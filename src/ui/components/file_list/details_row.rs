@@ -117,7 +117,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                             this.toggle_selection(&p_id_cap, p.clone(), multi, shift, cx);
                         }
                     });
-                    if e.click_count == 2 {
+                    if e.click_count == 2 && !e.modifiers.control && !e.modifiers.shift {
                         h_inner_inner.update(cx, |this, cx| this.open_file_item(&p_id_cap, p.clone(), is_dir, cx));
                     }
                 }
@@ -127,27 +127,8 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                 let p = path.clone();
                 let p_id_cap = p_id.clone();
                 move |event, _, cx| {
-                    // Only narrow when no modifier: click without drag on a
-                    // multi-selected file should deselect the others.
-                    if event.modifiers().control || event.modifiers().shift {
-                        return;
-                    }
                     h.update(cx, |this, cx| {
-                        if this.suppress_item_selection_click {
-                            return;
-                        }
-                        let is_multi = this.state.find_pane(&p_id_cap)
-                            .map(|pane| pane.active_tab().selected_paths.len() > 1)
-                            .unwrap_or(false);
-                        if is_multi {
-                            if let Some(pane) = this.state.find_pane_mut(&p_id_cap) {
-                                let tab = pane.active_tab_mut();
-                                tab.selected_paths.clear();
-                                tab.selected_paths.insert(p.clone());
-                                tab.selection_anchor = Some(p.clone());
-                            }
-                            cx.notify();
-                        }
+                        this.finish_item_selection_click(&p_id_cap, &p, event, cx);
                     });
                 }
             })
@@ -226,10 +207,10 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                     vec![path.clone()]
                 };
                 let h_drag = h.clone();
-                move |_, cursor_offset, _window, cx| {
+                move |_, cursor_offset, window, cx| {
                     let app = h_drag.clone();
                     let paths = drag_paths.clone();
-                    cx.new(|cx| FileDragPreview::new(paths, cursor_offset, is_dir, app, cx))
+                    cx.new(|cx| FileDragPreview::new(paths, cursor_offset, is_dir, app, window, cx))
                 }
             })
             .when(can_drop, |row| {

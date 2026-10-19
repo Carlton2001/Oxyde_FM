@@ -128,26 +128,15 @@ impl Render for OxydeApp {
             .on_action(cx.listener(Self::on_action_renommer))
             .on_action(cx.listener(Self::on_action_supprimer));
 
+        // Keyboard listeners must share the focused root's dispatch node.
+        // A canvas child has its own node and is outside that focus path.
         root = root.on_modifiers_changed({
             let h = handle.clone();
-            move |e: &ModifiersChangedEvent, _, cx| {
-                let modifier = if e.modifiers.control {
-                    Some(true) // Ctrl → always copy
-                } else if e.modifiers.shift {
-                    Some(false) // Shift → always move
-                } else {
-                    None // auto → determined by drive context
-                };
-                h.update(cx, |this, cx| {
-                    if this.shift_delete != e.modifiers.shift {
-                        this.shift_delete = e.modifiers.shift;
-                        cx.notify();
-                    }
-                    if this.drag_modifier_copy != modifier {
-                        this.drag_modifier_copy = modifier;
-                        this.update_drag_copy_mode(cx);
-                    }
-                });
+            move |event: &ModifiersChangedEvent, window, cx| {
+                h.update(cx, |this, cx| this.sync_pointer_modifiers(event.modifiers, cx));
+                if cx.has_active_drag() {
+                    window.refresh();
+                }
             }
         });
 
@@ -177,6 +166,8 @@ impl Render for OxydeApp {
                     window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
                         if phase == DispatchPhase::Capture && event.button == MouseButton::Left {
                             release_handle.update(cx, |this, cx| {
+                                // Apply the release's modifiers before any drop handler executes.
+                                this.sync_pointer_modifiers(event.modifiers, cx);
                                 if this.item_selection_drag {
                                     // Let GPUI observe the release and clear its pending press.
                                     // Suppress only the resulting item click, not event propagation.

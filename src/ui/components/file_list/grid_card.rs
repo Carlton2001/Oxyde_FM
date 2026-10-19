@@ -129,9 +129,19 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                             cx,
                         );
                     }
-                    if e.click_count == 2 {
+                    if e.click_count == 2 && !e.modifiers.control && !e.modifiers.shift {
                         this.open_file_item(&pid, path, is_dir, cx);
                     }
+                });
+            }
+        })
+        .on_click({
+            let h = h.clone();
+            let path = path.clone();
+            let pid = pid.clone();
+            move |event, _, cx| {
+                h.update(cx, |this, cx| {
+                    this.finish_item_selection_click(&pid, &path, event, cx);
                 });
             }
         })
@@ -213,7 +223,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
             },
             {
                 let h = h.clone();
-                move |_, cursor_offset, _, cx| {
+                move |_, cursor_offset, window, cx| {
                     let app = h.clone();
                     let paths = paths.clone();
                     cx.new(|cx| {
@@ -222,6 +232,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                             cursor_offset,
                             is_dir,
                             app,
+                            window,
                             cx,
                         )
                     })

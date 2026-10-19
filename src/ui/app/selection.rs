@@ -157,27 +157,8 @@ impl OxydeApp {
                     }
                     top += height;
                 }
-                if modifiers.control {
-                    tab.selected_paths.clear();
-                    for path in initial_selection_cap.iter() {
-                        if !current_rect_paths.contains(path) {
-                            tab.selected_paths.insert(path.clone());
-                        }
-                    }
-                    for path in current_rect_paths.iter() {
-                        if !initial_selection_cap.contains(path) {
-                            tab.selected_paths.insert(path.clone());
-                        }
-                    }
-                } else if modifiers.shift {
-                    for path in initial_selection_cap.iter() {
-                        tab.selected_paths.insert(path.clone());
-                    }
-                    for path in current_rect_paths.iter() {
-                        tab.selected_paths.insert(path.clone());
-                    }
-                } else {
-                    tab.selected_paths = current_rect_paths;
+                tab.selected_paths = rectangle_selection(&initial_selection_cap, current_rect_paths, modifiers);
+                if !modifiers.control && !modifiers.shift {
                     tab.selection_anchor = None;
                 }
             }
@@ -280,6 +261,24 @@ impl OxydeApp {
         }
     }
 }
+
+fn rectangle_selection(
+    initial: &std::collections::HashSet<String>,
+    covered: std::collections::HashSet<String>,
+    modifiers: Modifiers,
+) -> std::collections::HashSet<String> {
+    if modifiers.control {
+        initial.symmetric_difference(&covered).cloned().collect()
+    } else if modifiers.shift {
+        initial.union(&covered).cloned().collect()
+    } else {
+        covered
+    }
+}
+
+#[cfg(test)]
+#[path = "selection/tests/rectangle.rs"]
+mod rectangle_tests;
 
 fn arrow_target(rows: &[&[usize]], current: Option<usize>, key: &str) -> Option<usize> {
     let Some((row, column)) = current.and_then(|index| rows.iter().enumerate()

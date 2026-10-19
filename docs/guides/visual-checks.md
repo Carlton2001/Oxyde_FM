@@ -23,6 +23,16 @@ Le générateur crée un dossier neuf dans `target/` avec sources, références,
 
 Ne pas provoquer de panne sur les documents personnels ni vider la Corbeille réelle pour un test. Si une petite opération finit trop vite pour essayer la pause, le signaler ; ne pas la présenter comme testée.
 
+## Régression du ghost de glisser-déposer sous Windows
+
+Ce test volontairement exclu de la suite ordinaire ouvre brièvement une fenêtre GPUI sans l’activer. Il démarre un drag synthétique, puis alterne Ctrl, Shift et leur relâchement sans mouvement du pointeur. Il vérifie à la fois le mode de dépôt et le mode utilisé par le rendu du ghost, sans effectuer de transfert :
+
+```powershell
+cargo test --offline --locked --bin oxyde native_drag_ghost_tracks_modifiers_without_pointer_movement -- --ignored --test-threads=1
+```
+
+Il couvre le routage GPUI et les notifications du ghost ; la réception des touches physiques par Windows et l’aspect des couleurs restent à vérifier manuellement. Les gestionnaires clavier appartiennent à la racine suivie par le focus : un `canvas` enfant possède son propre nœud de dispatch et ne reçoit pas les événements destinés à cette racine.
+
 ## Interpréter les résultats
 
 - Les tests automatisés couvrent mieux délais, fautes et workers hostiles ; les essais manuels couvrent présentation, focus et interactions.

@@ -191,6 +191,8 @@ pub struct FileDragPreview {
     pub cursor_offset: Point<Pixels>,
     pub app_handle: Entity<OxydeApp>,
     _subscription: Subscription,
+    #[cfg(test)]
+    rendered_copy_mode: Option<bool>,
 }
 
 pub struct OxydeApp {

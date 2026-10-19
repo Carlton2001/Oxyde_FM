@@ -21,6 +21,24 @@ fn actionable_drop_paths(mut paths: Vec<String>, target: &str) -> Vec<String> {
 #[path = "drag/tests/drop_paths.rs"]
 mod drop_paths_tests;
 
+fn drag_copy_override(modifiers: Modifiers) -> Option<bool> {
+    if modifiers.control {
+        Some(true)
+    } else if modifiers.shift {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+#[path = "drag/tests/modifiers.rs"]
+mod modifier_tests;
+
+#[cfg(all(test, target_os = "windows"))]
+#[path = "drag/tests/native_input.rs"]
+mod native_input_tests;
+
 /// Returns true if `src` and `dst` are on different drives/volumes.
 /// On Windows this compares the root prefix (e.g. "C:" vs "D:").
 pub fn drives_differ(src: &str, dst: &str) -> bool {
@@ -35,9 +53,13 @@ impl FileDragPreview {
         cursor_offset: Point<Pixels>,
         single_is_dir: bool,
         app_handle: Entity<OxydeApp>,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        app_handle.update(cx, |app, _| {
+        app_handle.update(cx, |app, cx| {
+            // Modifier events follow the focus path, including with a stationary pointer.
+            window.focus(&app.focus_handle, cx);
+            app.sync_pointer_modifiers(window.modifiers(), cx);
             // A completed drag must never become a filename rename click.
             app.suppress_item_selection_click = true;
             app.rename_click_candidate = None;
@@ -51,6 +73,8 @@ impl FileDragPreview {
             cursor_offset,
             app_handle,
             _subscription: sub,
+            #[cfg(test)]
+            rendered_copy_mode: None,
         }
     }
 }
@@ -93,6 +117,8 @@ fn drag_op_pill(key_hint: &str, label: &str, active: bool, theme: &OxydeTheme) -
 impl Render for FileDragPreview {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let is_copy = self.app_handle.read(cx).drag_copy_mode;
+        #[cfg(test)]
+        { self.rendered_copy_mode = Some(is_copy); }
         let new_tab = self.app_handle.read(cx).drag_new_tab;
         let theme = *cx.theme();
 
@@ -187,6 +213,18 @@ impl Render for FileDragPreview {
 }
 
 impl OxydeApp {
+    pub(super) fn sync_pointer_modifiers(&mut self, modifiers: Modifiers, cx: &mut Context<Self>) {
+        if self.shift_delete != modifiers.shift {
+            self.shift_delete = modifiers.shift;
+            cx.notify();
+        }
+        let copy_override = drag_copy_override(modifiers);
+        if self.drag_modifier_copy != copy_override {
+            self.drag_modifier_copy = copy_override;
+            self.update_drag_copy_mode(cx);
+        }
+    }
+
     /// End pointer interactions, including releases missed outside the window.
     pub(crate) fn finish_pointer_drag(&mut self, cx: &mut Context<Self>) {
         self.item_press = None;
@@ -281,6 +319,8 @@ impl OxydeApp {
     }
 
     pub(super) fn handle_pointer_move(&mut self, e: &MouseMoveEvent, _window: &mut Window, cx: &mut Context<Self>) {
+        // Mouse events also carry current modifiers when a key event was missed.
+        self.sync_pointer_modifiers(e.modifiers, cx);
         if !e.dragging() {
             self.finish_pointer_drag(cx);
             return;
