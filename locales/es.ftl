@@ -982,3 +982,17 @@ viewer-previous = Archivo anterior
 viewer-next = Archivo siguiente
 viewer-play = Reproducir
 viewer-pause = Pausa
+
+viewer-rendered = Renderizado
+viewer-code = Código
+viewer-highlighted = Resaltado de sintaxis
+
+viewer-enable-highlighting = Activar el resaltado de sintaxis
+viewer-disable-highlighting = Desactivar el resaltado de sintaxis
+
+group-scripts = Scripts
+
+viewer-loading = Cargando archivo…
+viewer-autoplay = Reproducción automática
+viewer-enable-autoplay = Activar la reproducción automática de los próximos archivos multimedia
+viewer-disable-autoplay = Desactivar la reproducción automática de los próximos archivos multimedia

@@ -21,6 +21,7 @@ pub(super) enum Content {
     Pdf(super::pdf::Pdf),
     Document(Arc<Vec<Block>>, ListState),
     Text(super::text::TextFile),
+    Markdown(super::markdown::Markdown),
     /// Formats without a complete renderer keep the existing preview.
     Preview(Entity<PreviewTask>),
 }
@@ -79,6 +80,7 @@ impl Content {
         match self {
             Self::Image(image) => vec![image.clone()],
             Self::Pdf(pdf) => pdf.images().collect(),
+            Self::Markdown(document) => document.images(),
             _ => Vec::new(),
         }
     }
@@ -97,6 +99,11 @@ impl Viewer {
         use crate::ui::components::icons::get_preview_type;
         let path = file.path.clone();
         let generation = self.generation;
+        if super::markdown::is_markdown(&path) {
+            if self.markdown_rendered { self.load_markdown(path, cx); }
+            else { self.load_text(path, cx); }
+            return;
+        }
         let kind = if DOCUMENT_EXTENSIONS.contains(&extension(&file.name).as_str()) {
             None
         } else {

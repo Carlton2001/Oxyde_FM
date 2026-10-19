@@ -13,6 +13,7 @@ pub mod elements;
 pub mod errors;
 pub mod date_groups;
 pub mod format;
+pub(crate) mod file_types;
 pub mod i18n;
 pub mod scale;
 pub mod style;

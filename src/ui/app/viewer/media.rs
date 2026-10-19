@@ -32,8 +32,13 @@ impl Viewer {
     pub(super) fn update_visibility(&self) {
         if let Some(media) = &self.media {
             if let Ok(mut command) = media.control.command.lock() {
-                command.visible = !self.blocked;
-                command.paused = media.paused || self.blocked;
+                let visible = !self.blocked;
+                let paused = media.paused || self.blocked;
+                if command.visible != visible || command.paused != paused {
+                    command.visible = visible;
+                    command.paused = paused;
+                    media.control.wake();
+                }
             }
         }
     }
@@ -77,7 +82,7 @@ impl Viewer {
                 return;
             };
             let control = Arc::new(ViewerMediaControl::default());
-            let (resume_ms, resume_paused) = self.resume.take().unwrap_or((0, false));
+            let (resume_ms, resume_paused) = self.resume.take().unwrap_or((0, !self.media_autoplay));
             *control.command.lock().expect("new media controls") =
                 oxyde_lib::platform::ViewerMediaCommand {
                     parent,
@@ -118,14 +123,14 @@ impl Viewer {
                 })
                 .detach();
             cx.spawn(async move |this, cx| {
-                let mut previous = (MEDIA_LOADING, u64::MAX, u64::MAX);
+                let mut previous = (MEDIA_LOADING, u64::MAX, u64::MAX, 0);
                 while !control.is_cancelled() {
                     cx.background_executor()
                         .timer(std::time::Duration::from_millis(80))
                         .await;
                     let status = control.status();
                     // The progress bar moves in quarter seconds.
-                    let current = (status, control.position_ms() / 250, control.duration_ms());
+                    let current = (status, control.position_ms() / 250, control.duration_ms(), control.video_dimensions.load(Ordering::Acquire));
                     if current != previous {
                         previous = current;
                         if this.update(cx, |_, cx| cx.notify()).is_err() {
@@ -141,7 +146,10 @@ impl Viewer {
             .detach();
         } else if let Some(media) = &self.media {
             if let Ok(mut command) = media.control.command.lock() {
-                command.rect = rect;
+                if command.rect != rect {
+                    command.rect = rect;
+                    media.control.wake();
+                }
             }
             self.update_visibility();
         }

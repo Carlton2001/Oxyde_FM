@@ -982,3 +982,17 @@ viewer-previous = Vorherige Datei
 viewer-next = Nächste Datei
 viewer-play = Wiedergabe
 viewer-pause = Pause
+
+viewer-rendered = Gerendert
+viewer-code = Code
+viewer-highlighted = Syntaxhervorhebung
+
+viewer-enable-highlighting = Syntaxhervorhebung aktivieren
+viewer-disable-highlighting = Syntaxhervorhebung deaktivieren
+
+group-scripts = Skripte
+
+viewer-loading = Datei wird geladen…
+viewer-autoplay = Automatische Wiedergabe
+viewer-enable-autoplay = Automatische Wiedergabe für die nächsten Mediendateien aktivieren
+viewer-disable-autoplay = Automatische Wiedergabe für die nächsten Mediendateien deaktivieren

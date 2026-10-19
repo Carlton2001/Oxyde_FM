@@ -47,9 +47,10 @@ impl PreviewTask {
                 cx,
             );
         }
-        let message = self
-            .preview_message(window, cx)
-            .unwrap_or(Message::PreviewLoading);
+        let message = match self.preview_message(window, cx) {
+            None | Some(Message::PreviewLoading) => Message::ViewerLoading,
+            Some(message) => message,
+        };
         frame
             .text_color(theme.text_muted)
             .child(cx.i18n().text(message))

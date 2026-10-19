@@ -6,6 +6,12 @@
 use super::{content::Content, Viewer};
 use gpui::*;
 use std::sync::Arc;
+mod syntax;
+
+pub(super) fn code_highlights(language: &str, text: &str) -> Vec<(std::ops::Range<usize>, u8)> {
+    syntax::highlight(&format!("block.{language}"), text).into_iter()
+        .map(|span| (span.range, span.kind)).collect()
+}
 
 /// Text kept in memory for display; a larger file shows its beginning. Below
 /// 4 GiB, line and row offsets fit in `u32`, half the memory of `usize`.
@@ -20,6 +26,7 @@ pub(super) struct TextFile {
     text: Arc<String>,
     /// Byte offset where each logical line starts.
     lines: Arc<Vec<Offset>>,
+    highlights: Arc<Vec<syntax::Span>>,
     /// Byte offset where each displayed row starts, for `columns`.
     rows: Arc<Vec<Offset>>,
     columns: usize,
@@ -57,42 +64,46 @@ pub(super) fn line_starts(text: &str) -> Vec<Offset> {
         .collect()
 }
 
-/// Greedy word wrap: break after the last whitespace that fits, or inside a
-/// word longer than the row.
+/// Keep at least half the row for content in narrow panes or deeply indented files.
+fn continuation_indent(line: &str, columns: usize) -> usize {
+    let limit = columns / 2;
+    let mut indent = 0;
+    for c in line.chars().take_while(|c| matches!(c, ' ' | '\t')) {
+        indent = (indent + columns_of(c)).min(limit);
+        if indent == limit { break; }
+    }
+    indent
+}
+
+/// Greedy word wrap, preserving the logical line's indentation on continuations.
 pub(super) fn wrap(text: &str, lines: &[Offset], columns: usize) -> Vec<Offset> {
     let columns = columns.max(1);
     let mut rows: Vec<Offset> = Vec::with_capacity(lines.len());
     for (index, &start) in lines.iter().enumerate() {
         let start = start as usize;
         let end = lines.get(index + 1).map_or(text.len(), |end| *end as usize);
-        rows.push(start as Offset);
-        let mut used = 0;
-        // Byte offset after the last whitespace on this row, and the columns
-        // used by the characters that follow it.
-        let mut breakable: Option<(usize, usize)> = None;
-        for (offset, c) in text[start..end].char_indices() {
-            let at = start + offset;
-            let width = columns_of(c);
-            if used + width > columns && used > 0 {
-                match breakable.filter(|(position, _)| *position > *rows.last().unwrap() as usize) {
-                    Some((position, after)) => {
-                        rows.push(position as Offset);
-                        used = after;
-                    }
-                    None => {
-                        rows.push(at as Offset);
-                        used = 0;
-                    }
+        let indent = continuation_indent(&text[start..end], columns);
+        let mut row_start = start;
+        loop {
+            rows.push(row_start as Offset);
+            let available = columns - if row_start == start { 0 } else { indent };
+            let mut used = 0;
+            let mut breakable = None;
+            let mut next = end;
+            for (offset, c) in text[row_start..end].char_indices() {
+                let at = row_start + offset;
+                let width = columns_of(c);
+                if width > 0 && used + width > available && used > 0 {
+                    next = breakable.unwrap_or(at);
+                    break;
                 }
-                breakable = None;
+                used += width;
+                if c == ' ' || c == '\t' {
+                    breakable = Some(at + c.len_utf8());
+                }
             }
-            used += width;
-            if let Some((_, after)) = &mut breakable {
-                *after += width;
-            }
-            if c == ' ' || c == '\t' {
-                breakable = Some((at + c.len_utf8(), 0));
-            }
+            if next == end { break; }
+            row_start = next;
         }
     }
     if rows.is_empty() {
@@ -118,21 +129,74 @@ fn read(path: &str) -> std::io::Result<(String, bool)> {
 pub(super) struct Rows {
     text: Arc<String>,
     rows: Arc<Vec<Offset>>,
+    lines: Arc<Vec<Offset>>,
+    highlights: Arc<Vec<syntax::Span>>,
+    columns: usize,
 }
 
 impl TextFile {
+    pub(super) fn has_highlighting(&self) -> bool {
+        !self.highlights.is_empty()
+    }
+
     pub(super) fn rows(&self) -> Rows {
-        Rows { text: self.text.clone(), rows: self.rows.clone() }
+        Rows { text: self.text.clone(), rows: self.rows.clone(), lines: self.lines.clone(), highlights: self.highlights.clone(), columns: self.columns }
+    }
+
+    pub(super) fn gutter_width(&self) -> Rems {
+        rems((self.lines.len().max(1).ilog10() + 1) as f32 * 0.8125 * 0.6 + 1.0)
     }
 }
 
 impl Rows {
+    fn indent(&self, index: usize) -> usize {
+        let Some(&start) = self.rows.get(index) else { return 0 };
+        let line = self.lines.partition_point(|line| *line <= start).saturating_sub(1);
+        let origin = self.lines[line];
+        if origin == start { return 0; }
+        continuation_indent(&self.text[origin as usize..], self.columns)
+    }
+
+    pub(super) fn line_number(&self, index: usize) -> String {
+        self.rows.get(index).and_then(|start| self.lines.binary_search(start).ok())
+            .map(|line| (line + 1).to_string()).unwrap_or_default()
+    }
+
+    pub(super) fn styled_row(&self, index: usize, theme: &crate::ui::theme::OxydeTheme) -> StyledText {
+        let value = self.row(index).unwrap_or_default();
+        StyledText::new(value).with_highlights(self.row_highlights(index, theme))
+    }
+
+    fn row_highlights(&self, index: usize, theme: &crate::ui::theme::OxydeTheme) -> Vec<(std::ops::Range<usize>, HighlightStyle)> {
+        let Some(&start) = self.rows.get(index) else { return Vec::new() };
+        let start = start as usize;
+        let end = self.rows.get(index + 1).map_or(self.text.len(), |end| *end as usize);
+        let source = self.text[start..end].trim_end_matches(['\n', '\r']);
+        let end = start + source.len();
+        let first = self.highlights.partition_point(|span| span.range.end <= start);
+        let indent = self.indent(index);
+        self.highlights[first..].iter().take_while(|span| span.range.start < end).map(|span| {
+            let range = span.range.start.max(start) - start..span.range.end.min(end) - start;
+            let expanded = |offset| indent + offset + source[..offset].bytes().filter(|byte| *byte == b'\t').count() * (TAB_COLUMNS - 1);
+            let color = match span.kind {
+                1 => theme.text_muted,
+                2 => theme.success_text,
+                3 => theme.warning_text,
+                4 => theme.accent,
+                5 => theme.file_icons.code,
+                7 => theme.accent,
+                _ => theme.error,
+            };
+            (expanded(range.start)..expanded(range.end), HighlightStyle { color: Some(color), ..Default::default() })
+        }).collect()
+    }
+
     /// Displayed row, without its line ending; tabs become spaces.
     pub(super) fn row(&self, index: usize) -> Option<SharedString> {
         let start = *self.rows.get(index)? as usize;
         let end = self.rows.get(index + 1).map_or(self.text.len(), |end| *end as usize);
         let row = self.text[start..end].trim_end_matches(['\n', '\r']);
-        Some(SharedString::from(row.replace('\t', &" ".repeat(TAB_COLUMNS))))
+        Some(SharedString::from(format!("{}{}", " ".repeat(self.indent(index)), row.replace('\t', &" ".repeat(TAB_COLUMNS)))))
     }
 }
 
@@ -142,12 +206,13 @@ impl Viewer {
         let work = crate::ui::preview_jobs::load(move || {
             let (text, truncated) = read(&path)?;
             let lines = line_starts(&text);
-            Ok::<_, std::io::Error>((text, lines, truncated))
+            let highlights = syntax::highlight(&path, &text);
+            Ok::<_, std::io::Error>((text, lines, highlights, truncated))
         });
         self.finish(
             generation,
             work,
-            |(text, lines, truncated)| {
+            |(text, lines, highlights, truncated)| {
                 // Until the first wrap, rows are the logical lines themselves;
                 // the text moves into its Arc (an `Arc<str>` would copy it).
                 let lines = Arc::new(lines);
@@ -156,6 +221,7 @@ impl Viewer {
                     list: ListState::new(lines.len(), ListAlignment::Top, px(800.0)),
                     rows: lines.clone(),
                     lines,
+                    highlights: Arc::new(highlights),
                     columns: 0,
                     wrapping: None,
                     truncated,
@@ -189,7 +255,7 @@ impl Viewer {
             .advance(system.resolve_font(&font), TEXT_SIZE.to_pixels(rem), 'm')
             .map(|size| size.width)
             .unwrap_or(TEXT_SIZE.to_pixels(rem) * 0.6);
-        let usable = width - TEXT_PADDING.to_pixels(rem) * 2.0;
+        let usable = width - TEXT_PADDING.to_pixels(rem) * 2.0 - text.gutter_width().to_pixels(rem);
         let columns = ((usable / advance).floor() as usize).max(1);
         if text.columns == columns || text.wrapping.as_ref().is_some_and(|(pending, _)| *pending == columns) {
             return;

@@ -82,6 +82,11 @@ try {
         Copy-Item -LiteralPath (Join-Path $release "$worker.exe") -Destination $stage
     }
     Get-ChildItem -LiteralPath $CrtDirectory -Filter '*.dll' | Copy-Item -Destination $stage
+    $syntaxNotices = Join-Path $stage 'licenses/syntaxes'
+    New-Item -ItemType Directory -Path $syntaxNotices -Force | Out-Null
+    foreach ($notice in @('README.md', 'PowerShell-LICENSE.txt', 'PowerShell-NOTICES.txt', 'SCSS-LICENSE.txt', 'bat-LICENSE-MIT.txt')) {
+        Copy-Item -LiteralPath (Join-Path $projectRoot "vendor/syntaxes/$notice") -Destination $syntaxNotices
+    }
     & (Join-Path $PSScriptRoot 'distribution-icon.ps1') -ProjectRoot $projectRoot -Destination (Join-Path $stage 'oxyde.ico')
     if (-not $PortableOnly) {
         & $IsccPath "/DAppVersion=$version" "/DPayloadDir=$stage" "/O$output" (Join-Path $projectRoot 'installer/windows/oxyde.iss')
@@ -103,7 +108,7 @@ try {
     } finally { $zip.Dispose() }
     $archive = [IO.Compression.ZipFile]::OpenRead($download)
     try {
-        foreach ($name in @('Oxyde_GPUI.exe', 'oxyde-image-worker.exe', 'oxyde-archive-io-worker.exe', 'oxyde-archive-list-worker.exe', 'vcruntime140.dll', 'data/README.txt')) {
+        foreach ($name in @('Oxyde_GPUI.exe', 'oxyde-image-worker.exe', 'oxyde-archive-io-worker.exe', 'oxyde-archive-list-worker.exe', 'vcruntime140.dll', 'data/README.txt', 'licenses/syntaxes/PowerShell-LICENSE.txt', 'licenses/syntaxes/PowerShell-NOTICES.txt', 'licenses/syntaxes/SCSS-LICENSE.txt', 'licenses/syntaxes/bat-LICENSE-MIT.txt')) {
             if (-not $archive.GetEntry("Oxyde_GPUI/$name")) { throw "Portable archive is missing $name" }
         }
         if ($archive.Entries | Where-Object { $_.Name -match 'Setup|launcher' }) { throw 'Unexpected installer or launcher in portable archive.' }

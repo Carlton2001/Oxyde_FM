@@ -1,0 +1,112 @@
+//! Fit the video and controls using this frame's bounds, without a second render.
+use super::Viewer;
+use gpui::{prelude::*, *};
+use std::sync::atomic::Ordering;
+
+pub(super) struct VideoLayout {
+    viewer: WeakEntity<Viewer>,
+    bar: AnyElement,
+    ratio: f32,
+}
+
+impl Viewer {
+    pub(super) fn render_video(&self, cx: &mut Context<Self>) -> VideoLayout {
+        let dimensions = self
+            .media
+            .as_ref()
+            .map(|media| media.control.video_dimensions.load(Ordering::Acquire))
+            .unwrap_or_default();
+        let (width, height) = ((dimensions >> 32) as u32, dimensions as u32);
+        VideoLayout {
+            viewer: cx.entity().downgrade(),
+            bar: self.render_media_bar(cx).into_any_element(),
+            ratio: if width > 0 && height > 0 {
+                width as f32 / height as f32
+            } else {
+                16.0 / 9.0
+            },
+        }
+    }
+}
+
+impl IntoElement for VideoLayout {
+    type Element = Self;
+    fn into_element(self) -> Self {
+        self
+    }
+}
+
+impl Element for VideoLayout {
+    type RequestLayoutState = ();
+    type PrepaintState = Bounds<Pixels>;
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, ()) {
+        let mut style = Style::default();
+        style.size = size(relative(1.0).into(), relative(1.0).into());
+        (window.request_layout(style, [], cx), ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _: &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Bounds<Pixels> {
+        let bar_height = crate::ui::scale::rem_pixels(rems(2.5625));
+        let available_height = (bounds.size.height - bar_height).max(px(0.0));
+        let width = bounds
+            .size
+            .width
+            .min(available_height * self.ratio)
+            .max(px(0.0));
+        let height = width / self.ratio;
+        let origin = bounds.origin
+            + point(
+                (bounds.size.width - width) / 2.0,
+                (bounds.size.height - height - bar_height) / 2.0,
+            );
+        self.bar.layout_as_root(
+            size(
+                AvailableSpace::Definite(width),
+                AvailableSpace::Definite(bar_height),
+            ),
+            window,
+            cx,
+        );
+        self.bar
+            .prepaint_at(origin + point(px(0.0), height), window, cx);
+        Bounds::new(origin, size(width, height))
+    }
+
+    fn paint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        _: Bounds<Pixels>,
+        _: &mut (),
+        video: &mut Bounds<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let _ = self
+            .viewer
+            .update(cx, |this, cx| this.place_media(*video, window, cx));
+        self.bar.paint(window, cx);
+    }
+}

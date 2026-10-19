@@ -19,6 +19,8 @@ permettent de préciser les outils locaux. Les SHA-256 sont fournis pour le ZIP 
 Extraire `target/distribution/output/Oxyde_GPUI-<version>-x64-portable.zip`, puis lancer
 `Oxyde_GPUI/Oxyde_GPUI.exe`. Garder les DLL et les trois workers à côté de l'exécutable.
 Le ZIP ne contient aucun installateur ni lanceur intermédiaire.
+Le dossier `licenses/syntaxes` conserve les licences et notices des grammaires
+SCSS/Sass et PowerShell ; il est également déployé par le Setup classique.
 
 La présence du dossier `data` à côté de l'exécutable active automatiquement le mode portable,
 quel que soit le répertoire courant. Il est fourni dans le ZIP et contient ensuite :

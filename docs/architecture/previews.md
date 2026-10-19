@@ -37,8 +37,32 @@ les pages proches de la vue sont rendues, les demandes sorties de la vue sont
 abandonnées, six pages décodées au plus) ; texte entier jusqu’à 512 Mio, chargé
 en mémoire (`viewer/text` : retour à la ligne aux espaces, calculé en arrière-plan
 pour la largeur en colonnes de JetBrains Mono, caractères larges comptés double,
-tabulation de quatre colonnes ; chaque rangée garde sa plage d’octets et sa ligne
-logique, base des futurs numéros de ligne et de la coloration) ; documents Word/ODF
+tabulation de quatre colonnes ; les continuations reprennent l’indentation
+initiale, plafonnée à la moitié de la largeur disponible dans les panneaux étroits.
+Chaque rangée garde sa plage d’octets et sa ligne
+logique ; numéros à gauche, sans répétition sur les lignes repliées. Syntect
+détecte le langage par nom ou extension, puis par première ligne (shebang ou
+mode line) seulement si aucun type n’a été trouvé ; pas de détection générale
+sur le corps du texte. Les `.txt` restent du texte brut. L’analyse est hors UI ;
+ses catégories utilisent les couleurs sémantiques du thème. Coloration limitée
+aux syntaxes réellement embarquées ; XAML utilise la grammaire XML (coloration
+lexicale, sans interprétation WPF). `ui/file_types.rs` centralise les extensions,
+suffixes composés et noms de fichiers Code pour les familles, icônes et aperçus.
+Son inventaire inclut les formats Oxyde existants et ceux du pack Syntect 5.3,
+sans charger les grammaires sur le chemin de rendu des listes. Les familles
+spécialisées conservent leur priorité, notamment SVG en Images et MD en Documents.
+Un fichier classé Code n’a donc pas nécessairement une grammaire embarquée.
+SCSS et PowerShell ont des grammaires supplémentaires épinglées dans
+`vendor/syntaxes/README.md`, avec Sass comme dépendance de SCSS. Les notices MIT
+sont conservées et distribuées dans `licenses/syntaxes/`. Syntect `yaml-load`
+lit uniquement les grammaires embarquées, une fois hors UI. PowerShell couvre
+`.ps1`, `.psm1` et `.psd1`, dans la famille Scripts avec Shell/Batch. Les variables
+utilisent la couleur sémantique accent, y compris dans les blocs Markdown.
+Coloration limitée
+aux fichiers de 2 Mio, 200 000 plages ; arrêt avant une ligne de plus de 16 Kio
+ou entre deux lignes après 200 ms d’analyse, suite en texte brut. Ce délai
+est coopératif et ne borne pas une analyse de ligne en cours ni l’initialisation
+des syntaxes) ; documents Word/ODF
 Office Open XML et OpenDocument complets (`office-document` dans le worker
 Office : Word/Writer, chaque feuille Excel/Calc, chaque diapositive
 PowerPoint/Impress ; lignes `balise<TAB>texte`). Les valeurs de tableur sont
@@ -46,16 +70,45 @@ affichées telles que stockées, sans formats ni formules. Les longs contenus so
 virtualisés par `list` avec l’ascenseur partagé ; documents et cadres de
 pages PDF sont mesurés d’emblée (seules les pages proches de la vue sont
 décodées), donc l’ascenseur garde sa taille. Les formats binaires anciens
-(doc, xls, ppt) gardent l’aperçu existant. Le fond reprend celui des panneaux
-actifs. Ces parcours sont propres au Viewer : les aperçus des infobulles gardent
+(doc, xls, ppt) gardent l’aperçu existant. Le texte utilise le fond `sidebar`
+comme ses aperçus ; les autres contenus reprennent celui des panneaux actifs.
+Ces parcours sont propres au Viewer : les aperçus des infobulles gardent
 leurs modes et limites.
-Le contenu occupe toute la hauteur ; nom, navigation et détachement sont dans
-la barre de statut, et l’ascenseur touche le bord droit. Le panneau du Viewer
+Les images utilisent tout le cadre sans marge. Les listes texte/code, PDF et
+Office/ODF ont 1 rem de marge intérieure en haut et en bas, intégrée au
+défilement ; les espacements internes entre pages et blocs sont conservés.
+Markdown (`md`, `markdown`, `mdown`, `mkd`, `mkdn`) utilise `pulldown-cmark`
+avec rendu GPUI natif : titres, styles inline, listes, citations, tableaux et
+blocs de code colorés par Syntect. Le rendu est activé par défaut. La toolbar
+propose une bascule Rendu / Code pour Markdown et un bouton « Coloration
+syntaxique » activable/désactivable pour les autres fichiers texte ayant
+effectivement des plages colorées, avec les boutons
+standards à icône et libellé ; ces deux choix
+indépendants sont enregistrés dans `AppConfig`, avec défauts compatibles avec
+les anciennes configurations. Le Markdown source reste sans coloration ; les
+blocs de code du Markdown rendu sont toujours colorés selon leur langage,
+indépendamment du choix des autres fichiers texte. Les images relatives au document sont décodées à la demande
+par le parcours d’aperçu isolé et son budget mémoire, avec 32 demandes maximum
+par document. Images absentes ou non locales : texte alternatif. Aucune URL
+distante ou chemin absolu/UNC d’image n’est chargé. Les liens sont présentés
+comme du texte coloré ; le HTML brut est affiché littéralement.
+L’analyse est hors UI et le rendu virtualisé ; limites : 2 Mio de source,
+100 000 événements, 20 000 blocs et 16 Kio par bloc de texte, avec avertissement
+de troncature. La source complète reste accessible en mode Code selon les
+limites du lecteur texte. Changer de mode invalide les tâches précédentes et
+libère leurs textures ; les images décodées après un changement ne sont pas publiées.
+La barre d’outils en haut du Viewer, à la hauteur de la barre de navigation
+de l’explorateur, contient le nom du fichier, la navigation dans la sélection
+et le bouton de détachement. Le Viewer n’a pas de barre de statut.
+Le panneau intégré affiche le nom seul ; la fenêtre secondaire affiche le chemin
+complet, avec une infobulle permettant de le lire s’il est tronqué. Le chargement
+du Viewer utilise « Chargement du fichier… », distinct de celui des aperçus.
+Le contenu occupe l’espace restant et l’ascenseur touche le bord droit. Le panneau du Viewer
 ne devient jamais le panneau actif : ses commandes
 internes agissent sur lui et le panneau explorateur garde sélection, clavier
 et barre d’outils. Seule la fenêtre détachée reçoit le focus clavier.
 Les dossiers, entrées d’archives virtuelles et types non pris en charge restent
-sans aperçu. La barre de statut reste vide.
+sans aperçu.
 
 Le bouton supérieur droit ouvre une fenêtre secondaire redimensionnable,
 possédée par la fenêtre principale ; sa position, sa taille et son état
@@ -68,9 +121,18 @@ Viewers détachés.
 
 Sous Windows, audio et vidéo utilisent les codecs système via IMFMediaEngine (mode HWND) dans le
 mode `viewer-media` du self-worker. Un même lecteur natif synchronise image et
-son, démarre automatiquement et reçoit play/pause (ou Espace). Le worker
-renvoie des rapports de 17 octets (état, position, durée en ms) ; la barre de
+son et reçoit play/pause (ou Espace). La toolbar propose « Lecture automatique »,
+activée par défaut et persistée dans `AppConfig`. Désactivée, les nouveaux médias
+s’ouvrent en pause ; une lecture en cours et une reprise après détachement gardent
+leur état. Le worker
+renvoie des rapports de 25 octets (état, position, durée en ms et dimensions vidéo) ; la barre de
 lecture permet de cliquer ou glisser pour se déplacer (`seek_id`/`seek_ms`).
+La vidéo et sa barre de lecture forment un bloc centré : la barre suit immédiatement
+le bas de l’image, dans le panneau comme dans la fenêtre secondaire. Les dimensions
+natives remontent du worker ; le bloc adapte ses proportions à l’espace disponible
+dans la frame courante, sans attendre un second rendu. Les changements de géométrie
+réveillent le superviseur puis le lecteur natif ; les attentes périodiques restent
+présentes pour les rapports, la visibilité et les déplacements de la fenêtre.
 Le détachement ou le retour au panneau reprend à la même position et dans le
 même état ; listes et pages gardent leur défilement. La fin de lecture
 reste arrêtée jusqu’à une action Lire. Le worker possède une surface vidéo

@@ -146,85 +146,6 @@ pub static PDF_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| ["pdf"].in
 pub static DISK_EXTENSIONS: Lazy<HashSet<&'static str>> =
     Lazy::new(|| ["iso", "img", "vmdk", "vhd", "vhdx"].into());
 
-pub static CODE_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
-    [
-        // Web
-        "js",
-        "ts",
-        "tsx",
-        "jsx",
-        "html",
-        "css",
-        "scss",
-        "sass",
-        "less",
-        "wasm",
-        // Languages
-        "rs",
-        "py",
-        "java",
-        "cpp",
-        "c",
-        "h",
-        "hpp",
-        "cs",
-        "go",
-        "php",
-        "rb",
-        "swift",
-        "kt",
-        "dart",
-        "sql",
-        "sh",
-        "bat",
-        "ps1",
-        "cmd",
-        "vbs",
-        "pl",
-        "lua",
-        "r",
-        "m",
-        "f90",
-        "f",
-        "jl",
-        "scala",
-        "elm",
-        "erl",
-        "ex",
-        "exs",
-        "clj",
-        "cljs",
-        "lisp",
-        "scm",
-        "ml",
-        "mli",
-        "asm",
-        "s",
-        // Data & Config
-        "json",
-        "xml",
-        "yaml",
-        "yml",
-        "md",
-        "toml",
-        "ini",
-        "cfg",
-        "conf",
-        "config",
-        "env",
-        "graphql",
-        "gql",
-        "proto",
-        "dockerfile",
-        "makefile",
-        "cmake",
-        "sln",
-        "csproj",
-        "vcxproj",
-    ]
-    .into()
-});
-
 pub static TEXT_BASE_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     [
         "txt", "log", "nfo", "inf", "ini", "cfg", "conf", "config", "bak", "tmp", "csv", "tsv",
@@ -358,7 +279,7 @@ pub fn get_icon_type(
     if DISK_EXTENSIONS.contains(ext) {
         return IconType::Disc;
     }
-    if CODE_EXTENSIONS.contains(ext) {
+    if crate::ui::file_types::is_code_file(name) {
         return IconType::FileCode;
     }
     if TEXT_BASE_EXTENSIONS.contains(ext) {
@@ -412,7 +333,7 @@ pub fn get_preview_type(name: &str) -> PreviewType {
     if ext == "html" || ext == "htm" {
         return PreviewType::Text;
     }
-    if TEXT_BASE_EXTENSIONS.contains(ext) || CODE_EXTENSIONS.contains(ext) {
+    if TEXT_BASE_EXTENSIONS.contains(ext) || crate::ui::file_types::is_code_file(name) {
         return PreviewType::Text;
     }
 

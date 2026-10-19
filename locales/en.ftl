@@ -675,3 +675,17 @@ viewer-previous = Previous file
 viewer-next = Next file
 viewer-play = Play
 viewer-pause = Pause
+
+viewer-rendered = Rendered
+viewer-code = Code
+viewer-highlighted = Syntax highlighting
+
+viewer-enable-highlighting = Enable syntax highlighting
+viewer-disable-highlighting = Disable syntax highlighting
+
+group-scripts = Scripts
+
+viewer-loading = Loading file…
+viewer-autoplay = Autoplay
+viewer-enable-autoplay = Enable autoplay for the next media files
+viewer-disable-autoplay = Disable autoplay for the next media files

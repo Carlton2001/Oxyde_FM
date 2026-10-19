@@ -2,6 +2,9 @@ mod content;
 mod content_render;
 mod media;
 mod media_bar;
+mod video_layout;
+mod markdown;
+mod display_options;
 mod pdf;
 mod render;
 mod scrollbar;
@@ -30,6 +33,9 @@ pub(crate) struct Viewer {
     files: Vec<FileEntry>,
     index: usize,
     content: content::Content,
+    markdown_rendered: bool,
+    syntax_highlighting: bool,
+    media_autoplay: bool,
     /// Bumped per opened file; stale loads never publish into a newer file.
     generation: u64,
     /// Generation of the image the Viewer currently wants, read by queued jobs.
@@ -159,7 +165,8 @@ impl OxydeApp {
             }
             let owner = cx.entity();
             let initial = source.clone();
-            let viewer = cx.new(|cx| Viewer::new(owner, id.clone(), initial, cx));
+            let options = (self.config.viewer_markdown_rendered, self.config.viewer_syntax_highlighting, self.config.viewer_media_autoplay);
+            let viewer = cx.new(|cx| Viewer::new(owner, id.clone(), initial, options, cx));
             self.viewers.insert(id, viewer);
         }
     }
@@ -224,13 +231,17 @@ impl Viewer {
         owner: Entity<OxydeApp>,
         tab_id: String,
         source: Source,
+        options: (bool, bool, bool),
         cx: &mut Context<Self>,
     ) -> Self {
         let subscription = cx.observe(&owner, |this, owner, cx| {
             let app = owner.read(cx);
             let source = Source::capture(app, &this.source);
+            let options = (app.config.viewer_markdown_rendered, app.config.viewer_syntax_highlighting, app.config.viewer_media_autoplay);
             this.blocked = !this.detached && (app.settings_open || app.dragging_tab.is_some());
             this.set_source(source, cx);
+            this.sync_display_options(options.0, options.1, cx);
+            this.media_autoplay = options.2;
             this.update_visibility();
             cx.notify();
         });
@@ -238,6 +249,9 @@ impl Viewer {
         cx.background_executor()
             .spawn(async { oxyde_lib::platform::platform().warm_viewer_images() })
             .detach();
+        // The owner is being updated while it constructs this child. Read its
+        // initial preferences at the call site, never through owner.read here.
+        let (markdown_rendered, syntax_highlighting, media_autoplay) = options;
         let mut this = Self {
             owner: owner.downgrade(),
             tab_id,
@@ -245,6 +259,9 @@ impl Viewer {
             files: Vec::new(),
             index: 0,
             content: content::Content::None,
+            markdown_rendered,
+            syntax_highlighting,
+            media_autoplay,
             generation: 0,
             wanted: Default::default(),
             loading: None,

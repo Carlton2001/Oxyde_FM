@@ -219,7 +219,13 @@ fn native_viewer_renders_tracks_selection_and_detaches() {
             ));
             cx.set_global(crate::ui::i18n::I18n::default());
             cx.set_global(crate::ui::format::DateFormatPreference(Default::default()));
-            let app = cx.new(|cx| OxydeApp::new(Default::default(), None, false, cx));
+            let config = oxyde_lib::models::AppConfig {
+                viewer_markdown_rendered: false,
+                viewer_syntax_highlighting: false,
+                viewer_media_autoplay: false,
+                ..Default::default()
+            };
+            let app = cx.new(|cx| OxydeApp::new(config, None, false, cx));
             let (viewer, source) = app.update(cx, |app_state, cx| {
                 app_state.handle = Some(app.clone());
                 app_state.state.pinned_items.clear();
@@ -254,6 +260,11 @@ fn native_viewer_renders_tracks_selection_and_detaches() {
                 let source_id = tab.id.clone();
                 app_state.open_viewer(cx);
                 let viewer = app_state.viewers.values().next().unwrap().clone();
+                check(
+                    &result,
+                    !viewer.read(cx).markdown_rendered && !viewer.read(cx).syntax_highlighting && !viewer.read(cx).media_autoplay,
+                    "Viewer did not inherit the owner's saved display choices",
+                );
                 check(
                     &result,
                     viewer.read(cx).source.tab == source_id,

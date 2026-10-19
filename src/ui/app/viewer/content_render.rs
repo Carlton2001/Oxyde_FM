@@ -88,7 +88,7 @@ impl Viewer {
         }
         match &self.content {
             Content::None if self.preparation.is_some() => {
-                message(cx.i18n().text(Message::PreviewLoading), cx)
+                message(cx.i18n().text(Message::ViewerLoading), cx)
             }
             Content::None if self.files.get(self.index).is_none() => {
                 message(cx.i18n().text(Message::ViewerEmpty), cx)
@@ -96,7 +96,7 @@ impl Viewer {
             Content::None | Content::Unavailable => {
                 message(cx.i18n().text(Message::PreviewUnavailable), cx)
             }
-            Content::Loading => message(cx.i18n().text(Message::PreviewLoading), cx),
+            Content::Loading => message(cx.i18n().text(Message::ViewerLoading), cx),
             // The absolute box follows the pane or window, never the image's own
             // size; GPUI's img takes its intrinsic size unless sized explicitly.
             Content::Image(image) => div()
@@ -105,10 +105,7 @@ impl Viewer {
                 .child(
                     div()
                         .absolute()
-                        .top_0()
-                        .bottom_0()
-                        .left(rems(1.0))
-                        .right(rems(1.0))
+                        .inset_0()
                         .child(
                             img(image.clone())
                                 .id("viewer-image")
@@ -118,9 +115,13 @@ impl Viewer {
                 )
                 .into_any_element(),
             Content::Preview(preview) => preview.clone().into_any_element(),
+            Content::Markdown(_) => self.render_markdown(cx),
             Content::Text(text) => {
                 use super::text::{ROW_HEIGHT, TEXT_PADDING, TEXT_SIZE};
                 let rows = text.rows();
+                let highlighting = self.syntax_highlighting
+                    && !self.files.get(self.index).is_some_and(|file| super::markdown::is_markdown(&file.path));
+                let gutter = text.gutter_width();
                 let body = list(text.list.clone(), move |index, _, cx| {
                     div()
                         .w_full()
@@ -133,12 +134,20 @@ impl Viewer {
                         .font_family("JetBrains Mono")
                         .text_size(TEXT_SIZE)
                         .text_color(cx.theme().text)
-                        .child(rows.row(index).unwrap_or_default())
+                        .child(div().w(gutter).flex_none().pr(rems(1.0)).text_right()
+                            .text_color(cx.theme().text_muted).child(rows.line_number(index)))
+                        .child(if highlighting {
+                            rows.styled_row(index, cx.theme())
+                        } else {
+                            StyledText::new(rows.row(index).unwrap_or_default())
+                        })
                         .into_any_element()
                 })
-                .size_full();
+                .size_full()
+                .py(rems(1.0));
                 div()
                     .size_full()
+                    .bg(theme.sidebar)
                     .flex()
                     .flex_col()
                     .when(text.truncated, |frame| {
@@ -161,6 +170,7 @@ impl Viewer {
                     None => div().into_any_element(),
                 })
                 .size_full()
+                .py(rems(1.0))
                 .into_any_element()
             }
             Content::Pdf(pdf) => {
@@ -205,6 +215,7 @@ impl Viewer {
                         .into_any_element()
                 })
                 .size_full()
+                .py(rems(1.0))
                 .into_any_element()
             }
         }

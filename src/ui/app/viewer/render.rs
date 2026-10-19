@@ -54,13 +54,13 @@ impl Render for Viewer {
         }
         let theme = *cx.theme();
         let current = self.files.get(self.index);
-        let has_previous = self.index > 0;
-        let has_next = self.index + 1 < self.files.len();
         let failed = self
             .media
             .as_ref()
             .is_some_and(|media| media.control.status() == oxyde_lib::platform::MEDIA_FAILED);
-        let title = current.map(|file| file.name.clone()).unwrap_or_default();
+        let title = current.map(|file| {
+            if self.detached { file.path.clone() } else { file.name.clone() }
+        }).unwrap_or_default();
         let surface = div()
             .id("viewer-surface")
             .size_full()
@@ -90,8 +90,9 @@ impl Render for Viewer {
                 }
                 cx.stop_propagation();
             }))
+            .child(self.render_action_bar(title, cx))
             .child(
-                // Content fills the pane; its rail reaches the pane's right edge.
+                // Content fills the remaining space; its rail reaches the pane's right edge.
                 div()
                     .flex_1()
                     .min_h_0()
@@ -99,7 +100,9 @@ impl Render for Viewer {
                     .relative()
                     .child(div().size_full().flex().flex_col().min_h_0().min_w_0().map(
                         |content| {
-                            if self.native_media {
+                            if self.native_media && !self.audio && !failed {
+                                content.child(self.render_video(cx))
+                            } else if self.native_media {
                                 let handle = cx.entity().downgrade();
                                 content
                                     .relative()
@@ -137,28 +140,18 @@ impl Render for Viewer {
                         },
                     )),
             )
-            .when(self.native_media && !failed, |surface| {
+            .when(self.native_media && self.audio && !failed, |surface| {
                 surface.child(self.render_media_bar(cx))
-            })
-            .child(self.render_status_bar(title, has_previous, has_next, cx));
+            });
         surface.into_any_element()
     }
 }
 
 impl Viewer {
-    /// File name, navigation and playback in the pane's status bar.
-    fn render_status_bar(
-        &self,
-        title: String,
-        has_previous: bool,
-        has_next: bool,
-        cx: &mut Context<Self>,
-    ) -> Div {
+    fn render_action_bar(&self, title: String, cx: &mut Context<Self>) -> Div {
         let theme = *cx.theme();
-        let bar = crate::ui::style::STATUS_BAR_HEIGHT;
-        let button = |button: Stateful<Div>| button.size(bar);
         div()
-            .h(bar)
+            .h(crate::ui::style::NAV_BAR_HEIGHT)
             .w_full()
             .flex_none()
             .flex()
@@ -166,9 +159,37 @@ impl Viewer {
             .px(rems(0.5))
             .gap(rems(0.5))
             .bg(theme.surface)
-            .border_t(rems(0.0625))
+            .border_b(rems(0.0625))
             .border_color(theme.border)
-            .child(div().flex_1().min_w_0().truncate().text_color(theme.text_muted).child(title))
+            .child(div().id("viewer-file-title").flex_1().min_w_0().truncate().text_color(theme.text_muted)
+                .when(self.detached && !title.is_empty(), |label| {
+                    label.native_tooltip(Tooltip::text(SharedString::from(title.clone())))
+                })
+                .child(title))
+            .child(self.render_navigation(cx))
+            .child(self.render_display_options(cx))
+            .when(!self.detached, |bar| {
+                bar.child(
+                    icon_button(
+                        "viewer-detach",
+                        "icons/external-link.svg",
+                        Message::ViewerDetach,
+                        true,
+                        cx,
+                    )
+                    .on_click(cx.listener(|this, _, window, cx| this.detach(window, cx))),
+                )
+            })
+    }
+
+    fn render_navigation(&self, cx: &mut Context<Self>) -> Div {
+        let theme = *cx.theme();
+        let has_previous = self.index > 0;
+        let has_next = self.index + 1 < self.files.len();
+        div()
+            .flex_none()
+            .flex()
+            .items_center()
             .child(
                 div()
                     .flex_none()
@@ -177,13 +198,13 @@ impl Viewer {
                     .gap(rems(0.25))
                     .when(self.files.len() > 1, |controls| {
                         controls
-                            .child(button(icon_button(
+                            .child(icon_button(
                                 "viewer-previous",
                                 "icons/chevron-left.svg",
                                 Message::ViewerPrevious,
                                 has_previous,
                                 cx,
-                            ))
+                            )
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 if has_previous {
                                     this.step(false, cx);
@@ -194,37 +215,18 @@ impl Viewer {
                                 self.index + 1,
                                 self.files.len()
                             )))
-                            .child(button(icon_button(
+                            .child(icon_button(
                                 "viewer-next",
                                 "icons/chevron-right.svg",
                                 Message::ViewerNext,
                                 has_next,
                                 cx,
-                            ))
+                            )
                             .on_click(cx.listener(move |this, _, _, cx| {
                                 if has_next {
                                     this.step(true, cx);
                                 }
                             })))
-                    }),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .flex()
-                    .justify_end()
-                    .when(!self.detached, |end| {
-                        end.child(
-                            button(icon_button(
-                                "viewer-detach",
-                                "icons/external-link.svg",
-                                Message::ViewerDetach,
-                                true,
-                                cx,
-                            ))
-                            .on_click(cx.listener(|this, _, window, cx| this.detach(window, cx))),
-                        )
                     }),
             )
     }
@@ -238,6 +240,7 @@ impl Viewer {
             .bg(theme.active_background)
             .text_color(theme.text_muted)
             .text_size(rems(0.8125))
+            .child(self.render_action_bar(String::new(), cx))
             .child(
                 div()
                     .flex_1()
@@ -258,15 +261,6 @@ impl Viewer {
                         )
                         .on_click(cx.listener(|this, _, window, cx| this.detach(window, cx))),
                     ),
-            )
-            .child(
-                div()
-                    .h(crate::ui::style::STATUS_BAR_HEIGHT)
-                    .w_full()
-                    .flex_none()
-                    .bg(theme.surface)
-                    .border_t(rems(0.0625))
-                    .border_color(theme.border),
             )
     }
 }

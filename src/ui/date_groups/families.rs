@@ -12,6 +12,7 @@ pub enum FileFamily {
     Video,
     Audio,
     Code,
+    Scripts,
     Other,
 }
 impl FileFamily {
@@ -26,6 +27,7 @@ impl FileFamily {
             Self::Video => Message::GroupVideo,
             Self::Audio => Message::GroupAudio,
             Self::Code => Message::GroupCode,
+            Self::Scripts => Message::GroupScripts,
             Self::Other => Message::GroupOther,
         }
     }
@@ -56,10 +58,8 @@ impl FileFamily {
             | "flv" | "3gp" => Self::Video,
             "mp3" | "flac" | "wav" | "ogg" | "opus" | "m4a" | "aac" | "wma" | "aiff" | "alac"
             | "mid" | "midi" => Self::Audio,
-            "rs" | "js" | "ts" | "tsx" | "jsx" | "py" | "pyw" | "c" | "h" | "cpp" | "hpp"
-            | "cs" | "java" | "go" | "rb" | "php" | "swift" | "kt" | "sh" | "bash" | "bat"
-            | "cmd" | "ps1" | "html" | "css" | "scss" | "json" | "xml" | "yaml" | "yml"
-            | "toml" | "sql" | "lua" | "vue" | "svelte" => Self::Code,
+            _ if crate::ui::file_types::is_script_file(&file.name) => Self::Scripts,
+            _ if crate::ui::file_types::is_code_file(&file.name) => Self::Code,
             _ => match file.native_kind {
                 Some(oxyde_lib::models::file_entry::NativeFileKind::Documents) => Self::Documents,
                 Some(oxyde_lib::models::file_entry::NativeFileKind::Images) => Self::Images,

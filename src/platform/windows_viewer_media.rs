@@ -39,6 +39,7 @@ fn supervise_in(executable: &Path, path: &Path, control: &ViewerMediaControl) ->
     if control.is_cancelled() {
         return Ok(());
     }
+    control.register_supervisor();
     let mut command = Command::new(executable);
     command
         .arg("--oxyde-preview-worker-v1")
@@ -90,11 +91,12 @@ fn supervise_in(executable: &Path, path: &Path, control: &ViewerMediaControl) ->
                 let report: [u8; MEDIA_REPORT_BYTES] =
                     pending[..MEDIA_REPORT_BYTES].try_into().expect("report length");
                 pending.drain(..MEDIA_REPORT_BYTES);
-                let (status, position, duration) = decode_media_report(&report)
+                let (status, position, duration, dimensions) = decode_media_report(&report)
                     .ok_or_else(|| io::Error::other("Invalid media worker status"))?;
                 control.status.store(status, Ordering::Release);
                 control.position_ms.store(position, Ordering::Release);
                 control.duration_ms.store(duration, Ordering::Release);
+                control.video_dimensions.store((u64::from(dimensions[0]) << 32) | u64::from(dimensions[1]), Ordering::Release);
                 if status == MEDIA_FAILED {
                     return Err(io::Error::other("System codecs could not play the media"));
                 }
@@ -111,7 +113,7 @@ fn supervise_in(executable: &Path, path: &Path, control: &ViewerMediaControl) ->
             return Err(io::Error::other("Media worker exited"));
         }
         super::windows_resource_pressure::check_worker(HANDLE(worker.child.as_raw_handle()))?;
-        std::thread::sleep(Duration::from_millis(20));
+        std::thread::park_timeout(Duration::from_millis(20));
     }
 }
 
@@ -301,16 +303,19 @@ pub(super) fn run(path: &Path) -> io::Result<()> {
     let closed = Arc::new(AtomicBool::new(false));
     let input_latest = latest.clone();
     let input_closed = closed.clone();
+    let playback_thread = std::thread::current();
     std::thread::spawn(move || {
         let mut input = io::stdin().lock();
         while let Ok(Some(command)) = read_command(&mut input) {
             if let Ok(mut value) = input_latest.lock() {
                 *value = command;
+                playback_thread.unpark();
             } else {
                 break;
             }
         }
         input_closed.store(true, Ordering::Release);
+        playback_thread.unpark();
     });
     let class = surface_class()?;
     unsafe {
@@ -363,11 +368,7 @@ pub(super) fn run(path: &Path) -> io::Result<()> {
             if command.parent != first.parent {
                 return Err(io::Error::other("Media owner changed"));
             }
-            if REPAINT.swap(false, Ordering::AcqRel) {
-                if let Some((_, _, width, height, _)) = applied {
-                    player.place(width, height);
-                }
-            }
+            let repaint = REPAINT.swap(false, Ordering::AcqRel);
             if !checked_video && metadata.load(Ordering::Acquire) {
                 has_video = player.engine.HasVideo().as_bool();
                 checked_video = true;
@@ -386,7 +387,7 @@ pub(super) fn run(path: &Path) -> io::Result<()> {
             }
             let value = status.load(Ordering::Acquire);
             if value == MEDIA_FAILED || (value == 0 && started.elapsed() > DEADLINE) {
-                output.write_all(&encode_media_report(MEDIA_FAILED, 0, 0))?;
+                output.write_all(&encode_media_report(MEDIA_FAILED, 0, 0, [0, 0]))?;
                 output.flush()?;
                 return Err(io::Error::other("System media playback failed"));
             }
@@ -436,6 +437,10 @@ pub(super) fn run(path: &Path) -> io::Result<()> {
                 }
                 player.place(width, height);
                 applied = Some(placement);
+            } else if repaint && has_video {
+                // A resize already updates the stream above. Do not first redraw
+                // the old dimensions when WM_PAINT accompanies new geometry.
+                player.place(width, height);
             }
             if checked_video && command.paused != paused && value != MEDIA_ENDED {
                 if command.paused {
@@ -447,11 +452,13 @@ pub(super) fn run(path: &Path) -> io::Result<()> {
             }
             if heartbeat.elapsed() >= Duration::from_millis(100) {
                 let (position, duration) = player.progress();
-                output.write_all(&encode_media_report(value, position, duration))?;
+                let (mut width, mut height) = (0, 0);
+                let _ = player.engine.GetNativeVideoSize(Some(&mut width), Some(&mut height));
+                output.write_all(&encode_media_report(value, position, duration, [width, height]))?;
                 output.flush()?;
                 heartbeat = Instant::now();
             }
-            std::thread::sleep(Duration::from_millis(10));
+            std::thread::park_timeout(Duration::from_millis(10));
         }
     }
     Ok(())

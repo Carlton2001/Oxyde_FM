@@ -681,3 +681,18 @@ viewer-previous = Fichier précédent
 viewer-next = Fichier suivant
 viewer-play = Lire
 viewer-pause = Pause
+
+viewer-rendered = Rendu
+viewer-code = Code
+viewer-highlighted = Coloration syntaxique
+
+viewer-enable-highlighting = Activer la coloration syntaxique
+viewer-disable-highlighting = Désactiver la coloration syntaxique
+
+group-scripts = Scripts
+
+viewer-loading = Chargement du fichier…
+
+viewer-autoplay = Lecture automatique
+viewer-enable-autoplay = Activer la lecture automatique des prochains médias
+viewer-disable-autoplay = Désactiver la lecture automatique des prochains médias

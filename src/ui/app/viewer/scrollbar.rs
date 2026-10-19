@@ -15,6 +15,8 @@ pub(super) struct ListScroll {
     grab: f32,
     /// Axis, track, viewport and content sizes captured when dragging starts.
     drag: Option<(ScrollbarAxis, String, f32, f32)>,
+    hovered: bool,
+    top_anchor: std::cell::Cell<f32>,
 }
 
 impl ScrollbarState for Viewer {
@@ -38,6 +40,7 @@ impl Viewer {
     fn list_state(&self) -> Option<&ListState> {
         match &self.content {
             Content::Text(text) => Some(&text.list),
+            Content::Markdown(document) => Some(&document.list),
             Content::Document(_, list) => Some(list),
             Content::Pdf(pdf) => Some(&pdf.list),
             _ => None,
@@ -113,6 +116,33 @@ impl Viewer {
         let handle = cx.entity();
         let movement = handle.clone();
         let wheel = handle.clone();
+        let return_top = handle.clone();
+        let hover = handle.clone();
+        let scroll_zone = crate::ui::components::scrollbar::scroll_top::hover_zone(
+            div().absolute().top_0().bottom_0().right_0().w(rems(3.625)),
+            "viewer-scroll-zone".into(), move |hovered, _, cx| {
+                hover.update(cx, |this, cx| {
+                    if this.scroll.hovered != *hovered {
+                        this.scroll.hovered = *hovered;
+                        cx.notify();
+                    }
+                });
+            },
+        )
+            .child(vertical)
+            .child(crate::ui::components::scrollbar::scroll_top::button(
+                *cx.theme(), format!("viewer-{:?}", handle.entity_id()), self.scroll.hovered,
+                &self.scroll.top_anchor, scrolled, viewport, viewport + maximum,
+                move |_, _, cx| {
+                    return_top.update(cx, |this, cx| {
+                        this.end_drag();
+                        if let Some(list) = this.list_state() {
+                            list.set_offset_from_scrollbar(point(px(0.0), px(0.0)));
+                        }
+                        cx.notify();
+                    });
+                },
+            ));
         div()
             .id("viewer-scroll")
             .size_full()
@@ -120,7 +150,7 @@ impl Viewer {
             // The rails are drawn by this view; repaint them as the list scrolls.
             .on_scroll_wheel(move |_, _, cx| wheel.update(cx, |_, cx| cx.notify()))
             .child(div().size_full().pr(ZED_TRACK_WIDTH).child(content))
-            .child(div().absolute().inset_0().child(vertical))
+            .child(scroll_zone)
             .child(
                 canvas(|_, _, _| (), move |_, _, window, _| {
                     let moving = movement.clone();
@@ -155,3 +185,7 @@ impl Viewer {
             .into_any_element()
     }
 }
+
+#[cfg(all(test, target_os = "windows"))]
+#[path = "scrollbar/tests/native_scroll_top.rs"]
+mod native_tests;

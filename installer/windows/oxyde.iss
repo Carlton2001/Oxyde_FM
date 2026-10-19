@@ -47,6 +47,7 @@ Source: "{#PayloadDir}\oxyde-archive-io-worker.exe"; DestDir: "{app}"; Flags: ig
 Source: "{#PayloadDir}\oxyde-archive-list-worker.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\oxyde.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\*.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#PayloadDir}\licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\Oxyde GPUI"; Filename: "{app}\Oxyde_GPUI.exe"; WorkingDir: "{app}"; IconFilename: "{app}\oxyde.ico"; AppUserModelID: "Oxyde.GPUI.Windows"

@@ -3,6 +3,7 @@ use crate::ui::scale::rem_pixels;
 use crate::ui::theme::OxydeTheme;
 use gpui::prelude::*;
 use gpui::*;
+pub(crate) mod scroll_top;
 
 /// Pointer state owned by the view using a shared scrollbar.
 pub trait ScrollbarState {

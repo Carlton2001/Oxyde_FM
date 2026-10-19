@@ -1,6 +1,9 @@
 use crate::models::CommandError;
 use serde::{Deserialize, Serialize};
 use std::fs;
+#[cfg(test)]
+#[path = "config/tests/viewer.rs"]
+mod viewer_tests;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct WindowPlacement {
@@ -32,6 +35,12 @@ pub struct AppConfig {
     pub date_format: String,
     #[serde(default = "default_true")]
     pub show_previews: bool,
+    #[serde(default = "default_true")]
+    pub viewer_markdown_rendered: bool,
+    #[serde(default = "default_true")]
+    pub viewer_syntax_highlighting: bool,
+    #[serde(default = "default_true")]
+    pub viewer_media_autoplay: bool,
     #[serde(default)]
     pub zip_quality: String,
     #[serde(default = "default_archive_format")]
@@ -98,6 +107,9 @@ impl Default for AppConfig {
             use_system_icons: false,
             date_format: String::new(),
             show_previews: true,
+            viewer_markdown_rendered: true,
+            viewer_syntax_highlighting: true,
+            viewer_media_autoplay: true,
             default_archive_format: default_archive_format(),
             zip_quality: "fast".to_string(),
             seven_zip_quality: "fast".to_string(),
