@@ -10,6 +10,12 @@ Decode/Encode d’archives, listing/index, images/SVG, texte Office et tags/poch
 
 Les exceptions ACL ont été retenues par l’utilisateur : un accès explicite au SID exact du worker ou à `ALL RESTRICTED APPLICATION PACKAGES` peut rester possible. Le confinement n’est pas indépendant des ACL.
 
+Les miniatures et aperçus PDF réutilisent une session native hors LPAC, séparée
+du Viewer et des icônes. Le parent retient la source pendant chaque rendu et
+valide les réponses bornées. Le recyclage après 32 requêtes/60 s réduit la
+durée de rétention du moteur, sans rétablir une isolation par document ni
+retirer ses droits ordinaires.
+
 PDF, vidéo, lecteur audio/vidéo du Viewer et services natifs Shell/miniatures/icônes restent hors LPAC. Leurs jobs et délais ne retirent pas les permissions ordinaires. Le Viewer utilise les codecs système dans un self-worker distinct, sans décodage multimédia dans le parent ; son heartbeat surveille la réponse IPC, pas la progression du codec. Les sessions réutilisables d’images et de pochettes audio peuvent conserver l’état d’un décodeur compromis entre demandes ; leurs sessions sont distinctes : [aperçus](../architecture/previews.md).
 
 ## Suivi R1–R9

@@ -13,7 +13,7 @@ impl Asset for TooltipPreviewAsset {
         _cx: &mut App,
     ) -> impl std::future::Future<Output = Self::Output> + Send + 'static {
         let path = source.to_string();
-        let task = crate::ui::preview_jobs::load(move || {
+        let task = crate::ui::preview_jobs::load_hover(move || {
             let result = super::pdf_cache::load(path);
             result.map_err(|error| {
                 log::warn!("Could not load tooltip media preview: {error}");
@@ -42,7 +42,7 @@ impl Asset for TooltipImageAsset {
     ) -> impl std::future::Future<Output = Self::Output> + Send + 'static {
         let renderer = cx.svg_renderer();
         // Preserve the typed decoder error across the job runner's worker errors.
-        let task = crate::ui::preview_jobs::load(move || {
+        let task = crate::ui::preview_jobs::load_hover(move || {
             Ok::<_, String>(super::image_cache::load(&source, &renderer))
         });
         async move {

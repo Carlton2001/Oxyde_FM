@@ -130,16 +130,16 @@ fn icon_queue() -> &'static PreviewQueue {
     QUEUE.get_or_init(|| PreviewQueue::new(MAX_ICON_JOBS))
 }
 
-/// Explicit Viewer metadata requests must not wait behind a directory's thumbnails.
-pub(crate) fn load_audio_metadata<T, E>(work: impl FnOnce() -> Result<T, E> + Send + 'static)
+/// Explicit Viewer requests must not wait behind a directory's thumbnails.
+pub(crate) fn load_viewer<T, E>(work: impl FnOnce() -> Result<T, E> + Send + 'static)
     -> impl Future<Output = Result<T, String>> + Send
 where T: Send + 'static, E: Display + Send + 'static {
     static QUEUE: OnceLock<PreviewQueue> = OnceLock::new();
     load_on(QUEUE.get_or_init(|| PreviewQueue::new(1)), work)
 }
 
-/// A hovered audio file bypasses bulk grid admissions, while sharing its codec session.
-pub(crate) fn load_audio_hover<T, E>(work: impl FnOnce() -> Result<T, E> + Send + 'static)
+/// Hover requests bypass bulk grid admissions, while sharing codec sessions.
+pub(crate) fn load_hover<T, E>(work: impl FnOnce() -> Result<T, E> + Send + 'static)
     -> impl Future<Output = Result<T, String>> + Send
 where T: Send + 'static, E: Display + Send + 'static {
     static QUEUE: OnceLock<PreviewQueue> = OnceLock::new();

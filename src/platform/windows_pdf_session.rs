@@ -16,6 +16,9 @@ use windows::Win32::{Foundation::HANDLE, System::Pipes::PeekNamedPipe};
 /// Native PDF rendering stays within the still-preview job size.
 const MEMORY_BYTES: usize = 1024 * 1024 * 1024;
 const DEADLINE: Duration = Duration::from_secs(15);
+mod previews;
+
+pub(super) fn run_previews() -> io::Result<()> { previews::run() }
 
 fn frame(reply: Reply, output: &mut impl Write) -> io::Result<()> {
     let mut bytes = Vec::new();

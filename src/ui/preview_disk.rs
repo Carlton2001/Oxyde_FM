@@ -188,8 +188,8 @@ fn first_frame(image: &RenderImage) -> Option<RgbaImage> {
 
 /// All metadata checks and decoding in this function run on a preview worker.
 pub(crate) fn load_grid(path: &str, expected: Option<&Stamp>, audio: bool, renderer: &SvgRenderer) -> Result<Arc<RenderImage>, String> {
-    let image = checked_grid_image(Path::new(path), expected, || load_grid_pixels(path, audio, renderer))?;
-    Ok(if audio { crate::ui::audio_covers::share(image) } else { image })
+    let load = || checked_grid_image(Path::new(path), expected, || load_grid_pixels(path, audio, renderer));
+    if audio { crate::ui::audio_covers::load_grid(path, expected, load) } else { load() }
 }
 
 fn checked_grid_image(path: &Path, expected: Option<&Stamp>, load: impl FnOnce() -> Result<RgbaImage, String>) -> Result<Arc<RenderImage>, String> {
@@ -237,7 +237,7 @@ fn load_grid_pixels(path: &str, audio: bool, renderer: &SvgRenderer) -> Result<R
         } else if let Some(image) = crate::ui::components::tooltip::cached_media_pixels(path, pdf) {
             first_frame(&image).ok_or("Missing cached preview frame")?
         } else if pdf {
-            oxyde_lib::platform::platform().pdf_thumbnail(path.into()).map_err(|error| error.to_string())?
+            oxyde_lib::platform::platform().pdf_grid_thumbnail(path.into()).map_err(|error| error.to_string())?
         } else {
             first_frame(&crate::ui::image_preview::load_thumbnail(Path::new(path), renderer).map_err(|error| error.to_string())?.image)
                 .ok_or("Missing grid preview frame")?

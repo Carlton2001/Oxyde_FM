@@ -7,6 +7,10 @@ use crate::ui::{
 use gpui::{prelude::*, *};
 
 impl PreviewTask {
+    pub(crate) fn file_unavailable(&self) -> bool {
+        self.data.is_none() && self.message.is_some()
+    }
+
     pub(crate) fn new_viewer(path: String, kind: PreviewType, cx: &mut Context<Self>) -> Self {
         let mut preview = Self::new(path, kind, cx);
         preview.viewer = true;

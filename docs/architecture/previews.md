@@ -147,6 +147,13 @@ s’ouvrent en pause ; une lecture en cours et une reprise après détachement g
 leur état. Le worker
 renvoie des rapports de 25 octets (état, position, durée en ms et dimensions vidéo) ; la barre de
 lecture permet de cliquer ou glisser pour se déplacer (`seek_id`/`seek_ms`).
+L’ouverture des paramètres masque seulement la surface vidéo native ; la lecture
+audio/vidéo conserve son état, y compris une pause demandée par l’utilisateur.
+Un cadre noir aux dimensions calculées de la vidéo indique que l’affichage est
+en pause pendant ce masquage. Les fichiers non affichables ont un message propre
+à la visionneuse et un bouton Ouvrir, via l’action Ouvrir existante dans le panneau
+source : navigation interne pour les dossiers et archives, ouverture associée
+pour les autres fichiers.
 La vidéo et sa barre de lecture forment un bloc centré : la barre suit immédiatement
 le bas de l’image, dans le panneau comme dans la fenêtre secondaire. Les dimensions
 natives remontent du worker ; le bloc adapte ses proportions à l’espace disponible
@@ -196,9 +203,15 @@ audio reconnus par extension affichent aussi leur pochette au survol, sans
 lecture ni écriture du cache disque. Chargement, contrôles de révision et persistance
 restent en arrière-plan, avec les mêmes leases que les autres cartes.
 
-Les pochettes disposent d’un cache RAM de 32 révisions/résolutions de fichiers
-(128 px pour la grille, 512 px pour le survol ; au plus 2 Mio si les entrées
-sont uniquement des miniatures, 32 Mio si elles sont uniquement des aperçus).
+Les pochettes disposent de deux quotas RAM indépendants : 256 miniatures de grille
+à 128 px (16 Mio au plus) et 32 aperçus de survol à 512 px (32 Mio au plus).
+Les lectures du cache disque alimentent aussi ce cache RAM ; revenir sur une
+carte évite de relire et redécoder la miniature. Les révisions des fichiers sont
+vérifiées avant réutilisation ; changement de fichier et effacement du cache
+invalident les entrées concernées.
+Le survol audio utilise la même transition que les images : un indice RAM sans
+I/O évite d’atténuer l’ancienne pochette pendant la validation ; seul un succès
+de cache validé par le worker permet de publier sans le délai de remplacement.
 Une empreinte BLAKE3 des dimensions et pixels
 permet de partager les images identiques entre morceaux, et les miniatures
 identiques entre cartes. Ce partage ne repose pas sur le nom d’album. Sur
@@ -221,11 +234,32 @@ la dernière pochette décodée, par empreinte des octets intégrés et résolut
 (1 Mio au plus). Une grande source audio peut être parcourue par seek ; elle
 n’est pas chargée intégralement pour produire une pochette.
 Le survol audio et les tags du Viewer ont chacun une admission dédiée d’une
-requête, afin de ne pas attendre toute la file des miniatures. Les tags du
+requête, afin de ne pas attendre toute la file des miniatures. Ces admissions
+s’appliquent désormais à l’ensemble du survol et aux chargements initiaux du
+Viewer (images, texte, Markdown, Office et ouverture PDF). Les images relatives
+du Markdown conservent leur admission d’arrière-plan. Les tags du
 Viewer conservent leur worker ponctuel et leur réponse complète, mais ne
 prennent plus le verrou global des aperçus fixes. Les budgets agrégés restent
 communs : cette séparation ne garantit pas une disponibilité immédiate sous
 pression mémoire ou lorsque toutes les places de processus sont occupées.
+
+Les miniatures PDF de la grille et les aperçus PDF partagent une session native
+dédiée de `oxyde.exe` (`pdf-previews`), distincte de celle du Viewer et des
+icônes Shell. Un document est ouvert, rendu puis libéré à chaque requête ; le
+processus est réutilisé. Le rendu natif est directement limité à 128 px pour
+la grille et 1024 px pour le survol, sans rendu intermédiaire à 1024 px pour
+les miniatures. Le transport partage le protocole borné des sessions natives
+à chemins : une commande, une longueur et un chemin UTF-8 ; réponses identifiées
+et bornées, un seul cadre BGRA à la résolution attendue. Le parent retient la
+source en lecture pendant la requête. Plafonds : 512 Mio, 15 s par requête,
+15 s d’inactivité, 32 requêtes, 60 s de durée de session et 4095 octets cumulés
+de commandes. Les chemins dépassant ce transport gardent un worker ponctuel,
+avec la même résolution de sortie. Erreur, crash ou délai retirent le processus,
+sans décodage PDF dans le parent. Cette session reste hors LPAC et peut conserver
+de l’état du moteur PDF entre documents ; elle ne garantit pas l’isolation par
+document. Les sessions images, audio et PDF n’attendent plus le verrou des
+traitements ponctuels Office. Les requêtes déjà engagées dans une même session
+restent séquentielles ; elles ne sont pas préemptées par une demande de survol.
 
 Les clés utilisent chemin, type, taille et date ; les workers vérifient la source avant réutilisation et autour du décodage. Pas de cache des erreurs. Effacer le cache invalide les générations en cours. La signature taille/date n’est pas une preuve d’identité ou de contenu.
 
@@ -243,4 +277,4 @@ Les clés utilisent chemin, type, taille et date ; les workers vérifient la sou
 - Les icônes ordinaires partagent leur source par extension/taille ; dossiers génériques également. Exécutables, raccourcis, lecteurs et chemins spéciaux gardent leurs exceptions. Les personnalisations arbitraires `desktop.ini` ne sont pas détectées par cette heuristique.
 - PDF, vidéo et texte Office gardent leurs parcours distincts. La vidéo utilise une file bornée, l’annulation du dernier propriétaire et l’horloge PTS ; seuls les flux terminés normalement après une image bouclent.
 
-La [fermeture](../diagnostics/shutdown.md) arrête les superviseurs image puis icônes avant la sortie native finale. Les [limites de sécurité](../security/status.md) restent applicables. Les tests de propriété des pixels ne mesurent pas une session GPUI réelle ; Linux et le DPI exact du décodage ne sont pas validés par ces contrats.
+La [fermeture](../diagnostics/shutdown.md) arrête les superviseurs image, icônes et aperçus PDF avant la sortie native finale. Les [limites de sécurité](../security/status.md) restent applicables. Les tests de propriété des pixels ne mesurent pas une session GPUI réelle ; Linux et le DPI exact du décodage ne sont pas validés par ces contrats.

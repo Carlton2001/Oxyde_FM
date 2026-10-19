@@ -112,7 +112,7 @@ impl Viewer {
             Some(get_preview_type(&file.name))
         };
         let Some(kind) = kind else {
-            let work = crate::ui::preview_jobs::load(move || {
+            let work = crate::ui::preview_jobs::load_viewer(move || {
                 oxyde_lib::platform::platform().office_document(path)
             });
             self.finish(
@@ -135,7 +135,7 @@ impl Viewer {
                 // before their turn instead of decoding them for nothing.
                 let wanted = self.wanted.clone();
                 wanted.store(generation, std::sync::atomic::Ordering::Release);
-                let work = crate::ui::preview_jobs::load(move || {
+                let work = crate::ui::preview_jobs::load_viewer(move || {
                     if wanted.load(std::sync::atomic::Ordering::Acquire) != generation {
                         return Err("Viewer image no longer shown".to_string());
                     }
@@ -149,6 +149,7 @@ impl Viewer {
             PreviewType::None => self.replace_content(Content::Unavailable, cx),
             kind => {
                 let preview = cx.new(|cx| PreviewTask::new_viewer(path, kind, cx));
+                cx.observe(&preview, |_, _, cx| cx.notify()).detach();
                 self.replace_content(Content::Preview(preview), cx);
             }
         }

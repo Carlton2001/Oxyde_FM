@@ -203,7 +203,7 @@ impl Rows {
 impl Viewer {
     pub(super) fn load_text(&mut self, path: String, cx: &mut Context<Self>) {
         let generation = self.generation;
-        let work = crate::ui::preview_jobs::load(move || {
+        let work = crate::ui::preview_jobs::load_viewer(move || {
             let (text, truncated) = read(&path)?;
             let lines = line_starts(&text);
             let highlights = syntax::highlight(&path, &text);

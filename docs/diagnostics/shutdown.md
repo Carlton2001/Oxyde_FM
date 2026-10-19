@@ -18,6 +18,10 @@ avec la même attente bornée de deux secondes par session. Le cache de pochette
 du worker ne contient que des données régénérables ; aucune sauvegarde n’est
 attendue avant son arrêt.
 
+Le superviseur des sessions natives arrête les icônes Shell puis les aperçus
+PDF réutilisables, avec deux secondes d’attente au plus par service. Le PDF du
+Viewer garde sa session propre au document et son propriétaire existant.
+
 ## Si le problème revient
 
 1. Lire la fin d’`oxyde.log` à côté de `config.json` (`%APPDATA%\oxyde` habituellement, `data` en portable) et relever le PID de session.

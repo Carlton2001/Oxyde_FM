@@ -18,6 +18,9 @@ pub(super) const TEXT_PREVIEW_WIDTH: Rems = rems(20.0);
 
 impl PreviewTask {
     pub(super) fn may_have_cached_pixels(&self) -> bool {
+        if let Some(path) = &self.audio_source {
+            return crate::ui::audio_covers::may_have_cached(path);
+        }
         if let Some(path) = &self.original_image {
             return super::image_cache::may_have_cached(path);
         }
@@ -32,6 +35,7 @@ impl PreviewTask {
         fit_media_size(width, natural_height, maximum_width, height)
     }
     pub(super) fn cached_for_handover(&self, cx: &mut App) -> bool {
+        if self.audio_source.is_some() { return self.audio_cached; }
         if let Some(source) = &self.media_asset {
             return cx.fetch_asset::<TooltipPreviewAsset>(source).is_some_and(|result| matches!(result, Ok((_, true))));
         }
@@ -148,6 +152,8 @@ impl PreviewTask {
                 data: None,
                 media_asset: None,
                 original_image: Some(path),
+                audio_source: None,
+                audio_cached: false,
                 message: None,
                 loading_delay_elapsed: false,
                 _video_cancellation: None,
@@ -163,12 +169,15 @@ impl PreviewTask {
                 data: None,
                 media_asset: Some(path),
                 original_image: None,
+                audio_source: None,
+                audio_cached: false,
                 message: None,
                 loading_delay_elapsed: false,
                 _video_cancellation: None,
             };
         }
         let cancellation = crate::ui::preview_jobs::Cancellation::default();
+        let audio_source = (preview_type == PreviewType::Audio).then(|| path.clone());
         let video_cancellation = (preview_type == PreviewType::Video)
             .then(|| Arc::new(CancelVideoPreview(cancellation.clone())));
         cx.spawn(move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
@@ -251,10 +260,14 @@ impl PreviewTask {
                 }
 
                 let mut failure_message = None;
+                let mut audio_cached = false;
                 let preview = match preview_type {
                     PreviewType::Audio => {
-                        match crate::ui::preview_jobs::load_audio_hover(move || crate::ui::audio_covers::load(&path)).await {
-                            Ok(image) => Some(PreviewData::Image(image)),
+                        match crate::ui::preview_jobs::load_hover(move || crate::ui::audio_covers::load(&path)).await {
+                            Ok((image, cached)) => {
+                                audio_cached = cached;
+                                Some(PreviewData::Image(image))
+                            },
                             Err(error) => {
                                 log::debug!("Audio tooltip cover unavailable: {error}");
                                 None
@@ -265,7 +278,7 @@ impl PreviewTask {
                         let rgba_img = match preview_type {
                             PreviewType::Image => {
                                 let path = path.clone();
-                                match crate::ui::preview_jobs::load(move || {
+                                match crate::ui::preview_jobs::load_hover(move || {
                                     ::oxyde_lib::platform::platform().thumbnail(path)
                                 })
                                 .await
@@ -280,7 +293,7 @@ impl PreviewTask {
                             }
                             PreviewType::Office => {
                                 let path = path.clone();
-                                match crate::ui::preview_jobs::load(move || {
+                                match crate::ui::preview_jobs::load_hover(move || {
                                     ::oxyde_lib::platform::platform().office_thumbnail(path)
                                 })
                                 .await
@@ -297,7 +310,7 @@ impl PreviewTask {
                             }
                             PreviewType::Pdf => {
                                 let path = path.clone();
-                                match crate::ui::preview_jobs::load(move || {
+                                match crate::ui::preview_jobs::load_hover(move || {
                                     ::oxyde_lib::platform::platform().pdf_thumbnail(path)
                                 })
                                 .await
@@ -328,7 +341,7 @@ impl PreviewTask {
                         } else if preview_type == PreviewType::Office {
                             // Fallback to text for Office if no image
                             let path_for_text = path.clone();
-                            let content = match crate::ui::preview_jobs::load(move || {
+                            let content = match crate::ui::preview_jobs::load_hover(move || {
                                 ::oxyde_lib::platform::platform().office_text_preview(path_for_text)
                             })
                             .await
@@ -354,7 +367,7 @@ impl PreviewTask {
                         }
                     }
                     PreviewType::Text => {
-                        let content = crate::ui::preview_jobs::load(move || {
+                        let content = crate::ui::preview_jobs::load_hover(move || {
                             ::oxyde_lib::utils::preview::read_text_preview(std::path::Path::new(
                                 &path,
                             ))
@@ -375,6 +388,7 @@ impl PreviewTask {
                 let _ = this.update(&mut cx, |this, cx| {
                     this.message = if preview.is_none() { failure_message.or(Some(Message::PreviewUnavailable)) } else { None };
                     this.data = preview;
+                    this.audio_cached = audio_cached;
                     cx.notify();
                 });
             }
@@ -386,6 +400,8 @@ impl PreviewTask {
             data: None,
             media_asset: None,
             original_image: None,
+            audio_source,
+            audio_cached: false,
             message: None,
             loading_delay_elapsed: false,
             transition_image: None,

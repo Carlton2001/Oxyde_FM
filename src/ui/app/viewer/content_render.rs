@@ -78,6 +78,32 @@ fn block(block: &Block, cx: &App) -> AnyElement {
 }
 
 impl Viewer {
+    pub(super) fn render_unavailable_file(&self, cx: &mut Context<Self>) -> AnyElement {
+        let owner = self.owner.clone();
+        let file = self.files.get(self.index).cloned();
+        let source_tab = self.source.tab.clone();
+        div().size_full().flex().flex_col().items_center().justify_center()
+            .gap(rems(1.0)).p(rems(1.0))
+            .text_color(cx.theme().text_muted)
+            .child(cx.i18n().text(Message::ViewerFileUnavailable))
+            .when_some(file, |body, file| body.child(
+                crate::ui::elements::button::Button::new("viewer-open-file")
+                    .label(cx.i18n().text(Message::Open))
+                    .icon("icons/folder-open.svg")
+                    .on_click(move |_, cx| {
+                        let _ = owner.update(cx, |owner, cx| {
+                            let mut pane_id = None;
+                            owner.state.layout.visit_panes(&mut |pane| {
+                                if pane.active_tab().id == source_tab { pane_id = Some(pane.id.clone()); }
+                            });
+                            if let Some(pane_id) = pane_id {
+                                owner.open_file_item(&pane_id, file.path.clone(), file.is_dir, cx);
+                            }
+                        });
+                    })
+            )).into_any_element()
+    }
+
     pub(super) fn render_content(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let theme = *cx.theme();
         let handle = cx.entity().downgrade();
@@ -95,7 +121,7 @@ impl Viewer {
                 message(cx.i18n().text(Message::ViewerEmpty), cx)
             }
             Content::None | Content::Unavailable => {
-                message(cx.i18n().text(Message::PreviewUnavailable), cx)
+                self.render_unavailable_file(cx)
             }
             Content::Loading => message(cx.i18n().text(Message::ViewerLoading), cx),
             // The absolute box follows the pane or window, never the image's own
@@ -115,6 +141,7 @@ impl Viewer {
                         ),
                 )
                 .into_any_element(),
+            Content::Preview(preview) if preview.read(cx).file_unavailable() => self.render_unavailable_file(cx),
             Content::Preview(preview) => preview.clone().into_any_element(),
             Content::Markdown(_) => self.render_markdown(cx),
             Content::Text(text) => {

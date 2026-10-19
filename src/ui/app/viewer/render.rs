@@ -112,7 +112,7 @@ impl Render for Viewer {
                                         content.child(self.render_audio(window, cx))
                                     })
                                     .when(failed, |content| {
-                                        content.child(cx.i18n().text(Message::PreviewUnavailable))
+                                        content.child(self.render_unavailable_file(cx))
                                     })
                                     .child(
                                         canvas(

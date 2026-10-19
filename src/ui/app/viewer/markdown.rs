@@ -49,7 +49,7 @@ pub(super) fn is_markdown(path: &str) -> bool {
 impl Viewer {
     pub(super) fn load_markdown(&mut self, path: String, cx: &mut Context<Self>) {
         let generation = self.generation;
-        let work = crate::ui::preview_jobs::load(move || {
+        let work = crate::ui::preview_jobs::load_viewer(move || {
             use std::io::Read;
             const LIMIT: u64 = 2 * 1024 * 1024;
             let file = std::fs::File::open(&path)?;

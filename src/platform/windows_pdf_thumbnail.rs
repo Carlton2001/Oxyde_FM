@@ -116,6 +116,10 @@ pub(super) fn get(path: String) -> Result<RgbaImage, CommandError> {
     render(&path, 0, MAX_SIDE)
 }
 
+pub(super) fn get_grid(path: String) -> Result<RgbaImage, CommandError> {
+    render(&path, 0, 128)
+}
+
 /// One `width height` line per page (WinRT DIPs, after rotation).
 pub(super) fn sizes_of(document: &PdfDocument) -> Result<String, CommandError> {
     let count = document.PageCount()?.min(MAX_LISTED_PAGES);

@@ -63,21 +63,57 @@ pub(crate) fn clear() {
     }
 }
 
-pub(crate) fn load(path: &str) -> Result<Arc<RenderImage>, String> {
+pub(crate) fn load(path: &str) -> Result<(Arc<RenderImage>, bool), String> {
     load_size(path, false)
 }
 
 pub(crate) fn load_thumbnail(path: &str) -> Result<Arc<RenderImage>, String> {
-    load_size(path, true)
+    load_size(path, true).map(|(image, _)| image)
 }
 
-fn load_size(path: &str, thumbnail: bool) -> Result<Arc<RenderImage>, String> {
+fn load_size(path: &str, thumbnail: bool) -> Result<(Arc<RenderImage>, bool), String> {
+    with_cache(path, thumbnail, None, || {
+        let pixels = oxyde_lib::platform::platform()
+            .audio_cover(Path::new(path), thumbnail)
+            .map_err(|error| error.to_string())?
+            .ok_or("No embedded audio cover")?;
+        Ok(Arc::new(RenderImage::new(vec![image::Frame::new(pixels)])))
+    })
+}
+
+/// Keep decoded grid pixels across card leases, including disk-cache hits.
+pub(crate) fn load_grid(
+    path: &str,
+    expected: Option<&FileStamp>,
+    load: impl FnOnce() -> Result<Arc<RenderImage>, String>,
+) -> Result<Arc<RenderImage>, String> {
+    with_cache(path, true, expected, load).map(|(image, _)| image)
+}
+
+/// UI hint only: source validation stays on the loading worker.
+pub(crate) fn may_have_cached(path: &str) -> bool {
+    CACHE.get().is_some_and(|cache| match cache.try_lock() {
+        Ok(cache) => cache.entries.iter().any(|entry| entry.0 == path && !entry.3),
+        Err(std::sync::TryLockError::WouldBlock) => true,
+        Err(_) => false,
+    })
+}
+
+fn with_cache(
+    path: &str,
+    thumbnail: bool,
+    expected: Option<&FileStamp>,
+    load: impl FnOnce() -> Result<Arc<RenderImage>, String>,
+) -> Result<(Arc<RenderImage>, bool), String> {
     let stamp = || {
         std::fs::metadata(path)
             .map_err(|error| error.to_string())
             .map(|metadata| FileStamp::from_metadata(&metadata))
     };
     let before = stamp()?;
+    if expected.is_some_and(|expected| Some(expected) != before.as_ref()) {
+        return Err("Thumbnail source changed since listing".into());
+    }
     let cache = CACHE.get_or_init(Default::default);
     let revision = {
         let mut cache = cache.lock().unwrap();
@@ -90,33 +126,32 @@ fn load_size(path: &str, thumbnail: bool) -> Result<Arc<RenderImage>, String> {
             if Some(&entry.1) == before.as_ref() {
                 let image = entry.2.clone();
                 cache.entries.push_back(entry);
-                return Ok(image);
+                return Ok((image, true));
             }
         }
         cache.revision
     };
-    let pixels = oxyde_lib::platform::platform()
-        .audio_cover(Path::new(path), thumbnail)
-        .map_err(|error| error.to_string())?
-        .ok_or("No embedded audio cover")?;
+    let image = load()?;
     if stamp()? != before {
         return Err("Audio cover source changed during loading".into());
     }
-    let image = share(Arc::new(RenderImage::new(vec![image::Frame::new(pixels)])));
+    let image = share(image);
     if !thumbnail { crate::ui::preview_budget::admit(&image)?; }
     let mut cache = cache.lock().unwrap();
     if cache.revision == revision {
         if let Some(stamp) = before {
             cache.entries.retain(|(source, _, _, small)| source != path || *small != thumbnail);
-            while cache.entries.len() >= 32 {
-                cache.entries.pop_front();
+            let limit = if thumbnail { 256 } else { 32 };
+            while cache.entries.iter().filter(|entry| entry.3 == thumbnail).count() >= limit {
+                let oldest = cache.entries.iter().position(|entry| entry.3 == thumbnail).unwrap();
+                cache.entries.remove(oldest);
             }
             cache
                 .entries
                 .push_back((path.to_owned(), stamp, image.clone(), thumbnail));
         }
     }
-    Ok(image)
+    Ok((image, false))
 }
 
 #[cfg(test)]

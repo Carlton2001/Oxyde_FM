@@ -57,7 +57,7 @@ impl Pdf {
 impl Viewer {
     pub(super) fn load_pdf(&mut self, path: String, cx: &mut Context<Self>) {
         let generation = self.generation;
-        let work = crate::ui::preview_jobs::load(move || {
+        let work = crate::ui::preview_jobs::load_viewer(move || {
             oxyde_lib::platform::platform().open_pdf_session(std::path::Path::new(&path))
         });
         self.finish(

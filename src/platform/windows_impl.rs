@@ -32,6 +32,9 @@ impl Platform for WindowsPlatform {
     fn run_pdf_session_worker(&self, path: &std::path::Path) -> std::io::Result<()> {
         super::windows_pdf_session::run(path)
     }
+    fn run_pdf_preview_session_worker(&self) -> std::io::Result<()> {
+        super::windows_pdf_session::run_previews()
+    }
     fn file_kind_for_extension(&self, extension: &str) -> Option<crate::models::file_entry::NativeFileKind> {
         super::windows_file_kind::for_extension(extension)
     }

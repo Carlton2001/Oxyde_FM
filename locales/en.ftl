@@ -663,6 +663,8 @@ group-select-all = Select all items in the group
 group-deselect-all = Deselect all items in the group
 
 viewer-title = Viewer
+viewer-visual-paused = Video display paused
+viewer-file-unavailable = This file cannot be displayed.
 viewer-open = Open the Viewer
 viewer-close = Close the Viewer
 viewer-slide = Slide

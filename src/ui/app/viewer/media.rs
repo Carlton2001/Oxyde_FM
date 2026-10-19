@@ -10,10 +10,27 @@ pub(super) struct MediaSession {
     pub(super) paused: bool,
     cancellation: crate::ui::preview_jobs::Cancellation,
 }
+
+#[cfg(test)]
+#[path = "tests/media_visibility.rs"]
+mod visibility_tests;
 impl Drop for MediaSession {
     fn drop(&mut self) {
         self.control.cancel();
         self.cancellation.cancel();
+    }
+}
+
+impl MediaSession {
+    fn update_visibility(&self, blocked: bool) {
+        if let Ok(mut command) = self.control.command.lock() {
+            let visible = !blocked;
+            if command.visible != visible || command.paused != self.paused {
+                command.visible = visible;
+                command.paused = self.paused;
+                self.control.wake();
+            }
+        }
     }
 }
 
@@ -31,15 +48,7 @@ impl Viewer {
 
     pub(super) fn update_visibility(&self) {
         if let Some(media) = &self.media {
-            if let Ok(mut command) = media.control.command.lock() {
-                let visible = !self.blocked;
-                let paused = media.paused || self.blocked;
-                if command.visible != visible || command.paused != paused {
-                    command.visible = visible;
-                    command.paused = paused;
-                    media.control.wake();
-                }
-            }
+            media.update_visibility(self.blocked);
         }
     }
 
@@ -88,7 +97,7 @@ impl Viewer {
                     parent,
                     rect,
                     visible: !self.blocked,
-                    paused: self.blocked || resume_paused,
+                    paused: resume_paused,
                     seek_id: u32::from(resume_ms > 0),
                     seek_ms: resume_ms,
                 };

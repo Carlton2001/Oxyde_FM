@@ -260,6 +260,8 @@ pub struct PreviewTask {
     data: Option<PreviewData>,
     media_asset: Option<SharedString>,
     original_image: Option<std::path::PathBuf>,
+    audio_source: Option<String>,
+    audio_cached: bool,
     message: Option<Message>,
     loading_delay_elapsed: bool,
     _video_cancellation: Option<Arc<CancelVideoPreview>>,

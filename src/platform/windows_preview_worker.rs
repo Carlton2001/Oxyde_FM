@@ -171,14 +171,19 @@ pub(super) fn run(mode: &str, path: &Path) -> io::Result<Vec<u8>> {
     if mode == "image-viewer" {
         return image_session::run(path, image_session::VIEWER_KIND);
     }
+    if mode == "image" { return image_session::run(path, 0); }
+    if mode == "image-thumbnail" { return image_session::run(path, 1); }
+    if mode == "pdf" || mode == "pdf-thumbnail" {
+        if path.to_str().is_some_and(|path| path.len() + 5 <= crate::commands::icon_session_worker::MAX_INPUT) {
+            return icon_session::run_pdf(path, mode == "pdf-thumbnail");
+        }
+        let _source = super::platform().retain_archive_source(path)?;
+        return run_in(&std::env::current_exe()?, mode, path, DEADLINE);
+    }
     let _slot = SLOT
         .lock()
         .map_err(|_| io::Error::other("Preview worker admission failed"))?;
-    if mode == "image" {
-        image_session::run(path, 0)
-    } else if mode == "image-thumbnail" {
-        image_session::run(path, 1)
-    } else if mode == "office-text" || mode == "office-document" {
+    if mode == "office-text" || mode == "office-document" {
         run_office_text_in(
             &std::env::current_exe()?.with_file_name("oxyde-image-worker.exe"),
             path,

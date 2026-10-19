@@ -411,6 +411,13 @@ pub trait Platform: Send + Sync {
         thumbnails::get_pdf_thumbnail_raw(path)
     }
 
+    fn pdf_grid_thumbnail(&self, path: String) -> Result<image::RgbaImage, crate::models::CommandError> {
+        #[cfg(target_os = "windows")]
+        { thumbnails::get_pdf_grid_thumbnail_raw(path) }
+        #[cfg(not(target_os = "windows"))]
+        { self.pdf_thumbnail(path) }
+    }
+
     fn video_frames(
         &self,
         path: String,
@@ -481,6 +488,10 @@ pub trait Platform: Send + Sync {
     #[doc(hidden)]
     fn run_pdf_session_worker(&self, _path: &std::path::Path) -> std::io::Result<()> {
         Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "PDF session worker unavailable"))
+    }
+    #[doc(hidden)]
+    fn run_pdf_preview_session_worker(&self) -> std::io::Result<()> {
+        Err(std::io::Error::other("PDF previews unavailable on this platform"))
     }
 
     /// Liste les points de montage / lecteurs disponibles.

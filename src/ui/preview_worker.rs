@@ -19,6 +19,10 @@ pub(crate) fn run_if_requested() -> bool {
             .next()
             .and_then(|mode| mode.into_string().ok())
             .ok_or_else(|| std::io::Error::other("Missing preview mode"))?;
+        if mode == "pdf-previews" {
+            if arguments.next().is_some() { return Err(std::io::Error::other("Unexpected PDF session argument")); }
+            return oxyde_lib::platform::platform().run_pdf_preview_session_worker();
+        }
         let path = arguments
             .next()
             .ok_or_else(|| std::io::Error::other("Missing preview source"))?;

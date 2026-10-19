@@ -1,5 +1,6 @@
 //! Fit the video and controls using this frame's bounds, without a second render.
 use super::Viewer;
+use crate::ui::{i18n::{I18nContext, Message}, theme::ThemeContext};
 use gpui::{prelude::*, *};
 use std::sync::atomic::Ordering;
 
@@ -7,6 +8,7 @@ pub(super) struct VideoLayout {
     viewer: WeakEntity<Viewer>,
     bar: AnyElement,
     ratio: f32,
+    placeholder: Option<AnyElement>,
 }
 
 impl Viewer {
@@ -25,6 +27,17 @@ impl Viewer {
             } else {
                 16.0 / 9.0
             },
+            placeholder: self.blocked.then(|| div()
+                .size_full()
+                .bg(rgb(0x000000))
+                .border_1()
+                .border_color(cx.theme().border)
+                .flex().items_center().justify_center()
+                .p(rems(1.0))
+                .text_color(rgb(0xffffff))
+                .text_center()
+                .child(cx.i18n().text(Message::ViewerVisualPaused))
+                .into_any_element()),
         }
     }
 }
@@ -91,6 +104,10 @@ impl Element for VideoLayout {
         );
         self.bar
             .prepaint_at(origin + point(px(0.0), height), window, cx);
+        if let Some(placeholder) = &mut self.placeholder {
+            placeholder.layout_as_root(size(AvailableSpace::Definite(width), AvailableSpace::Definite(height)), window, cx);
+            placeholder.prepaint_at(origin, window, cx);
+        }
         Bounds::new(origin, size(width, height))
     }
 
@@ -107,6 +124,7 @@ impl Element for VideoLayout {
         let _ = self
             .viewer
             .update(cx, |this, cx| this.place_media(*video, window, cx));
+        if let Some(placeholder) = &mut self.placeholder { placeholder.paint(window, cx); }
         self.bar.paint(window, cx);
     }
 }
