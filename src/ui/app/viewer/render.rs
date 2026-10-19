@@ -69,7 +69,7 @@ impl Render for Viewer {
             .min_h_0()
             .flex()
             .flex_col()
-            .bg(theme.background)
+            .bg(theme.active_background)
             .text_color(theme.text)
             .text_size(rems(0.8125))
             .track_focus(&self.focus)
@@ -91,14 +91,12 @@ impl Render for Viewer {
                 cx.stop_propagation();
             }))
             .child(
+                // Content fills the pane; its rail reaches the pane's right edge.
                 div()
                     .flex_1()
                     .min_h_0()
                     .w_full()
                     .relative()
-                    .pt(rems(2.75))
-                    .pb(rems(3.0))
-                    .px(rems(1.0))
                     .child(div().size_full().flex().flex_col().min_h_0().min_w_0().map(
                         |content| {
                             if self.native_media {
@@ -130,145 +128,114 @@ impl Render for Viewer {
                                         .absolute()
                                         .size_full(),
                                     )
-                            } else if let Some(preview) = &self.preview {
-                                content.child(preview.clone())
                             } else {
-                                content
-                                    .items_center()
-                                    .justify_center()
-                                    .text_color(theme.text_muted)
-                                    .child(cx.i18n().text(if self.preparation.is_some() {
-                                        Message::PreviewLoading
-                                    } else if current.is_none() {
-                                        Message::ViewerEmpty
-                                    } else {
-                                        Message::PreviewUnavailable
-                                    }))
+                                content.child({
+                                    let body = self.render_content(window, cx);
+                                    self.with_scrollbar(body, cx)
+                                })
                             }
                         },
                     )),
             )
-            .child(
-                div()
-                    .absolute()
-                    .top(rems(0.5))
-                    .left(rems(1.0))
-                    .right(rems(3.0))
-                    .truncate()
-                    .child(title),
-            )
-            .when(!self.detached, |surface| {
-                surface.child(
-                    div()
-                        .absolute()
-                        .top(rems(0.375))
-                        .right(rems(0.375))
-                        .size(rems(2.0))
-                        .child(
-                            icon_button(
-                                "viewer-detach",
-                                "icons/external-link.svg",
-                                Message::ViewerDetach,
-                                true,
-                                cx,
-                            )
-                            .on_click(cx.listener(|this, _, window, cx| this.detach(window, cx))),
-                        ),
-                )
+            .when(self.native_media && !failed, |surface| {
+                surface.child(self.render_media_bar(cx))
             })
-            .child(
-                div()
-                    .absolute()
-                    .bottom(crate::ui::style::STATUS_BAR_HEIGHT + rems(0.375))
-                    .w_full()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .gap(rems(0.5))
-                    .when(self.files.len() > 1, |controls| {
-                        controls
-                            .child(
-                                icon_button(
-                                    "viewer-previous",
-                                    "icons/chevron-left.svg",
-                                    Message::ViewerPrevious,
-                                    has_previous,
-                                    cx,
-                                )
-                                .on_click(cx.listener(
-                                    move |this, _, _, cx| {
-                                        if has_previous {
-                                            this.step(false, cx);
-                                        }
-                                    },
-                                )),
-                            )
-                            .child(div().text_color(theme.text_muted).child(format!(
-                                "{} / {}",
-                                self.index + 1,
-                                self.files.len()
-                            )))
-                    })
-                    .when(self.native_media, |controls| {
-                        controls.child(
-                            icon_button(
-                                "viewer-play",
-                                if self.media_paused() {
-                                    "icons/play.svg"
-                                } else {
-                                    "icons/pause.svg"
-                                },
-                                if self.media_paused() {
-                                    Message::ViewerPlay
-                                } else {
-                                    Message::ViewerPause
-                                },
-                                true,
-                                cx,
-                            )
-                            .on_click(cx.listener(|this, _, _, cx| this.toggle_media(cx))),
-                        )
-                    })
-                    .when(self.files.len() > 1, |controls| {
-                        controls.child(
-                            icon_button(
-                                "viewer-next",
-                                "icons/chevron-right.svg",
-                                Message::ViewerNext,
-                                has_next,
-                                cx,
-                            )
-                            .on_click(cx.listener(
-                                move |this, _, _, cx| {
-                                    if has_next {
-                                        this.step(true, cx);
-                                    }
-                                },
-                            )),
-                        )
-                    }),
-            )
-            .child(
-                div()
-                    .h(crate::ui::style::STATUS_BAR_HEIGHT)
-                    .w_full()
-                    .flex_none()
-                    .bg(theme.surface)
-                    .border_t(rems(0.0625))
-                    .border_color(theme.border),
-            );
+            .child(self.render_status_bar(title, has_previous, has_next, cx));
         surface.into_any_element()
     }
 }
 
 impl Viewer {
+    /// File name, navigation and playback in the pane's status bar.
+    fn render_status_bar(
+        &self,
+        title: String,
+        has_previous: bool,
+        has_next: bool,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let theme = *cx.theme();
+        let bar = crate::ui::style::STATUS_BAR_HEIGHT;
+        let button = |button: Stateful<Div>| button.size(bar);
+        div()
+            .h(bar)
+            .w_full()
+            .flex_none()
+            .flex()
+            .items_center()
+            .px(rems(0.5))
+            .gap(rems(0.5))
+            .bg(theme.surface)
+            .border_t(rems(0.0625))
+            .border_color(theme.border)
+            .child(div().flex_1().min_w_0().truncate().text_color(theme.text_muted).child(title))
+            .child(
+                div()
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .gap(rems(0.25))
+                    .when(self.files.len() > 1, |controls| {
+                        controls
+                            .child(button(icon_button(
+                                "viewer-previous",
+                                "icons/chevron-left.svg",
+                                Message::ViewerPrevious,
+                                has_previous,
+                                cx,
+                            ))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                if has_previous {
+                                    this.step(false, cx);
+                                }
+                            })))
+                            .child(div().text_color(theme.text_muted).child(format!(
+                                "{} / {}",
+                                self.index + 1,
+                                self.files.len()
+                            )))
+                            .child(button(icon_button(
+                                "viewer-next",
+                                "icons/chevron-right.svg",
+                                Message::ViewerNext,
+                                has_next,
+                                cx,
+                            ))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                if has_next {
+                                    this.step(true, cx);
+                                }
+                            })))
+                    }),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .justify_end()
+                    .when(!self.detached, |end| {
+                        end.child(
+                            button(icon_button(
+                                "viewer-detach",
+                                "icons/external-link.svg",
+                                Message::ViewerDetach,
+                                true,
+                                cx,
+                            ))
+                            .on_click(cx.listener(|this, _, window, cx| this.detach(window, cx))),
+                        )
+                    }),
+            )
+    }
+
     fn render_detached(&self, cx: &mut Context<Self>) -> Div {
         let theme = *cx.theme();
         div()
             .size_full()
             .flex()
             .flex_col()
-            .bg(theme.background)
+            .bg(theme.active_background)
             .text_color(theme.text_muted)
             .text_size(rems(0.8125))
             .child(

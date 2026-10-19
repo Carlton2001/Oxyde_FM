@@ -155,7 +155,10 @@ impl OxydeApp {
     }
 
     pub(crate) fn activate_pane(&mut self, pane_id: &str, cx: &mut Context<Self>) {
-        if self.state.find_pane(pane_id).is_some() && self.state.active_pane_id != pane_id {
+        if self.state.find_pane(pane_id).is_some()
+            && self.state.active_pane_id != pane_id
+            && !self.state.is_viewer_pane(pane_id)
+        {
             self.state.active_pane_id = pane_id.to_string();
             self.save_workspace(cx);
         }
@@ -324,7 +327,9 @@ impl OxydeApp {
             {
                 load_path = Some(pane.active_tab().path.clone());
             }
-            self.state.active_pane_id = pane_id.to_string();
+            if !pane.active_tab().is_viewer() {
+                self.state.active_pane_id = pane_id.to_string();
+            }
         }
         if let Some(path) = load_path {
             self.request_tab_files(pane_id, tab_idx, path, false, cx);

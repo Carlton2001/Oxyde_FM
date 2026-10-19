@@ -49,7 +49,7 @@ impl Viewer {
             }
             let result = cx.open_window(
                 WindowOptions {
-                    window_bounds: Some(super::super::tool_geometry::restore(
+                    window_bounds: Some(super::super::tool_geometry::restore_sized(
                         "icons/eye.svg",
                         bounds,
                         cx,
@@ -74,6 +74,9 @@ impl Viewer {
                             log::warn!("Cannot set Viewer owner: {error}");
                         }
                     }
+                    // Only this window paints the player from its first frame;
+                    // otherwise both windows would claim it in turn.
+                    viewer.update(cx, |viewer, _| viewer.detached = true);
                     cx.new(|cx| {
                         let mut subscriptions = Vec::new();
                         let weak_viewer = viewer.downgrade();
@@ -83,7 +86,7 @@ impl Viewer {
                             let _ = weak_viewer.update(cx, |viewer, cx| {
                                 viewer.detached = false;
                                 viewer.detached_window = None;
-                                viewer.media = None;
+                                viewer.suspend_media();
                                 viewer.focus_pending = true;
                                 viewer.blocked = viewer.owner.upgrade().is_some_and(|owner| {
                                     let app = owner.read(cx);
@@ -120,12 +123,19 @@ impl Viewer {
                         viewer.detached = true;
                         viewer.detached_window = Some(handle);
                         viewer.focus_pending = true;
-                        viewer.media = None;
+                        // The secondary window's first paint moves the player
+                        // there (see `place_media`), keeping its position.
                         viewer.blocked = false;
                         cx.notify();
                     });
                 }
-                Err(error) => log::error!("Cannot detach Viewer: {error}"),
+                Err(error) => {
+                    viewer.update(cx, |viewer, cx| {
+                        viewer.detached = false;
+                        cx.notify();
+                    });
+                    log::error!("Cannot detach Viewer: {error}");
+                }
             }
         });
     }
@@ -142,7 +152,7 @@ impl Render for ViewerWindow {
             .flex()
             .flex_col()
             .min_h_0()
-            .bg(theme.background)
+            .bg(theme.active_background)
             .text_color(theme.text)
             .font_weight(FontWeight::NORMAL)
             .text_size(rems(0.8125))
@@ -157,6 +167,14 @@ impl Render for ViewerWindow {
                     window.remove_window();
                 },
             ))
-            .child(div().flex_1().min_h_0().child(self.viewer.clone()))
+            // An absolute box gives the Viewer a definite size: percentage
+            // heights inside a flex item would follow the image's natural size.
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .relative()
+                    .child(div().absolute().inset_0().child(self.viewer.clone())),
+            )
     }
 }

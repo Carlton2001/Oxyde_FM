@@ -86,32 +86,46 @@ fn decode(
 }
 
 pub(crate) fn load_path(path: &Path, renderer: &SvgRenderer) -> Result<PreviewImage, PreviewError> {
-    load_path_mode(path, renderer, false)
+    load_path_mode(path, renderer, "image", POLICY)
 }
 
 pub(crate) fn load_thumbnail(path: &Path, renderer: &SvgRenderer) -> Result<PreviewImage, PreviewError> {
-    load_path_mode(path, renderer, true)
+    load_path_mode(path, renderer, "image-thumbnail", Policy { output_side: 128, frame_count: 1, ..POLICY })
 }
 
-fn load_path_mode(path: &Path, renderer: &SvgRenderer, thumbnail: bool) -> Result<PreviewImage, PreviewError> {
+/// Larger raster for the Viewer; the display still fits it to the pane.
+pub(crate) fn load_viewer(path: &Path, renderer: &SvgRenderer) -> Result<PreviewImage, PreviewError> {
+    load_path_mode(path, renderer, "image-viewer", oxyde_lib::utils::image_preview_decode::VIEWER_POLICY)
+}
+
+fn load_path_mode(path: &Path, renderer: &SvgRenderer, mode: &str, policy: Policy) -> Result<PreviewImage, PreviewError> {
+    // The Viewer owns one full-resolution image; it is not a retained tooltip.
+    let viewer = mode == "image-viewer";
     #[cfg(target_os = "windows")]
     {
         // Retain the cheap admission and missing-file classification in the parent.
         let length = std::fs::metadata(path)
             .map_err(|error| PreviewError::Read(error.to_string()))?
             .len();
-        if length > POLICY.encoded_bytes as u64 {
-            return Err(PreviewError::Limit("encoded byte limit (64 MiB)"));
+        if length > policy.encoded_bytes as u64 {
+            return Err(PreviewError::Limit("encoded byte limit"));
         }
         let _ = renderer;
+        let limits = if viewer {
+            oxyde_lib::utils::preview_protocol::VIEWER
+        } else {
+            oxyde_lib::utils::preview_protocol::PREVIEW
+        };
         let reply = oxyde_lib::platform::platform()
-            .run_preview_worker(if thumbnail { "image-thumbnail" } else { "image" }, path)
-            .and_then(|bytes| oxyde_lib::utils::preview_protocol::decode(&bytes))
+            .run_preview_worker(mode, path)
+            .and_then(|bytes| oxyde_lib::utils::preview_protocol::decode_with(&bytes, limits))
             .map_err(|error| PreviewError::Worker(error.to_string()))?;
         match reply {
             oxyde_lib::utils::preview_protocol::Reply::Images { frames, limited, natural_size } => {
                 let image = Arc::new(RenderImage::new(frames));
-                crate::ui::preview_budget::admit(&image).map_err(PreviewError::Memory)?;
+                if !viewer {
+                    crate::ui::preview_budget::admit(&image).map_err(PreviewError::Memory)?;
+                }
                 Ok(PreviewImage {
                     image,
                     notice: limited.then_some(Message::PreviewAnimationStatic),
@@ -129,7 +143,7 @@ fn load_path_mode(path: &Path, renderer: &SvgRenderer, thumbnail: bool) -> Resul
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let policy = if thumbnail { Policy { output_side: 128, frame_count: 1, ..POLICY } } else { POLICY };
+        let _ = viewer;
         load_path_local_with_policy(path, renderer, policy)
     }
 }
@@ -147,11 +161,11 @@ fn load_path_local_with_policy(path: &Path, renderer: &SvgRenderer, policy: Poli
         .metadata()
         .map_err(|error| PreviewError::Read(error.to_string()))?
         .len()
-        > POLICY.encoded_bytes as u64
+        > policy.encoded_bytes as u64
     {
-        return Err(PreviewError::Limit("encoded byte limit (64 MiB)"));
+        return Err(PreviewError::Limit("encoded byte limit"));
     }
-    let data = read_bounded(file, POLICY.encoded_bytes)?;
+    let data = read_bounded(file, policy.encoded_bytes)?;
     decode(&data, renderer, policy)
 }
 

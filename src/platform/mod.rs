@@ -1,7 +1,7 @@
 use crate::models::{DriveInfo, QuickAccessItem};
 mod file_names;
 mod viewer_media;
-pub use viewer_media::{ViewerMediaCommand, ViewerMediaControl, MEDIA_ENDED, MEDIA_FAILED, MEDIA_LOADING, MEDIA_PAUSED, MEDIA_PLAYING};
+pub use viewer_media::{decode_media_report, encode_media_report, ViewerMediaCommand, ViewerMediaControl, MEDIA_ENDED, MEDIA_FAILED, MEDIA_LOADING, MEDIA_PAUSED, MEDIA_PLAYING, MEDIA_REPORT_BYTES};
 pub use file_names::FileNameRules;
 
 #[derive(Debug)]
@@ -424,6 +424,24 @@ pub trait Platform: Send + Sync {
         thumbnails::get_office_text_preview(path)
     }
 
+    /// Complete document for the Viewer, as `tag<TAB>text` lines.
+    fn office_document(&self, path: String) -> Result<String, crate::models::CommandError> {
+        thumbnails::get_office_document(path)
+    }
+
+    /// Starts the Viewer's image decoder ahead of its first image.
+    fn warm_viewer_images(&self) {}
+    /// Ends the Viewer's image decoder while it shows other content.
+    fn release_viewer_images(&self) {}
+    /// Opens a PDF once for the Viewer; pages are then rendered on request.
+    fn open_pdf_session(&self, _path: &std::path::Path) -> Result<Box<dyn PdfSession>, crate::models::CommandError> {
+        Err(crate::models::CommandError::Other("PDF viewing is unavailable on this platform".into()))
+    }
+    #[doc(hidden)]
+    fn run_pdf_session_worker(&self, _path: &std::path::Path) -> std::io::Result<()> {
+        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "PDF session worker unavailable"))
+    }
+
     /// Liste les points de montage / lecteurs disponibles.
     fn list_drives(&self, skip_hardware_info: bool) -> Vec<DriveInfo>;
     /// Fast mount snapshot; detailed hardware/capacity queries run separately.
@@ -603,6 +621,15 @@ mod windows_preview_cache;
 mod windows_preview_quota;
 #[cfg(target_os = "windows")]
 mod windows_pdf_thumbnail;
+#[cfg(target_os = "windows")]
+mod windows_pdf_session;
+
+/// An open Viewer PDF. Rendering blocks; call it on a background job.
+pub trait PdfSession: Send {
+    /// Page sizes in document order; only their ratios are meaningful.
+    fn sizes(&self) -> &[(f32, f32)];
+    fn page(&mut self, index: u32) -> Result<image::RgbaImage, crate::models::CommandError>;
+}
 #[cfg(target_os = "windows")]
 mod windows_file_moves;
 #[cfg(target_os = "windows")]

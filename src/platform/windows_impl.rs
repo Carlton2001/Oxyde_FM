@@ -20,6 +20,18 @@ impl Platform for WindowsPlatform {
     fn run_viewer_media_worker(&self, path: &std::path::Path) -> std::io::Result<()> {
         super::windows_viewer_media::run(path)
     }
+    fn warm_viewer_images(&self) {
+        super::windows_preview_worker::warm_viewer_images()
+    }
+    fn release_viewer_images(&self) {
+        super::windows_preview_worker::release_viewer_images()
+    }
+    fn open_pdf_session(&self, path: &std::path::Path) -> Result<Box<dyn super::PdfSession>, crate::models::CommandError> {
+        Ok(Box::new(super::windows_pdf_session::Session::open(path)?))
+    }
+    fn run_pdf_session_worker(&self, path: &std::path::Path) -> std::io::Result<()> {
+        super::windows_pdf_session::run(path)
+    }
     fn file_kind_for_extension(&self, extension: &str) -> Option<crate::models::file_entry::NativeFileKind> {
         super::windows_file_kind::for_extension(extension)
     }

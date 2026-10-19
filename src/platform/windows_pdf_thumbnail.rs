@@ -28,10 +28,15 @@ struct PixelLayout {
 }
 
 impl PixelLayout {
+    #[cfg(test)]
     fn new(width: u32, height: u32) -> Result<Self, CommandError> {
-        if width == 0 || height == 0 || width > MAX_SIDE || height > MAX_SIDE {
+        Self::bounded(width, height, MAX_SIDE)
+    }
+
+    fn bounded(width: u32, height: u32, max_side: u32) -> Result<Self, CommandError> {
+        if width == 0 || height == 0 || width > max_side || height > max_side {
             return Err(CommandError::Other(format!(
-                "Invalid PDF preview dimensions {width}x{height} (maximum {MAX_SIDE} per side)"
+                "Invalid PDF preview dimensions {width}x{height} (maximum {max_side} per side)"
             )));
         }
         let byte_len = (width as usize)
@@ -45,7 +50,12 @@ impl PixelLayout {
         })
     }
 
+    #[cfg(test)]
     fn fit(width: f32, height: f32) -> Result<Self, CommandError> {
+        Self::fit_within(width, height, MAX_SIDE)
+    }
+
+    fn fit_within(width: f32, height: f32, max_side: u32) -> Result<Self, CommandError> {
         if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
             return Err(CommandError::Other("Invalid PDF page size".into()));
         }
@@ -53,11 +63,11 @@ impl PixelLayout {
         // One pixel is the minimum representable side for an extremely thin page.
         let longest = f64::from(width.max(height));
         let fit = |side: f32| {
-            (f64::from(side) / longest * f64::from(MAX_SIDE))
+            (f64::from(side) / longest * f64::from(max_side))
                 .round()
-                .clamp(1.0, f64::from(MAX_SIDE)) as u32
+                .clamp(1.0, f64::from(max_side)) as u32
         };
-        Self::new(fit(width), fit(height))
+        Self::bounded(fit(width), fit(height), max_side)
     }
 
     fn copy_bgra(&self, pixels: &[u8]) -> Result<RgbaImage, CommandError> {
@@ -86,25 +96,56 @@ impl Drop for OwnedPage {
     }
 }
 
-pub(super) fn get(path: String) -> Result<RgbaImage, CommandError> {
-    let _com = super::windows_com::ComApartment::mta_or_existing()
-        .map_err(|error| CommandError::SystemError(error.to_string()))?;
-    let abs_path = std::fs::canonicalize(&path)?;
+/// Viewer pages stay within the preview reply's side bound.
+pub(super) const VIEWER_SIDE: u32 = crate::utils::preview_protocol::PREVIEW.side;
+/// Page sizes are listed once; a larger document still lists its first pages.
+const MAX_LISTED_PAGES: u32 = 100_000;
+
+pub(super) fn open(path: &str) -> Result<PdfDocument, CommandError> {
+    let abs_path = std::fs::canonicalize(path)?;
     let mut path_str = abs_path.to_string_lossy().to_string();
     if path_str.starts_with(r"\\?\") {
         path_str = path_str.chars().skip(4).collect();
     }
     let file =
         StorageFile::GetFileFromPathAsync(&windows::core::HSTRING::from(&path_str))?.join()?;
-    let document = PdfDocument::LoadFromFileAsync(&file)?.join()?;
-    if document.PageCount()? == 0 {
+    Ok(PdfDocument::LoadFromFileAsync(&file)?.join()?)
+}
+
+pub(super) fn get(path: String) -> Result<RgbaImage, CommandError> {
+    render(&path, 0, MAX_SIDE)
+}
+
+/// One `width height` line per page (WinRT DIPs, after rotation).
+pub(super) fn sizes_of(document: &PdfDocument) -> Result<String, CommandError> {
+    let count = document.PageCount()?.min(MAX_LISTED_PAGES);
+    if count == 0 {
         return Err(CommandError::Other("Empty PDF".into()));
     }
-    let page = OwnedPage(document.GetPage(0)?);
+    let mut sizes = String::new();
+    for index in 0..count {
+        let page = OwnedPage(document.GetPage(index)?);
+        let size = page.0.Size()?;
+        sizes.push_str(&format!("{} {}\n", size.Width, size.Height));
+    }
+    Ok(sizes)
+}
+
+fn render(path: &str, index: u32, max_side: u32) -> Result<RgbaImage, CommandError> {
+    let _com = super::windows_com::ComApartment::mta_or_existing()
+        .map_err(|error| CommandError::SystemError(error.to_string()))?;
+    render_page(&open(path)?, index, max_side)
+}
+
+pub(super) fn render_page(document: &PdfDocument, index: u32, max_side: u32) -> Result<RgbaImage, CommandError> {
+    if index >= document.PageCount()? {
+        return Err(CommandError::Other("PDF page is out of range".into()));
+    }
+    let page = OwnedPage(document.GetPage(index)?);
     // Size accounts for CropBox, MediaBox and rotation; bound BOTH requested sides
     // before invoking the native renderer, not just the resulting Rust allocation.
     let size = page.0.Size()?;
-    let requested = PixelLayout::fit(size.Width, size.Height)?;
+    let requested = PixelLayout::fit_within(size.Width, size.Height, max_side)?;
     let options = PdfPageRenderOptions::new()?;
     let dpi = unsafe { windows::Win32::UI::HiDpi::GetDpiForSystem() };
     options.SetDestinationWidth(render_dips(requested.width, dpi)?)?;
@@ -113,16 +154,17 @@ pub(super) fn get(path: String) -> Result<RgbaImage, CommandError> {
     page.0
         .RenderWithOptionsToStreamAsync(&stream, &options)?
         .join()?;
-    if stream.Size()? > MAX_ENCODED_BYTES {
+    let encoded_limit = MAX_ENCODED_BYTES * u64::from((max_side / MAX_SIDE).pow(2).max(1));
+    if stream.Size()? > encoded_limit {
         return Err(CommandError::Other(
-            "PDF preview exceeds the encoded size limit (4 MiB)".into(),
+            "PDF preview exceeds the encoded size limit".into(),
         ));
     }
     let decoder = BitmapDecoder::CreateAsync(&stream)?.join()?;
     // Validate before asking WinRT for uncompressed pixels. Native parser/renderer
     // internals remain outside this allocation policy; the production caller runs
     // this decoder in the resource-limited preview process.
-    let layout = PixelLayout::new(decoder.PixelWidth()?, decoder.PixelHeight()?)?;
+    let layout = PixelLayout::bounded(decoder.PixelWidth()?, decoder.PixelHeight()?, max_side)?;
     let pixels = decoder
         .GetPixelDataTransformedAsync(
             BitmapPixelFormat::Bgra8,
@@ -268,6 +310,26 @@ mod tests {
                 // Rendering must release file/page resources before returning.
                 std::fs::remove_file(path).unwrap();
             }
+        })
+        .join()
+        .unwrap();
+    }
+
+    #[test]
+    fn viewer_lists_pages_and_renders_them_within_the_viewer_bound() {
+        std::thread::spawn(|| {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("viewer.pdf");
+            write_pdf(&path, 72, 144, 0);
+            let path = path.to_string_lossy().into_owned();
+            let _com = super::super::windows_com::ComApartment::mta_or_existing().unwrap();
+            let document = open(&path).unwrap();
+            let sizes = sizes_of(&document).unwrap();
+            let (width, height) = sizes.trim().split_once(' ').unwrap();
+            assert_eq!(height.parse::<f32>().unwrap() / width.parse::<f32>().unwrap(), 2.0);
+            let image = render_page(&document, 0, VIEWER_SIDE).unwrap();
+            assert_eq!(image.dimensions(), (VIEWER_SIDE / 2, VIEWER_SIDE));
+            assert!(render_page(&document, 1, VIEWER_SIDE).is_err());
         })
         .join()
         .unwrap();

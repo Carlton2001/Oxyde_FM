@@ -43,9 +43,10 @@ pub fn render_title_bar(
             panel_handle.update(cx, |view, cx| view.add_panel_right(cx));
         });
     let viewer_handle = handle.clone();
-    let viewer = action_button("title-viewer", "icons/eye.svg", Message::ViewerOpen)
+    let viewer_label = if view.viewer_open() { Message::ViewerClose } else { Message::ViewerOpen };
+    let viewer = action_button("title-viewer", "icons/eye.svg", viewer_label)
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-            viewer_handle.update(cx, |view, cx| view.open_viewer(cx));
+            viewer_handle.update(cx, |view, cx| view.toggle_viewer(cx));
         });
     let tools_handle = handle.clone();
     let tools_measure_handle = handle.clone();

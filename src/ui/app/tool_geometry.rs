@@ -11,6 +11,15 @@ fn owner(cx: &App) -> Option<Entity<OxydeApp>> {
 
 /// Restore position by surface kind; content-sized forms keep their current size.
 pub(crate) fn restore(key: &str, fallback: Bounds<Pixels>, cx: &App) -> WindowBounds {
+    restore_with(key, fallback, false, cx)
+}
+
+/// Freely resized windows also restore their saved size and maximized state.
+pub(crate) fn restore_sized(key: &str, fallback: Bounds<Pixels>, cx: &App) -> WindowBounds {
+    restore_with(key, fallback, true, cx)
+}
+
+fn restore_with(key: &str, fallback: Bounds<Pixels>, sized: bool, cx: &App) -> WindowBounds {
     let saved = owner(cx).and_then(|owner| {
         owner
             .read(cx)
@@ -22,9 +31,11 @@ pub(crate) fn restore(key: &str, fallback: Bounds<Pixels>, cx: &App) -> WindowBo
     let Some(mut saved) = saved else {
         return WindowBounds::Windowed(fallback);
     };
-    saved.width = fallback.size.width.as_f32();
-    saved.height = fallback.size.height.as_f32();
-    saved.maximized = false;
+    if !sized {
+        saved.width = fallback.size.width.as_f32();
+        saved.height = fallback.size.height.as_f32();
+        saved.maximized = false;
+    }
     let screens = cx
         .displays()
         .iter()

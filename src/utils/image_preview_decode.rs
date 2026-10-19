@@ -28,6 +28,22 @@ pub const POLICY: Policy = Policy {
     animation_time: Duration::from_secs(2),
 };
 
+/// Viewer images keep their source resolution up to the usual GPU texture side
+/// (16384) and 256 MiB of pixels (about 67 megapixels). Larger sources are
+/// reduced to fit; animations beyond 256 MiB of frames become static.
+pub const VIEWER_POLICY: Policy = Policy {
+    encoded_bytes: 128 * 1024 * 1024,
+    svg_bytes: 16 * 1024 * 1024,
+    source_side: 65535,
+    source_bytes: 256 * 1024 * 1024,
+    output_side: 16384,
+    frame_bytes: 256 * 1024 * 1024,
+    frame_count: 1024,
+    animation_time: Duration::from_secs(10),
+};
+/// Vector sources are rasterized at most this wide, whatever the policy.
+pub const MAX_SVG_SIDE: u32 = 4096;
+
 #[derive(Clone, Debug)]
 pub enum PreviewError {
     Limit(&'static str),

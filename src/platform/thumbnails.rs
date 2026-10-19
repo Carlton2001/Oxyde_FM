@@ -717,6 +717,47 @@ pub fn get_office_text_preview(path: String) -> Result<String, CommandError> {
     get_office_text_preview_local(path)
 }
 
+/// Structured, complete document text for the Viewer.
+pub fn get_office_document(path: String) -> Result<String, CommandError> {
+    #[cfg(target_os = "windows")]
+    {
+        let bytes = super::platform().run_preview_worker("office-document", Path::new(&path))?;
+        isolated_text(&bytes)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let source = Path::new(&path);
+        let file = fs::File::open(source)?;
+        crate::utils::office_preview::document(file, source.extension().and_then(|ext| ext.to_str()).unwrap_or(""))
+    }
+}
+
+/// `width height` lines (only their ratio is used), one per page.
+pub(super) fn parse_pdf_sizes(text: &str) -> Result<Vec<(f32, f32)>, CommandError> {
+    let sizes: Vec<(f32, f32)> = text
+        .lines()
+        .filter_map(|line| {
+            let (width, height) = line.split_once(' ')?;
+            let size = (width.parse::<f32>().ok()?, height.parse::<f32>().ok()?);
+            (size.0.is_finite() && size.1.is_finite() && size.0 > 0.0 && size.1 > 0.0)
+                .then_some(size)
+        })
+        .collect();
+    if sizes.is_empty() {
+        return Err(CommandError::Other("Empty PDF".into()));
+    }
+    Ok(sizes)
+}
+
+#[cfg(target_os = "windows")]
+fn isolated_text(bytes: &[u8]) -> Result<String, CommandError> {
+    match crate::utils::preview_protocol::decode(bytes)? {
+        crate::utils::preview_protocol::Reply::Text(text) => Ok(text),
+        crate::utils::preview_protocol::Reply::Error { detail, .. } => Err(CommandError::Other(detail)),
+        _ => Err(CommandError::Other("Unexpected preview worker reply".into())),
+    }
+}
+
 #[cfg(target_os = "windows")]
 fn isolated_thumbnail(mode: &str, path: &str) -> Result<RgbaImage, CommandError> {
     let bytes = super::platform().run_preview_worker(mode, Path::new(path))?;

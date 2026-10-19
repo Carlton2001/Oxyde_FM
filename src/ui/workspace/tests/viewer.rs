@@ -21,7 +21,8 @@ fn viewer_cannot_join_explorer_and_explorer_cannot_join_viewer() {
     let mut state = workspace();
     let explorer = state.active_pane_id.clone();
     let viewer = state.add_viewer().unwrap();
-    let pane = state.active_pane_id.clone();
+    assert_eq!(state.active_pane_id, explorer);
+    let pane = state.viewer_pane_id(&viewer).unwrap();
     assert!(!state.can_merge_tab(&pane, 0, &explorer));
     assert!(!state.can_merge_tab(&explorer, 0, &pane));
     state.move_tab_to_pane_id(&pane, 0, &explorer);
@@ -34,11 +35,12 @@ fn viewer_cannot_join_explorer_and_explorer_cannot_join_viewer() {
 #[test]
 fn adding_or_duplicating_never_puts_another_tab_in_viewer_pane() {
     let mut state = workspace();
-    state.add_viewer().unwrap();
-    let viewer_pane = state.active_pane_id.clone();
+    let viewer = state.add_viewer().unwrap();
+    let viewer_pane = state.viewer_pane_id(&viewer).unwrap();
     state.add_tab(&viewer_pane, "D:/".into(), true);
     assert_eq!(state.find_pane(&viewer_pane).unwrap().tabs.len(), 1);
     state.duplicate_tab(&viewer_pane, 0);
+    assert!(state.add_viewer().is_none());
     assert_ne!(state.active_pane_id, viewer_pane);
     let mut viewers = 0;
     state.layout.visit_panes(&mut |pane| {
@@ -47,7 +49,7 @@ fn adding_or_duplicating_never_puts_another_tab_in_viewer_pane() {
             assert_eq!(pane.tabs.len(), 1);
         }
     });
-    assert_eq!(viewers, 2);
+    assert_eq!(viewers, 1);
 }
 
 #[test]
@@ -55,10 +57,11 @@ fn viewer_moves_as_its_own_split_and_keeps_its_tab_identity() {
     let mut state = workspace();
     let explorer = state.active_pane_id.clone();
     let viewer = state.add_viewer().unwrap();
-    let old_pane = state.active_pane_id.clone();
+    let old_pane = state.viewer_pane_id(&viewer).unwrap();
     state.split_tab_to_axis(&old_pane, 0, &explorer, LayoutAxis::Vertical, false);
     assert!(state.find_pane(&old_pane).is_none());
-    let pane = state.find_pane(&state.active_pane_id).unwrap();
+    assert_eq!(state.active_pane_id, explorer);
+    let pane = state.find_pane(&state.viewer_pane_id(&viewer).unwrap()).unwrap();
     assert_eq!(pane.tabs.len(), 1);
     assert_eq!(pane.tabs[0].id, viewer);
     let own_pane = pane.id.clone();
@@ -72,8 +75,9 @@ fn viewer_survives_session_restore_without_becoming_a_directory_load() {
     let viewer = state.add_viewer().unwrap();
     let saved = state.saved_snapshot(260.0);
     let (restored, _) = WorkspaceState::from_saved_snapshot(saved).unwrap();
+    assert!(!restored.is_viewer_pane(&restored.active_pane_id));
     let tab = restored
-        .find_pane(&restored.active_pane_id)
+        .find_pane(&restored.viewer_pane_id(&viewer).unwrap())
         .unwrap()
         .active_tab();
     assert_eq!(tab.id, viewer);

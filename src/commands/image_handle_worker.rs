@@ -11,6 +11,8 @@ use std::{
 
 pub const FLAG: &str = "--oxyde-image-handle-worker-v1";
 pub const THUMBNAIL_FLAG: &str = "--oxyde-thumbnail-handle-worker-v1";
+/// Full-resolution Viewer image in its own, larger resource job.
+pub const VIEWER_FLAG: &str = "--oxyde-viewer-image-handle-worker-v1";
 pub const SESSION_FLAG: &str = "--oxyde-image-session-worker-v1";
 pub const SESSION_REQUESTS: u64 = 32;
 mod session;
@@ -30,9 +32,16 @@ pub fn run_if_requested(
         let _ = crate::platform::finish_archive_worker_shutdown();
         return true;
     }
-    let thumbnail = flag.as_deref() == Some(std::ffi::OsStr::new(THUMBNAIL_FLAG));
-    if !thumbnail && flag.as_deref() != Some(std::ffi::OsStr::new(FLAG)) { return false; }
-    let policy = if thumbnail { image_preview_decode::Policy { output_side: 128, frame_count: 1, ..POLICY } } else { POLICY };
+    let is = |name: &str| flag.as_deref() == Some(std::ffi::OsStr::new(name));
+    let policy = if is(THUMBNAIL_FLAG) {
+        image_preview_decode::Policy { output_side: 128, frame_count: 1, ..POLICY }
+    } else if is(VIEWER_FLAG) {
+        image_preview_decode::VIEWER_POLICY
+    } else if is(FLAG) {
+        POLICY
+    } else {
+        return false;
+    };
     let result = (|| -> io::Result<()> {
         let mut gate = [0];
         io::stdin().read_exact(&mut gate)?;

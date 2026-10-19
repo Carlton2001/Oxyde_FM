@@ -970,7 +970,10 @@ group-select-all = Seleziona tutti gli elementi del gruppo
 group-deselect-all = Deseleziona tutti gli elementi del gruppo
 
 viewer-title = Viewer
-viewer-open = Apri un Viewer
+viewer-open = Apri il Viewer
+viewer-close = Chiudi il Viewer
+viewer-slide = Diapositiva
+viewer-text-truncated = Vengono mostrati solo i primi 512 MiB del file.
 viewer-empty = Seleziona un file in un pannello esplora risorse.
 viewer-detach = Scollega il Viewer
 viewer-detached = Il Viewer è aperto in una finestra secondaria.

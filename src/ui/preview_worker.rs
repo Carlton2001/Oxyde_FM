@@ -29,6 +29,9 @@ pub(crate) fn run_if_requested() -> bool {
         if mode == "viewer-media" {
             return oxyde_lib::platform::platform().run_viewer_media_worker(path);
         }
+        if mode == "pdf-session" {
+            return oxyde_lib::platform::platform().run_pdf_session_worker(path);
+        }
         if mode == "video" {
             let path = path
                 .to_str()

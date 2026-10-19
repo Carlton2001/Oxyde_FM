@@ -88,7 +88,9 @@ impl OxydeApp {
             }
             ("tab", false, false, previous) => {
                 let mut ids = Vec::new();
-                self.state.layout.visit_panes(&mut |pane| ids.push(pane.id.clone()));
+                self.state.layout.visit_panes(&mut |pane| {
+                    if !pane.active_tab().is_viewer() { ids.push(pane.id.clone()); }
+                });
                 if let Some(index) = ids.iter().position(|id| id == &pane_id) {
                     let next = (index + if previous { ids.len() - 1 } else { 1 }) % ids.len();
                     self.activate_pane(&ids[next], cx);

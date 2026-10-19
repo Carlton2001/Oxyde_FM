@@ -59,3 +59,8 @@ pub fn text(file: File, extension: &str) -> Result<String, CommandError> {
     }
     Ok(preview.trim().to_string())
 }
+
+/// Complete Viewer document; see `office_document` for its line format.
+pub fn document(file: File, extension: &str) -> Result<String, CommandError> {
+    super::office_document::document(file, extension)
+}

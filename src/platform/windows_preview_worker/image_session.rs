@@ -1,4 +1,6 @@
-//! One bounded LPAC session amortizes runtime staging across nearby image requests.
+//! One bounded LPAC session amortizes runtime staging (about 1.4 s per process)
+//! across nearby image requests. Tooltips and the Viewer use separate sessions:
+//! a Viewer image needs a larger job, and neither waits for the other.
 //! A compromised decoder can retain earlier images until recycling; it gains no
 //! path access. Never reuse this session for Office, archives, PDF or video.
 use super::{native, DEADLINE, MEMORY_BYTES};
@@ -20,18 +22,59 @@ use windows::Win32::Foundation::{DuplicateHandle, DUPLICATE_SAME_ACCESS, HANDLE}
 use windows::Win32::System::Pipes::PeekNamedPipe;
 use windows::Win32::System::Threading::GetCurrentProcess;
 
-const IDLE: Duration = Duration::from_secs(15);
-const MAX_AGE: Duration = Duration::from_secs(60);
 static STOPPING: AtomicBool = AtomicBool::new(false);
 static SERVICE: OnceLock<Result<Service, String>> = OnceLock::new();
+static VIEWER_SERVICE: OnceLock<Result<Service, String>> = OnceLock::new();
+/// Request kind of a full-resolution Viewer image.
+pub(super) const VIEWER_KIND: u8 = 2;
+
+/// Resource envelope and recycling of one session.
+#[derive(Clone, Copy)]
+struct Envelope {
+    memory: usize,
+    deadline: Duration,
+    encoded_bytes: u64,
+    max_reply: usize,
+    idle: Duration,
+    max_age: Duration,
+}
+
+const PREVIEW: Envelope = Envelope {
+    memory: MEMORY_BYTES,
+    deadline: DEADLINE,
+    encoded_bytes: crate::utils::image_preview_decode::POLICY.encoded_bytes as u64,
+    max_reply: preview_protocol::MAX_REPLY,
+    idle: Duration::from_secs(15),
+    max_age: Duration::from_secs(60),
+};
+/// Holds the encoded source, decoded pixels and their BGRA copy at once
+/// (128 + 256 + 256 MiB). A Viewer is browsed for longer stretches, so its
+/// session lives longer; it is released when the Viewer shows other content,
+/// leaving the global budget to PDF sessions, players and video previews.
+const VIEWER: Envelope = Envelope {
+    memory: 1024 * 1024 * 1024,
+    deadline: Duration::from_secs(30),
+    encoded_bytes: crate::utils::image_preview_decode::VIEWER_POLICY.encoded_bytes as u64,
+    max_reply: preview_protocol::VIEWER_MAX_REPLY,
+    idle: Duration::from_secs(60),
+    max_age: Duration::from_secs(300),
+};
+
+fn envelope(kind: u8) -> Envelope {
+    if kind == VIEWER_KIND { VIEWER } else { PREVIEW }
+}
 
 struct Request {
     source: super::super::RetainedArchiveSource,
-    thumbnail: bool,
+    kind: u8,
     reply: mpsc::Sender<io::Result<Vec<u8>>>,
 }
 enum Message {
     Request(Request),
+    /// Starts the process ahead of the first request.
+    Warm,
+    /// Ends the process and returns its budget.
+    Release,
     Stop,
 }
 struct Service {
@@ -39,44 +82,67 @@ struct Service {
     done: Mutex<mpsc::Receiver<()>>,
 }
 
-pub(super) fn run(path: &Path, thumbnail: bool) -> io::Result<Vec<u8>> {
+fn service(kind: u8) -> io::Result<&'static Service> {
+    let (cell, name) = if kind == VIEWER_KIND {
+        (&VIEWER_SERVICE, "image-viewer-session")
+    } else {
+        (&SERVICE, "image-preview-session")
+    };
+    let envelope = envelope(kind);
+    cell.get_or_init(|| {
+        let executable = std::env::current_exe()
+            .map_err(|error| error.to_string())?
+            .with_file_name("oxyde-image-worker.exe");
+        let (sender, requests) = mpsc::sync_channel(1);
+        let (done, completion) = mpsc::channel();
+        std::thread::Builder::new()
+            .name(name.into())
+            .spawn(move || {
+                serve_with(requests, &executable, envelope);
+                let _ = done.send(());
+            })
+            .map_err(|error| error.to_string())?;
+        Ok(Service {
+            sender,
+            done: Mutex::new(completion),
+        })
+    })
+    .as_ref()
+    .map_err(|error| io::Error::other(error.clone()))
+}
+
+/// Ends the Viewer's session; the next image or warm-up starts a new one.
+pub(super) fn release_viewer() {
+    if let Some(Ok(service)) = VIEWER_SERVICE.get() {
+        let _ = service.sender.try_send(Message::Release);
+    }
+}
+
+/// Prepares the Viewer's session so its first image skips process startup.
+pub(super) fn warm_viewer() {
+    if checkpoint().is_ok() {
+        if let Ok(service) = service(VIEWER_KIND) {
+            let _ = service.sender.try_send(Message::Warm);
+        }
+    }
+}
+
+pub(super) fn run(path: &Path, kind: u8) -> io::Result<Vec<u8>> {
     checkpoint()?;
     let source = crate::platform::platform().retain_archive_source(path)?;
-    if source.file.metadata()?.len()
-        > crate::utils::image_preview_decode::POLICY.encoded_bytes as u64
-    {
+    if source.file.metadata()?.len() > envelope(kind).encoded_bytes {
         return Err(io::Error::new(
             io::ErrorKind::FileTooLarge,
             "Image source exceeds its limit",
         ));
     }
-    let service = SERVICE
-        .get_or_init(|| {
-            let executable = std::env::current_exe()
-                .map_err(|error| error.to_string())?
-                .with_file_name("oxyde-image-worker.exe");
-            let (sender, requests) = mpsc::sync_channel(1);
-            let (done, completion) = mpsc::channel();
-            std::thread::Builder::new()
-                .name("image-preview-session".into())
-                .spawn(move || {
-                    serve(requests, &executable);
-                    let _ = done.send(());
-                })
-                .map_err(|error| error.to_string())?;
-            Ok(Service {
-                sender,
-                done: Mutex::new(completion),
-            })
-        })
-        .as_ref()
-        .map_err(|error| io::Error::other(error.clone()))?;
+    let service = service(kind)?;
     let (reply, response) = mpsc::channel();
     service
         .sender
         .send(Message::Request(Request {
             source,
-            thumbnail,
+            kind,
             reply,
         }))
         .map_err(|_| io::Error::other("Image session stopped"))?;
@@ -95,7 +161,12 @@ fn checkpoint() -> io::Result<()> {
     super::super::windows_resource_pressure::check()
 }
 
+#[cfg(test)]
 fn serve(requests: mpsc::Receiver<Message>, executable: &Path) {
+    serve_with(requests, executable, PREVIEW)
+}
+
+fn serve_with(requests: mpsc::Receiver<Message>, executable: &Path, envelope: Envelope) {
     let mut session: Option<Session> = None;
     loop {
         if STOPPING.load(Ordering::Acquire) {
@@ -110,13 +181,13 @@ fn serve(requests: mpsc::Receiver<Message>, executable: &Path) {
                         session = None;
                     }
                     if session.is_none() {
-                        session = Some(Session::start(executable, started, DEADLINE)?);
+                        session = Some(Session::start_with(executable, started, envelope)?);
                     }
                     session.as_mut().unwrap().request(
                         &request.source.file,
-                        request.thumbnail,
+                        request.kind,
                         started,
-                        DEADLINE,
+                        envelope.deadline,
                     )
                 })();
                 // Even a well-framed decoder error discards its process. A later
@@ -131,6 +202,15 @@ fn serve(requests: mpsc::Receiver<Message>, executable: &Path) {
                 log::debug!("Image session request completed in {:?}", started.elapsed());
                 let _ = request.reply.send(result);
             }
+            Ok(Message::Warm) => {
+                if session.as_mut().is_some_and(|session| !session.reusable()) {
+                    session = None;
+                }
+                if session.is_none() && checkpoint().is_ok() {
+                    session = Session::start_with(executable, Instant::now(), envelope).ok();
+                }
+            }
+            Ok(Message::Release) => session = None,
             Ok(Message::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 if session.as_mut().is_some_and(|session| !session.reusable())
@@ -147,11 +227,13 @@ fn serve(requests: mpsc::Receiver<Message>, executable: &Path) {
 
 pub(super) fn shutdown() {
     STOPPING.store(true, Ordering::Release);
-    if let Some(Ok(service)) = SERVICE.get() {
-        let _ = service.sender.try_send(Message::Stop);
-        if let Ok(done) = service.done.lock() {
-            if done.recv_timeout(Duration::from_secs(2)).is_err() {
-                log::warn!("Image session cleanup exceeded shutdown deadline; resource job closes on process exit");
+    for cell in [&SERVICE, &VIEWER_SERVICE] {
+        if let Some(Ok(service)) = cell.get() {
+            let _ = service.sender.try_send(Message::Stop);
+            if let Ok(done) = service.done.lock() {
+                if done.recv_timeout(Duration::from_secs(2)).is_err() {
+                    log::warn!("Image session cleanup exceeded shutdown deadline; resource job closes on process exit");
+                }
             }
         }
     }
@@ -164,16 +246,22 @@ struct Session {
     created: Instant,
     last_used: Instant,
     requests: u64,
+    envelope: Envelope,
 }
 impl Session {
+    #[cfg(test)]
     fn start(executable: &Path, started: Instant, deadline: Duration) -> io::Result<Self> {
+        Self::start_with(executable, started, Envelope { deadline, ..PREVIEW })
+    }
+
+    fn start_with(executable: &Path, started: Instant, envelope: Envelope) -> io::Result<Self> {
         let mut command = Command::new(executable);
         command.arg(SESSION_FLAG);
-        let checked = || check_deadline(started, deadline);
+        let checked = || check_deadline(started, envelope.deadline);
         let (worker, output, input) =
             super::super::windows_worker_sandbox::Worker::start_duplex_checked(
                 command,
-                MEMORY_BYTES,
+                envelope.memory,
                 &checked,
             )?;
         Ok(Self {
@@ -183,20 +271,21 @@ impl Session {
             created: Instant::now(),
             last_used: Instant::now(),
             requests: 0,
+            envelope,
         })
     }
 
     fn reusable(&mut self) -> bool {
         self.requests < SESSION_REQUESTS
-            && self.last_used.elapsed() < IDLE
-            && self.created.elapsed() < MAX_AGE
+            && self.last_used.elapsed() < self.envelope.idle
+            && self.created.elapsed() < self.envelope.max_age
             && matches!(self.worker.child.try_wait(), Ok(None))
     }
 
     fn request(
         &mut self,
         source: &std::fs::File,
-        thumbnail: bool,
+        kind: u8,
         started: Instant,
         deadline: Duration,
     ) -> io::Result<Vec<u8>> {
@@ -213,18 +302,19 @@ impl Session {
         let mut request = [0; 17];
         request[..8].copy_from_slice(&id.to_le_bytes());
         request[8..16].copy_from_slice(&(handle.0 as usize as u64).to_le_bytes());
-        request[16] = u8::from(thumbnail);
+        request[16] = kind;
         // At most 32 * 17 bytes are ever written to this >=4KiB pipe. Even a
         // compromised child refusing to read cannot fill it and block the parent.
         self.input.write_all(&request)?;
         let mut header = [0; 12];
         self.read_exact(&mut header, started, deadline)?;
-        let length = reply_length(header, id)?;
+        let length = reply_length_within(header, id, self.envelope.max_reply)?;
         let mut bytes = Vec::new();
         bytes.try_reserve_exact(length).map_err(io::Error::other)?;
         bytes.resize(length, 0);
         self.read_exact(&mut bytes, started, deadline)?;
-        match preview_protocol::decode(&bytes)? {
+        let limits = if kind == VIEWER_KIND { preview_protocol::VIEWER } else { preview_protocol::PREVIEW };
+        match preview_protocol::decode_with(&bytes, limits)? {
             Reply::Images { .. } => {}
             // Return the typed error to the UI while ensuring the session is
             // recycled before another document is granted to it.
@@ -282,10 +372,15 @@ impl Session {
     }
 }
 
+#[cfg(test)]
 fn reply_length(header: [u8; 12], expected: u64) -> io::Result<usize> {
+    reply_length_within(header, expected, preview_protocol::MAX_REPLY)
+}
+
+fn reply_length_within(header: [u8; 12], expected: u64, max_reply: usize) -> io::Result<usize> {
     let id = u64::from_le_bytes(header[..8].try_into().unwrap());
     let length = u32::from_le_bytes(header[8..].try_into().unwrap()) as usize;
-    if id != expected || length == 0 || length > preview_protocol::MAX_REPLY {
+    if id != expected || length == 0 || length > max_reply {
         Err(io::Error::other("Invalid image session frame"))
     } else {
         Ok(length)

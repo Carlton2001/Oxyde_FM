@@ -16,8 +16,8 @@ Le repli intégré ancre le bloc nom/métadonnées au curseur (0,75 rem de déca
 
 ## Viewer
 
-Le bouton œil de la barre de titre crée un onglet `viewer://`, seul dans son
-panneau. Les dépôts sur les barres d’onglets refusent toute fusion dans les deux
+Le bouton œil de la barre de titre ouvre ou ferme l’unique onglet `viewer://`,
+seul dans son panneau ; son infobulle suit cet état. Les dépôts sur les barres d’onglets refusent toute fusion dans les deux
 sens ; les zones de division déplacent le Viewer avec son propre panneau.
 La session restaure cet onglet sans lancer de listing ni de surveillance sur
 son emplacement interne.
@@ -27,23 +27,52 @@ de sa liste, et conserve le fichier courant s’il reste sélectionné. Précéd
 suivant (ou les flèches) parcourent une sélection multiple. Sans sélection,
 l’aperçu et le lecteur sont libérés. La préparation des grandes listes se fait
 en arrière-plan ; une révision de source écarte les résultats obsolètes.
-Images, PDF, texte et Office réutilisent les
-parcours et limites des aperçus existants (première page PDF, extrait texte ou
-Office, décodage image borné), avec une présentation adaptée au panneau.
+Le Viewer ouvre le fichier complet (`app/viewer/content`) : image en pleine
+résolution par une session LPAC propre au Viewer (`image_session`, type 2 :
+job de 1 Gio, 30 s, côté jusqu’à 16384 px et 256 Mio de pixels, hors budget
+des infobulles ; démarrée à la création du Viewer, réutilisée environ 35 ms par
+image, libérée dès que le Viewer affiche autre chose ou se ferme), affichée sans agrandissement ; toutes les pages PDF (`viewer/pdf` : une session `pdf-session` du
+self-worker garde le document ouvert, job de 1 Gio et 15 s par page ; seules
+les pages proches de la vue sont rendues, les demandes sorties de la vue sont
+abandonnées, six pages décodées au plus) ; texte entier jusqu’à 512 Mio, chargé
+en mémoire (`viewer/text` : retour à la ligne aux espaces, calculé en arrière-plan
+pour la largeur en colonnes de JetBrains Mono, caractères larges comptés double,
+tabulation de quatre colonnes ; chaque rangée garde sa plage d’octets et sa ligne
+logique, base des futurs numéros de ligne et de la coloration) ; documents Word/ODF
+Office Open XML et OpenDocument complets (`office-document` dans le worker
+Office : Word/Writer, chaque feuille Excel/Calc, chaque diapositive
+PowerPoint/Impress ; lignes `balise<TAB>texte`). Les valeurs de tableur sont
+affichées telles que stockées, sans formats ni formules. Les longs contenus sont
+virtualisés par `list` avec l’ascenseur partagé ; documents et cadres de
+pages PDF sont mesurés d’emblée (seules les pages proches de la vue sont
+décodées), donc l’ascenseur garde sa taille. Les formats binaires anciens
+(doc, xls, ppt) gardent l’aperçu existant. Le fond reprend celui des panneaux
+actifs. Ces parcours sont propres au Viewer : les aperçus des infobulles gardent
+leurs modes et limites.
+Le contenu occupe toute la hauteur ; nom, navigation et détachement sont dans
+la barre de statut, et l’ascenseur touche le bord droit. Le panneau du Viewer
+ne devient jamais le panneau actif : ses commandes
+internes agissent sur lui et le panneau explorateur garde sélection, clavier
+et barre d’outils. Seule la fenêtre détachée reçoit le focus clavier.
 Les dossiers, entrées d’archives virtuelles et types non pris en charge restent
 sans aperçu. La barre de statut reste vide.
 
 Le bouton supérieur droit ouvre une fenêtre secondaire redimensionnable,
-possédée par la fenêtre principale. L’onglet et son panneau conservent leur place ;
+possédée par la fenêtre principale ; sa position, sa taille et son état
+maximisé sont mémorisés. L’onglet et son panneau conservent leur place ;
 un bouton dans le panneau permet de retrouver la fenêtre secondaire. Seule cette
 fenêtre rend l’aperçu et le lecteur pendant le détachement. Le suivi de sélection
 reste actif. Fermer la fenêtre secondaire libère sa session et restaure l’aperçu
 dans le panneau conservé. Fermer la fenêtre principale ferme également les
 Viewers détachés.
 
-Sous Windows, audio et vidéo utilisent les codecs système via MFPlay dans le
+Sous Windows, audio et vidéo utilisent les codecs système via IMFMediaEngine (mode HWND) dans le
 mode `viewer-media` du self-worker. Un même lecteur natif synchronise image et
-son, démarre automatiquement et reçoit play/pause (ou Espace). La fin de lecture
+son, démarre automatiquement et reçoit play/pause (ou Espace). Le worker
+renvoie des rapports de 17 octets (état, position, durée en ms) ; la barre de
+lecture permet de cliquer ou glisser pour se déplacer (`seek_id`/`seek_ms`).
+Le détachement ou le retour au panneau reprend à la même position et dans le
+même état ; listes et pages gardent leur défilement. La fin de lecture
 reste arrêtée jusqu’à une action Lire. Le worker possède une surface vidéo
 native passive, possédée par la fenêtre du Viewer et sans statut topmost global.
 Elle suit en pixels physiques le rectangle mesuré et borné du contenu, y compris

@@ -18,6 +18,17 @@ impl Drop for MediaSession {
 }
 
 impl Viewer {
+    /// Stops the current player and remembers where it was, so the next
+    /// surface (docked or detached) resumes at the same point.
+    pub(super) fn suspend_media(&mut self) {
+        if let Some(media) = self.media.take() {
+            let ended = media.control.status() == MEDIA_ENDED;
+            if !ended && media.control.status() != MEDIA_FAILED {
+                self.resume = Some((media.control.position_ms(), media.paused));
+            }
+        }
+    }
+
     pub(super) fn update_visibility(&self) {
         if let Some(media) = &self.media {
             if let Ok(mut command) = media.control.command.lock() {
@@ -50,7 +61,8 @@ impl Viewer {
                 .lock()
                 .is_ok_and(|command| command.parent != parent)
         }) {
-            self.media = None;
+            // The player moves to another window: continue where it was.
+            self.suspend_media();
         }
         let scale = window.scale_factor();
         let rect = [
@@ -65,17 +77,21 @@ impl Viewer {
                 return;
             };
             let control = Arc::new(ViewerMediaControl::default());
+            let (resume_ms, resume_paused) = self.resume.take().unwrap_or((0, false));
             *control.command.lock().expect("new media controls") =
                 oxyde_lib::platform::ViewerMediaCommand {
                     parent,
                     rect,
                     visible: !self.blocked,
-                    paused: self.blocked,
+                    paused: self.blocked || resume_paused,
+                    seek_id: u32::from(resume_ms > 0),
+                    seek_ms: resume_ms,
                 };
+            control.position_ms.store(resume_ms, Ordering::Release);
             let cancellation = crate::ui::preview_jobs::Cancellation::default();
             self.media = Some(MediaSession {
                 control: control.clone(),
-                paused: false,
+                paused: resume_paused,
                 cancellation: cancellation.clone(),
             });
             let work_control = control.clone();
@@ -102,14 +118,16 @@ impl Viewer {
                 })
                 .detach();
             cx.spawn(async move |this, cx| {
-                let mut previous = MEDIA_LOADING;
+                let mut previous = (MEDIA_LOADING, u64::MAX, u64::MAX);
                 while !control.is_cancelled() {
                     cx.background_executor()
                         .timer(std::time::Duration::from_millis(80))
                         .await;
                     let status = control.status();
-                    if status != previous {
-                        previous = status;
+                    // The progress bar moves in quarter seconds.
+                    let current = (status, control.position_ms() / 250, control.duration_ms());
+                    if current != previous {
+                        previous = current;
                         if this.update(cx, |_, cx| cx.notify()).is_err() {
                             control.cancel();
                             break;
@@ -138,6 +156,16 @@ impl Viewer {
                 self.update_visibility();
             }
             cx.notify();
+        }
+    }
+
+    pub(super) fn seek_media(&mut self, fraction: f32, cx: &mut Context<Self>) {
+        if let Some(media) = &self.media {
+            let duration = media.control.duration_ms();
+            if duration > 0 {
+                media.control.seek((duration as f64 * fraction.clamp(0.0, 1.0) as f64) as u64);
+                cx.notify();
+            }
         }
     }
 

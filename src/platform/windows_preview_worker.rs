@@ -22,6 +22,8 @@ const DEADLINE: Duration = Duration::from_secs(15);
 mod image_session;
 mod icon_session;
 pub(super) fn shutdown_image_session() { image_session::shutdown(); }
+pub(super) fn warm_viewer_images() { image_session::warm_viewer(); }
+pub(super) fn release_viewer_images() { image_session::release_viewer(); }
 pub(super) fn shutdown_icon_session() { icon_session::shutdown(); }
 pub(super) fn reset_icon_session() { icon_session::reset(); }
 pub(super) fn initialize() -> io::Result<()> {
@@ -158,18 +160,22 @@ pub(super) fn run(mode: &str, path: &Path) -> io::Result<Vec<u8>> {
     if (mode == "icon-small" || mode == "icon-large") && path.to_str().is_some_and(|path| path.len() + 5 <= crate::commands::icon_session_worker::MAX_INPUT) {
         return icon_session::run(path, mode == "icon-large");
     }
+    if mode == "image-viewer" {
+        return image_session::run(path, image_session::VIEWER_KIND);
+    }
     let _slot = SLOT
         .lock()
         .map_err(|_| io::Error::other("Preview worker admission failed"))?;
     if mode == "image" {
-        image_session::run(path, false)
+        image_session::run(path, 0)
     } else if mode == "image-thumbnail" {
-        image_session::run(path, true)
-    } else if mode == "office-text" {
+        image_session::run(path, 1)
+    } else if mode == "office-text" || mode == "office-document" {
         run_office_text_in(
             &std::env::current_exe()?.with_file_name("oxyde-image-worker.exe"),
             path,
             DEADLINE,
+            mode == "office-document",
         )
     } else {
         run_in(&std::env::current_exe()?, mode, path, DEADLINE)
@@ -205,14 +211,15 @@ pub(super) fn run_office_text_in(
     executable: &Path,
     path: &Path,
     deadline: Duration,
+    document: bool,
 ) -> io::Result<Vec<u8>> {
     let source = crate::platform::platform().retain_archive_source(path)?;
     let mut command = Command::new(executable);
-    command.arg("--oxyde-office-text-handle-worker-v1").arg(
-        path.extension()
-            .and_then(|value| value.to_str())
-            .unwrap_or(""),
-    );
+    let extension = path.extension().and_then(|value| value.to_str()).unwrap_or("");
+    // The hint selects the complete Viewer document; it grants no extra authority.
+    command
+        .arg("--oxyde-office-text-handle-worker-v1")
+        .arg(if document { format!("document:{extension}") } else { extension.to_owned() });
     supervise_source(
         command,
         &source.file,

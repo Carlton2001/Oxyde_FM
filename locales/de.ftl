@@ -971,6 +971,9 @@ group-deselect-all = Auswahl aller Elemente der Gruppe aufheben
 
 viewer-title = Viewer
 viewer-open = Viewer öffnen
+viewer-close = Viewer schließen
+viewer-slide = Folie
+viewer-text-truncated = Nur die ersten 512 MiB der Datei werden angezeigt.
 viewer-empty = Wählen Sie eine Datei in einem Explorer-Bereich aus.
 viewer-detach = Viewer abdocken
 viewer-detached = Der Viewer ist in einem separaten Fenster geöffnet.

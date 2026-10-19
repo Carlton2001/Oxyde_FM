@@ -45,7 +45,7 @@ fn persistent_image_session_reuses_pid_for_different_files_and_output_policies()
     let pid = unsafe { GetProcessId(process) };
     let first = pixels(
         &session
-            .request(&red, false, Instant::now(), DEADLINE)
+            .request(&red, 0, Instant::now(), DEADLINE)
             .unwrap(),
     );
     let cold_time = cold.elapsed();
@@ -54,7 +54,7 @@ fn persistent_image_session_reuses_pid_for_different_files_and_output_policies()
     let warm = Instant::now();
     let second = pixels(
         &session
-            .request(&blue, true, Instant::now(), DEADLINE)
+            .request(&blue, 1, Instant::now(), DEADLINE)
             .unwrap(),
     );
     eprintln!(
@@ -83,7 +83,7 @@ fn persistent_image_session_renders_svg_then_raster_without_stale_pixels() {
         let file = std::fs::File::open(&svg).unwrap();
         let frames = pixels(
             &session
-                .request(&file, thumbnail, Instant::now(), DEADLINE)
+                .request(&file, u8::from(thumbnail), Instant::now(), DEADLINE)
                 .unwrap(),
         );
         let width = if thumbnail { 128 } else { 1024 };
@@ -96,7 +96,7 @@ fn persistent_image_session_renders_svg_then_raster_without_stale_pixels() {
     let file = source(directory.path(), "blue.png", [0, 0, 255, 255]);
     let frames = pixels(
         &session
-            .request(&file, false, Instant::now(), DEADLINE)
+            .request(&file, 0, Instant::now(), DEADLINE)
             .unwrap(),
     );
     assert_eq!(frames[0].buffer().get_pixel(128, 64).0, [255, 0, 0, 255]);
@@ -114,7 +114,7 @@ fn persistent_image_session_closes_sources_and_recycles_after_32_requests() {
         let file = std::fs::File::open(&path).unwrap();
         pixels(
             &session
-                .request(&file, true, Instant::now(), DEADLINE)
+                .request(&file, 1, Instant::now(), DEADLINE)
                 .unwrap(),
         );
         if index < SESSION_REQUESTS {
@@ -132,7 +132,7 @@ fn persistent_image_session_closes_sources_and_recycles_after_32_requests() {
     assert!(!session.reusable());
     let file = std::fs::File::open(path).unwrap();
     assert!(session
-        .request(&file, false, Instant::now(), DEADLINE)
+        .request(&file, 0, Instant::now(), DEADLINE)
         .is_err());
 }
 
@@ -145,7 +145,7 @@ fn persistent_image_session_marks_decoder_errors_for_recycling() {
     let reply = session
         .request(
             &std::fs::File::open(&path).unwrap(),
-            false,
+            0,
             Instant::now(),
             DEADLINE,
         )
@@ -160,10 +160,10 @@ fn persistent_image_session_marks_decoder_errors_for_recycling() {
 #[test]
 fn persistent_image_session_enforces_idle_age_and_reply_deadlines() {
     let mut session = start();
-    session.last_used = Instant::now() - IDLE;
+    session.last_used = Instant::now() - PREVIEW.idle;
     assert!(!session.reusable());
     session.last_used = Instant::now();
-    session.created = Instant::now() - MAX_AGE;
+    session.created = Instant::now() - PREVIEW.max_age;
     assert!(!session.reusable());
     // The real child waits for a request. A silent/blocked decoder cannot hold
     // a response read past its deadline; dropping its session then kills it.
@@ -225,7 +225,7 @@ fn image_session_service_recovers_from_decoder_error_and_stops_without_idle_wait
         sender
             .send(Message::Request(Request {
                 source,
-                thumbnail: true,
+                kind: 1,
                 reply,
             }))
             .unwrap();
@@ -292,5 +292,28 @@ fn persistent_image_session_rejects_a_crashed_child() {
     unsafe { windows::Win32::System::Threading::TerminateProcess(process, 1) }.unwrap();
     assert_eq!(unsafe { WaitForSingleObject(process, 1000) }, WAIT_OBJECT_0);
     assert!(!session.reusable());
-    assert!(session.request(&file, false, Instant::now(), DEADLINE).is_err());
+    assert!(session.request(&file, 0, Instant::now(), DEADLINE).is_err());
+}
+
+#[test]
+fn viewer_session_keeps_full_resolution_and_is_reused() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("large.png");
+    image::RgbaImage::from_pixel(3000, 2000, image::Rgba([200, 30, 10, 255])).save(&path).unwrap();
+    let started = Instant::now();
+    let mut session = Session::start_with(&executable(), started, VIEWER).unwrap();
+    let startup = started.elapsed();
+    let mut decode = Vec::new();
+    for _ in 0..2 {
+        let file = std::fs::File::open(&path).unwrap();
+        let request = Instant::now();
+        let reply = session.request(&file, VIEWER_KIND, request, VIEWER.deadline).unwrap();
+        decode.push(request.elapsed());
+        let Reply::Images { frames, .. } = preview_protocol::decode_with(&reply, preview_protocol::VIEWER).unwrap() else {
+            panic!("Expected viewer pixels");
+        };
+        assert_eq!(frames[0].buffer().dimensions(), (3000, 2000));
+    }
+    eprintln!("viewer session startup {startup:?}, requests {decode:?}");
+    assert_eq!(session.requests, 2, "Both requests must reuse one process");
 }

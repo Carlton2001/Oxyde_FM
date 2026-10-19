@@ -131,6 +131,7 @@ fn exercise(path: &Path, video: bool) {
         rect: [0, 0, 320, 240],
         visible: true,
         paused: false,
+        ..Default::default()
     };
     let work = control.clone();
     let path = path.to_owned();
@@ -177,6 +178,15 @@ fn exercise(path: &Path, video: bool) {
     await_status(&control, MEDIA_PAUSED);
     std::thread::sleep(Duration::from_millis(150));
     assert_eq!(control.status(), MEDIA_PAUSED);
+    // Reports carry the duration; a paused seek moves the reported position.
+    assert!(control.duration_ms() > 0, "Missing media duration");
+    control.seek(control.duration_ms() / 2);
+    let start = Instant::now();
+    while control.position_ms().abs_diff(control.duration_ms() / 2) > 300 {
+        assert!(start.elapsed() < Duration::from_secs(5), "Seek was not applied");
+        pump();
+        std::thread::sleep(Duration::from_millis(20));
+    }
     {
         let mut command = control.command.lock().unwrap();
         command.rect = [20, 20, 600, 350];

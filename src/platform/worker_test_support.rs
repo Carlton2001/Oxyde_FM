@@ -31,7 +31,7 @@ pub mod preview {
         path: &Path,
         deadline: Duration,
     ) -> io::Result<Vec<u8>> {
-        native::run_office_text_in(executable, path, deadline)
+        native::run_office_text_in(executable, path, deadline, false)
     }
     pub fn supervise(command: Command, deadline: Duration) -> io::Result<Vec<u8>> {
         native::supervise(command, deadline)

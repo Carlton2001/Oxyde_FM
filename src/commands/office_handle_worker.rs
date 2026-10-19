@@ -38,7 +38,11 @@ pub fn run_if_requested() -> bool {
             return Err(io::Error::other("Unexpected Office argument"));
         }
         let file = unsafe { File::from_raw_handle(handle as *mut std::ffi::c_void) };
-        let reply = match office_preview::text(file, &extension) {
+        let parsed = match extension.strip_prefix("document:") {
+            Some(extension) => office_preview::document(file, extension),
+            None => office_preview::text(file, &extension),
+        };
+        let reply = match parsed {
             Ok(text) => Reply::Text(text),
             Err(error) => Reply::Error {
                 limit: false,

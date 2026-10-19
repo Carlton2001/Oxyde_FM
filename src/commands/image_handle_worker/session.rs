@@ -20,17 +20,17 @@ pub(super) fn run(
         let id = u64::from_le_bytes(request[..8].try_into().unwrap());
         let handle = usize::try_from(u64::from_le_bytes(request[8..16].try_into().unwrap()))
             .map_err(io::Error::other)?;
-        if id != expected || handle == 0 || handle == usize::MAX || request[16] > 1 {
+        if id != expected || handle == 0 || handle == usize::MAX || request[16] > 2 {
             return Err(io::Error::other("Invalid image session request"));
         }
-        let policy = if request[16] == 1 {
-            image_preview_decode::Policy {
+        let policy = match request[16] {
+            1 => image_preview_decode::Policy {
                 output_side: 128,
                 frame_count: 1,
                 ..POLICY
-            }
-        } else {
-            POLICY
+            },
+            2 => image_preview_decode::VIEWER_POLICY,
+            _ => POLICY,
         };
         let file = unsafe { File::from_raw_handle(handle as *mut std::ffi::c_void) };
         // read_bounded consumes and closes this request's source before parsing.

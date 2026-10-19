@@ -1,10 +1,15 @@
+mod content;
+mod content_render;
 mod media;
+mod media_bar;
+mod pdf;
 mod render;
+mod scrollbar;
+mod text;
 mod window;
 pub(crate) use window::close_viewer_windows;
 
 use super::OxydeApp;
-use crate::ui::components::tooltip::PreviewTask;
 use gpui::*;
 use oxyde_lib::models::FileEntry;
 use std::{collections::HashSet, sync::Arc};
@@ -18,13 +23,26 @@ struct Source {
 
 pub(crate) struct Viewer {
     owner: WeakEntity<OxydeApp>,
+    /// The owning tab; the Viewer never activates its pane.
+    #[cfg_attr(not(test), allow(dead_code))]
     tab_id: String,
     source: Source,
     files: Vec<FileEntry>,
     index: usize,
-    preview: Option<Entity<PreviewTask>>,
+    content: content::Content,
+    /// Bumped per opened file; stale loads never publish into a newer file.
+    generation: u64,
+    /// Generation of the image the Viewer currently wants, read by queued jobs.
+    wanted: Arc<std::sync::atomic::AtomicU64>,
+    loading: Option<Task<()>>,
+    scroll: scrollbar::ListScroll,
     preparation: Option<Task<()>>,
     media: Option<media::MediaSession>,
+    /// Position and pause state carried to the next player surface.
+    resume: Option<(u64, bool)>,
+    /// Progress bar track while seeking with the pointer.
+    seeking: bool,
+    seek_track: Bounds<Pixels>,
     native_media: bool,
     audio: bool,
     detached: bool,
@@ -35,19 +53,52 @@ pub(crate) struct Viewer {
     _subscriptions: Vec<Subscription>,
 }
 
+/// The Viewer's image session holds a large worker budget; it is released
+/// whenever no image is shown, so PDF sessions and players can start at once.
+fn release_image_decoder(cx: &mut App) {
+    cx.background_executor()
+        .spawn(async { oxyde_lib::platform::platform().release_viewer_images() })
+        .detach();
+}
+
 impl OxydeApp {
     pub(crate) fn stop_viewers(&mut self, cx: &mut Context<Self>) {
         for viewer in self.viewers.values() {
-            viewer.update(cx, |viewer, _| {
+            viewer.update(cx, |viewer, cx| {
                 viewer.media = None;
                 viewer.preparation = None;
-                viewer.preview = None;
+                viewer.loading = None;
+                viewer.replace_content(content::Content::None, cx);
             });
         }
         self.viewers.clear();
+        release_image_decoder(cx);
+    }
+
+    pub(crate) fn viewer_open(&self) -> bool {
+        self.state.viewer_tab_id().is_some()
+    }
+
+    /// The title-bar button opens the single Viewer or closes it.
+    pub(crate) fn toggle_viewer(&mut self, cx: &mut Context<Self>) {
+        let pane = self
+            .state
+            .viewer_tab_id()
+            .and_then(|tab| self.state.viewer_pane_id(&tab));
+        match pane {
+            Some(pane) => {
+                self.close_tab(&pane, 0, cx);
+                self.sync_viewers(cx);
+                cx.notify();
+            }
+            None => self.open_viewer(cx),
+        }
     }
 
     pub(crate) fn open_viewer(&mut self, cx: &mut Context<Self>) {
+        if self.viewer_open() {
+            return;
+        }
         self.context_menus.clear();
         self.settings_open = false;
         let source = self
@@ -59,10 +110,7 @@ impl OxydeApp {
         let id = self.state.add_viewer();
         self.sync_viewers(cx);
         if let Some(viewer) = id.and_then(|id| self.viewers.get(&id)) {
-            viewer.update(cx, |viewer, cx| {
-                viewer.set_source(source, cx);
-                viewer.focus_pending = true;
-            });
+            viewer.update(cx, |viewer, cx| viewer.set_source(source, cx));
         }
         self.reconcile_watchers(cx);
         self.save_workspace(cx);
@@ -85,6 +133,10 @@ impl OxydeApp {
             } else {
                 viewer.update(cx, |viewer, cx| {
                     viewer.media = None;
+                    viewer.loading = None;
+                    // Closing frees the GPU textures of its image or PDF pages.
+                    viewer.replace_content(content::Content::None, cx);
+                    release_image_decoder(cx);
                     if let Some(handle) = viewer.detached_window.take() {
                         cx.defer(move |cx| {
                             let _ = handle.update(cx, |_, window, cx| {
@@ -182,15 +234,26 @@ impl Viewer {
             this.update_visibility();
             cx.notify();
         });
+        // Process startup dominates a first image; pay it while the user selects.
+        cx.background_executor()
+            .spawn(async { oxyde_lib::platform::platform().warm_viewer_images() })
+            .detach();
         let mut this = Self {
             owner: owner.downgrade(),
             tab_id,
             source: Source::default(),
             files: Vec::new(),
             index: 0,
-            preview: None,
+            content: content::Content::None,
+            generation: 0,
+            wanted: Default::default(),
+            loading: None,
+            scroll: Default::default(),
             preparation: None,
             media: None,
+            resume: None,
+            seeking: false,
+            seek_track: Bounds::default(),
             native_media: false,
             audio: false,
             detached: false,
@@ -283,19 +346,30 @@ impl Viewer {
     }
 
     fn load_current(&mut self, cx: &mut Context<Self>) {
-        self.preview = None;
+        self.generation += 1;
+        self.wanted.store(self.generation, std::sync::atomic::Ordering::Release);
+        self.loading = None;
+        self.replace_content(content::Content::None, cx);
         self.media = None;
+        self.resume = None;
         self.native_media = false;
         self.audio = false;
+        let image = self.files.get(self.index).is_some_and(|file| {
+            !file.is_dir
+                && file.archive_path.is_none()
+                && crate::ui::components::icons::get_preview_type(&file.name)
+                    == crate::ui::components::icons::PreviewType::Image
+        });
+        if !image {
+            release_image_decoder(cx);
+        }
         let Some(file) = self.files.get(self.index) else {
             return;
         };
         if file.is_dir || file.archive_path.is_some() {
             return;
         }
-        use crate::ui::components::icons::{
-            get_preview_type, PreviewType, AUDIO_EXTENSIONS, VIDEO_EXTENSIONS,
-        };
+        use crate::ui::components::icons::{AUDIO_EXTENSIONS, VIDEO_EXTENSIONS};
         let extension = file
             .name
             .rsplit('.')
@@ -319,27 +393,16 @@ impl Viewer {
             }
             return;
         }
-        let kind = get_preview_type(&file.name);
-        if kind != PreviewType::None {
-            let path = file.path.clone();
-            self.preview = Some(cx.new(|cx| PreviewTask::new_viewer(path, kind, cx)));
-        }
+        let file = file.clone();
+        self.load_content(&file, cx);
     }
 
+    /// Only a detached window gives the Viewer keyboard focus. Docked, the
+    /// explorer pane stays active and keeps the keyboard.
     fn activate(&self, window: &mut Window, cx: &mut Context<Self>) {
-        window.focus(&self.focus, cx);
-        let id = &self.tab_id;
-        let _ = self.owner.update(cx, |app, cx| {
-            let mut pane_id = None;
-            app.state.layout.visit_panes(&mut |pane| {
-                if pane.tabs.iter().any(|tab| &tab.id == id) {
-                    pane_id = Some(pane.id.clone());
-                }
-            });
-            if let Some(pane) = pane_id {
-                app.activate_pane(&pane, cx);
-            }
-        });
+        if self.detached {
+            window.focus(&self.focus, cx);
+        }
     }
 }
 

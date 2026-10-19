@@ -1,7 +1,7 @@
 //! GPUI SVG rasterization stays outside the backend library and its native workers.
 use gpui::{DevicePixels, SvgRenderer, SvgSize};
 use image::{DynamicImage, Frame, RgbaImage};
-use oxyde_lib::utils::image_preview_decode::{read_bounded, Policy, PreviewError};
+use oxyde_lib::utils::image_preview_decode::{read_bounded, Policy, PreviewError, MAX_SVG_SIDE};
 
 fn byte_len(width: u32, height: u32) -> Result<u64, PreviewError> {
     u64::from(width)
@@ -34,13 +34,11 @@ pub(crate) fn svg(
     // rasterizer caps height at 8192. Request 1024px width (<=32MiB main buffer),
     // then fit both returned sides to our final output envelope. Parser/filter
     // scratch allocations and embedded images are not bounded by this policy.
+    let side = policy.output_side.min(MAX_SVG_SIDE);
     let rendered = renderer
         .render_parsed(
             &parsed,
-            SvgSize::Size(gpui::size(
-                DevicePixels(policy.output_side as i32),
-                DevicePixels(policy.output_side as i32),
-            )),
+            SvgSize::Size(gpui::size(DevicePixels(side as i32), DevicePixels(side as i32))),
         )
         .map_err(|error| PreviewError::Decode(error.to_string()))?;
     let size = rendered.size(0);
@@ -48,7 +46,7 @@ pub(crate) fn svg(
         u32::try_from(size.width.0).map_err(|_| PreviewError::Limit("SVG output dimensions"))?;
     let height =
         u32::try_from(size.height.0).map_err(|_| PreviewError::Limit("SVG output dimensions"))?;
-    if width == 0 || height == 0 || width > policy.output_side || height > 8192 {
+    if width == 0 || height == 0 || width > side || height > 8192 {
         return Err(PreviewError::Limit("SVG output dimensions"));
     }
     let pixels = rendered

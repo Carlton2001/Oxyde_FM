@@ -27,10 +27,21 @@ fn reads_bounded_commands_in_order_and_detects_eof() {
         rect: [10, 20, 800, 600],
         visible: true,
         paused: false,
+        seek_id: 3,
+        seek_ms: 12_345,
     };
     let mut bytes = serde_json::to_vec(&command).unwrap();
     bytes.push(b'\n');
     let mut input = bytes.as_slice();
     assert_eq!(read_command(&mut input).unwrap(), Some(command));
     assert_eq!(read_command(&mut input).unwrap(), None);
+}
+
+#[test]
+fn media_reports_roundtrip_and_reject_unknown_status() {
+    let report = super::super::encode_media_report(MEDIA_PLAYING, 1_500, 90_000);
+    assert_eq!(super::super::decode_media_report(&report), Some((MEDIA_PLAYING, 1_500, 90_000)));
+    let mut invalid = report;
+    invalid[0] = b'?';
+    assert_eq!(super::super::decode_media_report(&invalid), None);
 }

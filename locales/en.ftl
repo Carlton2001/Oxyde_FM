@@ -663,7 +663,10 @@ group-select-all = Select all items in the group
 group-deselect-all = Deselect all items in the group
 
 viewer-title = Viewer
-viewer-open = Open a Viewer
+viewer-open = Open the Viewer
+viewer-close = Close the Viewer
+viewer-slide = Slide
+viewer-text-truncated = Only the first 512 MiB of the file are shown.
 viewer-empty = Select a file in an explorer pane.
 viewer-detach = Detach Viewer
 viewer-detached = The Viewer is open in a secondary window.

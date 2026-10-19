@@ -140,6 +140,8 @@ impl WorkspaceState {
         } else {
             first_pane_id?
         };
+        let active = state.active_pane_id.clone();
+        state.keep_explorer_active(&active);
         state.next_tab_id = next_tab_id;
         state.refresh_sidebar();
 

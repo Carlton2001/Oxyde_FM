@@ -2,10 +2,22 @@
 use image::{Delay, Frame, RgbaImage};
 use std::io::{self, Cursor, Read, Write};
 
-pub const MAX_PIXELS: usize = 32 * 1024 * 1024;
+/// Pixel envelopes enforced by the receiver of each request kind.
+#[derive(Clone, Copy)]
+pub struct Limits {
+    pub pixels: usize,
+    pub side: u32,
+}
+/// Tooltips, thumbnails, icons and Viewer PDF pages.
+pub const PREVIEW: Limits = Limits { pixels: 32 * 1024 * 1024, side: 2048 };
+/// Full-resolution Viewer images, up to the usual GPU texture side.
+pub const VIEWER: Limits = Limits { pixels: 256 * 1024 * 1024, side: 16384 };
+pub const MAX_PIXELS: usize = PREVIEW.pixels;
 pub const MAX_REPLY: usize = MAX_PIXELS + 16 * 1024;
+pub const VIEWER_MAX_REPLY: usize = VIEWER.pixels + 16 * 1024;
+/// Complete Viewer documents and PDF page lists; tooltips truncate earlier.
+pub const MAX_TEXT: usize = MAX_PIXELS;
 const MAX_FRAMES: usize = 256;
-const MAX_SIDE: u32 = 1024;
 
 pub enum Reply {
     /// `natural_size` is the intrinsic display size of a vector source.
@@ -31,8 +43,8 @@ fn natural_side(value: u32) -> io::Result<u32> {
     }
     Ok(value)
 }
-fn layout(width: u32, height: u32) -> io::Result<usize> {
-    if width == 0 || height == 0 || width > MAX_SIDE || height > MAX_SIDE {
+fn layout(width: u32, height: u32, limits: Limits) -> io::Result<usize> {
+    if width == 0 || height == 0 || width > limits.side || height > limits.side {
         return Err(invalid());
     }
     Ok(width as usize * height as usize * 4)
@@ -56,9 +68,9 @@ pub fn encode(reply: Reply, out: &mut impl Write) -> io::Result<()> {
             let mut total = 0;
             for frame in frames {
                 let image = frame.buffer();
-                let length = layout(image.width(), image.height())?;
+                let length = layout(image.width(), image.height(), VIEWER)?;
                 total += length;
-                if total > MAX_PIXELS || length != image.as_raw().len() {
+                if total > VIEWER.pixels || length != image.as_raw().len() {
                     return Err(invalid());
                 }
                 let (num, den) = frame.delay().numer_denom_ms();
@@ -72,7 +84,7 @@ pub fn encode(reply: Reply, out: &mut impl Write) -> io::Result<()> {
             }
         }
         Reply::Text(text) => {
-            if text.len() > 16 * 1024 {
+            if text.len() > MAX_TEXT {
                 return Err(invalid());
             }
             out.write_all(&[3])?;
@@ -91,7 +103,11 @@ pub fn encode(reply: Reply, out: &mut impl Write) -> io::Result<()> {
 }
 
 pub fn decode(bytes: &[u8]) -> io::Result<Reply> {
-    if bytes.len() > MAX_REPLY || !bytes.starts_with(b"OXYP1") {
+    decode_with(bytes, PREVIEW)
+}
+
+pub fn decode_with(bytes: &[u8], limits: Limits) -> io::Result<Reply> {
+    if bytes.len() > limits.pixels + 16 * 1024 || !bytes.starts_with(b"OXYP1") {
         return Err(invalid());
     }
     let mut input = Cursor::new(&bytes[5..]);
@@ -123,9 +139,9 @@ pub fn decode(bytes: &[u8]) -> io::Result<Reply> {
                 if den == 0 {
                     return Err(invalid());
                 }
-                let length = layout(width, height)?;
+                let length = layout(width, height, limits)?;
                 total += length;
-                if total > MAX_PIXELS {
+                if total > limits.pixels {
                     return Err(invalid());
                 }
                 let offset = input.position() as usize;
@@ -153,7 +169,7 @@ pub fn decode(bytes: &[u8]) -> io::Result<Reply> {
         }
         1..=3 => {
             let length = number(&mut input)? as usize;
-            if length > if kind[0] == 3 { 16 * 1024 } else { 4096 } {
+            if length > if kind[0] == 3 { MAX_TEXT } else { 4096 } {
                 return Err(invalid());
             }
             let offset = input.position() as usize;
@@ -246,7 +262,7 @@ mod tests {
             encode(reply, &mut bytes).unwrap();
             assert!(decode(&bytes).is_ok());
         }
-        assert!(encode(Reply::Text("a".repeat(16385)), &mut Vec::new()).is_err());
+        assert!(encode(Reply::Text("a".repeat(MAX_TEXT + 1)), &mut Vec::new()).is_err());
         assert!(decode(&vec![0; MAX_REPLY + 1]).is_err());
     }
 }

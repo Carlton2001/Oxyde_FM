@@ -144,5 +144,6 @@ mod tests {
 }
 pub mod image_preview_decode;
 pub mod office_preview;
+pub mod office_document;
 #[cfg(target_os = "windows")]
 pub(crate) mod tar_fidelity;

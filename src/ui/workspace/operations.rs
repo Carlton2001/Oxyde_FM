@@ -65,7 +65,8 @@ impl WorkspaceState {
             // Find another pane to activate
             let mut other_id = None;
             self.layout.visit_panes(&mut |p| {
-                if p.id != id {
+                // Prefer an explorer: a Viewer pane is never the active pane.
+                if p.id != id && (other_id.is_none() || !p.active_tab().is_viewer()) {
                     other_id = Some(p.id.clone());
                 }
             });
@@ -254,6 +255,23 @@ impl WorkspaceState {
             || (from_pane_id == to_pane_id && self.find_pane(from_pane_id).is_some_and(|pane| pane.tabs.len() == 1)) {
             return;
         }
+        let previous = if self.is_viewer_pane(from_pane_id) {
+            self.active_pane_id.clone()
+        } else {
+            from_pane_id.to_string()
+        };
+        self.split_tab_to_axis_inner(from_pane_id, from_tab_idx, to_pane_id, axis, after);
+        self.keep_explorer_active(&previous);
+    }
+
+    fn split_tab_to_axis_inner(
+        &mut self,
+        from_pane_id: &str,
+        from_tab_idx: usize,
+        to_pane_id: &str,
+        axis: LayoutAxis,
+        after: bool,
+    ) {
         let tab = if let Some(pane) = self.find_pane_mut(from_pane_id) {
             if from_tab_idx < pane.tabs.len() {
                 let active_id = pane.active_tab().id.clone();
