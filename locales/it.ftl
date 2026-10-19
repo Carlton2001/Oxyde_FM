@@ -968,3 +968,14 @@ group-origin-unknown = Posizione originale sconosciuta
 group-date-unknown = Data sconosciuta
 group-select-all = Seleziona tutti gli elementi del gruppo
 group-deselect-all = Deseleziona tutti gli elementi del gruppo
+
+viewer-title = Viewer
+viewer-open = Apri un Viewer
+viewer-empty = Seleziona un file in un pannello esplora risorse.
+viewer-detach = Scollega il Viewer
+viewer-detached = Il Viewer è aperto in una finestra secondaria.
+viewer-show-window = Mostra la finestra del Viewer
+viewer-previous = File precedente
+viewer-next = File successivo
+viewer-play = Riproduci
+viewer-pause = Pausa

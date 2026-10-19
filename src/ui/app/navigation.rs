@@ -223,6 +223,13 @@ impl OxydeApp {
     }
 
     pub fn navigate_to(&mut self, pane_id: &str, path: String, cx: &mut Context<Self>) {
+        if path == "viewer://" { self.open_viewer(cx); return; }
+        if self.state.find_pane(pane_id).is_some_and(|pane| pane.active_tab().is_viewer()) {
+            self.add_panel_right(cx);
+            let target = self.state.active_pane_id.clone();
+            self.load_path(&target, path, cx);
+            return;
+        }
         if let Some(pane) = self.state.find_pane_mut(pane_id) {
             let active_tab = pane.active_tab_mut();
             if path == active_tab.path {
@@ -258,6 +265,11 @@ impl OxydeApp {
     }
 
     pub fn add_tab(&mut self, pane_id: &str, path: String, activate: bool, cx: &mut Context<Self>) {
+        if path == "viewer://" { self.open_viewer(cx); return; }
+        if self.state.find_pane(pane_id).is_some_and(|pane| pane.active_tab().is_viewer()) {
+            self.navigate_to(pane_id, path, cx);
+            return;
+        }
         let tab_idx = self.state.find_pane(pane_id)
             .map(|pane| (pane.active_tab_index + 1).min(pane.tabs.len()));
         self.state.add_tab(pane_id, path, activate);
@@ -275,6 +287,10 @@ impl OxydeApp {
     /// `WorkspaceState::duplicate_tab` only updates the synchronous UI state;
     /// directory contents are loaded through `request_tab_files`.
     pub fn duplicate_tab(&mut self, pane_id: &str, tab_idx: usize, cx: &mut Context<Self>) {
+        if self.state.find_pane(pane_id).and_then(|pane| pane.tabs.get(tab_idx)).is_some_and(|tab| tab.is_viewer()) {
+            self.open_viewer(cx);
+            return;
+        }
         if let Some(new_tab_idx) = self.state.duplicate_tab(pane_id, tab_idx) {
             let path = self
                 .state
@@ -343,6 +359,8 @@ impl OxydeApp {
     }
 
     pub fn load_path(&mut self, pane_id: &str, path: String, cx: &mut Context<Self>) {
+        if path == "viewer://" { return; }
+        if self.state.find_pane(pane_id).is_some_and(|pane| pane.active_tab().is_viewer()) { return; }
         if self.breadcrumb_pane_id.as_deref() == Some(pane_id) {
             self.cancel_breadcrumb_edit(cx);
         }
@@ -386,6 +404,7 @@ impl OxydeApp {
         reset_scroll: bool,
         cx: &mut Context<Self>,
     ) {
+        if path == "viewer://" { return; }
         if path.starts_with("search://") {
             self.request_quick_search(pane_id, tab_idx, path, cx);
             return;

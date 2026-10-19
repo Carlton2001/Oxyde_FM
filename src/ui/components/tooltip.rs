@@ -2,6 +2,7 @@ mod assets;
 mod presentation;
 mod preview;
 mod video;
+mod viewer;
 mod placement;
 pub(crate) mod hover;
 mod pdf_cache;
@@ -252,6 +253,7 @@ struct DuplicateResultTooltip {
 
 #[derive(Clone)]
 pub struct PreviewTask {
+    viewer: bool,
     transition_image: Option<PreviewPixels>,
     maximum_size: Option<Size<Pixels>>,
     data: Option<PreviewData>,

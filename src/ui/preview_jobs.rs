@@ -110,6 +110,21 @@ fn video_queue() -> &'static PreviewQueue {
     QUEUE.get_or_init(|| PreviewQueue::new(MAX_VIDEO_JOBS))
 }
 
+fn media_queue() -> &'static PreviewQueue {
+    static QUEUE: OnceLock<PreviewQueue> = OnceLock::new();
+    QUEUE.get_or_init(|| PreviewQueue::new(2))
+}
+
+/// Long-lived Viewer playback must not occupy still-preview or hover-video slots.
+pub(crate) fn load_media<T, E>(
+    cancellation: Cancellation,
+    work: impl FnOnce() -> Result<T, E> + Send + 'static,
+) -> impl Future<Output = Result<Option<T>, String>> + Send
+where T: Send + 'static, E: Display + Send + 'static {
+    let runtime = Handle::try_current().map_err(|error| format!("Preview runtime unavailable: {error}"));
+    async move { media_queue().run(runtime?, Some(cancellation), work).await }
+}
+
 fn icon_queue() -> &'static PreviewQueue {
     static QUEUE: OnceLock<PreviewQueue> = OnceLock::new();
     QUEUE.get_or_init(|| PreviewQueue::new(MAX_ICON_JOBS))

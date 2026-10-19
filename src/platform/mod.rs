@@ -1,5 +1,7 @@
 use crate::models::{DriveInfo, QuickAccessItem};
 mod file_names;
+mod viewer_media;
+pub use viewer_media::{ViewerMediaCommand, ViewerMediaControl, MEDIA_ENDED, MEDIA_FAILED, MEDIA_LOADING, MEDIA_PAUSED, MEDIA_PLAYING};
 pub use file_names::FileNameRules;
 
 #[derive(Debug)]
@@ -103,6 +105,15 @@ impl ShellDeleteOutcome {
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
+    fn viewer_media_parent(&self, _handle: raw_window_handle::RawWindowHandle) -> Option<u64> { None }
+    /// Blocking native session. Call only on a background worker; cancellation stops its process.
+    fn play_viewer_media(&self, _path: &std::path::Path, _control: &ViewerMediaControl) -> std::io::Result<()> {
+        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Native media playback unavailable"))
+    }
+    #[doc(hidden)]
+    fn run_viewer_media_worker(&self, _path: &std::path::Path) -> std::io::Result<()> {
+        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Native media worker unavailable"))
+    }
     /// Background-only lookup. Extension includes its leading dot; no file is opened.
     fn file_kind_for_extension(&self, _extension: &str) -> Option<crate::models::file_entry::NativeFileKind> { None }
 
@@ -677,6 +688,8 @@ mod windows_shell_delete;
 mod windows_shell_delete_tracked;
 #[cfg(target_os = "windows")]
 mod windows_preview_worker;
+#[cfg(target_os = "windows")]
+mod windows_viewer_media;
 #[cfg(target_os = "windows")]
 mod windows_archive_worker;
 #[cfg(target_os = "windows")]

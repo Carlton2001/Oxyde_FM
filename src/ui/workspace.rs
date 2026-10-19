@@ -8,6 +8,7 @@ mod sorting;
 mod preparation;
 pub(crate) use preparation::FileUpdate;
 mod tree;
+mod viewer;
 
 use crate::ui::date_groups::{CalendarReference, DateGroup};
 use crate::ui::i18n::Message;

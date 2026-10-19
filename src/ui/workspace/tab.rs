@@ -109,7 +109,7 @@ impl TabState {
             column_type_labels: Default::default(),
             column_size_values: Default::default(),
             column_measurement_key: None,
-            load_status: TabLoadStatus::Loading,
+            load_status: if path == super::viewer::VIEWER_PATH { TabLoadStatus::Ready } else { TabLoadStatus::Loading },
         }
     }
 

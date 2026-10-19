@@ -11,6 +11,15 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn viewer_media_parent(&self, handle: raw_window_handle::RawWindowHandle) -> Option<u64> {
+        match handle { raw_window_handle::RawWindowHandle::Win32(handle) => Some(handle.hwnd.get() as u64), _ => None }
+    }
+    fn play_viewer_media(&self, path: &std::path::Path, control: &super::ViewerMediaControl) -> std::io::Result<()> {
+        super::windows_viewer_media::supervise(path, control)
+    }
+    fn run_viewer_media_worker(&self, path: &std::path::Path) -> std::io::Result<()> {
+        super::windows_viewer_media::run(path)
+    }
     fn file_kind_for_extension(&self, extension: &str) -> Option<crate::models::file_entry::NativeFileKind> {
         super::windows_file_kind::for_extension(extension)
     }

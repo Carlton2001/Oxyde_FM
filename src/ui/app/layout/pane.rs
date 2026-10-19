@@ -37,9 +37,13 @@ impl OxydeApp {
                     .flex()
                     .flex_col()
                     .relative()
-                    .child(render_top_bar(self, p_id.clone(), handle.clone(), cx))
+                    .when(!pane.active_tab().is_viewer(), |content| content.child(render_top_bar(self, p_id.clone(), handle.clone(), cx)))
                     .when(pane.active_tab().quick_search_query().is_some(), |pane| pane.child(self.render_quick_search_banner(&p_id, cx)))
-                    .child(render_file_list(self, p_id.clone(), handle.clone(), cx));
+                    .map(|content| {
+                        if pane.active_tab().is_viewer() {
+                            content.when_some(self.viewers.get(&pane.active_tab().id).cloned(), |content, viewer| content.child(viewer))
+                        } else { content.child(render_file_list(self, p_id.clone(), handle.clone(), cx)) }
+                    });
                 self.append_pane_split_drop_zones(content, p_id.clone(), handle.clone(), theme)
             })
             .into_any_element()

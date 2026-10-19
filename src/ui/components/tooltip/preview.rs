@@ -109,7 +109,7 @@ impl PreviewTask {
             _ => None,
         }
     }
-    fn preview_message(&self, window: &mut Window, cx: &mut App) -> Option<Message> {
+    pub(super) fn preview_message(&self, window: &mut Window, cx: &mut App) -> Option<Message> {
         if let Some(source) = &self.original_image {
             return window.use_asset::<TooltipImageAsset>(source, cx).and_then(
                 |result| match result {
@@ -143,6 +143,7 @@ impl PreviewTask {
             retain_tooltip_asset(TooltipAssetSource::Image(path.clone()), cx);
             return Self {
                 transition_image: None,
+                viewer: false,
                 maximum_size: None,
                 data: None,
                 media_asset: None,
@@ -157,6 +158,7 @@ impl PreviewTask {
             retain_tooltip_asset(TooltipAssetSource::Pdf(path.clone()), cx);
             return Self {
                 transition_image: None,
+                viewer: false,
                 maximum_size: None,
                 data: None,
                 media_asset: Some(path),
@@ -378,6 +380,7 @@ impl PreviewTask {
             message: None,
             loading_delay_elapsed: false,
             transition_image: None,
+            viewer: false,
             _video_cancellation: video_cancellation,
         }
     }
@@ -395,6 +398,7 @@ mod media_size_tests;
 
 impl Render for PreviewTask {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.viewer { return self.render_viewer(window, cx); }
         let theme = *OxydeTheme::global(cx);
         if let Some((image, natural_size)) = self.loaded_image(window, cx) {
             let maximum = self.maximum_size.map(|limit| limit.width).unwrap_or_else(||

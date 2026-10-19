@@ -106,6 +106,8 @@ impl WorkspaceState {
     }
 
     pub fn add_tab(&mut self, pane_id: &str, path: String, activate: bool) {
+        if path == super::viewer::VIEWER_PATH { self.add_viewer(); return; }
+        if self.find_pane(pane_id).is_some_and(|pane| pane.active_tab().is_viewer()) { return; }
         let id = format!("tab-{}", self.next_tab_id);
         self.next_tab_id = self.next_tab_id.wrapping_add(1);
 
@@ -166,7 +168,9 @@ impl WorkspaceState {
                 return;
             }
             if pane.tabs.len() == 1 {
-                let path = pane.tabs[0].path.clone();
+                let path = if pane.tabs[0].is_viewer() {
+                    if cfg!(target_os = "windows") { "C:/" } else { "/" }.into()
+                } else { pane.tabs[0].path.clone() };
                 let view_mode = pane.tabs[0].view_mode;
                 let id = format!("tab-{}", self.next_tab_id);
                 self.next_tab_id = self.next_tab_id.wrapping_add(1);
@@ -204,6 +208,10 @@ impl WorkspaceState {
     }
 
     pub fn duplicate_tab(&mut self, pane_id: &str, tab_idx: usize) -> Option<usize> {
+        if self.find_pane(pane_id).and_then(|pane| pane.tabs.get(tab_idx)).is_some_and(TabState::is_viewer) {
+            self.add_viewer()?;
+            return None;
+        }
         let duplicate = if let Some(pane) = self.find_pane(pane_id) {
             pane.tabs
                 .get(tab_idx)
@@ -242,7 +250,8 @@ impl WorkspaceState {
         axis: LayoutAxis,
         after: bool,
     ) {
-        if self.find_pane(to_pane_id).is_none() {
+        if self.find_pane(to_pane_id).is_none()
+            || (from_pane_id == to_pane_id && self.find_pane(from_pane_id).is_some_and(|pane| pane.tabs.len() == 1)) {
             return;
         }
         let tab = if let Some(pane) = self.find_pane_mut(from_pane_id) {
@@ -337,6 +346,7 @@ impl WorkspaceState {
     }
 
     pub fn move_tab_to_pane_id(&mut self, from_pane_id: &str, from_tab: usize, to_pane_id: &str) {
+        if !self.can_merge_tab(from_pane_id, from_tab, to_pane_id) { return; }
         if from_pane_id == to_pane_id {
             return;
         }

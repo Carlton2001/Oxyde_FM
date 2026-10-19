@@ -42,6 +42,11 @@ pub fn render_title_bar(
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             panel_handle.update(cx, |view, cx| view.add_panel_right(cx));
         });
+    let viewer_handle = handle.clone();
+    let viewer = action_button("title-viewer", "icons/eye.svg", Message::ViewerOpen)
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+            viewer_handle.update(cx, |view, cx| view.open_viewer(cx));
+        });
     let tools_handle = handle.clone();
     let tools_measure_handle = handle.clone();
     let tools = action_button("title-tools", "icons/wrench.svg", Message::Tools)
@@ -158,14 +163,17 @@ pub fn render_title_bar(
         .child(drag_area)
         .child(refresh)
         .child(new_panel)
+        .child(viewer)
         .child(tools)
         .child(crate::ui::components::operations::render_operations_footer(view, handle.clone(), cx))
         .child(div().w(rems(0.5)).h_full().flex_none())
-        .child(render_window_controls(is_maximized, cx, |window, cx| {
+        .child(render_window_controls(is_maximized, cx, move |window, cx| {
+            handle.update(cx, |view, cx| view.stop_viewers(cx));
             crate::trace_shutdown_request("title bar close button");
             crate::ui::app::duplicates::close_duplicate_windows(cx);
             crate::ui::components::operations::close_operations_windows(cx);
             crate::ui::app::advanced_search::close_advanced_search_windows(cx);
+            crate::ui::app::viewer::close_viewer_windows(cx);
             window.remove_window();
         }))
 }

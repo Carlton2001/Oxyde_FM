@@ -14,6 +14,54 @@ Les dimensions logiques suivent le zoom : hauteur maximale 12,5 rem pour images/
 
 Le repli intégré ancre le bloc nom/métadonnées au curseur (0,75 rem de décalage, marge de bord 3,125 rem ajustable). L’aperçu apparaît au-dessus sans déplacer ce repère ni réserver de place vide. `tooltip/position.rs` et `placement.rs` portent ces calculs. Les infobulles fixes conservent leur ancre ; transport natif : [fenêtres](windows.md).
 
+## Viewer
+
+Le bouton œil de la barre de titre crée un onglet `viewer://`, seul dans son
+panneau. Les dépôts sur les barres d’onglets refusent toute fusion dans les deux
+sens ; les zones de division déplacent le Viewer avec son propre panneau.
+La session restaure cet onglet sans lancer de listing ni de surveillance sur
+son emplacement interne.
+
+`app/viewer` suit la sélection du dernier onglet explorateur actif, dans l’ordre
+de sa liste, et conserve le fichier courant s’il reste sélectionné. Précédent /
+suivant (ou les flèches) parcourent une sélection multiple. Sans sélection,
+l’aperçu et le lecteur sont libérés. La préparation des grandes listes se fait
+en arrière-plan ; une révision de source écarte les résultats obsolètes.
+Images, PDF, texte et Office réutilisent les
+parcours et limites des aperçus existants (première page PDF, extrait texte ou
+Office, décodage image borné), avec une présentation adaptée au panneau.
+Les dossiers, entrées d’archives virtuelles et types non pris en charge restent
+sans aperçu. La barre de statut reste vide.
+
+Le bouton supérieur droit ouvre une fenêtre secondaire redimensionnable,
+possédée par la fenêtre principale. L’onglet et son panneau conservent leur place ;
+un bouton dans le panneau permet de retrouver la fenêtre secondaire. Seule cette
+fenêtre rend l’aperçu et le lecteur pendant le détachement. Le suivi de sélection
+reste actif. Fermer la fenêtre secondaire libère sa session et restaure l’aperçu
+dans le panneau conservé. Fermer la fenêtre principale ferme également les
+Viewers détachés.
+
+Sous Windows, audio et vidéo utilisent les codecs système via MFPlay dans le
+mode `viewer-media` du self-worker. Un même lecteur natif synchronise image et
+son, démarre automatiquement et reçoit play/pause (ou Espace). La fin de lecture
+reste arrêtée jusqu’à une action Lire. Le worker possède une surface vidéo
+native passive, possédée par la fenêtre du Viewer et sans statut topmost global.
+Elle suit en pixels physiques le rectangle mesuré et borné du contenu, y compris
+lors des déplacements de sa fenêtre. Ce transport évite que la composition GPUI,
+placée au-dessus des HWND enfants, masque la vidéo. L’audio
+seul n’affiche pas cette surface. Une lecture ne passe pas dans le parent en cas
+d’échec. Ce parcours est distinct des vidéos muettes de survol et n’occupe pas
+leurs admissions : deux sessions Viewer au plus, puis attente annulable.
+
+Le job natif reste hors LPAC, avec un plafond de 1 Gio et l’admission agrégée
+existante. Le démarrage et l’absence de heartbeat IPC sont bornés à 15 secondes ;
+ce heartbeat ne prouve pas la progression d’un codec. Les commandes JSON sont
+bornées à 512 octets et les réponses à des états d’un octet. Changement de fichier,
+fermeture et dernier propriétaire annulent le lecteur, retirent sa surface et
+récoltent son processus. Les anciens aperçus ne peuvent publier dans un nouveau
+Viewer. Linux conserve un message d’aperçu indisponible pour audio/vidéo ; ce
+lecteur natif n’y est pas implémenté.
+
 ## Caches et durée de vie
 
 | Usage | Limite et politique |

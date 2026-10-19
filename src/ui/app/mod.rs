@@ -32,6 +32,7 @@ mod drag;
 mod dialog_windows;
 pub(crate) use dialog_windows::close_dialog_windows;
 mod render;
+pub(crate) mod viewer;
 mod context_menu_render;
 pub use drag::drives_differ;
 use toasts::{Toast, ToastKind};
@@ -197,6 +198,7 @@ pub struct FileDragPreview {
 
 pub struct OxydeApp {
     pub state: WorkspaceState,
+    pub(crate) viewers: std::collections::HashMap<String, Entity<viewer::Viewer>>,
     pub handle: Option<Entity<Self>>,
     pub(crate) next_file_request: u64,
     pub(crate) next_native_menu_request: u64,
@@ -377,6 +379,7 @@ impl OxydeApp {
             restored_workspace.unwrap_or_else(|| (WorkspaceState::new(), 260.0));
         Self {
             state,
+            viewers: Default::default(),
             handle: None,
             next_file_request: 0,
             next_native_menu_request: 0,

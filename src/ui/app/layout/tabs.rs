@@ -49,11 +49,11 @@ impl OxydeApp {
         let tabs_count = pane.tabs.len();
         let mut pane_count = 0;
         self.state.layout.visit_panes(&mut |_| pane_count += 1);
-        let can_close_tab = pane_count > 1 || tabs_count > 1;
+        let can_close_tab = pane.active_tab().is_viewer() || pane_count > 1 || tabs_count > 1;
         let can_close_other_tabs = tabs_count > 1;
         let mut tab_bar = TabBar::new(SharedString::from(format!("tab-bar-{}", p_id)))
             .scroll_state(pane.tab_strip.clone(), pane.active_tab().id.clone(), active_idx)
-            .on_new_tab({
+            .when(!pane.active_tab().is_viewer(), |bar| bar.on_new_tab({
                 let h = h.clone();
                 let p_id_cap = p_id.clone();
                 move |_, cx| {
@@ -61,7 +61,7 @@ impl OxydeApp {
                         this.add_tab(&p_id_cap, "C:/".to_string(), true, cx);
                     });
                 }
-            });
+            }));
 
         for (t_ix, tab_data) in pane.tabs.iter().enumerate() {
             let is_tab_active = t_ix == active_idx;
@@ -69,9 +69,11 @@ impl OxydeApp {
 
             let is_root =
                 tab_data.path.len() <= 3 && tab_data.path.chars().nth(1) == Some(':');
-            let is_virtual = matches!(tab_data.path.as_str(), "__network_vincinity__" | "trash://")
+            let is_virtual = tab_data.is_viewer() || matches!(tab_data.path.as_str(), "__network_vincinity__" | "trash://")
                 || crate::ui::app::search::search_label(&tab_data.path, cx.i18n()).is_some();
-            let label = if let Some(label) = crate::ui::app::search::search_label(&tab_data.path, cx.i18n()) {
+            let label = if tab_data.is_viewer() {
+                cx.i18n().text(Message::ViewerTitle).to_string()
+            } else if let Some(label) = crate::ui::app::search::search_label(&tab_data.path, cx.i18n()) {
                 label
             } else if tab_data.path == "__network_vincinity__" {
                 cx.i18n().text(Message::SidebarNetwork).to_string()
@@ -126,6 +128,7 @@ impl OxydeApp {
 
             use crate::ui::components::tabs::TabIcon;
             let tab_icon = match tab_data.path.as_str() {
+                "viewer://" => TabIcon::Svg("icons/eye.svg"),
                 "__network_vincinity__" => TabIcon::Svg("icons/globe.svg"),
                 "trash://" => TabIcon::Svg("icons/trash-sidebar.svg"),
                 _ => {
@@ -283,6 +286,7 @@ impl OxydeApp {
                                 let h = h.clone();
                                 let target = tab_path.clone();
                                 move |data: &FileDragData, _, cx| {
+                                    if target == "viewer://" { return; }
                                     let paths = data.paths.clone();
                                     h.update(cx, |this, cx| {
                                         this.execute_file_drop(paths, target.clone(), cx);
@@ -314,6 +318,7 @@ impl OxydeApp {
                                         ) {
                                             return;
                                         }
+                                        if !v.state.can_merge_tab(&source_pane, source_index, &p_id_cap) { return; }
                                         let changed = update_tab_drop_target(
                                             &mut v.drop_target_pane,
                                             &mut v.drop_target_idx,
@@ -335,6 +340,7 @@ impl OxydeApp {
                                 move |(from_p, from_t): &(String, usize), _, app| {
                                     let (f_p, f_t) = (from_p.clone(), *from_t);
                                     h.update(app, |this, cx| {
+                                        if !this.state.can_merge_tab(&f_p, f_t, &p_id_cap) { return; }
                                         if f_p == p_id_cap {
                                             this.state
                                                 .reorder_tabs_id(&p_id_cap, f_t, t_ix);
@@ -385,6 +391,7 @@ impl OxydeApp {
                                         ) {
                                             return;
                                         }
+                                        if !v.state.can_merge_tab(&source_pane, source_index, &p_id_cap) { return; }
                                         let changed = update_tab_drop_target(
                                             &mut v.drop_target_pane,
                                             &mut v.drop_target_idx,
@@ -406,6 +413,7 @@ impl OxydeApp {
                                 move |(from_p, from_t): &(String, usize), _, app| {
                                     let (f_p, f_t) = (from_p.clone(), *from_t);
                                     h.update(app, |this, cx| {
+                                        if !this.state.can_merge_tab(&f_p, f_t, &p_id_cap) { return; }
                                         if f_p == p_id_cap {
                                             this.state.reorder_tabs_id(
                                                 &p_id_cap,
@@ -466,6 +474,7 @@ impl OxydeApp {
                     let (source_pane, source_index) = event.drag(app).clone();
                     h.update(app, |v, cx| {
                         if let Some(pane) = v.state.layout.find_pane(&p_id_cap) {
+                            if !v.state.can_merge_tab(&source_pane, source_index, &p_id_cap) { return; }
                             // Capture dispatch visits this wrapper before the tab halves.
                             // Free space and the + button therefore fall back to the end.
                             let changed = update_tab_drop_target(
@@ -490,6 +499,7 @@ impl OxydeApp {
                 move |(from_p, f_t): &(String, usize), _, app| {
                     let (f_p, f_t) = (from_p.clone(), *f_t);
                     h.update(app, |this, cx| {
+                        if !this.state.can_merge_tab(&f_p, f_t, &p_id_cap) { return; }
                         // If we drop on the wrapper and it wasn't caught by a specific tab/gap
                         // then target the absolute end of the pane
                         if let Some(pane) = this.state.layout.find_pane(&p_id_cap) {
@@ -513,6 +523,7 @@ impl OxydeApp {
                 let h = h.clone();
                 let pane_id = p_id.clone();
                 move |data: &FileDragData, _, cx| {
+                    if h.read(cx).state.find_pane(&pane_id).is_some_and(|pane| pane.active_tab().is_viewer()) { return; }
                     let directories = h.read(cx).tab_drop_directories(data);
                     h.update(cx, |this, cx| {
                         for path in directories { this.add_tab(&pane_id, path, false, cx); }

@@ -12,6 +12,7 @@ impl Render for OxydeApp {
 
         let handle = self.handle.clone().expect("handle set");
         let window_handle = _window.window_handle();
+        self.sync_viewers(cx);
         self.prepare_created_item_rename(_window, cx);
 
         let size = _window.viewport_size();

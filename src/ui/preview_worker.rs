@@ -26,6 +26,9 @@ pub(crate) fn run_if_requested() -> bool {
             return Err(std::io::Error::other("Unexpected preview argument"));
         }
         let path = std::path::Path::new(&path);
+        if mode == "viewer-media" {
+            return oxyde_lib::platform::platform().run_viewer_media_worker(path);
+        }
         if mode == "video" {
             let path = path
                 .to_str()

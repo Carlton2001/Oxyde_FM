@@ -9,6 +9,7 @@ Choisir les scénarios concernés par le changement, sur des fixtures privées. 
 | Composants / formulaires | Thèmes clairs et sombres, cinq langues dont libellés longs, zoom, petites fenêtres, Tab/Entrée/Échap, erreurs et champs désactivés |
 | Menus / fenêtres | Sous-menus après défilement, capture hors surface, champs texte/presse-papiers, clic propriétaire, Alt+Tab, fenêtre secondaire, plusieurs DPI ; rien ne réagit sous le menu |
 | Aperçus | Images transparentes/animées, PDF, vidéo ; survol rapide, retour sur cache, source modifiée, défilement, fermeture, absence de résultat obsolète |
+| Viewer | Bouton œil, sélection suivie entre panneaux, précédent/suivant, absence de fusion d’onglets dans les deux sens, déplacements par division ; statut vide ; détachement, redimensionnement, audio/vidéo et pause/reprise, changement de fichier, fin et fermeture |
 | Opérations | Progression, pause/reprise/annulation, conflits, reçus partiels, historique après relance, graphe final |
 | Archives | Navigation, extraction, création/reconstruction des quatre formats modifiables, transferts, collisions, refus lisibles et récupération |
 | Distribution | Installation propre et portable déplacé, caches/configuration, workers présents, ouverture de fichiers et fermeture |
@@ -34,6 +35,15 @@ cargo test --offline --locked --bin oxyde native_drag_ghost_tracks_modifiers_wit
 Il couvre le routage GPUI et les notifications du ghost ; la réception des touches physiques par Windows et l’aspect des couleurs restent à vérifier manuellement. Les gestionnaires clavier appartiennent à la racine suivie par le focus : un `canvas` enfant possède son propre nœud de dispatch et ne reçoit pas les événements destinés à cette racine.
 
 ## Interpréter les résultats
+
+Les tests opt-in `native_viewer_media_*` vérifient le lecteur Windows sur un WAV
+privé et, si `OXYDE_VIEWER_TEST_MEDIA` est défini, un fichier audio/vidéo privé.
+Ils exigent la reconstruction préalable des binaires. Le test opt-in
+`native_viewer_renders_tracks_selection_and_detaches` exerce le rendu GPUI et
+le suivi de sélection après détachement, la conservation du panneau, le retour
+de l’aperçu à la fermeture de la fenêtre et la fermeture liée à l’onglet.
+Ces tests ne prouvent ni l’audibilité,
+ni la synchronisation perceptuelle, ni toute la matrice des codecs/DPI/thèmes.
 
 - Les tests automatisés couvrent mieux délais, fautes et workers hostiles ; les essais manuels couvrent présentation, focus et interactions.
 - Un retour utilisateur global ne prouve pas toutes les variantes de la matrice ; consigner sa portée réelle.

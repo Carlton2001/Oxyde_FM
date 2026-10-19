@@ -661,3 +661,14 @@ group-origin-unknown = Unknown original location
 group-date-unknown = Unknown date
 group-select-all = Select all items in the group
 group-deselect-all = Deselect all items in the group
+
+viewer-title = Viewer
+viewer-open = Open a Viewer
+viewer-empty = Select a file in an explorer pane.
+viewer-detach = Detach Viewer
+viewer-detached = The Viewer is open in a secondary window.
+viewer-show-window = Show Viewer window
+viewer-previous = Previous file
+viewer-next = Next file
+viewer-play = Play
+viewer-pause = Pause

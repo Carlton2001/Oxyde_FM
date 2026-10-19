@@ -154,7 +154,9 @@ fn main() {
                 },
                 move |window, cx| {
                     app.update(cx, |this, cx| this.observe_main_window(window, cx));
-                    window.on_window_should_close(cx, |_, cx| {
+                    let viewer_owner = app.downgrade();
+                    window.on_window_should_close(cx, move |_, cx| {
+                        let _ = viewer_owner.update(cx, |app, cx| app.stop_viewers(cx));
                         trace_shutdown_request("native window close");
                         crate::ui::components::tooltip::hover::close_native_windows(cx);
                         #[cfg(target_os = "windows")]
@@ -162,6 +164,7 @@ fn main() {
                         crate::ui::app::duplicates::close_duplicate_windows(cx);
                         crate::ui::components::operations::close_operations_windows(cx);
                         crate::ui::app::advanced_search::close_advanced_search_windows(cx);
+                        crate::ui::app::viewer::close_viewer_windows(cx);
                         crate::ui::app::properties::close_properties_windows(cx);
                         crate::ui::app::close_dialog_windows(cx);
                         true

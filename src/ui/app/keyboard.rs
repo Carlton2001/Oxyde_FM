@@ -2,7 +2,8 @@ use super::*;
 
 impl OxydeApp {
     pub(super) fn file_keyboard_enabled(&self, window: &Window) -> bool {
-        self.focus_handle.is_focused(window)
+        self.state.find_pane(&self.state.active_pane_id).is_some_and(|pane| !pane.active_tab().is_viewer())
+            && self.focus_handle.is_focused(window)
             && !self.settings_open
             && self.network_dialog.is_none()
             && self.editing_path.is_none()

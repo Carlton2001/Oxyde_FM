@@ -381,7 +381,7 @@ impl OxydeApp {
             needed.extend(
                 pane.tabs
                     .iter()
-                    .filter(|tab| !tab.path.is_empty() && !tab.path.starts_with("search://"))
+                    .filter(|tab| !tab.is_viewer() && !tab.path.is_empty() && !tab.path.starts_with("search://"))
                     .map(|tab| tab.watched_path()),
             );
         });

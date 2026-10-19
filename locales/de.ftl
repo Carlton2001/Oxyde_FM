@@ -968,3 +968,14 @@ group-origin-unknown = Unbekannter ursprünglicher Speicherort
 group-date-unknown = Unbekanntes Datum
 group-select-all = Alle Elemente der Gruppe auswählen
 group-deselect-all = Auswahl aller Elemente der Gruppe aufheben
+
+viewer-title = Viewer
+viewer-open = Viewer öffnen
+viewer-empty = Wählen Sie eine Datei in einem Explorer-Bereich aus.
+viewer-detach = Viewer abdocken
+viewer-detached = Der Viewer ist in einem separaten Fenster geöffnet.
+viewer-show-window = Viewer-Fenster anzeigen
+viewer-previous = Vorherige Datei
+viewer-next = Nächste Datei
+viewer-play = Wiedergabe
+viewer-pause = Pause
