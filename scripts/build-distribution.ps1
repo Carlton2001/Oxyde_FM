@@ -85,11 +85,11 @@ try {
         Remove-Item -LiteralPath $resolved -Recurse -Force
     }
     New-Item -ItemType Directory -Path $stage, $output -Force | Out-Null
-    foreach ($obsolete in @("Oxyde_GPUI-$version-x64.exe", "Oxyde_GPUI-$version-x64.exe.sha256")) {
+    foreach ($obsolete in @("Oxyde_FM-$version-x64.exe", "Oxyde_FM-$version-x64.exe.sha256")) {
         $obsoletePath = Join-Path $output $obsolete
         if (Test-Path -LiteralPath $obsoletePath) { Remove-Item -LiteralPath $obsoletePath }
     }
-    Copy-Item -LiteralPath (Join-Path $release 'oxyde.exe') -Destination (Join-Path $stage 'Oxyde_GPUI.exe')
+    Copy-Item -LiteralPath (Join-Path $release 'oxyde.exe') -Destination (Join-Path $stage 'Oxyde_FM.exe')
     foreach ($worker in @('oxyde-image-worker', 'oxyde-archive-io-worker', 'oxyde-archive-list-worker')) {
         Copy-Item -LiteralPath (Join-Path $release "$worker.exe") -Destination $stage
     }
@@ -111,24 +111,24 @@ try {
     $data = Join-Path $stage 'data'
     New-Item -ItemType Directory -Path $data -Force | Out-Null
     [IO.File]::WriteAllText((Join-Path $data 'README.txt'), "Ce dossier active le mode portable. Preferences, session, logs, caches et fichiers temporaires restent ici. Ne le supprimez pas pour conserver le mode portable.`r`n")
-    $download = Join-Path $output "Oxyde_GPUI-$version-x64-portable.zip"
+    $download = Join-Path $output "Oxyde_FM-$version-x64-portable.zip"
     if (Test-Path -LiteralPath $download) { Remove-Item -LiteralPath $download }
     # Include a named root so extraction never scatters executables into Downloads.
     $zip = [IO.Compression.ZipFile]::Open($download, [IO.Compression.ZipArchiveMode]::Create)
     try {
         foreach ($file in (Get-ChildItem -LiteralPath $stage -Recurse -File)) {
             $relative = $file.FullName.Substring($stage.Length + 1).Replace('\', '/')
-            [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file.FullName, "Oxyde_GPUI/$relative", [IO.Compression.CompressionLevel]::Optimal) | Out-Null
+            [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file.FullName, "Oxyde_FM/$relative", [IO.Compression.CompressionLevel]::Optimal) | Out-Null
         }
     } finally { $zip.Dispose() }
     $archive = [IO.Compression.ZipFile]::OpenRead($download)
     try {
-        foreach ($name in @('Oxyde_GPUI.exe', 'oxyde-image-worker.exe', 'oxyde-archive-io-worker.exe', 'oxyde-archive-list-worker.exe', 'vcruntime140.dll', 'data/README.txt', 'licenses/dependencies/README.md', 'licenses/dependencies/THIRD-PARTY-NOTICES.md', 'licenses/dependencies/LUCIDE-LICENSE.txt', 'licenses/syntaxes/PowerShell-LICENSE.txt', 'licenses/syntaxes/PowerShell-NOTICES.txt', 'licenses/syntaxes/SCSS-LICENSE.txt', 'licenses/syntaxes/bat-LICENSE-MIT.txt')) {
-            if (-not $archive.GetEntry("Oxyde_GPUI/$name")) { throw "Portable archive is missing $name" }
+        foreach ($name in @('Oxyde_FM.exe', 'oxyde-image-worker.exe', 'oxyde-archive-io-worker.exe', 'oxyde-archive-list-worker.exe', 'vcruntime140.dll', 'data/README.txt', 'licenses/dependencies/README.md', 'licenses/dependencies/THIRD-PARTY-NOTICES.md', 'licenses/dependencies/LUCIDE-LICENSE.txt', 'licenses/syntaxes/PowerShell-LICENSE.txt', 'licenses/syntaxes/PowerShell-NOTICES.txt', 'licenses/syntaxes/SCSS-LICENSE.txt', 'licenses/syntaxes/bat-LICENSE-MIT.txt')) {
+            if (-not $archive.GetEntry("Oxyde_FM/$name")) { throw "Portable archive is missing $name" }
         }
         foreach ($licenseFile in (Get-ChildItem -LiteralPath (Join-Path $stage 'licenses') -Recurse -File)) {
             $relative = $licenseFile.FullName.Substring($stage.Length + 1).Replace('\', '/')
-            $entry = $archive.GetEntry("Oxyde_GPUI/$relative")
+            $entry = $archive.GetEntry("Oxyde_FM/$relative")
             if (-not $entry -or $entry.Length -ne $licenseFile.Length) { throw "Portable archive has missing or truncated notice: $relative" }
         }
         if ($archive.Entries | Where-Object { $_.Name -match 'Setup|launcher' }) { throw 'Unexpected installer or launcher in portable archive.' }

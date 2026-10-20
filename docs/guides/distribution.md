@@ -23,8 +23,8 @@ permettent de préciser les outils locaux. Les SHA-256 sont fournis pour le ZIP 
 
 ## Version portable
 
-Extraire `target/distribution/output/Oxyde_GPUI-<version>-x64-portable.zip`, puis lancer
-`Oxyde_GPUI/Oxyde_GPUI.exe`. Garder les DLL et les trois workers à côté de l'exécutable.
+Extraire `target/distribution/output/Oxyde_FM-<version>-x64-portable.zip`, puis lancer
+`Oxyde_FM/Oxyde_FM.exe`. Garder les DLL et les trois workers à côté de l'exécutable.
 Le ZIP ne contient aucun installateur ni lanceur intermédiaire.
 Le dossier `licenses/syntaxes` conserve les licences et notices des grammaires
 SCSS/Sass et PowerShell ; il est également déployé par le Setup classique.
@@ -45,7 +45,7 @@ lancement des threads ; les enfants les héritent. La configuration installée e
 Tauri ne sont ni importées ni modifiées. Si `data` n'est pas utilisable, une erreur s'affiche :
 il n'y a aucun repli silencieux vers AppData. Un support accessible en écriture est nécessaire.
 
-Pour déplacer l'application, déplacer tout le dossier Oxyde_GPUI, y compris `data`.
+Pour déplacer l'application, déplacer tout le dossier Oxyde_FM, y compris `data`.
 Les chemins enregistrés vers les fichiers utilisateur ne sont pas réécrits lors du déplacement.
 Supprimer `data` désactive le mode portable au prochain démarrage et rétablit les emplacements
 habituels du profil utilisateur. Effacer le cache dans les paramètres conserve configuration,
@@ -58,8 +58,8 @@ et supprimés suivant leur cycle de vie actuel. Les protections ne sont pas réd
 
 ## Setup classique
 
-`Oxyde_GPUI_Setup.exe` installe par utilisateur dans
-`%LOCALAPPDATA%\Programs\Oxyde_GPUI`, avec raccourci Démarrer « Oxyde GPUI », raccourci bureau
+`Oxyde_FM_Setup.exe` installe par utilisateur dans
+`%LOCALAPPDATA%\Programs\Oxyde_FM`, avec raccourci Démarrer « Oxyde », raccourci bureau
 facultatif et entrée de désinstallation distincte. Identité : `Oxyde.GPUI.Windows`.
 Le Setup ne déploie pas de dossier `data` : les chemins installés existants restent inchangés.
 La désinstallation conserve la configuration et les caches. Aucune association de fichiers,

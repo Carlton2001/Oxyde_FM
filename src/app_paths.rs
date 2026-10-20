@@ -28,8 +28,8 @@ impl StoragePaths {
             }),
             Ok(_) => Err(io::Error::other("Portable data path is not a directory")),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Self {
-                config: config.map(|root| root.join("oxyde")),
-                cache: cache.map(|root| root.join("oxyde")), temporary, portable: false,
+                config: config.map(|root| root.join("Oxyde")),
+                cache: cache.map(|root| root.join("Oxyde")), temporary, portable: false,
             }),
             Err(error) => Err(error),
         }

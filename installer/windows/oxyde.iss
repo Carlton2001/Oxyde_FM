@@ -8,21 +8,21 @@
 
 [Setup]
 AppId=Oxyde.GPUI.Windows
-AppName=Oxyde GPUI
+AppName=Oxyde
 AppVersion={#AppVersion}
 AppPublisher=Carlton2001
-DefaultDirName={localappdata}\Programs\Oxyde_GPUI
-DefaultGroupName=Oxyde GPUI
+DefaultDirName={localappdata}\Programs\Oxyde_FM
+DefaultGroupName=Oxyde
 DisableProgramGroupPage=yes
 DisableDirPage=no
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.17763
-UninstallDisplayName=Oxyde GPUI
+UninstallDisplayName=Oxyde
 UninstallDisplayIcon={app}\oxyde.ico
 SetupIconFile={#PayloadDir}\oxyde.ico
-OutputBaseFilename=Oxyde_GPUI_Setup
+OutputBaseFilename=Oxyde_FM_Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -41,7 +41,7 @@ Name: "it"; MessagesFile: "compiler:Languages\Italian.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "{#PayloadDir}\Oxyde_GPUI.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#PayloadDir}\Oxyde_FM.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\oxyde-image-worker.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\oxyde-archive-io-worker.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\oxyde-archive-list-worker.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -50,8 +50,8 @@ Source: "{#PayloadDir}\*.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\Oxyde GPUI"; Filename: "{app}\Oxyde_GPUI.exe"; WorkingDir: "{app}"; IconFilename: "{app}\oxyde.ico"; AppUserModelID: "Oxyde.GPUI.Windows"
-Name: "{autodesktop}\Oxyde GPUI"; Filename: "{app}\Oxyde_GPUI.exe"; WorkingDir: "{app}"; IconFilename: "{app}\oxyde.ico"; AppUserModelID: "Oxyde.GPUI.Windows"; Tasks: desktopicon
+Name: "{autoprograms}\Oxyde"; Filename: "{app}\Oxyde_FM.exe"; WorkingDir: "{app}"; IconFilename: "{app}\oxyde.ico"; AppUserModelID: "Oxyde.GPUI.Windows"
+Name: "{autodesktop}\Oxyde"; Filename: "{app}\Oxyde_FM.exe"; WorkingDir: "{app}"; IconFilename: "{app}\oxyde.ico"; AppUserModelID: "Oxyde.GPUI.Windows"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\Oxyde_GPUI.exe"; Description: "{cm:LaunchProgram,Oxyde GPUI}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Oxyde_FM.exe"; Description: "{cm:LaunchProgram,Oxyde}"; Flags: nowait postinstall skipifsilent

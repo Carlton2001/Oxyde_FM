@@ -28,7 +28,7 @@ jobs:
       - name: Upload portable distribution
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: Oxyde_GPUI-portable-x64
+          name: Oxyde_FM-portable-x64
           path: |
             target/distribution/output/*-portable.zip
             target/distribution/output/*-portable.zip.sha256

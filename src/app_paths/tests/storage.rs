@@ -1,7 +1,7 @@
 use super::*;
 
 fn resolve(root: &Path) -> io::Result<StoragePaths> {
-    StoragePaths::resolve(&root.join("Oxyde_GPUI.exe"), Some(root.join("profile/config")),
+    StoragePaths::resolve(&root.join("Oxyde_FM.exe"), Some(root.join("profile/config")),
         Some(root.join("profile/cache")), root.join("system-temp"))
 }
 
@@ -10,8 +10,8 @@ fn absent_data_directory_preserves_installed_paths() {
     let root = tempfile::tempdir().unwrap();
     let paths = resolve(root.path()).unwrap();
     assert!(!paths.portable);
-    assert_eq!(paths.config.unwrap(), root.path().join("profile/config/oxyde"));
-    assert_eq!(paths.cache.unwrap(), root.path().join("profile/cache/oxyde"));
+    assert_eq!(paths.config.unwrap(), root.path().join("profile/config/Oxyde"));
+    assert_eq!(paths.cache.unwrap(), root.path().join("profile/cache/Oxyde"));
     assert_eq!(paths.temporary, root.path().join("system-temp"));
 }
 
@@ -42,7 +42,7 @@ fn a_data_file_is_an_error_instead_of_a_profile_fallback() {
 #[test]
 fn portable_storage_never_uses_existing_user_preferences() {
     let root = tempfile::tempdir().unwrap();
-    let profile = root.path().join("profile/config/oxyde");
+    let profile = root.path().join("profile/config/Oxyde");
     std::fs::create_dir_all(&profile).unwrap();
     std::fs::write(profile.join("config.json"), b"existing preferences").unwrap();
     std::fs::create_dir(root.path().join("data")).unwrap();

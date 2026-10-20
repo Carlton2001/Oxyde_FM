@@ -75,7 +75,7 @@ fn main() {
         let platform = oxyde_lib::platform::platform();
         let locale = platform.regional_locale().unwrap_or_default();
         let i18n = crate::ui::i18n::I18n::for_language(crate::ui::i18n::Language::from_id(&locale));
-        platform.show_startup_error("Oxyde GPUI", &format!("{}\n\n{error}", i18n.text(crate::ui::i18n::Message::StorageUnavailable)));
+        platform.show_startup_error("Oxyde", &format!("{}\n\n{error}", i18n.text(crate::ui::i18n::Message::StorageUnavailable)));
         return;
     }
     initialize_logging();
@@ -147,7 +147,7 @@ fn main() {
                     window_min_size: Some(min_size),
                     titlebar: Some(TitlebarOptions {
                         appears_transparent: true,
-                        title: Some("Oxyde GPUI".into()),
+                        title: Some("Oxyde".into()),
                         ..Default::default()
                     }),
                     ..Default::default()
