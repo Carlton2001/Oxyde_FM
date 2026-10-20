@@ -95,6 +95,7 @@ impl Viewer {
             *control.command.lock().expect("new media controls") =
                 oxyde_lib::platform::ViewerMediaCommand {
                     parent,
+                    controls: 0,
                     rect,
                     visible: !self.blocked,
                     paused: resume_paused,

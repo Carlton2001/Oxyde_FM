@@ -11,6 +11,14 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn place_viewer_controls(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, rect: [i32; 4], visible: bool) -> Result<(), String> {
+        super::windows_viewer_controls::place(window, owner, rect, visible)
+    }
+    fn viewer_image_cursor(&self, handle: raw_window_handle::RawWindowHandle, zooming: bool, dragging: bool) {
+        if let raw_window_handle::RawWindowHandle::Win32(handle) = handle {
+            super::windows_pointer::set_image_cursor(windows::Win32::Foundation::HWND(handle.hwnd.get() as *mut _), zooming, dragging);
+        }
+    }
     fn viewer_media_parent(&self, handle: raw_window_handle::RawWindowHandle) -> Option<u64> {
         match handle { raw_window_handle::RawWindowHandle::Win32(handle) => Some(handle.hwnd.get() as u64), _ => None }
     }

@@ -105,7 +105,11 @@ impl ShellDeleteOutcome {
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
+    /// Override the image zoom/pan cursor on the owning UI window.
+    fn viewer_image_cursor(&self, _handle: raw_window_handle::RawWindowHandle, _zooming: bool, _dragging: bool) {}
     fn viewer_media_parent(&self, _handle: raw_window_handle::RawWindowHandle) -> Option<u64> { None }
+    /// Place a nonactivating playback overlay in physical owner-client coordinates.
+    fn place_viewer_controls(&self, _window: raw_window_handle::RawWindowHandle, _owner: raw_window_handle::RawWindowHandle, _rect: [i32; 4], _visible: bool) -> Result<(), String> { Ok(()) }
     /// Blocking native session. Call only on a background worker; cancellation stops its process.
     fn play_viewer_media(&self, _path: &std::path::Path, _control: &ViewerMediaControl) -> std::io::Result<()> {
         Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Native media playback unavailable"))
@@ -769,6 +773,8 @@ mod windows_shell_delete_tracked;
 mod windows_preview_worker;
 #[cfg(target_os = "windows")]
 mod windows_viewer_media;
+#[cfg(target_os = "windows")]
+mod windows_viewer_controls;
 #[cfg(target_os = "windows")]
 mod windows_archive_worker;
 #[cfg(target_os = "windows")]

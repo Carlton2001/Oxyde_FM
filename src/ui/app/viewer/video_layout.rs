@@ -9,10 +9,11 @@ pub(super) struct VideoLayout {
     bar: AnyElement,
     ratio: f32,
     placeholder: Option<AnyElement>,
+    fullscreen: bool,
 }
 
 impl Viewer {
-    pub(super) fn render_video(&self, cx: &mut Context<Self>) -> VideoLayout {
+    pub(super) fn render_video(&self, window: &Window, cx: &mut Context<Self>) -> VideoLayout {
         let dimensions = self
             .media
             .as_ref()
@@ -20,6 +21,7 @@ impl Viewer {
             .unwrap_or_default();
         let (width, height) = ((dimensions >> 32) as u32, dimensions as u32);
         VideoLayout {
+            fullscreen: window.is_fullscreen(),
             viewer: cx.entity().downgrade(),
             bar: self.render_media_bar(cx).into_any_element(),
             ratio: if width > 0 && height > 0 {
@@ -81,20 +83,10 @@ impl Element for VideoLayout {
         window: &mut Window,
         cx: &mut App,
     ) -> Bounds<Pixels> {
-        let bar_height = crate::ui::scale::rem_pixels(rems(2.5625));
-        let available_height = (bounds.size.height - bar_height).max(px(0.0));
-        let width = bounds
-            .size
-            .width
-            .min(available_height * self.ratio)
-            .max(px(0.0));
-        let height = width / self.ratio;
-        let origin = bounds.origin
-            + point(
-                (bounds.size.width - width) / 2.0,
-                (bounds.size.height - height - bar_height) / 2.0,
-            );
-        self.bar.layout_as_root(
+        let bar_height = if self.fullscreen { px(0.0) } else { crate::ui::scale::rem_pixels(rems(2.5625)) };
+        let video = fitted_video(bounds, self.ratio, bar_height);
+        let Bounds { origin, size: Size { width, height } } = video;
+        if !self.fullscreen { self.bar.layout_as_root(
             size(
                 AvailableSpace::Definite(width),
                 AvailableSpace::Definite(bar_height),
@@ -103,19 +95,19 @@ impl Element for VideoLayout {
             cx,
         );
         self.bar
-            .prepaint_at(origin + point(px(0.0), height), window, cx);
+            .prepaint_at(origin + point(px(0.0), height), window, cx); }
         if let Some(placeholder) = &mut self.placeholder {
             placeholder.layout_as_root(size(AvailableSpace::Definite(width), AvailableSpace::Definite(height)), window, cx);
             placeholder.prepaint_at(origin, window, cx);
         }
-        Bounds::new(origin, size(width, height))
+        video
     }
 
     fn paint(
         &mut self,
         _: Option<&GlobalElementId>,
         _: Option<&InspectorElementId>,
-        _: Bounds<Pixels>,
+        bounds: Bounds<Pixels>,
         _: &mut (),
         video: &mut Bounds<Pixels>,
         window: &mut Window,
@@ -123,8 +115,25 @@ impl Element for VideoLayout {
     ) {
         let _ = self
             .viewer
-            .update(cx, |this, cx| this.place_media(*video, window, cx));
+            .update(cx, |this, cx| {
+                this.place_media(*video, window, cx);
+                if self.fullscreen { this.place_fullscreen_controls(bounds, window, cx); }
+            });
         if let Some(placeholder) = &mut self.placeholder { placeholder.paint(window, cx); }
-        self.bar.paint(window, cx);
+        if !self.fullscreen { self.bar.paint(window, cx); }
     }
 }
+
+fn fitted_video(bounds: Bounds<Pixels>, ratio: f32, reserved_height: Pixels) -> Bounds<Pixels> {
+    let available_height = (bounds.size.height - reserved_height).max(px(0.0));
+    let width = bounds.size.width.min(available_height * ratio).max(px(0.0));
+    let height = width / ratio;
+    Bounds::new(bounds.origin + point(
+        (bounds.size.width - width) / 2.0,
+        (available_height - height) / 2.0,
+    ), size(width, height))
+}
+
+#[cfg(test)]
+#[path = "tests/video_layout.rs"]
+mod tests;

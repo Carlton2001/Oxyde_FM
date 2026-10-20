@@ -1,9 +1,11 @@
 mod content;
+mod image_interaction;
 mod audio;
 mod content_render;
 mod media;
 mod media_bar;
 mod video_layout;
+mod fullscreen_controls;
 mod markdown;
 mod display_options;
 mod pdf;
@@ -53,6 +55,10 @@ pub(crate) struct Viewer {
     native_media: bool,
     audio: bool,
     detached: bool,
+    fullscreen_pending: bool,
+    fullscreen_temporary: bool,
+    image_view: image_interaction::ImageView,
+    fullscreen_controls: fullscreen_controls::Controls,
     detached_window: Option<WindowHandle<window::ViewerWindow>>,
     blocked: bool,
     focus: FocusHandle,
@@ -72,6 +78,7 @@ impl OxydeApp {
     pub(crate) fn stop_viewers(&mut self, cx: &mut Context<Self>) {
         for viewer in self.viewers.values() {
             viewer.update(cx, |viewer, cx| {
+                viewer.close_fullscreen_controls(cx);
                 viewer.media = None;
                 viewer.preparation = None;
                 viewer.loading = None;
@@ -139,6 +146,7 @@ impl OxydeApp {
                 true
             } else {
                 viewer.update(cx, |viewer, cx| {
+                    viewer.close_fullscreen_controls(cx);
                     viewer.media = None;
                     viewer.loading = None;
                     // Closing frees the GPU textures of its image or PDF pages.
@@ -276,6 +284,10 @@ impl Viewer {
             native_media: false,
             audio: false,
             detached: false,
+            fullscreen_pending: false,
+            fullscreen_temporary: false,
+            image_view: Default::default(),
+            fullscreen_controls: Default::default(),
             detached_window: None,
             blocked: false,
             focus: cx.focus_handle(),
@@ -365,6 +377,8 @@ impl Viewer {
     }
 
     fn load_current(&mut self, cx: &mut Context<Self>) {
+        self.close_fullscreen_controls(cx);
+        self.image_view = Default::default();
         self.generation += 1;
         self.wanted.store(self.generation, std::sync::atomic::Ordering::Release);
         self.loading = None;

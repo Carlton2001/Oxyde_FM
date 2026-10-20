@@ -45,6 +45,7 @@ fn rejects_oversized_truncated_and_invalid_placements() {
 fn reads_bounded_commands_in_order_and_detects_eof() {
     let command = ViewerMediaCommand {
         parent: 42,
+        controls: 43,
         rect: [10, 20, 800, 600],
         visible: true,
         paused: false,

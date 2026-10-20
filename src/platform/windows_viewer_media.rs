@@ -241,6 +241,29 @@ static REPAINT: AtomicBool = AtomicBool::new(false);
 /// which leaves a stale image while audio continues.
 unsafe extern "system" fn surface_proc(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     match message {
+        WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
+        WM_LBUTTONDOWN | WM_LBUTTONUP | WM_MOUSEMOVE => {
+            // This popup lives in the worker, so disabled/transparent hit testing
+            // cannot route input to the GPUI window on another thread. Post only
+            // left-button input and motion to its owner, in physical client space.
+            if let Ok(owner) = unsafe { GetWindow(hwnd, GW_OWNER) } {
+                let mut position = POINT {
+                    x: lparam.0 as i16 as i32,
+                    y: (lparam.0 >> 16) as i16 as i32,
+                };
+                if unsafe { ClientToScreen(hwnd, &mut position) }.as_bool()
+                    && unsafe { windows::Win32::Graphics::Gdi::ScreenToClient(owner, &mut position) }.as_bool()
+                {
+                    let coordinates = LPARAM(
+                        ((position.x as u16 as u32) | ((position.y as u16 as u32) << 16)) as isize,
+                    );
+                    let _ = unsafe { PostMessageW(Some(owner), message, wparam, coordinates) };
+                }
+            }
+            LRESULT(0)
+        }
+        // No native context menu belongs to this display surface.
+        WM_RBUTTONDOWN | WM_RBUTTONUP | WM_RBUTTONDBLCLK | WM_CONTEXTMENU => LRESULT(0),
         WM_ERASEBKGND => LRESULT(1),
         WM_PAINT => {
             let mut paint = PAINTSTRUCT::default();
@@ -265,6 +288,22 @@ fn surface_class() -> io::Result<windows::core::PCWSTR> {
     // A second registration in the same worker reports ERROR_CLASS_ALREADY_EXISTS.
     let _ = unsafe { RegisterClassW(&description) };
     Ok(class)
+}
+
+fn create_surface(owner: HWND) -> io::Result<Surface> {
+    let class = surface_class()?;
+    unsafe {
+        CreateWindowExW(
+            WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
+            class,
+            w!("Oxyde media surface"),
+            // GPUI's composition is above child HWNDs. An enabled, nonactivating
+            // owned popup displays video and explicitly routes pointer input.
+            WS_POPUP,
+            0, 0, 1, 1,
+            Some(owner), None, None, None,
+        ).map(Surface).map_err(native)
+    }
 }
 
 /// A fixed-size JSON command carries only placement and playback controls.
@@ -317,27 +356,8 @@ pub(super) fn run(path: &Path) -> io::Result<()> {
         input_closed.store(true, Ordering::Release);
         playback_thread.unpark();
     });
-    let class = surface_class()?;
     unsafe {
-        let surface = Surface(
-            CreateWindowExW(
-                WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
-                class,
-                w!("Oxyde media surface"),
-                // GPUI's DirectComposition target is above child HWNDs. An owned,
-                // passive popup keeps video visible without changing GPUI or focus.
-                WS_POPUP | WS_DISABLED,
-                0,
-                0,
-                1,
-                1,
-                Some(HWND(first.parent as usize as *mut _)),
-                None,
-                None,
-                None,
-            )
-            .map_err(native)?,
-        );
+        let surface = create_surface(HWND(first.parent as usize as *mut _))?;
         let _platform = Platform::start()?;
         let status = Arc::new(AtomicU8::new(0));
         let metadata = Arc::new(AtomicBool::new(false));
@@ -348,6 +368,7 @@ pub(super) fn run(path: &Path) -> io::Result<()> {
         .into();
         let player = Engine::create(path, surface.0, events)?;
         let mut applied = None;
+        let mut applied_controls = 0;
         let started = Instant::now();
         let mut heartbeat = Instant::now() - Duration::from_secs(1);
         let mut output = io::stdout().lock();
@@ -418,25 +439,34 @@ pub(super) fn run(path: &Path) -> io::Result<()> {
                 && !IsIconic(parent).as_bool()
                 && windows::Win32::UI::Input::KeyboardAndMouse::IsWindowEnabled(parent).as_bool();
             let placement = (origin.x, origin.y, width, height, visible);
-            if applied != Some(placement) {
+            let controls = HWND(command.controls as usize as *mut _);
+            let has_controls = command.controls != 0 && IsWindow(Some(controls)).as_bool()
+                && GetWindow(controls, GW_OWNER).ok() == Some(parent);
+            let current_controls = if has_controls { command.controls } else { 0 };
+            if applied != Some(placement) || applied_controls != current_controls {
                 let visibility_changed = applied
                     .is_none_or(|previous: (i32, i32, i32, i32, bool)| previous.4 != visible);
                 SetWindowPos(
                     surface.0,
-                    None,
+                    if has_controls { Some(controls) } else { None },
                     origin.x,
                     origin.y,
                     width.max(1),
                     height.max(1),
-                    SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER,
+                    SWP_NOACTIVATE | SWP_NOOWNERZORDER | if has_controls { SET_WINDOW_POS_FLAGS(0) } else { SWP_NOZORDER },
                 )
                 .map_err(native)?;
                 if visibility_changed {
                     let _ =
                         ShowWindow(surface.0, if visible { SW_SHOWNOACTIVATE } else { SW_HIDE });
+                    if visible && has_controls {
+                        SetWindowPos(surface.0, Some(controls), 0, 0, 0, 0,
+                            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER).map_err(native)?;
+                    }
                 }
                 player.place(width, height);
                 applied = Some(placement);
+                applied_controls = current_controls;
             } else if repaint && has_video {
                 // A resize already updates the stream above. Do not first redraw
                 // the old dimensions when WM_PAINT accompanies new geometry.
@@ -471,3 +501,7 @@ mod tests;
 #[cfg(test)]
 #[path = "windows_viewer_media/tests/native.rs"]
 mod native_tests;
+
+#[cfg(test)]
+#[path = "windows_viewer_media/tests/pointer.rs"]
+mod pointer_tests;

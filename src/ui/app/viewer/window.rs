@@ -73,6 +73,9 @@ impl Viewer {
                             // The tab and its pane remain the owner of this Viewer.
                             // Stop the secondary surface before restoring inline rendering.
                             let _ = weak_viewer.update(cx, |viewer, cx| {
+                                viewer.fullscreen_pending = false;
+                                viewer.close_fullscreen_controls(cx);
+                                viewer.fullscreen_temporary = false;
                                 viewer.detached = false;
                                 viewer.detached_window = None;
                                 viewer.suspend_media();
@@ -145,7 +148,7 @@ impl Render for ViewerWindow {
             .text_color(theme.text)
             .font_weight(FontWeight::NORMAL)
             .text_size(rems(0.8125))
-            .child(tool_window::header(
+            .when(!window.is_fullscreen(), |root| root.child(tool_window::header(
                 "icons/eye.svg",
                 cx.i18n().text(Message::ViewerTitle),
                 window.is_maximized(),
@@ -155,7 +158,7 @@ impl Render for ViewerWindow {
                     tool_window::close_transients(window, cx);
                     window.remove_window();
                 },
-            ))
+            )))
             // An absolute box gives the Viewer a definite size: percentage
             // heights inside a flex item would follow the image's natural size.
             .child(

@@ -7,6 +7,9 @@ use std::sync::{
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ViewerMediaCommand {
     pub parent: u64,
+    /// Nonactivating GPUI controls; the video surface stays below this HWND.
+    #[serde(default)]
+    pub controls: u64,
     pub rect: [i32; 4],
     pub paused: bool,
     pub visible: bool,

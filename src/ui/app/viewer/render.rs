@@ -48,16 +48,28 @@ impl Render for Viewer {
         {
             return self.render_detached(cx).into_any_element();
         }
+        if self.fullscreen_pending && self.detached {
+            self.fullscreen_pending = false;
+            if !window.is_fullscreen() { window.toggle_fullscreen(); }
+        }
         if self.focus_pending {
             self.focus_pending = false;
             window.focus(&self.focus, cx);
         }
+        if !matches!(self.content, super::content::Content::Image(_)) {
+            use raw_window_handle::HasWindowHandle;
+            if let Ok(handle) = HasWindowHandle::window_handle(window) {
+                oxyde_lib::platform::platform().viewer_image_cursor(handle.as_raw(), false, false);
+            }
+        }
         let theme = *cx.theme();
-        let current = self.files.get(self.index);
+
         let failed = self
             .media
             .as_ref()
             .is_some_and(|media| media.control.status() == oxyde_lib::platform::MEDIA_FAILED);
+        self.enable_fullscreen_controls(window.is_fullscreen() && self.native_media && !self.audio && !failed && !self.blocked, cx);
+        let current = self.files.get(self.index);
         let title = current.map(|file| {
             if self.detached { file.path.clone() } else { file.name.clone() }
         }).unwrap_or_default();
@@ -70,15 +82,24 @@ impl Render for Viewer {
             .flex()
             .flex_col()
             .bg(theme.active_background)
+            .when(window.is_fullscreen() && self.native_media && !self.audio, |surface| surface.bg(rgb(0x000000)))
             .text_color(theme.text)
             .text_size(rems(0.8125))
             .track_focus(&self.focus)
             .key_context("Viewer")
+            .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
+                this.controls_pointer_moved(event.position, cx);
+            }))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, _, window, cx| this.activate(window, cx)),
             )
-            .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
+            .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                if event.keystroke.key == "escape" && window.is_fullscreen() {
+                    this.exit_fullscreen(window, cx);
+                    cx.stop_propagation();
+                    return;
+                }
                 if event.keystroke.modifiers.control || event.keystroke.modifiers.alt {
                     return;
                 }
@@ -90,7 +111,7 @@ impl Render for Viewer {
                 }
                 cx.stop_propagation();
             }))
-            .child(self.render_action_bar(title, cx))
+            .when(!window.is_fullscreen(), |surface| surface.child(self.render_action_bar(title, cx)))
             .child(
                 // Content fills the remaining space; its rail reaches the pane's right edge.
                 div()
@@ -98,12 +119,18 @@ impl Render for Viewer {
                     .min_h_0()
                     .w_full()
                     .relative()
+                    .on_mouse_down(MouseButton::Left, cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                        if event.click_count == 2 && (matches!(this.content, super::content::Content::Image(_)) || (this.native_media && !this.audio)) {
+                            this.toggle_preview_fullscreen(window, cx);
+                            cx.stop_propagation();
+                        }
+                    }))
                     // Resolve percentage heights against the remaining viewport,
                     // rather than letting intrinsic image dimensions size this flex item.
                     .child(div().absolute().inset_0().size_full().flex().flex_col().min_h_0().min_w_0().map(
                         |content| {
                             if self.native_media && !self.audio && !failed {
-                                content.child(self.render_video(cx))
+                                content.child(self.render_video(window, cx))
                             } else if self.native_media {
                                 let handle = cx.entity().downgrade();
                                 content

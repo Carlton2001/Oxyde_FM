@@ -173,13 +173,29 @@ pour les autres fichiers.
 La vidéo et sa barre de lecture forment un bloc centré : la barre suit immédiatement
 le bas de l’image, dans le panneau comme dans la fenêtre secondaire. Les dimensions
 natives remontent du worker ; le bloc adapte ses proportions à l’espace disponible
-dans la frame courante, sans attendre un second rendu. Les changements de géométrie
+dans la frame courante, sans attendre un second rendu.
+En plein écran, la vidéo utilise le plus grand rectangle qui conserve ses
+proportions dans l’écran, sans réserver de hauteur aux commandes. Une barre
+flottante est superposée en bas, dans une fenêtre GPUI transparente possédée et
+sans activation, au-dessus de la surface native du worker, sans topmost global.
+Les mouvements de souris sur la vidéo sont transmis au propriétaire ; la barre
+apparaît puis se masque après deux secondes d’inactivité, sauf pendant son survol
+ou une recherche dans la progression. Le fondu et le glissement de six pixels
+utilisent les ressorts courts communs (entrée environ 110 ms, sortie 85 ms).
+La sortie du plein écran, le changement de fichier et la fermeture retirent la
+fenêtre de commandes et son timer ; le focus clavier reste dans le Viewer.
+Les changements de géométrie
 réveillent le superviseur puis le lecteur natif ; les attentes périodiques restent
 présentes pour les rapports, la visibilité et les déplacements de la fenêtre.
 Le détachement ou le retour au panneau reprend à la même position et dans le
 même état ; listes et pages gardent leur défilement. La fin de lecture
 reste arrêtée jusqu’à une action Lire. Le worker possède une surface vidéo
 native passive, possédée par la fenêtre du Viewer et sans statut topmost global.
+Elle reste activée pour recevoir la souris, sans prendre l’activation ni le
+focus (`WS_EX_NOACTIVATE`, `MA_NOACTIVATE`). Les pressions et relâchements du
+bouton gauche sont postés à son propriétaire GPUI après conversion en coordonnées
+client physiques ; GPUI compte les clics pour le plein écran. Les clics droits
+et le menu contextuel sont absorbés par la surface, sans action native.
 Elle suit en pixels physiques le rectangle mesuré et borné du contenu, y compris
 lors des déplacements de sa fenêtre. Ce transport évite que la composition GPUI,
 placée au-dessus des HWND enfants, masque la vidéo. L’audio
@@ -195,6 +211,16 @@ fermeture et dernier propriétaire annulent le lecteur, retirent sa surface et
 récoltent son processus. Les anciens aperçus ne peuvent publier dans un nouveau
 Viewer. Linux conserve un message d’aperçu indisponible pour audio/vidéo ; ce
 lecteur natif n’y est pas implémenté.
+
+Le double clic dans un aperçu image ou vidéo bascule le plein écran ; Échap
+le quitte. Depuis le panneau intégré, une fenêtre temporaire accueille le
+plein écran et restitue le contenu au panneau à sa fermeture. Une fenêtre
+secondaire existante conserve son rôle à la sortie du plein écran.
+La molette sur les pixels d’une image zoome autour du pointeur (de 1 à 32 fois
+la taille ajustée) ; revenir à 1 réinitialise le déplacement. Après agrandissement,
+maintenir le bouton gauche déplace l’image. Le changement de fichier réinitialise
+ce cadrage. Sous Windows, les curseurs natifs utilisent les SVG Lucide officiels `search.svg`
+et `hand-grab.svg` : loupe brièvement pendant le zoom, main pendant le glissement. Ctrl+molette conserve le zoom de l’interface.
 
 ## Caches et durée de vie
 
