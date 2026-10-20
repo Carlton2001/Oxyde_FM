@@ -31,7 +31,7 @@ pub(crate) fn svg(
         .parse_svg(&data)
         .map_err(|error| PreviewError::Decode(error.to_string()))?;
     // GPUI's public Size variant preserves aspect ratio from width, and its
-    // rasterizer caps height at 8192. Request 1024px width (<=32MiB main buffer),
+    // rasterizer caps height at 8192. Request at most MAX_SVG_SIDE pixels wide,
     // then fit both returned sides to our final output envelope. Parser/filter
     // scratch allocations and embedded images are not bounded by this policy.
     let side = policy.output_side.min(MAX_SVG_SIDE);
@@ -61,9 +61,14 @@ pub(crate) fn svg(
     copy.extend_from_slice(pixels);
     let image = RgbaImage::from_raw(width, height, copy)
         .ok_or_else(|| PreviewError::Decode("Invalid SVG pixel buffer".into()))?;
+    // thumbnail also upscales: only call it when the raster exceeds the envelope.
     // These channels are already BGRA, so resize them without a second swap.
-    let image = DynamicImage::ImageRgba8(image)
-        .thumbnail(policy.output_side, policy.output_side)
-        .to_rgba8();
+    let image = if width > policy.output_side || height > policy.output_side {
+        DynamicImage::ImageRgba8(image)
+            .thumbnail(policy.output_side, policy.output_side)
+            .to_rgba8()
+    } else {
+        image
+    };
     Ok(vec![Frame::new(image)])
 }
