@@ -102,7 +102,7 @@ try {
     $dependencyNotices = Join-Path $stage 'licenses/dependencies'
     New-Item -ItemType Directory -Path $dependencyNotices -Force | Out-Null
     Copy-Item -Path (Join-Path $projectRoot 'licenses/dependencies/*') -Destination $dependencyNotices -Recurse
-    & (Join-Path $PSScriptRoot 'distribution-icon.ps1') -ProjectRoot $projectRoot -Destination (Join-Path $stage 'oxyde.ico')
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'assets/icons/oxyde.ico') -Destination (Join-Path $stage 'oxyde.ico')
     if (-not $PortableOnly) {
         & $IsccPath "/DAppVersion=$version" "/DPayloadDir=$stage" "/O$output" (Join-Path $projectRoot 'installer/windows/oxyde.iss')
         if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }

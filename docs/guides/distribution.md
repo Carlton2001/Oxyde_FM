@@ -58,12 +58,33 @@ et supprimés suivant leur cycle de vie actuel. Les protections ne sont pas réd
 
 ## Setup classique
 
-`Oxyde_FM_Setup.exe` installe par utilisateur dans
+`Oxyde_FM_<version>_x64-setup.exe` installe par utilisateur dans
 `%LOCALAPPDATA%\Programs\Oxyde_FM`, avec raccourci Démarrer « Oxyde », raccourci bureau
 facultatif et entrée de désinstallation distincte. Identité : `Oxyde.GPUI.Windows`.
 Le Setup ne déploie pas de dossier `data` : les chemins installés existants restent inchangés.
 La désinstallation conserve la configuration et les caches. Aucune association de fichiers,
 modification de PATH ou remplacement de l'Explorateur Windows n'est effectué.
+
+Lancé avec `/UPDATE` (par l'updater Tauri ou GPUI), le Setup saute ses pages puis relance
+Oxyde. Les options NSIS ajoutées par l'updater Tauri (`/P /R /ARGS`) sont ignorées.
+
+Transition depuis l'édition Tauri : après l'installation, le Setup désinstalle toute entrée
+`Oxyde_FM` de l'éditeur `Oxyde` (MSI par machine avec élévation, ou NSIS par utilisateur),
+puis supprime `%APPDATA%\com.oxyde.desktop` et `%LOCALAPPDATA%\com.oxyde.desktop`.
+Cette section de `oxyde.iss` est temporaire.
+
+## Version et tag
+
+```powershell
+./scripts/bump-version.ps1 -Version <x.y.z>
+```
+
+Depuis `main` sans modification locale, le script vérifie que la version dépasse l'actuelle
+et que le tag `v<x.y.z>` n'existe ni localement ni sur `origin`. Il met à jour `Cargo.toml`
+et `Cargo.lock`, commit `Release v<x.y.z>` et crée le tag annoté, sans pousser.
+La publication se fait ensuite à la main : `git push origin main v<x.y.z>`.
+Les tags `v1.x` existants appartiennent à l'édition Tauri : la première version GPUI
+publiée doit être supérieure à 1.2.1.
 
 ## Automatisation et validation
 

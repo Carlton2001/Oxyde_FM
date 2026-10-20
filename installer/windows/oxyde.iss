@@ -1,4 +1,4 @@
-; The GPUI identity is intentionally independent of the Tauri installation.
+; The GPUI identity is independent of the Tauri one; the Tauri install is removed after setup.
 #ifndef AppVersion
   #error AppVersion must be provided by scripts/build-distribution.ps1
 #endif
@@ -22,11 +22,12 @@ MinVersion=10.0.17763
 UninstallDisplayName=Oxyde
 UninstallDisplayIcon={app}\oxyde.ico
 SetupIconFile={#PayloadDir}\oxyde.ico
-OutputBaseFilename=Oxyde_FM_Setup
+OutputBaseFilename=Oxyde_FM_{#AppVersion}_x64-setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-; Never ask Restart Manager to close the parallel Tauri version or its workers.
+ShowLanguageDialog=auto
+; The in-app updater exits before launching Setup; never close other processes.
 CloseApplications=no
 RestartApplications=no
 
@@ -54,4 +55,70 @@ Name: "{autoprograms}\Oxyde"; Filename: "{app}\Oxyde_FM.exe"; WorkingDir: "{app}
 Name: "{autodesktop}\Oxyde"; Filename: "{app}\Oxyde_FM.exe"; WorkingDir: "{app}"; IconFilename: "{app}\oxyde.ico"; AppUserModelID: "Oxyde.GPUI.Windows"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\Oxyde_FM.exe"; Description: "{cm:LaunchProgram,Oxyde}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\Oxyde_FM.exe"; Description: "{cm:LaunchProgram,Oxyde}"; Flags: nowait postinstall skipifsilent; Check: not IsUpdate
+Filename: "{app}\Oxyde_FM.exe"; Flags: nowait; Check: IsUpdate
+
+[Code]
+// The Tauri updater and the GPUI updater both launch Setup with /UPDATE.
+function IsUpdate: Boolean;
+var
+  Index: Integer;
+begin
+  Result := False;
+  for Index := 1 to ParamCount do
+    if CompareText(ParamStr(Index), '/UPDATE') = 0 then
+      Result := True;
+end;
+
+function ShouldSkipPage(PageID: Integer): Boolean;
+begin
+  Result := IsUpdate;
+end;
+
+// Transitional: remove the Tauri edition (Oxyde_FM 1.x) and its data.
+// Drop this section once Tauri installs no longer need migrating.
+procedure RemoveTauriInstall(RootKey: Integer; const SubKey: String);
+var
+  Uninstall: String;
+  Code: Integer;
+begin
+  if not RegQueryStringValue(RootKey, SubKey, 'UninstallString', Uninstall) then
+    Exit;
+  if Pos('MsiExec.exe', Uninstall) = 1 then
+    // Per-machine MSI: request elevation for msiexec only.
+    ShellExec('runas', 'msiexec.exe',
+      '/x ' + Copy(Uninstall, Pos('{', Uninstall), 38) + ' /passive /norestart',
+      '', SW_SHOW, ewWaitUntilTerminated, Code)
+  else
+    Exec(RemoveQuotes(Uninstall), '/S', '', SW_SHOW, ewWaitUntilTerminated, Code);
+end;
+
+procedure RemoveTauriEdition;
+var
+  Roots: array[0..1] of Integer;
+  Keys: TArrayOfString;
+  Base, Key, Name, Publisher: String;
+  R, K: Integer;
+begin
+  Base := 'Software\Microsoft\Windows\CurrentVersion\Uninstall';
+  Roots[0] := HKCU;
+  Roots[1] := HKLM64;
+  for R := 0 to 1 do
+    if RegGetSubkeyNames(Roots[R], Base, Keys) then
+      for K := 0 to GetArrayLength(Keys) - 1 do
+      begin
+        Key := Base + '\' + Keys[K];
+        if RegQueryStringValue(Roots[R], Key, 'DisplayName', Name)
+          and RegQueryStringValue(Roots[R], Key, 'Publisher', Publisher)
+          and (Name = 'Oxyde_FM') and (Publisher = 'Oxyde') then
+          RemoveTauriInstall(Roots[R], Key);
+      end;
+  DelTree(ExpandConstant('{userappdata}\com.oxyde.desktop'), True, True, True);
+  DelTree(ExpandConstant('{localappdata}\com.oxyde.desktop'), True, True, True);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    RemoveTauriEdition;
+end;

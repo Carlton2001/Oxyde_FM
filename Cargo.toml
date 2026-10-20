@@ -21,6 +21,9 @@ opt-level = 2
 [lib]
 name = "oxyde_lib"
 
+[build-dependencies]
+embed-resource = "3.0.11"
+
 [dependencies]
 # Keep both GPUI crates on the same Zed stable release; the crates.io release
 # has the same version number but an older API.
