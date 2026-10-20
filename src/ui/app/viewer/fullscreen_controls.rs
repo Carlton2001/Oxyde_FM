@@ -42,6 +42,10 @@ impl Viewer {
             return;
         }
         self.fullscreen_controls.last_pointer = Some(position);
+        // The bar is a separate popup: motion reaching the Viewer, including
+        // input forwarded from the video surface, is outside it. Its own exit
+        // event is unreliable across these nonactivating windows.
+        self.fullscreen_controls.hovered = false;
         self.wake_controls(cx);
     }
 
@@ -247,7 +251,10 @@ impl Render for ControlsWindow {
         let owner = self.owner;
         let hover = self.viewer.clone();
         let moving = self.viewer.clone();
-        div().id("fullscreen-playback-controls").size_full().p(rems(0.5))
+        div().id("fullscreen-playback-controls")
+            // GPUI does not adopt this popup's native resize, so its viewport
+            // keeps the creation size. Size the bar from the placed rectangle.
+            .w(px(rect[2] as f32 / window.scale_factor())).h(px(rect[3] as f32 / window.scale_factor())).p(rems(0.5))
             .text_size(rems(0.8125)).font_weight(FontWeight::NORMAL)
             .on_hover(move |hovered, _, cx| { let _ = hover.update(cx, |this, cx| {
                 this.fullscreen_controls.hovered = *hovered;

@@ -195,7 +195,9 @@ impl Engine {
                 .SetUINT64(&MF_MEDIA_ENGINE_PLAYBACK_HWND, surface.0 as usize as u64)
                 .map_err(native)?;
             let engine = factory
-                .CreateInstance(MF_MEDIA_ENGINE_REAL_TIME_MODE.0 as u32, &attributes)
+                // Real-time mode targets low-latency communication streams. File
+                // playback after seeks could leave its video renderer frozen.
+                .CreateInstance(0, &attributes)
                 .map_err(native)?;
             let extended: IMFMediaEngineEx = engine.cast().map_err(native)?;
             let engine = Self { engine, extended };
@@ -397,7 +399,13 @@ pub(super) fn run(path: &Path) -> io::Result<()> {
                 applied = None;
                 let _ = status.compare_exchange(0, MEDIA_PAUSED, Ordering::AcqRel, Ordering::Acquire);
             }
-            if checked_video && command.seek_id != applied_seek {
+            // Dragging the track issues a seek per pointer move. Overlapping
+            // SetCurrentTime calls can stall the video renderer while audio
+            // continues, so apply only the latest target once a seek completes.
+            if checked_video
+                && command.seek_id != applied_seek
+                && !player.engine.IsSeeking().as_bool()
+            {
                 player.engine.SetCurrentTime(command.seek_ms as f64 / 1000.0).map_err(native)?;
                 applied_seek = command.seek_id;
                 // Seeking after the end makes the media playable again.

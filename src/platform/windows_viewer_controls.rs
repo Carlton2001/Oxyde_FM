@@ -51,6 +51,24 @@ pub(super) fn place(
                 GWL_EXSTYLE,
                 ((style | WS_EX_NOACTIVATE.0 | WS_EX_TOOLWINDOW.0) & !WS_EX_APPWINDOW.0) as isize,
             );
+            // GPUI creates PopUp windows as WS_OVERLAPPED, whose implicit side
+            // and bottom borders shrink the client area and clip the bar's end.
+            let style = GetWindowLongPtrW(window, GWL_STYLE) as u32;
+            SetWindowLongPtrW(
+                window,
+                GWL_STYLE,
+                ((style | WS_POPUP.0)
+                    & !(WS_CAPTION.0 | WS_THICKFRAME.0 | WS_BORDER.0 | WS_DLGFRAME.0)) as isize,
+            );
+            let _ = SetWindowPos(
+                window,
+                None,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+            );
             if !SetWindowSubclass(window, Some(controls_proc), SUBCLASS, 0).as_bool() {
                 return Err("Cannot configure playback controls".into());
             }
