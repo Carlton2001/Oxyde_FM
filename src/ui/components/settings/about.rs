@@ -24,9 +24,6 @@ pub(super) fn about_column(view: &OxydeApp, handle: Entity<OxydeApp>, about_widt
             .child(div().text_color(theme.text_muted)
                 .child(i18n.text_with_args(Message::SettingsVersion, &version))))
         .child(update_row(view, handle.clone(), theme, cx))
-        .child(about_link("about-releases", i18n.text(Message::AboutReleases),
-            "icons/refresh-cw.svg", "https://github.com/Carlton2001/Oxyde_FM/releases",
-            handle.clone(), theme))
         .child(about_link("about-repository", i18n.text(Message::AboutRepository),
             "icons/github.svg", "https://github.com/Carlton2001/Oxyde_FM",
             handle.clone(), theme))

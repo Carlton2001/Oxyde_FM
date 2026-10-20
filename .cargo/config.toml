@@ -1,0 +1,3 @@
+# Link the MSVC C runtime statically so distributions need no runtime DLLs.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

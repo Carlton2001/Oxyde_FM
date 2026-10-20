@@ -395,7 +395,6 @@ settings-search-limit-description = Maximum results for new quick and advanced s
 
 navigation-up = Up
 
-about-releases = View releases
 about-repository = GitHub repository
 about-main-tools = Main tools
 update-available-toast = Oxyde { $detail } is available. Install it from Settings › About.

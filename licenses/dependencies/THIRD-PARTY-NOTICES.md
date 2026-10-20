@@ -9083,6 +9083,7 @@ SOFTWARE.
 - lyon_tessellation 1.0.22
 - mac-notification-sys 0.6.15
 - malloc_buf 0.0.6
+- minisign-verify 0.2.5
 - ndk-sys 0.6.0+11769913
 - objc-sys 0.3.5
 - objc2-app-kit 0.2.2

@@ -2,7 +2,6 @@
 [CmdletBinding()]
 param(
     [string]$IsccPath,
-    [string]$CrtDirectory,
     [switch]$SkipBuild,
     [switch]$PortableOnly
 )
@@ -33,26 +32,6 @@ if (-not $IsccPath -or -not (Test-Path -LiteralPath $IsccPath)) {
     throw 'Install Inno Setup 6.3 or newer, or pass -IsccPath.'
 }
 }
-if (-not $CrtDirectory) {
-    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
-    if (-not (Test-Path -LiteralPath $vswhere)) { throw 'Pass -CrtDirectory with the x64 Microsoft.VC143.CRT redistributable directory.' }
-    $visualStudio = & $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-    if ($LASTEXITCODE -ne 0 -or -not $visualStudio) { throw 'Visual C++ Build Tools not found.' }
-    $redist = Join-Path $visualStudio 'VC/Redist/MSVC'
-    $versions = Get-ChildItem -LiteralPath $redist -Directory |
-        Where-Object { $_.Name -match '^\d+\.\d+\.\d+$' } |
-        Sort-Object { [version]$_.Name } -Descending
-    foreach ($version in $versions) {
-        $candidate = Join-Path $version.FullName 'x64/Microsoft.VC143.CRT'
-        if (Test-Path -LiteralPath $candidate) { $CrtDirectory = $candidate; break }
-    }
-}
-foreach ($required in @('vcruntime140.dll', 'msvcp140.dll')) {
-    if (-not $CrtDirectory -or -not (Test-Path -LiteralPath (Join-Path $CrtDirectory $required))) {
-        throw 'The x64 Microsoft.VC143.CRT redistributable files are missing.'
-    }
-}
-
 Push-Location -LiteralPath $projectRoot
 try {
     & (Join-Path $PSScriptRoot 'update-third-party-licenses.ps1')
@@ -93,7 +72,11 @@ try {
     foreach ($worker in @('oxyde-image-worker', 'oxyde-archive-io-worker', 'oxyde-archive-list-worker')) {
         Copy-Item -LiteralPath (Join-Path $release "$worker.exe") -Destination $stage
     }
-    Get-ChildItem -LiteralPath $CrtDirectory -Filter '*.dll' | Copy-Item -Destination $stage
+    # .cargo/config.toml links the C runtime statically; refuse a build that still imports it.
+    foreach ($binary in (Get-ChildItem -LiteralPath $stage -Filter '*.exe')) {
+        $imports = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($binary.FullName))
+        if ($imports -match '(?i)(vcruntime|msvcp)140[_a-z0-9]*\.dll') { throw "$($binary.Name) still imports $($Matches[0])." }
+    }
     $syntaxNotices = Join-Path $stage 'licenses/syntaxes'
     New-Item -ItemType Directory -Path $syntaxNotices -Force | Out-Null
     foreach ($notice in @('README.md', 'PowerShell-LICENSE.txt', 'PowerShell-NOTICES.txt', 'SCSS-LICENSE.txt', 'bat-LICENSE-MIT.txt')) {
@@ -123,7 +106,7 @@ try {
     } finally { $zip.Dispose() }
     $archive = [IO.Compression.ZipFile]::OpenRead($download)
     try {
-        foreach ($name in @('Oxyde_FM.exe', 'oxyde-image-worker.exe', 'oxyde-archive-io-worker.exe', 'oxyde-archive-list-worker.exe', 'vcruntime140.dll', 'data/README.txt', 'licenses/dependencies/README.md', 'licenses/dependencies/THIRD-PARTY-NOTICES.md', 'licenses/dependencies/LUCIDE-LICENSE.txt', 'licenses/syntaxes/PowerShell-LICENSE.txt', 'licenses/syntaxes/PowerShell-NOTICES.txt', 'licenses/syntaxes/SCSS-LICENSE.txt', 'licenses/syntaxes/bat-LICENSE-MIT.txt')) {
+        foreach ($name in @('Oxyde_FM.exe', 'oxyde-image-worker.exe', 'oxyde-archive-io-worker.exe', 'oxyde-archive-list-worker.exe', 'data/README.txt', 'licenses/dependencies/README.md', 'licenses/dependencies/THIRD-PARTY-NOTICES.md', 'licenses/dependencies/LUCIDE-LICENSE.txt', 'licenses/syntaxes/PowerShell-LICENSE.txt', 'licenses/syntaxes/PowerShell-NOTICES.txt', 'licenses/syntaxes/SCSS-LICENSE.txt', 'licenses/syntaxes/bat-LICENSE-MIT.txt')) {
             if (-not $archive.GetEntry("Oxyde_FM/$name")) { throw "Portable archive is missing $name" }
         }
         foreach ($licenseFile in (Get-ChildItem -LiteralPath (Join-Path $stage 'licenses') -Recurse -File)) {

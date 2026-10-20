@@ -401,7 +401,6 @@ settings-search-limit-description = Nombre maximal de résultats des nouvelles r
 
 navigation-up = Haut
 
-about-releases = Voir les versions
 about-repository = Dépôt GitHub
 about-main-tools = Outils principaux
 update-available-toast = Oxyde { $detail } est disponible. Installez-la depuis Paramètres › À propos.

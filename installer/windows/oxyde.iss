@@ -10,7 +10,7 @@
 AppId=Oxyde.GPUI.Windows
 AppName=Oxyde
 AppVersion={#AppVersion}
-AppPublisher=Carlton2001
+AppPublisher=Oxyde
 DefaultDirName={localappdata}\Programs\Oxyde_FM
 DefaultGroupName=Oxyde
 DisableProgramGroupPage=yes
@@ -47,7 +47,6 @@ Source: "{#PayloadDir}\oxyde-image-worker.exe"; DestDir: "{app}"; Flags: ignorev
 Source: "{#PayloadDir}\oxyde-archive-io-worker.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\oxyde-archive-list-worker.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\oxyde.ico"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#PayloadDir}\*.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
@@ -117,6 +116,21 @@ begin
     Exec(RemoveQuotes(Uninstall), '/S', '', SW_SHOW, ewWaitUntilTerminated, Code);
 end;
 
+// WebView2 helpers outlive the Tauri window for a few seconds and lock EBWebView.
+procedure RemoveTauriData(const Directory: String);
+var
+  Attempt: Integer;
+begin
+  for Attempt := 1 to 15 do
+  begin
+    DelTree(Directory, True, True, True);
+    if not DirExists(Directory) then
+      Exit;
+    Sleep(1000);
+  end;
+  Log('Tauri data remains in ' + Directory);
+end;
+
 procedure RemoveTauriEdition;
 var
   Roots: array[0..1] of Integer;
@@ -137,8 +151,8 @@ begin
           and (Name = 'Oxyde_FM') and (Publisher = 'Oxyde') then
           RemoveTauriInstall(Roots[R], Key);
       end;
-  DelTree(ExpandConstant('{userappdata}\com.oxyde.desktop'), True, True, True);
-  DelTree(ExpandConstant('{localappdata}\com.oxyde.desktop'), True, True, True);
+  RemoveTauriData(ExpandConstant('{userappdata}\com.oxyde.desktop'));
+  RemoveTauriData(ExpandConstant('{localappdata}\com.oxyde.desktop'));
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);

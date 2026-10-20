@@ -18,13 +18,14 @@ Lancer ensuite la distribution :
 ```
 
 Sans `-PortableOnly`, le script construit aussi le Setup classique avec Inno Setup 6.3+.
-`-SkipBuild` réutilise les exécutables release existants ; `-IsccPath` et `-CrtDirectory`
-permettent de préciser les outils locaux. Les SHA-256 sont fournis pour le ZIP portable.
+`-SkipBuild` réutilise les exécutables release existants ; `-IsccPath` permet de préciser
+Inno Setup. Le runtime C est lié statiquement (`.cargo/config.toml`) : aucune DLL Microsoft
+n'est livrée, et le script refuse un exécutable qui en importerait encore une. Les SHA-256 sont fournis pour le ZIP portable.
 
 ## Version portable
 
 Extraire `target/distribution/output/Oxyde_FM-<version>-x64-portable.zip`, puis lancer
-`Oxyde_FM/Oxyde_FM.exe`. Garder les DLL et les trois workers à côté de l'exécutable.
+`Oxyde_FM/Oxyde_FM.exe`. Garder les trois workers à côté de l'exécutable.
 Le ZIP ne contient aucun installateur ni lanceur intermédiaire.
 Le dossier `licenses/syntaxes` conserve les licences et notices des grammaires
 SCSS/Sass et PowerShell ; il est également déployé par le Setup classique.

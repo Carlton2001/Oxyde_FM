@@ -702,7 +702,6 @@ settings-search-limit-description = Maximale Ergebnisse für neue Schnell- und e
 
 navigation-up = Nach oben
 
-about-releases = Versionen ansehen
 about-repository = GitHub-Repository
 about-main-tools = Wichtigste Werkzeuge
 update-available-toast = Oxyde { $detail } ist verfügbar. Installieren Sie es unter Einstellungen › Über.
