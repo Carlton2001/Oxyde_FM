@@ -35,9 +35,6 @@ impl Viewer {
         }
         let viewer = cx.entity();
         let owner = self.owner.clone();
-        let parent = raw_window_handle::HasWindowHandle::window_handle(window)
-            .ok()
-            .map(|handle| handle.as_raw());
         let title = cx.i18n().text(Message::ViewerTitle);
         let bounds = Bounds::new(
             window.bounds().origin + point(px(40.0), px(40.0)),
@@ -64,16 +61,8 @@ impl Viewer {
                     ..Default::default()
                 },
                 |window, cx| {
-                    if let (Some(parent), Ok(handle)) = (
-                        parent,
-                        raw_window_handle::HasWindowHandle::window_handle(window),
-                    ) {
-                        if let Err(error) = oxyde_lib::platform::platform()
-                            .set_window_owner(handle.as_raw(), parent)
-                        {
-                            log::warn!("Cannot set Viewer owner: {error}");
-                        }
-                    }
+                    // Like search windows, keep a native top-level window so
+                    // the detached Viewer has its own taskbar entry.
                     // Only this window paints the player from its first frame;
                     // otherwise both windows would claim it in turn.
                     viewer.update(cx, |viewer, _| viewer.detached = true);
@@ -174,7 +163,7 @@ impl Render for ViewerWindow {
                     .flex_1()
                     .min_h_0()
                     .relative()
-                    .child(div().absolute().inset_0().child(self.viewer.clone())),
+                    .child(div().absolute().inset_0().size_full().child(self.viewer.clone())),
             )
     }
 }

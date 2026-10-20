@@ -98,7 +98,9 @@ impl Render for Viewer {
                     .min_h_0()
                     .w_full()
                     .relative()
-                    .child(div().size_full().flex().flex_col().min_h_0().min_w_0().map(
+                    // Resolve percentage heights against the remaining viewport,
+                    // rather than letting intrinsic image dimensions size this flex item.
+                    .child(div().absolute().inset_0().size_full().flex().flex_col().min_h_0().min_w_0().map(
                         |content| {
                             if self.native_media && !self.audio && !failed {
                                 content.child(self.render_video(cx))

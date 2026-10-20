@@ -124,23 +124,30 @@ impl Viewer {
                 self.render_unavailable_file(cx)
             }
             Content::Loading => message(cx.i18n().text(Message::ViewerLoading), cx),
-            // The absolute box follows the pane or window, never the image's own
-            // size; GPUI's img takes its intrinsic size unless sized explicitly.
-            Content::Image(image) => div()
-                .size_full()
-                .relative()
-                .child(
-                    div()
+            // GPUI's img imposes the image ratio on its layout box, so the height
+            // would follow the width. Paint into the available bounds instead.
+            Content::Image(image) => {
+                let image = image.clone();
+                let fit = if self.detached { ObjectFit::Contain } else { ObjectFit::ScaleDown };
+                div()
+                    .size_full()
+                    .relative()
+                    .child(
+                        canvas(
+                            |_, _, _| {},
+                            move |bounds, _, window, _| {
+                                let target = fit.get_bounds(bounds, image.size(0));
+                                window
+                                    .paint_image(bounds, target, Corners::default(), image.clone(), 0, false)
+                                    .ok();
+                            },
+                        )
                         .absolute()
                         .inset_0()
-                        .child(
-                            img(image.clone())
-                                .id("viewer-image")
-                                .size_full()
-                                .object_fit(ObjectFit::ScaleDown),
-                        ),
-                )
-                .into_any_element(),
+                        .size_full(),
+                    )
+                    .into_any_element()
+            }
             Content::Preview(preview) if preview.read(cx).file_unavailable() => self.render_unavailable_file(cx),
             Content::Preview(preview) => preview.clone().into_any_element(),
             Content::Markdown(_) => self.render_markdown(cx),
