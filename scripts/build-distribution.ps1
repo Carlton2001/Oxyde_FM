@@ -55,9 +55,21 @@ foreach ($required in @('vcruntime140.dll', 'msvcp140.dll')) {
 
 Push-Location -LiteralPath $projectRoot
 try {
+    & (Join-Path $PSScriptRoot 'update-third-party-licenses.ps1')
+    # License generation must succeed before assembling either distribution format.
     if (-not $SkipBuild) {
         & cargo build --locked --release --bins --target $target
         if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
+    }
+    $noticePath = Join-Path $projectRoot 'licenses/dependencies/THIRD-PARTY-NOTICES.md'
+    if (-not (Test-Path -LiteralPath $noticePath) -or (Get-Item -LiteralPath $noticePath).Length -eq 0) {
+        throw 'Generate licenses/dependencies/THIRD-PARTY-NOTICES.md with cargo-about before building the distribution.'
+    }
+    $noticeInputs = Get-Content -LiteralPath (Join-Path $projectRoot 'licenses/dependencies/inputs.json') -Raw | ConvertFrom-Json
+    foreach ($inputProperty in $noticeInputs.PSObject.Properties) {
+        if ((Get-FileHash -LiteralPath (Join-Path $projectRoot $inputProperty.Name) -Algorithm SHA256).Hash -ne $inputProperty.Value) {
+            throw 'Third-party notices are stale. Run scripts/update-third-party-licenses.ps1.'
+        }
     }
     $metadata = & cargo metadata --offline --locked --no-deps --format-version 1
     if ($LASTEXITCODE -ne 0) { throw 'Cannot read package version.' }
@@ -87,6 +99,9 @@ try {
     foreach ($notice in @('README.md', 'PowerShell-LICENSE.txt', 'PowerShell-NOTICES.txt', 'SCSS-LICENSE.txt', 'bat-LICENSE-MIT.txt')) {
         Copy-Item -LiteralPath (Join-Path $projectRoot "vendor/syntaxes/$notice") -Destination $syntaxNotices
     }
+    $dependencyNotices = Join-Path $stage 'licenses/dependencies'
+    New-Item -ItemType Directory -Path $dependencyNotices -Force | Out-Null
+    Copy-Item -Path (Join-Path $projectRoot 'licenses/dependencies/*') -Destination $dependencyNotices -Recurse
     & (Join-Path $PSScriptRoot 'distribution-icon.ps1') -ProjectRoot $projectRoot -Destination (Join-Path $stage 'oxyde.ico')
     if (-not $PortableOnly) {
         & $IsccPath "/DAppVersion=$version" "/DPayloadDir=$stage" "/O$output" (Join-Path $projectRoot 'installer/windows/oxyde.iss')
@@ -108,8 +123,13 @@ try {
     } finally { $zip.Dispose() }
     $archive = [IO.Compression.ZipFile]::OpenRead($download)
     try {
-        foreach ($name in @('Oxyde_GPUI.exe', 'oxyde-image-worker.exe', 'oxyde-archive-io-worker.exe', 'oxyde-archive-list-worker.exe', 'vcruntime140.dll', 'data/README.txt', 'licenses/syntaxes/PowerShell-LICENSE.txt', 'licenses/syntaxes/PowerShell-NOTICES.txt', 'licenses/syntaxes/SCSS-LICENSE.txt', 'licenses/syntaxes/bat-LICENSE-MIT.txt')) {
+        foreach ($name in @('Oxyde_GPUI.exe', 'oxyde-image-worker.exe', 'oxyde-archive-io-worker.exe', 'oxyde-archive-list-worker.exe', 'vcruntime140.dll', 'data/README.txt', 'licenses/dependencies/README.md', 'licenses/dependencies/THIRD-PARTY-NOTICES.md', 'licenses/dependencies/LUCIDE-LICENSE.txt', 'licenses/syntaxes/PowerShell-LICENSE.txt', 'licenses/syntaxes/PowerShell-NOTICES.txt', 'licenses/syntaxes/SCSS-LICENSE.txt', 'licenses/syntaxes/bat-LICENSE-MIT.txt')) {
             if (-not $archive.GetEntry("Oxyde_GPUI/$name")) { throw "Portable archive is missing $name" }
+        }
+        foreach ($licenseFile in (Get-ChildItem -LiteralPath (Join-Path $stage 'licenses') -Recurse -File)) {
+            $relative = $licenseFile.FullName.Substring($stage.Length + 1).Replace('\', '/')
+            $entry = $archive.GetEntry("Oxyde_GPUI/$relative")
+            if (-not $entry -or $entry.Length -ne $licenseFile.Length) { throw "Portable archive has missing or truncated notice: $relative" }
         }
         if ($archive.Entries | Where-Object { $_.Name -match 'Setup|launcher' }) { throw 'Unexpected installer or launcher in portable archive.' }
     } finally { $archive.Dispose() }

@@ -4,7 +4,14 @@ Pour construire et lancer en développement : [guide de développement](developm
 
 ## Construction de la distribution
 
-Construire avec Rust MSVC x64 et les Build Tools Visual C++ :
+Construire avec Rust MSVC x64 et les Build Tools Visual C++. Installer une fois
+le générateur de licences :
+
+```powershell
+cargo install cargo-about --version 0.9.2 --locked --features cli
+```
+
+Lancer ensuite la distribution :
 
 ```powershell
 ./scripts/build-distribution.ps1 -PortableOnly
@@ -21,6 +28,9 @@ Extraire `target/distribution/output/Oxyde_GPUI-<version>-x64-portable.zip`, pui
 Le ZIP ne contient aucun installateur ni lanceur intermédiaire.
 Le dossier `licenses/syntaxes` conserve les licences et notices des grammaires
 SCSS/Sass et PowerShell ; il est également déployé par le Setup classique.
+Le dossier `licenses/dependencies` contient les notices générées des crates Rust,
+les licences du checkout GPUI/Zed et la notice Lucide. Il est inclus dans les deux
+formats de distribution.
 
 La présence du dossier `data` à côté de l'exécutable active automatiquement le mode portable,
 quel que soit le répertoire courant. Il est fourni dans le ZIP et contient ensuite :
@@ -59,6 +69,13 @@ modification de PATH ou remplacement de l'Explorateur Windows n'est effectué.
 
 Le workflow manuel `.github/workflows/distribution.yml` compile, teste les chemins portables
 et publie le ZIP et son SHA-256 comme artefact GitHub Actions, sans publier de release.
+
+À chaque exécution de `build-distribution.ps1`, le script régénère les licences des crates
+depuis `Cargo.lock`, avant la compilation et l'assemblage des paquets, même avec `-SkipBuild`.
+Il inclut ensuite le rapport dans le ZIP et le Setup. Si la génération échoue, la distribution
+s'arrête. Un accès réseau est nécessaire pour récupérer les notices amont manquantes.
+Le workflow installe automatiquement le générateur. Pour lancer la génération séparément,
+suivre le [guide des notices](../../licenses/dependencies/README.md).
 
 Tests : `cargo test --lib app_paths::tests`. Vérifier aussi les caches et archives concernés.
 Le script vérifie les fichiers requis dans le ZIP. Tester manuellement la session, les aperçus,

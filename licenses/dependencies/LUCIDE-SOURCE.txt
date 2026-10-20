@@ -1,0 +1,2 @@
+License source: https://github.com/lucide-icons/lucide/blob/e715245d62667c800e7f54c94b1b023692e900a3/LICENSE
+The original revisions of the SVG assets in Oxyde were not recorded.

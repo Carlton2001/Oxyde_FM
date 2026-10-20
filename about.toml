@@ -1,0 +1,10 @@
+# Keep license texts and copyright holders in the generated distribution notices.
+accepted = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unicode-3.0", "Zlib", "CC0-1.0", "MPL-2.0", "OpenSSL", "BSL-1.0", "OFL-1.1", "LicenseRef-ring"]
+ignore-build-dependencies = false
+ignore-dev-dependencies = false
+
+[libbz2-rs-sys]
+accepted = ["bzip2-1.0.6"]
+
+[oxyde]
+accepted = ["GPL-3.0-only"]

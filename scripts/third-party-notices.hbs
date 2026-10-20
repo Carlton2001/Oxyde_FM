@@ -1,0 +1,17 @@
+# Third-party Rust licenses
+
+Generated from Cargo.lock with cargo-about. License texts retain upstream copyright notices.
+Includes dependencies for all supported targets, including build dependencies.
+
+{{#each licenses}}
+## {{name}}
+
+{{#each used_by}}
+- {{crate.name}} {{crate.version}}
+{{/each}}
+
+```text
+{{{text}}}
+```
+
+{{/each}}

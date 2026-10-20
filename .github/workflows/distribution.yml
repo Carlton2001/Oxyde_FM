@@ -16,6 +16,8 @@ jobs:
           persist-credentials: false
       - name: Install Rust stable
         run: rustup update stable --no-self-update
+      - name: Install license generator
+        run: cargo install cargo-about --version 0.9.2 --locked --features cli
       - name: Check application
         run: cargo check --locked
       - name: Test portable storage
