@@ -9,8 +9,12 @@ use std::sync::Arc;
 mod syntax;
 
 pub(super) fn code_highlights(language: &str, text: &str) -> Vec<(std::ops::Range<usize>, u8)> {
-    syntax::highlight(&format!("block.{language}"), text).into_iter()
+    syntax::highlight_within(&format!("block.{language}"), text, Some(std::time::Duration::from_millis(200))).into_iter()
         .map(|span| (span.range, span.kind)).collect()
+}
+
+pub(super) fn warm_syntaxes() {
+    syntax::warm();
 }
 
 /// Text kept in memory for display; a larger file shows its beginning. Below
@@ -27,6 +31,9 @@ pub(super) struct TextFile {
     /// Byte offset where each logical line starts.
     lines: Arc<Vec<Offset>>,
     highlights: Arc<Vec<syntax::Span>>,
+    /// Path still to analyse, then the running analysis; the text is shown first.
+    highlight_path: Option<String>,
+    highlighting: Option<Task<()>>,
     /// Byte offset where each displayed row starts, for `columns`.
     rows: Arc<Vec<Offset>>,
     columns: usize,
@@ -206,13 +213,12 @@ impl Viewer {
         let work = crate::ui::preview_jobs::load_viewer(move || {
             let (text, truncated) = read(&path)?;
             let lines = line_starts(&text);
-            let highlights = syntax::highlight(&path, &text);
-            Ok::<_, std::io::Error>((text, lines, highlights, truncated))
+            Ok::<_, std::io::Error>((text, lines, path, truncated))
         });
         self.finish(
             generation,
             work,
-            |(text, lines, highlights, truncated)| {
+            |(text, lines, path, truncated)| {
                 // Until the first wrap, rows are the logical lines themselves;
                 // the text moves into its Arc (an `Arc<str>` would copy it).
                 let lines = Arc::new(lines);
@@ -221,7 +227,9 @@ impl Viewer {
                     list: ListState::new(lines.len(), ListAlignment::Top, px(800.0)),
                     rows: lines.clone(),
                     lines,
-                    highlights: Arc::new(highlights),
+                    highlights: Arc::new(Vec::new()),
+                    highlight_path: Some(path),
+                    highlighting: None,
                     columns: 0,
                     wrapping: None,
                     truncated,
@@ -235,6 +243,7 @@ impl Viewer {
     /// Rewraps in the background when the available columns change, keeping
     /// the first visible row's text in view.
     pub(super) fn sync_text_layout(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.sync_highlighting(cx);
         let Content::Text(text) = &mut self.content else { return };
         let rem = window.rem_size();
         let height = ROW_HEIGHT.to_pixels(rem);
@@ -285,6 +294,41 @@ impl Viewer {
             });
         });
         text.wrapping = Some((columns, task));
+    }
+}
+
+impl Viewer {
+    /// Starts the syntax analysis once the text is displayed and publishes it
+    /// chunk by chunk; dropping the content (another file) stops it.
+    fn sync_highlighting(&mut self, cx: &mut Context<Self>) {
+        use futures::StreamExt;
+        let Content::Text(text) = &mut self.content else { return };
+        let Some(path) = text.highlight_path.take() else { return };
+        let source = text.text.clone();
+        let generation = self.generation;
+        let (sender, mut chunks) = futures::channel::mpsc::unbounded();
+        let work = cx.background_executor().spawn(async move {
+            syntax::highlight_progressively(&path, &source, |chunk| sender.unbounded_send(chunk).is_ok());
+        });
+        text.highlighting = Some(cx.spawn(async move |this, cx| {
+            let _work = work;
+            while let Some(chunk) = chunks.next().await {
+                let current = this.update(cx, |this, cx| {
+                    if this.generation != generation {
+                        return false;
+                    }
+                    let Content::Text(text) = &mut this.content else { return false };
+                    if !chunk.is_empty() {
+                        Arc::make_mut(&mut text.highlights).extend(chunk);
+                        cx.notify();
+                    }
+                    true
+                });
+                if !matches!(current, Ok(true)) {
+                    return;
+                }
+            }
+        }));
     }
 }
 

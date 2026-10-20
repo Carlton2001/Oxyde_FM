@@ -1,4 +1,4 @@
-//! Bounded syntax analysis, performed by the text loading job, never during render.
+//! Bounded syntax analysis, performed in the background, never during render.
 use std::{
     ops::Range,
     sync::LazyLock,
@@ -12,7 +12,7 @@ use syntect::{
 
 const MAX_BYTES: usize = 2 * 1024 * 1024;
 const MAX_LINE_BYTES: usize = 16 * 1024;
-const MAX_SPANS: usize = 200_000;
+const MAX_SPANS: usize = 1_000_000;
 static SYNTAXES: LazyLock<SyntaxSet> = LazyLock::new(load_syntaxes);
 
 fn load_syntaxes() -> SyntaxSet {
@@ -37,9 +37,41 @@ pub(super) struct Span {
     pub(super) kind: u8,
 }
 
+/// Pays the grammar compilation before the first file needs it.
+pub(super) fn warm() {
+    LazyLock::force(&SYNTAXES);
+}
+
+/// Whole-file analysis.
+#[cfg(test)]
 pub(super) fn highlight(path: &str, text: &str) -> Vec<Span> {
+    highlight_within(path, text, None)
+}
+
+/// Analysis stopping at the first whole line past `budget`, for callers that
+/// wait on the result.
+pub(super) fn highlight_within(path: &str, text: &str, budget: Option<Duration>) -> Vec<Span> {
+    let mut spans = Vec::new();
+    analyse(path, text, budget, |chunk| {
+        spans.extend(chunk);
+        true
+    });
+    spans
+}
+
+/// Whole-file analysis published in chunks, the start of the file first, so the
+/// visible rows are coloured without waiting for the rest. `publish` returns
+/// false once nobody listens, which stops the analysis.
+pub(super) fn highlight_progressively(path: &str, text: &str, publish: impl FnMut(Vec<Span>) -> bool) {
+    analyse(path, text, None, publish);
+}
+
+fn analyse(path: &str, text: &str, budget: Option<Duration>, mut publish: impl FnMut(Vec<Span>) -> bool) {
+    // A first chunk small enough to cover the opening screen almost at once.
+    const FIRST_CHUNK: Duration = Duration::from_millis(10);
+    const CHUNK: Duration = Duration::from_millis(80);
     if text.len() > MAX_BYTES {
-        return Vec::new();
+        return;
     }
     let syntaxes = &*SYNTAXES;
     let name = std::path::Path::new(path)
@@ -63,7 +95,7 @@ pub(super) fn highlight(path: &str, text: &str) -> Vec<Span> {
                 .and_then(|line| syntaxes.find_syntax_by_first_line(line))
         });
     let Some(syntax) = syntax else {
-        return Vec::new();
+        return;
     };
     // RGB values encode categories only; render resolves the current Oxyde
     // theme on every frame, so switching themes never requires another parse.
@@ -92,11 +124,14 @@ pub(super) fn highlight(path: &str, text: &str) -> Vec<Span> {
     }
     let mut highlighter = HighlightLines::new(syntax, &theme);
     let started = Instant::now();
+    let mut published = started;
+    let mut interval = FIRST_CHUNK;
+    let mut count = 0;
     let mut spans = Vec::new();
     let mut offset = 0;
     for line in syntect::util::LinesWithEndings::from(text) {
         // Stop at a whole logical line: a partial parse cannot preserve context.
-        if line.len() > MAX_LINE_BYTES || started.elapsed() > Duration::from_millis(200) {
+        if line.len() > MAX_LINE_BYTES || budget.is_some_and(|budget| started.elapsed() > budget) {
             break;
         }
         let Ok(parts) = highlighter.highlight_line(line, syntaxes) else {
@@ -108,9 +143,11 @@ pub(super) fn highlight(path: &str, text: &str) -> Vec<Span> {
                 && style.foreground.b == 0
                 && (1..=7).contains(&style.foreground.r)
             {
-                if spans.len() == MAX_SPANS {
-                    return spans;
+                if count == MAX_SPANS {
+                    publish(spans);
+                    return;
                 }
+                count += 1;
                 spans.push(Span {
                     range: offset..end,
                     kind: style.foreground.r,
@@ -118,8 +155,15 @@ pub(super) fn highlight(path: &str, text: &str) -> Vec<Span> {
             }
             offset = end;
         }
+        if published.elapsed() > interval {
+            if !publish(std::mem::take(&mut spans)) {
+                return;
+            }
+            published = Instant::now();
+            interval = CHUNK;
+        }
     }
-    spans
+    publish(spans);
 }
 
 #[cfg(test)]
