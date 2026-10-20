@@ -91,6 +91,14 @@ publiée doit être supérieure à 1.2.1.
 Le workflow manuel `.github/workflows/distribution.yml` compile, teste les chemins portables
 et publie le ZIP et son SHA-256 comme artefact GitHub Actions, sans publier de release.
 
+Le push d'un tag `v<x.y.z>` lance `.github/workflows/release.yml`. Il vérifie que le tag
+correspond à `Cargo.toml`, construit le Setup et le ZIP, signe le Setup avec la clé
+minisign de l'updater (secrets `TAURI_SIGNING_PRIVATE_KEY` et `_PASSWORD`, partagés avec
+l'édition Tauri), puis génère `latest.json` avec `scripts/write-update-manifest.ps1`.
+Les trois clés Windows du manifeste pointent vers le Setup Inno. Le workflow crée une
+release brouillon ; la publier à la main la rend visible des updaters, qui lisent
+`releases/latest/download/latest.json`.
+
 À chaque exécution de `build-distribution.ps1`, le script régénère les licences des crates
 depuis `Cargo.lock`, avant la compilation et l'assemblage des paquets, même avec `-SkipBuild`.
 Il inclut ensuite le rapport dans le ZIP et le Setup. Si la génération échoue, la distribution
