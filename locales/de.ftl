@@ -301,7 +301,7 @@ date-older = Älter
 
 path-error-not-found = Dieser Ordner wurde nicht gefunden oder ist nicht mehr verfügbar.
 
-path-error-access-denied = Zugriff auf diesen Ordner verweigert. Prüfen Sie Ihre Berechtigungen.
+path-error-access-denied = Geschützter Ordner (Administratorrechte erforderlich)
 
 path-error-failed = Ordner konnte nicht geöffnet werden. Prüfen Sie den Pfad und versuchen Sie es erneut.
 

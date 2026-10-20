@@ -301,7 +301,7 @@ date-older = Più vecchio
 
 path-error-not-found = Questa cartella non è stata trovata o non è più disponibile.
 
-path-error-access-denied = Accesso alla cartella negato. Controlla i tuoi permessi.
+path-error-access-denied = Cartella protetta (Sono richiesti diritti di amministratore)
 
 path-error-failed = Impossibile aprire la cartella. Controlla il percorso e riprova.
 

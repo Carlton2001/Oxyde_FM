@@ -38,6 +38,7 @@ pub(super) fn render_details_file_list(
     let histogram_total = if active_tab.show_size_histogram { presentation.histogram_total } else { 0 };
     let rows = presentation.rows.clone();
     let count = (rows.len() + 1) as f32;
+    let protected_folder = matches!(&active_tab.load_status, TabLoadStatus::Error(Message::PathAccessDenied));
     let empty_message = if !files.is_empty() {
         None
     } else if !active_tab.files.is_empty() {
@@ -515,14 +516,15 @@ pub(super) fn render_details_file_list(
         container = container.child(
             div()
                 .absolute()
-                .top(px(crate::ui::style::column_header_height() + logical(18.0)))
+                .when(!protected_folder, |empty| empty.top(px(crate::ui::style::column_header_height() + logical(18.0))))
+                .when(protected_folder, |empty| empty.top(px(crate::ui::style::column_header_height())).bottom(px(status_bar_height())).items_center())
                 .left_0()
                 .right_0()
                 .flex()
                 .justify_center()
                 .text_color(theme.text_muted)
                 .text_size(rems(0.8125))
-                .child(message),
+                .child(if protected_folder { super::protected_folder_message(message, &theme).into_any_element() } else { div().child(message).into_any_element() }),
         );
     }
 

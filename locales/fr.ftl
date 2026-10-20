@@ -172,7 +172,7 @@ date-this-week = Cette semaine
 date-last-week = La semaine dernière
 date-older = Plus ancien
 path-error-not-found = Ce dossier est introuvable ou n’est plus disponible.
-path-error-access-denied = L’accès à ce dossier est refusé. Vérifiez vos autorisations.
+path-error-access-denied = Dossier protégé (Droits administrateur requis)
 path-error-failed = Impossible d’ouvrir ce dossier. Vérifiez le chemin et réessayez.
 
 ## File operations

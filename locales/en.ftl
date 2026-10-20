@@ -166,7 +166,7 @@ date-this-week = This week
 date-last-week = Last week
 date-older = Older
 path-error-not-found = This folder was not found or is no longer available.
-path-error-access-denied = Access to this folder was denied. Check your permissions.
+path-error-access-denied = Protected folder (Administrator rights required)
 path-error-failed = Could not open this folder. Check the path and try again.
 
 ## File operations
