@@ -61,6 +61,8 @@ pub fn initialize() -> io::Result<()> {
 
 pub fn config_dir() -> Option<PathBuf> { paths().ok()?.config.clone() }
 pub fn cache_dir() -> Option<PathBuf> { paths().ok()?.cache.clone() }
+/// True when a `data` folder beside the executable holds all application files.
+pub fn is_portable() -> bool { paths().is_ok_and(|paths| paths.portable) }
 pub fn temporary_dir() -> io::Result<PathBuf> { Ok(paths()?.temporary.clone()) }
 
 #[cfg(test)]

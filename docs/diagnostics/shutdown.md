@@ -24,7 +24,7 @@ Viewer garde sa session propre au document et son propriétaire existant.
 
 ## Si le problème revient
 
-1. Lire la fin d’`oxyde.log` à côté de `config.json` (`%APPDATA%\oxyde` habituellement, `data` en portable) et relever le PID de session.
+1. Lire la fin d’`oxyde.log` à côté de `config.json` (`%APPDATA%\Oxyde` habituellement, `data` en portable) et relever le PID de session.
 2. Chercher `application cleanup complete; final process exit`. Si cette étape manque, enquêter à la dernière étape atteinte : le contournement final ne traite pas un blocage antérieur.
 3. Contrôler aussi WMI et `tasklist`. L’absence dans `Get-Process` ne suffit pas à conclure à la fin du processus.
 4. Capturer si possible un dump avant de tuer le processus, puis vérifier le binaire et reproduire avec plusieurs aperçus PDF et fermetures.

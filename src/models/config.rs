@@ -74,6 +74,9 @@ pub struct AppConfig {
     /// Snapshots interpreted and validated by their GPUI views.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workspace_state: Option<serde_json::Value>,
+    /// Last release version announced by the automatic update check.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_notified_update: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duplicate_search_options: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -125,6 +128,7 @@ impl Default for AppConfig {
             operations_panel_position: None,
             confirm_delete: true,
             workspace_state: None,
+            last_notified_update: None,
             duplicate_search_options: None,
             duplicate_search_window_size: None,
         }
@@ -142,6 +146,7 @@ impl AppConfig {
     /// Restore preferences while retaining workspace and duplicate-search state.
     pub fn reset_preferences(&mut self) {
         let workspace_state = self.workspace_state.take();
+        let last_notified_update = self.last_notified_update.take();
         let duplicate_search_options = self.duplicate_search_options.take();
         let duplicate_search_window_size = self.duplicate_search_window_size.take();
         let operations_panel_position = self.operations_panel_position;
@@ -149,6 +154,7 @@ impl AppConfig {
         let tool_window_placements = std::mem::take(&mut self.tool_window_placements);
         *self = Self {
             workspace_state,
+            last_notified_update,
             duplicate_search_options,
             duplicate_search_window_size,
             operations_panel_position,

@@ -705,6 +705,15 @@ navigation-up = Nach oben
 about-releases = Versionen ansehen
 about-repository = GitHub-Repository
 about-main-tools = Wichtigste Werkzeuge
+update-available-toast = Oxyde { $detail } ist verfügbar. Installieren Sie es unter Einstellungen › Über.
+update-failed-toast = Aktualisierung fehlgeschlagen: { $detail }
+update-check = Nach Updates suchen
+update-checking = Suche läuft…
+update-current = Oxyde ist aktuell
+update-check-failed = Suche fehlgeschlagen, erneut versuchen
+update-install = Version { $version } installieren
+update-download-portable = Version { $version } herunterladen
+update-downloading = Update wird heruntergeladen…
 
 settings-search-limit-reset = Auf das Standardlimit von 3.000 Ergebnissen zurücksetzen
 

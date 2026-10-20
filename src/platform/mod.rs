@@ -127,6 +127,10 @@ pub trait Platform: Send + Sync {
     fn onedrive_installed(&self) -> bool { false }
     fn onedrive_folders(&self) -> Vec<crate::models::QuickAccessItem> { Vec::new() }
     fn show_startup_error(&self, _title: &str, message: &str) { eprintln!("{message}"); }
+    /// HTTPS GET into memory, bounded by `limit` bytes.
+    fn download(&self, _url: &str, _limit: usize) -> std::io::Result<Vec<u8>> {
+        Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
+    }
     #[doc(hidden)]
     fn check_broker_pressure(&self) -> std::io::Result<()> { Ok(()) }
     #[doc(hidden)]
@@ -794,5 +798,7 @@ mod windows_icon_source;
 
 #[cfg(target_os = "windows")]
 mod windows_onedrive;
+#[cfg(target_os = "windows")]
+mod windows_download;
 #[cfg(target_os = "windows")]
 mod windows_file_kind;

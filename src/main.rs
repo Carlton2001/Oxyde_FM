@@ -140,6 +140,7 @@ fn main() {
                 this.start_watcher_task(cx);
                 this.reconcile_watchers(cx);
                 this.refresh_all_tabs(cx);
+                this.schedule_update_check(cx);
             });
             cx.open_window(
                 WindowOptions {

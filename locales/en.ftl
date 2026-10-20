@@ -398,6 +398,15 @@ navigation-up = Up
 about-releases = View releases
 about-repository = GitHub repository
 about-main-tools = Main tools
+update-available-toast = Oxyde { $detail } is available. Install it from Settings › About.
+update-failed-toast = Update failed: { $detail }
+update-check = Check for updates
+update-checking = Checking…
+update-current = Oxyde is up to date
+update-check-failed = Check failed, try again
+update-install = Install version { $version }
+update-download-portable = Download version { $version }
+update-downloading = Downloading the update…
 
 settings-search-limit-reset = Reset to the default limit of 3,000 results
 

@@ -23,6 +23,7 @@ pub(super) fn about_column(view: &OxydeApp, handle: Entity<OxydeApp>, about_widt
             .child(div().text_size(rems(1.5)).font_weight(FontWeight::BOLD).child("Oxyde"))
             .child(div().text_color(theme.text_muted)
                 .child(i18n.text_with_args(Message::SettingsVersion, &version))))
+        .child(update_row(view, handle.clone(), theme, cx))
         .child(about_link("about-releases", i18n.text(Message::AboutReleases),
             "icons/refresh-cw.svg", "https://github.com/Carlton2001/Oxyde_FM/releases",
             handle.clone(), theme))
@@ -38,6 +39,39 @@ pub(super) fn about_column(view: &OxydeApp, handle: Entity<OxydeApp>, about_widt
         .child(about_tool("about-lucide", "Lucide",
             if view.theme_id.is_light() { "icons/lucide-light.svg" } else { "icons/lucide-dark.svg" },
             "https://lucide.dev", true, handle.clone(), theme))
+}
+
+/// Reflects the update check; each state offers its natural next action.
+fn update_row(view: &OxydeApp, handle: Entity<OxydeApp>, theme: OxydeTheme, cx: &App) -> impl IntoElement {
+    use crate::ui::app::UpdateStatus;
+    let i18n = cx.i18n();
+    let (label, icon_path, install) = match &view.update_status {
+        UpdateStatus::Idle => (i18n.text(Message::UpdateCheck), "icons/refresh-cw.svg", Some(false)),
+        UpdateStatus::Checking => (i18n.text(Message::UpdateChecking), "icons/refresh-cw.svg", None),
+        UpdateStatus::Current => (i18n.text(Message::UpdateCurrent), "icons/circle-check.svg", Some(false)),
+        UpdateStatus::Failed => (i18n.text(Message::UpdateCheckFailed), "icons/refresh-cw.svg", Some(false)),
+        UpdateStatus::Downloading => (i18n.text(Message::UpdateDownloading), "icons/download.svg", None),
+        UpdateStatus::Available(update) => {
+            let mut args = FluentArgs::new();
+            args.set("version", update.version.clone());
+            let message = if oxyde_lib::app_paths::is_portable() { Message::UpdateDownloadPortable } else { Message::UpdateInstall };
+            (i18n.text_with_args(message, &args), "icons/download.svg", Some(true))
+        }
+    };
+    let row = div().id("about-update").flex().items_center().gap(rems(0.5))
+        .px(rems(0.75)).py(rems(0.5)).rounded_md()
+        .bg(theme.control_hover)
+        .child(icon(icon_path, theme))
+        .child(div().flex_1().flex_shrink_0().whitespace_nowrap().child(label));
+    // Busy states have no callback, not only a different look.
+    let Some(install) = install else { return row.text_color(theme.text_muted).into_any_element(); };
+    let action = std::rc::Rc::new(move |_: &mut Window, cx: &mut App| {
+        handle.update(cx, |this, cx| if install { this.install_update(cx) } else { this.check_for_updates(true, cx) });
+    });
+    let pointer = action.clone();
+    let row = row.hover(|s| s.bg(theme.menu_hover))
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| pointer(window, cx));
+    crate::ui::components::popup::keyboard::item(row, action, None, None).into_any_element()
 }
 
 /// Links use the platform worker because the shell can pump native messages.

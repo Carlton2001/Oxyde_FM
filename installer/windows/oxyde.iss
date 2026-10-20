@@ -70,6 +70,30 @@ begin
       Result := True;
 end;
 
+const
+  SYNCHRONIZE = $00100000;
+
+function OpenProcess(Access: DWORD; Inherit: BOOL; ProcessId: DWORD): THandle;
+  external 'OpenProcess@kernel32.dll stdcall';
+function WaitForSingleObject(Handle: THandle; Milliseconds: DWORD): DWORD;
+  external 'WaitForSingleObject@kernel32.dll stdcall';
+function CloseHandle(Handle: THandle): BOOL;
+  external 'CloseHandle@kernel32.dll stdcall';
+
+// The GPUI updater passes its process id so files are replaced after it exits.
+function InitializeSetup: Boolean;
+var
+  Process: THandle;
+begin
+  Process := OpenProcess(SYNCHRONIZE, False, StrToIntDef(ExpandConstant('{param:WAITPID|0}'), 0));
+  if Process <> 0 then
+  begin
+    WaitForSingleObject(Process, 60000);
+    CloseHandle(Process);
+  end;
+  Result := True;
+end;
+
 function ShouldSkipPage(PageID: Integer): Boolean;
 begin
   Result := IsUpdate;

@@ -73,6 +73,20 @@ Transition depuis l'édition Tauri : après l'installation, le Setup désinstall
 puis supprime `%APPDATA%\com.oxyde.desktop` et `%LOCALAPPDATA%\com.oxyde.desktop`.
 Cette section de `oxyde.iss` est temporaire.
 
+## Mises à jour dans l'application
+
+`systems/updates.rs` lit `latest.json` sur la dernière release publiée, compare la version
+à `CARGO_PKG_VERSION` et vérifie la signature minisign du Setup avec la clé publique de
+l'updater avant de l'écrire dans un dossier temporaire. Le téléchargement passe par
+`Platform::download` (WinHTTP, proxy système, HTTPS uniquement, taille bornée).
+
+Une vérification automatique a lieu 30 s après le démarrage. Chaque version n'est annoncée
+qu'une fois (`last_notified_update` dans `config.json`), jamais en mode portable.
+Paramètres › À propos permet de vérifier puis d'installer. L'installation lance le Setup avec
+`/UPDATE /WAITPID=<pid>`, puis ferme Oxyde normalement ; le Setup attend la fin du processus
+(60 s au plus), remplace les fichiers et relance Oxyde. En mode portable, le bouton ouvre la
+page des releases.
+
 ## Version et tag
 
 ```powershell

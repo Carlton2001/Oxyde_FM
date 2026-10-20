@@ -169,14 +169,19 @@ pub fn render_title_bar(
         .child(crate::ui::components::operations::render_operations_footer(view, handle.clone(), cx))
         .child(div().w(rems(0.5)).h_full().flex_none())
         .child(render_window_controls(is_maximized, cx, move |window, cx| {
-            handle.update(cx, |view, cx| view.stop_viewers(cx));
-            crate::trace_shutdown_request("title bar close button");
-            crate::ui::app::duplicates::close_duplicate_windows(cx);
-            crate::ui::components::operations::close_operations_windows(cx);
-            crate::ui::app::advanced_search::close_advanced_search_windows(cx);
-            crate::ui::app::viewer::close_viewer_windows(cx);
-            window.remove_window();
+            close_main_window(&handle, "title bar close button", window, cx);
         }))
+}
+
+/// Close the main window the way its close button does, ending the application.
+pub(crate) fn close_main_window(handle: &Entity<OxydeApp>, reason: &'static str, window: &mut Window, cx: &mut App) {
+    handle.update(cx, |view, cx| view.stop_viewers(cx));
+    crate::trace_shutdown_request(reason);
+    crate::ui::app::duplicates::close_duplicate_windows(cx);
+    crate::ui::components::operations::close_operations_windows(cx);
+    crate::ui::app::advanced_search::close_advanced_search_windows(cx);
+    crate::ui::app::viewer::close_viewer_windows(cx);
+    window.remove_window();
 }
 
 /// Shared title-bar controls. The caller owns its close lifecycle.

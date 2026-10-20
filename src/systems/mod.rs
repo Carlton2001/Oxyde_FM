@@ -27,6 +27,7 @@ pub(crate) mod history_directories;
 pub(crate) mod item_rename;
 pub(crate) mod new_folder_history;
 pub mod quick_access_watcher;
+pub mod updates;
 
 pub(crate) mod folder_sizes;
 

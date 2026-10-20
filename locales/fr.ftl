@@ -404,6 +404,15 @@ navigation-up = Haut
 about-releases = Voir les versions
 about-repository = Dépôt GitHub
 about-main-tools = Outils principaux
+update-available-toast = Oxyde { $detail } est disponible. Installez-la depuis Paramètres › À propos.
+update-failed-toast = Mise à jour impossible : { $detail }
+update-check = Rechercher des mises à jour
+update-checking = Recherche en cours…
+update-current = Oxyde est à jour
+update-check-failed = Échec de la recherche, réessayer
+update-install = Installer la version { $version }
+update-download-portable = Télécharger la version { $version }
+update-downloading = Téléchargement de la mise à jour…
 
 settings-search-limit-reset = Rétablir la limite par défaut de 3 000 résultats
 

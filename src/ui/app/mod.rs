@@ -20,6 +20,8 @@ mod group_selection;
 pub(crate) use group_selection::GroupSelection;
 mod keyboard;
 mod toasts;
+mod updates;
+pub(crate) use updates::UpdateStatus;
 mod shell_features;
 mod calendar;
 mod clipboard;
@@ -320,6 +322,8 @@ pub struct OxydeApp {
     file_operation_notice: Option<(Message, String)>,
     toasts: Vec<Toast>,
     next_toast_id: u64,
+    pub(crate) update_status: UpdateStatus,
+    main_window: Option<AnyWindowHandle>,
     pub(crate) operations_panel_view:
         Option<Entity<crate::ui::components::operations::OperationsPanelView>>,
     pub(crate) operations_panel_scroll: ScrollHandle,
@@ -515,6 +519,8 @@ impl OxydeApp {
             file_operation_notice: None,
             toasts: Vec::new(),
             next_toast_id: 0,
+            update_status: UpdateStatus::Idle,
+            main_window: None,
             operations_panel_view: None,
             operations_panel_scroll: ScrollHandle::new(),
             expanded_operations: std::collections::HashSet::new(),
