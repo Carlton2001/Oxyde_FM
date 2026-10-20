@@ -37,6 +37,18 @@ fn thumb_offset(viewport: f32, content: f32, position: f32, grab: f32) -> f32 {
 }
 
 impl Viewer {
+    pub(super) fn list_scroll_maximum(&self) -> f32 {
+        let Some(list) = self.list_state() else { return 0.0 };
+        let maximum = list.max_offset_for_scrollbar().y.as_f32();
+        // GPUI's scrollbar maximum excludes list padding. Every Viewer list
+        // has one rem at each end, also reachable when dragging to the bottom.
+        if maximum > 0.0 {
+            maximum + crate::ui::scale::rem_pixels(rems(2.0)).as_f32()
+        } else {
+            maximum
+        }
+    }
+
     fn list_state(&self) -> Option<&ListState> {
         match &self.content {
             Content::Text(text) => Some(&text.list),
@@ -110,7 +122,7 @@ impl Viewer {
         let Some(list) = self.list_state() else { return content };
         let bounds = list.viewport_bounds();
         let viewport = bounds.size.height.as_f32();
-        let maximum = list.max_offset_for_scrollbar().y.as_f32();
+        let maximum = self.list_scroll_maximum();
         let scrolled = -list.scroll_px_offset_for_scrollbar().y.as_f32();
         let vertical = self.rail(ScrollbarAxis::Vertical, viewport, viewport + maximum, scrolled, cx);
         let handle = cx.entity();

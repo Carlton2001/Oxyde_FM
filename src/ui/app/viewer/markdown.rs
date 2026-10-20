@@ -1,5 +1,6 @@
 //! Markdown parsing is bounded and performed off the UI thread. Images use
 //! the existing isolated preview decoder and its shared memory budget.
+mod loading;
 mod parse;
 use super::{content::Content, Viewer};
 use crate::ui::{
@@ -8,10 +9,10 @@ use crate::ui::{
 };
 use gpui::{prelude::*, *};
 use parse::{Block, Kind};
-use std::{collections::HashMap, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 pub(super) struct Markdown {
-    blocks: Arc<Vec<Block>>,
+    blocks: Rc<RefCell<Vec<Block>>>,
     pub(super) list: ListState,
     images: HashMap<usize, ImageState>,
     truncated: bool,
@@ -47,34 +48,6 @@ pub(super) fn is_markdown(path: &str) -> bool {
 }
 
 impl Viewer {
-    pub(super) fn load_markdown(&mut self, path: String, cx: &mut Context<Self>) {
-        let generation = self.generation;
-        let work = crate::ui::preview_jobs::load_viewer(move || {
-            use std::io::Read;
-            const LIMIT: u64 = 2 * 1024 * 1024;
-            let file = std::fs::File::open(&path)?;
-            let truncated = file.metadata()?.len() > LIMIT;
-            let mut bytes = Vec::new();
-            file.take(LIMIT).read_to_end(&mut bytes)?;
-            let text = String::from_utf8_lossy(&bytes);
-            let (blocks, limited) = parse::parse(&text, &path);
-            Ok::<_, std::io::Error>((blocks, truncated || limited))
-        });
-        self.finish(
-            generation,
-            work,
-            |(blocks, truncated)| {
-                Content::Markdown(Markdown {
-                    list: ListState::new(blocks.len(), ListAlignment::Top, px(800.0)),
-                    blocks: Arc::new(blocks),
-                    images: HashMap::new(),
-                    truncated,
-                })
-            },
-            cx,
-        );
-    }
-
     fn request_markdown_image(&mut self, index: usize, path: String, cx: &mut Context<Self>) {
         let Content::Markdown(document) = &mut self.content else {
             return;
@@ -113,7 +86,7 @@ impl Viewer {
                     },
                 );
                 // Re-measure only this block, preserving the logical scroll anchor.
-                document.list.splice(index..index + 1, 1);
+                document.list.remeasure_items(index..index + 1);
                 cx.notify();
             });
         });
@@ -129,6 +102,7 @@ impl Viewer {
         let blocks = document.blocks.clone();
         let handle = cx.entity().downgrade();
         let body = list(document.list.clone(), move |index, _, cx| {
+            let blocks = blocks.borrow();
             let Some(block) = blocks.get(index) else {
                 return div().into_any_element();
             };
@@ -155,17 +129,12 @@ impl Viewer {
             }
             if let Kind::Image(path) = &block.kind {
                 let image = handle
-                    .update(cx, |this, cx| {
-                        if let Some(path) = path {
-                            this.request_markdown_image(index, path.clone(), cx);
-                        }
-                        match &this.content {
-                            Content::Markdown(document) => match document.images.get(&index) {
-                                Some(ImageState::Ready(image)) => Some(image.clone()),
-                                _ => None,
-                            },
+                    .update(cx, |this, _| match &this.content {
+                        Content::Markdown(document) => match document.images.get(&index) {
+                            Some(ImageState::Ready(image)) => Some(image.clone()),
                             _ => None,
-                        }
+                        },
+                        _ => None,
                     })
                     .ok()
                     .flatten();
@@ -173,6 +142,24 @@ impl Viewer {
                     .w_full()
                     .px(rems(2.0))
                     .py(rems(0.5))
+                    .relative()
+                    .when_some(path.clone(), |frame, path| {
+                        let handle = handle.clone();
+                        frame.child(
+                            canvas(
+                                |_, _, _| (),
+                                move |_, _, _, cx| {
+                                    // Measuring the document must not decode offscreen images.
+                                    // Only painted list rows request their image.
+                                    let _ = handle.update(cx, |this, cx| {
+                                        this.request_markdown_image(index, path.clone(), cx);
+                                    });
+                                },
+                            )
+                            .absolute()
+                            .size_0(),
+                        )
+                    })
                     .map(|frame| {
                         if let Some(image) = image {
                             let size = image.size(0);

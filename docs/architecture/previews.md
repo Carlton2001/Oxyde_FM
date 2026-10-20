@@ -77,6 +77,8 @@ leurs modes et limites.
 Les images utilisent tout le cadre sans marge. Les listes texte/code, PDF et
 Office/ODF ont 1 rem de marge intérieure en haut et en bas, intégrée au
 défilement ; les espacements internes entre pages et blocs sont conservés.
+La plage de l’ascenseur inclut ces deux marges lorsque le contenu défile ;
+le maximum exposé par GPUI pour les blocs seuls les exclut.
 Markdown (`md`, `markdown`, `mdown`, `mkd`, `mkdn`) utilise `pulldown-cmark`
 avec rendu GPUI natif : titres, styles inline, listes, citations, tableaux et
 blocs de code colorés par Syntect. Le rendu est activé par défaut. La toolbar
@@ -92,10 +94,24 @@ par le parcours d’aperçu isolé et son budget mémoire, avec 32 demandes maxi
 par document. Images absentes ou non locales : texte alternatif. Aucune URL
 distante ou chemin absolu/UNC d’image n’est chargé. Les liens sont présentés
 comme du texte coloré ; le HTML brut est affiché littéralement.
-L’analyse est hors UI et le rendu virtualisé ; limites : 2 Mio de source,
-100 000 événements, 20 000 blocs et 16 Kio par bloc de texte, avec avertissement
-de troncature. La source complète reste accessible en mode Code selon les
-limites du lecteur texte. Changer de mode invalide les tâches précédentes et
+La source est lue hors UI, jusqu’à 512 Mio comme le lecteur texte, avec
+avertissement au-delà. Après cette lecture, une seule analyse Markdown continue
+publie le premier bloc immédiatement, puis des lots de 32 blocs au plus via
+une file bornée. Le Viewer ajoute ces blocs sans réinitialiser le défilement ;
+chaque lot est mesuré intégralement avant son affichage, y compris hors écran,
+pour donner à l’ascenseur toute la hauteur disponible sans parcourir les blocs
+intermédiaires. L’arrivée des lots étend encore la plage pendant l’analyse.
+Le rendu reste virtualisé ; la mesure ne déclenche pas de décodage d’image,
+réservé aux blocs peints. Les images arrivées invalident la mesure de leur bloc
+en conservant l’ancre de défilement. Les limites de 100 000 événements et 20 000 blocs
+sont supprimées. Les longs blocs sont découpés en portions de 16 Kio maximum,
+aux frontières UTF-8, sans perte de texte ni des styles inline. Les clôtures de
+code, listes et références gardent leur contexte entre les lots ; la coloration
+du code conserve son budget existant. La source et les blocs préparés restent
+en mémoire : le plafond de source ne constitue pas une borne du RSS global.
+Changer de fichier ou de mode interrompt la lecture entre morceaux de 64 Kio,
+puis l’analyse entre événements et portions ; un appel du parseur ou de Syntect
+en cours n’est pas préempté. Changer de mode invalide les tâches précédentes et
 libère leurs textures ; les images décodées après un changement ne sont pas publiées.
 La barre d’outils en haut du Viewer, à la hauteur de la barre de navigation
 de l’explorateur, contient le nom du fichier, la navigation dans la sélection

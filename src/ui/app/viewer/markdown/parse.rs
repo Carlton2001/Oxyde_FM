@@ -51,7 +51,11 @@ fn local_image(base: &str, destination: &str) -> Option<String> {
     Some(full.to_string_lossy().into_owned())
 }
 
-struct Builder {
+struct Builder<'a> {
+    publish: &'a mut dyn FnMut(Vec<Block>) -> bool,
+    cancelled: &'a dyn Fn() -> bool,
+    stopped: bool,
+    first: bool,
     blocks: Vec<Block>,
     kind: Kind,
     text: String,
@@ -64,29 +68,18 @@ struct Builder {
     quote_depth: usize,
     language: String,
     started: Instant,
-    limited: bool,
 }
 
-impl Builder {
+impl Builder<'_> {
     fn flush(&mut self) {
+        if self.stopped || (self.cancelled)() {
+            return;
+        }
         if self.text.is_empty() && !matches!(self.kind, Kind::Image(_) | Kind::Rule) {
             return;
         }
-        let mut text = std::mem::take(&mut self.text);
+        let text = std::mem::take(&mut self.text);
         let mut spans = std::mem::take(&mut self.spans);
-        // Bound a single GPUI text layout as well as the whole document.
-        if text.len() > 16 * 1024 {
-            let mut end = 16 * 1024;
-            while !text.is_char_boundary(end) {
-                end -= 1;
-            }
-            text.truncate(end);
-            spans.retain(|span| span.range.start < end);
-            for span in &mut spans {
-                span.range.end = span.range.end.min(end);
-            }
-            self.limited = true;
-        }
         if matches!(self.kind, Kind::Code) && self.started.elapsed() < Duration::from_millis(200) {
             spans = super::super::text::code_highlights(&self.language, &text)
                 .into_iter()
@@ -102,6 +95,10 @@ impl Builder {
             text,
             spans,
         });
+        if self.first || self.blocks.len() >= 32 {
+            self.first = false;
+            self.stopped = !(self.publish)(std::mem::take(&mut self.blocks));
+        }
         self.kind = if self.quote_depth > 0 {
             Kind::Quote
         } else {
@@ -110,25 +107,50 @@ impl Builder {
     }
 
     fn append(&mut self, value: &str, code: bool) {
-        let start = self.text.len();
-        self.text.push_str(value);
-        if start == self.text.len() {
-            return;
+        let mut remaining = value;
+        while !remaining.is_empty() && !self.stopped && !(self.cancelled)() {
+            let mut end = remaining.len().min(16 * 1024 - self.text.len());
+            while !remaining.is_char_boundary(end) {
+                end -= 1;
+            }
+            if end == 0 {
+                // Split the native layout without ending its Markdown context.
+                let kind = self.kind.clone();
+                self.flush();
+                self.kind = kind;
+                continue;
+            }
+            let start = self.text.len();
+            self.text.push_str(&remaining[..end]);
+            self.spans.push(Span {
+                range: start..self.text.len(),
+                bold: self.bold > 0,
+                italic: self.italic > 0,
+                strike: self.strike > 0,
+                link: self.links > 0,
+                code,
+                ..Default::default()
+            });
+            remaining = &remaining[end..];
         }
-        self.spans.push(Span {
-            range: start..self.text.len(),
-            bold: self.bold > 0,
-            italic: self.italic > 0,
-            strike: self.strike > 0,
-            link: self.links > 0,
-            code,
-            ..Default::default()
-        });
     }
 }
 
-pub(super) fn parse(source: &str, path: &str) -> (Vec<Block>, bool) {
+/// Keep one parser alive so references, lists and fences span batch boundaries.
+pub(super) fn parse_progressively(
+    source: &str,
+    path: &str,
+    cancelled: &dyn Fn() -> bool,
+    publish: &mut dyn FnMut(Vec<Block>) -> bool,
+) {
+    if cancelled() {
+        return;
+    }
     let mut builder = Builder {
+        publish,
+        cancelled,
+        stopped: false,
+        first: true,
         blocks: Vec::new(),
         kind: Kind::Paragraph,
         text: String::new(),
@@ -141,23 +163,20 @@ pub(super) fn parse(source: &str, path: &str) -> (Vec<Block>, bool) {
         quote_depth: 0,
         language: String::new(),
         started: Instant::now(),
-        limited: false,
     };
     let options =
         Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
     let mut image = None::<(Option<String>, String)>;
-    let mut limited = false;
-    for (count, event) in Parser::new_ext(source, options).enumerate() {
-        if count >= 100_000 || builder.blocks.len() >= 20_000 {
-            limited = true;
-            break;
+    for event in Parser::new_ext(source, options) {
+        if builder.stopped || cancelled() {
+            return;
         }
         if let Some((_, alt)) = &mut image {
             match event {
                 Event::End(TagEnd::Image) => {
                     let (path, alt) = image.take().unwrap();
                     builder.kind = Kind::Image(path);
-                    builder.text = alt;
+                    builder.append(&alt, false);
                     builder.flush();
                 }
                 Event::Text(value) | Event::Code(value) => alt.push_str(&value),
@@ -271,7 +290,19 @@ pub(super) fn parse(source: &str, path: &str) -> (Vec<Block>, bool) {
         }
     }
     builder.flush();
-    (builder.blocks, limited || builder.limited)
+    if !builder.stopped && !cancelled() && !builder.blocks.is_empty() {
+        (builder.publish)(builder.blocks);
+    }
+}
+
+#[cfg(test)]
+fn parse(source: &str, path: &str) -> (Vec<Block>, bool) {
+    let mut blocks = Vec::new();
+    parse_progressively(source, path, &|| false, &mut |batch| {
+        blocks.extend(batch);
+        true
+    });
+    (blocks, false)
 }
 
 #[cfg(test)]
