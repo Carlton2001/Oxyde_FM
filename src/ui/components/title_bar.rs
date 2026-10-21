@@ -134,7 +134,7 @@ pub fn render_title_bar(
             .absolute()
             .size_full(),
         )
-        .child(img("icons/logo_oxyde.svg").w(rems(1.25)).h(rems(1.25)).flex_none())
+        .child(img("icons/logo_title.png").w(rems(1.25)).h(rems(1.25)).flex_none())
         .child(
             div()
                 .text_size(rems(0.8125))

@@ -4,9 +4,11 @@ Pour construire et lancer en développement : [guide de développement](developm
 
 ## Logo et icônes de l'application
 
-Le logo source est `assets/icons/logo_oxyde.svg`, affiché directement dans
-« À propos » et la barre de titre. Après modification du SVG, régénérer ses
-déclinaisons avant de reconstruire l'application :
+Le logo source est `assets/icons/logo_oxyde.svg`. « À propos » et la barre de
+titre affichent `logo_about.png` (144 px) et `logo_title.png` (40 px), rendus
+pour les écrans 2x : GPUI réduit les images en une seule passe et crénèle une
+source trop grande. Après modification du SVG, régénérer ses déclinaisons
+avant de reconstruire l'application :
 
 ```powershell
 ./scripts/distribution-icon.ps1

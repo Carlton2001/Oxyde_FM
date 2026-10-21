@@ -19,7 +19,7 @@ pub(super) fn about_column(view: &OxydeApp, handle: Entity<OxydeApp>, about_widt
         .border_l(rems(0.0625)).border_color(theme.border)
         .child(section(i18n.text(Message::SettingsAbout), theme))
         .child(div().flex().flex_col().items_center().gap(rems(0.5)).py(rems(0.75))
-            .child(img("icons/logo_oxyde.svg").size(rems(4.5)).flex_none())
+            .child(img("icons/logo_about.png").size(rems(4.5)).flex_none())
             .child(div().text_size(rems(1.5)).font_weight(FontWeight::BOLD).child("Oxyde"))
             .child(div().text_color(theme.text_muted)
                 .child(i18n.text_with_args(Message::SettingsVersion, &version))))

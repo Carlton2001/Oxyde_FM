@@ -1,4 +1,4 @@
-# Regenerate logo.png and oxyde.ico from assets/icons/logo_oxyde.svg.
+# Regenerate logo.png, the in-app logo PNGs and oxyde.ico from assets/icons/logo_oxyde.svg.
 # The generated assets are committed: native windows use the PNG, while build.rs
 # embeds the ICO for Explorer, the window class, the taskbar and the installer.
 # Worker icons have their own source and are deliberately left untouched.

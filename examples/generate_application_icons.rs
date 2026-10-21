@@ -27,6 +27,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let renderer = SvgRenderer::new(Arc::new(()));
     let svg = renderer.parse_svg(&fs::read(icons.join("logo_oxyde.svg"))?)?;
     rasterize(&renderer, &svg, 600)?.save(icons.join("logo.png"))?;
+    // In-app copies sized for 2x displays: GPUI downsamples images in a single
+    // GPU pass, so a 600 px source aliases badly at title-bar size.
+    rasterize(&renderer, &svg, 40)?.save(icons.join("logo_title.png"))?;
+    rasterize(&renderer, &svg, 144)?.save(icons.join("logo_about.png"))?;
 
     let mut frames = Vec::new();
     for dimension in [16, 20, 24, 32, 40, 48, 64, 128, 256] {
