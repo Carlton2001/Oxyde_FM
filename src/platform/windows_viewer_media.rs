@@ -278,7 +278,7 @@ unsafe extern "system" fn surface_proc(hwnd: HWND, message: u32, wparam: WPARAM,
     }
 }
 
-fn surface_class() -> io::Result<windows::core::PCWSTR> {
+pub(super) fn surface_class() -> io::Result<windows::core::PCWSTR> {
     let class = w!("OxydeMediaSurface");
     let instance = unsafe { GetModuleHandleW(None) }.map_err(native)?;
     let description = WNDCLASSW {

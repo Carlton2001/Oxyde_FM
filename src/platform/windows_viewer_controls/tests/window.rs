@@ -68,12 +68,9 @@ fn fullscreen_controls_are_owned_nonactivating_and_never_globally_topmost() {
 
 #[test]
 fn video_overlays_are_owned_by_the_surface_and_released_before_it_closes() {
-    unsafe extern "system" fn surface_proc(window: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-        unsafe { DefWindowProcW(window, message, wparam, lparam) }
-    }
-    let class = w!("OxydeMediaSurface");
-    let description = WNDCLASSW { lpfnWndProc: Some(surface_proc), lpszClassName: class, ..Default::default() };
-    let _ = unsafe { RegisterClassW(&description) };
+    // The class is process-wide: register it with the production procedure, or a
+    // stub registered first would answer the media surface tests instead.
+    let class = crate::platform::windows_viewer_media::surface_class().unwrap();
     let owner = create();
     let surface = TestWindow(unsafe {
         CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, class, w!("surface"), WS_POPUP,
