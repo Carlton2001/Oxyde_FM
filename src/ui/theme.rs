@@ -55,6 +55,24 @@ pub struct OxydeTheme {
 impl Global for OxydeTheme {}
 
 impl OxydeTheme {
+    /// Fond le plus foncé parmi les surfaces du thème, pour la visionneuse.
+    pub fn darkest_background(&self) -> Hsla {
+        [
+            self.background,
+            self.active_background,
+            self.sidebar,
+            self.header,
+            self.surface,
+            self.search_banner,
+            self.menu_surface,
+            self.dialog_tabs,
+            self.tab_active,
+        ]
+        .into_iter()
+        .min_by(|a, b| a.l.total_cmp(&b.l))
+        .unwrap_or(self.background)
+    }
+
     pub fn drive_usage_color(&self, total: u64, free: u64) -> Hsla {
         let used = total.saturating_sub(free);
         if total > 0 && u128::from(used) * 10 >= u128::from(total) * 9 {
