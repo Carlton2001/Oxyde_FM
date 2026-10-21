@@ -2,6 +2,22 @@
 
 Pour construire et lancer en développement : [guide de développement](development.md).
 
+## Logo et icônes de l'application
+
+Le logo source est `assets/icons/logo_oxyde.svg`, affiché directement dans
+« À propos » et la barre de titre. Après modification du SVG, régénérer ses
+déclinaisons avant de reconstruire l'application :
+
+```powershell
+./scripts/distribution-icon.ps1
+```
+
+Le script utilise le moteur SVG de GPUI et génère `assets/icons/logo.png`
+pour les icônes natives ainsi que `assets/icons/oxyde.ico` (16 à 256 pixels)
+pour l'exécutable, l'Explorateur, la barre des tâches et l'installateur.
+Ces deux fichiers générés sont conservés dans Git. Chaque taille est rendue
+depuis le SVG ; les icônes spécifiques des workers restent indépendantes.
+
 ## Construction de la distribution
 
 Construire avec Rust MSVC x64 et les Build Tools Visual C++. Installer une fois
