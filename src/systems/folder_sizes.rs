@@ -145,7 +145,7 @@ fn scan(
                     files_acc.fetch_add(1, Ordering::Relaxed);
                     if let Ok(metadata) = entry.metadata() {
                         let _ =
-                            size_acc.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+                            size_acc.try_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
                                 Some(value.saturating_add(metadata.len()))
                             });
                     }

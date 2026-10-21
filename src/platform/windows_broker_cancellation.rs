@@ -70,7 +70,7 @@ impl Drop for Scope {
 fn create(remaining: Duration, cancel: &AtomicBool) -> io::Result<Arc<Monitor>> {
     let admission = Instant::now();
     while ACTIVE
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |active| {
+        .try_update(Ordering::AcqRel, Ordering::Acquire, |active| {
             (active < MAX_MONITORS).then_some(active + 1)
         })
         .is_err()
@@ -160,7 +160,7 @@ pub(super) fn watch(
     let id = monitor
         .state
         .next
-        .fetch_update(Ordering::AcqRel, Ordering::Acquire, |id| id.checked_add(1))
+        .try_update(Ordering::AcqRel, Ordering::Acquire, |id| id.checked_add(1))
         .map_err(|_| io::Error::other("Broker cancellation scope IDs exhausted"))?;
     {
         let mut scopes = monitor
