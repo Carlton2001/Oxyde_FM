@@ -23,7 +23,7 @@ pub(super) fn grouping_button(pane_id: &str, enabled: bool, handle: Entity<Oxyde
     )
         .relative().size(rems(1.5)).flex_none().flex().items_center().justify_center().rounded_md()
         .bg(if enabled { theme.selected } else { theme.header })
-        .native_tooltip(move |window, cx| {
+        .fixed_tooltip(move |window, cx| {
             use crate::ui::date_groups::GroupMode;
             let mode = tooltip_handle.read(cx).state.find_pane(&tooltip_pane)
                 .map(|pane| pane.active_tab().grouping()).unwrap_or(GroupMode::None);
@@ -214,7 +214,7 @@ pub(super) fn view_mode_button(
         } else {
             theme.header
         })
-        .native_tooltip(Tooltip::text(cx.i18n().text(tooltip)))
+        .fixed_tooltip(Tooltip::text(cx.i18n().text(tooltip)))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             cx.stop_propagation();
             handle.update(cx, |this, cx| {

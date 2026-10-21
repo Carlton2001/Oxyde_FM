@@ -66,7 +66,9 @@ pub(super) fn render_grid_thumbnail(
         result
     })
     .id(SharedString::from(format!("grid-thumbnail-{path}")))
-    .size(rems(5.0))
+    // Stay inside the card's 4.25rem icon area, clear of the name below.
+    .w(rems(5.0))
+    .h(rems(3.75))
     .object_fit(ObjectFit::Contain)
     .with_fallback(move || {
         render_file_icon(

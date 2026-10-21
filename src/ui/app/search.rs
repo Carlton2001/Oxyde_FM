@@ -393,7 +393,7 @@ impl OxydeApp {
                     .justify_center()
                     .rounded_sm()
                     .hover(move |style| style.bg(theme.control_hover))
-                    .native_tooltip(crate::ui::components::tooltip::Tooltip::with_shortcut(
+                    .fixed_tooltip(crate::ui::components::tooltip::Tooltip::with_shortcut(
                         format!("{} — {}", cx.i18n().text(Message::QuickSearch), cx.i18n().text(Message::QuickSearchCurrentFolder)),
                         Some("Ctrl+F".into()),
                     ))

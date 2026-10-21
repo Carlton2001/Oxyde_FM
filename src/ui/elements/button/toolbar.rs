@@ -19,7 +19,7 @@ pub(crate) fn toolbar_button_with_tooltip(
         .items_center()
         .justify_center()
         .rounded_md()
-        .native_tooltip(tooltip)
+        .fixed_tooltip(tooltip)
         .when(enabled, |d| d.on_mouse_down(MouseButton::Left, action))
         .when_some(icon, |d, path| {
             d.child(svg().path(path).size(rems(1.125)).text_color(if enabled {

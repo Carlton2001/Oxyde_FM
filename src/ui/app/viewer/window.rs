@@ -142,6 +142,13 @@ impl Render for ViewerWindow {
             window.set_rem_size(px(owner.read(cx).ui_rem_size() as f32));
         }
         let theme = *cx.theme();
+        // The file name titles the window; its full path stays in a tooltip.
+        let file = self.viewer.read(cx).file.as_ref().map(|file| (file.name.clone(), file.path.clone()));
+        let title: SharedString = file.as_ref().map(|(name, _)| name.clone().into())
+            .unwrap_or_else(|| cx.i18n().text(Message::ViewerTitle));
+        window.set_window_title(title.as_ref());
+        // The title bar carries the display options; no action bar remains.
+        let options = self.viewer.update(cx, |viewer, cx| viewer.render_display_options(cx).mr(rems(0.5)));
         div()
             .size_full()
             .flex()
@@ -152,12 +159,14 @@ impl Render for ViewerWindow {
             .text_color(theme.text)
             .font_weight(FontWeight::NORMAL)
             .text_size(rems(0.8125))
-            .when(!window.is_fullscreen(), |root| root.child(tool_window::header(
+            .when(!window.is_fullscreen(), |root| root.child(tool_window::header_with_title_tooltip(
                 "icons/eye.svg",
-                cx.i18n().text(Message::ViewerTitle),
+                title,
+                file.map(|(_, path)| path.into()),
                 window.is_maximized(),
                 true,
                 cx,
+                Some(options.into_any_element()),
                 |window, cx| {
                     super::media_overlay::release_surface_overlays(window);
                     tool_window::close_transients(window, cx);

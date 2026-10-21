@@ -26,7 +26,7 @@ pub(super) fn icon_button(
         .when(enabled, |button| {
             button.hover(move |style| style.bg(theme.control_hover))
         })
-        .native_tooltip(Tooltip::text(cx.i18n().text(label)))
+        .fixed_tooltip(Tooltip::text(cx.i18n().text(label)))
         .child(
             svg()
                 .path(icon)
@@ -59,7 +59,7 @@ pub(super) fn bar_button(
         .text_color(theme.text)
         .when(active, |button| button.bg(theme.control_hover))
         .hover(move |style| style.bg(theme.control_hover))
-        .native_tooltip(Tooltip::text(tooltip))
+        .fixed_tooltip(Tooltip::text(tooltip))
         .child(svg().path(icon).size_4().text_color(theme.text))
         .when_some(label, |button, label| {
             button.px(rems(0.375)).gap(rems(0.375)).text_size(rems(0.8125)).child(label)
@@ -101,9 +101,7 @@ impl Render for Viewer {
         self.enable_fullscreen_controls(window.is_fullscreen() && self.native_media && !self.audio && !failed && !self.blocked, cx);
         let overlay = self.render_overlay(window, failed, cx);
         let current = self.file.as_ref();
-        let title = current.map(|file| {
-            if self.detached { file.path.clone() } else { file.name.clone() }
-        }).unwrap_or_default();
+        let title = current.map(|file| file.name.clone()).unwrap_or_default();
         let surface = div()
             .id("viewer-surface")
             .size_full()
@@ -148,7 +146,7 @@ impl Render for Viewer {
                 }
                 cx.stop_propagation();
             }))
-            .when(!window.is_fullscreen(), |surface| surface.child(self.render_action_bar(title, cx)))
+            .when(!window.is_fullscreen() && !self.detached, |surface| surface.child(self.render_action_bar(title, cx)))
             .child(
                 // Content fills the remaining space; its rail reaches the pane's right edge.
                 div()
@@ -212,6 +210,12 @@ impl Render for Viewer {
 }
 
 impl Viewer {
+    /// The file name leads in the primary text color.
+    fn render_file_title(&self, title: String, cx: &App) -> Div {
+        div().flex_1().min_w_0().truncate().text_color(cx.theme().text)
+            .font_weight(FontWeight::SEMIBOLD).child(title)
+    }
+
     fn render_action_bar(&self, title: String, cx: &mut Context<Self>) -> Div {
         let theme = *cx.theme();
         div()
@@ -221,16 +225,12 @@ impl Viewer {
             .flex()
             .items_center()
             .pl(rems(0.5))
-            .pr(rems(0.25))
+            .pr(rems(0.5))
             .gap_1()
             .bg(theme.surface)
             .border_b(rems(0.0625))
             .border_color(theme.border)
-            .child(div().id("viewer-file-title").flex_1().min_w_0().truncate().text_color(theme.text_muted)
-                .when(self.detached && !title.is_empty(), |label| {
-                    label.native_tooltip(Tooltip::text(SharedString::from(title.clone())))
-                })
-                .child(title))
+            .child(self.render_file_title(title, cx))
             .child(self.render_display_options(cx))
             .when(!self.detached, |bar| {
                 bar.child(

@@ -189,6 +189,26 @@ pub(super) fn follow_pointer(
     }
 }
 
+/// The live pointer no longer matches the last position GPUI received.
+/// An anchored tooltip also ends as soon as the pointer leaves its source.
+fn pointer_left(view: &AnyView, parent: &Window, cx: &App) -> bool {
+    let Ok(raw) = HasWindowHandle::window_handle(parent) else { return false };
+    let Some([x, y]) = oxyde_lib::platform::platform().cursor_client_position(raw.as_raw()) else {
+        return false;
+    };
+    let scale = parent.scale_factor().max(0.1);
+    let live = point(px(x as f32 / scale), px(y as f32 / scale));
+    let anchor = view.clone().downcast::<Tooltip>().ok().and_then(|view| view.read(cx).fixed_bounds.clone());
+    if anchor.is_some_and(|bounds| !bounds.get().contains(&live)) {
+        return true;
+    }
+    let known = parent.mouse_position();
+    let tolerance = parent.rem_size();
+    !parent.is_window_hovered()
+        || (live.x - known.x).abs() > tolerance
+        || (live.y - known.y).abs() > tolerance
+}
+
 pub(super) fn hide(id: WindowId, cx: &mut App) {
     let handle = cx
         .default_global::<NativeWindows>()
@@ -309,7 +329,15 @@ pub(super) fn present(_view: &AnyView, parent: &mut Window, cx: &mut App) -> boo
                                     .windows
                                     .get(&id)
                                     .and_then(|session| session.scope.clone());
-                                let ordinary = cx.default_global::<NativeWindows>().ordinary.contains_key(&id);
+                                let view = cx.default_global::<NativeWindows>().ordinary.get(&id).cloned();
+                                let ordinary = view.is_some();
+                                // Leaving through a window edge or a non-client
+                                // area may deliver no move: GPUI keeps its tooltip.
+                                if view.is_some_and(|view| pointer_left(&view, parent, cx)) {
+                                    cx.default_global::<NativeWindows>().ordinary.remove(&id);
+                                    hide(id, cx);
+                                    return;
+                                }
                                 if !parent.is_window_active() || !parent.is_window_hovered() || (!ordinary && !scope.is_some_and(|scope| scope.valid(parent, cx))) {
                                     hide(id, cx);
                                 }

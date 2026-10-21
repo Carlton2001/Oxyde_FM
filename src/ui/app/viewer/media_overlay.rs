@@ -329,6 +329,10 @@ impl Viewer {
                     this.overlay.area = bounds;
                     cx.notify();
                 }
+                // The fullscreen poll reads the real pointer for images too;
+                // without this window it would report none and hide the chips.
+                this.overlay.scale = window.scale_factor();
+                this.overlay.owner_raw = HasWindowHandle::window_handle(window).ok().map(|raw| raw.as_raw());
                 if this.overlay.video {
                     this.place_overlay_popups(window, cx);
                 }

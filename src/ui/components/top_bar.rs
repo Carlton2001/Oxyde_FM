@@ -174,7 +174,7 @@ pub fn render_top_bar(
                     if can_go_back {
                         let p_id = pane_id.clone();
                         btn = btn
-                            .when(show_tooltips, |d| d.native_tooltip(Tooltip::with_shortcut(_cx.i18n().text(Message::Back), Some("Alt+←".into()))))
+                            .when(show_tooltips, |d| d.fixed_tooltip(Tooltip::with_shortcut(_cx.i18n().text(Message::Back), Some("Alt+←".into()))))
                             .on_mouse_down(MouseButton::Left, {
                                 let h = handle.clone();
                                 move |_, _, cx| { h.update(cx, |v: &mut OxydeApp, cx| v.go_back(&p_id, cx)); }
@@ -203,7 +203,7 @@ pub fn render_top_bar(
                     if can_go_forward {
                         let p_id = pane_id.clone();
                         btn = btn
-                            .when(show_tooltips, |d| d.native_tooltip(Tooltip::with_shortcut(_cx.i18n().text(Message::Forward), Some("Alt+→".into()))))
+                            .when(show_tooltips, |d| d.fixed_tooltip(Tooltip::with_shortcut(_cx.i18n().text(Message::Forward), Some("Alt+→".into()))))
                             .on_mouse_down(MouseButton::Left, {
                                 let h = handle.clone();
                                 move |_, _, cx| { h.update(cx, |v: &mut OxydeApp, cx| v.go_forward(&p_id, cx)); }
@@ -245,9 +245,9 @@ pub fn render_top_bar(
                     && (!matches!(action, 1 | 2) || !view.history_operation_in_progress)
                     && (!(7..=10).contains(&action) || (!view.trash_busy && (action < 9 || !active_tab.files.is_empty())));
                 let mut button = div().id(id).min_w(rems(1.5)).h_6().px(rems(0.125)).flex().items_center().justify_center().rounded_md()
-                    .when(show_tooltips && (action == 1 || action == 2), |d| d.native_tooltip(Tooltip::with_meta(_cx.i18n().text(label), tip.clone())))
-                    .when(show_tooltips && action == 6, |d| d.native_tooltip(Tooltip::for_delete(handle.clone(), pane_id.clone())))
-                    .when(show_tooltips && !matches!(action, 1 | 2 | 6 | 9 | 10), |d| d.native_tooltip(Tooltip::with_shortcut(_cx.i18n().text(label),
+                    .when(show_tooltips && (action == 1 || action == 2), |d| d.fixed_tooltip(Tooltip::with_meta(_cx.i18n().text(label), tip.clone())))
+                    .when(show_tooltips && action == 6, |d| d.fixed_tooltip(Tooltip::for_delete(handle.clone(), pane_id.clone())))
+                    .when(show_tooltips && !matches!(action, 1 | 2 | 6 | 9 | 10), |d| d.fixed_tooltip(Tooltip::with_shortcut(_cx.i18n().text(label),
                         (!tip.is_empty()).then(|| SharedString::from(tip)))));
                 if enabled {
                     let h = handle.clone();

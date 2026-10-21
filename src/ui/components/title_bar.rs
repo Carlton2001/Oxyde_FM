@@ -23,13 +23,16 @@ pub fn render_title_bar(
     let icon_color: Hsla = theme.text;
 
     let action_button = |id: &'static str, icon: &'static str, label: Message| {
+        let bounds = std::rc::Rc::new(std::cell::Cell::new(Bounds::<Pixels>::default()));
+        let measured = bounds.clone();
         div().id(id).w(rems(2.25)).h_full().flex().items_center()
-            .justify_center().flex_none()
+            .justify_center().flex_none().relative()
             .hover(move |s| s.bg(btn_hover_bg))
-            .native_tooltip(Tooltip::with_shortcut(
+            .native_tooltip(Tooltip::anchored(Tooltip::with_shortcut(
                 cx.i18n().text(label),
                 match label { Message::Refresh => Some("F5 / Ctrl+R".into()), Message::NewPanel => Some("Ctrl+N".into()), _ => None },
-            ))
+            ), bounds))
+            .child(canvas(move |rect, _, _| measured.set(rect), |_, _, _, _| {}).absolute().left_0().top_0().size_full())
             .child(svg().path(icon).size_4().text_color(icon_color))
     };
     let refresh_handle = handle.clone();
@@ -98,10 +101,12 @@ pub fn render_title_bar(
     // ── Oxyde app button (left) → opens Settings directly ───────────────────
     let h_menu = handle.clone();
     let measure_handle = handle.clone();
+    let app_bounds = std::rc::Rc::new(std::cell::Cell::new(Bounds::<Pixels>::default()));
+    let app_measured = app_bounds.clone();
     let app_button = div()
         .id("oxyde-app-btn")
         .relative()
-        .native_tooltip(Tooltip::text(cx.i18n().text(Message::SettingsTitle)))
+        .native_tooltip(Tooltip::anchored(Tooltip::text(cx.i18n().text(Message::SettingsTitle)), app_bounds.clone()))
         .h_full()
         .px_3()
         .flex()
@@ -124,6 +129,7 @@ pub fn render_title_bar(
             canvas(
                 |bounds, _, _| bounds,
                 move |_, bounds, _, cx| {
+                    app_measured.set(bounds);
                     measure_handle.update(cx, |this, _| this.settings_button_bounds = Some(bounds));
                 },
             )

@@ -1,4 +1,5 @@
 use super::Viewer;
+use crate::ui::theme::ThemeContext;
 use gpui::{prelude::*, *};
 use std::sync::Arc;
 
@@ -8,10 +9,15 @@ pub(super) struct ImageView {
     target: Bounds<Pixels>,
     drag: Option<Point<Pixels>>,
     zooming_until: Option<std::time::Instant>,
+    /// Zoom relative to the image's real size, shown briefly after a change.
+    zoom_label: Option<(u32, std::time::Instant)>,
+    /// Fullscreen and detached state of the last frame: any change restarts the zoom.
+    presentation: (bool, bool),
 }
+const ZOOM_LABEL_TIME: std::time::Duration = std::time::Duration::from_millis(1200);
 impl Default for ImageView {
     fn default() -> Self {
-        Self { scale: 1.0, offset: Point::default(), target: Bounds::default(), drag: None, zooming_until: None }
+        Self { scale: 1.0, offset: Point::default(), target: Bounds::default(), drag: None, zooming_until: None, zoom_label: None, presentation: (false, false) }
     }
 }
 impl Viewer {
@@ -40,27 +46,48 @@ impl Viewer {
         cx.notify();
     }
 
-    pub(super) fn render_interactive_image(&self, image: Arc<RenderImage>, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_interactive_image(&mut self, image: Arc<RenderImage>, fullscreen: bool, cx: &mut Context<Self>) -> AnyElement {
+        let presentation = (fullscreen, self.detached);
+        if self.image_view.presentation != presentation {
+            self.image_view = ImageView { presentation, ..ImageView::default() };
+        }
         let handle = cx.entity().downgrade();
-        let fit = if self.detached { ObjectFit::Contain } else { ObjectFit::ScaleDown };
+        let natural_width = image.size(0).width.0.max(1) as f32;
+        let zoom_label = self.image_view.zoom_label
+            .filter(|(_, until)| *until > std::time::Instant::now())
+            .map(|(percent, _)| percent);
+        let theme = *cx.theme();
+        // Only fullscreen enlarges small images; windows show them at real size.
+        let fit = if fullscreen { ObjectFit::Contain } else { ObjectFit::ScaleDown };
         let scale = self.image_view.scale;
         let offset = self.image_view.offset;
         let dragging = self.image_view.drag.is_some();
         let zooming = self.image_view.drag.is_none() && self.image_view.zooming_until.is_some_and(|until| until > std::time::Instant::now());
         div().id("viewer-image").size_full().relative().overflow_hidden()
             .when(self.image_view.drag.is_some(), |surface| surface.cursor(CursorStyle::ClosedHand))
-            .on_scroll_wheel(cx.listener(|this, event: &ScrollWheelEvent, window, cx| {
+            .on_scroll_wheel(cx.listener(move |this, event: &ScrollWheelEvent, window, cx| {
                 let view = &mut this.image_view;
                 if !view.target.contains(&event.position) || event.modifiers.control { return; }
                 let delta = event.delta.pixel_delta(window.line_height()).y.as_f32();
                 if !delta.is_finite() || delta == 0.0 { return; }
                 let next = (view.scale * (delta * 0.002).exp()).clamp(1.0, 32.0);
                 let ratio = next / view.scale;
+                let percent = (view.target.size.width.as_f32() * ratio / natural_width * 100.0).round().max(1.0) as u32;
+                view.zoom_label = Some((percent, std::time::Instant::now() + ZOOM_LABEL_TIME));
                 let center = view.target.center();
                 view.offset = anchored_offset(view.offset, event.position, center, ratio);
                 view.scale = next;
                 view.zooming_until = Some(std::time::Instant::now() + std::time::Duration::from_millis(180));
                 if next == 1.0 { view.offset = Point::default(); }
+                cx.spawn(async move |this, cx| {
+                    cx.background_executor().timer(ZOOM_LABEL_TIME).await;
+                    let _ = this.update(cx, |this, cx| {
+                        if this.image_view.zoom_label.is_some_and(|(_, until)| until <= std::time::Instant::now()) {
+                            this.image_view.zoom_label = None;
+                            cx.notify();
+                        }
+                    });
+                }).detach();
                 cx.spawn(async move |this, cx| {
                     cx.background_executor().timer(std::time::Duration::from_millis(180)).await;
                     let _ = this.update(cx, |this, cx| {
@@ -108,6 +135,12 @@ impl Viewer {
                 });
                 let _ = window.paint_image(bounds, target, Corners::default(), image.clone(), 0, false);
             }).absolute().inset_0().size_full())
+            .when_some(zoom_label, |surface, percent| {
+                surface.child(div().absolute().bottom(rems(1.0)).left_0().right_0().flex().justify_center()
+                    .child(div().px(rems(0.625)).py(rems(0.25)).rounded_md().bg(theme.surface)
+                        .border(rems(0.0625)).border_color(theme.border).text_color(theme.text)
+                        .text_size(rems(0.8125)).child(format!("{percent}%"))))
+            })
             .into_any_element()
     }
 }

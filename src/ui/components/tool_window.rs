@@ -1,3 +1,4 @@
+use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
@@ -112,7 +113,21 @@ pub(crate) fn header(
     cx: &App,
     on_close: impl Fn(&mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
-    header_frame(icon.into(), title, maximized, allow_resize, cx, None, on_close)
+    header_frame(icon.into(), title, maximized, allow_resize, cx, None, None, on_close)
+}
+
+/// A header whose title reveals its full form, such as a path, in a fixed tooltip.
+pub(crate) fn header_with_title_tooltip(
+    icon: impl Into<SharedString>,
+    title: SharedString,
+    tooltip: Option<SharedString>,
+    maximized: bool,
+    allow_resize: bool,
+    cx: &App,
+    actions: Option<AnyElement>,
+    on_close: impl Fn(&mut Window, &mut App) + 'static,
+) -> impl IntoElement {
+    header_frame(icon.into(), title, maximized, allow_resize, cx, actions, tooltip, on_close)
 }
 
 pub(crate) fn header_with_actions(
@@ -124,7 +139,7 @@ pub(crate) fn header_with_actions(
     actions: impl IntoElement,
     on_close: impl Fn(&mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
-    header_frame(icon.into(), title, maximized, allow_resize, cx, Some(actions.into_any_element()), on_close)
+    header_frame(icon.into(), title, maximized, allow_resize, cx, Some(actions.into_any_element()), None, on_close)
 }
 
 fn header_frame(
@@ -134,6 +149,7 @@ fn header_frame(
     allow_resize: bool,
     cx: &App,
     actions: Option<AnyElement>,
+    title_tooltip: Option<SharedString>,
     on_close: impl Fn(&mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
     let theme = *cx.theme();
@@ -163,7 +179,11 @@ fn header_frame(
                 .items_center()
                 .window_control_area(WindowControlArea::Drag)
                 .font_weight(FontWeight::BOLD)
-                .child(div().truncate().child(title)),
+                .child(div().id("tool-window-title").min_w_0().truncate()
+                    .when_some(title_tooltip, |title, tooltip| {
+                        title.fixed_tooltip(crate::ui::components::tooltip::Tooltip::text(tooltip))
+                    })
+                    .child(title)),
         )
         .when_some(actions, |header, actions| header.child(actions))
         .child(super::title_bar::render_window_controls_with_options(

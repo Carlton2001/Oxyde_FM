@@ -83,6 +83,19 @@ impl Tooltip {
             file_info: None, preview_view: None, fixed_bounds: Some(bounds.clone()),
         }).into()
     }
+    /// Place any plain tooltip below its source element instead of the pointer.
+    pub(crate) fn anchored(
+        builder: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
+        bounds: std::rc::Rc<std::cell::Cell<Bounds<Pixels>>>,
+    ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+        move |window, cx| {
+            let view = builder(window, cx);
+            if let Ok(tooltip) = view.clone().downcast::<Self>() {
+                tooltip.update(cx, |tooltip, _| tooltip.fixed_bounds = Some(bounds.clone()));
+            }
+            view
+        }
+    }
     pub fn for_drive(name: String, drive: oxyde_lib::models::DriveInfo) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         move |_, cx| cx.new(|_| DriveTooltip { name: name.clone().into(), drive: drive.clone() }).into()
     }
