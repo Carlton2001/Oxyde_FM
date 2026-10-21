@@ -687,8 +687,6 @@ viewer-empty = Sélectionnez un fichier dans un panneau explorateur.
 viewer-detach = Détacher la visionneuse
 viewer-detached = La visionneuse est ouverte dans une fenêtre secondaire.
 viewer-show-window = Afficher la fenêtre de la visionneuse
-viewer-previous = Fichier précédent
-viewer-next = Fichier suivant
 viewer-play = Lire
 viewer-pause = Pause
 

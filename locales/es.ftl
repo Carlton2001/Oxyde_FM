@@ -988,8 +988,6 @@ viewer-empty = Seleccione un archivo en un panel del explorador.
 viewer-detach = Separar el Visor
 viewer-detached = El Visor está abierto en una ventana secundaria.
 viewer-show-window = Mostrar la ventana del Visor
-viewer-previous = Archivo anterior
-viewer-next = Archivo siguiente
 viewer-play = Reproducir
 viewer-pause = Pausa
 

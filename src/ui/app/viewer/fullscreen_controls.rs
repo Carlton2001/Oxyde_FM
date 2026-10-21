@@ -94,6 +94,14 @@ impl Viewer {
         }));
     }
 
+    pub(super) fn fullscreen_controls_window(&self) -> Option<AnyWindowHandle> {
+        self.fullscreen_controls.window.map(Into::into)
+    }
+
+    pub(super) fn fullscreen_controls_visible(&self) -> bool {
+        self.fullscreen_controls.visible
+    }
+
     pub(super) fn close_fullscreen_controls(&mut self, cx: &mut Context<Self>) {
         let revision = self.fullscreen_controls.revision.wrapping_add(1);
         let old = std::mem::take(&mut self.fullscreen_controls);
@@ -201,23 +209,9 @@ impl Viewer {
             entity.update(cx, |this, cx| {
                 this.fullscreen_controls.pending = false;
                 match result {
-                    Ok(handle) => {
-                        this.fullscreen_controls.window = Some(handle);
-                        let _ = handle.update(cx, |_, window, _| {
-                            if let (Some(media), Ok(raw)) =
-                                (&this.media, HasWindowHandle::window_handle(window))
-                            {
-                                if let Some(id) = oxyde_lib::platform::platform()
-                                    .viewer_media_parent(raw.as_raw())
-                                {
-                                    if let Ok(mut command) = media.control.command.lock() {
-                                        command.controls = id;
-                                        media.control.wake();
-                                    }
-                                }
-                            }
-                        });
-                    }
+                    // The bar stacks itself above the surface (`place_viewer_overlay`);
+                    // the worker never restacks its surface over the overlays.
+                    Ok(handle) => this.fullscreen_controls.window = Some(handle),
                     Err(error) => log::error!("Cannot open fullscreen playback controls: {error}"),
                 }
                 cx.notify();
@@ -266,7 +260,7 @@ impl Render for ControlsWindow {
                 root.opacity(progress).relative().top(rems((1.0 - progress) * 0.375))
                     .child(canvas(|_, _, _| (), move |_, _, _, cx| {
                         if let Some(raw) = raw { cx.defer(move |_| {
-                            if let Err(error) = oxyde_lib::platform::platform().place_viewer_controls(raw, owner, rect, visible || progress > 0.01) {
+                            if let Err(error) = oxyde_lib::platform::platform().place_viewer_overlay(raw, owner, rect, visible || progress > 0.01) {
                                 log::warn!("Cannot place fullscreen playback controls: {error}");
                             }
                         }); }
@@ -275,7 +269,7 @@ impl Render for ControlsWindow {
     }
 }
 
-fn draw_controls(handle: AnyWindowHandle, cx: &mut App) {
+pub(super) fn draw_controls(handle: AnyWindowHandle, cx: &mut App) {
     let _ = handle.update(cx, |_, window, cx| {
         window.refresh();
         // As with native menus, initialize input only after open_window returns.

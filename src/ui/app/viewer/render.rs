@@ -36,6 +36,36 @@ pub(super) fn icon_button(
         )
 }
 
+/// Toolbar button with the explorer navigation bar's metrics.
+pub(super) fn bar_button(
+    id: &'static str,
+    icon: &'static str,
+    label: Option<SharedString>,
+    tooltip: SharedString,
+    active: bool,
+    cx: &App,
+) -> Stateful<Div> {
+    let theme = *cx.theme();
+    div()
+        .id(id)
+        .flex_none()
+        .min_w(rems(1.5))
+        .h_6()
+        .px(rems(0.125))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded_md()
+        .text_color(theme.text)
+        .when(active, |button| button.bg(theme.control_hover))
+        .hover(move |style| style.bg(theme.control_hover))
+        .native_tooltip(Tooltip::text(tooltip))
+        .child(svg().path(icon).size_4().text_color(theme.text))
+        .when_some(label, |button, label| {
+            button.px(rems(0.375)).gap(rems(0.375)).text_size(rems(0.8125)).child(label)
+        })
+}
+
 impl Render for Viewer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // A shared Viewer may be drawn by both windows. Only the secondary window
@@ -69,7 +99,8 @@ impl Render for Viewer {
             .as_ref()
             .is_some_and(|media| media.control.status() == oxyde_lib::platform::MEDIA_FAILED);
         self.enable_fullscreen_controls(window.is_fullscreen() && self.native_media && !self.audio && !failed && !self.blocked, cx);
-        let current = self.files.get(self.index);
+        let overlay = self.render_overlay(window, failed, cx);
+        let current = self.file.as_ref();
         let title = current.map(|file| {
             if self.detached { file.path.clone() } else { file.name.clone() }
         }).unwrap_or_default();
@@ -82,13 +113,19 @@ impl Render for Viewer {
             .flex()
             .flex_col()
             .bg(theme.active_background)
-            .when(window.is_fullscreen() && self.native_media && !self.audio, |surface| surface.bg(rgb(0x000000)))
+            .when(window.is_fullscreen(), |surface| surface.bg(rgb(0x000000)))
             .text_color(theme.text)
             .text_size(rems(0.8125))
             .track_focus(&self.focus)
             .key_context("Viewer")
             .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _, cx| {
                 this.controls_pointer_moved(event.position, cx);
+                this.overlay_pointer_moved(Some(event.position), cx);
+            }))
+            .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
+                if !*hovered {
+                    this.overlay_pointer_moved(None, cx);
+                }
             }))
             .on_mouse_down(
                 MouseButton::Left,
@@ -120,6 +157,11 @@ impl Render for Viewer {
                     .w_full()
                     .relative()
                     .on_mouse_down(MouseButton::Left, cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                        // Every press in an edge band skips, so quick clicks never toggle fullscreen.
+                        if this.overlay_click(event.position, cx) {
+                            cx.stop_propagation();
+                            return;
+                        }
                         if event.click_count == 2 && (matches!(this.content, super::content::Content::Image(_)) || (this.native_media && !this.audio)) {
                             this.toggle_preview_fullscreen(window, cx);
                             cx.stop_propagation();
@@ -162,7 +204,8 @@ impl Render for Viewer {
                                 })
                             }
                         },
-                    )),
+                    ))
+                    .child(overlay),
             );
         surface.into_any_element()
     }
@@ -177,8 +220,9 @@ impl Viewer {
             .flex_none()
             .flex()
             .items_center()
-            .px(rems(0.5))
-            .gap(rems(0.5))
+            .pl(rems(0.5))
+            .pr(rems(0.25))
+            .gap_1()
             .bg(theme.surface)
             .border_b(rems(0.0625))
             .border_color(theme.border)
@@ -187,69 +231,20 @@ impl Viewer {
                     label.native_tooltip(Tooltip::text(SharedString::from(title.clone())))
                 })
                 .child(title))
-            .child(self.render_navigation(cx))
             .child(self.render_display_options(cx))
             .when(!self.detached, |bar| {
                 bar.child(
-                    icon_button(
+                    bar_button(
                         "viewer-detach",
                         "icons/external-link.svg",
-                        Message::ViewerDetach,
-                        true,
+                        None,
+                        cx.i18n().text(Message::ViewerDetach),
+                        false,
                         cx,
                     )
                     .on_click(cx.listener(|this, _, window, cx| this.detach(window, cx))),
                 )
             })
-    }
-
-    fn render_navigation(&self, cx: &mut Context<Self>) -> Div {
-        let theme = *cx.theme();
-        let has_previous = self.index > 0;
-        let has_next = self.index + 1 < self.files.len();
-        div()
-            .flex_none()
-            .flex()
-            .items_center()
-            .child(
-                div()
-                    .flex_none()
-                    .flex()
-                    .items_center()
-                    .gap(rems(0.25))
-                    .when(self.files.len() > 1, |controls| {
-                        controls
-                            .child(icon_button(
-                                "viewer-previous",
-                                "icons/chevron-left.svg",
-                                Message::ViewerPrevious,
-                                has_previous,
-                                cx,
-                            )
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                if has_previous {
-                                    this.step(false, cx);
-                                }
-                            })))
-                            .child(div().text_color(theme.text_muted).child(format!(
-                                "{} / {}",
-                                self.index + 1,
-                                self.files.len()
-                            )))
-                            .child(icon_button(
-                                "viewer-next",
-                                "icons/chevron-right.svg",
-                                Message::ViewerNext,
-                                has_next,
-                                cx,
-                            )
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                if has_next {
-                                    this.step(true, cx);
-                                }
-                            })))
-                    }),
-            )
     }
 
     fn render_detached(&self, cx: &mut Context<Self>) -> Div {

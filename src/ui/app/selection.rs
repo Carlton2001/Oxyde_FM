@@ -42,24 +42,31 @@ impl OxydeApp {
         let Some(index) = arrow_target(&file_rows, current, key) else { return; };
         let path = tab.filtered_files()[index].path.clone();
         self.toggle_selection(&pane_id, path.clone(), false, shift, cx);
-        if let Some(pane) = self.state.find_pane_mut(&pane_id) {
-            let tab = pane.active_tab_mut();
-            let mut top = 0.0;
-            for row in &rows {
-                let height = crate::ui::date_groups::row_height(row, grid);
-                if matches!(row, DisplayRow::Files(indices) if indices.contains(&index)) {
-                    let handle = &tab.list_scroll.0.borrow().base_handle;
-                    let offset = handle.offset();
-                    let viewport = handle.bounds().size.height.as_f32().max(1.0);
-                    let visible_top = -offset.y.as_f32();
-                    let target = if top < visible_top { top }
-                        else if top + height > visible_top + viewport { (top + height - viewport).max(0.0) }
-                        else { visible_top };
-                    handle.set_offset(point(offset.x, px(-target)));
-                    break;
-                }
-                top += height;
+        if let Some(pane) = self.state.find_pane(&pane_id) {
+            scroll_row_into_view(pane.active_tab(), &rows, index);
+        }
+    }
+
+    /// The Viewer skips media by selecting it alone in its source pane.
+    pub(crate) fn select_viewer_file(&mut self, tab_id: &str, path: String, cx: &mut Context<Self>) {
+        use crate::ui::date_groups::display_rows;
+        let mut pane_id = None;
+        self.state.layout.visit_panes(&mut |pane| {
+            if pane.active_tab().id == tab_id {
+                pane_id = Some(pane.id.clone());
             }
+        });
+        let Some(pane_id) = pane_id else { return; };
+        self.toggle_selection(&pane_id, path.clone(), false, false, cx);
+        let width = self.list_bounds.get(&pane_id).map_or(self.list_width, |bounds| bounds.size.width);
+        if let Some(pane) = self.state.find_pane(&pane_id) {
+            let tab = pane.active_tab();
+            let Some(index) = tab.filtered_files().iter().position(|file| file.path == path) else { return; };
+            let columns = if tab.view_mode == ViewMode::Grid {
+                crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::zed_track_width()).columns
+            } else { 1 };
+            let rows = display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, columns);
+            scroll_row_into_view(tab, &rows, index);
         }
     }
 
@@ -273,6 +280,28 @@ fn rectangle_selection(
         initial.union(&covered).cloned().collect()
     } else {
         covered
+    }
+}
+
+/// Scrolls the least distance that shows the row holding `index`.
+fn scroll_row_into_view(tab: &crate::ui::workspace::TabState, rows: &[crate::ui::date_groups::DisplayRow], index: usize) {
+    use crate::ui::date_groups::DisplayRow;
+    let grid = tab.view_mode == ViewMode::Grid;
+    let mut top = 0.0;
+    for row in rows {
+        let height = crate::ui::date_groups::row_height(row, grid);
+        if matches!(row, DisplayRow::Files(indices) if indices.contains(&index)) {
+            let handle = &tab.list_scroll.0.borrow().base_handle;
+            let offset = handle.offset();
+            let viewport = handle.bounds().size.height.as_f32().max(1.0);
+            let visible_top = -offset.y.as_f32();
+            let target = if top < visible_top { top }
+                else if top + height > visible_top + viewport { (top + height - viewport).max(0.0) }
+                else { visible_top };
+            handle.set_offset(point(offset.x, px(-target)));
+            break;
+        }
+        top += height;
     }
 }
 

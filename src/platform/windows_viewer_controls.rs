@@ -33,6 +33,7 @@ pub(super) fn place(
     owner: RawWindowHandle,
     rect: [i32; 4],
     visible: bool,
+    above_surface: bool,
 ) -> Result<(), String> {
     let (RawWindowHandle::Win32(window), RawWindowHandle::Win32(owner)) = (window, owner) else {
         return Err("Expected Win32 playback windows".into());
@@ -43,7 +44,11 @@ pub(super) fn place(
         if !IsWindow(Some(owner)).as_bool() {
             return Ok(());
         }
-        if GetWindow(window, GW_OWNER).ok() != Some(owner) {
+        // Overlays over the video are owned by its surface: Windows then keeps
+        // them above it whatever the worker or an activation restacks.
+        let surface = if above_surface { media_surface(owner) } else { None };
+        let initialized = GetWindowLongPtrW(window, GWL_EXSTYLE) as u32 & WS_EX_NOACTIVATE.0 != 0;
+        if !initialized {
             super::windows_window_owner::set_owner(window, owner)?;
             let style = GetWindowLongPtrW(window, GWL_EXSTYLE) as u32;
             SetWindowLongPtrW(
@@ -60,14 +65,16 @@ pub(super) fn place(
                 ((style | WS_POPUP.0)
                     & !(WS_CAPTION.0 | WS_THICKFRAME.0 | WS_BORDER.0 | WS_DLGFRAME.0)) as isize,
             );
+            // GPUI PopUp windows are created topmost. Ownership alone keeps
+            // them above the surface, and other applications may cover both.
             let _ = SetWindowPos(
                 window,
-                None,
+                Some(HWND_NOTOPMOST),
                 0,
                 0,
                 0,
                 0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED,
             );
             if !SetWindowSubclass(window, Some(controls_proc), SUBCLASS, 0).as_bool() {
                 return Err("Cannot configure playback controls".into());
@@ -83,11 +90,11 @@ pub(super) fn place(
                 std::mem::size_of_val(&DWMNCRP_DISABLED) as u32,
             );
         }
-        let foreground = GetForegroundWindow();
-        let active = foreground == owner
-            || GetAncestor(foreground, GA_ROOTOWNER) == GetAncestor(owner, GA_ROOTOWNER);
+        let wanted = surface.unwrap_or(owner);
+        if GetWindow(window, GW_OWNER).ok() != Some(wanted) {
+            super::windows_window_owner::set_owner(window, wanted)?;
+        }
         if !visible
-            || !active
             || !IsWindowVisible(owner).as_bool()
             || IsIconic(owner).as_bool()
             || !windows::Win32::UI::Input::KeyboardAndMouse::IsWindowEnabled(owner).as_bool()
@@ -117,6 +124,60 @@ pub(super) fn place(
         }
     }
     Ok(())
+}
+
+/// The worker's video popups owned by `owner`, found by their class.
+fn media_surfaces(owner: HWND) -> Vec<HWND> {
+    let mut surfaces = Vec::new();
+    let mut previous = None;
+    while let Ok(surface) =
+        unsafe { FindWindowExW(None, previous, windows::core::w!("OxydeMediaSurface"), None) }
+    {
+        if unsafe { GetWindow(surface, GW_OWNER) }.ok() == Some(owner) {
+            surfaces.push(surface);
+        }
+        previous = Some(surface);
+    }
+    surfaces
+}
+
+fn media_surface(owner: HWND) -> Option<HWND> {
+    media_surfaces(owner).into_iter().find(|surface| unsafe { IsWindowVisible(*surface) }.as_bool())
+}
+
+/// Before a surface is destroyed, its overlays return to the UI window:
+/// Windows destroys owned windows with their owner.
+pub(super) fn release_overlays(owner: RawWindowHandle) {
+    let RawWindowHandle::Win32(owner) = owner else { return };
+    let owner = HWND(owner.hwnd.get() as *mut _);
+    for surface in media_surfaces(owner) {
+        let mut owned: Vec<HWND> = Vec::new();
+        unsafe extern "system" fn collect(window: HWND, data: LPARAM) -> windows::core::BOOL {
+            let (surface, owned) = unsafe { &mut *(data.0 as *mut (HWND, &mut Vec<HWND>)) };
+            if unsafe { GetWindow(window, GW_OWNER) }.ok() == Some(*surface) {
+                owned.push(window);
+            }
+            true.into()
+        }
+        let mut data = (surface, &mut owned);
+        let _ = unsafe { EnumWindows(Some(collect), LPARAM(&mut data as *mut _ as isize)) };
+        for window in owned {
+            unsafe {
+                let _ = ShowWindow(window, SW_HIDE);
+            }
+            let _ = super::windows_window_owner::set_owner(window, owner);
+        }
+    }
+}
+
+pub(super) fn cursor_client_position(handle: RawWindowHandle) -> Option<[i32; 2]> {
+    let RawWindowHandle::Win32(handle) = handle else { return None };
+    let window = HWND(handle.hwnd.get() as *mut _);
+    let mut point = POINT::default();
+    unsafe {
+        GetCursorPos(&mut point).ok()?;
+        windows::Win32::Graphics::Gdi::ScreenToClient(window, &mut point).as_bool().then_some([point.x, point.y])
+    }
 }
 
 #[cfg(test)]

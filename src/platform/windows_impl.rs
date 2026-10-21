@@ -12,7 +12,16 @@ impl WindowsPlatform {
 
 impl Platform for WindowsPlatform {
     fn place_viewer_controls(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, rect: [i32; 4], visible: bool) -> Result<(), String> {
-        super::windows_viewer_controls::place(window, owner, rect, visible)
+        super::windows_viewer_controls::place(window, owner, rect, visible, false)
+    }
+    fn place_viewer_overlay(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, rect: [i32; 4], visible: bool) -> Result<(), String> {
+        super::windows_viewer_controls::place(window, owner, rect, visible, true)
+    }
+    fn release_viewer_overlays(&self, owner: raw_window_handle::RawWindowHandle) {
+        super::windows_viewer_controls::release_overlays(owner)
+    }
+    fn cursor_client_position(&self, handle: raw_window_handle::RawWindowHandle) -> Option<[i32; 2]> {
+        super::windows_viewer_controls::cursor_client_position(handle)
     }
     fn viewer_image_cursor(&self, handle: raw_window_handle::RawWindowHandle, zooming: bool, dragging: bool) {
         if let raw_window_handle::RawWindowHandle::Win32(handle) = handle {

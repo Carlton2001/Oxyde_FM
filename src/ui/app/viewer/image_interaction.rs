@@ -31,6 +31,7 @@ impl Viewer {
 
     pub(super) fn exit_fullscreen(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.fullscreen_temporary {
+            super::media_overlay::release_surface_overlays(window);
             crate::ui::components::tool_window::close_transients(window, cx);
             window.remove_window();
         } else {
@@ -101,7 +102,10 @@ impl Viewer {
                 let base = fit.get_bounds(bounds, image.size(0));
                 let dimensions = size(base.size.width * scale, base.size.height * scale);
                 let target = Bounds::new(base.center() - point(dimensions.width / 2.0, dimensions.height / 2.0) + offset, dimensions);
-                let _ = handle.update(cx, |this, _| this.image_view.target = target);
+                let _ = handle.update(cx, |this, cx| {
+                    this.image_view.target = target;
+                    this.set_overlay_media(target, cx);
+                });
                 let _ = window.paint_image(bounds, target, Corners::default(), image.clone(), 0, false);
             }).absolute().inset_0().size_full())
             .into_any_element()

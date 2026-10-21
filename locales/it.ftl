@@ -988,8 +988,6 @@ viewer-empty = Seleziona un file in un pannello esplora risorse.
 viewer-detach = Scollega il Visualizzatore
 viewer-detached = Il Visualizzatore è aperto in una finestra secondaria.
 viewer-show-window = Mostra la finestra del Visualizzatore
-viewer-previous = File precedente
-viewer-next = File successivo
 viewer-play = Riproduci
 viewer-pause = Pausa
 

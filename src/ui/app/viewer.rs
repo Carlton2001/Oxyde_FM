@@ -4,6 +4,7 @@ mod audio;
 mod content_render;
 mod media;
 mod media_bar;
+mod media_overlay;
 mod video_layout;
 mod fullscreen_controls;
 mod markdown;
@@ -24,7 +25,17 @@ use std::{collections::HashSet, sync::Arc};
 struct Source {
     tab: String,
     selected: Arc<HashSet<String>>,
+    /// Keyboard cursor, then anchor: the selected file the Viewer shows.
+    focus: Option<String>,
     files: Arc<Vec<FileEntry>>,
+}
+
+/// The shown file and the nearest media of the same kind on each side.
+#[derive(Default)]
+struct Resolved {
+    file: Option<FileEntry>,
+    previous: Option<String>,
+    next: Option<String>,
 }
 
 pub(crate) struct Viewer {
@@ -33,8 +44,9 @@ pub(crate) struct Viewer {
     #[cfg_attr(not(test), allow(dead_code))]
     tab_id: String,
     source: Source,
-    files: Vec<FileEntry>,
-    index: usize,
+    file: Option<FileEntry>,
+    /// Same-kind media around the file in the source pane, for skipping.
+    neighbors: (Option<String>, Option<String>),
     content: content::Content,
     markdown_rendered: bool,
     syntax_highlighting: bool,
@@ -59,6 +71,7 @@ pub(crate) struct Viewer {
     fullscreen_temporary: bool,
     image_view: image_interaction::ImageView,
     fullscreen_controls: fullscreen_controls::Controls,
+    overlay: media_overlay::Overlay,
     detached_window: Option<WindowHandle<window::ViewerWindow>>,
     blocked: bool,
     focus: FocusHandle,
@@ -79,6 +92,7 @@ impl OxydeApp {
         for viewer in self.viewers.values() {
             viewer.update(cx, |viewer, cx| {
                 viewer.close_fullscreen_controls(cx);
+                viewer.close_overlay(cx);
                 viewer.media = None;
                 viewer.preparation = None;
                 viewer.loading = None;
@@ -147,6 +161,7 @@ impl OxydeApp {
             } else {
                 viewer.update(cx, |viewer, cx| {
                     viewer.close_fullscreen_controls(cx);
+                viewer.close_overlay(cx);
                     viewer.media = None;
                     viewer.loading = None;
                     // Closing frees the GPU textures of its image or PDF pages.
@@ -185,17 +200,31 @@ impl Source {
     fn same_revision(&self, other: &Self) -> bool {
         self.tab == other.tab
             && Arc::ptr_eq(&self.selected, &other.selected)
+            && self.focus == other.focus
             && Arc::ptr_eq(&self.files, &other.files)
     }
-    fn selected_files(&self) -> Vec<FileEntry> {
+    /// A multiple selection shows its focused file, else the first in explorer order.
+    fn resolve(&self) -> Resolved {
         if self.selected.is_empty() {
-            return Vec::new();
+            return Resolved::default();
         }
-        self.files
-            .iter()
-            .filter(|file| self.selected.contains(&file.path))
-            .cloned()
-            .collect()
+        let index = self
+            .focus
+            .as_ref()
+            .filter(|path| self.selected.contains(*path))
+            .and_then(|path| self.files.iter().position(|file| &file.path == path))
+            .or_else(|| self.files.iter().position(|file| self.selected.contains(&file.path)));
+        let Some(index) = index else {
+            return Resolved::default();
+        };
+        let file = self.files[index].clone();
+        let kind = media_overlay::media_kind(&file);
+        let same = |candidate: &&FileEntry| kind.is_some() && media_overlay::media_kind(candidate) == kind;
+        Resolved {
+            previous: self.files[..index].iter().rev().find(same).map(|file| file.path.clone()),
+            next: self.files[index + 1..].iter().find(same).map(|file| file.path.clone()),
+            file: Some(file),
+        }
     }
     fn capture(owner: &OxydeApp, previous: &Source) -> Self {
         let from_tab = |tab: &crate::ui::workspace::TabState| Self {
@@ -205,6 +234,8 @@ impl Source {
             } else {
                 Arc::new(tab.selected_paths.clone())
             },
+            focus: tab.keyboard_cursor.clone().filter(|path| tab.selected_paths.contains(path))
+                .or_else(|| tab.selection_anchor.clone()),
             files: tab.cached_filtered_files.clone(),
         };
         let mut tab = owner
@@ -266,8 +297,8 @@ impl Viewer {
             owner: owner.downgrade(),
             tab_id,
             source: Source::default(),
-            files: Vec::new(),
-            index: 0,
+            file: None,
+            neighbors: (None, None),
             content: content::Content::None,
             markdown_rendered,
             syntax_highlighting,
@@ -288,6 +319,7 @@ impl Viewer {
             fullscreen_temporary: false,
             image_view: Default::default(),
             fullscreen_controls: Default::default(),
+            overlay: Default::default(),
             detached_window: None,
             blocked: false,
             focus: cx.focus_handle(),
@@ -304,80 +336,61 @@ impl Viewer {
         }
         self.preparation = None;
         if source.selected.is_empty() || source.files.len() <= 1024 {
-            let files = source.selected_files();
+            let resolved = source.resolve();
             self.source = source;
-            self.publish_files(files, cx);
+            self.publish(resolved, cx);
             return;
         }
         // A large directory scan must not block selection or playback controls.
-        let retained = self
-            .files
-            .get(self.index)
-            .filter(|file| source.selected.contains(&file.path))
-            .cloned();
-        self.files = retained.into_iter().collect();
-        self.index = 0;
-        if self.files.is_empty() {
+        if !self.file.as_ref().is_some_and(|file| source.selected.contains(&file.path)) {
+            self.file = None;
+            self.neighbors = (None, None);
             self.load_current(cx);
         }
         self.source = source.clone();
         let expected = source.clone();
-        let work = cx
-            .background_executor()
-            .spawn(async move { source.selected_files() });
+        let work = cx.background_executor().spawn(async move { source.resolve() });
         self.preparation = Some(cx.spawn(async move |this, cx| {
-            let files = work.await;
+            let resolved = work.await;
             let _ = this.update(cx, |this, cx| {
                 if !this.source.same_revision(&expected) {
                     return;
                 }
                 this.preparation = None;
-                this.publish_files(files, cx);
+                this.publish(resolved, cx);
                 cx.notify();
             });
         }));
     }
 
-    fn publish_files(&mut self, files: Vec<FileEntry>, cx: &mut Context<Self>) {
-        let old = self.files.get(self.index).cloned();
-        self.files = files;
-        self.index = old
-            .as_ref()
-            .and_then(|old| self.files.iter().position(|file| file.path == old.path))
-            .unwrap_or(0);
-        let unchanged = old
-            .as_ref()
-            .zip(self.files.get(self.index))
-            .is_some_and(|(old, file)| {
-                old.path == file.path
-                    && old.content_stamp == file.content_stamp
-                    && old.modified == file.modified
-                    && old.size == file.size
-            });
+    fn publish(&mut self, resolved: Resolved, cx: &mut Context<Self>) {
+        let unchanged = self.file.as_ref().zip(resolved.file.as_ref()).is_some_and(|(old, file)| {
+            old.path == file.path
+                && old.content_stamp == file.content_stamp
+                && old.modified == file.modified
+                && old.size == file.size
+        });
+        self.file = resolved.file;
+        self.neighbors = (resolved.previous, resolved.next);
         if !unchanged {
             self.load_current(cx);
         }
     }
 
+    /// Skips to the neighboring media of the same kind by selecting it in the
+    /// source pane; the Viewer then follows that selection.
     fn step(&mut self, forward: bool, cx: &mut Context<Self>) {
-        if self.files.len() < 2 {
+        let target = if forward { &self.neighbors.1 } else { &self.neighbors.0 };
+        let (Some(path), Some(owner)) = (target.clone(), self.owner.upgrade()) else {
             return;
-        }
-        let next = if forward {
-            (self.index + 1).min(self.files.len() - 1)
-        } else {
-            self.index.saturating_sub(1)
         };
-        if next == self.index {
-            return;
-        }
-        self.index = next;
-        self.load_current(cx);
-        cx.notify();
+        let tab = self.source.tab.clone();
+        owner.update(cx, |app, cx| app.select_viewer_file(&tab, path, cx));
     }
 
     fn load_current(&mut self, cx: &mut Context<Self>) {
         self.close_fullscreen_controls(cx);
+        // Overlay popups survive skipping, so the pointer can rest on an arrow.
         self.image_view = Default::default();
         self.generation += 1;
         self.wanted.store(self.generation, std::sync::atomic::Ordering::Release);
@@ -387,7 +400,7 @@ impl Viewer {
         self.resume = None;
         self.native_media = false;
         self.audio = false;
-        let image = self.files.get(self.index).is_some_and(|file| {
+        let image = self.file.as_ref().is_some_and(|file| {
             !file.is_dir
                 && file.archive_path.is_none()
                 && crate::ui::components::icons::get_preview_type(&file.name)
@@ -396,7 +409,7 @@ impl Viewer {
         if !image {
             release_image_decoder(cx);
         }
-        let Some(file) = self.files.get(self.index) else {
+        let Some(file) = self.file.as_ref() else {
             return;
         };
         if file.is_dir || file.archive_path.is_some() {

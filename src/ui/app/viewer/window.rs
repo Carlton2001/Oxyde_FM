@@ -16,6 +16,7 @@ pub(crate) fn close_viewer_windows(cx: &mut App) {
         if let Some(handle) = handle.downcast::<ViewerWindow>() {
             let _ = handle.update(cx, |view, window, cx| {
                 view.viewer.update(cx, |viewer, _| viewer.media = None);
+                super::media_overlay::release_surface_overlays(window);
                 tool_window::close_transients(window, cx);
                 window.remove_window();
             });
@@ -75,6 +76,7 @@ impl Viewer {
                             let _ = weak_viewer.update(cx, |viewer, cx| {
                                 viewer.fullscreen_pending = false;
                                 viewer.close_fullscreen_controls(cx);
+                                viewer.close_overlay(cx);
                                 viewer.fullscreen_temporary = false;
                                 viewer.detached = false;
                                 viewer.detached_window = None;
@@ -99,6 +101,7 @@ impl Viewer {
                         }
                         tool_window::install_icon("icons/eye.svg", window);
                         window.on_window_should_close(cx, |window, cx| {
+                            super::media_overlay::release_surface_overlays(window);
                             tool_window::close_transients(window, cx);
                             true
                         });
@@ -145,6 +148,7 @@ impl Render for ViewerWindow {
             .flex_col()
             .min_h_0()
             .bg(theme.active_background)
+            .when(window.is_fullscreen(), |root| root.bg(rgb(0x000000)))
             .text_color(theme.text)
             .font_weight(FontWeight::NORMAL)
             .text_size(rems(0.8125))
@@ -155,6 +159,7 @@ impl Render for ViewerWindow {
                 true,
                 cx,
                 |window, cx| {
+                    super::media_overlay::release_surface_overlays(window);
                     tool_window::close_transients(window, cx);
                     window.remove_window();
                 },

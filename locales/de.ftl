@@ -988,8 +988,6 @@ viewer-empty = Wählen Sie eine Datei in einem Explorer-Bereich aus.
 viewer-detach = Dateibetrachter abdocken
 viewer-detached = Der Dateibetrachter ist in einem separaten Fenster geöffnet.
 viewer-show-window = Dateibetrachter-Fenster anzeigen
-viewer-previous = Vorherige Datei
-viewer-next = Nächste Datei
 viewer-play = Wiedergabe
 viewer-pause = Pause
 

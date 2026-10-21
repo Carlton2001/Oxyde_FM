@@ -22,9 +22,12 @@ sens ; les zones de division déplacent le Viewer avec son propre panneau.
 La session restaure cet onglet sans lancer de listing ni de surveillance sur
 son emplacement interne.
 
-`app/viewer` suit la sélection du dernier onglet explorateur actif, dans l’ordre
-de sa liste, et conserve le fichier courant s’il reste sélectionné. Précédent /
-suivant (ou les flèches) parcourent une sélection multiple. Sans sélection,
+`app/viewer` suit la sélection du dernier onglet explorateur actif et affiche un
+seul fichier : celui du curseur clavier (ou de l’ancre) s’il est sélectionné,
+sinon le premier de la sélection dans l’ordre de la liste. Sur une image ou une
+vidéo, les flèches latérales (ou ← / →) passent au média précédent ou suivant
+du même type dans la liste du panneau source, qui le sélectionne seul et le
+fait défiler en vue ; le Viewer suit alors cette sélection. Sans sélection,
 l’aperçu et le lecteur sont libérés. La préparation des grandes listes se fait
 en arrière-plan ; une révision de source écarte les résultats obsolètes.
 Le Viewer ouvre le fichier complet (`app/viewer/content`) : image en pleine
@@ -114,8 +117,9 @@ puis l’analyse entre événements et portions ; un appel du parseur ou de Synt
 en cours n’est pas préempté. Changer de mode invalide les tâches précédentes et
 libère leurs textures ; les images décodées après un changement ne sont pas publiées.
 La barre d’outils en haut du Viewer, à la hauteur de la barre de navigation
-de l’explorateur, contient le nom du fichier, la navigation dans la sélection
-et le bouton de détachement. Le Viewer n’a pas de barre de statut.
+de l’explorateur et avec ses métriques (boutons de 1,5 rem, icônes de 1 rem,
+espacement de 0,25 rem, marges 0,5 / 0,25 rem), contient le nom du fichier,
+les options d’affichage et le bouton de détachement. Le Viewer n’a pas de barre de statut.
 Le panneau intégré affiche le nom seul ; la fenêtre secondaire affiche le chemin
 complet, avec une infobulle permettant de le lire s’il est tronqué. Le chargement
 du Viewer utilise « Chargement du fichier… », distinct de celui des aperçus.
@@ -213,7 +217,38 @@ Viewer. Linux conserve un message d’aperçu indisponible pour audio/vidéo ; c
 lecteur natif n’y est pas implémenté.
 
 Le double clic dans un aperçu image ou vidéo bascule le plein écran ; Échap
-le quitte. Depuis le panneau intégré, une fenêtre temporaire accueille le
+le quitte. Au survol du média, un bouton `maximize-2` apparaît dans son coin
+supérieur droit, remplacé par `minimize-2` (sortie) en plein écran ; le fond du
+plein écran est toujours noir ; près des bords gauche et droit de la
+zone de contenu, les flèches précédent / suivant apparaissent s’il existe un
+média voisin du même type, dans le panneau, la fenêtre secondaire et le plein
+écran. Ils utilisent le fondu du bouton de retour en haut (`motion::presence`).
+`app/viewer/media_overlay` les dessine dans le Viewer pour les images ; pour la
+vidéo, placée au-dessus de la composition GPUI, ce sont des popups GPUI
+transparentes possédées et sans activation, comme la barre plein écran, créées
+au premier survol, conservées d’un fichier à l’autre (un pointeur immobile sur
+une flèche permet d’enchaîner les sauts) et retirées au changement de fenêtre.
+Comme la barre plein écran, elles sont possédées par la surface vidéo visible
+(retrouvée par sa classe `OxydeMediaSurface`) : Windows les garde au-dessus
+d’elle quel que soit le réordonnancement. GPUI crée ses PopUp en topmost ; ce
+statut leur est retiré, si bien qu’elles restent visibles même quand Oxyde n’est
+pas au premier plan, sans recouvrir les autres applications. Une HWND masquée ne
+reçoit pas de `WM_PAINT` et c’est leur rendu qui les place : une commande à
+afficher dont la popup est masquée (fin de fondu, changement de surface) est
+donc redessinée de force, comme la barre plein écran. Avant la destruction de la surface
+(fin de session, fermeture de fenêtre ou sortie du plein écran temporaire), elles
+reviennent à la fenêtre GPUI. La classe de la surface déclare le curseur flèche,
+qui remplace celui d’un séparateur survolé juste avant.
+En plein écran, le bouton de sortie apparaît au moindre mouvement et s’efface
+après deux secondes d’immobilité, sauf sous le pointeur. Un clic n’importe où
+dans la bande latérale d’une flèche saute au média voisin, comme dans les
+visionneuses de photothèques ; ces clics ne basculent jamais le plein écran. Le survol transmis par la surface ne signale pas la sortie
+de la fenêtre : la position réelle du pointeur est relue toutes les 100 ms, et
+les commandes restent visibles tant qu’il demeure dans leur zone. Le survol d’une
+popup ne sert qu’à relancer ce suivi : son événement de sortie peut manquer, et
+chaque commande se trouve dans sa propre zone.
+Les infobulles et aperçus de survol réutilisés passent au sommet de leur
+famille de fenêtres possédées à chaque apparition, au-dessus de cette surface. Depuis le panneau intégré, une fenêtre temporaire accueille le
 plein écran et restitue le contenu au panneau à sa fermeture. Une fenêtre
 secondaire existante conserve son rôle à la sortie du plein écran.
 La molette sur les pixels d’une image zoome autour du pointeur (de 1 à 32 fois

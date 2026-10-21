@@ -48,7 +48,7 @@ impl Viewer {
         };
         let value = |keys: &[&str]| audio.and_then(|audio| audio.value(keys));
         let title = value(&["TrackTitle"])
-            .or_else(|| self.files.get(self.index).map(|file| file.name.as_str()))
+            .or_else(|| self.file.as_ref().map(|file| file.name.as_str()))
             .unwrap_or("—");
         let track = match (value(&["TrackNumber"]), value(&["TrackTotal"])) {
             (Some(number), Some(total)) => format!("{number} / {total}"),

@@ -80,7 +80,7 @@ fn block(block: &Block, cx: &App) -> AnyElement {
 impl Viewer {
     pub(super) fn render_unavailable_file(&self, cx: &mut Context<Self>) -> AnyElement {
         let owner = self.owner.clone();
-        let file = self.files.get(self.index).cloned();
+        let file = self.file.clone();
         let source_tab = self.source.tab.clone();
         div().size_full().flex().flex_col().items_center().justify_center()
             .gap(rems(1.0)).p(rems(1.0))
@@ -117,7 +117,7 @@ impl Viewer {
             Content::None if self.preparation.is_some() => {
                 message(cx.i18n().text(Message::ViewerLoading), cx)
             }
-            Content::None if self.files.get(self.index).is_none() => {
+            Content::None if self.file.as_ref().is_none() => {
                 message(cx.i18n().text(Message::ViewerEmpty), cx)
             }
             Content::None | Content::Unavailable => {
@@ -134,7 +134,7 @@ impl Viewer {
                 use super::text::{ROW_HEIGHT, TEXT_PADDING, TEXT_SIZE};
                 let rows = text.rows();
                 let highlighting = self.syntax_highlighting
-                    && !self.files.get(self.index).is_some_and(|file| super::markdown::is_markdown(&file.path));
+                    && !self.file.as_ref().is_some_and(|file| super::markdown::is_markdown(&file.path));
                 let gutter = text.gutter_width();
                 let body = list(text.list.clone(), move |index, _, cx| {
                     div()

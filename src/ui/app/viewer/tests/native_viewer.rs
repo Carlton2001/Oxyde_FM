@@ -24,14 +24,8 @@ fn stage(
             if step == 0 {
                 check(
                     &failures,
-                    viewer.read(cx).files.len() == 2,
-                    "initial multi-selection missing",
-                );
-                viewer.update(cx, |viewer, cx| viewer.step(true, cx));
-                check(
-                    &failures,
-                    viewer.read(cx).index == 1,
-                    "next file did not advance",
+                    viewer.read(cx).file.as_ref().is_some_and(|file| file.path == "first.unknown"),
+                    "multi-selection did not show its first file",
                 );
                 let mut refreshed = viewer.read(cx).source.clone();
                 let mut refreshed_files = refreshed.files.as_ref().clone();
@@ -46,9 +40,9 @@ fn stage(
                     &failures,
                     viewer
                         .read(cx)
-                        .files
-                        .first()
-                        .is_some_and(|file| file.path == "second.unknown"),
+                        .file
+                        .as_ref()
+                        .is_some_and(|file| file.path == "first.unknown"),
                     "large listing refresh lost the current selected file",
                 );
                 // Queue a large obsolete selection before the real explorer change.
@@ -56,6 +50,7 @@ fn stage(
                 let stale = Source {
                     tab: "obsolete-source".into(),
                     selected: Arc::new(["obsolete-0.unknown".into()].into()),
+                    focus: None,
                     files: Arc::new(
                         (0..2048)
                             .map(|index| oxyde_lib::models::FileEntry {
@@ -80,8 +75,8 @@ fn stage(
             } else if step == 1 {
                 check(
                     &failures,
-                    viewer.read(cx).files.len() == 1 && viewer.read(cx).index == 0,
-                    "live selection did not replace the sequence",
+                    viewer.read(cx).file.as_ref().is_some_and(|file| file.path == "second.unknown"),
+                    "live selection did not replace the file",
                 );
                 viewer.update(cx, |viewer, cx| viewer.detach(window, cx));
             } else if step == 2 {
@@ -136,8 +131,8 @@ fn stage(
                     &failures,
                     viewer
                         .read(cx)
-                        .files
-                        .first()
+                        .file
+                        .as_ref()
                         .is_some_and(|file| file.path == "first.unknown"),
                     "detached Viewer stopped following selection",
                 );

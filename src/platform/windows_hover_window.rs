@@ -522,15 +522,19 @@ fn place_now(window: HWND, size: Option<(f32, f32, f32)>, scale: f32) -> Result<
         {
             return Ok(());
         }
+        // A reused hover keeps its creation rank among the owner's popups;
+        // raise it when shown so a later native surface (Viewer video) is below.
+        let showing = !IsWindowVisible(window).as_bool();
         SetWindowPos(
             window,
-            None,
+            showing.then_some(HWND_TOP),
             x,
             y,
             width,
             height,
             SWP_NOACTIVATE
-                | SWP_NOZORDER
+                | SWP_NOOWNERZORDER
+                | if showing { SET_WINDOW_POS_FLAGS(0) } else { SWP_NOZORDER }
                 | SWP_SHOWWINDOW
                 | if current.right - current.left == width && current.bottom - current.top == height
                 {

@@ -110,6 +110,12 @@ pub trait Platform: Send + Sync {
     fn viewer_media_parent(&self, _handle: raw_window_handle::RawWindowHandle) -> Option<u64> { None }
     /// Place a nonactivating playback overlay in physical owner-client coordinates.
     fn place_viewer_controls(&self, _window: raw_window_handle::RawWindowHandle, _owner: raw_window_handle::RawWindowHandle, _rect: [i32; 4], _visible: bool) -> Result<(), String> { Ok(()) }
+    /// Like `place_viewer_controls`, stacked directly above the owner's video surface.
+    fn place_viewer_overlay(&self, _window: raw_window_handle::RawWindowHandle, _owner: raw_window_handle::RawWindowHandle, _rect: [i32; 4], _visible: bool) -> Result<(), String> { Ok(()) }
+    /// Hand overlays owned by the video surfaces of `owner` back to it.
+    fn release_viewer_overlays(&self, _owner: raw_window_handle::RawWindowHandle) {}
+    /// The pointer in physical client coordinates of a window, even outside it.
+    fn cursor_client_position(&self, _handle: raw_window_handle::RawWindowHandle) -> Option<[i32; 2]> { None }
     /// Blocking native session. Call only on a background worker; cancellation stops its process.
     fn play_viewer_media(&self, _path: &std::path::Path, _control: &ViewerMediaControl) -> std::io::Result<()> {
         Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Native media playback unavailable"))

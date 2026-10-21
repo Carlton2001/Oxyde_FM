@@ -284,6 +284,9 @@ fn surface_class() -> io::Result<windows::core::PCWSTR> {
     let description = WNDCLASSW {
         lpfnWndProc: Some(surface_proc),
         hInstance: instance.into(),
+        // Without a class cursor, the last cursor shown (such as the pane
+        // splitter's) would stay over the video.
+        hCursor: unsafe { LoadCursorW(None, IDC_ARROW) }.unwrap_or_default(),
         lpszClassName: class,
         ..Default::default()
     };

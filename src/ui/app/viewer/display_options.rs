@@ -1,10 +1,5 @@
-use super::{content::Content, markdown::is_markdown, Viewer};
-use crate::ui::{
-    components::tooltip::Tooltip,
-    elements::button::toolbar_button_with_tooltip,
-    i18n::{I18nContext, Message},
-    theme::ThemeContext,
-};
+use super::{content::Content, markdown::is_markdown, render::bar_button, Viewer};
+use crate::ui::i18n::{I18nContext, Message};
 use gpui::{prelude::*, *};
 
 impl Viewer {
@@ -29,8 +24,8 @@ impl Viewer {
     ) {
         let reload = self.markdown_rendered != rendered
             && self
-                .files
-                .get(self.index)
+                .file
+                .as_ref()
                 .is_some_and(|file| is_markdown(&file.path));
         self.markdown_rendered = rendered;
         self.syntax_highlighting = highlighting;
@@ -71,37 +66,32 @@ impl Viewer {
         markdown: bool,
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
-        toolbar_button_with_tooltip(
-            id.into(),
-            Tooltip::text(cx.i18n().text(target)),
-            Some(icon),
-            Some(cx.i18n().text(label).to_string()),
-            *cx.theme(),
-            true,
-            cx.listener(move |this, _, _, cx| this.toggle_display(markdown, cx)),
+        bar_button(
+            id,
+            icon,
+            Some(cx.i18n().text(label)),
+            cx.i18n().text(target),
+            !markdown && self.syntax_highlighting,
+            cx,
         )
-        .w_auto()
-        .px(rems(0.375))
-        .gap(rems(0.375))
-        .text_size(rems(0.8125))
-        .when(!markdown && self.syntax_highlighting, |button| button.bg(cx.theme().control_hover))
+        .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, _, cx| this.toggle_display(markdown, cx)))
     }
 
     pub(super) fn render_display_options(&self, cx: &mut Context<Self>) -> Div {
-        let markdown = self.files.get(self.index).is_some_and(|file| is_markdown(&file.path));
-        div().flex().flex_none().items_center().gap(rems(0.25))
+        let markdown = self.file.as_ref().is_some_and(|file| is_markdown(&file.path));
+        div().flex().flex_none().items_center().gap_1()
             .when(self.native_media, |bar| {
-                bar.child(toolbar_button_with_tooltip(
-                    "viewer-autoplay".into(),
-                    Tooltip::text(cx.i18n().text(if self.media_autoplay {
+                bar.child(bar_button(
+                    "viewer-autoplay",
+                    "icons/play.svg",
+                    Some(cx.i18n().text(Message::ViewerAutoplay)),
+                    cx.i18n().text(if self.media_autoplay {
                         Message::ViewerDisableAutoplay
-                    } else { Message::ViewerEnableAutoplay })),
-                    Some("icons/play.svg"),
-                    Some(cx.i18n().text(Message::ViewerAutoplay).to_string()),
-                    *cx.theme(), true,
-                    cx.listener(|this, _, _, cx| this.toggle_autoplay(cx)),
-                ).w_auto().px(rems(0.375)).gap(rems(0.375)).text_size(rems(0.8125))
-                    .when(self.media_autoplay, |button| button.bg(cx.theme().control_hover)))
+                    } else { Message::ViewerEnableAutoplay }),
+                    self.media_autoplay,
+                    cx,
+                )
+                .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.toggle_autoplay(cx))))
             })
             .when(markdown, |bar| {
                 let (icon, label, target) = if self.markdown_rendered {

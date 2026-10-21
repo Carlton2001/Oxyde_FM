@@ -16,6 +16,13 @@ pub(super) struct MediaSession {
 mod visibility_tests;
 impl Drop for MediaSession {
     fn drop(&mut self) {
+        // Overlays owned by the surface must not be destroyed with it.
+        let parent = self.control.command.lock().map(|command| command.parent).unwrap_or(0);
+        if let Some(parent) = std::num::NonZeroIsize::new(parent as isize) {
+            oxyde_lib::platform::platform().release_viewer_overlays(
+                raw_window_handle::RawWindowHandle::Win32(raw_window_handle::Win32WindowHandle::new(parent)),
+            );
+        }
         self.control.cancel();
         self.cancellation.cancel();
     }
@@ -59,6 +66,9 @@ impl Viewer {
         cx: &mut Context<Self>,
     ) {
         let bounds = bounds.intersect(&window.content_mask().bounds);
+        if !self.audio {
+            self.set_overlay_media(bounds, cx);
+        }
         use raw_window_handle::HasWindowHandle;
         let Some(parent) = HasWindowHandle::window_handle(window)
             .ok()
@@ -87,7 +97,7 @@ impl Viewer {
         ]
         .map(|value| value.round() as i32);
         if self.media.is_none() {
-            let Some(path) = self.files.get(self.index).map(|file| file.path.clone()) else {
+            let Some(path) = self.file.as_ref().map(|file| file.path.clone()) else {
                 return;
             };
             let control = Arc::new(ViewerMediaControl::default());
