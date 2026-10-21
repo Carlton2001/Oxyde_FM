@@ -22,7 +22,6 @@ mod delete_shortcuts;
 
 #[derive(Clone)]
 pub enum IconName {
-    ChartBar,
     Separator,
     ListOrdered,
     SquareDashedMousePointer,
@@ -454,7 +453,6 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                                     IconName::HardDrive => {
                                                                         "icons/hard-drive.svg"
                                                                     }
-                                                                    IconName::ChartBar => "icons/chart-bar.svg",
                                                                     IconName::Undo => "icons/undo-2.svg",
                                                                     IconName::Redo => "icons/redo-2.svg",
                                                                     IconName::Copy => {

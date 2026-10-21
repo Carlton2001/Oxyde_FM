@@ -270,7 +270,7 @@ impl AdvancedSearchWindow {
             bottom_padding: 0.0,
             open_left: false,
             hovered_item: None,
-            native_request_id: None,
+            native_request_id: None, open_up: false,
         });
         cx.notify();
     }

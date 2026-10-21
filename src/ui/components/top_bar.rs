@@ -663,7 +663,7 @@ pub fn render_top_bar(
                                             content: crate::ui::app::ContextMenuContent::Items(items, None),
                                             scroll_handle: UniformListScrollHandle::new(),
                                             width: px(0.0), bottom_padding: 3.0, open_left: false,
-                                            hovered_item: None, native_request_id: None,
+                                            hovered_item: None, native_request_id: None, open_up: false,
                                         });
                                         cx.notify();
                                     });

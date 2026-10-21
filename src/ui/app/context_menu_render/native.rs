@@ -245,7 +245,7 @@ impl OxydeApp {
                                                                 position: new_pos,
                                                                 open_left,
                                                                 hovered_item: None,
-                                                                native_request_id: None,
+                                                                native_request_id: None, open_up: false,
                                                                 content: ContextMenuContent::NativeItems {
                                                                     path: path_cap,
                                                                     is_background: is_bg_cap,

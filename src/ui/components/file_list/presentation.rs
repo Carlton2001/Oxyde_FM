@@ -21,7 +21,7 @@ pub(super) fn grouping_button(pane_id: &str, enabled: bool, handle: Entity<Oxyde
         div().id(SharedString::from(format!("grouping-{pane_id}"))),
         theme, ButtonVariant::Ghost, true,
     )
-        .relative().size(rems(1.5)).flex_none().flex().items_center().justify_center().rounded_md()
+        .relative().h(rems(1.5)).px(rems(0.25)).gap(rems(0.125)).flex_none().flex().items_center().justify_center().rounded_md()
         .bg(if enabled { theme.selected } else { theme.header })
         .fixed_tooltip(move |window, cx| {
             use crate::ui::date_groups::GroupMode;
@@ -58,10 +58,30 @@ pub(super) fn grouping_button(pane_id: &str, enabled: bool, handle: Entity<Oxyde
         .on_mouse_up(MouseButton::Right, |_, _, cx| cx.stop_propagation())
         .child(canvas(|bounds, _, _| bounds, move |_, bounds, _, cx| {
             anchor_handle.update(cx, |view, _| {
-                view.context_anchor_points.insert(anchor_key.clone(), point(bounds.left(), bounds.bottom()));
+                view.context_anchor_points.insert(anchor_key.clone(), point(bounds.left(), bounds.top()));
             });
         }).absolute().left_0().top_0().size_full())
         .child(svg().path("icons/layers.svg").size(rems(1.0)).text_color(if enabled { theme.accent } else { theme.text }))
+        .child(crate::ui::elements::button::menu_chevron(true, if enabled { theme.accent } else { theme.text_muted }))
+}
+
+pub(super) fn sizes_button(pane_id: &str, active: bool, handle: Entity<OxydeApp>, theme: OxydeTheme, cx: &mut Context<OxydeApp>) -> impl IntoElement {
+    let pane_id = pane_id.to_string();
+    button_style(
+        div().id(SharedString::from(format!("sizes-{pane_id}"))),
+        theme, ButtonVariant::Ghost, true,
+    )
+        .size(rems(1.5)).flex_none().flex().items_center().justify_center().rounded_md()
+        .bg(if active { theme.selected } else { theme.header })
+        .fixed_tooltip(Tooltip::text(cx.i18n().text(Message::ToolSizes)))
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+            cx.stop_propagation();
+            handle.update(cx, |view, cx| {
+                view.state.active_pane_id = pane_id.clone();
+                view.calculate_sizes(cx);
+            });
+        })
+        .child(svg().path("icons/chart-bar.svg").size(rems(1.0)).text_color(if active { theme.accent } else { theme.text }))
 }
 
 /// Returns the display type label for a file entry.

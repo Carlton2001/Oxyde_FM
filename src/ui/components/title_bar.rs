@@ -53,7 +53,9 @@ pub fn render_title_bar(
         });
     let tools_handle = handle.clone();
     let tools_measure_handle = handle.clone();
-    let tools = action_button("title-tools", "icons/wrench.svg", Message::Tools)
+    let tools = action_button("title-tools", "icons/search.svg", Message::Tools)
+        .w_auto().px(rems(0.5)).gap(rems(0.125))
+        .child(crate::ui::elements::button::menu_chevron(false, theme.text_muted))
         .relative()
         .child(canvas(|bounds, _, _| bounds, move |_, bounds, _, cx| {
             tools_measure_handle.update(cx, |view, _| view.tools_button_bounds = Some(bounds));
@@ -64,13 +66,10 @@ pub fn render_title_bar(
                 let Some(bounds) = view.tools_button_bounds else { return; };
                 use crate::ui::app::{ContextMenuContent, ContextMenuInstance};
                 use crate::ui::components::dropdown::DropdownItem;
-                let items = [Message::ToolSizes, Message::ToolSearch, Message::ToolDuplicates]
+                let items = [Message::ToolSearch, Message::ToolDuplicates]
                     .into_iter().map(|message| {
                         let search_handle = tools_handle.clone();
                         let mut item = DropdownItem::new(cx.i18n().text(message).to_string(), move |window, cx| {
-                            if message == Message::ToolSizes {
-                                search_handle.update(cx, |view, cx| view.calculate_sizes(cx));
-                            }
                             if message == Message::ToolDuplicates {
                                 search_handle.update(cx, |view, cx| view.open_duplicates(window, cx));
                             }
@@ -80,7 +79,6 @@ pub fn render_title_bar(
                         });
                         if message == Message::ToolSearch { item.icon = Some(crate::ui::components::dropdown::IconName::Search); }
                         if message == Message::ToolDuplicates { item.icon = Some(crate::ui::components::dropdown::IconName::Copy); }
-                        if message == Message::ToolSizes { item.icon = Some(crate::ui::components::dropdown::IconName::ChartBar); }
                         item
                     }).collect();
                 view.settings_open = false;
@@ -91,7 +89,7 @@ pub fn render_title_bar(
                     content: ContextMenuContent::Items(items, None),
                     scroll_handle: UniformListScrollHandle::new(),
                     width: px(0.0), bottom_padding: 0.0, open_left: true,
-                    hovered_item: None, native_request_id: None,
+                    hovered_item: None, native_request_id: None, open_up: false,
                 });
                 view.mark_menu_owner("title-tools");
                 cx.notify();

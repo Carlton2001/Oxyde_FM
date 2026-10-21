@@ -27,7 +27,7 @@ impl OxydeApp {
                     let row = crate::ui::components::popup::row_bounds(window_handle, format!("context-menu-{parent_index}"), parent.hovered_item?, cx)?;
                     let bounds = parent.native_bounds.unwrap_or(row);
                     Some(crate::ui::components::popup::PopupAnchor::beside(Bounds::new(point(bounds.left(), row.top()), size(bounds.size.width, row.size.height)), false))
-                }).unwrap_or_else(|| crate::ui::components::popup::PopupAnchor::point(instance.position, instance.open_left))
+                }).unwrap_or_else(|| crate::ui::components::popup::PopupAnchor::point(instance.position, instance.open_left).above(instance.open_up))
                     .parent(if let Some(parent_index) = index.checked_sub(1) {
                         crate::ui::components::popup::surface(window_handle, format!("context-menu-{parent_index}"), cx)
                     } else if self.sidebar_collapsed && self.pinned_rail_open {
@@ -88,7 +88,13 @@ impl OxydeApp {
                 ),
             };
 
-            root = root.child(deferred(if instance.open_left {
+            root = root.child(deferred(if instance.open_up {
+                anchored()
+                    .position(pos)
+                    .anchor(Anchor::BottomLeft)
+                    .snap_to_window()
+                    .child(content_element)
+            } else if instance.open_left {
                 // Snap (no corner-switch) so the submenu extends left from parent_left
                 anchored()
                     .position(pos)

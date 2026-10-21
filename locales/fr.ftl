@@ -233,7 +233,7 @@ settings-clear-cache = Effacer le cache
 settings-reset-preferences = Réinitialiser les préférences
 
 title-new-panel = Nouveau panneau à droite
-title-tools = Outils
+title-tools = Recherche
 tool-sizes = Calculer les tailles
 tool-search = Recherche avancée
 quick-search = Recherche rapide

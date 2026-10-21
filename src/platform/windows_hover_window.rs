@@ -30,7 +30,7 @@ thread_local! {
     // Coalesce pointer requests without entering GPUI through synchronous
     // WM_MOVE/WM_SIZE callbacks while its App/Window is already borrowed.
     static PENDING: RefCell<HashMap<isize, Placement>> = RefCell::new(HashMap::new());
-    static ANCHORS: RefCell<HashMap<isize, ((f32, f32, f32, f32), bool, bool)>> = RefCell::new(HashMap::new());
+    static ANCHORS: RefCell<HashMap<isize, ((f32, f32, f32, f32), bool, bool, bool)>> = RefCell::new(HashMap::new());
     static MENUS: RefCell<HashSet<isize>> = RefCell::new(HashSet::new());
     static COORDINATE_OWNERS: RefCell<HashMap<isize, isize>> = RefCell::new(HashMap::new());
     static INSETS: RefCell<HashMap<isize, f32>> = RefCell::new(HashMap::new());
@@ -91,7 +91,7 @@ unsafe extern "system" fn owner_subclass(
                 if matches!(message, WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN | WM_XBUTTONDOWN) {
                     let anchor =
                         ANCHORS.with(|anchors| anchors.borrow().get(&(menu.0 as isize)).copied());
-                    if let Some(((x, y, width, height), _, _)) = anchor {
+                    if let Some(((x, y, width, height), ..)) = anchor {
                         let reference = COORDINATE_OWNERS
                             .with(|owners| owners.borrow().get(&(menu.0 as isize)).copied())
                             .unwrap_or(window.0 as isize);
@@ -197,11 +197,22 @@ pub(super) fn work_area_size(handle: RawWindowHandle) -> Result<(f32, f32), Stri
     }
 }
 
+#[cfg(test)]
 pub(super) fn set_anchor(
     handle: RawWindowHandle,
     bounds: Option<(f32, f32, f32, f32)>,
     open_left: bool,
     beside: bool,
+) -> Result<(), String> {
+    set_anchor_with(handle, bounds, open_left, beside, false)
+}
+
+pub(super) fn set_anchor_with(
+    handle: RawWindowHandle,
+    bounds: Option<(f32, f32, f32, f32)>,
+    open_left: bool,
+    beside: bool,
+    above: bool,
 ) -> Result<(), String> {
     if bounds.is_some_and(|(x, y, w, h)| {
         ![x, y, w, h].into_iter().all(f32::is_finite) || w < 0.0 || h < 0.0
@@ -212,7 +223,7 @@ pub(super) fn set_anchor(
     ANCHORS.with(|anchors| {
         let mut anchors = anchors.borrow_mut();
         if let Some(bounds) = bounds {
-            anchors.insert(window.0 as isize, (bounds, open_left, beside));
+            anchors.insert(window.0 as isize, (bounds, open_left, beside, above));
         } else {
             anchors.remove(&(window.0 as isize));
         }
@@ -438,7 +449,7 @@ fn place_now(window: HWND, size: Option<(f32, f32, f32)>, scale: f32) -> Result<
         let anchor = ANCHORS.with(|anchors| anchors.borrow().get(&(window.0 as isize)).copied());
         let mut anchor_top = cursor.y;
         let mut anchor_width = 0;
-        if let Some(((x, y, width, height), _, _)) = anchor {
+        if let Some(((x, y, width, height), ..)) = anchor {
             let owner = COORDINATE_OWNERS
                 .with(|owners| owners.borrow().get(&(window.0 as isize)).copied())
                 .map(|owner| HWND(owner as *mut _))
@@ -468,8 +479,8 @@ fn place_now(window: HWND, size: Option<(f32, f32, f32)>, scale: f32) -> Result<
         let work = info.rcWork;
         let width = ((width * scale).ceil() as i32).clamp(1, (work.right - work.left).max(1));
         let height = ((height * scale).ceil() as i32).clamp(1, (work.bottom - work.top).max(1));
-        let gap = (if let Some(((.., height), _, _)) = anchor {
-            if height > 0.0 {
+        let gap = (if let Some(((.., height), _, _, above)) = anchor {
+            if height > 0.0 || above {
                 4.0
             } else {
                 0.0
@@ -479,7 +490,7 @@ fn place_now(window: HWND, size: Option<(f32, f32, f32)>, scale: f32) -> Result<
         } * scale)
             .round() as i32;
         let inset = (inset * scale).round() as i32;
-        let (x, y) = if let Some((_, open_left, beside)) = anchor {
+        let (x, y) = if let Some((_, open_left, beside, above)) = anchor {
             let x = if beside {
                 if open_left || cursor.x + anchor_width - inset + width > work.right {
                     cursor.x - width + inset
@@ -493,7 +504,7 @@ fn place_now(window: HWND, size: Option<(f32, f32, f32)>, scale: f32) -> Result<
             };
             let y = if beside {
                 anchor_top - inset
-            } else if cursor.y + gap - inset + height <= work.bottom {
+            } else if !above && cursor.y + gap - inset + height <= work.bottom {
                 cursor.y + gap - inset
             } else {
                 anchor_top - gap - height + inset

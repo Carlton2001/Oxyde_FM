@@ -102,7 +102,7 @@ fn place(root: &NativeTooltip, window: &Window, cx: &App) {
         let anchor = root.view.as_ref().and_then(|view| view.clone().downcast::<Tooltip>().ok())
             .and_then(|view| view.read(cx).fixed_bounds.clone());
         let anchor = anchor.map(|bounds| { let bounds = bounds.get(); (bounds.left().as_f32(), bounds.top().as_f32(), bounds.size.width.as_f32(), bounds.size.height.as_f32()) });
-        let _ = oxyde_lib::platform::platform().set_popup_anchor(raw.as_raw(), anchor, false, false);
+        let _ = oxyde_lib::platform::platform().set_popup_anchor(raw.as_raw(), anchor, false, false, false);
         let size = root.view.as_ref().map(|_| {
             let measured = visible_size(root.measured, window.rem_size());
             (

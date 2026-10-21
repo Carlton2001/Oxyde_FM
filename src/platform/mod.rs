@@ -586,7 +586,8 @@ pub trait Platform: Send + Sync {
     fn place_hover_window(&self, window: raw_window_handle::RawWindowHandle, size: Option<(f32, f32, f32)>, scale: f32) -> Result<(), String>;
 
     /// Set a fixed owner-client anchor (x, y, width, height), or follow the cursor.
-    fn set_popup_anchor(&self, window: raw_window_handle::RawWindowHandle, bounds: Option<(f32, f32, f32, f32)>, open_left: bool, beside: bool) -> Result<(), String>;
+    /// `above` always opens a non-beside popup over the anchor top.
+    fn set_popup_anchor(&self, window: raw_window_handle::RawWindowHandle, bounds: Option<(f32, f32, f32, f32)>, open_left: bool, beside: bool, above: bool) -> Result<(), String>;
 
     /// Own a fixed dialog, disable its owner while shown and keep it centered
     /// over the owner. UI thread only; Win32 work is deferred to the message loop.

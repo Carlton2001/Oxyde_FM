@@ -76,5 +76,6 @@ fn grouping_menu(
         open_left,
         hovered_item: None,
         native_request_id: None,
+        open_up: true,
     }
 }

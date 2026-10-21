@@ -2,7 +2,7 @@ use super::group_header::render as group_header;
 use crate::ui::app::GroupSelection;
 use crate::ui::components::tooltip::NativeTooltipExt;
 use super::grid_card::{render_grid_card, GridCardParams};
-use super::presentation::{grouping_button, view_mode_button};
+use super::presentation::{grouping_button, sizes_button, view_mode_button};
 use super::status_bar_height;
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, DragTarget, OxydeApp};
 use crate::ui::components::{with_grid_sort, pane_context_menu_items};
@@ -130,7 +130,7 @@ pub(super) fn render_grid_file_list(
                             bottom_padding: 0.0,
                             open_left: false,
                             hovered_item: None,
-                            native_request_id: None,
+                            native_request_id: None, open_up: false,
                         });
                         cx.notify();
                     });
@@ -382,7 +382,7 @@ pub(super) fn render_grid_file_list(
                             bottom_padding: 0.0,
                             open_left: false,
                             hovered_item: None,
-                            native_request_id: None,
+                            native_request_id: None, open_up: false,
                         });
                         cx.notify();
                     });
@@ -503,6 +503,8 @@ pub(super) fn render_grid_file_list(
                     )
                 })
                 .child(div().flex_1())
+                .child(sizes_button(&pane_id, tab.show_size_histogram, handle.clone(), theme, cx))
+                .child(div().flex_none().w(rems(0.0625)).h(rems(1.0)).bg(theme.border))
                 .child(grouping_button(&pane_id, tab.is_grouped(), handle.clone(), theme))
                 .child(div().flex_none().w(rems(0.0625)).h(rems(1.0)).bg(theme.border))
                 .child(view_mode_button(

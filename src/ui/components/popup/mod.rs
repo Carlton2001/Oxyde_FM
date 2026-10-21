@@ -17,6 +17,7 @@ pub(crate) struct PopupAnchor {
     pub bounds: Bounds<Pixels>,
     pub open_left: bool,
     pub beside: bool,
+    pub above: bool,
     pub parent: Option<AnyWindowHandle>,
 }
 #[cfg(target_os = "windows")]
@@ -26,6 +27,7 @@ impl PopupAnchor {
             bounds: Bounds::new(position, size(px(0.0), px(0.0))),
             open_left,
             beside: false,
+            above: false,
             parent: None,
         }
     }
@@ -34,6 +36,7 @@ impl PopupAnchor {
             bounds,
             open_left: false,
             beside: false,
+            above: false,
             parent: None,
         }
     }
@@ -42,8 +45,13 @@ impl PopupAnchor {
             bounds,
             open_left,
             beside: true,
+            above: false,
             parent: None,
         }
+    }
+    pub(crate) fn above(mut self, above: bool) -> Self {
+        self.above = above;
+        self
     }
     pub(crate) fn parent(mut self, parent: Option<AnyWindowHandle>) -> Self {
         self.parent = parent;

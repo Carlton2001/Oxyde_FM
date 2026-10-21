@@ -124,7 +124,7 @@ pub(super) fn render_sidebar_rows(
                                     bottom_padding: 3.0,
                                     open_left: false,
                                     hovered_item: None,
-                                    native_request_id: None,
+                                    native_request_id: None, open_up: false,
                                 });
                                 cx.notify();
                             });
@@ -246,7 +246,7 @@ pub(super) fn render_sidebar_rows(
                                     bottom_padding: 3.0,
                                     open_left: false,
                                     hovered_item: None,
-                                    native_request_id: None,
+                                    native_request_id: None, open_up: false,
                                 });
                                 cx.notify();
                             });
@@ -376,7 +376,7 @@ pub(super) fn render_sidebar_rows(
                                     bottom_padding: 3.0,
                                     open_left: false,
                                     hovered_item: None,
-                                    native_request_id: None,
+                                    native_request_id: None, open_up: false,
                                 });
                                 cx.notify();
                             });

@@ -535,6 +535,7 @@ fn position(root: &MenuWindow, window: &Window) {
             )),
             root.spec.anchor.open_left,
             root.spec.anchor.beside,
+            root.spec.anchor.above,
         );
         if let Some(measured) = root.measured {
             let _ = platform.place_hover_window(

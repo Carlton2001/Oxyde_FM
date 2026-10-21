@@ -3,7 +3,7 @@ use crate::ui::app::GroupSelection;
 use crate::ui::components::tooltip::NativeTooltipExt;
 use super::details_row::{render_details_row, DetailsRowParams};
 use super::headers::render_headers;
-use super::presentation::{grouping_button, view_mode_button};
+use super::presentation::{grouping_button, sizes_button, view_mode_button};
 use super::status_bar_height;
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, DragTarget, FileDragData, OxydeApp};
 use crate::ui::components::{with_grid_sort, pane_context_menu_items};
@@ -574,6 +574,8 @@ pub(super) fn render_details_file_list(
                     )
             })
             .child(div().flex_1())
+            .child(sizes_button(&pane_id, active_tab.show_size_histogram, handle.clone(), theme, cx))
+            .child(div().flex_none().w(rems(0.0625)).h(rems(1.0)).bg(theme.border))
             .child(grouping_button(&pane_id, active_tab.is_grouped(), handle.clone(), theme))
             .child(div().flex_none().w(rems(0.0625)).h(rems(1.0)).bg(theme.border))
             .child(view_mode_button(
@@ -619,7 +621,7 @@ fn background_menu(handle: Entity<OxydeApp>, pane_id: String) -> impl Fn(&MouseD
                 bottom_padding: 0.0,
                 open_left: false,
                 hovered_item: None,
-                native_request_id: None,
+                native_request_id: None, open_up: false,
             });
             cx.notify();
         });

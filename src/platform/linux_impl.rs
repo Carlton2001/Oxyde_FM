@@ -746,7 +746,7 @@ impl Platform for LinuxPlatform {
         Err("Native hover windows are unavailable on this platform".into())
     }
 
-    fn set_popup_anchor(&self, _window: raw_window_handle::RawWindowHandle, _bounds: Option<(f32, f32, f32, f32)>, _open_left: bool, beside: bool) -> Result<(), String> {
+    fn set_popup_anchor(&self, _window: raw_window_handle::RawWindowHandle, _bounds: Option<(f32, f32, f32, f32)>, _open_left: bool, beside: bool, _above: bool) -> Result<(), String> {
         Err("Native popup anchors are unavailable on this platform".into())
     }
 

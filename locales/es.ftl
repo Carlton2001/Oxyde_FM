@@ -396,7 +396,7 @@ settings-reset-preferences = Restablecer preferencias
 
 title-new-panel = Nuevo panel a la derecha
 
-title-tools = Herramientas
+title-tools = Búsqueda
 
 tool-sizes = Calcular tamaños
 

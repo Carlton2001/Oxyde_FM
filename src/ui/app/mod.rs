@@ -167,6 +167,8 @@ pub struct ContextMenuInstance {
     pub bottom_padding: f32,
     /// If true, the menu opens to the LEFT of its anchor (use Anchor::TopRight).
     pub open_left: bool,
+    /// Opens above `position` instead of below it.
+    pub open_up: bool,
     pub hovered_item: Option<usize>,
     /// Request token for an in-flight native submenu; stale replies are discarded.
     pub native_request_id: Option<u64>,

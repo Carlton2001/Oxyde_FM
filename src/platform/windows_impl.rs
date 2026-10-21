@@ -843,8 +843,8 @@ impl Platform for WindowsPlatform {
         super::windows_hover_window::place(window, size, scale)
     }
 
-    fn set_popup_anchor(&self, window: raw_window_handle::RawWindowHandle, bounds: Option<(f32, f32, f32, f32)>, open_left: bool, beside: bool) -> Result<(), String> {
-        super::windows_hover_window::set_anchor(window, bounds, open_left, beside)
+    fn set_popup_anchor(&self, window: raw_window_handle::RawWindowHandle, bounds: Option<(f32, f32, f32, f32)>, open_left: bool, beside: bool, above: bool) -> Result<(), String> {
+        super::windows_hover_window::set_anchor_with(window, bounds, open_left, beside, above)
     }
 
     fn configure_fixed_dialog(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle) -> Result<(), String> {

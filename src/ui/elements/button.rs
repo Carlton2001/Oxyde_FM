@@ -3,6 +3,12 @@ mod toolbar;
 pub(crate) use toolbar::toolbar_button_with_tooltip;
 pub use style::{button_style, ButtonVariant};
 
+/// Mini chevron signalant qu’un bouton icône ouvre un menu, orienté vers son ouverture.
+pub(crate) fn menu_chevron(up: bool, color: gpui::Hsla) -> gpui::Svg {
+    use gpui::{rems, svg, Styled};
+    svg().path(if up { "icons/chevron-up.svg" } else { "icons/chevron-down.svg" }).size(rems(0.625)).flex_none().text_color(color)
+}
+
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;

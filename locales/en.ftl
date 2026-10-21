@@ -227,7 +227,7 @@ settings-clear-cache = Clear cache
 settings-reset-preferences = Reset preferences
 
 title-new-panel = New panel on the right
-title-tools = Tools
+title-tools = Search
 tool-sizes = Calculate sizes
 tool-search = Advanced search
 quick-search = Quick search
