@@ -20,6 +20,15 @@ pour l'exécutable, l'Explorateur, la barre des tâches et l'installateur.
 Ces deux fichiers générés sont conservés dans Git. Chaque taille est rendue
 depuis le SVG ; les icônes spécifiques des workers restent indépendantes.
 
+Les curseurs du Viewer (`assets/cursors/search.cur` et `hand-grab.cur`, 32 à
+96 pixels) proviennent des SVG Lucide `search` et `hand-grab`, teintés en blanc
+sans modifier leur tracé. Ils sont conservés dans Git ; les régénérer avec
+Node.js et `sharp` (`npm install --no-save sharp`) :
+
+```powershell
+node scripts/generate-viewer-cursors.cjs
+```
+
 ## Construction de la distribution
 
 Construire avec Rust MSVC x64 et les Build Tools Visual C++. Installer une fois

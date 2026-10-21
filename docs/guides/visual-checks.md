@@ -22,6 +22,14 @@ cargo run --offline --example prepare_archive_isolation_visual
 
 Le générateur crée un dossier neuf dans `target/` avec sources, références, archives normales et témoins de refus. Utiliser exclusivement ces copies. Pour les mutations, vérifier les octets/noms/dossiers vides ; après déplacement, seules les sources confirmées doivent disparaître. Une archive avec chemin interdit ne doit rien publier hors destination.
 
+Pour les refus de sécurité (aperçus aux limites ou corrompus, archives hostiles, déplacements, export, corbeille, cache indisponible), générer des fixtures inertes avec Python, sans dépendance :
+
+```powershell
+python -I scripts/prepare-security-visual-check.py
+```
+
+Le script crée `target/security-visual-check-*` sans rien écraser ni extraire. Pour le scénario « cache indisponible », construire `oxyde`, puis lancer `python -I scripts/prepare-security-visual-check.py --launch-cache-unavailable target/security-visual-check-<id>` : seul ce processus reçoit le `TEMP` privé ; le fermer après l’essai.
+
 Ne pas provoquer de panne sur les documents personnels ni vider la Corbeille réelle pour un test. Si une petite opération finit trop vite pour essayer la pause, le signaler ; ne pas la présenter comme testée.
 
 ## Régression du ghost de glisser-déposer sous Windows
