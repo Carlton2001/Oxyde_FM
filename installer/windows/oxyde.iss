@@ -1,4 +1,4 @@
-; The GPUI identity is independent of the Tauri one; the Tauri install is removed after setup.
+﻿; The GPUI identity is independent of the Tauri one; the Tauri install is removed after setup.
 #ifndef AppVersion
   #error AppVersion must be provided by scripts/build-distribution.ps1
 #endif
@@ -37,6 +37,17 @@ Name: "en"; MessagesFile: "compiler:Default.isl"
 Name: "de"; MessagesFile: "compiler:Languages\German.isl"
 Name: "es"; MessagesFile: "compiler:Languages\Spanish.isl"
 Name: "it"; MessagesFile: "compiler:Languages\Italian.isl"
+
+[CustomMessages]
+fr.RemoveSettings=Supprimer aussi vos préférences, votre session et les journaux d'Oxyde ?
+en.RemoveSettings=Also remove your Oxyde preferences, session and logs?
+de.RemoveSettings=Auch Ihre Oxyde-Einstellungen, Sitzung und Protokolle entfernen?
+es.RemoveSettings=¿Eliminar también sus preferencias, sesión y registros de Oxyde?
+it.RemoveSettings=Rimuovere anche preferenze, sessione e log di Oxyde?
+
+[UninstallDelete]
+; Caches are regenerated; preferences are removed only on request.
+Type: filesandordirs; Name: "{localappdata}\Oxyde"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -159,4 +170,11 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
     RemoveTauriEdition;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if (CurUninstallStep = usPostUninstall) and not UninstallSilent
+    and (MsgBox(CustomMessage('RemoveSettings'), mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES) then
+    DelTree(ExpandConstant('{userappdata}\Oxyde'), True, True, True);
 end;

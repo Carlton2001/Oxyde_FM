@@ -63,7 +63,8 @@ et supprimés suivant leur cycle de vie actuel. Les protections ne sont pas réd
 `%LOCALAPPDATA%\Programs\Oxyde_FM`, avec raccourci Démarrer « Oxyde », raccourci bureau
 facultatif et entrée de désinstallation distincte. Identité : `Oxyde.GPUI.Windows`.
 Le Setup ne déploie pas de dossier `data` : les chemins installés existants restent inchangés.
-La désinstallation conserve la configuration et les caches. Aucune association de fichiers,
+La désinstallation supprime `%LOCALAPPDATA%\Oxyde` (caches) et propose, sauf en mode silencieux,
+de supprimer `%APPDATA%\Oxyde` (préférences, session, logs). Aucune association de fichiers,
 modification de PATH ou remplacement de l'Explorateur Windows n'est effectué.
 
 Lancé avec `/UPDATE` (par l'updater Tauri ou GPUI), le Setup saute ses pages puis relance
