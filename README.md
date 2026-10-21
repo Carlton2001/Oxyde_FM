@@ -1,116 +1,111 @@
 # Oxyde
 
 <p align="center">
-  <img src="screenshots/hero120.png" alt="Oxyde Hero" width="100%" />
+  <img src="screenshots/hero.webp" alt="Oxyde Hero" width="100%" />
 </p>
 
-Oxyde is a modern, high-performance file manager designed for efficiency and speed. Built on a powerful **Rust** core using **Tauri**, with a sleek **React** and **TypeScript** interface.
+Oxyde is a native file manager built in **Rust**, with a **GPUI** interface and **Tokio** for background work. It combines flexible multipane browsing, integrated previews, advanced search, and file operations in a customizable desktop workspace.
 
----
+Windows is the current distribution target. Linux platform code is also present, but the Linux build and runtime are not currently validated, and some native integrations are Windows-only.
 
-## Showcase
+## From Tauri to GPUI
 
-<table border="0" cellpadding="0" cellspacing="0">
-  <tr>
-    <td style="border: none;"><img src="screenshots/main_view120.png" /></td>
-    <td style="border: none;"><img src="screenshots/multi_panel120.png" /></td>
-  </tr>
-  <tr>
-    <td style="border: none;"><img src="screenshots/advanced_search120.png" /></td>
-    <td style="border: none;"><img src="screenshots/themes_showcase120.png" /></td>
-  </tr>
-</table>
+Oxyde has migrated from a Tauri application with a React and TypeScript frontend to a Rust application using **GPUI**, the GPU-accelerated UI framework developed for Zed. The migration replaces the webview and JavaScript frontend with native rendering and brings interface state, application logic, and background services into one language. It removes the Rust-to-JavaScript bridge from UI interactions and gives the project direct control over rendering, focus, virtualized lists, and native windows. Together with Tokio background tasks and dedicated worker processes, this foundation supports richer integrated previews and keeps file access and expensive processing off the UI thread.
 
----
+The migration also brought substantial security hardening: on Windows, archive codecs, image decoding, and Office text extraction now run in restricted worker processes, with resource limits and explicit validation of worker responses. Stronger checks around file identity, archive paths, and output publication further protect file operations. The [security documentation](docs/security/status.md) describes these protections and their current scope.
 
 ## Key Features
 
-*   **Dynamic Multipane System**: Move beyond traditional split-views with a fully flexible layout. Open multiple resizable panels side-by-side, with full support for horizontal reordering and seamless drag-and-drop of tabs and files between locations.
-*   **Tabbed Browsing**: Manage multiple locations simultaneously within each panel. Tab duplication, middle-click to open in new tab, and drag-and-drop support.
-*   **Native Performance**: Leverages a Rust-driven backend for near-instant responsiveness even in directories with tens of thousands of files.
-*   **Turbo Mode**: Hardware-aware I/O optimization for accelerated file transfers that respect system stability.
-*   **Duplicate Search**: Integrated tool to **identify** duplicate files by content, name, or size across multiple locations.
-*   **Advanced Search**: Instant filtering with Regular Expression (Regex) support, file content searching, and precise **date/size constraints**.
-*   **Disk Image Management**: Seamlessly **mount and unmount** ISO, IMG, and VHD/VHDX disk images directly from the interface.
-*   **Multi-Format Archives**: Built-in support for ZIP, 7z, TAR, and Zstd archive management.
-*   **Premium Themes**: Includes a wide variety of curated themes (GitHub, Ayu, Monokai, Solarized, and more).
-*   **Auto-Updater**: Stay up to date with automatic notifications and seamless installation of the latest versions directly from GitHub releases.
-*   **PowerToys Peek Integration**: Full support for PowerToys Peek, allowing for super-fast file previews with smart activation and real-time status checks.
-*   **Network Drive Management**: Dedicated tools to easily Connect (Map) and Disconnect network drives directly from the interface.
-
-*   **Language**: Supports English, French, Spanish, German, and Italian.
-
-
----
-
+- **Flexible Multipane Workspace**: Browse multiple locations in resizable panels, rearrange tabs and panels, and drag files between locations. Restore your tabs, layout, and window geometry between sessions.
+- **Tabbed Browsing**: Duplicate tabs, open folders with a middle click, and switch locations independently in each panel.
+- **List and Thumbnail Views**: Browse virtualized file lists or thumbnail grids, with natural filename sorting, date grouping, and controls for hidden and system files.
+- **Integrated Viewer**: Follow the current selection in a dedicated panel or detach it into a resizable window. View full-resolution images, multipage PDFs, text and source code with syntax highlighting, rendered Markdown, and text from Office Open XML and OpenDocument files. Play audio and video with system codecs on Windows, with album artwork and media navigation.
+- **Hover Previews**: Inspect supported images, documents, and media directly from file tooltips, without opening another application. PowerToys Peek remains available as an optional Windows integration.
+- **Advanced Search**: Search recursively by name, use wildcard and regular expression criteria, search file contents, and narrow results by date and size. Browse incoming results while the search runs, or stop it and keep the results already found.
+- **Duplicate Search**: Compare files by name, size, content, or combined criteria across multiple locations.
+- **File Operations Manager**: Track transfers and other operations in a dedicated window with progress, throughput graphs, pause and cancellation controls, and per-item results. Resolve destination conflicts before transfers begin, and undo or redo supported file operations during the session.
+- **Turbo Mode**: Adjust operation priority and use additional parallelism where supported, including storage-aware file transfers and ZIP, 7z, and Zstandard compression.
+- **Archive Browsing and Editing**: Browse and extract supported archives, search archive names and metadata, and create or modify ZIP, 7z, TAR, and TAR.ZST archives from the workspace.
+- **Disk Images**: Browse ISO9660 ISO/IMG images directly, with native Windows mounting and unmounting for supported disk images, including VHD/VHDX.
+- **Recycle Bin and Network Drives**: Browse and restore recycled items, manage Recycle Bin settings, and map or disconnect network drives on Windows.
+- **Dedicated Workers**: On Windows, archive codecs, image decoding, and Office text extraction run in restricted worker processes with resource limits. See the [security documentation](docs/security/status.md) for the scope and remaining limits.
+- **Themes and Languages**: Choose from thirteen themes, including GitHub, Ayu, Monokai, and Solarized, adjust UI scale, and use Oxyde in English, French, Spanish, German, or Italian.
+- **Updates and Portable Distribution**: Install signed update packages from GitHub releases through the installed Windows edition, or use a portable ZIP that keeps preferences, session data, and caches alongside the application. Portable users update from the releases page.
 
 ## Technology Stack
 
-*   **Backend**: [Rust](https://www.rust-lang.org/) & [Tauri v2](https://tauri.app/)
-*   **Frontend**: [React v19](https://reactjs.org/) with [TypeScript v6](https://www.typescriptlang.org/)
-*   **Icons**: [Lucide React](https://lucide.dev/)
+- **Application and UI**: Rust and [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui), with GPU-accelerated native rendering.
+- **Background Work**: Tokio, dedicated worker processes, and asynchronous filesystem monitoring.
+- **System Integration**: A shared `Platform` abstraction with target-specific implementations.
+- **Localization**: Fluent translation catalogs for five languages.
+- **Icons**: Official [Lucide](https://lucide.dev/) SVG assets.
 
 ## Getting Started
 
 ### Prerequisites
 
-- [Rust](https://www.rust-lang.org/tools/install)
-- [Node.js](https://nodejs.org/) (npm)
+For the current Windows build:
 
-### Setup
+- [Rust](https://www.rust-lang.org/tools/install) with the MSVC x64 toolchain.
+- Visual Studio Build Tools with the Visual C++ build tools and Windows SDK.
 
-```bash
-# Install dependencies
-npm install
+### Build and Run
 
-# Run in development mode
-npm run tauri dev
+From the repository root, with Oxyde closed:
+
+```powershell
+cargo build --bins
+cargo run
 ```
 
-### Building for production
+Build all binaries before launching: `cargo run` alone does not rebuild the auxiliary workers. Keep the three worker executables alongside the main executable. Once dependencies are cached, add `--offline` to these commands to build without network access.
 
-```bash
-npm run tauri build
+### Release Build and Packaging
+
+```powershell
+cargo build --release --bins
 ```
 
----
+To assemble a portable ZIP or a Windows installer, follow the [distribution guide](docs/guides/distribution.md), which covers packaging prerequisites, bundled licenses, and update behavior.
+
+For development checks and tests, see the [development guide](docs/guides/development.md).
 
 ## Keyboard Shortcuts
 
-Oxyde is designed with some keyboard workflow. Here are the most common shortcuts:
+These shortcuts apply while the file panel has keyboard focus.
 
-### Navigation & Focus
-*   **Tab**: Switch focus between active panels.
-*   **Backspace**: Go back in history; if no history exists, move up to the parent directory.
-*   **Alt + Arrow Up**: Navigate to the parent directory.
-*   **Enter**: Open the selected folder or file.
-*   **Space**: Quick preview of the selected file (requires PowerToys Peek).
-*   **Ctrl + F**: Instantly focus the search box.
-*   **Ctrl + N**: Open a new panel.
+| Navigation and Focus | Shortcut |
+| --- | --- |
+| Switch between explorer panels | Tab / Shift + Tab |
+| Go back, or up if there is no history | Backspace |
+| Go to the parent directory | Alt + Up |
+| Open the selected folder or file | Enter |
+| Open quick search | Ctrl + F |
+| Add a panel | Ctrl + N |
+| Open a folder in a new tab | Middle click |
 
-### File Operations
-*   **Ctrl + C / X / V**: Standard Copy, Cut, and Paste.
-*   **Ctrl + Shift + C**: Copy the full path of selected items.
-*   **Ctrl + Alt + C**: Copy only the names of selected items.
-*   **Ctrl + Shift + N**: Create a new folder.
-*   **Delete**: Move selected items to the Trash.
-*   **Shift + Delete**: Permanently delete items (bypassing the Trash).
-*   **F2**: Rename the selected item.
-*   **Ctrl + A**: Select all items in the active panel.
-*   **Alt + Enter**: Show properties for the current selection.
-*   **Ctrl + Z / Y**: Undo and Redo file operations.
+| File Operations | Shortcut |
+| --- | --- |
+| Copy / Cut / Paste | Ctrl + C / X / V |
+| Copy full paths | Ctrl + Shift + C |
+| Copy names | Ctrl + Alt + C |
+| Create a folder | Ctrl + Shift + N |
+| Move to the Recycle Bin | Delete |
+| Delete permanently | Shift + Delete |
+| Rename | F2 |
+| Select all / Deselect all | Ctrl + A / Ctrl + Shift + A |
+| Show properties | Alt + Enter |
+| Undo / Redo supported operations | Ctrl + Z / Ctrl + Y or Ctrl + Shift + Z |
 
-### Tab Management
-*   **Ctrl + Tab** or **Ctrl + PageDown**: Switch to the next tab.
-*   **Ctrl + Shift + Tab** or **Ctrl + PageUp**: Switch to the previous tab.
-*   **Middle Click**: Open a folder in a new tab.
+| Tabs and View | Shortcut |
+| --- | --- |
+| Next tab | Ctrl + Tab or Ctrl + PageDown |
+| Previous tab | Ctrl + Shift + Tab or Ctrl + PageUp |
+| Refresh | F5 or Ctrl + R |
+| Increase / Decrease UI scale | Ctrl + Plus / Minus |
+| Reset UI scale | Ctrl + 0 |
 
-### View & Controls
-*   **F5** or **Ctrl + R**: Refresh the current view.
-*   **Ctrl + Plus / Minus**: Increase or decrease the UI font size.
-*   **Ctrl + 0**: Reset the UI font size to default.
-
----
+PowerToys Peek uses its configured activation shortcut; Space is available when enabled in Peek. In the media Viewer, Space toggles playback, and Left / Right navigate images or videos of the same type.
 
 ## Note on Contributions
 
@@ -120,7 +115,7 @@ However, since this project is licensed under the **GNU GPL v3**, you are more t
 
 ## Documentation
 
-Technical documentation is available in [docs/](docs/README.md), and build and installation instructions in [installer/](installer/README.md).
+Technical documentation is available in [docs/](docs/README.md), with dedicated guides for [development](docs/guides/development.md), [Windows distribution](docs/guides/distribution.md), and [security protections and limits](docs/security/status.md).
 
 ## License
 
