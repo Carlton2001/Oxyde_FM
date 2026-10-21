@@ -4435,7 +4435,7 @@ dependencies = [
 
 [[package]]
 name = "oxyde"
-version = "1.2.1"
+version = "2.0.0"
 dependencies = [
  "base64",
  "blake3",
