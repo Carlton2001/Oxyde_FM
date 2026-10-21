@@ -56,11 +56,12 @@ fn pinned_display_name(item: &oxyde_lib::models::QuickAccessItem, i18n: &I18n) -
 pub fn render_sidebar(
     view: &OxydeApp,
     handle: Entity<OxydeApp>,
+    window: &mut Window,
     cx: &mut Context<OxydeApp>,
 ) -> impl IntoElement {
     if view.sidebar_collapsed {
         rail::render_sidebar_rail(view, handle, cx)
     } else {
-        tree::render_sidebar_tree(view, handle, cx)
+        tree::render_sidebar_tree(view, handle, window, cx)
     }
 }

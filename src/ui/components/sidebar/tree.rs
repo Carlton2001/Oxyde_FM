@@ -13,6 +13,7 @@ use gpui::*;
 pub(super) fn render_sidebar_tree(
     view: &OxydeApp,
     handle: Entity<OxydeApp>,
+    window: &mut Window,
     _cx: &mut Context<OxydeApp>,
 ) -> Div {
     let show_hidden = view.show_hidden;
@@ -40,19 +41,27 @@ pub(super) fn render_sidebar_tree(
     let theme = *_cx.theme();
     let use_system_icons = cfg!(target_os = "windows") && view.use_system_icons();
 
-    // Dynamic content width (minimum = sidebar width)
+    // Dynamic content width (minimum = sidebar width), from the shaped names.
+    let font = window.text_style().font();
+    let font_size = crate::ui::scale::rem_pixels(rems(0.8125));
+    let measure = |text: String| {
+        let len = text.len();
+        window.text_system().shape_line(text.into(), font_size, &[TextRun {
+            len, font: font.clone(), color: theme.text, background_color: None, underline: None, strikethrough: None,
+        }], None).width.as_f32()
+    };
     let calculated_content_w = sidebar_items
         .iter()
         .map(|item| match item {
             SidebarItem::Header(_) => 0.0,
             SidebarItem::Pinned { item } | SidebarItem::OneDrive { item } => {
-                pinned_display_name(item, _cx.i18n()).len() as f32 * logical(7.0) + logical(60.0)
+                measure(pinned_display_name(item, _cx.i18n()).to_string()) + logical(60.0)
             }
             SidebarItem::Drive { drive, .. } => {
-                crate::ui::format::drive_label(&drive.label, &drive.path, _cx.i18n()).chars().count() as f32 * logical(7.0) + logical(60.0)
+                measure(crate::ui::format::drive_label(&drive.label, &drive.path, _cx.i18n()).to_string()) + logical(60.0)
             }
             SidebarItem::Directory { node, depth, .. } => {
-                (*depth as f32 * logical(12.0)) + node.name.len() as f32 * logical(7.0) + logical(60.0)
+                (*depth as f32 * logical(12.0)) + measure(node.name.clone()) + logical(60.0)
             }
         })
         .fold(view.sidebar_display_width(), |a, b| a.max(b));
@@ -75,6 +84,9 @@ pub(super) fn render_sidebar_tree(
     let viewport_h = (view.list_height - list_top - list_bottom).max(1.0);
     let content_h = sidebar_items.iter().map(sidebar_item_height).sum::<f32>().max(1.0);
     let list_right = if content_h > viewport_h { rems(1.125) } else { rems(0.5) };
+    // Rows fill the list's visible width until the content itself overflows it.
+    let visible_w = viewport_w - crate::ui::scale::rem_pixels(rems(0.5) + list_right).as_f32();
+    let row_w = (content_w - logical(26.0)).max(visible_w).max(1.0);
 
     // Highlight only the folder currently open in the active pane's active tab.
     let selected_path = view
@@ -126,14 +138,14 @@ pub(super) fn render_sidebar_tree(
                         .relative()
                         .h_full()
                         .left(view.sidebar_scroll_h.offset().x)
-                        .w(px((content_w - logical(26.0)).max(1.0)))
+                        .w(px(row_w))
                         .child({
                             let items_for_list = sidebar_items.clone();
                             let h = handle.clone();
                             let sel = selected_path.clone();
                             let pinned_paths_for_list = pinned_paths.clone();
                             let presentation = SidebarRowPresentation {
-                                content_w,
+                                row_w,
                                 pinned_paths: pinned_paths_for_list,
                                 expandable_drives,
                                 show_tooltips,

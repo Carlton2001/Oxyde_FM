@@ -13,7 +13,8 @@ use gpui::*;
 use std::collections::HashSet;
 
 pub(super) struct SidebarRowPresentation {
-    pub(super) content_w: f32,
+    /// Row width: the list's visible width, or the content width when it overflows.
+    pub(super) row_w: f32,
     pub(super) pinned_paths: HashSet<String>,
     pub(super) expandable_drives: HashSet<String>,
     pub(super) show_tooltips: bool,
@@ -29,10 +30,10 @@ pub(super) fn render_sidebar_rows(
     presentation: &SidebarRowPresentation,
 ) -> Vec<AnyElement> {
     let SidebarRowPresentation {
-        content_w, pinned_paths: pinned_paths_for_list, expandable_drives,
+        row_w, pinned_paths: pinned_paths_for_list, expandable_drives,
         show_tooltips, use_system_icons,
     } = presentation;
-    let (content_w, show_tooltips, use_system_icons) = (*content_w, *show_tooltips, *use_system_icons);
+    let (row_w, show_tooltips, use_system_icons) = (*row_w, *show_tooltips, *use_system_icons);
     let items  = items_for_list.to_vec();
     let sel    = sel.clone();
     range.map(|i| {
@@ -45,7 +46,7 @@ pub(super) fn render_sidebar_rows(
             // ── Section header ─────────────────────────────
             SidebarItem::Header(_) => {
                 div()
-                    .w(px((content_w - logical(26.0)).max(1.0)))
+                    .w(px(row_w))
                     .h(px(sidebar_row_h()))
                     .px_3()
                     .flex()
@@ -64,7 +65,7 @@ pub(super) fn render_sidebar_rows(
 
                 div()
                     .id(SharedString::from(format!("sb-pin-{}", path)))
-                    .w(px((content_w - logical(26.0)).max(1.0)))
+                    .w(px(row_w))
                     .h(px(sidebar_row_h()))
                     .px_3()
                     .flex()
@@ -142,7 +143,7 @@ pub(super) fn render_sidebar_rows(
                             })
                     )
                     .child(
-                        div().flex_1().text_ellipsis().overflow_hidden()
+                        div().flex_1().min_w_0().truncate()
                             .text_color(theme.text)
                             .when(item.path == "__network_vincinity__" || item.path == "trash://", |d| d.font_weight(FontWeight::SEMIBOLD))
                             .child(pinned_display_name(item, cx.i18n()))
@@ -188,7 +189,7 @@ pub(super) fn render_sidebar_rows(
 
                 div()
                     .id(SharedString::from(format!("sb-drv-{}", path)))
-                    .w(px((content_w - logical(26.0)).max(1.0)))
+                    .w(px(row_w))
                     .h(px(sidebar_item_height(item)))
                     .px_3()
                     .flex()
@@ -278,7 +279,7 @@ pub(super) fn render_sidebar_rows(
                             .child(svg().path(crate::ui::components::icons::drive_icon_path(drive)).size_4().text_color(theme.text))
                     )
                     .child(
-                        div().flex_1().text_ellipsis().overflow_hidden()
+                        div().flex_1().min_w_0().truncate()
                             .text_color(theme.text)
                             .font_weight(FontWeight::SEMIBOLD)
                             .child(label)
@@ -323,7 +324,7 @@ pub(super) fn render_sidebar_rows(
 
                 div()
                     .id(SharedString::from(format!("sb-dir-{}", path)))
-                    .w(px((content_w - logical(26.0)).max(1.0)))
+                    .w(px(row_w))
                     .h(px(sidebar_row_h()))
                     .pl(px(depth_px))
                     .pr_3()
@@ -419,7 +420,7 @@ pub(super) fn render_sidebar_rows(
                     )
                     // Name
                     .child(
-                        div().flex_1().text_ellipsis().overflow_hidden()
+                        div().flex_1().min_w_0().truncate()
                             .text_color(theme.text)
                             .child(node.name.clone())
                     )

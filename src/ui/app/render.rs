@@ -241,7 +241,7 @@ impl Render for OxydeApp {
                             .w(px(self.sidebar_display_width()))
                             .h_full()
                             .flex_none()
-                            .child(render_sidebar(self, handle.clone(), cx)),
+                            .child(render_sidebar(self, handle.clone(), _window, cx)),
                     )
                     .child(
                         div()
