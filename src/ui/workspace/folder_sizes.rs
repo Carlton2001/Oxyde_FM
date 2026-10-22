@@ -6,7 +6,7 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-pub(crate) const SIZE_FLASH_DURATION: Duration = Duration::from_millis(150);
+pub(crate) const SIZE_FLASH_DURATION: Duration = Duration::from_millis(300);
 
 pub(crate) fn measurable(file: &FileEntry) -> bool {
     file.is_dir && !file.is_symlink && !file.is_junction
