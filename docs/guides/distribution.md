@@ -32,11 +32,20 @@ node scripts/generate-viewer-cursors.cjs
 ## Construction de la distribution
 
 Construire avec Rust MSVC x64 et les Build Tools Visual C++. Installer une fois
-le générateur de licences :
+le générateur de licences, depuis le binaire officiel Windows x64 :
 
 ```powershell
-cargo install cargo-about --version 0.9.2 --locked --features cli
+./scripts/install-cargo-about.ps1
 ```
+
+Le script installe `cargo-about` 0.9.2 dans `$CARGO_HOME/bin` (ou `~/.cargo/bin`),
+qui doit être dans le PATH. Il vérifie les SHA-256 fixés de l'archive officielle
+avant extraction et du binaire avant exécution, puis contrôle sa version. Un binaire
+déjà présent avec l'empreinte attendue est réutilisé sans accès réseau ; sinon il est
+remplacé après vérification du téléchargement. Les empreintes proviennent de la
+[release officielle](https://github.com/EmbarkStudios/cargo-about/releases/tag/0.9.2).
+La compilation locale reste possible avec
+`cargo install cargo-about --version 0.9.2 --locked --features cli`.
 
 Lancer ensuite la distribution :
 
@@ -142,8 +151,11 @@ Les deux workflows de distribution utilisent l'action locale
 `.github/actions/setup-distribution/action.yml` : Rust **1.98.1** (version fixée pour
 ces workflows uniquement), cache partagé des dépendances compilées et de `cargo-about`
 **0.9.2**. Mettre à jour la toolchain dans cette action après validation d'une nouvelle
-version de Rust. Lors d'une mise à jour de `cargo-about`, adapter aussi sa version dans
-la clé partagée du cache. Les tests portables utilisent `--release --target x86_64-pc-windows-msvc`,
+version de Rust. `cargo-about` est téléchargé précompilé par `scripts/install-cargo-about.ps1`
+en l'absence d'un binaire vérifié dans le cache Cargo ; aucune compilation du générateur
+n'est nécessaire. Lors d'une mise à jour, adapter version, empreintes de l'archive et du
+binaire dans ce script, puis la version dans la clé partagée du cache. Les tests portables
+utilisent `--release --target x86_64-pc-windows-msvc`,
 comme les exécutables livrés, pour partager la compilation des dépendances. La suite
 native de `tests.yml` conserve son profil et ses vérifications propres.
 
@@ -173,6 +185,32 @@ Le workflow installe automatiquement le générateur. Pour lancer la génératio
 suivre le [guide des notices](../../licenses/dependencies/README.md).
 Le script affiche séparément les durées des licences, de la compilation Rust, d'Inno Setup
 et de la création/vérification du ZIP, pour identifier les prochains gains possibles.
+
+Pour mesurer le cache, terminer une première exécution **Windows portable distribution**
+sur `main`, puis en lancer une deuxième sur le même commit. Relever les clés et résultats
+de restauration, le volume et la durée des transferts/restauration/enregistrement du cache,
+l'installation de `cargo-about`, la préparation/construction des tests (ligne Cargo `Finished`),
+leur exécution (`test result`), les licences, la compilation Rust et le ZIP. Ce workflow
+ne mesure ni Inno Setup ni la signature. Ne pas créer de tag ou de release pour mesurer.
+Les [mesures de référence](../reports/2026-10-22-windows-distribution.md) concernent
+la release v2.0.0 ; aucun gain hébergé des optimisations n'est encore mesuré.
+La [comparaison locale des parcours Rust](../reports/2026-10-22-distribution-local-tests.md)
+utilise des sources figées et des dossiers de compilation isolés, avec caches vide,
+intégral et limité aux dépendances. Elle exclut les transferts du cache GitHub.
+
+Pour vérifier l'installateur avec une archive officielle téléchargée sans modification :
+
+```powershell
+./scripts/tests/install-cargo-about.tests.ps1 -ArchivePath <cargo-about-0.9.2-x86_64-pc-windows-msvc.tar.gz>
+```
+
+Ces tests utilisent l'archive comme fixture locale et contrôlent installation, version,
+réutilisation sans réseau, rejet d'un hash incorrect, remplacement d'un cache corrompu
+et emplacements par défaut (`CARGO_HOME/bin` ou `USERPROFILE/.cargo/bin`). Ils couvrent
+aussi les chemins contenant des espaces, une restauration sans métadonnées Cargo,
+un téléchargement interrompu, une extraction en erreur ou altérée et le nettoyage
+des fichiers temporaires après échec, sans remplacer l'installation Cargo de l'utilisateur.
+Ils ne mesurent pas le transfert du cache GitHub.
 
 Tests : `cargo test --lib app_paths::tests`. Vérifier aussi les caches et archives concernés.
 Le script vérifie les fichiers requis dans le ZIP. Tester manuellement la session, les aperçus,

@@ -11,6 +11,8 @@ Les références actives décrivent les contrats ; les bilans ci-dessous décriv
 | [Turbo des archives, 17 octobre](2026-10-17-archive-turbo.md) | Parallélisme, mesures ZIP/7z/TAR.ZST/TAR et répartition de la mémoire |
 | [Couverture de Turbo, 17 octobre](2026-10-17-turbo-coverage.md) | Effets par opération, lacunes et pistes de correction priorisées |
 | [Corrections UI, 18 octobre](2026-10-18-ui-audit-fixes.md) | Douze corrections, commits, vérifications et parcours visuels précis |
+| [Distribution Windows, 22 octobre](2026-10-22-windows-distribution.md) | Mesures détaillées v2.0.0, coût des constructions Cargo et protocole de cache |
+| [Tests locaux de distribution, 22 octobre](2026-10-22-distribution-local-tests.md) | Comparaison des parcours Rust avec caches vide, intégral et limité aux dépendances |
 
 ## Retrouver une preuve complète
 

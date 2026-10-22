@@ -13,6 +13,8 @@ on:
       - .github/workflows/distribution.yml
       - .github/workflows/release.yml
       - scripts/build-distribution.ps1
+      - scripts/install-cargo-about.ps1
+      - 'scripts/tests/install-cargo-about.tests.ps1'
       - scripts/update-third-party-licenses.ps1
       - scripts/third-party-notices.hbs
       - about.toml

@@ -5,10 +5,12 @@
 Le script `build-distribution.ps1` régénère automatiquement ces notices à chaque distribution,
 avant compilation et assemblage du ZIP ou du Setup, même avec `-SkipBuild`.
 Installer une fois le générateur en local ; le workflow GitHub l'installe automatiquement.
+Le [guide de distribution](../../docs/guides/distribution.md) décrit l'installation du
+binaire officiel Windows avec vérification des empreintes et réutilisation du cache.
 La commande suivante permet aussi une actualisation manuelle :
 
 ```powershell
-cargo install cargo-about --version 0.9.2 --locked --features cli
+./scripts/install-cargo-about.ps1
 ./scripts/update-third-party-licenses.ps1
 ```
 
