@@ -81,7 +81,7 @@ impl Drop for LockedClipboardData {
     }
 }
 
-fn parse_dropfiles(bytes: &[u8]) -> Result<Vec<String>, CommandError> {
+pub(super) fn parse_dropfiles(bytes: &[u8]) -> Result<Vec<String>, CommandError> {
     let header_size = std::mem::size_of::<DROPFILES>();
     if bytes.len() < header_size {
         return Err(malformed("CF_HDROP", "truncated header"));

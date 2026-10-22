@@ -344,6 +344,11 @@ impl OxydeApp {
 
     pub(crate) fn observe_main_window(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.set_main_window(window.window_handle());
+        #[cfg(target_os = "windows")]
+        {
+            let activation = cx.observe_window_activation(window, |app, window, cx| app.promote_file_drag(window, cx));
+            self._subscriptions.push(activation);
+        }
         let subscription = cx.observe_window_bounds(window, |this, window, cx| {
             if let Ok(handle) = raw_window_handle::HasWindowHandle::window_handle(window) {
                 if let Err(error) = oxyde_lib::platform::platform().follow_fixed_dialog_owner(handle.as_raw()) {

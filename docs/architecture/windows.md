@@ -48,3 +48,37 @@ Le cadre visible suit le pointeur à 12 pixels logiques sur X/Y, avec retourneme
 `ui/window_geometry.rs` mémorise la position restaurable et l’état maximisé ; `app/tool_geometry.rs` gère les familles secondaires via `AppConfig::tool_window_placements`. Conserver les positions négatives, ignorer la minimisation et borner une géométrie invalide aux écrans disponibles. Les écritures sont différées de 350 ms ; la fermeture force la dernière sauvegarde. Réinitialiser les préférences conserve ces positions.
 
 Les essais utiles et leurs limites figurent dans le [guide visuel](../guides/visual-checks.md) ; les résultats datés dans le [bilan des fenêtres](../reports/2026-10-15-windows.md).
+
+## Glisser-déposer de fichiers
+
+Sous Windows, le ghost utilise une fenêtre GPUI possédée, transparente aux clics,
+sans activation et sans barre des tâches. Il suit le pointeur et sa zone de
+travail, y compris hors du propriétaire. Il devient temporairement topmost pendant
+la session OLE, puis est détruit au dépôt, à l'annulation ou à la fermeture du
+propriétaire. Les placements natifs sont différés et regroupés via `Platform`.
+Le curseur reste inchangé ; le ghost indique l'action négociée ou le refus.
+
+Les interactions internes restent GPUI. À la sortie de la fenêtre, lors du passage
+sur une fenêtre étrangère superposée ou d'un changement d'application, les chemins
+réels préalablement vérifiés en arrière-plan sont confiés à une session OLE,
+lancée par message après libération des emprunts GPUI. Le drag interne est alors
+retiré ; un retour dans Oxyde passe par le même dépôt externe que les autres
+programmes. Les membres virtuels d'archives ne sont pas exportés sans préparation.
+
+`Platform::install_file_drop_target` remplace le récepteur GPUI Windows afin de
+transmettre les modificateurs, les effets autorisés et le refus des zones sans
+cible. Les dossiers, listes (détails/grille), entrées physiques de la barre
+latérale et onglets partagent les cibles d'`app/drag/external.rs`. Les opérations
+et conflits restent dans les parcours asynchrones habituels. Le dépôt sur l'espace
+libre des onglets ouvre les dossiers après vérification en arrière-plan.
+
+Oxyde effectue lui-même les déplacements entrants. Le récepteur signale un
+déplacement optimisé (`Performed DropEffect = NONE`, retour `NONE`) pour que la
+source étrangère ne supprime pas les fichiers une seconde fois. Pour un départ,
+seule la confirmation explicite d'un déplacement non optimisé demande le retrait
+des sources par le moteur d'opérations. La session transporte toute la sélection
+dans un unique objet `CF_HDROP`, sans modifier le presse-papiers. Les éléments
+virtuels fournis uniquement en flux par une autre application ne sont pas acceptés.
+
+Linux conserve les événements entrants GPUI et les cibles communes. La session
+sortante OLE et la fenêtre indépendante sont spécifiques à Windows.

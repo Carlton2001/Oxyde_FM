@@ -1,3 +1,4 @@
+use crate::ui::app::FileDropTargetExt;
 use crate::ui::components::dropdown::{DropdownItem, IconName};
 use super::menus::{directory_context_menu, drive_context_menu, location_context_menu, pinned_context_menu};
 use super::{pinned_display_name, sidebar_paths_equal, sidebar_item_height, sidebar_row_h};
@@ -148,6 +149,7 @@ pub(super) fn render_sidebar_rows(
                             .when(item.path == "__network_vincinity__" || item.path == "trash://", |d| d.font_weight(FontWeight::SEMIBOLD))
                             .child(pinned_display_name(item, cx.i18n()))
                     )
+                    .external_file_drop(h.clone(), path.clone())
                     .drag_over::<FileDragData>({
                         let h = h.clone(); let tgt = path.clone();
                         move |style, data, _, cx| {
@@ -284,6 +286,7 @@ pub(super) fn render_sidebar_rows(
                             .font_weight(FontWeight::SEMIBOLD)
                             .child(label)
                     )
+                    .external_file_drop(h.clone(), path.clone())
                     .drag_over::<FileDragData>({
                         let h = h.clone(); let tgt = path.clone();
                         move |style, data, _, cx| {
@@ -438,6 +441,7 @@ pub(super) fn render_sidebar_rows(
                         }
                     )
                     // Drag target
+                    .external_file_drop(h.clone(), path.clone())
                     .drag_over::<FileDragData>({
                         let h = h.clone(); let tgt = path.clone(); let self_path = path.clone();
                         move |style, data, _, cx| {

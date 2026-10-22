@@ -1,4 +1,5 @@
 use super::group_header::render as group_header;
+use crate::ui::app::FileDropTargetExt;
 use crate::ui::app::GroupSelection;
 use crate::ui::components::tooltip::NativeTooltipExt;
 use super::details_row::{render_details_row, DetailsRowParams};
@@ -290,6 +291,7 @@ pub(super) fn render_details_file_list(
                                 }
                             })
                             .on_mouse_down(MouseButton::Right, background_menu(handle.clone(), pane_id.clone()))
+                            .external_file_drop(handle.clone(), active_tab.path.clone())
                             .drag_over::<FileDragData>({
                                 let p_id_cap = pane_id.clone();
                                 let h_over = handle.clone();

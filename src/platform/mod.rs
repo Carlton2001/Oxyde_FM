@@ -1,5 +1,7 @@
 use crate::models::{DriveInfo, QuickAccessItem};
 mod file_names;
+mod file_drag;
+pub use file_drag::{FileDragFeedback, FileDropEffect, FileDropPhase, NativeFileDrop};
 mod viewer_media;
 mod memory;
 pub use memory::ProcessMemorySnapshot;
@@ -107,6 +109,21 @@ impl ShellDeleteOutcome {
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
+    /// Replace the window's file drop target. The callback runs on its UI thread.
+    fn install_file_drop_target(&self, _window: raw_window_handle::RawWindowHandle,
+        _callback: Box<dyn Fn(NativeFileDrop) -> FileDropEffect>) -> Result<(), String> {
+        Err("Native file drops unavailable".into())
+    }
+    /// Queue a native session after GPUI releases its App/Window borrows.
+    fn queue_file_drag(&self, _window: raw_window_handle::RawWindowHandle, _paths: Vec<String>,
+        _callback: Box<dyn FnMut(FileDragFeedback)>) -> Result<(), String> {
+        Err("Native file dragging unavailable".into())
+    }
+    /// Includes foreign windows overlapping the owner's client rectangle.
+    fn file_drag_pointer_outside(&self, _window: raw_window_handle::RawWindowHandle) -> bool { false }
+    /// Deferred placement of a passive drag ghost; topmost only for a native session.
+    fn place_drag_window(&self, _window: raw_window_handle::RawWindowHandle,
+        _size: [f32; 2], _scale: f32, _native: bool) -> Result<(), String> { Ok(()) }
     /// Diagnostic scan of this process only. Call from a background thread.
     fn process_memory_snapshot(&self) -> Result<ProcessMemorySnapshot, String> {
         Err("Process memory diagnostics are unavailable on this platform".into())
@@ -657,6 +674,8 @@ mod thumbnails;
 mod windows_disk_images;
 #[cfg(target_os = "windows")]
 mod windows_pointer;
+#[cfg(target_os = "windows")]
+mod windows_file_drag;
 #[cfg(target_os = "windows")]
 mod windows_window_owner;
 

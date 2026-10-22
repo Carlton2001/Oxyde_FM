@@ -1,4 +1,5 @@
 use super::group_header::render as group_header;
+use crate::ui::app::{FileDropTargetExt, FileDragData};
 use crate::ui::app::GroupSelection;
 use crate::ui::components::tooltip::NativeTooltipExt;
 use super::grid_card::{render_grid_card, GridCardParams};
@@ -399,6 +400,27 @@ pub(super) fn render_grid_file_list(
         .flex_col()
         .relative()
         .pb(px(status_bar_height()))
+        .external_file_drop(handle.clone(), tab.path.clone())
+        .drag_over::<FileDragData>({
+            let handle = handle.clone(); let target = tab.path.clone();
+            move |style, data, _, cx| {
+                handle.update(cx, |app, cx| {
+                    app.drag_target_default_copy = data.paths.iter().any(|path| crate::ui::app::drives_differ(path, &target));
+                    app.update_drag_copy_mode(cx);
+                });
+                style.bg(cx.theme().drag_hover)
+            }
+        })
+        .on_drop({
+            let handle = handle.clone(); let target = tab.path.clone();
+            move |data: &FileDragData, _, cx| {
+                handle.update(cx, |app, cx| {
+                    app.drag_target_default_copy = data.paths.iter().any(|path| crate::ui::app::drives_differ(path, &target));
+                    app.update_drag_copy_mode(cx);
+                    app.execute_file_drop(data.paths.clone(), target.clone(), cx);
+                });
+            }
+        })
         .on_scroll_wheel(|_, window, cx| crate::ui::components::tooltip::hover::dismiss(window, cx))
         .child(crate::ui::components::tooltip::hover::container(handle.clone(), pane_id.clone(), px(0.0), px(status_bar_height()), cx))
         .overflow_hidden()

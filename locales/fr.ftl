@@ -619,6 +619,7 @@ toast-transfer-skipped = Tous les éléments ont été ignorés.
 
 properties-calculating-size = Calcul de la taille…
 drag-new-tab = Créer un nouvel onglet
+drag-unavailable = Dépôt indisponible
 properties-loading = Chargement des propriétés…
 
 storage-unavailable = Impossible d’accéder aux données d’Oxyde. En mode portable, le dossier data doit être accessible en écriture.

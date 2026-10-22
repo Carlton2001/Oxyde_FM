@@ -1,3 +1,4 @@
+use crate::ui::app::FileDropTargetExt;
 use crate::ui::app::{FileDragData, OxydeApp};
 use crate::ui::elements::motion;
 use crate::ui::components::tabs::{Tab, TabBar, TabDragPreview, TabPosition};
@@ -250,6 +251,19 @@ impl OxydeApp {
                         div()
                             .absolute()
                             .inset_0()
+                            .external_file_drop(h.clone(), tab_path.clone())
+                            .on_drag_move::<ExternalPaths>({
+                                let h = h.clone(); let pane_id = p_id.clone();
+                                move |event, _, cx| {
+                                    h.update(cx, |app, cx| {
+                                        if app.state.find_pane(&pane_id).is_some_and(|pane| tab_drop_zone_contains_pointer(event.bounds, pane.tab_strip.scroll.bounds(), event.event.position)) {
+                                            if app.state.active_pane_id != pane_id || app.state.find_pane(&pane_id).is_some_and(|pane| pane.active_tab_index != t_ix) {
+                                                app.switch_tab(&pane_id, t_ix, cx);
+                                            }
+                                        }
+                                    });
+                                }
+                            })
                             .on_drag_move::<FileDragData>({
                                 let h = h.clone();
                                 let pane_id = p_id.clone();
@@ -453,6 +467,7 @@ impl OxydeApp {
             .h(crate::ui::style::TAB_BAR_HEIGHT)
             .w_full()
             .relative()
+            .external_tab_drop(h.clone(), p_id.clone())
             .on_drag_move::<FileDragData>({
                 let h = h.clone();
                 move |event, _, cx| {

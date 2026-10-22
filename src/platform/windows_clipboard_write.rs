@@ -176,7 +176,7 @@ impl Drop for Session<'_> {
     }
 }
 
-fn file_bytes(paths: &[String]) -> Vec<u8> {
+pub(super) fn file_bytes(paths: &[String]) -> Vec<u8> {
     let header = DROPFILES {
         pFiles: std::mem::size_of::<DROPFILES>() as u32,
         fWide: true.into(),

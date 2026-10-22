@@ -613,6 +613,7 @@ toast-transfer-skipped = All items were skipped.
 
 properties-calculating-size = Calculating size…
 drag-new-tab = Create a new tab
+drag-unavailable = Drop unavailable
 properties-loading = Loading properties…
 
 storage-unavailable = Could not access Oxyde data. In portable mode, the data folder must be writable.

@@ -42,6 +42,9 @@ fn step(handle: WindowHandle<Probe>, stage: usize, failures: Rc<RefCell<Vec<Stri
         } else {
             let probe = root.downcast::<Probe>().expect("probe root");
             let probe = probe.read(cx);
+            if !super::native::has_ghost(cx) {
+                failures.borrow_mut().push(format!("stage {stage}: missing independent ghost window"));
+            }
             let expected = match stage { 1 | 3 | 5 => false, _ => true };
             let mode = probe.app.read(cx).drag_copy_mode;
             let rendered = probe.preview.as_ref().and_then(|ghost| ghost.read(cx).rendered_copy_mode);
@@ -60,6 +63,7 @@ fn step(handle: WindowHandle<Probe>, stage: usize, failures: Rc<RefCell<Vec<Stri
         }
         if stage == 5 {
             cx.stop_active_drag(window);
+            super::native::close(cx);
             window.remove_window();
             cx.quit();
         } else {

@@ -829,6 +829,25 @@ impl Platform for WindowsPlatform {
         super::windows_pointer::install(windows::Win32::Foundation::HWND(handle.hwnd.get() as *mut std::ffi::c_void))
     }
 
+    fn install_file_drop_target(&self, window: raw_window_handle::RawWindowHandle,
+        callback: Box<dyn Fn(super::NativeFileDrop) -> super::FileDropEffect>) -> Result<(), String> {
+        super::windows_file_drag::install_target(window, callback)
+    }
+
+    fn queue_file_drag(&self, window: raw_window_handle::RawWindowHandle, paths: Vec<String>,
+        callback: Box<dyn FnMut(super::FileDragFeedback)>) -> Result<(), String> {
+        super::windows_file_drag::queue(window, paths, callback)
+    }
+
+    fn place_drag_window(&self, window: raw_window_handle::RawWindowHandle,
+        size: [f32; 2], scale: f32, native: bool) -> Result<(), String> {
+        super::windows_file_drag::place_ghost(window, size, scale, native)
+    }
+
+    fn file_drag_pointer_outside(&self, window: raw_window_handle::RawWindowHandle) -> bool {
+        super::windows_file_drag::pointer_outside(window)
+    }
+
     fn set_window_owner(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle) -> Result<(), String> {
         let (raw_window_handle::RawWindowHandle::Win32(window), raw_window_handle::RawWindowHandle::Win32(owner)) = (window, owner) else {
             return Err("Window ownership requires Win32 handles".into());

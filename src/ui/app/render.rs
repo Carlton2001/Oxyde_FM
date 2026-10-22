@@ -144,6 +144,14 @@ impl Render for OxydeApp {
         root.text_style().font_features = Some(TNUM.clone());
 
         root = root
+            .on_drag_move::<ExternalPaths>({
+                let h = handle.clone();
+                move |event, _, cx| h.update(cx, |app, cx| {
+                    app.external_drop.effect = oxyde_lib::platform::FileDropEffect::None;
+                    app.external_drop.submitted = false;
+                    app.sync_pointer_modifiers(event.event.modifiers, cx);
+                })
+            })
             .on_drag_move::<FileDragData>({
                 let h = handle.clone();
                 move |_, _, cx| h.update(cx, |this, cx| this.set_file_drag_new_tab(false, cx))

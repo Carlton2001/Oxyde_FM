@@ -42,6 +42,28 @@ cargo test --offline --locked --bin oxyde native_drag_ghost_tracks_modifiers_wit
 
 Il couvre le routage GPUI et les notifications du ghost ; la réception des touches physiques par Windows et l’aspect des couleurs restent à vérifier manuellement. Les gestionnaires clavier appartiennent à la racine suivie par le focus : un `canvas` enfant possède son propre nœud de dispatch et ne reçoit pas les événements destinés à cette racine.
 
+Le test vérifie aussi la présence de la fenêtre indépendante du ghost. Le parcours
+de dépôt externe dispose d'un autre test natif isolé, sur deux fichiers temporaires
+(dont un nom accentué), avec copie puis déplacement et contrôle de l'absence de
+préparation dupliquée :
+
+```powershell
+cargo test --offline --locked --bin oxyde native_external_multiselection_copies_then_moves_once -- --ignored --test-threads=1
+```
+
+Utiliser un `TEMP`/`TMP` privé dans `target/`, comme le script `test-windows.ps1`,
+avec les droits Windows ordinaires. Le bac à sable de l'agent peut refuser les
+handles nécessaires au moteur de fichiers ; le même essai doit alors être
+exécuté hors de ce bac à sable, en conservant les fichiers temporaires privés.
+
+Les tests unitaires `platform::windows_file_drag` exercent les objets COM sans
+déplacer le pointeur ni utiliser le presse-papiers : multisélection, propriété des
+allocations, modificateurs, refus des formats/objets remplacés et acquittement des
+déplacements optimisés. Ces tests ne remplacent pas l'essai réel entre Oxyde,
+l'Explorateur et une application tierce. Vérifier aussi Échap/clic droit, retour
+dans Oxyde après sortie, noms longs, changement d'écran/DPI et fermeture pendant
+un glissement. Utiliser exclusivement des fichiers de test pour les déplacements.
+
 ## Interpréter les résultats
 
 Les tests opt-in `native_viewer_media_*` vérifient le lecteur Windows sur un WAV

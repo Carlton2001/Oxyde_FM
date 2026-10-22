@@ -5,6 +5,9 @@ use gpui::prelude::*;
 use gpui::*;
 #[cfg(target_os = "windows")]
 mod popup;
+pub(super) mod external;
+#[cfg(target_os = "windows")]
+pub(super) mod native;
 
 fn actionable_drop_paths(mut paths: Vec<String>, target: &str) -> Vec<String> {
     use crate::ui::components::sidebar::sidebar_paths_equal;
@@ -67,6 +70,8 @@ impl FileDragPreview {
                 .map(|pane| (pane.id.clone(), pane.active_tab().id.clone()));
         });
         let sub = cx.observe(&app_handle, |_, _entity, cx| cx.notify());
+        #[cfg(target_os = "windows")]
+        native::begin(paths.clone(), single_is_dir, app_handle.clone(), window, cx);
         Self {
             paths,
             single_is_dir,
@@ -120,11 +125,21 @@ impl Render for FileDragPreview {
         #[cfg(test)]
         { self.rendered_copy_mode = Some(is_copy); }
         let new_tab = self.app_handle.read(cx).drag_new_tab;
+        #[cfg(target_os = "windows")]
+        if native::has_ghost(cx) { return div().into_any_element(); }
+        let offset = self.cursor_offset;
+        div().relative().child(ghost_content(&self.paths, self.single_is_dir, is_copy, new_tab, false, cx)
+            .absolute().left(offset.x + rem_pixels(rems(0.75))).top(offset.y + rem_pixels(rems(0.25))))
+            .into_any_element()
+    }
+}
+
+fn ghost_content(paths: &[String], single_is_dir: bool, is_copy: bool, new_tab: bool, unavailable: bool, cx: &mut App) -> Div {
         let theme = *cx.theme();
 
-        let (icon_path, name_label) = if self.paths.len() == 1 {
-            let p = std::path::Path::new(&self.paths[0]);
-            let is_dir = self.single_is_dir;
+        let (icon_path, name_label) = if paths.len() == 1 {
+            let p = std::path::Path::new(&paths[0]);
+            let is_dir = single_is_dir;
             let name = p
                 .file_name()
                 .and_then(|n| n.to_str())
@@ -141,10 +156,10 @@ impl Render for FileDragPreview {
         } else {
             ("icons/file.svg", {
                 let mut args = FluentArgs::new();
-                args.set("count", self.paths.len());
+                args.set("count", paths.len());
                 args.set(
                     "number",
-                    crate::ui::format::format_number(self.paths.len() as u64, cx.i18n().language()),
+                    crate::ui::format::format_number(paths.len() as u64, cx.i18n().language()),
                 );
                 cx.i18n()
                     .text_with_args(Message::DragItems, &args)
@@ -152,12 +167,7 @@ impl Render for FileDragPreview {
             })
         };
 
-        // Root is 0×0; the visible ghost is absolutely positioned at cursor + (12, 4).
-        div().relative().child(
             div()
-                .absolute()
-                .left(self.cursor_offset.x + rem_pixels(rems(0.75)))
-                .top(self.cursor_offset.y + rem_pixels(rems(0.25)))
                 .px(rems(0.625))
                 .py(rems(0.5))
                 .rounded_md()
@@ -183,6 +193,7 @@ impl Render for FileDragPreview {
                         )
                         .child(
                             div()
+                                .max_w(rems(28.0)).truncate()
                                 .text_color(theme.text)
                                 .text_size(rems(0.75))
                                 .font_weight(FontWeight::MEDIUM)
@@ -194,22 +205,21 @@ impl Render for FileDragPreview {
                     div()
                         .flex()
                         .gap(rems(0.25))
-                        .when(new_tab, |row| row.child(drag_op_pill("", cx.i18n().text(Message::DragNewTab).as_ref(), true, &theme)))
-                        .when(!new_tab, |row| row.child(drag_op_pill(
+                        .when(unavailable, |row| row.child(drag_op_pill("", cx.i18n().text(Message::DragUnavailable).as_ref(), false, &theme)))
+                        .when(new_tab && !unavailable, |row| row.child(drag_op_pill("", cx.i18n().text(Message::DragNewTab).as_ref(), true, &theme)))
+                        .when(!new_tab && !unavailable, |row| row.child(drag_op_pill(
                             "+Ctrl",
                             cx.i18n().text(Message::DragCopy).as_ref(),
                             is_copy,
                             &theme,
-                        ))
-                        .child(drag_op_pill(
+                        )))
+                        .when(!unavailable, |row| row.child(drag_op_pill(
                             "+Shift",
                             cx.i18n().text(Message::DragMove).as_ref(),
                             !is_copy,
                             &theme,
                         ))),
-                ),
-        )
-    }
+                )
 }
 
 impl OxydeApp {
@@ -227,6 +237,11 @@ impl OxydeApp {
 
     /// End pointer interactions, including releases missed outside the window.
     pub(crate) fn finish_pointer_drag(&mut self, cx: &mut Context<Self>) {
+        #[cfg(target_os = "windows")]
+        if !self.file_drag_session.as_ref().is_some_and(|session| session.native) {
+            self.file_drag_session = None;
+            native::close(cx);
+        }
         self.item_press = None;
         self.item_selection_drag = false;
         self.file_drag_origin = None;
@@ -325,6 +340,8 @@ impl OxydeApp {
             self.finish_pointer_drag(cx);
             return;
         }
+        #[cfg(target_os = "windows")]
+        self.promote_file_drag(_window, cx);
         self.move_item_press(e, cx);
         if let Some(target) = self.drag_target.clone() {
             let pos = e.position;

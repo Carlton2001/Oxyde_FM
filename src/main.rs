@@ -160,6 +160,8 @@ fn main() {
                     window.on_window_should_close(cx, move |_, cx| {
                         let _ = viewer_owner.update(cx, |app, cx| app.stop_viewers(cx));
                         trace_shutdown_request("native window close");
+                        #[cfg(target_os = "windows")]
+                        crate::ui::app::close_file_drag(cx);
                         crate::ui::components::tooltip::hover::close_native_windows(cx);
                         #[cfg(target_os = "windows")]
                         crate::ui::components::popup::close_all(cx);
@@ -172,7 +174,11 @@ fn main() {
                         true
                     });
                     let focus_handle = app.read(cx).focus_handle.clone();
+                    #[cfg(target_os = "windows")]
+                    let drag_owner = app.clone();
                     window.on_next_frame(move |window, cx| {
+                        #[cfg(target_os = "windows")]
+                        crate::ui::app::OxydeApp::install_file_drag(&drag_owner, window, cx);
                         window.focus(&focus_handle, cx);
                         match raw_window_handle::HasWindowHandle::window_handle(window) {
                             Ok(handle) => {

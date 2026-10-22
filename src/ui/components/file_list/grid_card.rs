@@ -1,6 +1,6 @@
 use super::presentation::{file_type_display, grid_display_name, network_category, network_entry, selection_checkbox, size_loading};
 use super::thumbnails::render_grid_thumbnail;
-use crate::ui::app::{ContextMenuContent, ContextMenuInstance, FileDragData, FileDragPreview, OxydeApp};
+use crate::ui::app::{ContextMenuContent, ContextMenuInstance, FileDragData, FileDragPreview, FileDropTargetExt, OxydeApp};
 use crate::ui::components::{paths_match, with_grid_sort, oxyde_context_menu_items};
 use crate::ui::components::icons::render_file_icon;
 use crate::ui::components::tooltip::Tooltip;
@@ -343,6 +343,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
         );
     if can_drop {
         card = card
+            .external_file_drop(h.clone(), path.clone())
             .drag_over::<FileDragData>({
                 let h = h.clone();
                 let target = path.clone();

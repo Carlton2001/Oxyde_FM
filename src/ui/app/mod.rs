@@ -31,6 +31,9 @@ mod archives;
 mod rename;
 mod context_menus;
 mod drag;
+pub(crate) use drag::external::FileDropTargetExt;
+#[cfg(target_os = "windows")]
+pub(crate) use drag::native::close as close_file_drag;
 mod dialog_windows;
 pub(crate) use dialog_windows::close_dialog_windows;
 mod render;
@@ -295,6 +298,9 @@ pub struct OxydeApp {
     pub drag_copy_mode: bool,
     pub(crate) drag_new_tab: bool,
     pub(crate) file_drag_origin: Option<(String, String)>,
+    external_drop: drag::external::ExternalDropState,
+    #[cfg(target_os = "windows")]
+    file_drag_session: Option<drag::native::Outgoing>,
     /// Modifier override: Some(true) = Ctrl (always copy), Some(false) = Shift (always move),
     /// None = auto (determined by whether source and target are on different drives).
     pub drag_modifier_copy: Option<bool>,
@@ -498,6 +504,9 @@ impl OxydeApp {
             drag_copy_mode: false,
             drag_new_tab: false,
             file_drag_origin: None,
+            external_drop: Default::default(),
+            #[cfg(target_os = "windows")]
+            file_drag_session: None,
             drag_modifier_copy: None,
             drag_target_default_copy: false,
             editing_path: None,
