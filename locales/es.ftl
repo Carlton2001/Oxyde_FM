@@ -34,9 +34,9 @@ settings-theme = Tema
 
 settings-scale = Escala de la interfaz
 
-settings-scale-value = { $reference } px
+settings-scale-value = { $percentage } %
 
-settings-scale-reset = Restablecer la referencia a 16 px por rem
+settings-scale-reset = Restablecer la escala al 100 %
 
 settings-language = Idioma
 

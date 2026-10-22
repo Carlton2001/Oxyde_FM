@@ -34,9 +34,9 @@ settings-theme = Design
 
 settings-scale = Oberflächenskalierung
 
-settings-scale-value = { $reference } px
+settings-scale-value = { $percentage } %
 
-settings-scale-reset = Referenz auf 16 px pro rem zurücksetzen
+settings-scale-reset = Skalierung auf 100 % zurücksetzen
 
 settings-language = Sprache
 

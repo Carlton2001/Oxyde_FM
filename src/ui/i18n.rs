@@ -1944,7 +1944,7 @@ mod tests {
             args.set("version", "1.0");
             args.set("format", "zip");
             args.set("mode", "Date");
-            args.set("reference", 16);
+            args.set("percentage", 100);
             args.set("name", "Oxyde");
             args.set("size", "1,5 Ko");
             args.set("folders", "1");
