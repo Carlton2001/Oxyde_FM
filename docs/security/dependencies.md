@@ -23,3 +23,32 @@ Le retrait de l’encodeur AVIF inutilisé a désactivé le chemin actif `ravif/
 Avant une migration de typographie, vérifier accents des cinq langues, ligatures, scripts complexes, bidirectionnel, polices de repli, emoji/glyphes manquants et dimensions/couleurs des SVG. Les tests de pixels ne remplacent pas ces essais.
 
 `scripts/audit-security.ps1` et `.github/workflows/security.yml` produisent les contrôles de sécurité ; ils ne migrent pas automatiquement les dépendances. L’ancienne analyse complète est récupérable via l’[historique documentaire](../reports/README.md).
+
+## Exécuter l’audit Windows
+
+```powershell
+./scripts/audit-security.ps1
+```
+
+Sous Windows, le script utilise le binaire x64 officiel `cargo-audit` 0.22.2,
+installé dans `target/security-tools/bin`. L’installateur vérifie les SHA-256 fixés
+de l’archive avant extraction et du binaire avant exécution, puis sa version.
+L’empreinte de l’archive est publiée dans la [release RustSec officielle](https://github.com/rustsec/rustsec/releases/tag/cargo-audit/v0.22.2).
+Un binaire déjà présent avec l’empreinte attendue est réutilisé sans téléchargement ;
+sinon le script télécharge et vérifie son remplacement. Aucune compilation de
+l’outil ni mise à jour de Rust n’est nécessaire dans le workflow Windows.
+Sur les autres systèmes, le parcours existant par `cargo install` est conservé.
+
+La base RustSec et l’index des versions retirées sont actualisés à chaque audit :
+aucun résultat ni base d’avis n’est mis en cache par le workflow. Les filtres
+Windows x86_64, le blocage des versions `yanked`, les avis de maintenance visibles,
+le rapport JSON et sa conservation comme artifact restent présents. Le script
+affiche le temps d’installation de l’outil, puis celui de l’actualisation et de
+l’audit. Les [mesures datées](../reports/2026-10-22-windows-ci.md) distinguent les
+anciennes durées GitHub des nouvelles validations locales.
+
+Pour vérifier l’installateur hors réseau avec une copie intacte du ZIP officiel :
+
+```powershell
+./scripts/tests/install-cargo-audit.tests.ps1 -ArchivePath C:\chemin\cargo-audit-x86_64-pc-windows-msvc-v0.22.2.zip
+```

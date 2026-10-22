@@ -20,12 +20,18 @@ try {
     $env:TMP = $fixtureRoot
     Write-Host "Native test fixtures: $fixtureRoot"
 
+    $phaseTimer = [Diagnostics.Stopwatch]::StartNew()
     & cargo check @cargoArguments --all-targets
     if ($LASTEXITCODE -ne 0) { throw 'All-target compilation failed.' }
+    Write-Host ('Native timing: all-target check {0:N1} s' -f $phaseTimer.Elapsed.TotalSeconds)
+    $phaseTimer.Restart()
     & cargo build @cargoArguments --bins
     if ($LASTEXITCODE -ne 0) { throw 'Worker/application build failed.' }
+    Write-Host ('Native timing: worker/application build {0:N1} s' -f $phaseTimer.Elapsed.TotalSeconds)
+    $phaseTimer.Restart()
     & cargo test @cargoArguments --all-targets -- --test-threads=1
     if ($LASTEXITCODE -ne 0) { throw 'Native tests failed.' }
+    Write-Host ('Native timing: test compilation and execution {0:N1} s' -f $phaseTimer.Elapsed.TotalSeconds)
 } finally {
     $env:TEMP = $savedTemp
     $env:TMP = $savedTmp

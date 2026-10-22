@@ -13,6 +13,7 @@ Les références actives décrivent les contrats ; les bilans ci-dessous décriv
 | [Corrections UI, 18 octobre](2026-10-18-ui-audit-fixes.md) | Douze corrections, commits, vérifications et parcours visuels précis |
 | [Distribution Windows, 22 octobre](2026-10-22-windows-distribution.md) | Mesures détaillées v2.0.0, coût des constructions Cargo et protocole de cache |
 | [Tests locaux de distribution, 22 octobre](2026-10-22-distribution-local-tests.md) | Comparaison des parcours Rust avec caches vide, intégral et limité aux dépendances |
+| [CI Windows, 22 octobre](2026-10-22-windows-ci.md) | Journaux des tests natifs et de l’audit, optimisations et validations locales |
 
 ## Retrouver une preuve complète
 

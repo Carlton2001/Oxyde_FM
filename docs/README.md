@@ -7,6 +7,7 @@ Oxyde utilise Rust, GPUI et Tokio. Choisir une référence selon le travail à f
 | Compiler, tester ou découper un module | [Développement](guides/development.md) |
 | Construire une version installable ou portable | [Distribution Windows](guides/distribution.md) |
 | Comprendre les temps de distribution Windows | [Référence GitHub](reports/2026-10-22-windows-distribution.md), [tests locaux](reports/2026-10-22-distribution-local-tests.md) |
+| Comprendre les temps de la CI native et de l’audit Windows | [Mesures et validations](reports/2026-10-22-windows-ci.md) |
 | Mettre à jour les avis de licences tiers | [Licences des dépendances](../licenses/dependencies/README.md) |
 | Modifier thèmes, langues ou composants | [Interface](architecture/interface.md) |
 | Modifier menus, infobulles ou fenêtres secondaires | [Fenêtres](architecture/windows.md) |

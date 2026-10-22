@@ -3,9 +3,9 @@ name: Windows dependency security
 on:
   push:
     branches: [main]
-    paths: [Cargo.toml, Cargo.lock, scripts/audit-security.ps1, .github/workflows/security.yml]
+    paths: [Cargo.toml, Cargo.lock, scripts/audit-security.ps1, scripts/install-cargo-audit.ps1, scripts/tests/install-cargo-audit.tests.ps1, .github/workflows/security.yml]
   pull_request:
-    paths: [Cargo.toml, Cargo.lock, scripts/audit-security.ps1, .github/workflows/security.yml]
+    paths: [Cargo.toml, Cargo.lock, scripts/audit-security.ps1, scripts/install-cargo-audit.ps1, scripts/tests/install-cargo-audit.tests.ps1, .github/workflows/security.yml]
   schedule:
     - cron: '17 7 * * 1'
   workflow_dispatch:
@@ -21,8 +21,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install current stable Rust
-        run: rustup update stable --no-self-update
       - name: Audit locked Windows dependencies
         shell: pwsh
         run: ./scripts/audit-security.ps1
