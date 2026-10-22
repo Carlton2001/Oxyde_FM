@@ -11,6 +11,9 @@ impl WindowsPlatform {
 }
 
 impl Platform for WindowsPlatform {
+    fn process_memory_snapshot(&self) -> Result<super::ProcessMemorySnapshot, String> {
+        super::memory::read_windows()
+    }
     fn place_viewer_controls(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle, rect: [i32; 4], visible: bool) -> Result<(), String> {
         super::windows_viewer_controls::place(window, owner, rect, visible, false)
     }

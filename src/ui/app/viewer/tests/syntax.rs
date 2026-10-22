@@ -89,3 +89,16 @@ fn powershell_unicode_escapes_keep_their_semantics_with_the_rust_regex_backend()
         assert_kind_at("escape.ps1", &source, escape, 3);
     }
 }
+
+/// Run alone in a fresh test process: SYNTAXES is a process-lifetime LazyLock.
+#[cfg(target_os = "windows")]
+#[test]
+#[ignore = "Measures one-time syntax initialization; run alone with --nocapture"]
+fn syntax_initialization_memory() {
+    let platform = oxyde_lib::platform::platform();
+    let before = platform.process_memory_snapshot().unwrap();
+    super::warm();
+    let after = platform.process_memory_snapshot().unwrap();
+    println!("syntax initialization: before={before:?}; after={after:?}; private_delta_bytes={}",
+        after.private_bytes as i128 - before.private_bytes as i128);
+}

@@ -40,6 +40,17 @@ struct Cache {
 static CACHE: OnceLock<Mutex<Cache>> = OnceLock::new();
 static POOL: OnceLock<Mutex<Pool>> = OnceLock::new();
 
+pub(crate) fn diagnostic_snapshot() -> Option<(usize, usize)> {
+    let Some(cache) = CACHE.get() else { return Some((0, 0)) };
+    cache.try_lock().ok().map(|cache| {
+        let mut unique = std::collections::HashSet::new();
+        cache.entries.iter().filter(|(_, _, image, _)| unique.insert(image.id))
+            .fold((0, 0), |(count, bytes), (_, _, image, _)| {
+                (count + 1, bytes + image.as_bytes(0).map_or(0, <[u8]>::len))
+            })
+    })
+}
+
 pub(crate) fn share(image: Arc<RenderImage>) -> Arc<RenderImage> {
     POOL.get_or_init(Default::default)
         .lock()

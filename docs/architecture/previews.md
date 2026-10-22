@@ -259,6 +259,44 @@ et `hand-grab.svg` : loupe brièvement pendant le zoom, main pendant le glisseme
 
 ## Caches et durée de vie
 
+Les grammaires de coloration sont chargées à la première demande d'analyse,
+hors UI ; ouvrir le Viewer sur des images ne les précharge pas. Les mesures
+opt-in des pixels et des caches sont décrites dans le [diagnostic mémoire](../diagnostics/memory.md).
+
+Les caches de survol gardent uniquement les pixels réduits, jamais les octets
+du fichier ni le raster source : 4 Mio au plus pour une image fixe à 1024 × 1024,
+32 Mio de frames pour une animation. Le décodage peut temporairement charger la
+source entière dans le worker (64 Mio encodés, 128 Mio de pixels source pour
+les images). Ce pic et les allocations du décodeur sont distincts du cache.
+Les buffers RGBA sont déplacés vers la conversion BGRA sans copie supplémentaire.
+
+`tooltip/pixels` suit l'image affichée par chaque entité d'aperçu. Un remplacement
+(y compris une frame vidéo), une erreur ou la libération du dernier affichage
+retire les anciennes textures de l'atlas par une action différée ; les pixels
+partagés avec un autre aperçu visible et les caches CPU restent disponibles.
+Masquer la fenêtre native vide aussi ses deux frames GPUI, sans attendre le
+prochain survol : une HWND masquée ne reçoit pas de `WM_PAINT` et pourrait
+sinon garder ses anciennes entités, pixels et propriétaire d'annulation vidéo.
+Le contrôle périodique ferme aussi la session de survol devenue invalide,
+même si aucun événement de sortie du pointeur n'a été reçu.
+Voir l'[audit mémoire des infobulles](../reports/2026-10-22-tooltip-memory.md).
+
+Le remplacement ou la fermeture du contenu du Viewer retire ses images de
+l'atlas GPUI par une action différée. Pendant une interaction, GPUI retire
+temporairement la fenêtre courante de sa liste : un `drop_image(image, None)`
+immédiat peut donc manquer cette fenêtre. L'action différée attend son retour
+dans la liste et couvre aussi les fenêtres détachées. Ce nettoyage ne garantit
+pas une baisse immédiate des Private Bytes : les frames, l'allocateur et le
+pilote graphique peuvent conserver des ressources.
+
+Le même retrait différé s'applique aux pages PDF évincées pendant le défilement,
+sans attendre la fermeture du document. Les demandes en attente d'une page
+évincée ou d'un PDF fermé sont annulées avant leur décodage ; un rendu natif
+déjà commencé peut terminer. Chaque réponse doit toujours posséder sa demande :
+une ancienne requête annulée ne retire pas la nouvelle requête du même numéro
+de page. Les pages PDF et images Markdown sont suivies par le diagnostic dès
+le décodage, puis à leur publication et à leur retrait.
+
 | Usage | Limite et politique |
 | --- | --- |
 | Pixels images | LRU RAM : 32 entrées / 64 Mio ; toutes les frames comptent |

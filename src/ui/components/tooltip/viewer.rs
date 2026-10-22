@@ -26,7 +26,9 @@ impl PreviewTask {
             .justify_center()
             .min_h_0()
             .min_w_0();
-        if let Some((image, _)) = self.loaded_image(window, cx) {
+        let pixels = self.loaded_image(window, cx);
+        super::pixels::display(cx.entity_id(), pixels.as_ref().map(|(image, _)| image.clone()), cx);
+        if let Some((image, _)) = pixels {
             return frame.child(
                 img(image)
                     .id("viewer-preview-image")

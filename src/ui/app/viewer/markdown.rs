@@ -63,7 +63,10 @@ impl Viewer {
                 return Err("Markdown image no longer shown".to_string());
             }
             crate::ui::image_preview::load_path(std::path::Path::new(&path), &renderer)
-                .map(|preview| preview.image)
+                .map(|preview| {
+                    crate::ui::memory_diagnostics::track(&preview.image, crate::ui::memory_diagnostics::State::Decoded);
+                    preview.image
+                })
                 .map_err(|error| error.to_string())
         });
         let task = cx.spawn(async move |this, cx| {
@@ -78,7 +81,10 @@ impl Viewer {
                 document.images.insert(
                     index,
                     match result {
-                        Ok(image) => ImageState::Ready(image),
+                        Ok(image) => {
+                            crate::ui::memory_diagnostics::track(&image, crate::ui::memory_diagnostics::State::Shown);
+                            ImageState::Ready(image)
+                        },
                         Err(error) => {
                             log::debug!("Markdown image unavailable: {error}");
                             ImageState::Failed

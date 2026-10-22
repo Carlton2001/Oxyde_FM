@@ -152,7 +152,8 @@ fn fitted_bgra(image: DynamicImage, policy: Policy) -> RgbaImage {
     } else {
         image
     };
-    let mut image = image.to_rgba8();
+    // Move an existing RGBA buffer instead of cloning every preview/frame.
+    let mut image = image.into_rgba8();
     for pixel in image.chunks_exact_mut(4) {
         pixel.swap(0, 2);
     }
@@ -274,3 +275,7 @@ pub fn decode(
     };
     Ok(DecodedImage { frames, limited, natural_size })
 }
+
+#[cfg(test)]
+#[path = "image_preview_decode/tests/buffers.rs"]
+mod buffer_tests;

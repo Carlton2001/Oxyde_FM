@@ -140,3 +140,29 @@ fn lru_counts_all_animation_frames_and_bounds_retained_pixels() {
     assert!(cache.get(Path::new("a"), Some(&modified)).is_none());
     assert_eq!(cache.bytes, 8);
 }
+
+#[test]
+fn source_with_65_mib_of_pixels_only_retains_the_reduced_preview() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("large.png");
+    // The full source exists only while encoding/decoding, outside the cache.
+    image::RgbaImage::from_pixel(4096, 4160, image::Rgba([10, 20, 30, 255]))
+        .save(&path).unwrap();
+    assert_eq!(4096 * 4160 * 4, 65 * 1024 * 1024);
+    let cache = Mutex::new(Cache::new(MAX_ENTRIES, MAX_BYTES));
+    let renderer = SvgRenderer::new(Arc::new(()));
+    let preview = cached_load(&cache, &path, || {
+        crate::ui::image_preview::load_path_local(&path, &renderer)
+    }).unwrap();
+    let pixels = preview.image.as_bytes(0).unwrap().len();
+    let size = preview.image.size(0);
+    assert!(size.width.0 <= 1024 && size.height.0 <= 1024);
+    assert!(pixels <= 4 * 1024 * 1024);
+    assert_eq!(cache.lock().unwrap().bytes, pixels);
+    let probe = Arc::downgrade(&preview.image);
+    drop(preview);
+    std::fs::remove_file(&path).unwrap();
+    assert!(probe.upgrade().is_some(), "the reduced preview stays in the bounded LRU");
+    cache.lock().unwrap().invalidate(&path);
+    assert!(probe.upgrade().is_none());
+}

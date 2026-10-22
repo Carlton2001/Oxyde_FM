@@ -12,6 +12,11 @@ const MAX_ENTRIES: usize = 32;
 const MAX_BYTES: usize = 64 * 1024 * 1024;
 static CACHE: OnceLock<Mutex<Cache>> = OnceLock::new();
 
+pub(super) fn diagnostic_snapshot() -> Option<(usize, usize)> {
+    let Some(cache) = CACHE.get() else { return Some((0, 0)) };
+    cache.try_lock().ok().map(|cache| (cache.entries.len(), cache.bytes))
+}
+
 #[derive(Clone, PartialEq, Eq)]
 struct Signature {
     path: PathBuf,

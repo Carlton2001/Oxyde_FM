@@ -1,6 +1,8 @@
 use crate::models::{DriveInfo, QuickAccessItem};
 mod file_names;
 mod viewer_media;
+mod memory;
+pub use memory::ProcessMemorySnapshot;
 pub use viewer_media::{decode_media_report, encode_media_report, ViewerMediaCommand, ViewerMediaControl, MEDIA_ENDED, MEDIA_FAILED, MEDIA_LOADING, MEDIA_PAUSED, MEDIA_PLAYING, MEDIA_REPORT_BYTES};
 pub use file_names::FileNameRules;
 
@@ -105,6 +107,10 @@ impl ShellDeleteOutcome {
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
 pub trait Platform: Send + Sync {
+    /// Diagnostic scan of this process only. Call from a background thread.
+    fn process_memory_snapshot(&self) -> Result<ProcessMemorySnapshot, String> {
+        Err("Process memory diagnostics are unavailable on this platform".into())
+    }
     /// Override the image zoom/pan cursor on the owning UI window.
     fn viewer_image_cursor(&self, _handle: raw_window_handle::RawWindowHandle, _zooming: bool, _dragging: bool) {}
     fn viewer_media_parent(&self, _handle: raw_window_handle::RawWindowHandle) -> Option<u64> { None }

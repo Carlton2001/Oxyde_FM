@@ -100,6 +100,11 @@ impl Cache {
 
 static CACHE: OnceLock<Mutex<Cache>> = OnceLock::new();
 
+pub(super) fn diagnostic_snapshot() -> Option<(usize, usize)> {
+    let Some(cache) = CACHE.get() else { return Some((0, 0)) };
+    cache.try_lock().ok().map(|cache| (cache.entries.len(), cache.bytes))
+}
+
 pub(super) fn invalidate(path: &str) {
     if let Some(cache) = CACHE.get() {
         let mut cache = cache.lock().unwrap();

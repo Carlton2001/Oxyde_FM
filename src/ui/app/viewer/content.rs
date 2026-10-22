@@ -88,13 +88,29 @@ impl Content {
     }
 }
 
+/// Retire displayed pixels after GPUI restores the window currently being updated.
+pub(super) fn retire_images(images: Vec<Arc<RenderImage>>, cx: &mut App) {
+    if images.is_empty() { return; }
+    for image in &images {
+        crate::ui::memory_diagnostics::track(image, crate::ui::memory_diagnostics::State::Retired);
+    }
+    // During a window callback GPUI temporarily removes that window from
+    // App.windows. None would silently skip its atlas without this deferral.
+    cx.defer(move |cx| {
+        for image in images { cx.drop_image(image, None); }
+    });
+}
+
 impl Viewer {
     /// Release GPU textures with the content that owned them.
     pub(super) fn replace_content(&mut self, content: Content, cx: &mut Context<Self>) {
         let old = std::mem::replace(&mut self.content, content);
-        for image in old.images() {
-            cx.drop_image(image, None);
+        if crate::ui::memory_diagnostics::enabled() {
+            use crate::ui::memory_diagnostics::{track, State};
+            for image in self.content.images() { track(&image, State::Shown); }
+            crate::ui::memory_diagnostics::checkpoint("viewer-content-replaced");
         }
+        retire_images(old.images(), cx);
     }
 
     pub(super) fn load_content(&mut self, file: &oxyde_lib::models::FileEntry, cx: &mut Context<Self>) {
@@ -187,3 +203,11 @@ impl Viewer {
 #[cfg(test)]
 #[path = "tests/content.rs"]
 mod tests;
+
+#[cfg(all(test, target_os = "windows"))]
+#[path = "tests/native_image_cleanup.rs"]
+mod native_image_cleanup;
+
+#[cfg(all(test, target_os = "windows"))]
+#[path = "tests/native_graphics_memory.rs"]
+mod native_graphics_memory;

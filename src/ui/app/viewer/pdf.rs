@@ -30,6 +30,33 @@ pub(super) struct Pdf {
 }
 
 impl Pdf {
+    fn cancel_page(&mut self, index: usize) {
+        if let Some(cancelled) = self.pending.remove(&index) {
+            cancelled.store(true, Ordering::Release);
+        }
+    }
+
+    fn finish_request(&mut self, index: usize, request: &Arc<AtomicBool>) -> bool {
+        if !self.pending.get(&index).is_some_and(|pending| Arc::ptr_eq(pending, request)) {
+            return false;
+        }
+        self.pending.remove(&index);
+        true
+    }
+
+    fn touch_page(&mut self, index: usize) -> Vec<Arc<RenderImage>> {
+        self.recent.retain(|page| *page != index);
+        self.recent.push_back(index);
+        let mut evicted = Vec::new();
+        while self.recent.len() > MAX_PAGES {
+            if let Some(page) = self.recent.pop_front() {
+                self.cancel_page(page);
+                evicted.extend(self.pages.remove(&page));
+            }
+        }
+        evicted
+    }
+
     /// Snapshot taken by the Viewer's render, before the list lays out: GPUI
     /// keeps the list state borrowed while it calls the item renderer.
     pub(super) fn update_visible(&mut self) {
@@ -51,6 +78,14 @@ impl Pdf {
 
     pub(super) fn images(&self) -> impl Iterator<Item = Arc<RenderImage>> + '_ {
         self.pages.values().cloned()
+    }
+}
+
+impl Drop for Pdf {
+    fn drop(&mut self) {
+        // A blocking request already running can finish; queued requests must
+        // not keep rendering an obsolete document after its Viewer closes.
+        for cancelled in self.pending.values() { cancelled.store(true, Ordering::Release); }
     }
 }
 
@@ -89,22 +124,14 @@ impl Viewer {
         if !pdf.visible.contains(&index) {
             return;
         }
-        pdf.recent.retain(|page| *page != index);
-        pdf.recent.push_back(index);
+        let evicted = pdf.touch_page(index);
+        super::content::retire_images(evicted, cx);
         if pdf.pages.contains_key(&index) || pdf.pending.contains_key(&index) || pdf.failed.contains(&index) {
             return;
         }
-        let mut evicted = Vec::new();
-        while pdf.recent.len() > MAX_PAGES {
-            if let Some(page) = pdf.recent.pop_front() {
-                evicted.extend(pdf.pages.remove(&page));
-            }
-        }
-        for image in evicted {
-            cx.drop_image(image, None);
-        }
         let cancelled = Arc::new(AtomicBool::new(false));
         pdf.pending.insert(index, cancelled.clone());
+        let request = cancelled.clone();
         let session = pdf.session.clone();
         // The session serializes rendering; this job only waits on its own page.
         let work = cx.background_executor().spawn(async move {
@@ -115,27 +142,28 @@ impl Viewer {
             let image = session.page(index as u32).map_err(|error| error.to_string())?;
             // Bounded by MAX_PAGES, not by the tooltips' shared pixel budget:
             // hovering files must never make visible pages fail.
-            Ok(Arc::new(RenderImage::new(vec![image::Frame::new(image)])))
+            let image = Arc::new(RenderImage::new(vec![image::Frame::new(image)]));
+            crate::ui::memory_diagnostics::track(&image, crate::ui::memory_diagnostics::State::Decoded);
+            Ok(image)
         });
         cx.spawn(async move |this, cx| {
             let result = work.await;
             let _ = this.update(cx, |this, cx| {
-                let Content::Pdf(pdf) = &mut this.content else {
-                    if let Ok(image) = result {
-                        cx.drop_image(image, None);
-                    }
-                    return;
-                };
                 if this.generation != generation {
                     return;
                 }
-                pdf.pending.remove(&index);
+                let Content::Pdf(pdf) = &mut this.content else { return };
+                // A page may leave the viewport and be requested again while
+                // its previous decode finishes. That old result owns no new request.
+                if !pdf.finish_request(index, &request) { return; }
                 match result {
                     // A page scrolled far away meanwhile is not retained.
                     Ok(image) if pdf.recent.contains(&index) => {
+                        crate::ui::memory_diagnostics::track(&image, crate::ui::memory_diagnostics::State::Shown);
                         pdf.pages.insert(index, image);
                     }
-                    Ok(image) => cx.drop_image(image, None),
+                    // Unpublished pixels never entered the atlas and drop here.
+                    Ok(_) => {},
                     Err(error) if error == SKIPPED => {}
                     Err(error) => {
                         log::warn!("Viewer could not render PDF page {index}: {error}");
@@ -148,3 +176,7 @@ impl Viewer {
         .detach();
     }
 }
+
+#[cfg(test)]
+#[path = "tests/pdf_lifetimes.rs"]
+mod lifetime_tests;

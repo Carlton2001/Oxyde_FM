@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 const MAX_BYTES: usize = 256 * 1024 * 1024;
 const MAX_IMAGES: usize = 256;
+static BUDGET: OnceLock<Mutex<Budget>> = OnceLock::new();
 
 struct Entry {
     image: Weak<RenderImage>,
@@ -48,12 +49,20 @@ impl Budget {
 }
 
 pub(crate) fn admit(image: &Arc<RenderImage>) -> Result<(), String> {
-    static BUDGET: OnceLock<Mutex<Budget>> = OnceLock::new();
     BUDGET
         .get_or_init(|| Mutex::new(Budget::new(MAX_BYTES, MAX_IMAGES)))
         .lock()
         .map_err(|_| "Preview pixel budget unavailable".to_string())?
         .admit(image)
+}
+
+/// Retained logical pixels; includes images shared with caches and render frames.
+pub(crate) fn diagnostic_snapshot() -> Option<(usize, usize)> {
+    let Some(budget) = BUDGET.get() else { return Some((0, 0)) };
+    budget.try_lock().ok().map(|budget| {
+        budget.images.iter().filter(|entry| entry.image.strong_count() > 0)
+            .fold((0, 0), |(count, bytes), entry| (count + 1, bytes + entry.bytes))
+    })
 }
 
 #[cfg(test)]

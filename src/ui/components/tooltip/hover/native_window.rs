@@ -142,12 +142,14 @@ pub(super) fn sync(parent: &mut Window, cx: &mut App) {
     let ordinary = cx.default_global::<NativeWindows>().ordinary.get(&id).cloned();
     let view = if parent.is_window_active() && parent.is_window_hovered() { ordinary.or(view) } else { None };
     let rem = parent.rem_size();
-    let _ = handle.update(cx, |root, window, cx| {
+    let clear_frames = handle.update(cx, |root, window, cx| {
+        let mut cleared = false;
         if root.view.as_ref().map(|view| view.entity_id()) != view.as_ref().map(|view| view.entity_id()) {
             if let Some(old) = root.view.take() {
                 set_native(&old, false, cx);
             }
             root.view = view;
+            cleared = root.view.is_none();
             if let Some(view) = &root.view {
                 set_native(view, true, cx);
             }
@@ -159,7 +161,9 @@ pub(super) fn sync(parent: &mut Window, cx: &mut App) {
             window.refresh();
         }
         place(root, window, cx);
-    });
+        cleared
+    }).unwrap_or(false);
+    if clear_frames { clear_hidden_frames(handle, cx); }
 }
 
 pub(super) fn follow_pointer(
@@ -216,7 +220,8 @@ pub(super) fn hide(id: WindowId, cx: &mut App) {
         .get(&id)
         .map(|entry| entry.0);
     if let Some(handle) = handle {
-        let _ = handle.update(cx, |root, window, cx| {
+        let cleared = handle.update(cx, |root, window, cx| {
+            let cleared = root.view.is_some();
             if let Some(view) = root.view.take() {
                 set_native(&view, false, cx);
             }
@@ -227,7 +232,50 @@ pub(super) fn hide(id: WindowId, cx: &mut App) {
                     root.scale,
                 );
             }
+            cleared
+        }).unwrap_or(false);
+        if cleared { clear_hidden_frames(handle, cx); }
+    }
+}
+
+fn clear_hidden_frames(handle: WindowHandle<NativeTooltip>, cx: &mut App) {
+    // Hidden HWNDs receive no WM_PAINT. Both GPUI frame buffers can retain
+    // image elements, preview entities and the video cancellation owner.
+    // Use the untyped handle so drawing can borrow the root entity again.
+    cx.defer(move |cx| {
+        let _ = AnyWindowHandle::from(handle).update(cx, |view, window, cx| {
+            let hidden = view.downcast::<NativeTooltip>().is_ok_and(|root| root.read(cx).view.is_none());
+            if hidden {
+                window.refresh();
+                window.draw(cx).clear(cx);
+                window.draw(cx).clear(cx);
+            }
         });
+    });
+}
+
+fn dismiss_invalid_session(parent: &mut Window, cx: &mut App) {
+    let id = Window::window_handle(parent).window_id();
+    let (scope, shared) = cx.default_global::<Sessions>().windows.get(&id)
+        .map(|session| (session.scope.clone(), session.scope.is_some()
+            || session.tooltip.is_some() || session.task.is_some()))
+        .unwrap_or_default();
+    let view = cx.default_global::<NativeWindows>().ordinary.get(&id).cloned();
+    let ordinary = view.is_some();
+    // Once cleared, the idle timer must not refresh the owner every 100 ms.
+    if !shared && !ordinary { return; }
+    // Leaving through a window edge or a non-client area may deliver no move.
+    if view.is_some_and(|view| pointer_left(&view, parent, cx)) {
+        cx.default_global::<NativeWindows>().ordinary.remove(&id);
+        super::clear(parent, cx);
+        return;
+    }
+    if !parent.is_window_active() || !parent.is_window_hovered()
+        || (!ordinary && !scope.is_some_and(|scope| scope.valid(parent, cx)))
+    {
+        // Hiding alone leaves Sessions.tooltip and its decoder alive.
+        cx.default_global::<NativeWindows>().ordinary.remove(&id);
+        super::clear(parent, cx);
     }
 }
 
@@ -323,25 +371,7 @@ pub(super) fn present(_view: &AnyView, parent: &mut Window, cx: &mut App) -> boo
                         .await;
                     let alive = cx.update(|cx| {
                         parent_handle
-                            .update(cx, |_, parent, cx| {
-                                let scope = cx
-                                    .default_global::<Sessions>()
-                                    .windows
-                                    .get(&id)
-                                    .and_then(|session| session.scope.clone());
-                                let view = cx.default_global::<NativeWindows>().ordinary.get(&id).cloned();
-                                let ordinary = view.is_some();
-                                // Leaving through a window edge or a non-client
-                                // area may deliver no move: GPUI keeps its tooltip.
-                                if view.is_some_and(|view| pointer_left(&view, parent, cx)) {
-                                    cx.default_global::<NativeWindows>().ordinary.remove(&id);
-                                    hide(id, cx);
-                                    return;
-                                }
-                                if !parent.is_window_active() || !parent.is_window_hovered() || (!ordinary && !scope.is_some_and(|scope| scope.valid(parent, cx))) {
-                                    hide(id, cx);
-                                }
-                            })
+                            .update(cx, |_, parent, cx| dismiss_invalid_session(parent, cx))
                             .is_ok()
                     });
                     if !alive {
@@ -465,3 +495,7 @@ impl Element for MeasuredContent {
 #[cfg(test)]
 #[path = "../tests/native_dimensions.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "../tests/native_lifetimes.rs"]
+mod lifetime_tests;

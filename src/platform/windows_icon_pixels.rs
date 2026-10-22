@@ -57,8 +57,14 @@ impl PixelCache {
         self.generation = generation;
     }
 }
+static CACHE: OnceLock<Mutex<PixelCache>> = OnceLock::new();
+
+pub(super) fn diagnostic_snapshot() -> Option<(usize, usize)> {
+    let Some(cache) = CACHE.get() else { return Some((0, 0)) };
+    cache.try_lock().ok().map(|cache| (cache.images.len(), cache.bytes))
+}
+
 fn cache() -> &'static Mutex<PixelCache> {
-    static CACHE: OnceLock<Mutex<PixelCache>> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(PixelCache::new(32 * 1024 * 1024, 1000)))
 }
 pub(super) fn clear() {

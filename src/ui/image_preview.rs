@@ -95,7 +95,9 @@ pub(crate) fn load_thumbnail(path: &Path, renderer: &SvgRenderer) -> Result<Prev
 
 /// Larger raster for the Viewer; the display still fits it to the pane.
 pub(crate) fn load_viewer(path: &Path, renderer: &SvgRenderer) -> Result<PreviewImage, PreviewError> {
-    load_path_mode(path, renderer, "image-viewer", oxyde_lib::utils::image_preview_decode::VIEWER_POLICY)
+    let preview = load_path_mode(path, renderer, "image-viewer", oxyde_lib::utils::image_preview_decode::VIEWER_POLICY)?;
+    crate::ui::memory_diagnostics::track(&preview.image, crate::ui::memory_diagnostics::State::Decoded);
+    Ok(preview)
 }
 
 fn load_path_mode(path: &Path, renderer: &SvgRenderer, mode: &str, policy: Policy) -> Result<PreviewImage, PreviewError> {

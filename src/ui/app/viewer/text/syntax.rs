@@ -16,6 +16,7 @@ const MAX_SPANS: usize = 1_000_000;
 static SYNTAXES: LazyLock<SyntaxSet> = LazyLock::new(load_syntaxes);
 
 fn load_syntaxes() -> SyntaxSet {
+    crate::ui::memory_diagnostics::checkpoint("syntax-initialization-start");
     let mut builder = SyntaxSet::load_defaults_newlines().into_builder();
     // Keep upstream names: SCSS links to named contexts in Sass.
     for (name, source) in [
@@ -28,7 +29,9 @@ fn load_syntaxes() -> SyntaxSet {
             Err(error) => log::error!("Cannot load embedded syntax {name}: {error}"),
         }
     }
-    builder.build()
+    let syntaxes = builder.build();
+    crate::ui::memory_diagnostics::checkpoint("syntax-initialization-complete");
+    syntaxes
 }
 
 #[derive(Clone)]
@@ -38,6 +41,7 @@ pub(super) struct Span {
 }
 
 /// Pays the grammar compilation before the first file needs it.
+#[cfg(test)]
 pub(super) fn warm() {
     LazyLock::force(&SYNTAXES);
 }

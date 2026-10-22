@@ -289,7 +289,6 @@ impl Viewer {
         cx.background_executor()
             .spawn(async { oxyde_lib::platform::platform().warm_viewer_images() })
             .detach();
-        cx.background_executor().spawn(async { text::warm_syntaxes() }).detach();
         // The owner is being updated while it constructs this child. Read its
         // initial preferences at the call site, never through owner.read here.
         let (markdown_rendered, syntax_highlighting, media_autoplay) = options;

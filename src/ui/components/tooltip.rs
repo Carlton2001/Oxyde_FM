@@ -1,4 +1,5 @@
 mod assets;
+mod pixels;
 mod presentation;
 mod preview;
 mod video;
@@ -10,6 +11,11 @@ mod image_cache;
 mod native;
 pub(crate) use native::NativeTooltipExt;
 mod position;
+
+/// Image and PDF caches respectively; each total overlaps the preview budget.
+pub(crate) fn diagnostic_cache_snapshot() -> [Option<(usize, usize)>; 2] {
+    [image_cache::diagnostic_snapshot(), pdf_cache::diagnostic_snapshot()]
+}
 
 use video::CancelVideoPreview;
 use crate::ui::components::icons::{get_preview_type, PreviewType};

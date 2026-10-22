@@ -109,6 +109,7 @@ fn main() {
     gpui_platform::application()
         .with_assets(asset_source)
         .run(move |cx| {
+            crate::ui::memory_diagnostics::start(cx);
             cx.set_global(folder_icons);
             let assets = crate::ui::assets::EmbeddedAssetSource::new();
             assets.load_fonts(cx).expect("fonts could not be loaded");

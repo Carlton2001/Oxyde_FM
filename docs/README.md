@@ -17,6 +17,7 @@ Oxyde utilise Rust, GPUI et Tokio. Choisir une référence selon le travail à f
 | Vérifier l’effet de Turbo et les améliorations restantes | [Couverture de Turbo](reports/2026-10-17-turbo-coverage.md) |
 | Modifier le listing, les filtres ou la recherche | [Navigation et recherche](architecture/search.md) |
 | Diagnostiquer copies, suppressions ou fermeture | [Copie](diagnostics/copy.md), [suppression](diagnostics/delete.md), [fermeture](diagnostics/shutdown.md) |
+| Mesurer la mémoire du Viewer et des aperçus | [Mémoire](diagnostics/memory.md) |
 | Comparer les moteurs de copie | [Benchmark](guides/copy-benchmark.md) |
 | Mesurer la compression et les échanges du worker | [Compression ZIP](diagnostics/archive-compression.md) |
 | Connaître les protections et limites restantes | [Sécurité](security/status.md) |

@@ -4,6 +4,8 @@ Les références actives décrivent les contrats ; les bilans ci-dessous décriv
 
 | Bilan | Lecture utile |
 | --- | --- |
+| [Audit mémoire du Viewer, 22 octobre](2026-10-22-viewer-memory-audit.md) | Relecture des changements non commités, évictions PDF, annulation des demandes et couverture des diagnostics |
+| [Mémoire des infobulles, 22 octobre](2026-10-22-tooltip-memory.md) | Sources réduites, budgets RAM, retrait des textures et libération des frames masquées |
 | [Sécurité, 13 octobre](2026-10-13-security.md) | Décisions, commits, bornes de tests et limites |
 | [Fenêtres et aperçus, 15 octobre](2026-10-15-windows.md) | Migration, corrections après essais et validation manquante |
 | [Code, 17 octobre](2026-10-17-code-review.md) | Corrections A01–A10 et optimisations O01–O04 intégrées |

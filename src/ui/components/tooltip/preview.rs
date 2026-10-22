@@ -130,6 +130,7 @@ impl PreviewTask {
         self.message
     }
     pub(super) fn new(path: String, preview_type: PreviewType, cx: &mut Context<Self>) -> Self {
+        super::pixels::observe(cx);
         // The task holds only a weak entity reference: closing the tooltip
         // cannot bring its loading message back after the delay.
         cx.spawn(async move |this, cx| {
@@ -425,7 +426,9 @@ impl Render for PreviewTask {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self.viewer { return self.render_viewer(window, cx); }
         let theme = *OxydeTheme::global(cx);
-        if let Some((image, natural_size)) = self.loaded_image(window, cx) {
+        let pixels = self.loaded_image(window, cx);
+        super::pixels::display(cx.entity_id(), pixels.as_ref().map(|(image, _)| image.clone()), cx);
+        if let Some((image, natural_size)) = pixels {
             let maximum = self.maximum_size.map(|limit| limit.width).unwrap_or_else(||
                 rem_pixels(rems(48.375))
                     .min((window.viewport_size().width - rem_pixels(rems(3.625))).max(px(1.0))));

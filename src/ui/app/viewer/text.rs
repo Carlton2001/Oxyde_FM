@@ -13,10 +13,6 @@ pub(super) fn code_highlights(language: &str, text: &str) -> Vec<(std::ops::Rang
         .map(|span| (span.range, span.kind)).collect()
 }
 
-pub(super) fn warm_syntaxes() {
-    syntax::warm();
-}
-
 /// Text kept in memory for display; a larger file shows its beginning. Below
 /// 4 GiB, line and row offsets fit in `u32`, half the memory of `usize`.
 pub(super) const MAX_TEXT_BYTES: u64 = 512 * 1024 * 1024;
