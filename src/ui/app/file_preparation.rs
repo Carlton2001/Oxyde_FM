@@ -24,11 +24,19 @@ pub(super) enum Owner {
         id: String,
         path: String,
     },
+    FolderSize {
+        id: String,
+        path: String,
+        generation: u64,
+        directory: String,
+        revision: u64,
+    },
 }
 impl Owner {
     fn id(&self) -> &str {
         match self {
-            Self::Listing { id, .. } | Self::Search { id, .. } | Self::Current { id, .. } => id,
+            Self::Listing { id, .. } | Self::Search { id, .. } | Self::Current { id, .. }
+                | Self::FolderSize { id, .. } => id,
         }
     }
     fn matches(&self, app: &mut OxydeApp) -> bool {
@@ -41,6 +49,10 @@ impl Owner {
             return false;
         };
         match self {
+            Self::FolderSize { path, generation, directory, revision, .. } => {
+                &tab.path == path && tab.show_size_histogram
+                    && tab.folder_sizes.current(*generation, directory, *revision)
+            }
             Self::Listing { path, .. } | Self::Current { path, .. } => &tab.path == path,
             Self::Search {
                 path, cancellation, ..

@@ -6,7 +6,9 @@ mod tab;
 mod presentation;
 mod sorting;
 mod preparation;
+mod folder_sizes;
 pub(crate) use preparation::FileUpdate;
+pub(crate) use folder_sizes::SIZE_FLASH_DURATION;
 mod tree;
 mod viewer;
 
@@ -133,6 +135,7 @@ pub struct TabState {
     pub files: std::sync::Arc<Vec<FileEntry>>,
     pub show_size_histogram: bool,
     pub size_calculation: Option<std::sync::Arc<gpui::Task<()>>>,
+    pub(crate) folder_sizes: folder_sizes::FolderSizes,
     pub back_stack: Vec<String>,
     pub forward_stack: Vec<String>,
     pub list_scroll: UniformListScrollHandle,

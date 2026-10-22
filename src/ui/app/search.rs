@@ -740,6 +740,7 @@ impl OxydeApp {
             tab.back_stack.push(tab.path.clone());
         }
         tab.forward_stack.clear();
+        tab.reset_folder_sizes();
         tab.path = path.clone();
         tab.filter_name.clear();
                     tab.filter_original_location.clear();
@@ -752,6 +753,7 @@ impl OxydeApp {
         if let Some((pane, index)) = index {
             self.request_quick_search(&pane, index, path, cx);
         }
+        self.reconcile_watchers(cx);
         self.save_workspace(cx);
     }
 
@@ -784,6 +786,7 @@ impl OxydeApp {
                 if let Some(tab) = self.state.find_tab_mut(tab_id) {
                     tab.back_stack.push(tab.path.clone());
                     tab.forward_stack.clear();
+                    tab.reset_folder_sizes();
                     tab.path = root.clone();
                     tab.clear_files();
                     tab.selected_paths.clear();

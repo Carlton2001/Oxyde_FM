@@ -195,6 +195,7 @@ pub(super) fn render_details_file_list(
                                     let h_inner = handle.clone();
                                     let p_id_for_list = pane_id.clone();
                                     let selected_paths = selected_paths.clone();
+                                    let size_flashes = active_tab.folder_sizes.size_flashes();
                                     let folder_subdirectory_flags = folder_subdirectory_flags.clone();
                                     move |range, _, cx| {
                                         let folder_subdirectory_flags = folder_subdirectory_flags.clone();
@@ -210,6 +211,7 @@ pub(super) fn render_details_file_list(
                                             let file = &files[index];
                                             let is_dir = file.is_dir;
                                             let path = file.path.clone();
+                                            let size_flash = size_flashes.get(&path).copied();
                                             let is_selected = selected_paths.contains(&path);
                                             let has_subdirectories = is_dir
                                                 && folder_subdirectory_flags.get(&path).copied().unwrap_or(false);
@@ -253,6 +255,7 @@ pub(super) fn render_details_file_list(
                                                 search_results,
                                                 network_panel,
                                                 calculating_sizes,
+                                                size_flash,
                                                 trash_panel,
                                                 language,
                                             }, cx)

@@ -2,58 +2,11 @@ use super::{drive_watchers, OxydeApp, ToastKind};
 use crate::ui::i18n::Message;
 use crate::ui::components::sidebar::sidebar_paths_equal;
 use gpui::*;
-use notify::{Config, PollWatcher, RecommendedWatcher, RecursiveMode, Watcher};
-use std::collections::{HashMap, HashSet, VecDeque};
+mod changes;
+pub use changes::{DirectoryWatcher, WatcherChanges};
+use std::collections::{HashMap, HashSet};
+#[cfg(test)]
 use std::sync::{Arc, Mutex};
-
-pub struct DirectoryWatcher {
-    polling: bool,
-    watcher: Box<dyn Watcher + Send>,
-}
-
-impl DirectoryWatcher {
-    fn create(
-        path: &str,
-        polling: bool,
-        changes: Arc<Mutex<VecDeque<String>>>,
-    ) -> notify::Result<Self> {
-        let watched_path = path.to_owned();
-        let callback = move |result: notify::Result<notify::Event>| {
-            if result.is_ok() {
-                if let Ok(mut queue) = changes.lock() {
-                    if !queue.contains(&watched_path) {
-                        queue.push_back(watched_path.clone());
-                    }
-                }
-            }
-        };
-        // USB polling retains snapshots, not open directory handles. All scans,
-        // including the initial snapshot, run on a background worker.
-        let mut watcher: Box<dyn Watcher + Send> = if polling {
-            Box::new(PollWatcher::new(
-                callback,
-                Config::default().with_poll_interval(std::time::Duration::from_secs(2)),
-            )?)
-        } else {
-            Box::new(RecommendedWatcher::new(callback, Config::default())?)
-        };
-        watcher.watch(std::path::Path::new(path), RecursiveMode::NonRecursive)?;
-        Ok(Self { polling, watcher })
-    }
-
-    pub(super) fn release(mut self, path: &str) -> Result<(), String> {
-        self.watcher
-            .unwatch(std::path::Path::new(path))
-            .map_err(|error| error.to_string())?;
-        // On Windows unwatch is queued. configure's reply acts as a FIFO barrier:
-        // even Ok(false) means that the preceding unwatch has finished closing handles.
-        // PollWatcher unwatch already waits for any current snapshot to finish.
-        self.watcher
-            .configure(Config::default())
-            .map_err(|error| error.to_string())?;
-        Ok(())
-    }
-}
 
 pub(super) fn path_on_drive(path: &str, root: &str) -> bool {
     std::path::Path::new(path)
@@ -256,16 +209,17 @@ impl OxydeApp {
                             cx.notify();
                         }
                     });
-                    let changed: Vec<String> = if let Ok(mut q) = changes.lock() {
-                        q.drain(..).collect()
+                    let changed = if let Ok(mut q) = changes.lock() {
+                        std::mem::take(&mut *q)
                     } else {
-                        vec![]
+                        HashMap::new()
                     };
                     if !changed.is_empty() {
                         h.update(&mut cx, |this, cx| {
                             if this.ejecting_drive { return; }
                             // Refresh only affected expanded paths off the UI thread.
-                            for path in &changed {
+                            for (path, change) in &changed {
+                                if !change.listing { continue; }
                                 if this.state.expanded_paths.contains(path)
                                     || this.state.drives.iter().any(|drive| &drive.path == path) {
                                     this.request_sidebar_nodes(path.clone(), true, cx);
@@ -273,17 +227,29 @@ impl OxydeApp {
                             }
 
                             // Reload every affected tab (active = full refresh, inactive = files only).
-                            let mut reloads: Vec<(String, usize, String)> = Vec::new();
-                            this.state.layout.visit_panes(&mut |p| {
-                                for (idx, tab) in p.tabs.iter().enumerate() {
+                            let mut reloads = Vec::new();
+                            let mut size_updates = Vec::new();
+                            this.state.layout.visit_panes_mut(&mut |p| {
+                                for (idx, tab) in p.tabs.iter_mut().enumerate() {
                                     let watched = tab.watched_path();
-                                    if changed.contains(&watched) {
-                                        reloads.push((p.id.clone(), idx, tab.path.clone()));
+                                    if let Some(change) = changed.get(&watched) {
+                                        tab.invalidate_folder_sizes(if change.all_sizes { None } else { Some(&change.children) });
+                                        size_updates.push(tab.id.clone());
+                                        if change.listing {
+                                            reloads.push((p.id.clone(), idx, tab.path.clone(), tab.id.clone()));
+                                        }
                                     }
                                 }
                             });
-                            for (pane_id, tab_idx, path) in reloads {
-                                this.refresh_tab_files(&pane_id, tab_idx, path, cx);
+                            for (pane_id, tab_idx, path, id) in reloads {
+                                if this.pending_file_requests.contains_key(&id) {
+                                    this.watcher_pending_listings.insert(id);
+                                } else {
+                                    this.request_tab_listing(&pane_id, tab_idx, path, false, cx);
+                                }
+                            }
+                            for id in size_updates {
+                                this.schedule_folder_sizes(&id, cx);
                             }
                         });
                     }
@@ -377,7 +343,13 @@ impl OxydeApp {
             return;
         }
         let mut needed = HashSet::new();
+        let mut recursive_paths = HashSet::new();
+        let mut tab_ids = HashSet::new();
         self.state.layout.visit_panes(&mut |pane| {
+            tab_ids.extend(pane.tabs.iter().map(|tab| tab.id.clone()));
+            recursive_paths.extend(pane.tabs.iter()
+                .filter(|tab| tab.show_size_histogram && tab.archive_root.is_none())
+                .map(|tab| tab.path.clone()));
             needed.extend(
                 pane.tabs
                     .iter()
@@ -385,6 +357,7 @@ impl OxydeApp {
                     .map(|tab| tab.watched_path()),
             );
         });
+        self.watcher_pending_listings.retain(|id| tab_ids.contains(id));
         needed.extend(self.state.expanded_paths.iter().cloned());
         needed.extend(self.state.drives.iter().map(|drive| drive.path.clone()));
         let wanted: HashMap<_, _> = needed
@@ -394,15 +367,16 @@ impl OxydeApp {
                     (drive.is_usb() || drive.media_type.is_none())
                         && path_on_drive(&path, &drive.path)
                 });
-                (path, polling)
+                let recursive = recursive_paths.contains(&path);
+                (path, (polling, recursive))
             })
             .collect();
         self.pending_watchers
-            .retain(|path, (_, polling)| wanted.get(path) == Some(polling));
+            .retain(|path, (_, polling, recursive)| wanted.get(path) == Some(&(*polling, *recursive)));
         let obsolete: Vec<_> = self
             ._path_watchers
             .iter()
-            .filter(|(path, watcher)| wanted.get(*path) != Some(&watcher.polling))
+            .filter(|(path, watcher)| wanted.get(*path) != Some(&(watcher.polling, watcher.recursive)))
             .map(|(path, _)| path.clone())
             .collect();
         for path in obsolete {
@@ -414,7 +388,7 @@ impl OxydeApp {
                     .detach();
             }
         }
-        for (path, polling) in wanted {
+        for (path, (polling, recursive)) in wanted {
             if self._path_watchers.contains_key(&path) || self.pending_watchers.contains_key(&path)
             {
                 continue;
@@ -422,22 +396,36 @@ impl OxydeApp {
             self.next_watcher_request = self.next_watcher_request.wrapping_add(1);
             let request = self.next_watcher_request;
             self.pending_watchers
-                .insert(path.clone(), (request, polling));
+                .insert(path.clone(), (request, polling, recursive));
             let changes = self.watcher_changes.clone();
             cx.spawn(async move |this, cx| {
                 let worker_path = path.clone();
                 let result = cx
                     .background_executor()
-                    .spawn(async move { DirectoryWatcher::create(&worker_path, polling, changes) })
+                    .spawn(async move { DirectoryWatcher::create(&worker_path, polling, recursive, changes) })
                     .await;
+                if let Err(error) = &result { log::warn!("Cannot watch {path}: {error}"); }
                 let mut result = result.ok();
-                let _ = this.update(cx, |this, _| {
+                let _ = this.update(cx, |this, cx| {
                     if !this.ejecting_drive
-                        && this.pending_watchers.get(&path) == Some(&(request, polling))
+                        && this.pending_watchers.get(&path) == Some(&(request, polling, recursive))
                     {
                         this.pending_watchers.remove(&path);
                         if let Some(watcher) = result.take() {
                             this._path_watchers.insert(path.clone(), watcher);
+                            // Close the gap between activation and installation.
+                            if recursive {
+                                let mut ids = Vec::new();
+                                this.state.layout.visit_panes_mut(&mut |pane| {
+                                    for tab in &mut pane.tabs {
+                                        if tab.path == path && tab.show_size_histogram {
+                                            tab.invalidate_folder_sizes(None);
+                                            ids.push(tab.id.clone());
+                                        }
+                                    }
+                                });
+                                for id in ids { this.schedule_folder_sizes(&id, cx); }
+                            }
                         }
                     }
                 });
@@ -493,6 +481,7 @@ fn redirect_tabs(
             if !affected(&tab.path) {
                 continue;
             }
+            tab.reset_folder_sizes();
             tab.path = fallback.to_owned();
             tab.search_revision = tab.search_revision.wrapping_add(1);
             tab.search_input = None;
@@ -639,15 +628,15 @@ mod tests {
     fn usb_polling_detects_changes_and_can_be_released_before_removal() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().to_string_lossy().into_owned();
-        let changes = Arc::new(Mutex::new(VecDeque::new()));
-        let watcher = DirectoryWatcher::create(&path, true, changes.clone()).unwrap();
+        let changes = Arc::new(Mutex::new(HashMap::new()));
+        let watcher = DirectoryWatcher::create(&path, true, false, changes.clone()).unwrap();
         changes.lock().unwrap().clear();
         std::fs::create_dir(directory.path().join("new-folder")).unwrap();
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(6);
         while changes.lock().unwrap().is_empty() && std::time::Instant::now() < deadline {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
-        assert!(changes.lock().unwrap().contains(&path));
+        assert!(changes.lock().unwrap().contains_key(&path));
         watcher.release(&path).unwrap();
         directory.close().unwrap();
     }

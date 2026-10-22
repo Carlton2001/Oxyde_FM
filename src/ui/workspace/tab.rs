@@ -76,6 +76,7 @@ impl TabState {
             files: Default::default(),
             show_size_histogram: false,
             size_calculation: None,
+            folder_sizes: Default::default(),
             back_stack: Vec::new(),
             forward_stack: Vec::new(),
             list_scroll: UniformListScrollHandle::new(),
@@ -131,6 +132,7 @@ impl TabState {
         &self.cached_filtered_files
     }
 
+    #[cfg(test)]
     pub fn sort_files(&mut self) {
         super::sorting::sort_files(std::sync::Arc::make_mut(&mut self.files).as_mut_slice(), self.sort_column, self.sort_direction);
     }

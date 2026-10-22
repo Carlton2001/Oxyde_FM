@@ -42,6 +42,7 @@ pub(super) struct DetailsRowParams<'a> {
     pub(super) search_results: bool,
     pub(super) network_panel: bool,
     pub(super) calculating_sizes: bool,
+    pub(super) size_flash: Option<std::time::Instant>,
     pub(super) trash_panel: bool,
     pub(super) language: crate::ui::i18n::Language,
 }
@@ -76,6 +77,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
         search_results,
         network_panel,
         calculating_sizes,
+        size_flash,
         trash_panel,
         language,
     } = params;
@@ -364,9 +366,29 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
             .when(location_w > 0.0, |row| row.child(div().w(px(location_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).child(std::path::Path::new(file.original_path.as_deref().unwrap_or(&file.path)).parent().map(|parent| parent.to_string_lossy().into_owned()).unwrap_or_default())))
             .when(!network_panel, |row| row.child(div().w(px(type_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(file_type_display(file, cx.i18n()))))
             .when(!network_panel, |row| row
-                .child(div().w(px(size_w)).flex_none().px(rems(0.5)).text_align(TextAlign::Right).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(if calculating_sizes && is_dir && !file.is_calculated { size_loading(&path, theme.accent) } else if is_dir && file.is_calculated && file.size == 0 { div().child(cx.i18n().text(Message::FolderSizeEmpty)).into_any_element() } else { div().child(format_size(file.size, is_dir, file.is_calculated, language)).into_any_element() }))
+                .child(flash_size_cell(div().w(px(size_w)).flex_none().px(rems(0.5)).text_align(TextAlign::Right).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(if calculating_sizes && is_dir && !file.is_calculated { size_loading(&path, theme.accent) } else if is_dir && file.is_calculated && file.size == 0 { div().child(cx.i18n().text(Message::FolderSizeEmpty)).into_any_element() } else { div().child(format_size(file.size, is_dir, file.is_calculated, language)).into_any_element() }), &path, size_flash, theme.accent))
                 .child(div().w(px(date_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_date(file.modified, crate::ui::format::date_format(cx)))))
             .when(trash_panel, |row| row.child(div().w(px(logical(active_deleted_width))).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).child(format_date(file.deleted_time.and_then(|date| u64::try_from(date).ok()).unwrap_or(0), crate::ui::format::date_format(cx)))))
             .into_any_element()
     }
+}
+
+fn flash_size_cell(cell: Div, path: &str, started: Option<std::time::Instant>, color: Hsla) -> AnyElement {
+    let Some(started) = started else { return cell.into_any_element(); };
+    let duration = crate::ui::workspace::SIZE_FLASH_DURATION;
+    if started.elapsed() >= duration {
+        // Virtualized rows must not flash later when scrolled into view.
+        return cell.into_any_element();
+    }
+    cell.with_animation(
+        SharedString::from(format!("size-flash-{path}-{started:?}")),
+        Animation::new(duration),
+        move |cell, progress| {
+            // GPUI also supplies the final frame immediately for reduced motion.
+            let fade = if progress >= 1.0 { 0.0 } else {
+                (1.0 - started.elapsed().as_secs_f32() / duration.as_secs_f32()).clamp(0.0, 1.0)
+            };
+            cell.bg(color.opacity(0.24 * fade * fade))
+        },
+    ).into_any_element()
 }

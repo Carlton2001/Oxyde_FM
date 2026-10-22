@@ -10,6 +10,14 @@ Nom et emplacement utilisent une sous-chaîne insensible à la casse mais sensib
 
 Le regroupement par date appartient à l’onglet et est persisté ; son repli reste temporaire. Les six périodes calendaires sont communes aux filtres et groupes. Le changement de jour/fuseau invalide les caches en arrière-plan, y compris pour les onglets inactifs, sans relire les fichiers. Les groupes utilisent la même géométrie pour rendu et sélection.
 
+## Tailles des dossiers
+
+Le bouton de la barre de statut active le calcul pour le chemin de l’onglet jusqu’à sa prochaine navigation. Un rafraîchissement conserve les dernières tailles affichées et remet tous les dossiers en attente. La surveillance devient récursive pendant ce mode ; un changement profond ne recalcule que le sous-dossier immédiat concerné. Les liens symboliques et jonctions sont exclus du calcul, les vues virtuelles et archives de ce mode.
+
+Les événements sont regroupés par racine et enfant, avec repli sur une invalidation complète en cas de débordement ou de perte d’événements. La file conserve au plus une demande en attente par dossier ; une modification pendant son parcours invalide le résultat et ajoute un seul nouveau passage en fin de file. L’ordonnanceur regroupe les changements sur 500 ms et remplit deux places sans attendre les dossiers plus lents ; le moteur conserve sa limite globale de deux parcours physiques, y compris après annulation. Les changements survenus pendant un listing demandent un seul listing supplémentaire.
+
+Chaque résultat vérifie l’identité de l’onglet, le chemin, la génération du mode et la révision du dossier avant publication. Tri, filtres et résumés des colonnes sont préparés en arrière-plan. Une navigation annule le parcours et vide la file, y compris vers une recherche ou après retrait du disque. Les erreurs de surveillance sont journalisées ; un rafraîchissement manuel permet toujours de relancer le calcul. Le résultat reste une mesure du parcours, sans garantie d’instantané face aux écritures concurrentes.
+
 ## Parcours de recherche
 
 | Parcours | Contrat |

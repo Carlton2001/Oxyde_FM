@@ -86,3 +86,8 @@ survol des lignes, le changement d’onglet ni le redimensionnement.
 `glide`, `slide`) qui se réorientent sans saut. Ne pas animer l’apparition des
 fenêtres possédées (menus, infobulles) : Windows y superpose sa propre animation d’ouverture.
 Une animation répétée doit être retirée du rendu dès qu’elle n’a plus d’objet.
+
+Une taille de dossier déjà calculée qui change signale sa mise à jour par un
+fond accent qui s’efface en 150 ms dans la
+cellule Taille. Le calcul initial et les résultats identiques restent sans
+animation ; une cellule hors écran ne rejoue pas le flash à son apparition.
