@@ -57,6 +57,10 @@ travail, y compris hors du propriétaire. Il devient temporairement topmost pend
 la session OLE, puis est détruit au dépôt, à l'annulation ou à la fermeture du
 propriétaire. Les placements natifs sont différés et regroupés via `Platform`.
 Le curseur reste inchangé ; le ghost indique l'action négociée ou le refus.
+Le relâchement ou l'annulation masque le ghost dès `QueryContinueDrag`, avant
+l'appel au `Drop` étranger, qui peut durer. Ce masquage invalide les placements
+en attente et les mesures tardives ; aucun message de placement ne peut rouvrir
+la surface. La fin de session conserve séparément l'acquittement du transfert.
 
 Les interactions internes restent GPUI. À la sortie de la fenêtre, lors du passage
 sur une fenêtre étrangère superposée ou d'un changement d'application, les chemins

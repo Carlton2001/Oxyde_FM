@@ -29,6 +29,8 @@ pub struct NativeFileDrop {
 
 pub struct FileDragFeedback {
     pub effect: FileDropEffect,
+    /// Release/cancellation ends the preview before a potentially slow native Drop.
+    pub dismiss_preview: bool,
     pub finished: bool,
     pub cancelled: bool,
     /// Only an explicitly confirmed unoptimized native move needs source cleanup.

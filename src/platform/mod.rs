@@ -124,6 +124,8 @@ pub trait Platform: Send + Sync {
     /// Deferred placement of a passive drag ghost; topmost only for a native session.
     fn place_drag_window(&self, _window: raw_window_handle::RawWindowHandle,
         _size: [f32; 2], _scale: f32, _native: bool) -> Result<(), String> { Ok(()) }
+    /// Cancel queued placements and hide this ghost permanently until destruction.
+    fn dismiss_drag_window(&self, _window: raw_window_handle::RawWindowHandle) -> Result<(), String> { Ok(()) }
     /// Diagnostic scan of this process only. Call from a background thread.
     fn process_memory_snapshot(&self) -> Result<ProcessMemorySnapshot, String> {
         Err("Process memory diagnostics are unavailable on this platform".into())

@@ -156,6 +156,9 @@ impl OxydeApp {
                         return;
                     };
                     session.effect = feedback.effect;
+                    if feedback.dismiss_preview {
+                        ghost::close(cx);
+                    }
                     if feedback.finished {
                         let paths = session.paths.clone();
                         let origin = app.file_drag_origin.take();

@@ -4,8 +4,8 @@ mod target;
 use super::{FileDragFeedback, FileDropEffect};
 use raw_window_handle::RawWindowHandle;
 use std::{
-    cell::RefCell,
-    collections::{BTreeMap, HashMap},
+    cell::{Cell, RefCell},
+    collections::{BTreeMap, HashMap, HashSet},
     rc::Rc,
 };
 pub(super) use target::install_target;
@@ -25,6 +25,7 @@ use windows::{
 const SUBCLASS: usize = 0x4f585947;
 const START: u32 = WM_APP + 0x361;
 const PLACE: u32 = START + 1;
+const DISMISS: u32 = PLACE + 1;
 type Feedback = Rc<RefCell<Box<dyn FnMut(FileDragFeedback)>>>;
 struct Pending {
     paths: Vec<String>,
@@ -39,6 +40,7 @@ struct Placement {
 thread_local! {
     static PENDING: RefCell<HashMap<isize, Pending>> = RefCell::new(HashMap::new());
     static PLACEMENTS: RefCell<HashMap<isize, Placement>> = RefCell::new(HashMap::new());
+    static DISMISSED: RefCell<HashSet<isize>> = RefCell::new(HashSet::new());
 }
 
 pub(super) fn hwnd(raw: RawWindowHandle) -> std::result::Result<HWND, String> {
@@ -117,6 +119,9 @@ pub(super) fn place_ghost(
     native: bool,
 ) -> std::result::Result<(), String> {
     let window = hwnd(raw)?;
+    if DISMISSED.with(|dismissed| dismissed.borrow().contains(&(window.0 as isize))) {
+        return Ok(());
+    }
     if !unsafe { SetWindowSubclass(window, Some(subclass), SUBCLASS, 0) }.as_bool() {
         return Err("Cannot place native drag ghost".into());
     }
@@ -141,6 +146,36 @@ pub(super) fn place_ghost(
         return Err(error.to_string());
     }
     Ok(())
+}
+
+pub(super) fn dismiss_ghost(raw: RawWindowHandle) -> std::result::Result<(), String> {
+    let window = hwnd(raw)?;
+    if !unsafe { SetWindowSubclass(window, Some(subclass), SUBCLASS, 0) }.as_bool() {
+        return Err("Cannot dismiss native drag ghost".into());
+    }
+    // Invalidate synchronously, but perform native hiding outside GPUI's borrow.
+    // Late measurements and already-posted PLACE messages must never show it again.
+    DISMISSED.with(|dismissed| dismissed.borrow_mut().insert(window.0 as isize));
+    PLACEMENTS.with(|placements| placements.borrow_mut().remove(&(window.0 as isize)));
+    unsafe { PostMessageW(Some(window), DISMISS, WPARAM(0), LPARAM(0)) }
+        .map_err(|error| error.to_string())
+}
+
+fn flush_dismissals() {
+    let windows =
+        DISMISSED.with(|dismissed| dismissed.borrow().iter().copied().collect::<Vec<_>>());
+    // The feedback callback has released GPUI. Hide now, before entering a
+    // foreign Drop which may block without pumping our posted window messages.
+    for window in windows {
+        let _ = unsafe {
+            SendMessageW(
+                HWND(window as *mut _),
+                DISMISS,
+                Some(WPARAM(0)),
+                Some(LPARAM(0)),
+            )
+        };
+    }
 }
 
 unsafe extern "system" fn subclass(
@@ -217,9 +252,24 @@ unsafe extern "system" fn subclass(
         }
         return LRESULT(0);
     }
+    if message == DISMISS {
+        let _ = unsafe {
+            SetWindowPos(
+                window,
+                Some(HWND_NOTOPMOST),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_HIDEWINDOW,
+            )
+        };
+        return LRESULT(0);
+    }
     if message == WM_NCDESTROY {
         PENDING.with(|pending| pending.borrow_mut().remove(&(window.0 as isize)));
         PLACEMENTS.with(|placements| placements.borrow_mut().remove(&(window.0 as isize)));
+        DISMISSED.with(|dismissed| dismissed.borrow_mut().remove(&(window.0 as isize)));
         let _ = unsafe { RemoveWindowSubclass(window, Some(subclass), id) };
     }
     unsafe { DefSubclassProc(window, message, wparam, lparam) }
@@ -229,11 +279,12 @@ unsafe extern "system" fn subclass(
 struct Source {
     feedback: Feedback,
     owner: HWND,
+    preview_dismissed: Cell<bool>,
 }
 #[allow(non_snake_case)]
 impl IDropSource_Impl for Source_Impl {
     fn QueryContinueDrag(&self, escape: BOOL, keys: MODIFIERKEYS_FLAGS) -> HRESULT {
-        if escape.as_bool()
+        let result = if escape.as_bool()
             || keys.0 & MK_RBUTTON.0 != 0
             || !unsafe { IsWindow(Some(self.owner)) }.as_bool()
         {
@@ -242,11 +293,23 @@ impl IDropSource_Impl for Source_Impl {
             DRAGDROP_S_DROP
         } else {
             S_OK
+        };
+        if result != S_OK && !self.preview_dismissed.replace(true) {
+            (self.feedback.borrow_mut())(FileDragFeedback {
+                effect: FileDropEffect::None,
+                dismiss_preview: true,
+                finished: false,
+                cancelled: result == DRAGDROP_S_CANCEL,
+                delete_sources: false,
+            });
+            flush_dismissals();
         }
+        result
     }
     fn GiveFeedback(&self, current: DROPEFFECT) -> HRESULT {
         (self.feedback.borrow_mut())(FileDragFeedback {
             effect: effect(current),
+            dismiss_preview: self.preview_dismissed.get(),
             finished: false,
             cancelled: false,
             delete_sources: false,
@@ -259,6 +322,7 @@ impl IDropSource_Impl for Source_Impl {
 fn run(window: HWND, pending: Pending) {
     let mut result = FileDragFeedback {
         effect: FileDropEffect::None,
+        dismiss_preview: true,
         finished: true,
         cancelled: true,
         delete_sources: false,
@@ -282,6 +346,7 @@ fn run(window: HWND, pending: Pending) {
         let source: IDropSource = Source {
             feedback: pending.feedback.clone(),
             owner: window,
+            preview_dismissed: Cell::new(false),
         }
         .into();
         let performed = data::registered(w!("Performed DropEffect"));
@@ -307,8 +372,13 @@ fn run(window: HWND, pending: Pending) {
             !result.cancelled && current == DROPEFFECT_MOVE && reported == Some(DROPEFFECT_MOVE.0);
     }
     (pending.feedback.borrow_mut())(result);
+    flush_dismissals();
 }
 
 #[cfg(test)]
 #[path = "windows_file_drag/tests/data.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "windows_file_drag/tests/preview.rs"]
+mod preview_tests;

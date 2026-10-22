@@ -848,6 +848,10 @@ impl Platform for WindowsPlatform {
         super::windows_file_drag::pointer_outside(window)
     }
 
+    fn dismiss_drag_window(&self, window: raw_window_handle::RawWindowHandle) -> Result<(), String> {
+        super::windows_file_drag::dismiss_ghost(window)
+    }
+
     fn set_window_owner(&self, window: raw_window_handle::RawWindowHandle, owner: raw_window_handle::RawWindowHandle) -> Result<(), String> {
         let (raw_window_handle::RawWindowHandle::Win32(window), raw_window_handle::RawWindowHandle::Win32(owner)) = (window, owner) else {
             return Err("Window ownership requires Win32 handles".into());

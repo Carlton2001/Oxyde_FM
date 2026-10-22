@@ -27,6 +27,13 @@ pub(super) fn close(cx: &mut App) {
     let state = cx.default_global::<GhostWindow>();
     state.token = None;
     if let Some(handle) = state.handle.take() {
+        let _ = handle.update(cx, |_, window, _| {
+            if let Ok(raw) = HasWindowHandle::window_handle(window) {
+                if let Err(error) = platform().dismiss_drag_window(raw.as_raw()) {
+                    log::warn!("Cannot dismiss drag ghost: {error}");
+                }
+            }
+        });
         // Closing a native window can synchronously enter GPUI. Defer it.
         cx.defer(move |cx| {
             let _ = handle.update(cx, |_, window, _| window.remove_window());
