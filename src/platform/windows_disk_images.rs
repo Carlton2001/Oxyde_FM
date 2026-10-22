@@ -1,6 +1,4 @@
 use super::MountedDiskImage;
-use std::os::windows::process::CommandExt;
-use std::process::Command;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::OnceLock;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
@@ -80,88 +78,24 @@ pub(super) fn install_autoplay_handler(hwnd: HWND) -> Result<(), String> {
     Ok(())
 }
 
-// Paths are environment data, never interpolated into PowerShell source.
-// CREATE_NO_WINDOW also avoids flashing a console during background queries.
-fn run(script: &str, path: Option<&str>) -> Result<String, String> {
-    let mut command = Command::new(
-        super::platform()
-            .system_executable(super::SystemExecutable::PowerShell)
-            .map_err(|error| error.to_string())?,
-    );
-    command.args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command"])
-        .arg(format!(r#"$ErrorActionPreference = 'Stop'; [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); {ROOTS_FUNCTION}; {script}"#))
-        .creation_flags(0x08000000);
-    if let Some(path) = path {
-        command.env("OXYDE_DISK_IMAGE_PATH", path);
-    }
-    let output = super::windows_process_launch::output(command)
-        .map_err(|error| error.to_string())?;
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
-    }
-    Ok(String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .trim_start_matches('\u{feff}')
-        .to_string())
-}
-
-const ROOTS_FUNCTION: &str = r#"
-function ImageRoots($image) {
-    if ($image.StorageType -eq 1) {
-        $volumes = @($image | Get-Volume -ErrorAction SilentlyContinue)
-    } else {
-        $volumes = @($image | Get-Disk -ErrorAction SilentlyContinue | Get-Partition -ErrorAction SilentlyContinue | Get-Volume -ErrorAction SilentlyContinue)
-    }
-    @($volumes | Where-Object DriveLetter | ForEach-Object { [string]$_.DriveLetter + ':\' } | Sort-Object -Unique)
-}
-"#;
+mod native;
 
 pub fn mounted_images() -> Result<Vec<MountedDiskImage>, String> {
-    let output = run(
-        r#"
-# MSFT_DiskImage enumeration can be empty even while an ISO is mounted.
-# Resolve optical images from volumes and virtual hard disks from device paths.
-$candidates = @(
-    Get-Volume | Get-DiskImage -ErrorAction SilentlyContinue
-    Get-Disk | ForEach-Object {
-        Get-DiskImage -DevicePath ('\\.\PhysicalDrive' + $_.Number) -ErrorAction SilentlyContinue
-    }
-)
-$images = @($candidates | Where-Object Attached | Sort-Object ImagePath -Unique | ForEach-Object {
-    [pscustomobject]@{ image_path = $_.ImagePath; roots = @(ImageRoots $_) }
-}); ConvertTo-Json -InputObject $images -Depth 4 -Compress
-"#,
-        None,
-    )?;
-    serde_json::from_str(&output).map_err(|error| error.to_string())
+    native::mounted_images()
 }
 
 pub fn mount(path: &str) -> Result<Vec<String>, String> {
-    let path =
-        crate::utils::path_security::validate_path(path).map_err(|error| error.to_string())?;
+    let path = crate::utils::path_security::validate_path(path).map_err(|error| error.to_string())?;
     if !path.is_file() || !crate::utils::disk_image::is_disk_image(&path) {
         return Err("Not a supported disk image file".into());
     }
     let _autoplay = MountAutoplayGuard::new();
-    let output = run(
-        r#"
-$type = if ([IO.Path]::GetExtension($env:OXYDE_DISK_IMAGE_PATH) -in @('.iso', '.img')) { 'ISO' } else { 'Unknown' };
-$image = Get-DiskImage -ImagePath $env:OXYDE_DISK_IMAGE_PATH -StorageType $type;
-if (!$image.Attached) { $image = Mount-DiskImage -ImagePath $env:OXYDE_DISK_IMAGE_PATH -StorageType $type -PassThru }
-$roots = @(); for ($attempt = 0; $attempt -lt 20; $attempt++) {
-    $roots = @(ImageRoots $image); if ($roots.Count -gt 0) { break }; Start-Sleep -Milliseconds 100
-}; ConvertTo-Json -InputObject $roots -Compress
-"#,
-        Some(&path.to_string_lossy()),
-    )?;
-    serde_json::from_str(&output).map_err(|error| error.to_string())
+    native::mount(&path)
 }
 
 pub fn unmount(path: &str) -> Result<(), String> {
-    // File paths only: drive actions resolve back to their owning image in GPUI.
-    let path =
-        crate::utils::path_security::validate_path(path).map_err(|error| error.to_string())?;
-    run(r#"$type = if ([IO.Path]::GetExtension($env:OXYDE_DISK_IMAGE_PATH) -in @('.iso', '.img')) { 'ISO' } else { 'Unknown' }; Get-DiskImage -ImagePath $env:OXYDE_DISK_IMAGE_PATH -StorageType $type | Dismount-DiskImage"#, Some(&path.to_string_lossy())).map(|_| ())
+    let path = crate::utils::path_security::validate_path(path).map_err(|error| error.to_string())?;
+    native::unmount(&path)
 }
 
 #[cfg(test)]

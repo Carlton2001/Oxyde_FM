@@ -21,6 +21,15 @@ Les variantes locales sous `cfg(any(not(target_os = "windows"), test))` servent 
 
 ZIP, 7z, TAR et TAR.ZST sont créables et modifiables via workspace. Les autres formats navigables restent en lecture/extraction. ISO et IMG ISO9660 sont virtuels en lecture seule ; sous Windows, les images non reconnues et VHD/VHDX passent par le montage natif via `Platform`.
 
+Le montage Windows utilise directement `virtdisk.dll` (`OpenVirtualDisk`,
+`AttachVirtualDisk`, `DetachVirtualDisk`). Le suivi des images interroge les
+périphériques disque/CD-ROM avec `GetStorageDependencyInformation` et associe
+leurs lettres de lecteur par numéro et type de périphérique. Il détecte aussi
+les images montées hors d’Oxyde, sans lancer PowerShell. Ces appels restent hors
+du thread UI ; le rafraîchissement des lecteurs, le délai d’attribution des
+lettres et la protection AutoPlay conservent leur fonctionnement. Les ISO/IMG
+sont montés en lecture seule ; les montages persistent après fermeture du handle.
+
 ### Compression et Turbo sous Windows
 
 Turbo conserve le niveau de qualité choisi et augmente le parallélisme, en plus de la priorité du processus. La limite CPU du job reste active ; Turbo ne promet pas une occupation de 100 % du processeur.
