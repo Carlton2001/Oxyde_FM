@@ -34,11 +34,18 @@ if (-not $IsccPath -or -not (Test-Path -LiteralPath $IsccPath)) {
 }
 Push-Location -LiteralPath $projectRoot
 try {
+    $phaseTimer = [Diagnostics.Stopwatch]::StartNew()
     & (Join-Path $PSScriptRoot 'update-third-party-licenses.ps1')
+    Write-Host ('Distribution timing: licenses {0:N1} s' -f $phaseTimer.Elapsed.TotalSeconds)
     # License generation must succeed before assembling either distribution format.
     if (-not $SkipBuild) {
-        & cargo build --locked --release --bins --target $target
+        $phaseTimer.Restart()
+        # Build only the shipped executables, excluding tools such as copy_benchmark.
+        & cargo build --locked --release --target $target `
+            --bin oxyde --bin oxyde-image-worker `
+            --bin oxyde-archive-io-worker --bin oxyde-archive-list-worker
         if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
+        Write-Host ('Distribution timing: Rust build {0:N1} s' -f $phaseTimer.Elapsed.TotalSeconds)
     }
     $noticePath = Join-Path $projectRoot 'licenses/dependencies/THIRD-PARTY-NOTICES.md'
     if (-not (Test-Path -LiteralPath $noticePath) -or (Get-Item -LiteralPath $noticePath).Length -eq 0) {
@@ -87,9 +94,12 @@ try {
     Copy-Item -Path (Join-Path $projectRoot 'licenses/dependencies/*') -Destination $dependencyNotices -Recurse
     Copy-Item -LiteralPath (Join-Path $projectRoot 'assets/icons/oxyde.ico') -Destination (Join-Path $stage 'oxyde.ico')
     if (-not $PortableOnly) {
+        $phaseTimer.Restart()
         & $IsccPath "/DAppVersion=$version" "/DPayloadDir=$stage" "/O$output" (Join-Path $projectRoot 'installer/windows/oxyde.iss')
         if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
+        Write-Host ('Distribution timing: Inno Setup {0:N1} s' -f $phaseTimer.Elapsed.TotalSeconds)
     }
+    $phaseTimer.Restart()
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $data = Join-Path $stage 'data'
     New-Item -ItemType Directory -Path $data -Force | Out-Null
@@ -118,5 +128,6 @@ try {
     } finally { $archive.Dispose() }
     $hash = (Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash.ToLowerInvariant()
     [IO.File]::WriteAllText("$download.sha256", "$hash  $([IO.Path]::GetFileName($download))`n")
+    Write-Host ('Distribution timing: ZIP creation and validation {0:N1} s' -f $phaseTimer.Elapsed.TotalSeconds)
     Write-Host "Portable ZIP: $download"
 } finally { Pop-Location }

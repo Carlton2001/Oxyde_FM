@@ -1,0 +1,26 @@
+name: Set up Windows distribution
+description: Select a fixed Rust toolchain and reuse distribution dependencies and cargo-about.
+
+runs:
+  using: composite
+  steps:
+    - name: Install distribution toolchain
+      shell: pwsh
+      run: |
+        $toolchain = '1.98.1'
+        rustup toolchain install $toolchain --profile minimal --no-self-update
+        if ($LASTEXITCODE -ne 0) { throw 'Rust toolchain installation failed.' }
+        "RUSTUP_TOOLCHAIN=$toolchain" >> $env:GITHUB_ENV
+    - name: Restore Rust dependencies and license generator
+      uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      with:
+        # Include the installed tool version so upgrading it also refreshes its cache.
+        shared-key: windows-distribution-x64-cargo-about-0.9.2-v1
+        # Tag-scoped caches cannot be reused by subsequent release tags.
+        save-if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    - name: Install license generator
+      shell: pwsh
+      # cargo install skips installation when this exact version is already cached.
+      run: |
+        cargo install cargo-about --version 0.9.2 --locked --features cli
+        if ($LASTEXITCODE -ne 0) { throw 'License generator installation failed.' }

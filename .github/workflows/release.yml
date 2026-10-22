@@ -26,10 +26,8 @@ jobs:
           $version = ($metadata.packages | Where-Object name -eq 'oxyde').version
           if ("v$version" -ne $env:GITHUB_REF_NAME) { throw "Tag $env:GITHUB_REF_NAME does not match Cargo version $version." }
           "version=$version" >> $env:GITHUB_OUTPUT
-      - name: Install Rust stable
-        run: rustup update stable --no-self-update
-      - name: Install license generator
-        run: cargo install cargo-about --version 0.9.2 --locked --features cli
+      - name: Set up cached distribution toolchain
+        uses: ./.github/actions/setup-distribution
       - name: Install Inno Setup
         shell: pwsh
         run: |
@@ -38,7 +36,8 @@ jobs:
             choco install innosetup --no-progress -y
           }
       - name: Test portable storage
-        run: cargo test --locked --lib app_paths::tests -- --test-threads=1
+        # Match the distribution profile and target to reuse compiled dependencies.
+        run: cargo test --locked --release --target x86_64-pc-windows-msvc --lib app_paths::tests -- --test-threads=1
       - name: Build setup and portable ZIP
         shell: pwsh
         run: ./scripts/build-distribution.ps1

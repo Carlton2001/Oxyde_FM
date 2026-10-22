@@ -131,8 +131,31 @@ publiée doit être supérieure à 1.2.1.
 
 ## Automatisation et validation
 
-Le workflow manuel `.github/workflows/distribution.yml` compile, teste les chemins portables
+Le workflow `.github/workflows/distribution.yml` compile, teste les chemins portables
 et publie le ZIP et son SHA-256 comme artefact GitHub Actions, sans publier de release.
+Il peut être lancé manuellement. Il se lance aussi sur `main` après modification de
+`Cargo.toml`, `Cargo.lock`, `.cargo/`, des scripts et réglages de licences, ou des workflows
+et de l'action de distribution, pour préparer le cache des dépendances utilisé par les
+prochaines releases.
+
+Les deux workflows de distribution utilisent l'action locale
+`.github/actions/setup-distribution/action.yml` : Rust **1.98.1** (version fixée pour
+ces workflows uniquement), cache partagé des dépendances compilées et de `cargo-about`
+**0.9.2**. Mettre à jour la toolchain dans cette action après validation d'une nouvelle
+version de Rust. Lors d'une mise à jour de `cargo-about`, adapter aussi sa version dans
+la clé partagée du cache. Les tests portables utilisent `--release --target x86_64-pc-windows-msvc`,
+comme les exécutables livrés, pour partager la compilation des dépendances. La suite
+native de `tests.yml` conserve son profil et ses vérifications propres.
+
+Le cache est enregistré uniquement sur la branche par défaut : GitHub permet aux tags
+de le restaurer, mais ne partage pas les caches entre deux tags distincts. La première
+exécution sur `main` prépare ce cache ; un changement de toolchain, de dépendances ou
+une éviction peut imposer une reconstruction. Une release déclenchée avant la fin de
+cette préparation peut encore travailler sans cache. Pour le remplir ou le rafraîchir
+manuellement, lancer **Windows portable distribution** sur `main` avant le tag.
+Le cache ne remplace aucun test ni la régénération des licences.
+La compilation de distribution sélectionne uniquement l'application et ses trois workers ;
+les outils internes comme `copy_benchmark` ne sont pas construits pour le paquet.
 
 Le push d'un tag `v<x.y.z>` lance `.github/workflows/release.yml`. Il vérifie que le tag
 correspond à `Cargo.toml`, construit le Setup et le ZIP, signe le Setup avec la clé
@@ -148,6 +171,8 @@ Il inclut ensuite le rapport dans le ZIP et le Setup. Si la génération échoue
 s'arrête. Un accès réseau est nécessaire pour récupérer les notices amont manquantes.
 Le workflow installe automatiquement le générateur. Pour lancer la génération séparément,
 suivre le [guide des notices](../../licenses/dependencies/README.md).
+Le script affiche séparément les durées des licences, de la compilation Rust, d'Inno Setup
+et de la création/vérification du ZIP, pour identifier les prochains gains possibles.
 
 Tests : `cargo test --lib app_paths::tests`. Vérifier aussi les caches et archives concernés.
 Le script vérifie les fichiers requis dans le ZIP. Tester manuellement la session, les aperçus,

@@ -1,6 +1,21 @@
 name: Windows portable distribution
 
 on:
+  # Populate the default-branch cache that release tags are allowed to restore.
+  # Ordinary source changes do not need to rebuild cached third-party crates.
+  push:
+    branches: [main]
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - '.cargo/**'
+      - '.github/actions/setup-distribution/**'
+      - .github/workflows/distribution.yml
+      - .github/workflows/release.yml
+      - scripts/build-distribution.ps1
+      - scripts/update-third-party-licenses.ps1
+      - scripts/third-party-notices.hbs
+      - about.toml
   workflow_dispatch:
 
 permissions:
@@ -14,14 +29,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install Rust stable
-        run: rustup update stable --no-self-update
-      - name: Install license generator
-        run: cargo install cargo-about --version 0.9.2 --locked --features cli
-      - name: Check application
-        run: cargo check --locked
+      - name: Set up cached distribution toolchain
+        uses: ./.github/actions/setup-distribution
       - name: Test portable storage
-        run: cargo test --locked --lib app_paths::tests -- --test-threads=1
+        run: cargo test --locked --release --target x86_64-pc-windows-msvc --lib app_paths::tests -- --test-threads=1
       - name: Build portable ZIP
         shell: pwsh
         run: ./scripts/build-distribution.ps1 -PortableOnly
