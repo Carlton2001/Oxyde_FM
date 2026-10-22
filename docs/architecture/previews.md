@@ -164,7 +164,13 @@ mode `viewer-media` du self-worker. Un même lecteur natif synchronise image et
 son et reçoit play/pause (ou Espace). La toolbar propose « Lecture automatique »,
 activée par défaut et persistée dans `AppConfig`. Désactivée, les nouveaux médias
 s’ouvrent en pause ; une lecture en cours et une reprise après détachement gardent
-leur état. Le worker
+leur état. Ouvrir le fichier à l’extérieur d’Oxyde met son lecteur en pause,
+sans changer sa position, y compris dans le Viewer détaché ou pendant son
+chargement. Les commandes natives « Ouvrir avec » et de lecture suivent la même
+règle lorsqu’elles sont identifiées par leur verbe Shell. Le sous-menu « Ouvrir
+avec » sans verbe Shell est reconnu par son libellé système dans les cinq langues
+prises en charge ; ses applications héritent de cette action. La reprise dans Oxyde
+reste manuelle. Le worker
 renvoie des rapports de 25 octets (état, position, durée en ms et dimensions vidéo) ; la barre de
 lecture permet de cliquer ou glisser pour se déplacer (`seek_id`/`seek_ms`).
 L’ouverture des paramètres masque seulement la surface vidéo native ; la lecture

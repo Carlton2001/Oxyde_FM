@@ -87,7 +87,6 @@ impl OxydeApp {
                                                 false
                                             }
                                         });
-                                    this.context_menus.clear();
                                     this.execute_native_context_menu_item(
                                         p_inner,
                                         id_inner,

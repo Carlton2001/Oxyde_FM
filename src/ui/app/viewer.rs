@@ -61,6 +61,8 @@ pub(crate) struct Viewer {
     media: Option<media::MediaSession>,
     /// Position and pause state carried to the next player surface.
     resume: Option<(u64, bool)>,
+    /// External opens in the current selection, including pending resolution.
+    external_open_pauses: HashSet<String>,
     /// Progress bar track while seeking with the pointer.
     seeking: bool,
     seek_track: Bounds<Pixels>,
@@ -309,6 +311,7 @@ impl Viewer {
             preparation: None,
             media: None,
             resume: None,
+            external_open_pauses: HashSet::new(),
             seeking: false,
             seek_track: Bounds::default(),
             native_media: false,
@@ -333,6 +336,7 @@ impl Viewer {
         if self.source.same_revision(&source) {
             return;
         }
+        self.external_open_pauses.clear();
         self.preparation = None;
         if source.selected.is_empty() || source.files.len() <= 1024 {
             let resolved = source.resolve();
@@ -433,6 +437,9 @@ impl Viewer {
                 )
             );
         if self.native_media {
+            if self.external_open_pauses.contains(&file.path) {
+                self.resume = Some((0, true));
+            }
             if self.audio {
                 let path = file.path.clone();
                 self.load_audio(path, cx);

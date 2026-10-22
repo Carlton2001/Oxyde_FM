@@ -74,6 +74,41 @@ fn action_paths(
 #[path = "context_menus/tests/selection.rs"]
 mod selection_tests;
 
+fn is_open_with_submenu(item: &oxyde_lib::models::WinMenuItem) -> bool {
+    if !item.has_submenu {
+        return false;
+    }
+    // GetMenuItemID returns -1 for popup entries, so Windows often supplies
+    // no canonical verb for Open with. Its label follows the OS language,
+    // independently of Oxyde's language setting.
+    let label = item.label.split('\t').next().unwrap_or_default().replace('&', "");
+    let label = oxyde_lib::utils::remove_accents(&label.to_lowercase());
+    matches!(
+        label.trim().trim_end_matches(['.', '…']).trim_end(),
+        "ouvrir avec" | "open with" | "offnen mit" | "abrir con" | "apri con"
+    )
+}
+
+fn native_action_opens_media(
+    items: &[oxyde_lib::models::WinMenuItem],
+    id: i32,
+    in_open: bool,
+) -> bool {
+    items.iter().any(|item| {
+        let opens_media = in_open || is_open_with_submenu(item) || item.verb.as_deref().is_some_and(|verb| {
+            ["open", "openas", "openwith", "play", "playwith"]
+                .iter()
+                .any(|opening| verb.eq_ignore_ascii_case(opening))
+        });
+        (item.id == id && !item.has_submenu && opens_media)
+            || native_action_opens_media(&item.children, id, opens_media)
+    })
+}
+
+#[cfg(test)]
+#[path = "context_menus/tests/media_open.rs"]
+mod media_open_tests;
+
 impl OxydeApp {
     /// Closes the root menu when its own control is clicked again.
     pub(crate) fn close_menu_owned_by(&mut self, owner: &str, cx: &mut Context<Self>) -> bool {
@@ -242,6 +277,20 @@ impl OxydeApp {
         creates_item: bool,
         cx: &mut Context<Self>,
     ) {
+        let opens_media = !is_background && self.context_menus.iter().any(|menu| {
+            match &menu.content {
+                ContextMenuContent::NativeItems { items, .. } => {
+                    native_action_opens_media(items, id, false)
+                }
+                _ => false,
+            }
+        });
+        self.context_menus.clear();
+        if opens_media {
+            for path in &path {
+                self.pause_viewer_media_for_external_open(path, cx);
+            }
+        }
         let Some(handle) = self.handle.clone() else {
             return;
         };

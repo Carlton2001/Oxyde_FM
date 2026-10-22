@@ -13,6 +13,7 @@ impl OxydeApp {
     /// Shell handlers may pump Windows messages. Never invoke them while GPUI
     /// holds the App/Entity borrow for a mouse or keyboard callback.
     pub(crate) fn open_external_item(&mut self, path: String, cx: &mut Context<Self>) {
+        self.pause_viewer_media_for_external_open(&path, cx);
         let source = path.clone();
         cx.spawn(async move |this, cx| {
             let result = tokio::task::spawn_blocking(move || {

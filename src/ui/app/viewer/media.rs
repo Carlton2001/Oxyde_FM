@@ -1,4 +1,4 @@
-use super::Viewer;
+use super::{OxydeApp, Viewer};
 use gpui::*;
 use oxyde_lib::platform::{
     ViewerMediaControl, MEDIA_ENDED, MEDIA_FAILED, MEDIA_LOADING, MEDIA_PAUSED,
@@ -29,6 +29,11 @@ impl Drop for MediaSession {
 }
 
 impl MediaSession {
+    fn pause(&mut self, blocked: bool) {
+        self.paused = true;
+        self.update_visibility(blocked);
+    }
+
     fn update_visibility(&self, blocked: bool) {
         if let Ok(mut command) = self.control.command.lock() {
             let visible = !blocked;
@@ -37,6 +42,38 @@ impl MediaSession {
                 command.paused = self.paused;
                 self.control.wake();
             }
+        }
+    }
+}
+
+impl OxydeApp {
+    pub(crate) fn pause_viewer_media_for_external_open(
+        &mut self,
+        path: &str,
+        cx: &mut Context<Self>,
+    ) {
+        for viewer in self.viewers.values() {
+            viewer.update(cx, |viewer, cx| {
+                // Selection notifications may not have reached the Viewer yet
+                // when a double click opens the newly selected file.
+                let source = super::Source::capture(self, &viewer.source);
+                viewer.set_source(source, cx);
+                if viewer.source.selected.contains(path) {
+                    viewer.external_open_pauses.insert(path.to_owned());
+                }
+                if !viewer.native_media
+                    || !viewer.file.as_ref().is_some_and(|file| file.path == path)
+                {
+                    return;
+                }
+                if let Some(media) = &mut viewer.media {
+                    media.pause(viewer.blocked);
+                } else {
+                    // Also cover a pending first paint or a surface transfer.
+                    viewer.resume.get_or_insert((0, true)).1 = true;
+                }
+                cx.notify();
+            });
         }
     }
 }
