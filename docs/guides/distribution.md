@@ -151,7 +151,13 @@ Les deux workflows de distribution utilisent l'action locale
 `.github/actions/setup-distribution/action.yml` : Rust **1.98.1** (version fixée pour
 ces workflows uniquement), cache partagé des dépendances compilées et de `cargo-about`
 **0.9.2**. Mettre à jour la toolchain dans cette action après validation d'une nouvelle
-version de Rust. `cargo-about` est téléchargé précompilé par `scripts/install-cargo-about.ps1`
+version de Rust. L'action utilise un `RUSTUP_HOME` dédié sous `RUNNER_TOOL_CACHE`,
+dans un chemin stable contenant la version et la cible MSVC x64. Il contient uniquement
+la toolchain choisie : `rust-cache` inclut toutes les toolchains installées dans sa clé,
+et les versions préinstallées inutilisées ne doivent pas invalider le cache. Le setup
+vérifie cette contrainte et exporte le même environnement pour la restauration,
+les tests, la construction et l'enregistrement. Le Rustup préinstallé reste intact.
+`cargo-about` est téléchargé précompilé par `scripts/install-cargo-about.ps1`
 en l'absence d'un binaire vérifié dans le cache Cargo ; aucune compilation du générateur
 n'est nécessaire. Lors d'une mise à jour, adapter version, empreintes de l'archive et du
 binaire dans ce script, puis la version dans la clé partagée du cache. Les tests portables
@@ -166,6 +172,8 @@ une éviction peut imposer une reconstruction. Une release déclenchée avant la
 cette préparation peut encore travailler sans cache. Pour le remplir ou le rafraîchir
 manuellement, lancer **Windows portable distribution** sur `main` avant le tag.
 Le cache ne remplace aucun test ni la régénération des licences.
+Après adoption de l'environnement Rustup isolé, une nouvelle préparation sur `main`
+est nécessaire avant le tag : les anciennes clés incluent les toolchains du runner.
 La compilation de distribution sélectionne uniquement l'application et ses trois workers ;
 les outils internes comme `copy_benchmark` ne sont pas construits pour le paquet.
 
@@ -193,7 +201,9 @@ l'installation de `cargo-about`, la préparation/construction des tests (ligne C
 leur exécution (`test result`), les licences, la compilation Rust et le ZIP. Ce workflow
 ne mesure ni Inno Setup ni la signature. Ne pas créer de tag ou de release pour mesurer.
 Les [mesures de référence](../reports/2026-10-22-windows-distribution.md) concernent
-la release v2.0.0 ; aucun gain hébergé des optimisations n'est encore mesuré.
+la release v2.0.0. Les [mesures v2.0.1 et la correction de clé](../reports/2026-10-23-distribution-cache.md)
+montrent le gain hébergé et le cache manqué par la release ; la correction d'isolation
+doit encore être vérifiée sur GitHub.
 La [comparaison locale des parcours Rust](../reports/2026-10-22-distribution-local-tests.md)
 utilise des sources figées et des dossiers de compilation isolés, avec caches vide,
 intégral et limité aux dépendances. Elle exclut les transferts du cache GitHub.
@@ -211,6 +221,18 @@ aussi les chemins contenant des espaces, une restauration sans métadonnées Car
 un téléchargement interrompu, une extraction en erreur ou altérée et le nettoyage
 des fichiers temporaires après échec, sans remplacer l'installation Cargo de l'utilisateur.
 Ils ne mesurent pas le transfert du cache GitHub.
+
+Pour vérifier le setup de la toolchain, sans modifier le Rustup du poste :
+
+```powershell
+./scripts/tests/setup-distribution.tests.ps1
+# Ajoute une installation réelle isolée sous target/ (chemin court pour MSVC) :
+./scripts/tests/setup-distribution.tests.ps1 -RealToolchain
+```
+
+L'envoi des artefacts utilise `actions/upload-artifact` 7.0.2, épinglé sur un commit
+immuable et exécuté avec Node.js 24. Le ZIP portable et son SHA-256 gardent leur nom,
+leurs chemins et une compression d'envoi à zéro.
 
 Tests : `cargo test --lib app_paths::tests`. Vérifier aussi les caches et archives concernés.
 Le script vérifie les fichiers requis dans le ZIP. Tester manuellement la session, les aperçus,

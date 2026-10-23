@@ -7,9 +7,19 @@ runs:
     - name: Install distribution toolchain
       shell: pwsh
       run: |
-        $toolchain = '1.98.1'
+        $toolchain = '1.98.1-x86_64-pc-windows-msvc'
+        if (-not $env:RUNNER_TOOL_CACHE) { throw 'Missing runner tool cache directory.' }
+        # rust-cache hashes every installed toolchain, including unused runner defaults.
+        # Keep a stable, versioned Rustup home containing only the distribution toolchain.
+        $env:RUSTUP_HOME = Join-Path $env:RUNNER_TOOL_CACHE "oxyde-distribution-rustup/$toolchain"
+        $env:RUSTUP_TOOLCHAIN = $toolchain
         rustup toolchain install $toolchain --profile minimal --no-self-update
         if ($LASTEXITCODE -ne 0) { throw 'Rust toolchain installation failed.' }
+        $installed = @(rustup toolchain list --quiet)
+        if ($LASTEXITCODE -ne 0 -or $installed.Count -ne 1 -or $installed[0] -ne $toolchain) {
+          throw 'Distribution Rustup home must contain only the selected toolchain.'
+        }
+        "RUSTUP_HOME=$env:RUSTUP_HOME" >> $env:GITHUB_ENV
         "RUSTUP_TOOLCHAIN=$toolchain" >> $env:GITHUB_ENV
     - name: Restore Rust dependencies and license generator
       uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2

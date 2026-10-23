@@ -4,6 +4,7 @@ Les références actives décrivent les contrats ; les bilans ci-dessous décriv
 
 | Bilan | Lecture utile |
 | --- | --- |
+| [Cache de distribution, 23 octobre](2026-10-23-distribution-cache.md) | Mesures v2.0.1, isolation de Rustup et migration des uploads vers Node.js 24 |
 | [Audit mémoire du Viewer, 22 octobre](2026-10-22-viewer-memory-audit.md) | Relecture des changements non commités, évictions PDF, annulation des demandes et couverture des diagnostics |
 | [Mémoire des infobulles, 22 octobre](2026-10-22-tooltip-memory.md) | Sources réduites, budgets RAM, retrait des textures et libération des frames masquées |
 | [Sécurité, 13 octobre](2026-10-13-security.md) | Décisions, commits, bornes de tests et limites |

@@ -15,6 +15,7 @@ on:
       - scripts/build-distribution.ps1
       - scripts/install-cargo-about.ps1
       - 'scripts/tests/install-cargo-about.tests.ps1'
+      - scripts/tests/setup-distribution.tests.ps1
       - scripts/update-third-party-licenses.ps1
       - scripts/third-party-notices.hbs
       - about.toml
@@ -39,7 +40,7 @@ jobs:
         shell: pwsh
         run: ./scripts/build-distribution.ps1 -PortableOnly
       - name: Upload portable distribution
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Oxyde_FM-portable-x64
           path: |
