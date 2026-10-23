@@ -72,13 +72,19 @@ pub struct SavedTab {
     #[serde(default)]
     pub grouping: crate::ui::date_groups::GroupMode,
     #[serde(default)]
+    pub sort_column: SortColumn,
+    #[serde(default)]
+    pub sort_direction: SortDirection,
+    #[serde(default)]
     pub back_stack: Vec<String>,
     #[serde(default)]
     pub forward_stack: Vec<String>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum SortColumn {
+    #[default]
     Name,
     Location,
     OriginalLocation,
@@ -88,8 +94,10 @@ pub enum SortColumn {
     Modified,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum SortDirection {
+    #[default]
     Ascending,
     Descending,
 }

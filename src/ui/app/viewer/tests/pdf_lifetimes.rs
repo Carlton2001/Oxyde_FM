@@ -12,6 +12,7 @@ impl PdfSession for UnusedSession {
 
 fn document() -> Pdf {
     Pdf {
+        path: "test.pdf".into(),
         session: Arc::new(Mutex::new(Box::new(UnusedSession))),
         sizes: vec![(100.0, 100.0); 20],
         pages: HashMap::new(),
@@ -88,3 +89,7 @@ fn an_obsolete_page_result_cannot_remove_its_replacement_request() {
 #[cfg(target_os = "windows")]
 #[path = "native_pdf_memory.rs"]
 mod native;
+
+#[cfg(target_os = "windows")]
+#[path = "native_pdf_deletion.rs"]
+mod deletion;

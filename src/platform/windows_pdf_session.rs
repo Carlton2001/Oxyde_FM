@@ -16,6 +16,9 @@ use windows::Win32::{Foundation::HANDLE, System::Pipes::PeekNamedPipe};
 /// Native PDF rendering stays within the still-preview job size.
 const MEMORY_BYTES: usize = 1024 * 1024 * 1024;
 const DEADLINE: Duration = Duration::from_secs(15);
+const CLOSE_DEADLINE: Duration = Duration::from_secs(2);
+const CLOSE_DOCUMENT: u32 = u32::MAX;
+const DOCUMENT_CLOSED: &str = "pdf-document-closed";
 mod previews;
 
 pub(super) fn run_previews() -> io::Result<()> { previews::run() }
@@ -51,6 +54,13 @@ pub(super) fn run(path: &Path) -> io::Result<()> {
     let mut request = [0; 4];
     while input.read_exact(&mut request).is_ok() {
         let index = u32::from_le_bytes(request);
+        if index == CLOSE_DOCUMENT {
+            // A normal COM release precedes the receipt. Killing the worker is
+            // only a fallback, rather than the document-close protocol.
+            drop(document);
+            frame(Reply::Text(DOCUMENT_CLOSED.into()), &mut output)?;
+            return Ok(());
+        }
         let reply = super::windows_pdf_thumbnail::render_page(
             &document,
             index,
@@ -64,7 +74,7 @@ pub(super) fn run(path: &Path) -> io::Result<()> {
 }
 
 pub(super) struct Session {
-    worker: Worker,
+    worker: Option<Worker>,
     output: std::fs::File,
     input: std::process::ChildStdin,
     sizes: Vec<(f32, f32)>,
@@ -79,8 +89,8 @@ impl Session {
         let mut command = Command::new(executable);
         command.arg("--oxyde-preview-worker-v1").arg("pdf-session").arg(path);
         let (worker, output, input) = Worker::start_duplex_checked(command, MEMORY_BYTES, &|| Ok(()))?;
-        let mut session = Self { worker, output, input, sizes: Vec::new() };
-        let text = match session.reply()? {
+        let mut session = Self { worker: Some(worker), output, input, sizes: Vec::new() };
+        let text = match session.reply(DEADLINE)? {
             Reply::Text(text) => text,
             Reply::Error { detail, .. } => return Err(CommandError::Other(detail)),
             _ => return Err(CommandError::Other("Unexpected PDF session reply".into())),
@@ -90,20 +100,20 @@ impl Session {
     }
 
     /// Reads one frame, giving up when the worker stalls or exits.
-    fn reply(&mut self) -> Result<Reply, CommandError> {
+    fn reply(&mut self, deadline: Duration) -> Result<Reply, CommandError> {
         let started = Instant::now();
         let mut header = [0; 4];
-        self.read_exact(&mut header, started)?;
+        self.read_exact(&mut header, started, deadline)?;
         let length = u32::from_le_bytes(header) as usize;
         if length == 0 || length > preview_protocol::MAX_REPLY {
             return Err(CommandError::Other("Invalid PDF session reply".into()));
         }
         let mut bytes = vec![0; length];
-        self.read_exact(&mut bytes, started)?;
+        self.read_exact(&mut bytes, started, deadline)?;
         Ok(preview_protocol::decode(&bytes)?)
     }
 
-    fn read_exact(&mut self, mut buffer: &mut [u8], started: Instant) -> io::Result<()> {
+    fn read_exact(&mut self, mut buffer: &mut [u8], started: Instant, deadline: Duration) -> io::Result<()> {
         while !buffer.is_empty() {
             let mut available = 0;
             unsafe {
@@ -111,11 +121,12 @@ impl Session {
             }
             .map_err(io::Error::other)?;
             if available == 0 {
-                if self.worker.child.try_wait()?.is_some() {
+                let worker = self.worker.as_mut().ok_or_else(|| io::Error::other("PDF session is closed"))?;
+                if worker.child.try_wait()?.is_some() {
                     return Err(io::Error::other("PDF session worker exited"));
                 }
-                if started.elapsed() > DEADLINE {
-                    return Err(io::Error::new(io::ErrorKind::TimedOut, "PDF page exceeded 15 seconds"));
+                if started.elapsed() > deadline {
+                    return Err(io::Error::new(io::ErrorKind::TimedOut, "PDF session response exceeded its deadline"));
                 }
                 std::thread::sleep(Duration::from_millis(5));
                 continue;
@@ -129,14 +140,40 @@ impl Session {
 }
 
 impl super::PdfSession for Session {
+    fn close(&mut self) -> Result<(), CommandError> {
+        if self.worker.is_none() { return Ok(()); }
+        let result = (|| {
+            self.input.write_all(&CLOSE_DOCUMENT.to_le_bytes())?;
+            self.input.flush()?;
+            match self.reply(CLOSE_DEADLINE)? {
+                Reply::Text(text) if text == DOCUMENT_CLOSED => Ok(()),
+                _ => Err(CommandError::Other("Missing PDF close receipt".into())),
+            }
+        })();
+        if result.is_ok() {
+            if let Some(worker) = &self.worker {
+                // Give the worker its normal exit after releasing COM. A failed
+                // handshake/exit still uses Worker's bounded kill-and-reap path.
+                unsafe { windows::Win32::System::Threading::WaitForSingleObject(
+                    HANDLE(worker.child.as_raw_handle()), 1000,
+                ); }
+            }
+        }
+        drop(self.worker.take());
+        result
+    }
+
     fn sizes(&self) -> &[(f32, f32)] {
         &self.sizes
     }
 
     fn page(&mut self, index: u32) -> Result<image::RgbaImage, CommandError> {
+        if self.worker.is_none() || index == CLOSE_DOCUMENT {
+            return Err(CommandError::Other("PDF session is closed or page is out of range".into()));
+        }
         self.input.write_all(&index.to_le_bytes())?;
         self.input.flush()?;
-        match self.reply()? {
+        match self.reply(DEADLINE)? {
             Reply::Images { mut frames, .. } if frames.len() == 1 => Ok(frames.remove(0).into_buffer()),
             Reply::Error { detail, .. } => Err(CommandError::Other(detail)),
             _ => Err(CommandError::Other("Unexpected PDF session reply".into())),
@@ -144,17 +181,23 @@ impl super::PdfSession for Session {
     }
 }
 
+impl Drop for Session {
+    fn drop(&mut self) {
+        // Also cover an opening result discarded before publication in the UI.
+        let _ = super::PdfSession::close(self);
+    }
+}
+
+#[cfg(test)]
+#[path = "windows_pdf_session/tests/recycle.rs"]
+mod recycle_tests;
+
 #[cfg(test)]
 mod tests {
     use super::super::PdfSession;
     use super::*;
 
-    #[test]
-    fn session_keeps_the_document_open_across_page_requests() {
-        let executable = std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().join("oxyde.exe");
-        assert!(executable.is_file(), "Build oxyde.exe before native worker tests");
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("two.pdf");
+    pub(super) fn write_pdf(path: &Path) {
         // Two red pages: 72x144 then 144x72 points.
         let pages = [(72, 144), (144, 72)];
         let mut objects = vec![
@@ -181,6 +224,15 @@ mod tests {
             format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objects.len() + 1).as_bytes(),
         );
         std::fs::write(&path, pdf).unwrap();
+    }
+
+    #[test]
+    fn session_keeps_the_document_open_across_page_requests() {
+        let executable = std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().join("oxyde.exe");
+        assert!(executable.is_file(), "Build oxyde.exe before native worker tests");
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("two.pdf");
+        write_pdf(&path);
 
         let mut session = Session::open_in(&executable, &path).unwrap();
         assert_eq!(session.sizes().len(), 2);
@@ -190,5 +242,7 @@ mod tests {
         assert!(first.height() > first.width());
         assert!(session.page(2).is_err());
         assert!(session.page(0).is_ok(), "A page error must not close the session");
+        drop(session);
+        std::fs::remove_file(&path).expect("Closing the native PDF session must release its source file");
     }
 }

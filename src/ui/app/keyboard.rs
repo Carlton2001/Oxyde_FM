@@ -36,7 +36,8 @@ impl OxydeApp {
             | ("c" | "z" | "n" | "tab" | "pageup" | "pagedown" | "+" | "=" | "add", true, false, _)
             | ("a" | "x" | "v" | "y" | "r" | "f" | "-" | "subtract" | "0", true, false, false)
             | ("a", true, false, true)
-            | ("c", true, true, false));
+            | ("c", true, true, false)
+            | ("s", false, true, true));
         if !recognized { return false; }
         if !self.context_menus.is_empty() {
             self.context_menus.clear();
@@ -63,6 +64,7 @@ impl OxydeApp {
                 self.on_action_supprimer(&Supprimer, window, cx);
             }
             ("f5", false, false, false) | ("r", true, false, false) => self.refresh_active_view(window, cx),
+            ("s", false, true, true) => self.calculate_sizes(cx),
             ("enter", false, false, false) => self.execute_ouvrir(cx),
             ("f2", false, false, false) => self.execute_renommer(window, cx),
             ("enter", false, true, false) => {

@@ -111,6 +111,9 @@ impl Viewer {
             crate::ui::memory_diagnostics::checkpoint("viewer-content-replaced");
         }
         retire_images(old.images(), cx);
+        if let Content::Pdf(pdf) = old {
+            pdf.retire(&mut self.jobs, cx);
+        }
     }
 
     pub(super) fn load_content(&mut self, file: &oxyde_lib::models::FileEntry, cx: &mut Context<Self>) {
@@ -128,7 +131,7 @@ impl Viewer {
             Some(get_preview_type(&file.name))
         };
         let Some(kind) = kind else {
-            let work = crate::ui::preview_jobs::load_viewer(move || {
+            let work = self.load_work(move || {
                 oxyde_lib::platform::platform().office_document(path)
             });
             self.finish(
@@ -151,7 +154,7 @@ impl Viewer {
                 // before their turn instead of decoding them for nothing.
                 let wanted = self.wanted.clone();
                 wanted.store(generation, std::sync::atomic::Ordering::Release);
-                let work = crate::ui::preview_jobs::load_viewer(move || {
+                let work = self.load_work(move || {
                     if wanted.load(std::sync::atomic::Ordering::Acquire) != generation {
                         return Err("Viewer image no longer shown".to_string());
                     }
@@ -174,7 +177,7 @@ impl Viewer {
     pub(super) fn finish<T: Send + 'static>(
         &mut self,
         generation: u64,
-        work: impl std::future::Future<Output = Result<T, String>> + Send + 'static,
+        work: impl std::future::Future<Output = Result<(T, futures::channel::oneshot::Sender<()>), String>> + Send + 'static,
         build: impl FnOnce(T) -> Content + 'static,
         cx: &mut Context<Self>,
     ) {
@@ -187,7 +190,7 @@ impl Viewer {
                 }
                 this.loading = None;
                 let content = match result {
-                    Ok(value) => build(value),
+                    Ok((value, _completion)) => build(value),
                     Err(error) => {
                         log::warn!("Viewer could not open the file: {error}");
                         Content::Unavailable

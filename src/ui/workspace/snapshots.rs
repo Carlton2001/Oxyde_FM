@@ -1,5 +1,9 @@
 use super::{default_sidebar_width, LayoutAxis, LayoutNode, PaneState, SavedLayoutAxis, SavedLayoutNode, SavedTab, SavedWorkspace, TabState, TabStripState, WorkspaceState};
 
+#[cfg(test)]
+#[path = "tests/sorting_session.rs"]
+mod sorting_session_tests;
+
 impl SavedLayoutNode {
     fn from_layout(layout: &LayoutNode) -> Self {
         match layout {
@@ -13,6 +17,8 @@ impl SavedLayoutNode {
                         path: tab.path.clone(),
                         view_mode: tab.view_mode,
                         grouping: tab.group_mode,
+                        sort_column: tab.sort_column,
+                        sort_direction: tab.sort_direction,
                         back_stack: tab.back_stack.clone(),
                         forward_stack: tab.forward_stack.clone(),
                     })
@@ -50,6 +56,8 @@ impl SavedLayoutNode {
                         let mut state = TabState::new(tab.id, tab.path);
                         state.view_mode = tab.view_mode;
                         state.group_mode = tab.grouping;
+                        state.sort_column = tab.sort_column;
+                        state.sort_direction = tab.sort_direction;
                         state.back_stack = tab.back_stack;
                         state.forward_stack = tab.forward_stack;
                         state

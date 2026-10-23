@@ -59,6 +59,7 @@ impl FileDragPreview {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        crate::ui::components::tooltip::hover::dismiss(window, cx);
         app_handle.update(cx, |app, cx| {
             // Modifier events follow the focus path, including with a stationary pointer.
             window.focus(&app.focus_handle, cx);

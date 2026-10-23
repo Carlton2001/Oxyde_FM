@@ -157,6 +157,7 @@ impl Viewer {
                 cancellation: cancellation.clone(),
             });
             let work_control = control.clone();
+            let completion = self.jobs.register(&path);
             // Admission and parsing run on a worker, never during render/paint.
             let work = crate::ui::preview_jobs::load_media(cancellation, move || {
                 let result = oxyde_lib::platform::platform()
@@ -164,6 +165,7 @@ impl Viewer {
                 if result.is_err() && !work_control.is_cancelled() {
                     work_control.status.store(MEDIA_FAILED, Ordering::Release);
                 }
+                drop(completion);
                 result
             });
             let failure_control = control.clone();

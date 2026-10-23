@@ -17,7 +17,7 @@ impl Viewer {
     pub(super) fn load_audio(&mut self, path: String, cx: &mut Context<Self>) {
         let wanted = self.wanted.clone();
         let generation = self.generation;
-        let work = crate::ui::preview_jobs::load_viewer(move || {
+        let work = self.load_work(move || {
             if wanted.load(std::sync::atomic::Ordering::Acquire) != generation {
                 return Err("Audio no longer shown".to_owned());
             }

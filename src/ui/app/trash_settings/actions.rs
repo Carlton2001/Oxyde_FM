@@ -90,17 +90,21 @@ impl OxydeApp {
             let Some(handle) = self.handle.clone() else {
                 return;
             };
+            let mut op = oxyde_lib::systems::file_ops::FileOperation::new(
+                if permanent { oxyde_lib::systems::file_ops::FileOpType::Delete } else { oxyde_lib::systems::file_ops::FileOpType::Trash },
+                paths.into_iter().map(std::path::PathBuf::from).collect(),
+                None,
+                None,
+            );
+            let released = self.suspend_viewers_for_deletion(&op.id, &op.sources, cx);
+            self.trash_delete_check_pending = true;
             cx.spawn(move |_, cx: &mut AsyncApp| {
                 let mut cx = cx.clone();
                 async move {
                     let runtime = tokio::runtime::Handle::current();
+                    released.await;
                     handle.update(&mut cx, |this, cx| {
-                        let mut op = oxyde_lib::systems::file_ops::FileOperation::new(
-                            if permanent { oxyde_lib::systems::file_ops::FileOpType::Delete } else { oxyde_lib::systems::file_ops::FileOpType::Trash },
-                            paths.into_iter().map(std::path::PathBuf::from).collect(),
-                            None,
-                            None,
-                        );
+                        this.trash_delete_check_pending = false;
                         op.archive_qualities = this.archive_qualities();
                         op.set_turbo(this.config.default_turbo_mode);
                         let id =

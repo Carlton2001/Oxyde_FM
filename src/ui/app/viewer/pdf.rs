@@ -18,6 +18,7 @@ const MAX_PAGES: usize = 6;
 const SKIPPED: &str = "PDF page left the view";
 
 pub(super) struct Pdf {
+    path: String,
     session: Arc<Mutex<Box<dyn PdfSession>>>,
     pub(super) sizes: Vec<(f32, f32)>,
     pub(super) pages: HashMap<usize, Arc<RenderImage>>,
@@ -30,6 +31,26 @@ pub(super) struct Pdf {
 }
 
 impl Pdf {
+    pub(super) fn retire(self, jobs: &mut super::deletion::Jobs, cx: &mut App) {
+        let completion = jobs.register(&self.path);
+        let session = self.session.clone();
+        // List state stays on the UI thread. Keep a session reference until
+        // its native worker can be closed in the background.
+        drop(self);
+        cx.background_executor().spawn(async move {
+            match session.lock() {
+                Ok(mut session) => {
+                    if let Err(error) = session.close() {
+                        log::warn!("Viewer PDF close failed: {error}");
+                    }
+                }
+                Err(error) => log::warn!("Viewer PDF session unavailable during close: {error}"),
+            }
+            drop(session);
+            drop(completion);
+        }).detach();
+    }
+
     fn cancel_page(&mut self, index: usize) {
         if let Some(cancelled) = self.pending.remove(&index) {
             cancelled.store(true, Ordering::Release);
@@ -92,15 +113,17 @@ impl Drop for Pdf {
 impl Viewer {
     pub(super) fn load_pdf(&mut self, path: String, cx: &mut Context<Self>) {
         let generation = self.generation;
-        let work = crate::ui::preview_jobs::load_viewer(move || {
+        let source_path = path.clone();
+        let work = self.load_work(move || {
             oxyde_lib::platform::platform().open_pdf_session(std::path::Path::new(&path))
         });
         self.finish(
             generation,
             work,
-            |session| {
+            move |session| {
                 let sizes = session.sizes().to_vec();
                 Content::Pdf(Pdf {
+                    path: source_path,
                     session: Arc::new(Mutex::new(session)),
                     // Page boxes are measured up front; only nearby pages are decoded.
                     list: ListState::new(sizes.len(), ListAlignment::Top, px(800.0)).measure_all(),
@@ -133,18 +156,25 @@ impl Viewer {
         pdf.pending.insert(index, cancelled.clone());
         let request = cancelled.clone();
         let session = pdf.session.clone();
+        let completion = self.jobs.register(&pdf.path);
         // The session serializes rendering; this job only waits on its own page.
         let work = cx.background_executor().spawn(async move {
-            let mut session = session.lock().map_err(|_| "PDF session unavailable".to_string())?;
-            if cancelled.load(Ordering::Acquire) {
-                return Err(SKIPPED.to_string());
-            }
-            let image = session.page(index as u32).map_err(|error| error.to_string())?;
-            // Bounded by MAX_PAGES, not by the tooltips' shared pixel budget:
-            // hovering files must never make visible pages fail.
-            let image = Arc::new(RenderImage::new(vec![image::Frame::new(image)]));
-            crate::ui::memory_diagnostics::track(&image, crate::ui::memory_diagnostics::State::Decoded);
-            Ok(image)
+            let result = (|| {
+                let mut session = session.lock().map_err(|_| "PDF session unavailable".to_string())?;
+                if cancelled.load(Ordering::Acquire) {
+                    return Err(SKIPPED.to_string());
+                }
+                let image = session.page(index as u32).map_err(|error| error.to_string())?;
+                // Bounded by MAX_PAGES, not by the tooltips' shared pixel budget:
+                // hovering files must never make visible pages fail.
+                let image = Arc::new(RenderImage::new(vec![image::Frame::new(image)]));
+                crate::ui::memory_diagnostics::track(&image, crate::ui::memory_diagnostics::State::Decoded);
+                Ok(image)
+            })();
+            // Close the final session/worker before releasing the deletion fence.
+            drop(session);
+            drop(completion);
+            result
         });
         cx.spawn(async move |this, cx| {
             let result = work.await;

@@ -224,7 +224,10 @@ impl OxydeApp {
                     cx.background_executor()
                         .timer(std::time::Duration::from_millis(200))
                         .await;
-                    let Some(progress) = operations.operation_progress(&op_id) else { break; };
+                    let Some(progress) = operations.operation_progress(&op_id) else {
+                        handle.update(&mut cx, |app, cx| app.resume_viewers_after_deletion(&op_id, true, cx));
+                        break;
+                    };
                     let changed = previous.as_ref() != Some(&progress);
                     let op_type = progress.op_type.clone();
                     let status = progress.status.clone();
@@ -245,6 +248,7 @@ impl OxydeApp {
                         }
                         OpStatus::Error(error) => {
                             handle.update(&mut cx, |this, cx| {
+                                this.resume_viewers_after_deletion(&op_id, true, cx);
                                 log::warn!("File operation failed: {error}");
                                 let recovery = this.archive_recovery_notice(&error, cx);
                                 this.file_operation_notice = Some((if recovery { Message::ArchiveRecoveryNotice } else { Message::TransferFailed }, error));
@@ -254,6 +258,7 @@ impl OxydeApp {
                         }
                         OpStatus::Completed => {
                             handle.update(&mut cx, |this, cx| {
+                                this.resume_viewers_after_deletion(&op_id, false, cx);
                                 this.refresh_all_tabs(cx);
                                 this.state.refresh_sidebar();
                                 this.reconcile_watchers(cx);
@@ -271,7 +276,10 @@ impl OxydeApp {
                             break;
                         }
                         OpStatus::Cancelled => {
-                            handle.update(&mut cx, |_, cx| cx.notify());
+                            handle.update(&mut cx, |app, cx| {
+                                app.resume_viewers_after_deletion(&op_id, true, cx);
+                                cx.notify();
+                            });
                             break;
                         }
                     }

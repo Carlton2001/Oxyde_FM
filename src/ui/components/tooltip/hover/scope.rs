@@ -48,6 +48,8 @@ impl Scope {
         let app = owner.read(cx);
         if !app.context_menus.is_empty()
             || app.drag_target.is_some()
+            || app.file_drag_origin.is_some()
+            || cx.has_active_drag()
             || !window.is_window_active()
             || !window.is_window_hovered()
         {

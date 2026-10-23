@@ -720,6 +720,9 @@ mod windows_pdf_session;
 
 /// An open Viewer PDF. Rendering blocks; call it on a background job.
 pub trait PdfSession: Send {
+    /// Release the native document even while obsolete render references remain.
+    /// Called off the UI thread after cancelling pending page requests.
+    fn close(&mut self) -> Result<(), crate::models::CommandError> { Ok(()) }
     /// Page sizes in document order; only their ratios are meaningful.
     fn sizes(&self) -> &[(f32, f32)];
     fn page(&mut self, index: u32) -> Result<image::RgbaImage, crate::models::CommandError>;

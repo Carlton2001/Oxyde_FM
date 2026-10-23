@@ -73,7 +73,7 @@ pub(super) fn sizes_button(pane_id: &str, active: bool, handle: Entity<OxydeApp>
     )
         .size(rems(1.5)).flex_none().flex().items_center().justify_center().rounded_md()
         .bg(if active { theme.selected } else { theme.header })
-        .fixed_tooltip(Tooltip::text(cx.i18n().text(Message::ToolSizes)))
+        .fixed_tooltip(Tooltip::with_shortcut(cx.i18n().text(Message::ToolSizes), Some("Alt+Shift+S".into())))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             cx.stop_propagation();
             handle.update(cx, |view, cx| {

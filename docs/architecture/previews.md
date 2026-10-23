@@ -2,6 +2,10 @@
 
 Les aperçus de survol restent en mémoire ; les miniatures de grille ont un cache disque distinct. Le chargement, la validation des fichiers et le décodage restent sur les workers.
 
+Le démarrage d’un ghost de fichiers ferme immédiatement l’aperçu de survol,
+y compris sa préparation en attente. Les survols restent désactivés pendant
+le glisser-déposer, même lorsqu’aucune cible de dépôt n’est acceptée.
+
 ## Survol et présentation
 
 `components/tooltip/hover.rs` partage une session par fenêtre, panneau et onglet/dossier. Délai initial : 750 ms ; tolérance entre éléments : 300 ms. Sortie, clic, défilement, navigation ou menu ferment la session. Timers annulables et révisions écartent les résultats obsolètes.
@@ -30,6 +34,17 @@ du même type dans la liste du panneau source, qui le sélectionne seul et le
 fait défiler en vue ; le Viewer suit alors cette sélection. Sans sélection,
 l’aperçu et le lecteur sont libérés. La préparation des grandes listes se fait
 en arrière-plan ; une révision de source écarte les résultats obsolètes.
+
+Avant une suppression, `viewer/deletion` bloque la réouverture des chemins
+concernés jusqu’à la fin de l’opération. Le Viewer libère son contenu et attend
+les chargements et rendus déjà engagés avant de confier la suppression au moteur
+d’opérations. La session PDF ferme explicitement son document en arrière-plan,
+même si des références de rendu subsistent. Le worker libère le document avant
+d’acquitter la fermeture, puis quitte ; un délai borné conserve l’arrêt forcé
+comme repli. Les rendus encore actifs gardent leur acquittement jusqu’à la
+libération de leur référence native.
+Une erreur ou une annulation autorise de nouveau l’affichage du fichier conservé.
+
 Le Viewer ouvre le fichier complet (`app/viewer/content`) : image en pleine
 résolution par une session LPAC propre au Viewer (`image_session`, type 2 :
 job de 1 Gio, 30 s, côté jusqu’à 16384 px et 256 Mio de pixels, hors budget

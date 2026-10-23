@@ -1,4 +1,5 @@
 mod content;
+mod deletion;
 mod image_interaction;
 mod audio;
 mod content_render;
@@ -56,6 +57,8 @@ pub(crate) struct Viewer {
     /// Generation of the image the Viewer currently wants, read by queued jobs.
     wanted: Arc<std::sync::atomic::AtomicU64>,
     loading: Option<Task<()>>,
+    jobs: deletion::Jobs,
+    deletions: std::collections::HashMap<String, Vec<std::path::PathBuf>>,
     scroll: scrollbar::ListScroll,
     preparation: Option<Task<()>>,
     media: Option<media::MediaSession>,
@@ -307,6 +310,8 @@ impl Viewer {
             generation: 0,
             wanted: Default::default(),
             loading: None,
+            jobs: Default::default(),
+            deletions: Default::default(),
             scroll: Default::default(),
             preparation: None,
             media: None,
@@ -416,6 +421,9 @@ impl Viewer {
             return;
         };
         if file.is_dir || file.archive_path.is_some() {
+            return;
+        }
+        if self.deletion_blocks(&file.path) {
             return;
         }
         use crate::ui::components::icons::{AUDIO_EXTENSIONS, VIDEO_EXTENSIONS};

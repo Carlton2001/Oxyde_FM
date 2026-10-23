@@ -95,6 +95,7 @@ These shortcuts apply while the file panel has keyboard focus.
 | Rename | F2 |
 | Select all / Deselect all | Ctrl + A / Ctrl + Shift + A |
 | Show properties | Alt + Enter |
+| Calculate folder sizes | Alt + Shift + S |
 | Undo / Redo supported operations | Ctrl + Z / Ctrl + Y or Ctrl + Shift + Z |
 
 | Tabs and View | Shortcut |

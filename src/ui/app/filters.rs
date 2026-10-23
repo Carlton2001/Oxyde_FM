@@ -187,6 +187,7 @@ impl OxydeApp {
             }
             let id = tab.id.clone();
             self.prepare_current_tab(id, cx);
+            self.save_workspace(cx);
             cx.notify();
         }
     }
