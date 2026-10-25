@@ -2,6 +2,13 @@
 
 Chaque onglet possède ses critères, résultats et annulation. Les workers préparent les données ; la publication vérifie l’identité de l’onglet et la révision de la demande. Une ancienne réponse ne doit jamais remplacer une navigation plus récente.
 
+Les résultats de doublons utilisent une liste virtualisée commune aux en-têtes
+de groupes et aux fichiers. Filtre, tailles minimales/maximales et plages de lignes
+sont préparés en arrière-plan ; replier un groupe invalide la préparation précédente.
+Le rendu ne parcourt que les lignes demandées par le viewport, même pour un groupe
+de 100 000 fichiers. Une taille commune est affichée si tous les membres ont la
+même taille ; sinon, le groupe affiche leur plage de tailles.
+
 ## Listing et filtres
 
 Les dossiers restent en tête en ordre ascendant comme descendant. L’UI trie les noms en ordre naturel, en minuscules Unicode et sans retrait d’accents : `fichier2` précède `fichier10`. Les suites de chiffres ASCII sont comparées sans limite de taille ; à valeur égale, le moins de zéros initiaux précède (`2`, `02`, `002`). Les extensions restent lexicographiques, avec les noms en départage naturel pour toutes les colonnes et des égalités stables. Le tri naturel public du backend garde ses autres consommateurs.

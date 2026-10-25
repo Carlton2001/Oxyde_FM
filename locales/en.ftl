@@ -377,7 +377,7 @@ duplicate-files = { $file_count ->
     }
 duplicate-group = Group { $index }
 duplicate-failed = Search failed: { $error }
-duplicate-more = Load more
+duplicate-size-range = { $min } – { $max }
 duplicate-disk = Disk #{ $disk }
 duplicate-go-to-folder = Click to go to the folder
 folder-size-empty = Empty

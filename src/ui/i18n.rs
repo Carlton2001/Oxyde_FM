@@ -334,6 +334,7 @@ pub enum Message {
     QuickSearchRunning,
     QuickSearchLimited,
     QuickSearchArchivesSkipped,
+    DuplicateSizeRange,
     QuickSearchArchiveSkippedDetail,
     QuickSearchArchiveUnreadable,
     QuickSearchArchiveContentNotSearched,
@@ -362,7 +363,6 @@ pub enum Message {
     DuplicateFiles,
     DuplicateGroup,
     DuplicateFailed,
-    DuplicateMore,
     DuplicateDisk,
 
     Undo,
@@ -917,6 +917,7 @@ impl Message {
             Self::QuickSearchRunning => "quick-search-running",
             Self::QuickSearchLimited => "quick-search-limited",
             Self::QuickSearchArchivesSkipped => "quick-search-archives-skipped",
+            Self::DuplicateSizeRange => "duplicate-size-range",
             Self::QuickSearchArchiveSkippedDetail => "quick-search-archive-skipped-detail",
             Self::QuickSearchArchiveUnreadable => "quick-search-archive-unreadable",
             Self::QuickSearchArchiveContentNotSearched => "quick-search-archive-content-not-searched",
@@ -945,7 +946,6 @@ impl Message {
             Self::DuplicateFiles => "duplicate-files",
             Self::DuplicateGroup => "duplicate-group",
             Self::DuplicateFailed => "duplicate-failed",
-            Self::DuplicateMore => "duplicate-more",
             Self::DuplicateDisk => "duplicate-disk",
 
             Self::Undo => "navigation-undo",
@@ -1288,6 +1288,10 @@ mod operation_count_tests;
 #[cfg(test)]
 #[path = "i18n/tests/folder_sizes.rs"]
 mod folder_size_tests;
+
+#[cfg(test)]
+#[path = "i18n/tests/duplicates.rs"]
+mod duplicate_size_tests;
 
 #[cfg(test)]
 mod tests {
@@ -1686,7 +1690,7 @@ mod tests {
                 Message::DuplicateFiles,
                 Message::DuplicateGroup,
                 Message::DuplicateFailed,
-                Message::DuplicateMore,
+                Message::DuplicateSizeRange,
                 Message::DuplicateDisk,
 
                 Message::Undo,
@@ -1927,6 +1931,8 @@ mod tests {
             ];
             let mut args = FluentArgs::new();
             args.set("path", "sample.zip");
+            args.set("min", "1");
+            args.set("max", "100");
             args.set("reason", "Test reason");
             args.set("error", "Test error");
             args.set("groups", 2);

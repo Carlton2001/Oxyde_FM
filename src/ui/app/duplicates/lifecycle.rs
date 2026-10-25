@@ -137,7 +137,7 @@ impl DuplicateWindow {
                     let _ = weak.update(cx, |this, cx| {
                         this.query = value.to_lowercase();
                         this.update_filter(cx);
-                        this.limit = 100;
+                        this.results_scroll.set_offset(point(px(0.0), px(0.0)));
                         cx.notify();
                     });
                 },
@@ -177,6 +177,8 @@ impl DuplicateWindow {
                 window.remove_window();
             }));
         }
+        let result_list = UniformListScrollHandle::new();
+        let results_scroll = result_list.0.borrow().base_handle.clone();
         Self {
             owner,
             locations,
@@ -188,16 +190,18 @@ impl DuplicateWindow {
             filter,
             query: String::new(),
             filtered: Vec::new(),
+            result_rows: Arc::default(),
+            result_revision: 0,
+            result_list,
             scrollbar_origins: Default::default(),
             grab_offset: 0.0,
             scroll_drag: None,
-            results_scroll: ScrollHandle::new(),
+            results_scroll,
             sources_scroll: ScrollHandle::new(),
             running: false,
             searched: false,
             error: None,
             cancellation: Arc::new(DuplicateSearchState::new()),
-            limit: 100,
             focus,
             _subscriptions: subscriptions,
             resize_task: None,

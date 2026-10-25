@@ -11,6 +11,7 @@ Les constats et chiffres ci-dessous décrivent la révision auditée. Le suivi s
 | A05 | Lancement du setup via `Platform` et le verrou Windows commun ; flux standard explicites | Check toutes cibles sans avertissement ; 2 tests natifs d’héritage réussis, dont lancement concurrent du setup fixture |
 | A02 | Mise à jour ciblée de `ctutils` vers 0.4.4 ; notices et empreintes régénérées | Check toutes cibles sans avertissement ; audit RustSec actualisé réussi, 0 vulnérabilité publiée ; avis de maintenance/Tokio conservés |
 | A07 | Nettoyage sur le pool bloquant, référence indépendante du hook GPUI et attente finale avant arrêt de Tokio | Check toutes cibles sans avertissement ; 14 tests d’historique réussis, 1 ignoré ; test de nettoyage bloqué conservé après abandon du hook réussi |
+| A06, A10 | Liste GPUI virtualisée des groupes/fichiers, plages et tailles préparées en arrière-plan ; tailles mixtes affichées en plage ; minimum de tri déterministe | Check toutes cibles sans avertissement ; 3 tests de présentation dont 100 000 fichiers, 15 tests i18n et 6 tests du moteur de doublons réussis ; pas d’essai visuel général |
 
 ## Révision, méthode et portée
 

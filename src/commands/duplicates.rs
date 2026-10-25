@@ -42,6 +42,7 @@ impl Default for DuplicateSearchState {
 }
 
 pub struct DuplicateGroup {
+    /// Smallest member size; a name-only group may contain other sizes.
     pub size: u64,
     pub files: Vec<FileEntry>,
 }
@@ -256,7 +257,7 @@ pub async fn find_duplicates(
                         size: if options.by_size || options.by_content {
                             size
                         } else {
-                            files[0].size
+                            files.iter().map(|file| file.size).min().unwrap_or(0)
                         },
                         files,
                     });
@@ -459,7 +460,7 @@ pub async fn find_duplicates(
                         size: if options.by_size || options.by_content {
                             size
                         } else {
-                            files[0].size
+                            files.iter().map(|file| file.size).min().unwrap_or(0)
                         },
                         files,
                     });
@@ -484,6 +485,10 @@ pub async fn find_duplicates(
 pub fn cancel_find_duplicates(state: &DuplicateSearchState) {
     state.0.store(true, Ordering::Relaxed);
 }
+
+#[cfg(test)]
+#[path = "duplicates/tests/sizes.rs"]
+mod size_tests;
 
 #[cfg(test)]
 mod tests {

@@ -10,7 +10,7 @@ impl DuplicateWindow {
     pub(super) fn render_title_actions(&self, cx: &Context<Self>) -> Div {
         let collapse = cx.entity();
         let top = cx.entity();
-        let can_collapse = self.filtered.iter().any(|index| !self.collapsed.contains(index));
+        let can_collapse = self.result_rows.has_expanded;
         div()
             .flex()
             .flex_none()
@@ -39,6 +39,7 @@ impl DuplicateWindow {
                         } else {
                             this.collapsed.clear();
                         }
+                        this.prepare_results(false, cx);
                         cx.notify();
                     });
                 },

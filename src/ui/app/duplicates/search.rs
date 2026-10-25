@@ -1,6 +1,8 @@
 use super::DuplicateWindow;
-use gpui::{px, point, Context};
-use oxyde_lib::commands::duplicates::{find_duplicates, DuplicateSearchOptions, DuplicateSearchState};
+use gpui::{point, px, Context};
+use oxyde_lib::commands::duplicates::{
+    find_duplicates, DuplicateSearchOptions, DuplicateSearchState,
+};
 use std::sync::Arc;
 
 impl DuplicateWindow {
@@ -11,7 +13,6 @@ impl DuplicateWindow {
         self.running = true;
         self.searched = true;
         self.error = None;
-        self.limit = 100;
         self.results_scroll.set_offset(point(px(0.0), px(0.0)));
         self.cancellation = Arc::new(DuplicateSearchState::new());
         let progress_token = self.cancellation.clone();
@@ -57,8 +58,9 @@ impl DuplicateWindow {
                         Ok(groups) => {
                             this.groups = Arc::new(groups);
                             this.filtered.clear();
-                            this.update_filter(cx);
+                            this.result_rows = Arc::default();
                             this.collapsed.clear();
+                            this.update_filter(cx);
                         }
                         Err(e) => this.error = Some(e.to_string()),
                     }
@@ -71,19 +73,28 @@ impl DuplicateWindow {
     }
 
     pub(super) fn update_filter(&mut self, cx: &mut Context<Self>) {
+        self.prepare_results(true, cx);
+    }
+
+    pub(super) fn prepare_results(&mut self, debounce: bool, cx: &mut Context<Self>) {
         let groups = self.groups.clone();
         let query = self.query.clone();
+        let collapsed = self.collapsed.clone();
+        self.result_revision = self.result_revision.wrapping_add(1);
+        let revision = self.result_revision;
         self.filtering = true;
         self.filter_task = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor()
-                .timer(std::time::Duration::from_millis(150))
-                .await;
+            if debounce {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(150))
+                    .await;
+            }
             let snapshot = groups.clone();
             let needle = query.trim().to_string();
-            let indices = cx
+            let (indices, rows) = cx
                 .background_executor()
                 .spawn(async move {
-                    snapshot
+                    let indices: Vec<_> = snapshot
                         .iter()
                         .enumerate()
                         .filter(|(_, group)| {
@@ -94,12 +105,20 @@ impl DuplicateWindow {
                                 })
                         })
                         .map(|(index, _)| index)
-                        .collect()
+                        .collect();
+                    let rows = Arc::new(super::presentation::Results::prepare(
+                        &snapshot, &indices, &collapsed,
+                    ));
+                    (indices, rows)
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
-                if Arc::ptr_eq(&this.groups, &groups) && this.query == query {
+                if Arc::ptr_eq(&this.groups, &groups)
+                    && this.query == query
+                    && this.result_revision == revision
+                {
                     this.filtered = indices;
+                    this.result_rows = rows;
                     this.filtering = false;
                     cx.notify();
                 }

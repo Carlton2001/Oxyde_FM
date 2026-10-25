@@ -1,5 +1,6 @@
 mod lifecycle;
 mod results;
+mod presentation;
 mod search;
 mod scroll;
 mod sources;
@@ -10,7 +11,7 @@ pub(crate) use lifecycle::close_duplicate_windows;
 
 use super::OxydeApp;
 use crate::ui::components::input::TextInput;
-use gpui::{AnyView, Entity, FocusHandle, ScrollHandle, Subscription, Task, WeakEntity};
+use gpui::{AnyView, Entity, FocusHandle, ScrollHandle, Subscription, Task, UniformListScrollHandle, WeakEntity};
 use oxyde_lib::commands::duplicates::{cancel_find_duplicates, DuplicateGroup, DuplicateSearchState};
 use std::{collections::HashSet, sync::Arc};
 
@@ -25,6 +26,9 @@ pub struct DuplicateWindow {
     filter: Entity<TextInput>,
     query: String,
     filtered: Vec<usize>,
+    result_rows: Arc<presentation::Results>,
+    result_revision: u64,
+    result_list: UniformListScrollHandle,
     results_scroll: ScrollHandle,
     sources_scroll: ScrollHandle,
     scrollbar_origins: std::collections::HashMap<String, gpui::Point<f32>>,
@@ -34,7 +38,6 @@ pub struct DuplicateWindow {
     searched: bool,
     error: Option<String>,
     cancellation: Arc<DuplicateSearchState>,
-    limit: usize,
     focus: FocusHandle,
     _subscriptions: Vec<Subscription>,
     resize_task: Option<Task<()>>,

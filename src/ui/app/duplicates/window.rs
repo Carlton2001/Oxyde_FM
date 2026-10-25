@@ -36,7 +36,7 @@ impl Render for DuplicateWindow {
             "group_count",
             crate::ui::format::format_number(self.groups.len() as u64, cx.i18n().language()),
         );
-        let file_count = self.groups.iter().map(|g| g.files.len()).sum::<usize>();
+        let file_count = self.result_rows.file_count;
         args.set("file_count", file_count as i64);
         args.set(
             "file_number",
@@ -44,7 +44,7 @@ impl Render for DuplicateWindow {
         );
         args.set(
             "files",
-            self.groups.iter().map(|g| g.files.len()).sum::<usize>() as i64,
+            file_count as i64,
         );
         let results = self.render_results(theme, system_icons, cx);
         let disabled = self.selected.is_empty() || !self.options.iter().any(|v| *v);

@@ -383,7 +383,7 @@ duplicate-files = { $file_count ->
     }
 duplicate-group = Groupe { $index }
 duplicate-failed = La recherche a échoué : { $error }
-duplicate-more = Afficher davantage
+duplicate-size-range = { $min } – { $max }
 duplicate-disk = Disque #{ $disk }
 duplicate-go-to-folder = Cliquez pour aller au dossier
 folder-size-empty = Vide

@@ -674,7 +674,7 @@ duplicate-group = Grupo { $index }
 
 duplicate-failed = La búsqueda ha fallado: { $error }
 
-duplicate-more = Cargar más
+duplicate-size-range = { $min } – { $max }
 
 duplicate-disk = Disco n.º { $disk }
 

@@ -674,7 +674,7 @@ duplicate-group = Gruppe { $index }
 
 duplicate-failed = Suche fehlgeschlagen: { $error }
 
-duplicate-more = Mehr laden
+duplicate-size-range = { $min } – { $max }
 
 duplicate-disk = Datenträger Nr. { $disk }
 
