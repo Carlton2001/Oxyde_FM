@@ -15,6 +15,7 @@ pub mod layout;
 pub mod navigation;
 mod sizes;
 mod preferences;
+pub(crate) mod shutdown;
 mod grouping;
 mod group_selection;
 pub(crate) use group_selection::GroupSelection;
@@ -485,20 +486,17 @@ impl OxydeApp {
             _subscriptions: vec![cx.on_app_quit(|this, cx| {
                 this.flush_window_geometry(cx);
                 crate::trace_shutdown_request("GPUI quit hook");
-                crate::trace_shutdown_stage("history cleanup started");
                 // Undo history is session-only, so its replacement backups must
-                // not outlive a normal application shutdown.
-                if this.history.clear() {
-                    crate::trace_shutdown_stage("history cleanup completed");
-                } else {
-                    crate::trace_shutdown_stage("history cleanup deferred to active worker");
-                }
+                // not outlive a normal application shutdown. Keep the last
+                // history owner with the physical cleanup, away from the UI.
+                let cleanup = shutdown::begin_history_cleanup(this.history.clone());
                 let save = this.preferences_save_task.take();
                 async move {
                     if let Some(save) = save {
                         crate::trace_shutdown_stage("waiting for preference saves");
                         save.await;
                     }
+                    cleanup.await;
                     crate::trace_shutdown_stage("GPUI quit hook completed");
                 }
             })],

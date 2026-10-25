@@ -203,6 +203,7 @@ fn main() {
             .expect("window opens");
         });
     trace_shutdown_stage("GPUI event loop returned");
+    crate::ui::app::shutdown::finish_pending_cleanup();
     drop(guard);
     shutdown_runtime(runtime);
     trace_shutdown_stage("application cleanup complete; final process exit");

@@ -11,6 +11,13 @@ Référence : `SHUTDOWN-PDF-INTEL-2026-10-04`. Le contournement Windows a été 
 
 `TerminateProcess` évite les callbacks finaux de détachement des DLL ; `std::process::exit` n’est pas un remplacement équivalent. Ce contournement ne remplace aucune sauvegarde ni hook de fermeture. Les workers sans état applicatif sérialisent et vident leur réponse avant leur sortie finale.
 
+Le hook GPUI programme le nettoyage de l’historique sur le pool bloquant Tokio,
+attend d’abord les préférences puis ce nettoyage. Vérification des identités/hashes
+et suppression des backups ne bloquent donc plus le callback UI. GPUI n’accorde
+que 200 ms aux hooks : une référence indépendante conserve le nettoyage et `main`
+attend son achèvement après le retour de GPUI, avant l’arrêt de Tokio et la sortie
+native. Une I/O matérielle bloquée peut toujours retarder cette dernière attente.
+
 Points d’entrée : `src/main.rs`, `platform/windows_impl.rs`, `platform/linux_impl.rs`, `platform/windows_preview_worker/`. Voir les [sessions d’aperçus](../architecture/previews.md).
 
 Le superviseur image arrête également la session dédiée aux pochettes audio,
