@@ -69,6 +69,9 @@ impl Platform for WindowsPlatform {
     fn onedrive_installed(&self) -> bool { super::windows_onedrive::installed() }
     fn onedrive_folders(&self) -> Vec<crate::models::QuickAccessItem> { super::windows_onedrive::folders() }
     fn download(&self, url: &str, limit: usize) -> std::io::Result<Vec<u8>> { super::windows_download::download(url, limit) }
+    fn launch_update(&self, setup: &std::path::Path) -> std::io::Result<()> {
+        super::windows_process_launch::spawn_update(setup).map(drop)
+    }
 
     fn show_startup_error(&self, title: &str, message: &str) {
         use windows::core::{HSTRING, PCWSTR};

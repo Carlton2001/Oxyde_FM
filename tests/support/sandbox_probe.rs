@@ -73,7 +73,11 @@ fn main() {
     if args[1] == "leaf" {
         return;
     }
-    if args[1] == "hold-no-gate" {
+    if args[1] == "/UPDATE" {
+        assert_eq!(args.len(), 3);
+        assert!(args[2].strip_prefix("/WAITPID=").unwrap().parse::<u32>().unwrap() > 0);
+    }
+    if args[1] == "hold-no-gate" || args[1] == "/UPDATE" {
         std::thread::sleep(Duration::from_secs(10));
         return;
     }

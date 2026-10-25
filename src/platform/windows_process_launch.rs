@@ -51,6 +51,13 @@ pub(super) fn spawn(mut command: Command) -> io::Result<Child> {
     result
 }
 
+pub(super) fn spawn_update(setup: &std::path::Path) -> io::Result<Child> {
+    let mut command = Command::new(setup);
+    command.arg("/UPDATE").arg(format!("/WAITPID={}", std::process::id()))
+        .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    spawn(command)
+}
+
 /// The native callers of this helper use Command::output's default streams.
 pub(super) fn output(mut command: Command) -> io::Result<Output> {
     command

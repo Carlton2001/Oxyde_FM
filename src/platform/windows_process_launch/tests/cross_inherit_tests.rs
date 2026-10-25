@@ -50,6 +50,15 @@ impl Drop for FixtureChild {
 
 #[test]
 fn concurrent_spawn_waits_until_inheritable_pipes_close_and_cannot_keep_them_alive() {
+    verify_isolated_launch(false, "concurrent_spawn_waits_until_inheritable_pipes_close_and_cannot_keep_them_alive");
+}
+
+#[test]
+fn concurrent_update_launch_cannot_inherit_worker_pipes() {
+    verify_isolated_launch(true, "concurrent_update_launch_cannot_inherit_worker_pipes");
+}
+
+fn verify_isolated_launch(update: bool, test_name: &str) {
     // Junction and executable fixtures elsewhere in the suite launch outside
     // Oxyde's lock. Isolate this exact test so those unrelated children cannot
     // retain its deliberately inheritable reader. Keep every identity/lifetime
@@ -57,7 +66,7 @@ fn concurrent_spawn_waits_until_inheritable_pipes_close_and_cannot_keep_them_ali
     const INNER: &str = "OXYDE_CROSS_INHERIT_TEST_INNER";
     if std::env::var_os(INNER).is_none() {
         let module = module_path!().split_once("::").unwrap().1;
-        let name = format!("{module}::concurrent_spawn_waits_until_inheritable_pipes_close_and_cannot_keep_them_alive");
+        let name = format!("{module}::{test_name}");
         let mut command = Command::new(std::env::current_exe().unwrap());
         command
             .args(["--exact", &name, "--nocapture"])
@@ -79,6 +88,7 @@ fn concurrent_spawn_waits_until_inheritable_pipes_close_and_cannot_keep_them_ali
     // Compile before opening the inheritance interval: this test's compiler is
     // deliberately outside the process-launch mechanism under test.
     let mut command = native_probe::command("hold-no-gate");
+    let executable = command.get_program().to_owned();
     command
         .creation_flags(0x08000000)
         .stdin(Stdio::null())
@@ -100,7 +110,7 @@ fn concurrent_spawn_waits_until_inheritable_pipes_close_and_cannot_keep_them_ali
     let (spawned, receive) = mpsc::sync_channel(1);
     let launcher = std::thread::spawn(move || {
         attempt.send(()).unwrap();
-        let result = spawn(command).map(FixtureChild);
+        let result = if update { spawn_update(std::path::Path::new(&executable)) } else { spawn(command) }.map(FixtureChild);
         let _ = spawned.send(result);
     });
     attempted.recv_timeout(Duration::from_secs(2)).unwrap();

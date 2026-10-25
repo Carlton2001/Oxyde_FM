@@ -162,6 +162,10 @@ pub trait Platform: Send + Sync {
     fn download(&self, _url: &str, _limit: usize) -> std::io::Result<Vec<u8>> {
         Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
     }
+    /// Launch the verified installer in the background; it waits for this process.
+    fn launch_update(&self, _setup: &std::path::Path) -> std::io::Result<()> {
+        Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
+    }
     #[doc(hidden)]
     fn check_broker_pressure(&self) -> std::io::Result<()> { Ok(()) }
     #[doc(hidden)]

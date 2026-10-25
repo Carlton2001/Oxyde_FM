@@ -2,6 +2,14 @@
 
 La compilation et les **1 405 tests Windows exécutés passent**, mais l’audit relève **10 constats : 1 P1, 8 P2 et 1 P3**. Le problème prioritaire est la recherche de contenu Office : elle décompresse les documents dans le processus principal sans borne de taille. L’audit RustSec actualisé échoue sur `ctutils 0.4.2`, présent dans le graphe Windows actif. Aucun correctif applicatif n’a été réalisé pendant cet audit.
 
+## Suivi des corrections après audit
+
+Les constats et chiffres ci-dessous décrivent la révision auditée. Le suivi suivant décrit les corrections ultérieures, sans clôturer les ID non mentionnés.
+
+| ID | Correction | Validation ciblée |
+| --- | --- | --- |
+| A05 | Lancement du setup via `Platform` et le verrou Windows commun ; flux standard explicites | Check toutes cibles sans avertissement ; 2 tests natifs d’héritage réussis, dont lancement concurrent du setup fixture |
+
 ## Révision, méthode et portée
 
 - Révision : `c0dc529356dc30db82fffbcd9f7ec184b4e34183`, paquet `oxyde 2.0.1` ; arbre Git initial propre.

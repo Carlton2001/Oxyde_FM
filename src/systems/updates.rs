@@ -50,8 +50,7 @@ pub fn download(update: &Update) -> Result<PathBuf, String> {
 
 /// Start Setup in update mode; it waits for this process, skips its pages and relaunches Oxyde.
 pub fn launch(setup: &std::path::Path) -> Result<(), String> {
-    std::process::Command::new(setup).arg("/UPDATE").arg(format!("/WAITPID={}", std::process::id()))
-        .spawn().map(drop).map_err(|error| error.to_string())
+    crate::platform::platform().launch_update(setup).map_err(|error| error.to_string())
 }
 
 fn parse_manifest(bytes: &[u8], current: &str) -> Result<Option<Update>, String> {
