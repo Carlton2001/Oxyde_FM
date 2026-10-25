@@ -1,4 +1,5 @@
 use crate::ui::elements::button::{button_style, ButtonVariant};
+mod breadcrumb_fades;
 #[cfg(target_os = "windows")]
 mod breadcrumb_glide;
 mod breadcrumb_menu;
@@ -102,10 +103,6 @@ pub fn render_top_bar(
         // The scroll handle's dimensions are updated during prepaint.
         _cx.notify();
     }
-    let scroll_left = -breadcrumb_scroll.offset().x.as_f32();
-    let scroll_max = breadcrumb_scroll.max_offset().x.as_f32();
-    let fade_left = scroll_left > logical(2.0);
-    let fade_right = scroll_max - scroll_left > logical(2.0);
 
     let can_go_back = !active_tab.back_stack.is_empty();
     let can_go_forward = !active_tab.forward_stack.is_empty();
@@ -752,33 +749,18 @@ pub fn render_top_bar(
                                     if max > px(0.0) && amount != px(0.0) {
                                         breadcrumb_glide::scroll_by(&wheel_glide, &wheel_scroll, amount * 1.5);
                                         wheel_handle.update(cx, |_, cx| cx.notify());
-                                        cx.stop_propagation();
                                     }
+                                    // GPUI's default wheel listener otherwise applies an
+                                    // unclamped offset, even when the whole path fits.
+                                    cx.stop_propagation();
                                 })
                                 .children(elements),
                         )
-                        .when(fade_left, |bar| {
-                            bar.child(
-                                div()
-                                    .absolute()
-                                    .left_0()
-                                    .top_0()
-                                    .h_full()
-                                    .w(rems(1.5))
-                                    .bg(linear_gradient(90.0, linear_color_stop(theme.surface, 0.0), linear_color_stop(theme.surface.alpha(0.0), 1.0))),
-                            )
-                        })
-                        .when(fade_right, |bar| {
-                            bar.child(
-                                div()
-                                    .absolute()
-                                    .right_0()
-                                    .top_0()
-                                    .h_full()
-                                    .w(rems(1.5))
-                                    .bg(linear_gradient(270.0, linear_color_stop(theme.surface, 0.0), linear_color_stop(theme.surface.alpha(0.0), 1.0))),
-                            )
-                        }))
+                        .child(breadcrumb_fades::render(
+                            breadcrumb_scroll.clone(),
+                            total_parts.checked_mul(2).and_then(|count| count.checked_sub(2)),
+                            theme.surface,
+                        )))
                     },
                 )
         ))
