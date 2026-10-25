@@ -4,7 +4,7 @@
 
 ## Suivi des corrections après audit
 
-**A01, A02, A03, A05, A06, A07 et A10 sont corrigés. A04, A08 et A09 restent ouverts.** Les constats et chiffres des sections d’audit décrivent la révision initiale. Le suivi suivant décrit les corrections ultérieures.
+**A01, A02, A03, A05, A06, A07 et A10 sont corrigés. A04 est classé comme limite acceptée par décision produit ; A08 et A09 restent ouverts.** Les constats et chiffres des sections d’audit décrivent la révision initiale. Le suivi suivant décrit les corrections ultérieures.
 
 | ID | Correction | Validation ciblée |
 | --- | --- | --- |
@@ -104,7 +104,9 @@ Trois défauts sont reproduits par le point d’entrée public :
 
 **Correction proposée :** mutualiser une extraction de texte cohérente avec le Viewer, dans les limites de A01 ; couvrir toutes les diapositives/feuilles pertinentes et les entités. Rendre explicite toute troncature. Conserver les trois fixtures comme tests de régression, avec assertions de résultats positifs.
 
-### A04 — Les erreurs de parcours des tailles deviennent un total apparemment complet
+### A04 — Taille des éléments accessibles : limite acceptée
+
+**Décision produit après revue :** le calcul des tailles d’Oxyde fournit une indication utile dans un explorateur de fichiers. L’exhaustivité d’un outil spécialisé d’analyse disque n’est pas un objectif. Les éléments inaccessibles peuvent être omis ; ce comportement ne demande ni élévation des droits, ni statut supplémentaire dans l’interface, ni changement du moteur. A04 est donc retiré des corrections à réaliser. La qualification P2 du tableau initial est conservée comme historique de l’audit, pas comme priorité actuelle.
 
 **Localisation :** [calcul des tailles](../../src/systems/folder_sizes.rs), lignes 151–195 ; [API publique](../../src/commands/io.rs), lignes 425–443.
 
@@ -114,7 +116,7 @@ Les erreurs des enfants sont exclues du comptage par `children.iter().flatten()`
 
 **Impact :** affichage d’une taille et de compteurs sous-estimés sans signaler de sous-arbre inaccessible. Ce cas est distinct des exclusions système intentionnelles et de l’annulation, déjà testée.
 
-**Correction proposée :** propager les erreurs de parcours ou enrichir `FolderSizeResult` avec un statut incomplet et un compteur d’erreurs ; traduire ce statut dans les cellules et les Propriétés. Ajouter le contrôle positif de la sonde au test de régression.
+**Proposition initiale non retenue :** propager les erreurs de parcours ou enrichir `FolderSizeResult` avec un statut incomplet et un compteur d’erreurs. La reproduction reste une preuve de la limite, sans imposer cette évolution au produit. Les watchers, invalidations et recalculs différés existants sont conservés ; ils améliorent l’actualisation sans garantir une mesure exhaustive ni un instantané.
 
 ### A05 — Le lancement de la mise à jour échappe au mécanisme d’héritage commun
 
@@ -218,7 +220,7 @@ Les tailles brutes ne doivent pas déclencher des découpages automatiques : par
 
 1. Corriger A01 en conservant une recherche Office utile et en ajoutant ses tests de ressources ; traiter A03 dans le même périmètre d’extraction.
 2. Actualiser la dépendance de A02 et ajouter la barrière de livraison A09.
-3. Corriger A04 et A05 avec les contrôles positifs des sondes natives.
+3. Corriger A05 avec les contrôles positifs des sondes natives. A04, initialement proposé ici, est désormais une limite acceptée et ne demande pas de correction.
 4. Virtualiser les résultats A06, déplacer les I/O de fermeture A07, puis traiter A08 sur Linux et A10 dans la présentation des doublons.
 
 Les [limites R1–R9](../security/status.md) restent ouvertes selon leur statut documenté : services natifs hors LPAC, ressources globales du parent/GPU non plafonnées universellement, récupération conservatrice, absence de transaction durable multi-archives et garanties Linux différentes. Les tests verts de cet audit ne clôturent pas ces limites.
