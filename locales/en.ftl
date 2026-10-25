@@ -220,7 +220,7 @@ settings-network-description = Show the network neighborhood in the left panel.
 
 settings-region-language = Region & language
 settings-performance = Performance
-settings-turbo = Turbo operations
+settings-turbo = Turbo mode
 settings-search-limit = Search limit
 settings-data = Application data
 settings-clear-cache = Clear cache
@@ -381,6 +381,10 @@ duplicate-more = Load more
 duplicate-disk = Disk #{ $disk }
 duplicate-go-to-folder = Click to go to the folder
 folder-size-empty = Empty
+folder-size-provisional-description =
+    Size awaiting an update.
+    Automatic recalculation waits for activity to settle.
+    Refresh to force the update.
 quick-search-current-folder = Current folder
 
 settings-clear-cache-confirm = Delete icon and thumbnail caches? They will be recreated when needed.
@@ -390,7 +394,7 @@ settings-cache-cleared = Cache cleared.
 settings-cache-error = Could not clear the entire cache. Try again.
 settings-preferences-reset = Preferences reset.
 
-settings-turbo-description = Default Turbo mode for new copies, moves, deletions, Trash moves, compressions and extractions. Operations already running keep their current setting.
+settings-turbo-description = Default Turbo mode for new copies, moves, deletions, Trash moves, compressions and extractions. Also applies to folder size calculations, including those already running. Running file operations keep their individual setting.
 settings-search-limit-description = Maximum results for new quick and advanced searches. Steps of 500, minimum 500.
 
 navigation-up = Up

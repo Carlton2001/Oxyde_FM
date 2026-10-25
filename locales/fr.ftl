@@ -226,7 +226,7 @@ settings-network-description = Afficher le voisinage réseau dans le panneau gau
 
 settings-region-language = Région & langue
 settings-performance = Performances
-settings-turbo = Opérations Turbo
+settings-turbo = Mode Turbo
 settings-search-limit = Limite de recherche
 settings-data = Données de l’application
 settings-clear-cache = Effacer le cache
@@ -387,6 +387,10 @@ duplicate-more = Afficher davantage
 duplicate-disk = Disque #{ $disk }
 duplicate-go-to-folder = Cliquez pour aller au dossier
 folder-size-empty = Vide
+folder-size-provisional-description =
+    Taille à actualiser.
+    Le recalcul automatique attend une accalmie.
+    Actualisez pour forcer la mise à jour.
 quick-search-current-folder = Dossier courant
 
 settings-clear-cache-confirm = Supprimer les caches d’icônes et de miniatures ? Ils seront recréés au besoin.
@@ -396,7 +400,7 @@ settings-cache-cleared = Cache effacé.
 settings-cache-error = Impossible d’effacer entièrement le cache. Réessayez.
 settings-preferences-reset = Préférences réinitialisées.
 
-settings-turbo-description = Mode Turbo par défaut des nouvelles copies, déplacements, suppressions, mises à la Corbeille, compressions et extractions. Les opérations en cours conservent leur réglage.
+settings-turbo-description = Mode Turbo par défaut des nouvelles copies, déplacements, suppressions, mises à la Corbeille, compressions et extractions. S’applique aussi aux calculs de tailles de dossiers, y compris en cours. Les opérations de fichiers en cours conservent leur réglage individuel.
 settings-search-limit-description = Nombre maximal de résultats des nouvelles recherches rapides et avancées. Pas de 500, minimum 500.
 
 navigation-up = Haut

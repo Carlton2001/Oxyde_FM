@@ -83,13 +83,103 @@ fn recursive_native_watcher_detects_nested_writes_and_releases_handles() {
     recursive_changes(false);
 }
 
+#[test]
+fn manual_size_flush_keeps_listing_work_and_consumes_each_size_change_once() {
+    let root = root();
+    let path = root.to_string_lossy().into_owned();
+    let mut change = DirectoryChanges::default();
+    change.record(
+        &path,
+        &Event::new(EventKind::Create(CreateKind::Folder)).add_path(root.join("direct")),
+    );
+    change.record(
+        &path,
+        &Event::new(EventKind::Modify(ModifyKind::Any)).add_path(root.join("deep").join("file")),
+    );
+    let changes = Arc::new(Mutex::new(HashMap::from([(path.clone(), change)])));
+    let SizeChanges::Children(children) = take_size_changes(&changes, &path) else {
+        panic!("missing child changes")
+    };
+    assert_eq!(
+        children,
+        HashSet::from([
+            root.join("direct").to_string_lossy().into_owned(),
+            root.join("deep").to_string_lossy().into_owned()
+        ])
+    );
+    assert!(changes.lock().unwrap()[&path].listing);
+    assert!(matches!(
+        take_size_changes(&changes, &path),
+        SizeChanges::None
+    ));
+    changes.lock().unwrap().get_mut(&path).unwrap().record(
+        &path,
+        &Event::new(EventKind::Modify(ModifyKind::Any)).add_path(root.join("later").join("file")),
+    );
+    let SizeChanges::Children(later) = take_size_changes(&changes, &path) else {
+        panic!("lost later change")
+    };
+    assert_eq!(
+        later,
+        HashSet::from([root.join("later").to_string_lossy().into_owned()])
+    );
+}
+
+#[test]
+fn manual_size_flush_preserves_full_rescan_without_repeating_it() {
+    let path = root().to_string_lossy().into_owned();
+    let mut change = DirectoryChanges::default();
+    change.rescan();
+    let changes = Arc::new(Mutex::new(HashMap::from([(path.clone(), change)])));
+    assert!(matches!(
+        take_size_changes(&changes, &path),
+        SizeChanges::All
+    ));
+    assert!(changes.lock().unwrap()[&path].listing);
+    assert!(matches!(
+        take_size_changes(&changes, &path),
+        SizeChanges::None
+    ));
+}
+
+#[test]
+fn manual_size_flush_clears_only_the_target_root_when_no_listing_is_pending() {
+    let root = root();
+    let path = root.to_string_lossy().into_owned();
+    let mut change = DirectoryChanges::default();
+    change.record(
+        &path,
+        &Event::new(EventKind::Modify(ModifyKind::Any)).add_path(root.join("deep").join("file")),
+    );
+    let other = root.with_file_name("other").to_string_lossy().into_owned();
+    let changes = Arc::new(Mutex::new(HashMap::from([
+        (path.clone(), change),
+        (other.clone(), DirectoryChanges::default()),
+    ])));
+    assert!(matches!(
+        take_size_changes(&changes, &path),
+        SizeChanges::Children(_)
+    ));
+    let queue = changes.lock().unwrap();
+    assert!(!queue.contains_key(&path));
+    assert!(queue.contains_key(&other));
+}
+
 fn recursive_changes(polling: bool) {
     let directory = tempfile::tempdir().unwrap();
     let child = directory.path().join("child");
     std::fs::create_dir(&child).unwrap();
     let path = directory.path().to_string_lossy().into_owned();
     let changes = Arc::new(Mutex::new(HashMap::new()));
-    let watcher = DirectoryWatcher::create(&path, polling, true, changes.clone()).unwrap();
+    let watcher = DirectoryWatcher::with_poll_interval(
+        &path,
+        polling,
+        true,
+        changes.clone(),
+        std::time::Duration::from_millis(100),
+    )
+    .unwrap();
+    assert_eq!(watcher.reliable_size_events(), !polling);
     // PollWatcher takes its initial snapshot synchronously during watch().
     changes.lock().unwrap().clear();
     std::fs::write(child.join("new-file"), b"new bytes").unwrap();

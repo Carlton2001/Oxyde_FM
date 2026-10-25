@@ -9,7 +9,7 @@ pub(crate) enum FileUpdate {
     Listing(Arc<Vec<FileEntry>>),
     Replace(Arc<Vec<FileEntry>>),
     Append(Arc<Vec<FileEntry>>),
-    FolderSize { path: String, size: oxyde_lib::models::FolderSizeResult },
+    FolderSizes(Vec<(String, oxyde_lib::models::FolderSizeResult)>),
 }
 pub(crate) struct Request {
     id: String,
@@ -29,11 +29,11 @@ pub(crate) struct Prepared {
     filtered: Arc<Vec<FileEntry>>,
     types: HashSet<String>,
     sizes: HashSet<(u64, bool, bool)>,
-    changed_size: Option<String>,
+    changed_sizes: Vec<String>,
 }
 impl Request {
     pub(crate) fn calculate(self) -> Prepared {
-        let mut changed_size = None;
+        let mut changed_sizes = Vec::new();
         let mut files = match &self.update {
             FileUpdate::Replace(files) | FileUpdate::Listing(files) => files.clone(),
             _ => self.source.clone(),
@@ -41,11 +41,19 @@ impl Request {
         if let FileUpdate::Append(additions) = &self.update {
             Arc::make_mut(&mut files).extend(additions.iter().cloned());
         }
-        if self.keep_folder_sizes && matches!(self.update, FileUpdate::Listing(_) | FileUpdate::Replace(_)) {
-            let previous: std::collections::HashMap<_, _> = self.source.iter()
+        if self.keep_folder_sizes
+            && matches!(self.update, FileUpdate::Listing(_) | FileUpdate::Replace(_))
+        {
+            let previous: std::collections::HashMap<_, _> = self
+                .source
+                .iter()
                 .filter(|file| super::folder_sizes::measurable(file) && file.is_calculated)
-                .map(|file| (file.path.as_str(), file)).collect();
-            for file in Arc::make_mut(&mut files).iter_mut().filter(|file| super::folder_sizes::measurable(file)) {
+                .map(|file| (file.path.as_str(), file))
+                .collect();
+            for file in Arc::make_mut(&mut files)
+                .iter_mut()
+                .filter(|file| super::folder_sizes::measurable(file))
+            {
                 if let Some(old) = previous.get(file.path.as_str()) {
                     file.size = old.size;
                     file.files_count = old.files_count;
@@ -54,32 +62,44 @@ impl Request {
                 }
             }
         }
-        if let FileUpdate::FolderSize { path, size } = &self.update {
-            if let Some(file) = Arc::make_mut(&mut files).iter_mut()
-                .find(|file| file.path == *path && super::folder_sizes::measurable(file)) {
-                // Initial results and unchanged totals stay quiet. Only a
-                // published change to an existing total receives a flash.
-                if file.is_calculated && file.size != size.size {
-                    changed_size = Some(path.clone());
+        if let FileUpdate::FolderSizes(updates) = &self.update {
+            let updates: std::collections::HashMap<_, _> = updates
+                .iter()
+                .map(|(path, size)| (path.as_str(), size))
+                .collect();
+            for file in Arc::make_mut(&mut files)
+                .iter_mut()
+                .filter(|file| super::folder_sizes::measurable(file))
+            {
+                if let Some(size) = updates.get(file.path.as_str()) {
+                    if file.is_calculated && file.size != size.size {
+                        changed_sizes.push(file.path.clone());
+                    }
+                    file.size = size.size;
+                    file.files_count = Some(size.files_count);
+                    file.folders_count = Some(size.folders_count);
+                    file.is_calculated = true;
                 }
-                file.size = size.size;
-                file.files_count = Some(size.files_count);
-                file.folders_count = Some(size.folders_count);
-                file.is_calculated = true;
             }
         }
         // A batch cache avoids repeated Shell calls, including for unknown extensions.
         // Recreated per preparation so association changes are picked up on refresh.
         let mut native_kinds = std::collections::HashMap::new();
-        for file in Arc::make_mut(&mut files).iter_mut()
-            .filter(|file| !file.is_dir && !matches!(self.update, FileUpdate::FolderSize { .. })) {
-            let extension = std::path::Path::new(&file.name).extension()
-                .and_then(|value| value.to_str()).filter(|value| !value.is_empty());
+        for file in Arc::make_mut(&mut files)
+            .iter_mut()
+            .filter(|file| !file.is_dir && !matches!(self.update, FileUpdate::FolderSizes(_)))
+        {
+            let extension = std::path::Path::new(&file.name)
+                .extension()
+                .and_then(|value| value.to_str())
+                .filter(|value| !value.is_empty());
             file.native_kind = extension.and_then(|extension| {
                 let extension = format!(".{}", extension.to_ascii_lowercase());
-                *native_kinds.entry(extension).or_insert_with_key(|extension| {
-                    oxyde_lib::platform::platform().file_kind_for_extension(extension)
-                })
+                *native_kinds
+                    .entry(extension)
+                    .or_insert_with_key(|extension| {
+                        oxyde_lib::platform::platform().file_kind_for_extension(extension)
+                    })
             });
         }
         let sort = if matches!(self.update, FileUpdate::Listing(_)) {
@@ -105,7 +125,7 @@ impl Request {
             filtered,
             types,
             sizes,
-            changed_size,
+            changed_sizes,
         }
     }
 }
@@ -142,7 +162,7 @@ impl TabState {
             return false;
         }
         self.files = result.files;
-        if let Some(path) = result.changed_size {
+        for path in result.changed_sizes {
             self.folder_sizes.flash_updated_size(path);
         }
         self.cached_filtered_files = result.filtered;

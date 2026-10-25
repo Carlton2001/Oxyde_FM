@@ -1,4 +1,5 @@
 use crate::models::{CommandError, FolderSizeResult};
+use crate::platform::{follow_turbo_priority, RestoreNormalPriority, ThreadPriority};
 use once_cell::sync::Lazy;
 use std::path::{Path, PathBuf};
 use std::sync::{
@@ -11,6 +12,11 @@ mod pools;
 static SCAN_SLOTS: Lazy<Arc<tokio::sync::Semaphore>> =
     Lazy::new(|| Arc::new(tokio::sync::Semaphore::new(2)));
 static SCAN_POOLS: Lazy<Arc<pools::ScanPools>> = Lazy::new(|| Arc::new(pools::ScanPools::new()));
+static SCAN_TURBO: Lazy<Arc<AtomicBool>> = Lazy::new(|| Arc::new(AtomicBool::new(false)));
+
+pub(crate) fn set_turbo(enabled: bool) {
+    SCAN_TURBO.store(enabled, Ordering::Relaxed);
+}
 
 fn make_pool(threads: usize) -> Result<Arc<rayon::ThreadPool>, String> {
     rayon::ThreadPoolBuilder::new()
@@ -93,9 +99,13 @@ pub(crate) async fn calculate(
         // ends. A second walk on the same pool would wait for the entire first
         // directory, even though it already holds its own semaphore permit.
         let lane = SCAN_POOLS.acquire().map_err(CommandError::SystemError)?;
-        let pool = lane.pool(crate::utils::hardware::is_ssd(&path))
+        let pool = lane
+            .pool(
+                crate::utils::hardware::is_ssd(&path),
+                SCAN_TURBO.load(Ordering::Relaxed),
+            )
             .map_err(CommandError::SystemError)?;
-        scan(&path, cancellation, pool, || {})
+        scan(&path, cancellation, pool, SCAN_TURBO.clone(), || {})
     })
     .await
 }
@@ -104,9 +114,18 @@ fn scan(
     path: &Path,
     cancellation: ScanCancellation,
     pool: Arc<rayon::ThreadPool>,
+    turbo: Arc<AtomicBool>,
     mut checkpoint: impl FnMut(),
 ) -> Result<FolderSizeResult, CommandError> {
     cancellation.check()?;
+    // Set every lane before jwalk starts its directory reads. Its workers also
+    // follow live transitions at checkpoints; no unrelated Rayon pool is touched.
+    pool.broadcast(|_| {
+        follow_turbo_priority(turbo.load(Ordering::Relaxed), ThreadPriority::Normal)
+    });
+    let _restore_pool = RestorePoolPriority(pool.clone());
+    let _restore_caller = RestoreNormalPriority;
+    follow_turbo_priority(turbo.load(Ordering::Relaxed), ThreadPriority::Normal);
     let size = Arc::new(AtomicU64::new(0));
     let folders = Arc::new(AtomicU64::new(0));
     let files = Arc::new(AtomicU64::new(0));
@@ -114,6 +133,7 @@ fn scan(
     let folders_acc = folders.clone();
     let files_acc = files.clone();
     let worker_cancel = cancellation.clone();
+    let worker_turbo = turbo.clone();
     let walker = jwalk::WalkDir::new(path)
         .skip_hidden(false)
         .follow_links(false)
@@ -122,6 +142,7 @@ fn scan(
             busy_timeout: None,
         })
         .process_read_dir(move |depth, path, _, children| {
+            follow_turbo_priority(worker_turbo.load(Ordering::Relaxed), ThreadPriority::Normal);
             if worker_cancel.cancelled() || excluded(path) {
                 children.clear();
                 return;
@@ -136,26 +157,32 @@ fn scan(
             if depth.is_none() {
                 return;
             }
+            let (mut directory_size, mut directory_files, mut directory_folders) =
+                (0u64, 0u64, 0u64);
             for entry in children.iter().flatten() {
                 if worker_cancel.cancelled() {
                     children.clear();
                     return;
                 }
+                follow_turbo_priority(worker_turbo.load(Ordering::Relaxed), ThreadPriority::Normal);
                 if entry.file_type().is_file() {
-                    files_acc.fetch_add(1, Ordering::Relaxed);
+                    directory_files += 1;
                     if let Ok(metadata) = entry.metadata() {
-                        let _ =
-                            size_acc.try_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
-                                Some(value.saturating_add(metadata.len()))
-                            });
+                        directory_size = directory_size.saturating_add(metadata.len());
                     }
                 } else if entry.file_type().is_dir() {
-                    folders_acc.fetch_add(1, Ordering::Relaxed);
+                    directory_folders += 1;
                 }
             }
+            files_acc.fetch_add(directory_files, Ordering::Relaxed);
+            folders_acc.fetch_add(directory_folders, Ordering::Relaxed);
+            let _ = size_acc.try_update(Ordering::Relaxed, Ordering::Relaxed, |value| {
+                Some(value.saturating_add(directory_size))
+            });
         });
     for _ in walker {
         checkpoint();
+        follow_turbo_priority(turbo.load(Ordering::Relaxed), ThreadPriority::Normal);
         cancellation.check()?;
     }
     cancellation.check()?;
@@ -164,6 +191,13 @@ fn scan(
         folders_count: folders.load(Ordering::Relaxed),
         files_count: files.load(Ordering::Relaxed),
     })
+}
+
+struct RestorePoolPriority(Arc<rayon::ThreadPool>);
+impl Drop for RestorePoolPriority {
+    fn drop(&mut self) {
+        self.0.broadcast(|_| drop(RestoreNormalPriority));
+    }
 }
 
 /// Match whole components so similarly named user folders remain measurable.
@@ -178,6 +212,10 @@ pub(crate) fn excluded(path: &Path) -> bool {
             .windows(3)
             .any(|parts| parts == ["microsoft", "windows", "containers"])
 }
+
+#[cfg(test)]
+#[path = "folder_sizes/tests/turbo.rs"]
+mod turbo_tests;
 
 #[cfg(test)]
 mod tests {
@@ -255,14 +293,18 @@ mod tests {
             requested: requested.clone(),
             abandoned: Arc::new(AtomicBool::new(false)),
         };
-        let result = scan(root.path(), cancellation, make_pool(2).unwrap(), || {
-            requested.store(true, Ordering::Relaxed)
-        });
+        let result = scan(
+            root.path(),
+            cancellation,
+            make_pool(2).unwrap(),
+            Arc::new(AtomicBool::new(false)),
+            || requested.store(true, Ordering::Relaxed),
+        );
         assert!(result.unwrap_err().to_string().contains("cancelled"));
     }
 
     #[test]
-    #[ignore = "manual filesystem profile comparing per-folder pools with bounded shared scans"]
+    #[ignore = "manual filesystem profile comparing per-folder pools with bounded independent scans"]
     fn profile_many_folder_scans() {
         let root = tempfile::tempdir().unwrap();
         let paths: Vec<_> = (0..4)
@@ -287,7 +329,14 @@ mod tests {
             .cloned()
             .map(|path| {
                 std::thread::spawn(move || {
-                    scan(&path, cancel(), make_pool(16).unwrap(), || {}).unwrap()
+                    scan(
+                        &path,
+                        cancel(),
+                        make_pool(16).unwrap(),
+                        Arc::new(AtomicBool::new(true)),
+                        || {},
+                    )
+                    .unwrap()
                 })
             })
             .collect();
@@ -295,17 +344,26 @@ mod tests {
             assert_eq!(worker.join().unwrap().files_count, 512);
         }
         let previous = start.elapsed();
-        let pool = make_pool(16).unwrap();
+        let pools = Arc::new(pools::ScanPools::new());
         let slots = Arc::new(tokio::sync::Semaphore::new(2));
         let runtime = tokio::runtime::Runtime::new().unwrap();
         let start = std::time::Instant::now();
         runtime.block_on(async {
             let results = futures::future::join_all(paths.into_iter().map(|path| {
-                let pool = pool.clone();
+                let pools = pools.clone();
                 run_scan(
                     Arc::new(AtomicBool::new(false)),
                     slots.clone(),
-                    move |cancel| scan(&path, cancel, pool, || {}),
+                    move |cancel| {
+                        let lane = pools.acquire().unwrap();
+                        scan(
+                            &path,
+                            cancel,
+                            lane.pool(true, true).unwrap(),
+                            Arc::new(AtomicBool::new(true)),
+                            || {},
+                        )
+                    },
                 )
             }))
             .await;
@@ -313,6 +371,6 @@ mod tests {
                 assert_eq!(result.unwrap().files_count, 512);
             }
         });
-        eprintln!("4 folders x 512 files: per-folder pools (64 Rayon threads) {previous:?}; shared pool (16 threads, 2 active scans) {:?}", start.elapsed());
+        eprintln!("4 folders x 512 files: per-folder pools (64 Rayon threads) {previous:?}; independent cached lanes (up to 16 threads, 2 active scans) {:?}", start.elapsed());
     }
 }

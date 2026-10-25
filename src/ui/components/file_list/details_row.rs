@@ -42,6 +42,7 @@ pub(super) struct DetailsRowParams<'a> {
     pub(super) search_results: bool,
     pub(super) network_panel: bool,
     pub(super) calculating_sizes: bool,
+    pub(super) provisional_size: bool,
     pub(super) size_flash: Option<std::time::Instant>,
     pub(super) trash_panel: bool,
     pub(super) language: crate::ui::i18n::Language,
@@ -77,6 +78,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
         search_results,
         network_panel,
         calculating_sizes,
+        provisional_size,
         size_flash,
         trash_panel,
         language,
@@ -93,7 +95,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
             .w(px(total_w))
             .bg(if is_selected { theme.selected } else if is_active_pane { theme.active_background } else { theme.background })
             .when(!is_selected, |s| s.hover(|s| s.bg(theme.hover)))
-            .when(show_tooltips, |d| d.file_tooltip(h.clone(), p_id.clone(), path.clone(), cx, Tooltip::for_item(file.clone(), search_results, show_media_previews)))
+            .when(show_tooltips, |d| d.file_tooltip(h.clone(), p_id.clone(), path.clone(), cx, Tooltip::for_item(file.clone(), search_results, show_media_previews, provisional_size)))
             .on_mouse_down(MouseButton::Left, {
                 let p = path.clone();
                 let h_inner_inner = h.clone();
@@ -367,7 +369,18 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
             .when(location_w > 0.0, |row| row.child(div().w(px(location_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).child(std::path::Path::new(file.original_path.as_deref().unwrap_or(&file.path)).parent().map(|parent| parent.to_string_lossy().into_owned()).unwrap_or_default())))
             .when(!network_panel, |row| row.child(div().w(px(type_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(file_type_display(file, cx.i18n()))))
             .when(!network_panel, |row| row
-                .child(flash_size_cell(div().w(px(size_w)).flex_none().px(rems(0.5)).text_align(TextAlign::Right).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(if calculating_sizes && is_dir && !file.is_calculated { size_loading(&path, theme.accent) } else if is_dir && file.is_calculated && file.size == 0 { div().child(cx.i18n().text(Message::FolderSizeEmpty)).into_any_element() } else { div().child(format_size(file.size, is_dir, file.is_calculated, language)).into_any_element() }), &path, size_flash, theme.accent))
+                .child(flash_size_cell(div().w(px(size_w)).flex_none().px(rems(0.5)).text_align(TextAlign::Right).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(if calculating_sizes && is_dir && !file.is_calculated {
+                    size_loading(&path, theme.accent)
+                } else if provisional_size {
+                    div().id(SharedString::from(format!("size-provisional-details-{path}")))
+                        .text_color(theme.accent)
+                        .child(format_size(file.size, is_dir, file.is_calculated, language))
+                        .into_any_element()
+                } else if is_dir && file.is_calculated && file.size == 0 {
+                    div().child(cx.i18n().text(Message::FolderSizeEmpty)).into_any_element()
+                } else {
+                    div().child(format_size(file.size, is_dir, file.is_calculated, language)).into_any_element()
+                }), &path, size_flash, theme.accent))
                 .child(div().w(px(date_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_date(file.modified, crate::ui::format::date_format(cx)))))
             .when(trash_panel, |row| row.child(div().w(px(logical(active_deleted_width))).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).child(format_date(file.deleted_time.and_then(|date| u64::try_from(date).ok()).unwrap_or(0), crate::ui::format::date_format(cx)))))
             .into_any_element()

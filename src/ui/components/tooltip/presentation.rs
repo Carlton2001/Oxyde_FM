@@ -247,6 +247,7 @@ impl Render for Tooltip {
         let mut tooltip_width = maximum_width;
         let mut meta_lines: Option<Vec<SharedString>> = None;
         let mut body_lines: Vec<SharedString> = Vec::new();
+        let mut notice_lines: Vec<SharedString> = Vec::new();
         let title_lines: Vec<SharedString> = if let Some(info) = &self.file_info {
             // One rule for every line: the widest line or preview sets the width
             // within [14rem, 30rem]; a line wider than that wraps, never truncates.
@@ -264,13 +265,20 @@ impl Render for Tooltip {
                 file_detail_lines(info, cx).into_iter().chain(info.location.clone()).chain(info.extra.iter().cloned()).collect()
             };
             let shaped: Vec<_> = body.iter().map(|text| (text, shape(text, rems(0.6875), crate::ui::style::DEFAULT_FONT_WEIGHT))).collect();
+            let notice_chrome = rem_pixels(rems(0.875)); // 2 x padding + 2 x border.
+            let notice: Vec<_> = info.notice.iter().map(|text| (text, shape(text, rems(0.6875), crate::ui::style::DEFAULT_FONT_WEIGHT))).collect();
             let natural = shaped.iter().fold(title.width, |width, (_, line)| width.max(line.width))
+                .max(notice.iter().fold(px(0.0), |width, (_, line)| width.max(line.width + notice_chrome)))
                 .max(media_width.unwrap_or(px(0.0)));
             // The slack absorbs layout rounding so a fitting line never wraps.
             tooltip_width = (natural + px(1.0) + chrome).max(rem_pixels(ITEM_MINIMUM_WIDTH)).min(maximum_width);
             let content = (tooltip_width - chrome - px(1.0)).as_f32().max(1.0);
             body_lines = shaped.iter().flat_map(|(text, line)| {
                 location_line_ranges(text, content, |index| line.x_for_index(index).as_f32())
+                    .into_iter().map(|range| SharedString::from(text[range].to_string()))
+            }).collect();
+            notice_lines = notice.iter().flat_map(|(text, line)| {
+                location_line_ranges(text, (content - notice_chrome.as_f32()).max(1.0), |index| line.x_for_index(index).as_f32())
                     .into_iter().map(|range| SharedString::from(text[range].to_string()))
             }).collect();
             filename_line_ranges(&self.title, content, |index| title.x_for_index(index).as_f32())
@@ -390,6 +398,14 @@ impl Render for Tooltip {
             .when(self.file_info.is_some(), |this| {
                 this.child(div().flex().flex_col().text_size(rems(0.6875)).text_color(theme.text_muted)
                     .children(body_lines.into_iter().map(|line| div().whitespace_nowrap().child(line))))
+            })
+            .when(!notice_lines.is_empty(), |this| {
+                this.child(div().flex_none().w_full().flex().flex_col()
+                    .px(rems(0.375)).py(rems(0.375))
+                    .border(rems(0.0625)).border_color(theme.accent.opacity(0.6))
+                    .rounded_sm().bg(theme.accent.opacity(0.06))
+                    .text_size(rems(0.6875)).text_color(theme.accent)
+                    .children(notice_lines.into_iter().map(|line| div().whitespace_nowrap().child(line))))
             });
 
         box_div.text_style().font_features = Some(TNUM.clone());

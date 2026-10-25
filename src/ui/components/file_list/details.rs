@@ -33,7 +33,7 @@ pub(super) fn render_details_file_list(
 ) -> AnyElement {
     let active_tab = pane.active_tab();
     let search_results = active_tab.quick_search.is_some();
-    let calculating_sizes = active_tab.size_calculation.is_some();
+    let calculating_sizes = active_tab.size_calculation.is_some() || active_tab.folder_sizes.has_pending() || active_tab.folder_sizes.has_ready();
     let presentation = active_tab.presentation(false, 1);
     let files = presentation.files.clone();
     let histogram_total = if active_tab.show_size_histogram { presentation.histogram_total } else { 0 };
@@ -197,6 +197,7 @@ pub(super) fn render_details_file_list(
                                     let p_id_for_list = pane_id.clone();
                                     let selected_paths = selected_paths.clone();
                                     let size_flashes = active_tab.folder_sizes.size_flashes();
+                                    let provisional_sizes = active_tab.folder_sizes.provisional_paths();
                                     let folder_subdirectory_flags = folder_subdirectory_flags.clone();
                                     move |range, _, cx| {
                                         let folder_subdirectory_flags = folder_subdirectory_flags.clone();
@@ -213,6 +214,7 @@ pub(super) fn render_details_file_list(
                                             let is_dir = file.is_dir;
                                             let path = file.path.clone();
                                             let size_flash = size_flashes.get(&path).copied();
+                                            let provisional_size = is_dir && file.is_calculated && provisional_sizes.contains(&path);
                                             let is_selected = selected_paths.contains(&path);
                                             let has_subdirectories = is_dir
                                                 && folder_subdirectory_flags.get(&path).copied().unwrap_or(false);
@@ -256,6 +258,7 @@ pub(super) fn render_details_file_list(
                                                 search_results,
                                                 network_panel,
                                                 calculating_sizes,
+                                                provisional_size,
                                                 size_flash,
                                                 trash_panel,
                                                 language,

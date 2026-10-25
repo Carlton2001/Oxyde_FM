@@ -28,7 +28,7 @@ pub(super) fn render_grid_file_list(
     let pane = view.state.layout.find_pane(&pane_id).expect("pane exists");
     let tab = pane.active_tab();
     let search_results = tab.quick_search.is_some();
-    let calculating_sizes = tab.size_calculation.is_some();
+    let calculating_sizes = tab.size_calculation.is_some() || tab.folder_sizes.has_pending() || tab.folder_sizes.has_ready();
     let files = tab.cached_filtered_files.clone();
     let selected = tab.selected_paths.clone();
     let inline_rename = view.inline_rename;
@@ -144,6 +144,7 @@ pub(super) fn render_grid_file_list(
                 let rows = rows.clone();
                 let groups = presentation.groups.clone();
                 let collapsed = tab.collapsed_groups.clone();
+                let provisional_sizes = tab.folder_sizes.provisional_paths();
                 let selected = selected.clone();
                 let pane_id = pane_id.clone();
                 let handle = handle.clone();
@@ -166,6 +167,7 @@ pub(super) fn render_grid_file_list(
                                     let path = file.path.clone();
                                     let name = file.name.clone();
                                     let is_dir = file.is_dir;
+                                    let provisional_size = is_dir && file.is_calculated && provisional_sizes.contains(&path);
                                     let has_subdirectories = is_dir
                                         && folder_subdirectory_flags
                                             .get(&path)
@@ -202,6 +204,7 @@ pub(super) fn render_grid_file_list(
                                         has_rename_error,
                                         theme,
                                         calculating_sizes,
+                                        provisional_size,
                                         histogram_total,
                                         card_width,
                                         active,

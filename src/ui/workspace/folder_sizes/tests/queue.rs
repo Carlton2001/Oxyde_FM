@@ -43,13 +43,15 @@ fn bursts_coalesce_and_changes_during_scan_queue_one_fair_followup() {
     for _ in 0..10_000 {
         tab.invalidate_folder_sizes(Some(&changes));
     }
-    assert!(!tab.folder_sizes.current(0, path, *revision));
+    assert!(tab.folder_sizes.current(0, path, *revision));
     assert_eq!(tab.folder_sizes.pending.len(), 2);
     assert_eq!(tab.folder_sizes.queue.len(), 2);
     for (path, revision) in batch {
         tab.folder_sizes.finish(&path, revision);
     }
-    let next = tab.folder_sizes.take_batch();
+    let next = tab
+        .folder_sizes
+        .take_available_at(2, Instant::now() + RESCAN_INTERVAL);
     assert_eq!(
         next.iter()
             .map(|(path, _)| path.as_str())
@@ -77,7 +79,13 @@ fn a_slow_scan_does_not_block_free_slots_or_run_concurrently_with_itself() {
     tab.folder_sizes.finish(&next[0].0, next[0].1);
     assert!(tab.folder_sizes.take_available(2).is_empty());
     tab.folder_sizes.finish(&first[0].0, first[0].1);
-    assert_eq!(tab.folder_sizes.take_available(2)[0].0, "C:/root/a");
+    assert!(tab.folder_sizes.take_available(2).is_empty());
+    assert_eq!(
+        tab.folder_sizes
+            .take_available_at(2, Instant::now() + RESCAN_INTERVAL)[0]
+            .0,
+        "C:/root/a"
+    );
 }
 
 #[test]
@@ -102,13 +110,15 @@ fn render_snapshots_share_the_queue_without_copying_or_owning_future_changes() {
 fn only_published_changes_to_previously_calculated_sizes_flash() {
     let mut tab = tab();
     Arc::make_mut(&mut tab.files).push(folder("new", None));
-    let update = |path: &str, size| FileUpdate::FolderSize {
-        path: format!("C:/root/{path}"),
-        size: FolderSizeResult {
-            size,
-            files_count: 1,
-            folders_count: 0,
-        },
+    let update = |path: &str, size| {
+        FileUpdate::FolderSizes(vec![(
+            format!("C:/root/{path}"),
+            FolderSizeResult {
+                size,
+                files_count: 1,
+                folders_count: 0,
+            },
+        )])
     };
     for change in [update("new", 10), update("a", 10)] {
         assert!(tab.apply_preparation(tab.preparation(change).calculate()));
@@ -150,14 +160,14 @@ fn refresh_keeps_values_and_recomputes_all_rows_with_background_sort_and_filters
     tab.sort_column = SortColumn::Size;
     tab.sort_direction = SortDirection::Descending;
     let prepared = tab
-        .preparation(FileUpdate::FolderSize {
-            path: "C:/root/a".into(),
-            size: FolderSizeResult {
+        .preparation(FileUpdate::FolderSizes(vec![(
+            "C:/root/a".into(),
+            FolderSizeResult {
                 size: 100,
                 files_count: 5,
                 folders_count: 2,
             },
-        })
+        )]))
         .calculate();
     assert!(tab.apply_preparation(prepared));
     assert_eq!(tab.filtered_files()[0].name, "a");
@@ -250,11 +260,8 @@ fn nested_filesystem_changes_recompute_the_target_and_refresh_keeps_other_totals
                 .unwrap();
             assert!(tab.folder_sizes.current(0, &path, revision));
             assert!(tab.apply_preparation(
-                tab.preparation(FileUpdate::FolderSize {
-                    path: path.clone(),
-                    size
-                })
-                .calculate()
+                tab.preparation(FileUpdate::FolderSizes(vec![(path.clone(), size)]))
+                    .calculate()
             ));
             tab.folder_sizes.finish(&path, revision);
         }
@@ -290,4 +297,166 @@ fn watcher_path_case_and_separators_match_listing_paths() {
     let mut tab = tab();
     tab.invalidate_folder_sizes(Some(&HashSet::from(["c:\\ROOT\\B".into()])));
     assert_eq!(tab.folder_sizes.take_batch()[0].0, "C:/root/b");
+}
+
+fn result(size: u64) -> FolderSizeResult {
+    FolderSizeResult {
+        size,
+        files_count: 1,
+        folders_count: 0,
+    }
+}
+
+#[test]
+fn completed_scans_release_slots_before_publication_and_survive_listing_reconciliation() {
+    let mut tab = tab();
+    Arc::make_mut(&mut tab.files)[0].is_calculated = false;
+    tab.invalidate_folder_sizes(None);
+    let first = tab.folder_sizes.take_available(2);
+    let (path, revision) = &first[0];
+    tab.folder_sizes
+        .complete(path.clone(), *revision, result(100));
+    assert!(tab.folder_sizes.publication_current(0, path, *revision));
+    assert!(!tab.folder_sizes.current(0, path, *revision));
+    tab.queue_missing_folder_sizes();
+    assert!(!tab.folder_sizes.pending.contains_key(path));
+    assert_eq!(tab.folder_sizes.take_available(2)[0].0, "C:/root/c");
+    assert_eq!(tab.folder_sizes.ready_batch().len(), 1);
+}
+
+#[test]
+fn invalidation_during_publication_keeps_one_followup_and_rejects_old_acknowledgements() {
+    let mut tab = tab();
+    tab.invalidate_folder_sizes(None);
+    let first = tab.folder_sizes.take_available(2);
+    let now = Instant::now();
+    let (path, revision) = &first[0];
+    tab.folder_sizes
+        .complete_at(path.clone(), *revision, result(100), now);
+    tab.invalidate_folder_sizes(Some(&HashSet::from([path.clone()])));
+    assert!(tab.folder_sizes.publication_current(0, path, *revision));
+    assert!(tab.folder_sizes.has_ready());
+    let next = tab.folder_sizes.take_available_at(2, now);
+    // The fair queue runs c before the invalidated a.
+    tab.folder_sizes.finish(&next[0].0, next[0].1);
+    tab.folder_sizes.published(&first);
+    assert!(tab.folder_sizes.provisional_paths().contains(path));
+    assert!(tab.folder_sizes.take_available_at(2, now).is_empty());
+    let next = tab
+        .folder_sizes
+        .take_available_at(2, now + RESCAN_INTERVAL * 2);
+    assert_eq!(next[0].0, *path);
+    tab.folder_sizes
+        .complete(path.clone(), next[0].1, result(200));
+    tab.folder_sizes.published(&first);
+    assert!(tab.folder_sizes.publication_current(0, path, next[0].1));
+    tab.folder_sizes.published(&next);
+    assert!(!tab.folder_sizes.has_ready());
+}
+
+#[test]
+fn removed_recreated_or_navigated_folders_cannot_receive_waiting_publications() {
+    for navigate in [false, true] {
+        let mut tab = tab();
+        tab.invalidate_folder_sizes(None);
+        let first = tab.folder_sizes.take_available(2);
+        let (path, revision) = &first[0];
+        tab.folder_sizes
+            .complete(path.clone(), *revision, result(100));
+        if navigate {
+            tab.reset_folder_sizes();
+            tab.show_size_histogram = true;
+        } else {
+            tab.files = vec![folder("c", Some(30))].into();
+            tab.queue_missing_folder_sizes();
+            tab.files = vec![folder("a", None), folder("c", Some(30))].into();
+            tab.queue_missing_folder_sizes();
+        }
+        assert!(!tab.folder_sizes.publication_current(0, path, *revision));
+        assert!(!tab.folder_sizes.has_ready());
+    }
+}
+
+#[test]
+fn a_batch_updates_all_totals_and_flashes_only_changed_previously_calculated_folders() {
+    let mut tab = tab();
+    Arc::make_mut(&mut tab.files).push(folder("new", None));
+    tab.sort_column = SortColumn::Size;
+    tab.sort_direction = SortDirection::Descending;
+    let before = tab.files.clone();
+    let update = FileUpdate::FolderSizes(vec![
+        ("C:/root/a".into(), result(100)),
+        ("C:/root/b".into(), result(20)),
+        ("C:/root/new".into(), result(200)),
+    ]);
+    assert!(tab.apply_preparation(tab.preparation(update).calculate()));
+    assert_eq!(tab.filtered_files()[0].name, "new");
+    assert_eq!(tab.files.iter().map(|file| file.size).sum::<u64>(), 350);
+    assert_eq!(before[0].size, 10);
+    assert_eq!(tab.folder_sizes.size_flashes().len(), 1);
+    assert!(tab.folder_sizes.size_flashes().contains_key("C:/root/a"));
+}
+
+#[test]
+fn publication_batches_are_bounded_and_preserve_the_backlog() {
+    let mut sizes = FolderSizes::default();
+    for index in 0..300 {
+        let path = format!("folder-{index}");
+        sizes.enqueue(path.clone());
+        let job = sizes.take_available(1).pop().unwrap();
+        sizes.complete(path, job.1, result(index));
+    }
+    let snapshot = sizes.clone();
+    assert!(Arc::ptr_eq(&snapshot.ready, &sizes.ready));
+    let mut published = 0;
+    while sizes.has_ready() {
+        let batch = sizes.ready_batch();
+        assert!(batch.len() <= 128);
+        published += batch.len();
+        sizes.published(
+            &batch
+                .into_iter()
+                .map(|(path, revision, _)| (path, revision))
+                .collect::<Vec<_>>(),
+        );
+    }
+    assert_eq!(published, 300);
+    assert_eq!(snapshot.ready.len(), 300);
+}
+
+#[test]
+#[ignore = "manual comparison of individual vs grouped list preparations"]
+fn profile_grouped_folder_size_publication() {
+    let mut source = tab();
+    source.files = (0..2000)
+        .map(|index| folder(&index.to_string(), Some(0)))
+        .collect::<Vec<_>>()
+        .into();
+    let updates = (0..128)
+        .map(|index| (format!("C:/root/{index}"), result(index + 1)))
+        .collect::<Vec<_>>();
+    let mut single = source.clone();
+    let started = std::time::Instant::now();
+    for update in &updates {
+        assert!(single.apply_preparation(
+            single
+                .preparation(FileUpdate::FolderSizes(vec![update.clone()]))
+                .calculate()
+        ));
+    }
+    let individual = started.elapsed();
+    let started = std::time::Instant::now();
+    assert!(source.apply_preparation(
+        source
+            .preparation(FileUpdate::FolderSizes(updates))
+            .calculate()
+    ));
+    let grouped = started.elapsed();
+    assert_eq!(
+        single.files.iter().map(|f| f.size).sum::<u64>(),
+        source.files.iter().map(|f| f.size).sum::<u64>()
+    );
+    eprintln!(
+        "publication: 2000 rows / 128 results; individual={individual:?}; grouped={grouped:?}"
+    );
 }

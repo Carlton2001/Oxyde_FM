@@ -430,6 +430,11 @@ pub async fn calculate_folder_size(path: String) -> Result<FolderSizeResult, Com
     .await
 }
 
+/// Applies the general Turbo preference to all size scans, including Properties.
+pub fn set_folder_size_turbo(enabled: bool) {
+    crate::systems::folder_sizes::set_turbo(enabled);
+}
+
 pub async fn calculate_folder_size_cancellable(
     path: String,
     cancellation: std::sync::Arc<std::sync::atomic::AtomicBool>,

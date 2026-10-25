@@ -9,6 +9,7 @@ impl OxydeApp {
 
     pub(crate) fn toggle_default_turbo(&mut self, cx: &mut Context<Self>) {
         self.config.default_turbo_mode = !self.config.default_turbo_mode;
+        oxyde_lib::commands::io::set_folder_size_turbo(self.config.default_turbo_mode);
         self.save_preferences(cx);
     }
 
@@ -107,6 +108,7 @@ impl OxydeApp {
             return;
         }
         self.config.reset_preferences();
+        oxyde_lib::commands::io::set_folder_size_turbo(self.config.default_turbo_mode);
         self.refresh_quick_access(cx);
         self.show_hidden = self.config.show_hidden;
         self.show_system = self.config.show_system;

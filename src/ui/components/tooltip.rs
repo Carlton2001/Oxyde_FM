@@ -56,6 +56,7 @@ struct FileInfo {
     location: Option<SharedString>,
     /// Context lines after the location, such as the deletion date.
     extra: Vec<SharedString>,
+    notice: Vec<SharedString>,
     network: Option<oxyde_lib::models::FileEntry>,
     size: (u64, bool, bool),
     date: u64,
@@ -124,12 +125,12 @@ impl Tooltip {
     }
     /// The single entry point for pane items, in list and grid views alike.
     /// Order: name, type, size, modification date, location, context lines.
-    pub(crate) fn for_item(file: oxyde_lib::models::FileEntry, search_result: bool, previews: bool) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+    pub(crate) fn for_item(file: oxyde_lib::models::FileEntry, search_result: bool, previews: bool, provisional_size: bool) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         move |_, cx| {
             if file.original_path.is_none() && crate::ui::components::file_list::network_entry(&file) {
                 return cx.new(|_| Self {
                     native_presentation: false, secondary_action: None, title: file.name.clone().into(), wrap_title: false, meta: None, shortcut: None,
-                    file_info: Some(FileInfo { type_label: String::new(), location: None, extra: Vec::new(), network: Some(file.clone()), size: (0, false, false), date: 0 }),
+                    file_info: Some(FileInfo { type_label: String::new(), location: None, extra: Vec::new(), notice: Vec::new(), network: Some(file.clone()), size: (0, false, false), date: 0 }),
                     fixed_bounds: None, preview_view: None,
                 }).into();
             }
@@ -147,9 +148,13 @@ impl Tooltip {
             } else {
                 (None, Vec::new())
             };
+            let notice = if provisional_size {
+                cx.i18n().text(Message::FolderSizeProvisionalDescription)
+                    .lines().map(|line| SharedString::from(line.to_owned())).collect()
+            } else { Vec::new() };
             let info = FileInfo {
                 type_label: crate::ui::components::file_list::file_type_display(&file, cx.i18n()),
-                location, extra, network: None,
+                location, extra, notice, network: None,
                 size: (file.size, file.is_dir, file.is_calculated), date: file.modified,
             };
             Self::new_for_file(file.name.clone(), file.path.clone(), info, previews, cx).into()

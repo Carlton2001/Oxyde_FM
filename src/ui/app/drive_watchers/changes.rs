@@ -3,10 +3,41 @@ use notify::{Config, Event, EventKind, PollWatcher, RecommendedWatcher, Recursiv
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
 };
 
 pub type WatcherChanges = Arc<Mutex<HashMap<String, DirectoryChanges>>>;
+
+pub(in crate::ui::app) enum SizeChanges {
+    None,
+    All,
+    Children(HashSet<String>),
+}
+
+/// Consume only size invalidations; listing work remains queued for every tab.
+pub(in crate::ui::app) fn take_size_changes(changes: &WatcherChanges, root: &str) -> SizeChanges {
+    let Ok(mut queue) = changes.lock() else {
+        return SizeChanges::All;
+    };
+    let Some(change) = queue.get_mut(root) else {
+        return SizeChanges::None;
+    };
+    let all = std::mem::take(&mut change.all_sizes);
+    let children = std::mem::take(&mut change.children);
+    if !change.listing {
+        queue.remove(root);
+    }
+    if all {
+        SizeChanges::All
+    } else if children.is_empty() {
+        SizeChanges::None
+    } else {
+        SizeChanges::Children(children)
+    }
+}
 
 /// Bounded per-root accumulation, even if millions of descendants change.
 #[derive(Default)]
@@ -62,6 +93,7 @@ pub struct DirectoryWatcher {
     pub(super) polling: bool,
     pub(super) recursive: bool,
     watcher: Box<dyn Watcher + Send>,
+    failed: Arc<AtomicBool>,
 }
 
 impl DirectoryWatcher {
@@ -71,8 +103,26 @@ impl DirectoryWatcher {
         recursive: bool,
         changes: WatcherChanges,
     ) -> notify::Result<Self> {
+        // Recursive polling walks the whole subtree: do not repeat that every
+        // two seconds on removable or unidentified storage.
+        let interval = std::time::Duration::from_secs(if recursive { 30 } else { 2 });
+        Self::with_poll_interval(path, polling, recursive, changes, interval)
+    }
+
+    fn with_poll_interval(
+        path: &str,
+        polling: bool,
+        recursive: bool,
+        changes: WatcherChanges,
+        interval: std::time::Duration,
+    ) -> notify::Result<Self> {
         let watched_path = path.to_owned();
+        let failed = Arc::new(AtomicBool::new(false));
+        let callback_failed = failed.clone();
         let callback = move |result: notify::Result<Event>| {
+            if result.is_err() {
+                callback_failed.store(true, Ordering::Relaxed);
+            }
             // Reading directories for a size scan must not trigger another scan.
             if matches!(&result, Ok(event) if matches!(event.kind, EventKind::Access(_))) {
                 return;
@@ -94,7 +144,7 @@ impl DirectoryWatcher {
         let mut watcher: Box<dyn Watcher + Send> = if polling {
             Box::new(PollWatcher::new(
                 callback,
-                config.with_poll_interval(std::time::Duration::from_secs(2)),
+                config.with_poll_interval(interval),
             )?)
         } else {
             Box::new(RecommendedWatcher::new(callback, config)?)
@@ -111,7 +161,12 @@ impl DirectoryWatcher {
             polling,
             recursive,
             watcher,
+            failed,
         })
+    }
+
+    pub(in crate::ui::app) fn reliable_size_events(&self) -> bool {
+        self.recursive && !self.polling && !self.failed.load(Ordering::Relaxed)
     }
 
     pub(in crate::ui::app) fn release(mut self, path: &str) -> Result<(), String> {

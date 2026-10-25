@@ -26,7 +26,7 @@ Les reçus réels priment sur la progression. Les transferts suivent les descend
 
 ## Contrat Turbo
 
-La préférence fixe le mode initial des six types d’opérations ; le bouton agit sur une seule opération. Turbo ne pilote ni navigation, ni recherche, ni aperçus. Sans Turbo, les threads de travail passent en mode d’arrière-plan Windows.
+La préférence fixe le mode initial des six types d’opérations ; le bouton agit sur une seule opération. Elle pilote également les calculs de tailles de dossiers, y compris ceux déjà en cours et ceux des Propriétés ; les boutons des opérations restent indépendants de ces calculs. Turbo ne pilote ni navigation, ni recherche, ni aperçus. Sans Turbo, les threads de travail passent en mode d’arrière-plan Windows.
 
 Les priorités passent toutes par `apply_thread_priority` / `follow_turbo_priority` (`src/platform/thread_priority.rs`). Chaque transition est absolue — y compris le retour à `THREAD_PRIORITY_NORMAL` — et un état déjà appliqué n’est pas renvoyé au système. `RestoreNormalPriority` rend les threads réutilisés à la priorité normale ; un échec natif inattendu est journalisé. Linux n’applique aucune priorité.
 
@@ -38,6 +38,7 @@ Les priorités passent toutes par `apply_thread_priority` / `follow_turbo_priori
 | Corbeille | Normale | Aucune | Avant chaque lot et aux points de contrôle du Shell, dossiers compris |
 | Compression | Priorité du processus worker | ZIP, 7z, TAR.ZST : [limites](archives.md#compression-et-turbo-sous-windows) | Aux frontières de fichiers ou de blocs ; TAR.ZST au démarrage du flux |
 | Extraction | Priorité du processus worker | Aucune ; le décodage reste monothread | Aux points de contrôle |
+| Tailles des dossiers | Normale | Deux parcours globaux ; sur SSD, jusqu’à 2 workers par parcours sans Turbo et jusqu’à 8 avec Turbo, selon les processeurs logiques disponibles. HDD, réseau ou inconnu : 1 worker par parcours dans les deux modes | Priorité : pendant le parcours. Budget de workers : au démarrage de chaque parcours. |
 
 Le type de stockage vient de `Platform::is_ssd` (pénalité de recherche), interrogé une fois par lecteur ; les chemins `\\?\` sont normalisés. Chaque copie relit sa sortie pour la vérifier : sous Windows, cette lecture attend l’analyse de Defender (15 à 25 ms par fichier mesurés), latence que plusieurs workers recouvrent.
 

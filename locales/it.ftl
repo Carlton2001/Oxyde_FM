@@ -384,7 +384,7 @@ settings-region-language = Regione e Lingua
 
 settings-performance = Prestazioni
 
-settings-turbo = Operazioni Turbo
+settings-turbo = Modalità Turbo
 
 settings-search-limit = Limite ricerca
 
@@ -681,6 +681,10 @@ duplicate-disk = Disco n. { $disk }
 duplicate-go-to-folder = Fai clic per andare alla cartella
 
 folder-size-empty = Vuoto
+folder-size-provisional-description =
+    Dimensione da aggiornare.
+    Il ricalcolo automatico attende una pausa nell’attività.
+    Aggiornare per forzare l’aggiornamento.
 
 quick-search-current-folder = Cartella corrente
 
@@ -696,7 +700,7 @@ settings-cache-error = Impossibile svuotare l’intera cache. Riprova.
 
 settings-preferences-reset = Preferenze ripristinate.
 
-settings-turbo-description = Modalità Turbo predefinita per nuove copie, spostamenti, eliminazioni, spostamenti nel Cestino, compressioni ed estrazioni. Le operazioni in corso mantengono l’impostazione attuale.
+settings-turbo-description = Modalità Turbo predefinita per nuove copie, spostamenti, eliminazioni, spostamenti nel Cestino, compressioni ed estrazioni. Si applica anche ai calcoli delle dimensioni delle cartelle, inclusi quelli in corso. Le operazioni sui file in corso mantengono la propria impostazione individuale.
 
 settings-search-limit-description = Numero massimo di risultati per nuove ricerche rapide e avanzate. Incrementi di 500, minimo 500.
 

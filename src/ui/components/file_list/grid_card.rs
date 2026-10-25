@@ -27,6 +27,7 @@ pub(super) struct GridCardParams<'a> {
     pub(super) has_rename_error: bool,
     pub(super) theme: OxydeTheme,
     pub(super) calculating_sizes: bool,
+    pub(super) provisional_size: bool,
     pub(super) histogram_total: u64,
     pub(super) card_width: f32,
     pub(super) active: bool,
@@ -54,6 +55,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
         has_rename_error,
         theme,
         calculating_sizes,
+        provisional_size,
         histogram_total,
         card_width,
         active,
@@ -102,7 +104,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
         })
         .group("file-grid-card")
         .relative().when(!is_selected, |d| d.hover(|d| d.bg(theme.hover)))
-        .when(show_tooltips, |d| d.file_tooltip(h.clone(), pid.clone(), path.clone(), cx, Tooltip::for_item(file.clone(), search_results, show_media_previews)))
+        .when(show_tooltips, |d| d.file_tooltip(h.clone(), pid.clone(), path.clone(), cx, Tooltip::for_item(file.clone(), search_results, show_media_previews, provisional_size)))
         .on_mouse_down(MouseButton::Left, {
             let path = path.clone();
             let h = h.clone();
@@ -329,8 +331,9 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
         )
         .child(
             div()
+                .id(SharedString::from(format!("size-provisional-grid-{path}")))
                 .text_size(rems(0.625))
-                .text_color(theme.text_muted)
+                .text_color(if provisional_size { theme.accent } else { theme.text_muted })
                 .text_ellipsis()
                 .when(file.is_hidden || file.is_system, |d| d.opacity(0.5))
                 .child(if network_entry(file) {

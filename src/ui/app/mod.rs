@@ -373,6 +373,7 @@ impl OxydeApp {
         load_failed: bool,
         cx: &mut Context<Self>,
     ) -> Self {
+        oxyde_lib::commands::io::set_folder_size_turbo(config.default_turbo_mode);
         let restored_workspace = config
             .workspace_state
             .as_ref()

@@ -4,19 +4,23 @@ use std::sync::{
     Arc,
 };
 
-/// Two independently scheduled walks, with a combined budget of 16 SSD / 2 HDD workers.
+/// Independent walks: at most 4 normal / 16 Turbo SSD workers, or 2 HDD workers.
 pub(super) struct ScanPools {
     busy: [AtomicBool; 2],
-    ssd: [OnceCell<Result<Arc<rayon::ThreadPool>, String>>; 2],
-    hdd: [OnceCell<Result<Arc<rayon::ThreadPool>, String>>; 2],
+    pools: [[OnceCell<Result<Arc<rayon::ThreadPool>, String>>; 3]; 2],
+    ssd_workers: usize,
 }
 
 impl ScanPools {
     pub(super) fn new() -> Self {
+        Self::with_parallelism(std::thread::available_parallelism().map_or(2, usize::from))
+    }
+
+    fn with_parallelism(parallelism: usize) -> Self {
         Self {
             busy: std::array::from_fn(|_| AtomicBool::new(false)),
-            ssd: std::array::from_fn(|_| OnceCell::new()),
-            hdd: std::array::from_fn(|_| OnceCell::new()),
+            pools: std::array::from_fn(|_| std::array::from_fn(|_| OnceCell::new())),
+            ssd_workers: parallelism.div_ceil(2).clamp(1, 8),
         }
     }
 
@@ -42,12 +46,15 @@ pub(super) struct ScanPoolLease {
 }
 
 impl ScanPoolLease {
-    pub(super) fn pool(&self, ssd: bool) -> Result<Arc<rayon::ThreadPool>, String> {
-        let (cell, workers) = if ssd {
-            (&self.pools.ssd[self.index], 8)
+    pub(super) fn pool(&self, ssd: bool, turbo: bool) -> Result<Arc<rayon::ThreadPool>, String> {
+        let (kind, workers) = if !ssd {
+            (0, 1)
+        } else if turbo {
+            (2, self.pools.ssd_workers)
         } else {
-            (&self.pools.hdd[self.index], 1)
+            (1, self.pools.ssd_workers.min(2))
         };
+        let cell = &self.pools.pools[self.index][kind];
         cell.get_or_init(|| super::make_pool(workers)).clone()
     }
 }

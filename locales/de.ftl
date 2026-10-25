@@ -681,6 +681,10 @@ duplicate-disk = Datenträger Nr. { $disk }
 duplicate-go-to-folder = Klicken, um zum Ordner zu wechseln
 
 folder-size-empty = Leer
+folder-size-provisional-description =
+    Größe zur Aktualisierung vorgemerkt.
+    Die Neuberechnung wartet auf eine Ruhephase.
+    Zum Erzwingen aktualisieren.
 
 quick-search-current-folder = Aktueller Ordner
 
@@ -696,7 +700,7 @@ settings-cache-error = Der Cache konnte nicht vollständig geleert werden. Versu
 
 settings-preferences-reset = Einstellungen zurückgesetzt.
 
-settings-turbo-description = Standard-Turbomodus für neue Kopier-, Verschiebe-, Lösch-, Papierkorb-, Komprimierungs- und Entpackvorgänge. Laufende Vorgänge behalten ihre Einstellung.
+settings-turbo-description = Standard-Turbomodus für neue Kopier-, Verschiebe-, Lösch-, Papierkorb-, Komprimierungs- und Entpackvorgänge. Gilt auch für die Berechnung von Ordnergrößen, einschließlich laufender Berechnungen. Laufende Dateivorgänge behalten ihre individuelle Einstellung.
 
 settings-search-limit-description = Maximale Ergebnisse für neue Schnell- und erweiterte Suchen. Schritte von 500, mindestens 500.
 

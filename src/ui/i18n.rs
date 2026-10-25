@@ -256,6 +256,7 @@ pub enum Message {
     FolderLoading,
     FolderEmpty,
     FolderSizeEmpty,
+    FolderSizeProvisionalDescription,
     PreviewLoading,
     PropertiesCalculatingSize,
     PropertiesLoading,
@@ -782,6 +783,7 @@ impl Message {
             Self::FolderLoading => "folder-loading",
             Self::FolderEmpty => "folder-empty",
             Self::FolderSizeEmpty => "folder-size-empty",
+            Self::FolderSizeProvisionalDescription => "folder-size-provisional-description",
             Self::PreviewLoading => "preview-loading",
             Self::PropertiesCalculatingSize => "properties-calculating-size",
             Self::PropertiesLoading => "properties-loading",
@@ -1284,6 +1286,10 @@ impl<T> I18nContext for Context<'_, T> {
 mod operation_count_tests;
 
 #[cfg(test)]
+#[path = "i18n/tests/folder_sizes.rs"]
+mod folder_size_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -1556,6 +1562,7 @@ mod tests {
                 Message::FolderLoading,
                 Message::FolderEmpty,
                 Message::FolderSizeEmpty,
+                Message::FolderSizeProvisionalDescription,
                 Message::PreviewLoading,
                 Message::PropertiesCalculatingSize,
                 Message::PropertiesLoading,

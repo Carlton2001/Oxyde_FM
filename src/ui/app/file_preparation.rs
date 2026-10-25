@@ -24,19 +24,20 @@ pub(super) enum Owner {
         id: String,
         path: String,
     },
-    FolderSize {
+    FolderSizes {
         id: String,
         path: String,
         generation: u64,
-        directory: String,
-        revision: u64,
+        directories: Vec<(String, u64)>,
     },
 }
 impl Owner {
     fn id(&self) -> &str {
         match self {
-            Self::Listing { id, .. } | Self::Search { id, .. } | Self::Current { id, .. }
-                | Self::FolderSize { id, .. } => id,
+            Self::Listing { id, .. }
+            | Self::Search { id, .. }
+            | Self::Current { id, .. }
+            | Self::FolderSizes { id, .. } => id,
         }
     }
     fn matches(&self, app: &mut OxydeApp) -> bool {
@@ -49,9 +50,12 @@ impl Owner {
             return false;
         };
         match self {
-            Self::FolderSize { path, generation, directory, revision, .. } => {
-                &tab.path == path && tab.show_size_histogram
-                    && tab.folder_sizes.current(*generation, directory, *revision)
+            Self::FolderSizes {
+                path, generation, ..
+            } => {
+                &tab.path == path
+                    && tab.show_size_histogram
+                    && tab.folder_sizes.generation == *generation
             }
             Self::Listing { path, .. } | Self::Current { path, .. } => &tab.path == path,
             Self::Search {
@@ -79,14 +83,37 @@ pub(super) async fn prepare(
             return false;
         };
         let request = handle.update(cx, |app, _| {
-            owner.matches(app).then(|| {
-                app.state
-                    .find_tab_mut(owner.id())
-                    .unwrap()
-                    .preparation(update.clone())
-            })
+            if !owner.matches(app) {
+                return None;
+            }
+            let tab = app.state.find_tab_mut(owner.id()).unwrap();
+            let mut update = update.clone();
+            let mut revisions = Vec::new();
+            if let Owner::FolderSizes {
+                generation,
+                directories,
+                ..
+            } = owner
+            {
+                revisions = directories
+                    .iter()
+                    .filter(|(path, revision)| {
+                        tab.folder_sizes
+                            .publication_current(*generation, path, *revision)
+                    })
+                    .cloned()
+                    .collect();
+                if let FileUpdate::FolderSizes(updates) = &mut update {
+                    updates
+                        .retain(|(path, _)| revisions.iter().any(|(current, _)| current == path));
+                    if updates.is_empty() {
+                        return None;
+                    }
+                }
+            }
+            Some((tab.preparation(update), revisions))
         });
-        let Some(request) = request else {
+        let Some((request, revisions)) = request else {
             return false;
         };
         let result = tokio::task::spawn_blocking(move || {
@@ -100,6 +127,17 @@ pub(super) async fn prepare(
         let decision = handle.update(cx, |app, cx| {
             if !owner.matches(app) {
                 return None;
+            }
+            if let Owner::FolderSizes { generation, .. } = owner {
+                let tab = app.state.find_tab_mut(owner.id()).unwrap();
+                if revisions.iter().any(|(path, revision)| {
+                    !tab.folder_sizes
+                        .publication_current(*generation, path, *revision)
+                }) {
+                    // Retry only the still-current subset of the original batch;
+                    // a busy folder must not starve unaffected publications.
+                    return Some(false);
+                }
             }
             let applied = app
                 .state

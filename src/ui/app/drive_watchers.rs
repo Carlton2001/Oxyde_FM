@@ -4,6 +4,7 @@ use crate::ui::components::sidebar::sidebar_paths_equal;
 use gpui::*;
 mod changes;
 pub use changes::{DirectoryWatcher, WatcherChanges};
+pub(super) use changes::{take_size_changes, SizeChanges};
 use std::collections::{HashMap, HashSet};
 #[cfg(test)]
 use std::sync::{Arc, Mutex};
@@ -251,6 +252,9 @@ impl OxydeApp {
                             for id in size_updates {
                                 this.schedule_folder_sizes(&id, cx);
                             }
+                            // A published size can become provisional even while
+                            // another scan already owns this tab's scheduler.
+                            cx.notify();
                         });
                     }
                 }
@@ -411,20 +415,19 @@ impl OxydeApp {
                         && this.pending_watchers.get(&path) == Some(&(request, polling, recursive))
                     {
                         this.pending_watchers.remove(&path);
+                        let installed = result.is_some();
                         if let Some(watcher) = result.take() {
                             this._path_watchers.insert(path.clone(), watcher);
-                            // Close the gap between activation and installation.
-                            if recursive {
-                                let mut ids = Vec::new();
-                                this.state.layout.visit_panes_mut(&mut |pane| {
-                                    for tab in &mut pane.tabs {
-                                        if tab.path == path && tab.show_size_histogram {
-                                            tab.invalidate_folder_sizes(None);
-                                            ids.push(tab.id.clone());
-                                        }
-                                    }
-                                });
-                                for id in ids { this.schedule_folder_sizes(&id, cx); }
+                        }
+                        {
+                            let mut ids = Vec::new();
+                            this.state.layout.visit_panes(&mut |pane| {
+                                ids.extend(pane.tabs.iter()
+                                    .filter(|tab| tab.path == path && tab.show_size_histogram)
+                                    .map(|tab| tab.id.clone()));
+                            });
+                            for id in ids {
+                                this.resume_folder_sizes_after_watcher(&id, installed && recursive, cx);
                             }
                         }
                     }

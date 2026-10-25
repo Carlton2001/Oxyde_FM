@@ -408,8 +408,9 @@ impl OxydeApp {
         reset_scroll: bool,
         cx: &mut Context<Self>,
     ) {
-        if let Some(tab) = self.state.find_pane_mut(pane_id).and_then(|pane| pane.tabs.get_mut(tab_idx)) {
-            if tab.path == path { tab.invalidate_folder_sizes(None); }
+        if let Some(id) = self.state.find_pane(pane_id).and_then(|pane| pane.tabs.get(tab_idx))
+            .filter(|tab| tab.path == path).map(|tab| tab.id.clone()) {
+            self.refresh_folder_size_requests(&id, cx);
         }
         self.request_tab_listing(pane_id, tab_idx, path, reset_scroll, cx);
     }
