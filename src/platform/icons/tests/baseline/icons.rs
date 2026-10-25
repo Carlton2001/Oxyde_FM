@@ -167,9 +167,9 @@ fn icon_to_bitmap(hicon: HICON, target_size: i32) -> Result<RgbaImage, String> {
     // --- SMART RENDERING PIPELINE ---
 
     // 1. CONTENT-AWARE CROPPING (Always enabled to fix tiny icons in large canvases)
-    let mut min_x = actual_width as u32;
+    let mut min_x = actual_width;
     let mut max_x = 0;
-    let mut min_y = actual_height as u32;
+    let mut min_y = actual_height;
     let mut max_y = 0;
     let mut has_content = false;
 

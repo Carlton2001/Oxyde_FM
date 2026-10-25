@@ -27,7 +27,7 @@ impl Drop for Fixture {
         let ids: Vec<_> = crate::commands::ops::list_trash()
             .unwrap_or_default()
             .into_iter()
-            .filter(|entry| PathBuf::from(&entry.original_path) == self.path)
+            .filter(|entry| std::path::Path::new(&entry.original_path) == self.path)
             .map(|entry| entry.path)
             .collect();
         if !ids.is_empty() {

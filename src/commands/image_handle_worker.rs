@@ -17,10 +17,7 @@ pub const SESSION_FLAG: &str = "--oxyde-image-session-worker-v1";
 pub const SESSION_REQUESTS: u64 = 32;
 mod session;
 pub fn run_if_requested(
-    svg: &dyn Fn(
-        &[u8],
-        image_preview_decode::Policy,
-    ) -> Result<Vec<image::Frame>, image_preview_decode::PreviewError>,
+    svg: &image_preview_decode::SvgDecoder<'_>,
 ) -> bool {
     let mut arguments = std::env::args_os().skip(1);
     let flag = arguments.next();

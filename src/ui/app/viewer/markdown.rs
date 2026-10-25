@@ -223,7 +223,7 @@ impl Viewer {
             let highlights = block
                 .spans
                 .iter()
-                .filter_map(|span| {
+                .map(|span| {
                     let color = match span.syntax {
                         1 => Some(theme.text_muted),
                         2 => Some(theme.success_text),
@@ -235,7 +235,7 @@ impl Viewer {
                         _ if span.link => Some(theme.accent),
                         _ => None,
                     };
-                    Some((
+                    (
                         span.range.clone(),
                         HighlightStyle {
                             color,
@@ -248,7 +248,7 @@ impl Viewer {
                             }),
                             ..Default::default()
                         },
-                    ))
+                    )
                 })
                 .collect::<Vec<_>>();
             frame

@@ -63,6 +63,6 @@ fn cancellation_and_missing_files_do_not_publish_an_incomplete_total() {
         .join("missing.txt")
         .to_string_lossy()
         .into_owned();
-    assert!(inspect_selection(&[missing.clone()], &AtomicBool::new(true)).is_err());
+    assert!(inspect_selection(std::slice::from_ref(&missing), &AtomicBool::new(true)).is_err());
     assert!(inspect_selection(&[missing], &AtomicBool::new(false)).is_err());
 }

@@ -187,7 +187,7 @@ mod tests {
                             .into_iter()
                             .filter(|item| {
                                 entries.iter().any(|entry| {
-                                    entry.original_path == PathBuf::from(&item.original_path)
+                                    entry.original_path == Path::new(&item.original_path)
                                 })
                             })
                             .map(|item| item.path)
@@ -216,7 +216,7 @@ mod tests {
                 PathBuf::from(
                     &items
                         .iter()
-                        .find(|item| PathBuf::from(&item.original_path) == *source)
+                        .find(|item| Path::new(&item.original_path) == *source)
                         .unwrap()
                         .path,
                 )

@@ -66,7 +66,7 @@ impl FileOperationManager {
             { let mut op = op.lock().unwrap(); op.destination = Some(target); op.total_files = 0; op.total_bytes = 0; op.status = OpStatus::Running; }
             crate::systems::archive_io::decode(&source, file, &mut tree, None, &budget, Some(op)).map_err(|e| e.to_string())?;
             tree.keep();
-            return Ok(());
+            Ok(())
         }
         #[cfg(any(not(target_os = "windows"), test))]
         {

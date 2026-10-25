@@ -79,8 +79,10 @@ impl Element for PreviewTooltip {
             .child(self.preview.clone())
             .into_any_element();
         let preview_size = preview.layout_as_root(AvailableSpace::min_size(), window, cx);
-        let mut style = Style::default();
-        style.size = size(metadata_size.width.into(), metadata_size.height.into());
+        let style = Style {
+            size: size(metadata_size.width.into(), metadata_size.height.into()),
+            ..Default::default()
+        };
         (
             window.request_layout(style, [], cx),
             Layout {

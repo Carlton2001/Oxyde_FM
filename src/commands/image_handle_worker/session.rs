@@ -2,10 +2,7 @@
 use super::*;
 
 pub(super) fn run(
-    svg: &dyn Fn(
-        &[u8],
-        image_preview_decode::Policy,
-    ) -> Result<Vec<image::Frame>, image_preview_decode::PreviewError>,
+    svg: &image_preview_decode::SvgDecoder<'_>,
 ) -> io::Result<()> {
     let mut input = io::stdin().lock();
     let mut output = io::stdout().lock();

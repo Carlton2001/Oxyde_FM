@@ -169,8 +169,8 @@ fn run(initial_data: bool) {
     sample("device-created");
     {
         let mut pixels = vec![0u8; 4000 * 4000 * 4];
-        for (index, pixel) in pixels.chunks_exact_mut(4).enumerate() {
-            pixel.copy_from_slice(&[(index % 251) as u8, (index % 239) as u8, 120, 255]);
+        for (index, pixel) in pixels.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+            *pixel = [(index % 251) as u8, (index % 239) as u8, 120, 255];
         }
         for iteration in 0..8 {
             pixels[0] = iteration;

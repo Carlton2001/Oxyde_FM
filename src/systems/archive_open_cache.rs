@@ -278,6 +278,8 @@ impl CacheEntry {
         if let Some(owner) = &mut self.payload_owner {
             owner.keep();
         }
+        // `keep` returns a path for `TempDir` and unit for `OwnedTree`.
+        #[allow(clippy::let_unit_value)]
         let _ = self.directory.take().unwrap().keep();
         Ok(path)
     }
@@ -376,7 +378,7 @@ impl Session {
             let owner = read_owner(&path).ok();
             if owner
                 .as_ref()
-                .is_some_and(|owner| matches!(owner.version, 2 | 3 | 4) && owner.original.is_none())
+                .is_some_and(|owner| matches!(owner.version, 2..=4) && owner.original.is_none())
             {
                 // A live preparation keeps its marker and directory open.
                 // Traversing it would race decoder writes and TempDir cleanup.
@@ -453,7 +455,7 @@ impl Session {
         }
         #[cfg(all(target_os = "windows", not(test)))]
         {
-            return recovery::evict(path, policy, now, pressure, remaining);
+            recovery::evict(path, policy, now, pressure, remaining)
         }
         #[cfg(any(not(target_os = "windows"), test))]
         {
@@ -478,7 +480,7 @@ impl Session {
             } else {
                 policy.retention
             };
-            if !matches!(owner.version, 1 | 2 | 3)
+            if !matches!(owner.version, 1..=3)
                 || now.saturating_sub(owner.created) < required_age.as_secs()
                 || (pressure && owner.version == 1 && owner.original.is_none())
             {

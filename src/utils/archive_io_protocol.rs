@@ -326,8 +326,8 @@ impl Message {
                 cause,
                 limit,
                 detail,
-            } => {
-                if detail.len() > MAX_ERROR
+            }
+                if (detail.len() > MAX_ERROR
                     || (!matches!(
                         cause,
                         FailureKind::Bytes
@@ -337,11 +337,10 @@ impl Message {
                             | FailureKind::Depth
                             | FailureKind::Seconds
                             | FailureKind::Decoded
-                    ) && *limit != 0)
-                {
+                    ) && *limit != 0))
+                => {
                     return Err(invalid());
                 }
-            }
             _ => {}
         }
         Ok(())

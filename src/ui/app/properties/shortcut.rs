@@ -199,7 +199,8 @@ pub(super) fn run_menu(
             |view, _, cx| run_choices(&cx.entity(), *cx.theme(), view.properties_dialog.as_ref().map_or(1, |dialog| dialog.run_window), cx).into_any_element(),
             |view, _, cx| { if let Some(dialog) = &mut view.properties_dialog { dialog.run_menu = None; cx.notify(); } });
         return body;
-    }    if let Some(position) = dialog.run_menu {
+    }
+    if let Some(position) = dialog.run_menu {
         let menu = run_choices(handle, theme, dialog.run_window, cx);
         let close = handle.clone();
         body = body.child(deferred(

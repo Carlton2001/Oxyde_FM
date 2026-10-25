@@ -5,9 +5,11 @@ use std::sync::{
 };
 
 /// Independent walks: at most 4 normal / 16 Turbo SSD workers, or 2 HDD workers.
+type PoolCell = OnceCell<Result<Arc<rayon::ThreadPool>, String>>;
+
 pub(super) struct ScanPools {
     busy: [AtomicBool; 2],
-    pools: [[OnceCell<Result<Arc<rayon::ThreadPool>, String>>; 3]; 2],
+    pools: [[PoolCell; 3]; 2],
     ssd_workers: usize,
 }
 

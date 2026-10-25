@@ -23,6 +23,11 @@ opt-level = 2
 [patch."https://github.com/zed-industries/zed"]
 gpui_windows = { path = "vendor/gpui_windows" }
 
+[lints.clippy]
+# Readonly is only cleared on Windows and in tests, where it removes
+# FILE_ATTRIBUTE_READONLY rather than granting Unix world-write access.
+permissions_set_readonly_false = "allow"
+
 [lib]
 name = "oxyde_lib"
 

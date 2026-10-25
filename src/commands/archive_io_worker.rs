@@ -89,46 +89,6 @@ impl<R: Read, W: Write> Exchange for Client<R, W> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::utils::archive_io_stream::Exchange;
-    #[test]
-    fn data_ack_does_not_reset_turbo_and_pause_resume_keeps_control_value() {
-        for paused in [false, true] {
-            let session = [3; 16];
-            let mut wire = Wire::new(session);
-            let mut input = Vec::new();
-            wire.write(
-                &mut input,
-                &Frame::new(Message::Ack {
-                    pause: paused,
-                    turbo: true,
-                }),
-            )
-            .unwrap();
-            if paused {
-                wire.write(&mut input, &Frame::new(Message::Resume { turbo: true }))
-                    .unwrap();
-            }
-            wire.write(
-                &mut input,
-                &Frame::new(Message::Ack {
-                    pause: false,
-                    turbo: false,
-                }),
-            )
-            .unwrap();
-            let mut output = Vec::new();
-            let mut client = Client::new(input.as_slice(), &mut output, session);
-            client
-                .exchange(Frame::new(Message::Begin { id: 0 }))
-                .unwrap();
-            assert!(client.turbo());
-        }
-    }
-}
-
 pub fn error_frame(error: &crate::models::CommandError) -> Frame {
     let detail = error.to_string();
     let (cause, limit) = if let Some(failure) = ArchiveLimitFailure::from_message(&detail) {
@@ -208,4 +168,44 @@ pub fn run_if_requested() -> bool {
     }
     let _ = crate::platform::finish_archive_worker_shutdown();
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::utils::archive_io_stream::Exchange;
+    #[test]
+    fn data_ack_does_not_reset_turbo_and_pause_resume_keeps_control_value() {
+        for paused in [false, true] {
+            let session = [3; 16];
+            let mut wire = Wire::new(session);
+            let mut input = Vec::new();
+            wire.write(
+                &mut input,
+                &Frame::new(Message::Ack {
+                    pause: paused,
+                    turbo: true,
+                }),
+            )
+            .unwrap();
+            if paused {
+                wire.write(&mut input, &Frame::new(Message::Resume { turbo: true }))
+                    .unwrap();
+            }
+            wire.write(
+                &mut input,
+                &Frame::new(Message::Ack {
+                    pause: false,
+                    turbo: false,
+                }),
+            )
+            .unwrap();
+            let mut output = Vec::new();
+            let mut client = Client::new(input.as_slice(), &mut output, session);
+            client
+                .exchange(Frame::new(Message::Begin { id: 0 }))
+                .unwrap();
+            assert!(client.turbo());
+        }
+    }
 }

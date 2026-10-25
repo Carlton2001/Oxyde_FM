@@ -101,7 +101,7 @@ pub(super) fn parse_dropfiles(bytes: &[u8]) -> Result<Vec<String>, CommandError>
         return Ok(Vec::new());
     }
     let mut characters = bytes[offset..]
-        .chunks_exact(2)
+        .as_chunks::<2>().0.iter()
         .map(|pair| u16::from_le_bytes([pair[0], pair[1]]));
     let mut files = Vec::new();
     let mut name = Vec::new();

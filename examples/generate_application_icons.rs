@@ -64,7 +64,7 @@ fn rasterize(
         .ok_or("SVG renderer returned no frame")?
         .to_vec();
     // GPUI exposes straight-alpha BGRA; PNG and ICO encoders expect RGBA.
-    for pixel in rgba.chunks_exact_mut(4) {
+    for pixel in rgba.as_chunks_mut::<4>().0 {
         pixel.swap(0, 2);
     }
     let image = RgbaImage::from_raw(dimension * 4, dimension * 4, rgba)

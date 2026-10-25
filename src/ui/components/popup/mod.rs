@@ -161,7 +161,7 @@ pub(crate) fn is_menu(window: &Window, cx: &App) -> bool {
 pub(crate) fn owner_point(window: &Window, cx: &App, position: Point<Pixels>) -> Point<Pixels> {
     #[cfg(target_os = "windows")]
     {
-        return window::owner_point(window, cx, position);
+        window::owner_point(window, cx, position)
     }
     #[cfg(not(target_os = "windows"))]
     {

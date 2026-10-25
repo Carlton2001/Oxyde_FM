@@ -174,8 +174,10 @@ mod tests {
             conflict("root/older", 1, 2, 10),
             conflict("root/newer", 2, 1, 10),
         ];
-        let mut state = ConflictDialogState::default();
-        state.filter = 2;
+        let mut state = ConflictDialogState {
+            filter: 2,
+            ..ConflictDialogState::default()
+        };
         assert_eq!(filtered_indices(&conflicts, &state), vec![1]);
         state.query = "NEWER".into();
         assert_eq!(filtered_indices(&conflicts, &state), vec![1]);

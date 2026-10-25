@@ -234,7 +234,7 @@ pub async fn find_duplicates(
                             .or_default()
                             .push(entry.path().to_path_buf());
                         let count = file_count.fetch_add(1, Ordering::Relaxed) + 1;
-                        if count % 100 == 0 {
+                        if count.is_multiple_of(100) {
                             report("Scanning", count, 0);
                         }
                     }
@@ -334,7 +334,7 @@ pub async fn find_duplicates(
                 };
                 let hash = calculate_hash(&path, limit, false, &cancel_flag).ok()?;
                 let count = hashed.fetch_add(1, Ordering::Relaxed) + 1;
-                if count % 20 == 0 {
+                if count.is_multiple_of(20) {
                     report("Hashing", count, hash_total);
                 }
                 Some((size, path, hash))
@@ -389,7 +389,7 @@ pub async fn find_duplicates(
                 };
                 let hash = calculate_hash(&path, limit, true, &cancel_flag).ok()?;
                 let count = hashed.fetch_add(1, Ordering::Relaxed) + 1;
-                if count % 20 == 0 {
+                if count.is_multiple_of(20) {
                     report("Hashing", count, hash_total);
                 }
                 Some((size, path, hash))
@@ -439,7 +439,7 @@ pub async fn find_duplicates(
                 let _guard = lock.lock().unwrap();
                 let hash = calculate_hash(&path, None, false, &cancel_flag).ok()?;
                 let count = hashed.fetch_add(1, Ordering::Relaxed) + 1;
-                if count % 20 == 0 {
+                if count.is_multiple_of(20) {
                     report("Hashing", count, hash_total);
                 }
                 Some((size, path, hash))

@@ -177,7 +177,7 @@ impl DibSurface {
                 .map_err(|error| format!("CreateDIBSection failed for icon: {error}"))?,
         );
         let bits = NonNull::new(address.cast::<u32>()).ok_or("Icon DIB has no pixel buffer")?;
-        if bits.as_ptr() as usize % std::mem::align_of::<u32>() != 0 {
+        if !(bits.as_ptr() as usize).is_multiple_of(std::mem::align_of::<u32>()) {
             return Err("Icon DIB pixel buffer is misaligned".into());
         }
         // Fully initialize the surface, including transparent areas not drawn by GDI.
@@ -261,7 +261,7 @@ mod tests {
     use windows::Win32::UI::WindowsAndMessaging::CreateIconIndirect;
 
     fn monochrome_icon(width: i32, height: i32) -> HICON {
-        let stride = (width as usize + 15) / 16 * 2;
+        let stride = (width as usize).div_ceil(16) * 2;
         // AND=0, XOR=0 yields a black monochrome icon, independent of row order.
         let data = vec![0; stride * height as usize * 2];
         let mask = OwnedBitmap(unsafe {

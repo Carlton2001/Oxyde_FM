@@ -69,8 +69,10 @@ impl Element for VideoLayout {
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, ()) {
-        let mut style = Style::default();
-        style.size = size(relative(1.0).into(), relative(1.0).into());
+        let style = Style {
+            size: size(relative(1.0).into(), relative(1.0).into()),
+            ..Default::default()
+        };
         (window.request_layout(style, [], cx), ())
     }
 

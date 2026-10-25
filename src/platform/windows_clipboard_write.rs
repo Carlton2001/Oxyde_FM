@@ -341,7 +341,7 @@ mod tests {
         fn create_owner(&self) -> Result<HWND> {
             self.step("owner")?;
             self.state.borrow_mut().owner = true;
-            Ok(HWND(1_usize as *mut _))
+            Ok(HWND(std::ptr::dangling_mut()))
         }
         fn destroy_owner(&self, _: HWND) {
             let mut state = self.state.borrow_mut();
@@ -483,8 +483,10 @@ mod tests {
         let state = api.state.borrow();
         let bytes = &state.memory[&state.clipboard[&(CF_UNICODETEXT.0 as u32)]];
         let characters: Vec<_> = bytes
-            .chunks_exact(2)
-            .map(|bytes| u16::from_le_bytes([bytes[0], bytes[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|bytes| u16::from_le_bytes(*bytes))
             .collect();
         assert_eq!(characters.last(), Some(&0));
         assert_eq!(

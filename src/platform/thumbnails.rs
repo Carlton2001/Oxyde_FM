@@ -599,7 +599,7 @@ fn resize_video_frame(bytes: &[u8], layout: VideoLayout) -> Result<RgbaImage, Co
         for (y, destination) in out.chunks_exact_mut(out_w as usize * 4).enumerate() {
             let offset = row(y) * pitch;
             destination.copy_from_slice(&bytes[offset..offset + destination.len()]);
-            for pixel in destination.chunks_exact_mut(4) { pixel[3] = 255; }
+            for pixel in destination.as_chunks_mut::<4>().0 { pixel[3] = 255; }
         }
         return RgbaImage::from_raw(out_w, out_h, out)
             .ok_or_else(|| CommandError::Other("Invalid frame dimensions".into()));

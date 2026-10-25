@@ -106,9 +106,8 @@ pub(crate) fn scroll_area(
         });
         let release = measure.clone();
         window.on_mouse_event(move |event: &MouseUpEvent, phase, window, cx| {
-            if phase == DispatchPhase::Capture && event.button == MouseButton::Left {
-                if release.update(cx, |state, _| state.drag.take().is_some()) { window.refresh(); }
-            }
+            if phase == DispatchPhase::Capture && event.button == MouseButton::Left
+                && release.update(cx, |state, _| state.drag.take().is_some()) { window.refresh(); }
         });
     }).absolute().size_0())
 }

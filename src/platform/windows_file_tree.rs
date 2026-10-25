@@ -91,14 +91,14 @@ fn next_name(reader: &File, buffer: &mut [u32], restart: bool) -> io::Result<Opt
     let bytes = unsafe { std::slice::from_raw_parts(buffer.as_ptr().cast::<u8>(), size) };
     let next = u32::from_le_bytes(bytes[..4].try_into().unwrap());
     let length = u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize;
-    if next != 0 || length == 0 || length % 2 != 0 || length > size - 12 {
+    if next != 0 || length == 0 || !length.is_multiple_of(2) || length > size - 12 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
             "Invalid directory entry",
         ));
     }
     let wide: Vec<_> = bytes[12..12 + length]
-        .chunks_exact(2)
+        .as_chunks::<2>().0.iter()
         .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
         .collect();
     Ok(Some(OsString::from_wide(&wide)))

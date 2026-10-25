@@ -66,6 +66,7 @@ impl FileOperationManager {
     pub fn perform_compress_with_limits_for_tests(op: &Arc<Mutex<FileOperation>>, sources: Vec<PathBuf>, destination: Option<PathBuf>, limits: ArchiveLimits) -> Result<(), String> {
         crate::systems::archive_recovery::scope(|| Self::perform_compress_impl(op, sources, destination, &mut || Ok(()), None, Some(limits), None, None, None))
     }
+    #[allow(clippy::too_many_arguments)]
     fn perform_compress_impl(
         op: &Arc<Mutex<FileOperation>>,
         sources: Vec<PathBuf>,

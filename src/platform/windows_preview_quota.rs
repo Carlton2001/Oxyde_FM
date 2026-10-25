@@ -109,9 +109,9 @@ fn parse_batch(bytes: &[u8]) -> io::Result<Vec<Entry>> {
         let end = if next == 0 { record.len() } else { next };
         if end > record.len()
             || end < header
-            || (next != 0 && next % 8 != 0)
+            || (next != 0 && !next.is_multiple_of(8))
             || length == 0
-            || length % 2 != 0
+            || !length.is_multiple_of(2)
             || length > end - header
         {
             return Err(io::Error::other("Invalid preview cache directory record"));
@@ -121,7 +121,7 @@ fn parse_batch(bytes: &[u8]) -> io::Result<Vec<Entry>> {
             return Err(io::Error::other("Invalid preview cache file length"));
         }
         let name: Vec<u16> = record[header..header + length]
-            .chunks_exact(2)
+            .as_chunks::<2>().0.iter()
             .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
             .collect();
         entries.push(Entry {

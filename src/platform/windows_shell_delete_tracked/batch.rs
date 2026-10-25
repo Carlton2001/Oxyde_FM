@@ -59,7 +59,7 @@ fn execute(
             if Some(*recycle) != files.first().map(|(_, recycle, _)| *recycle) {
                 return Err(Error::from_hresult(E_ABORT));
             }
-            let buffer = super::super::windows_shell_delete::source_buffer(&[path.clone()])
+            let buffer = super::super::windows_shell_delete::source_buffer(std::slice::from_ref(path))
                 .map_err(|_| Error::from_hresult(E_ABORT))?;
             let root: IShellItem =
                 unsafe { SHCreateItemFromParsingName(PCWSTR(buffer.as_ptr()), None)? };

@@ -266,7 +266,7 @@ impl ArchiveWorkspace {
     }
     pub fn commit_with_retained(&self, op: &Arc<Mutex<FileOperation>>, retained: &HashMap<PathBuf, std::fs::File>) -> Result<(), String> {
         #[cfg(all(target_os = "windows", not(test)))]
-        { return self.commit_native(op, retained); }
+        { self.commit_native(op, retained)}
         #[cfg(any(not(target_os = "windows"), test))]
         {
         if !writable(&self.archive) {
@@ -523,7 +523,7 @@ fn prepare_selection_with_limits(
         #[cfg(all(target_os = "windows", not(test)))]
         let directory = super::archive_owned_tree::OwnedTree::temporary(target).map_err(|e| e.to_string())?;
         let workspace = ArchiveWorkspace::open_in_directory(archive, &|| Ok(()), limits, directory)?;
-        let source = workspace.path(&internal)?;
+        let source = workspace.path(internal)?;
         if !source.is_file() {
             return Err("Archive item is not a file".into());
         }

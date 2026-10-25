@@ -16,11 +16,11 @@
         let entries = list_trash().unwrap();
         let selected_entry = entries
             .iter()
-            .find(|entry| PathBuf::from(&entry.original_path) == selected)
+            .find(|entry| std::path::Path::new(&entry.original_path) == selected)
             .unwrap();
         let sibling_entry = entries
             .iter()
-            .find(|entry| PathBuf::from(&entry.original_path) == sibling)
+            .find(|entry| std::path::Path::new(&entry.original_path) == sibling)
             .unwrap();
         let runtime = tokio::runtime::Runtime::new().unwrap();
         let purged = runtime.block_on(purge_recycle_bin(vec![
@@ -57,7 +57,7 @@
         let entry = list_trash()
             .unwrap()
             .into_iter()
-            .find(|entry| PathBuf::from(&entry.original_path) == file)
+            .find(|entry| std::path::Path::new(&entry.original_path) == file)
             .unwrap();
         std::fs::write(&file, b"existing fixture").unwrap();
         let runtime = tokio::runtime::Runtime::new().unwrap();
@@ -128,7 +128,7 @@
             let expected = sources
                 .iter()
                 .find(|source| {
-                    **source == PathBuf::from(entry.original_path.trim_end_matches('\0'))
+                    source.as_path() == std::path::Path::new(entry.original_path.trim_end_matches('\0'))
                 })
                 .unwrap();
             assert_eq!(entry.name, expected.file_name().unwrap().to_string_lossy());

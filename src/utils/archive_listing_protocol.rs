@@ -387,7 +387,7 @@ mod tests {
         assert!(decode(&reply, archive, "").is_err());
         let mut reply = bytes("a");
         reply[9..13].copy_from_slice(&2u32.to_le_bytes());
-        reply.extend_from_slice(&reply[13..].to_vec());
+        reply.extend_from_within(13..);
         assert!(decode(&reply, archive, "").is_err());
         assert!(decode(&bytes("a"), archive, "../outside").is_err());
     }
@@ -512,7 +512,7 @@ mod tests {
         let mut reply = INDEX_MAGIC.to_vec();
         reply.extend_from_slice(&bytes("a")[8..]);
         reply[9..13].copy_from_slice(&2u32.to_le_bytes());
-        reply.extend_from_slice(&reply[13..].to_vec());
+        reply.extend_from_within(13..);
         assert!(decode_index(&reply, archive, &|| Ok(())).is_err());
     }
     #[test]

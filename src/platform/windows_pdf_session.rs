@@ -223,7 +223,7 @@ mod tests {
         pdf.extend_from_slice(
             format!("trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n", objects.len() + 1).as_bytes(),
         );
-        std::fs::write(&path, pdf).unwrap();
+        std::fs::write(path, pdf).unwrap();
     }
 
     #[test]

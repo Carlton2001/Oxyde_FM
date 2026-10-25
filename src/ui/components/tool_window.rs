@@ -72,7 +72,7 @@ fn native_tool_icon(path: &str, cx: &App) -> Option<Vec<u8>> {
         )
         .ok()?;
     let mut rgba = rendered.as_bytes(0)?.to_vec();
-    for pixel in rgba.chunks_exact_mut(4) {
+    for pixel in rgba.as_chunks_mut::<4>().0 {
         pixel.swap(0, 2);
     }
     let image = image::RgbaImage::from_raw(48, 48, rgba)?;

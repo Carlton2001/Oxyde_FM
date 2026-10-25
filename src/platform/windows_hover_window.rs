@@ -26,11 +26,14 @@ struct Placement {
     scale: f32,
 }
 
+/// Anchor rectangle and its three placement flags.
+type Anchor = ((f32, f32, f32, f32), bool, bool, bool);
+
 thread_local! {
     // Coalesce pointer requests without entering GPUI through synchronous
     // WM_MOVE/WM_SIZE callbacks while its App/Window is already borrowed.
     static PENDING: RefCell<HashMap<isize, Placement>> = RefCell::new(HashMap::new());
-    static ANCHORS: RefCell<HashMap<isize, ((f32, f32, f32, f32), bool, bool, bool)>> = RefCell::new(HashMap::new());
+    static ANCHORS: RefCell<HashMap<isize, Anchor>> = RefCell::new(HashMap::new());
     static MENUS: RefCell<HashSet<isize>> = RefCell::new(HashSet::new());
     static COORDINATE_OWNERS: RefCell<HashMap<isize, isize>> = RefCell::new(HashMap::new());
     static INSETS: RefCell<HashMap<isize, f32>> = RefCell::new(HashMap::new());

@@ -35,7 +35,7 @@ impl Fixture {
                 PathBuf::from(
                     &listed
                         .iter()
-                        .find(|entry| PathBuf::from(&entry.original_path) == *source)
+                        .find(|entry| std::path::Path::new(&entry.original_path) == *source)
                         .unwrap()
                         .path,
                 )
@@ -219,7 +219,7 @@ fn native_trash_transfer_names_metadata_and_history_roundtrip() {
         std::fs::rename(&saved, &backups[0]).unwrap();
         for _ in 0..2 {
             assert!(fixture.physical.iter().all(|path| !path.exists()));
-            assert!(backups.iter().all(|path| Path::new(path).exists()));
+            assert!(backups.iter().all(|path| std::path::Path::new(path).exists()));
             crate::commands::ops::undo_last_action(&history)
                 .await
                 .unwrap();

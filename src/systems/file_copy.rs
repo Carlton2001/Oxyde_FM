@@ -247,6 +247,7 @@ pub(super) fn copy_with_parents_observed(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn copy_with_parents_checked(
     source: &Path,
     destination: &Path,

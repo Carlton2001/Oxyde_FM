@@ -47,11 +47,11 @@
     fn restoration_requires_the_complete_corrected_name_without_stem_guessing() {
         let selected = item("C:/bin/$Rshortcut.lnk", "C:/original/shortcut.lnk");
         assert!(
-            select_restoration_tasks(&[selected.clone()], vec!["C:/original/shortcut".into()])
+            select_restoration_tasks(std::slice::from_ref(&selected), vec!["C:/original/shortcut".into()])
                 .is_err()
         );
         assert_eq!(
-            select_restoration_tasks(&[selected.clone()], vec!["C:/original/shortcut.lnk".into()])
+            select_restoration_tasks(std::slice::from_ref(&selected), vec!["C:/original/shortcut.lnk".into()])
                 .unwrap(),
             vec![selected]
         );

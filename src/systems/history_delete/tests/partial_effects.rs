@@ -43,7 +43,7 @@ fn failed_redo_keeps_child_receipts_in_shared_journal_through_root_retry() {
     entry.set_restored(true);
     let cloned = entry.clone();
     let proof = HistoryFileIdentity::from_file(&File::open(&child).unwrap()).unwrap();
-    assert!(redo_reporting(&[entry.clone()], &mut |_, _| {
+    assert!(redo_reporting(std::slice::from_ref(&entry), &mut |_, _| {
         fs::rename(&child, temp.path().join("saved-child")).unwrap();
         crate::platform::ShellDeleteOutcome {
             completed: false,
@@ -113,7 +113,7 @@ fn undo_restores_separate_root_and_child_payloads_in_order_and_keeps_retry_state
     root.remember_partial(vec![child.clone()]);
     let items = vec![root_item, child_item];
     let mut first = true;
-    assert!(restore_entries(&[root.clone()], &mut |journal| {
+    assert!(restore_entries(std::slice::from_ref(&root), &mut |journal| {
         platform().restore_trash_history(items.clone(), journal)?;
         if first {
             first = false;

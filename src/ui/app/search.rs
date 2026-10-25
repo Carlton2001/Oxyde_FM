@@ -527,16 +527,16 @@ impl OxydeApp {
                         .truncate()
                         .text_color(theme.warning_text)
                         .native_tooltip(crate::ui::components::tooltip::Tooltip::wrapped_text(
-                            warnings.detail(&cx.i18n()),
+                            warnings.detail(cx.i18n()),
                         ))
-                        .child(warnings.label(&cx.i18n())),
+                        .child(warnings.label(cx.i18n())),
                 )
             })
             .when(content_warnings.count > 0, |bar| {
                 bar.child(div().id(SharedString::from(format!("search-content-warning-{id}")))
                     .min_w_0().truncate().text_color(theme.warning_text)
-                    .native_tooltip(crate::ui::components::tooltip::Tooltip::wrapped_text(content_warnings.detail(&cx.i18n())))
-                    .child(content_warnings.label(&cx.i18n())))
+                    .native_tooltip(crate::ui::components::tooltip::Tooltip::wrapped_text(content_warnings.detail(cx.i18n())))
+                    .child(content_warnings.label(cx.i18n())))
             })
             .when(running || limited, |bar| {
                 bar.child(

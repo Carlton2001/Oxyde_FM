@@ -32,7 +32,7 @@ pub fn format_number(number: u64, language: Language) -> String {
     };
     let mut result = String::new();
     for (index, ch) in digits.chars().enumerate() {
-        if index > 0 && (digits.len() - index) % 3 == 0 {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
             result.push(separator);
         }
         result.push(ch);

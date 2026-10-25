@@ -27,7 +27,7 @@ fn string(key: HKEY, name: PCWSTR) -> Option<String> {
             return None;
         }
     }
-    if kind != REG_SZ || bytes < 2 || bytes as usize > data.len() * 2 || bytes % 2 != 0 {
+    if kind != REG_SZ || bytes < 2 || bytes as usize > data.len() * 2 || !bytes.is_multiple_of(2) {
         return None;
     }
     let value = String::from_utf16(&data[..bytes as usize / 2]).ok()?;

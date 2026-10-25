@@ -197,7 +197,7 @@ pub(super) fn parse_original_path(bytes: &[u8]) -> Option<PathBuf> {
     // Both formats include a NUL terminator; it must not become part of a
     // Rust filename or cause the shortcut extension correction to append twice.
     let wide: Vec<u16> = path_bytes
-        .chunks_exact(2)
+        .as_chunks::<2>().0.iter()
         .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
         .take_while(|unit| *unit != 0)
         .collect();

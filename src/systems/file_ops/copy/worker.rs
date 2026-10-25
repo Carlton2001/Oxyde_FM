@@ -181,7 +181,7 @@ impl FileOperationManager {
                 },
                 Some(&mut || {
                     #[cfg(all(target_os = "windows", not(test)))]
-                    { return Self::remove_archive_replacement(&operation, dest); }
+                    { Self::remove_archive_replacement(&operation, dest)}
                     #[cfg(any(not(target_os = "windows"), test))]
                     { Ok(false) }
                 }),

@@ -208,6 +208,7 @@ fn open_name(
     .map(|(file, _created)| file)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn open_name_with_attributes(
     mut name: Vec<u16>,
     root: *mut c_void,

@@ -171,21 +171,23 @@ mod reset_tests {
 
     #[test]
     fn reset_restores_defaults_and_preserves_workspace_and_search_state() {
-        let mut config = AppConfig::default();
-        config.theme = "light".into();
-        config.language = "en".into();
-        config.ui_rem_size = 24;
-        config.show_hidden = true;
-        config.zip_quality = "best".into();
-        config.search_limit = 4500;
-        config.default_turbo_mode = false;
-        config.workspace_state = Some(serde_json::json!({"tabs": ["C:/"]}));
-        config.duplicate_search_options = Some(serde_json::json!([true, false, true]));
-        config.duplicate_search_window_size = Some(serde_json::json!([900.0, 650.0]));
-        config.operations_panel_position = Some([20.0, 30.0]);
-        config.window_placement = Some(super::WindowPlacement {
-            x: -800.0, y: 30.0, width: 700.0, height: 500.0, maximized: true,
-        });
+        let mut config = AppConfig {
+            theme: "light".into(),
+            language: "en".into(),
+            ui_rem_size: 24,
+            show_hidden: true,
+            zip_quality: "best".into(),
+            search_limit: 4500,
+            default_turbo_mode: false,
+            workspace_state: Some(serde_json::json!({"tabs": ["C:/"]})),
+            duplicate_search_options: Some(serde_json::json!([true, false, true])),
+            duplicate_search_window_size: Some(serde_json::json!([900.0, 650.0])),
+            operations_panel_position: Some([20.0, 30.0]),
+            window_placement: Some(super::WindowPlacement {
+                x: -800.0, y: 30.0, width: 700.0, height: 500.0, maximized: true,
+            }),
+            ..AppConfig::default()
+        };
         let previous = config.clone();
         config.reset_preferences();
         assert_eq!(config.theme, "dark");

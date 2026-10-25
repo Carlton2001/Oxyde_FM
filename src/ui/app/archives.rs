@@ -89,7 +89,7 @@ impl OxydeApp {
     }
     pub(crate) fn select_archive_format(&mut self, format: &str, cx: &mut Context<Self>) {
         let Some((_, extension)) = self.archive_creation.as_mut() else { return; };
-        let next = if format == "zst" { "tar.zst" } else { &format };
+        let next = if format == "zst" { "tar.zst" } else { format };
         self.editing_text = archive_name_for_format(&self.editing_text, extension, next);
         *extension = next.into();
         if let Some(input) = &self.editing_view {

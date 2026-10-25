@@ -184,7 +184,7 @@ mod tests {
         let foreign = root.path().join("foreign");
         std::fs::write(&source, b"same bytes").unwrap();
         std::fs::write(&foreign, b"same bytes").unwrap();
-        let entries = plan(&[source.clone()], &mut || Ok(())).unwrap();
+        let entries = plan(std::slice::from_ref(&source), &mut || Ok(())).unwrap();
         let retained = std::collections::HashMap::from([(
             entries[0].source.resolved_path(),
             File::open(&foreign).unwrap(),
@@ -213,7 +213,7 @@ mod tests {
             ..ArchiveLimits::EXTRACTION
         };
         let error = plan_controlled(
-            &[folder.clone()],
+            std::slice::from_ref(&folder),
             &mut || Ok(()),
             Some(&ArchiveBudget::new(value)),
         )
@@ -232,7 +232,7 @@ mod tests {
         };
         assert_eq!(
             plan_controlled(
-                &[folder.clone()],
+                std::slice::from_ref(&folder),
                 &mut || Ok(()),
                 Some(&ArchiveBudget::new(value))
             )
@@ -277,7 +277,7 @@ mod tests {
         let folder = temp.path().join("folder");
         std::fs::create_dir(&folder).unwrap();
         std::fs::write(folder.join("file"), b"safe").unwrap();
-        let mut entries = plan(&[folder.clone()], &mut || Ok(())).unwrap();
+        let mut entries = plan(std::slice::from_ref(&folder), &mut || Ok(())).unwrap();
         let original = entries[1].source.resolved_path();
         remap(
             &mut entries,

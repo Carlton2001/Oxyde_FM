@@ -275,7 +275,7 @@ mod tests {
         let saved = fixture._root.path().join("original-payload");
         fs::rename(&fixture.source, &saved).unwrap();
         fs::write(&fixture.source, b"selected contents").unwrap();
-        let error = restore_history(vec![fixture.item.clone()], &[entry.clone()]).unwrap_err();
+        let error = restore_history(vec![fixture.item.clone()], std::slice::from_ref(&entry)).unwrap_err();
         assert_eq!(
             crate::models::error::HistoryDeleteFailure::from_message(&error),
             Some(true)
@@ -293,7 +293,7 @@ mod tests {
         let mut other = second.item.clone();
         other.original_parent = first.item.original_parent.clone();
         fs::write(&second.sidecar, metadata(&first.original, 2)).unwrap();
-        restore_history(vec![other, first.item.clone()], &[entry.clone()]).unwrap();
+        restore_history(vec![other, first.item.clone()], std::slice::from_ref(&entry)).unwrap();
         assert!(entry.is_restored());
         assert!(!first.source.exists());
         assert!(!first.sidecar.exists());

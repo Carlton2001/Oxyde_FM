@@ -447,8 +447,10 @@ impl Element for MeasuredContent {
             content_size.width + self.inset * 2.0,
             content_size.height + self.inset * 2.0,
         );
-        let mut style = Style::default();
-        style.size = size(measured.width.into(), measured.height.into());
+        let style = Style {
+            size: size(measured.width.into(), measured.height.into()),
+            ..Default::default()
+        };
         (window.request_layout(style, [], cx), measured)
     }
     fn prepaint(

@@ -9,6 +9,8 @@ use std::{
     sync::Arc,
 };
 
+type BeforeRemove<'a> = dyn FnMut(&Path, &mut dyn FnMut() -> io::Result<()>) -> io::Result<()> + 'a;
+
 struct Entry {
     path: PathBuf,
     destination: PathBuf,
@@ -102,7 +104,7 @@ impl SourceDirectories {
         &mut self,
         matches: &dyn Fn(&Path) -> bool,
         checkpoint: &mut dyn FnMut() -> io::Result<()>,
-        before_remove: &mut dyn FnMut(&Path, &mut dyn FnMut() -> io::Result<()>) -> io::Result<()>,
+        before_remove: &mut BeforeRemove<'_>,
         removed: &mut dyn FnMut(&Path, &Path),
     ) -> io::Result<()> {
         self.remove_matching_observed(matches, checkpoint, before_remove, &mut |source, destination, _| { removed(source, destination); Ok(()) })
@@ -111,7 +113,7 @@ impl SourceDirectories {
         &mut self,
         matches: &dyn Fn(&Path) -> bool,
         checkpoint: &mut dyn FnMut() -> io::Result<()>,
-        before_remove: &mut dyn FnMut(&Path, &mut dyn FnMut() -> io::Result<()>) -> io::Result<()>,
+        before_remove: &mut BeforeRemove<'_>,
         removed: &mut dyn FnMut(&Path, &Path, FileIdentity) -> io::Result<()>,
     ) -> io::Result<()> {
         self.entries

@@ -53,6 +53,10 @@ fn clear_generated_cache(root: &std::path::Path) -> Result<(), CommandError> {
     Ok(())
 }
 
+pub async fn open_peek(path: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || crate::platform::platform().open_peek(&path)).await.map_err(|error| error.to_string())?
+}
+
 #[cfg(test)]
 mod cache_tests {
     use super::clear_generated_cache;
@@ -80,8 +84,4 @@ mod cache_tests {
         std::fs::write(root.path().join("icons"), b"invalid directory").unwrap();
         assert!(clear_generated_cache(root.path()).is_err());
     }
-}
-
-pub async fn open_peek(path: String) -> Result<(), String> {
-    tokio::task::spawn_blocking(move || crate::platform::platform().open_peek(&path)).await.map_err(|error| error.to_string())?
 }

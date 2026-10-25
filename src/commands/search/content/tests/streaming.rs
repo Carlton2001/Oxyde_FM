@@ -292,7 +292,7 @@ fn interrupted_reads_are_retried_as_with_bufread_lines() {
     impl Read for Interrupted {
         fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
             self.reads += 1;
-            if self.reads % 2 == 0 {
+            if self.reads.is_multiple_of(2) {
                 return Err(io::ErrorKind::Interrupted.into());
             }
             let count = bytes.len().min(2);

@@ -111,8 +111,10 @@ impl Element for CursorTooltip {
         let size = self
             .content
             .layout_as_root(AvailableSpace::min_size(), window, cx);
-        let mut style = Style::default();
-        style.size = gpui::size(size.width.into(), size.height.into());
+        let style = Style {
+            size: gpui::size(size.width.into(), size.height.into()),
+            ..Default::default()
+        };
         (window.request_layout(style, [], cx), size)
     }
     fn prepaint(

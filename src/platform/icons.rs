@@ -161,9 +161,9 @@ fn icon_to_bitmap(hicon: HICON, target_size: i32) -> Result<RgbaImage, String> {
     // --- SMART RENDERING PIPELINE ---
 
     // 1. CONTENT-AWARE CROPPING (Always enabled to fix tiny icons in large canvases)
-    let mut min_x = actual_width as u32;
+    let mut min_x = actual_width;
     let mut max_x = 0;
-    let mut min_y = actual_height as u32;
+    let mut min_y = actual_height;
     let mut max_y = 0;
     let mut has_content = false;
 
@@ -278,10 +278,10 @@ mod tests {
                 bits as *mut u8,
                 width as usize * height as usize * 4,
             );
-            for pixel in pixels.chunks_exact_mut(4) {
-                pixel.copy_from_slice(&[17, 43, 201, 255]);
+            for pixel in pixels.as_chunks_mut::<4>().0 {
+                *pixel = [17, 43, 201, 255];
             }
-            let mask_data = vec![0u8; ((width as usize + 15) / 16 * 2) * height as usize];
+            let mask_data = vec![0u8; ((width as usize).div_ceil(16) * 2) * height as usize];
             let mask = CreateBitmap(width, height, 1, 1, Some(mask_data.as_ptr().cast()));
             assert!(!mask.is_invalid());
             let result = CreateIconIndirect(&ICONINFO {

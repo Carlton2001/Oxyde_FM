@@ -182,6 +182,7 @@ pub(super) fn move_file_with_journal_identity(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn move_bound_controlled(
     ops: &impl MoveIo,
     source: &Path,

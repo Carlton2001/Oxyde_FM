@@ -180,7 +180,7 @@ impl OxydeApp {
                         InputAppearance::Standard
                     },
                     submit_on_outside: inline,
-                    initial_selection: initial_selection,
+                    initial_selection,
                     ..Default::default()
                 },
                 window,

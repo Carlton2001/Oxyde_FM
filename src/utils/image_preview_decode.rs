@@ -154,7 +154,7 @@ fn fitted_bgra(image: DynamicImage, policy: Policy) -> RgbaImage {
     };
     // Move an existing RGBA buffer instead of cloning every preview/frame.
     let mut image = image.into_rgba8();
-    for pixel in image.chunks_exact_mut(4) {
+    for pixel in image.as_chunks_mut::<4>().0 {
         pixel.swap(0, 2);
     }
     image
@@ -257,10 +257,13 @@ fn raster(
     }
 }
 
+/// Decodes SVG documents, which the raster decoders do not handle.
+pub type SvgDecoder<'a> = dyn Fn(&[u8], Policy) -> Result<Vec<Frame>, PreviewError> + 'a;
+
 pub fn decode(
     data: &[u8],
     policy: Policy,
-    svg: &dyn Fn(&[u8], Policy) -> Result<Vec<Frame>, PreviewError>,
+    svg: &SvgDecoder<'_>,
 ) -> Result<DecodedImage, PreviewError> {
     let (frames, limited, natural_size) = match image::guess_format(data) {
         Ok(format) => {

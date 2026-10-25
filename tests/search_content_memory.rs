@@ -78,7 +78,7 @@ fn advanced_search_allocations_remain_bounded_as_a_line_grows() {
         {
             let mut file = File::create(&path).unwrap();
             let mut marks = [0; 64 * 1024];
-            for item in marks.chunks_exact_mut(4) {
+            for item in marks.as_chunks_mut::<4>().0 {
                 item.copy_from_slice("\u{05b1}\u{05b0}".as_bytes());
             }
             for _ in 0..megabytes * 16 {

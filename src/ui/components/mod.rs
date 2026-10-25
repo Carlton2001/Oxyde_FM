@@ -779,6 +779,41 @@ pub fn pane_context_menu_items(i18n: &I18n, h: Entity<crate::ui::app::OxydeApp>,
     context_menu_sections(items, i18n)
 }
 
+fn trash_context_menu_items(i18n: &I18n, handle: Entity<crate::ui::app::OxydeApp>, path: Option<String>, view: &crate::ui::app::OxydeApp) -> Vec<dropdown::DropdownItem> {
+    use dropdown::{DropdownItem, IconName};
+    let mut items = Vec::new();
+    let all = path.is_none();
+    if !all {
+        let h = handle.clone();
+        items.push(DropdownItem::new(i18n.text(Message::Cut).to_string(), move |_, cx| {
+            h.update(cx, |this, cx| { this.execute_couper(cx); this.context_menus.clear(); cx.notify(); });
+        }).icon(IconName::Scissors));
+    }
+    for (label, restore, icon) in [
+        (if all { Message::TrashRestoreAll } else { Message::TrashRestore }, true, IconName::Restore),
+        (if all { Message::TrashDeleteAll } else { Message::TrashDeletePermanent }, false, IconName::TrashPermanent),
+    ] {
+        let h = handle.clone();
+        let mut item = DropdownItem::new(i18n.text(label).to_string(), move |_, cx| {
+            h.update(cx, |this, cx| { this.execute_trash_action(restore, all, cx); this.context_menus.clear(); cx.notify(); });
+        }).icon(icon);
+        item.is_dimmed = view.trash_busy || (all && view.state.find_pane(&view.state.active_pane_id)
+            .is_some_and(|pane| pane.active_tab().files.is_empty()));
+        items.push(item);
+    }
+    items.push(DropdownItem::separator());
+    items.push(DropdownItem::new(i18n.text(Message::Properties).to_string(), move |window, cx| {
+        let path = path.clone().unwrap_or_else(|| "trash://".into());
+        handle.update(cx, |this, cx| {
+            this.context_menus.clear();
+            if path == "trash://" { this.open_trash_settings(window, cx); return; }
+            this.open_properties_for_paths(this.context_action_paths(&path), window, cx);
+            cx.notify();
+        });
+    }).icon(IconName::Settings));
+    items
+}
+
 #[cfg(test)]
 mod context_menu_tests {
     use super::{context_menu_sections, dropdown};
@@ -875,39 +910,4 @@ mod context_menu_tests {
             .collect(), &i18n);
         assert_eq!(labels_by_section(&filtered).iter().map(Vec::len).collect::<Vec<_>>(), vec![2, 1, 1]);
     }
-}
-
-fn trash_context_menu_items(i18n: &I18n, handle: Entity<crate::ui::app::OxydeApp>, path: Option<String>, view: &crate::ui::app::OxydeApp) -> Vec<dropdown::DropdownItem> {
-    use dropdown::{DropdownItem, IconName};
-    let mut items = Vec::new();
-    let all = path.is_none();
-    if !all {
-        let h = handle.clone();
-        items.push(DropdownItem::new(i18n.text(Message::Cut).to_string(), move |_, cx| {
-            h.update(cx, |this, cx| { this.execute_couper(cx); this.context_menus.clear(); cx.notify(); });
-        }).icon(IconName::Scissors));
-    }
-    for (label, restore, icon) in [
-        (if all { Message::TrashRestoreAll } else { Message::TrashRestore }, true, IconName::Restore),
-        (if all { Message::TrashDeleteAll } else { Message::TrashDeletePermanent }, false, IconName::TrashPermanent),
-    ] {
-        let h = handle.clone();
-        let mut item = DropdownItem::new(i18n.text(label).to_string(), move |_, cx| {
-            h.update(cx, |this, cx| { this.execute_trash_action(restore, all, cx); this.context_menus.clear(); cx.notify(); });
-        }).icon(icon);
-        item.is_dimmed = view.trash_busy || (all && view.state.find_pane(&view.state.active_pane_id)
-            .is_some_and(|pane| pane.active_tab().files.is_empty()));
-        items.push(item);
-    }
-    items.push(DropdownItem::separator());
-    items.push(DropdownItem::new(i18n.text(Message::Properties).to_string(), move |window, cx| {
-        let path = path.clone().unwrap_or_else(|| "trash://".into());
-        handle.update(cx, |this, cx| {
-            this.context_menus.clear();
-            if path == "trash://" { this.open_trash_settings(window, cx); return; }
-            this.open_properties_for_paths(this.context_action_paths(&path), window, cx);
-            cx.notify();
-        });
-    }).icon(IconName::Settings));
-    items
 }

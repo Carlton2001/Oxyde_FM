@@ -246,7 +246,7 @@ fn index<R: Read + Seek>(image: &mut Image<'_, R>) -> Result<Vec<Entry>, Command
                 });
                 entry_index
             };
-            continuation = (!entry.final_extent).then(|| (entry.raw_name, entry_index));
+            continuation = (!entry.final_extent).then_some((entry.raw_name, entry_index));
         }
         if continuation.is_some() {
             return Err(invalid("Incomplete ISO multi-extent file").into());
@@ -363,6 +363,9 @@ pub(super) fn extract_iso(
     Ok(())
 }
 
+type EntryCallback<'a> =
+    dyn FnMut(&crate::utils::archive_io_protocol::Entry, Option<&mut dyn Read>) -> io::Result<()> + 'a;
+
 /// The same checked ISO index, with a seekable source and streamed output only.
 pub(super) fn stream_iso<R: Read + Seek>(
     source: R,
@@ -370,10 +373,7 @@ pub(super) fn stream_iso<R: Read + Seek>(
     selected: Option<&Path>,
     budget: &ArchiveBudget,
     checkpoint: &dyn Fn() -> io::Result<()>,
-    entry_callback: &mut dyn FnMut(
-        &crate::utils::archive_io_protocol::Entry,
-        Option<&mut dyn Read>,
-    ) -> io::Result<()>,
+    entry_callback: &mut EntryCallback<'_>,
     manifest_end: &mut dyn FnMut() -> io::Result<()>,
 ) -> Result<(), CommandError> {
     let mut image = Image {

@@ -550,7 +550,7 @@ mod tests {
         let mut usb = root.clone();
         usb.path = "E:\\".into();
         usb.drive_type = "removable".into();
-        let snapshot = merge_drive_roots(vec![root, usb.clone()], &[known.clone()]);
+        let snapshot = merge_drive_roots(vec![root, usb.clone()], std::slice::from_ref(&known));
         assert_eq!(snapshot, vec![known, usb]);
         // Absence from the quick snapshot removes the mount without waiting for details.
         assert!(merge_drive_roots(Vec::new(), &snapshot).is_empty());

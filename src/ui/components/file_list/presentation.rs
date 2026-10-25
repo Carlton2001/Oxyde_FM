@@ -139,27 +139,6 @@ pub(super) fn network_category(file: &FileEntry, i18n: &crate::ui::i18n::I18n) -
     i18n.text(if oxyde_lib::commands::io::is_network_server(&file.path) { Message::NetworkComputer } else { Message::NetworkOtherDevices }).to_string()
 }
 
-#[cfg(test)]
-mod network_type_tests {
-    use super::*;
-
-    #[::core::prelude::v1::test]
-    fn network_devices_and_servers_use_localized_network_type_without_relabeling_shares() {
-        for language in [crate::ui::i18n::Language::French, crate::ui::i18n::Language::English] {
-            let i18n = crate::ui::i18n::I18n::for_language(language);
-            for (path, is_dir) in [("::{device}", false), ("?device", false), ("\\\\server", true)] {
-                let file = FileEntry { name: "Bbox".into(), path: path.into(), is_dir, ..Default::default() };
-                assert_eq!(file_type_display(&file, &i18n), i18n.text(Message::SidebarNetwork).as_ref());
-                assert_eq!(file_type_label(&file), "Réseau");
-            }
-            for path in ["\\\\server\\share", "\\\\server\\share\\folder", "C:\\folder"] {
-                let file = FileEntry { name: "folder".into(), path: path.into(), is_dir: true, ..Default::default() };
-                assert_eq!(file_type_display(&file, &i18n), i18n.text(Message::FileTypeFolder).as_ref());
-            }
-        }
-    }
-}
-
 /// Uppercases only the extension for presentation in grid cards.
 pub(super) fn grid_display_name(name: &str) -> String {
     let Some((stem, extension)) = name.rsplit_once('.') else {
@@ -270,4 +249,25 @@ pub(super) fn size_loading(path: &str, color: Hsla) -> AnyElement {
                     },
                 )
         })).into_any_element()
+}
+
+#[cfg(test)]
+mod network_type_tests {
+    use super::*;
+
+    #[::core::prelude::v1::test]
+    fn network_devices_and_servers_use_localized_network_type_without_relabeling_shares() {
+        for language in [crate::ui::i18n::Language::French, crate::ui::i18n::Language::English] {
+            let i18n = crate::ui::i18n::I18n::for_language(language);
+            for (path, is_dir) in [("::{device}", false), ("?device", false), ("\\\\server", true)] {
+                let file = FileEntry { name: "Bbox".into(), path: path.into(), is_dir, ..Default::default() };
+                assert_eq!(file_type_display(&file, &i18n), i18n.text(Message::SidebarNetwork).as_ref());
+                assert_eq!(file_type_label(&file), "Réseau");
+            }
+            for path in ["\\\\server\\share", "\\\\server\\share\\folder", "C:\\folder"] {
+                let file = FileEntry { name: "folder".into(), path: path.into(), is_dir: true, ..Default::default() };
+                assert_eq!(file_type_display(&file, &i18n), i18n.text(Message::FileTypeFolder).as_ref());
+            }
+        }
+    }
 }
