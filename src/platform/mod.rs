@@ -479,6 +479,22 @@ pub trait Platform: Send + Sync {
         thumbnails::get_office_document(path)
     }
 
+    /// Complete-or-error search text. Windows must never fall back to local parsing.
+    fn office_search_text(&self, path: &std::path::Path, checkpoint: &dyn Fn() -> std::io::Result<()>) -> std::io::Result<String> {
+        #[cfg(target_os = "windows")]
+        { let _ = (path, checkpoint); Err(std::io::ErrorKind::Unsupported.into()) }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let started = std::time::Instant::now();
+            crate::utils::office_document::search::extract(self.open_archive_source(path, false)?,
+                path.extension().and_then(|extension| extension.to_str()).unwrap_or_default(), &|| {
+                    checkpoint()?;
+                    if started.elapsed() >= std::time::Duration::from_secs(15) { return Err(std::io::ErrorKind::TimedOut.into()); }
+                    Ok(())
+                })
+        }
+    }
+
     /// Cover-only requests use a reusable codec session and raw, bounded pixels.
     fn audio_cover(&self, path: &std::path::Path, thumbnail: bool) -> std::io::Result<Option<image::RgbaImage>> {
         #[cfg(target_os = "windows")]
@@ -816,6 +832,8 @@ mod windows_shell_delete;
 mod windows_shell_delete_tracked;
 #[cfg(target_os = "windows")]
 mod windows_preview_worker;
+#[cfg(target_os = "windows")]
+mod windows_office_search;
 #[cfg(target_os = "windows")]
 mod windows_viewer_media;
 #[cfg(target_os = "windows")]

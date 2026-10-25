@@ -81,6 +81,7 @@ fn modes_follow_regular_archive_search_trash_and_network_panes() {
         running: false,
         limited: false,
         archive_warnings: Default::default(),
+        content_warnings: Default::default(),
         cancellation: Arc::new(crate::ui::app::search::SearchCancellation(Arc::new(
             std::sync::atomic::AtomicBool::new(false),
         ))),

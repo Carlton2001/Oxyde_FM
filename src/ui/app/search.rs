@@ -176,8 +176,12 @@ pub struct QuickSearchState {
     pub running: bool,
     pub limited: bool,
     pub archive_warnings: ArchiveSearchWarnings,
+    pub content_warnings: ContentSearchWarnings,
     pub cancellation: Arc<SearchCancellation>,
 }
+
+mod content_warnings;
+pub use content_warnings::ContentSearchWarnings;
 
 #[derive(Clone, Default)]
 pub struct ArchiveSearchWarnings {
@@ -465,6 +469,8 @@ impl OxydeApp {
         let limited = search.is_some_and(|search| search.limited);
         let empty_warnings = ArchiveSearchWarnings::default();
         let warnings = search.map_or(&empty_warnings, |search| &search.archive_warnings);
+        let empty_content_warnings = ContentSearchWarnings::default();
+        let content_warnings = search.map_or(&empty_content_warnings, |search| &search.content_warnings);
         let theme = *cx.theme();
         let handle = cx.entity();
         let id = tab.id.clone();
@@ -525,6 +531,12 @@ impl OxydeApp {
                         ))
                         .child(warnings.label(&cx.i18n())),
                 )
+            })
+            .when(content_warnings.count > 0, |bar| {
+                bar.child(div().id(SharedString::from(format!("search-content-warning-{id}")))
+                    .min_w_0().truncate().text_color(theme.warning_text)
+                    .native_tooltip(crate::ui::components::tooltip::Tooltip::wrapped_text(content_warnings.detail(&cx.i18n())))
+                    .child(content_warnings.label(&cx.i18n())))
             })
             .when(running || limited, |bar| {
                 bar.child(
@@ -830,6 +842,7 @@ impl OxydeApp {
             running: true,
             limited: false,
             archive_warnings: ArchiveSearchWarnings::default(),
+            content_warnings: ContentSearchWarnings::default(),
             cancellation: Arc::new(SearchCancellation(cancellation.clone())),
         });
         tab.search_text = query.clone();
@@ -919,6 +932,9 @@ impl OxydeApp {
                                 if let Some(search) = &mut tab.quick_search {
                                     search.archive_warnings.record(path, detail);
                                 }
+                            }
+                            QuickSearchEvent::ContentSkipped { path, detail: _ } => {
+                                if let Some(search) = &mut tab.quick_search { search.content_warnings.record(path); }
                             }
                             QuickSearchEvent::Finished { limited } => {
                                 if let Some(search) = &mut tab.quick_search {

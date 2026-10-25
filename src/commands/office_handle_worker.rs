@@ -10,9 +10,12 @@ use std::{
 };
 
 pub const FLAG: &str = "--oxyde-office-text-handle-worker-v1";
+pub const SEARCH_FLAG: &str = "--oxyde-office-search-handle-worker-v1";
 pub fn run_if_requested() -> bool {
     let mut arguments = std::env::args_os().skip(1);
-    if arguments.next().as_deref() != Some(std::ffi::OsStr::new(FLAG)) {
+    let flag = arguments.next();
+    let search = flag.as_deref() == Some(std::ffi::OsStr::new(SEARCH_FLAG));
+    if !search && flag.as_deref() != Some(std::ffi::OsStr::new(FLAG)) {
         return false;
     }
     let result = (|| -> io::Result<()> {
@@ -38,6 +41,18 @@ pub fn run_if_requested() -> bool {
             return Err(io::Error::other("Unexpected Office argument"));
         }
         let file = unsafe { File::from_raw_handle(handle as *mut std::ffi::c_void) };
+        if search {
+            let started = std::time::Instant::now();
+            let parsed = crate::utils::office_document::search::extract(file, &extension, &|| {
+                if started.elapsed() >= std::time::Duration::from_secs(15) { return Err(io::ErrorKind::TimedOut.into()); }
+                Ok(())
+            });
+            let reply = match parsed {
+                Ok(text) => Reply::Text(text),
+                Err(error) => Reply::Error { limit: error.kind() == io::ErrorKind::FileTooLarge, detail: error.to_string() },
+            };
+            return preview_protocol::encode(reply, &mut io::stdout().lock());
+        }
         let parsed = match extension.strip_prefix("document:") {
             Some(extension) => office_preview::document(file, extension),
             None => office_preview::text(file, &extension),

@@ -2,6 +2,10 @@
 
 Les aperçus de survol restent en mémoire ; les miniatures de grille ont un cache disque distinct. Le chargement, la validation des fichiers et le décodage restent sur les workers.
 
+La [recherche Office](search.md#recherche-de-contenu-office) utilise son propre
+mode LPAC d’`oxyde-image-worker`, une admission distincte et une réponse texte
+bornée à 8 Mio. Elle ne réutilise pas les sorties tronquées des aperçus de survol.
+
 Le démarrage d’un ghost de fichiers ferme immédiatement l’aperçu de survol,
 y compris sa préparation en attente. Les survols restent désactivés pendant
 le glisser-déposer, même lorsqu’aucune cible de dépôt n’est acceptée.

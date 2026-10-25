@@ -707,3 +707,11 @@ audio-no-tags = No tags available
 audio-album = Album
 audio-track = Track
 audio-year = Year
+
+
+quick-search-content-skipped =
+    { $count ->
+        [one] Content not checked: { $number } file
+       *[other] Content not checked: { $number } files
+    }
+quick-search-content-skipped-detail = Content search incomplete for { $path }: unreadable document or resource limit reached.

@@ -1,6 +1,6 @@
     use super::*;
     use std::cell::Cell;
-    use std::io::{Cursor, Write};
+    use std::io::Cursor;
 
     struct CancelAfter<'a, R> {
         inner: R,
@@ -45,47 +45,6 @@
             &ContentPattern::new("needle", true).unwrap(),
             false,
             &AtomicBool::new(false)
-        ));
-    }
-
-    #[test]
-    fn office_cancellation_stops_during_decompression_and_keeps_normal_matching() {
-        let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
-        writer
-            .start_file(
-                "word/document.xml",
-                zip::write::SimpleFileOptions::default()
-                    .compression_method(zip::CompressionMethod::Deflated),
-            )
-            .unwrap();
-        let xml = format!("<w:p>Résumé{}<w:br/>end</w:p>", "x".repeat(2 * 1024 * 1024));
-        writer.write_all(xml.as_bytes()).unwrap();
-        let mut archive = zip::ZipArchive::new(writer.finish().unwrap()).unwrap();
-        let cancellation = AtomicBool::new(false);
-        let bytes = Cell::new(0);
-        assert!(!office_entry_contains_content(
-            CancelAfter {
-                inner: archive.by_name("word/document.xml").unwrap(),
-                bytes: &bytes,
-                cancellation: &cancellation
-            },
-            &ContentPattern::new("(?i)resume", true).unwrap(),
-            true,
-            &cancellation,
-        ));
-        assert!(bytes.get() <= 64 * 1024);
-        cancellation.store(false, Ordering::Relaxed);
-        assert!(office_entry_contains_content(
-            archive.by_name("word/document.xml").unwrap(),
-            &ContentPattern::new("(?i)resume", true).unwrap(),
-            true,
-            &cancellation
-        ));
-        assert!(office_entry_contains_content(
-            Cursor::new("<w:p>Résumé</w:p>"),
-            &ContentPattern::new("Résumé", true).unwrap(),
-            false,
-            &cancellation
         ));
     }
 

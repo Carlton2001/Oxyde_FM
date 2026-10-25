@@ -18,7 +18,7 @@
                 QuickSearchEvent::Batch(batch) => results.extend(batch),
                 QuickSearchEvent::ArchiveSkipped { .. } => {},
                 QuickSearchEvent::Finished { .. } => return results,
-                QuickSearchEvent::Failed(error) => panic!("{error}"),
+                QuickSearchEvent::Failed(error) | QuickSearchEvent::ContentSkipped { detail: error, .. } => panic!("{error}"),
             }
         }
     }
@@ -158,7 +158,7 @@
                     assert_eq!(count, 2);
                     break;
                 }
-                QuickSearchEvent::Failed(error) => panic!("{error}"),
+                QuickSearchEvent::Failed(error) | QuickSearchEvent::ContentSkipped { detail: error, .. } => panic!("{error}"),
             }
         }
     }
@@ -183,7 +183,7 @@
                 QuickSearchEvent::Batch(batch) => files.extend(batch),
                 QuickSearchEvent::ArchiveSkipped { .. } => {},
                 QuickSearchEvent::Finished { limited } => return (files, limited),
-                QuickSearchEvent::Failed(error) => panic!("{error}"),
+                QuickSearchEvent::Failed(error) | QuickSearchEvent::ContentSkipped { detail: error, .. } => panic!("{error}"),
             }
         }
         assert!(cancelled, "search did not finish");

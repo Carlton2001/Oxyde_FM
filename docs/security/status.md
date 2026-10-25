@@ -8,6 +8,11 @@ Le parent est de confiance ; un worker peut être compromis par un codec. Noyau,
 
 Decode/Encode d’archives, listing/index, images/SVG, texte Office et tags/pochettes audio utilisent des workers LPAC sans capacité, sans repli local permissif. Le parent garde les sources, les contrôles et les écritures. Le lancement suspendu attache les jobs avant reprise ; seuls les handles IPC et sources explicitement autorisés sont transmis.
 
+Cela inclut la recherche de contenu Office : décompression et extraction restent
+dans un worker dédié, avec plafond cumulé de XML et de réponse ; une limite ou
+une panne est signalée comme contenu non vérifié. Le parent reçoit uniquement le
+texte borné. Contrat et formats : [recherche Office](../architecture/search.md#recherche-de-contenu-office).
+
 Les exceptions ACL ont été retenues par l’utilisateur : un accès explicite au SID exact du worker ou à `ALL RESTRICTED APPLICATION PACKAGES` peut rester possible. Le confinement n’est pas indépendant des ACL.
 
 Les miniatures et aperçus PDF réutilisent une session native hors LPAC, séparée

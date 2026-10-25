@@ -1,10 +1,10 @@
 # Audit du code Oxyde — 25 octobre 2026
 
-La compilation et les **1 405 tests Windows exécutés passent**, mais l’audit relève **10 constats : 1 P1, 8 P2 et 1 P3**. Le problème prioritaire est la recherche de contenu Office : elle décompresse les documents dans le processus principal sans borne de taille. L’audit RustSec actualisé échoue sur `ctutils 0.4.2`, présent dans le graphe Windows actif. Aucun correctif applicatif n’a été réalisé pendant cet audit.
+À la révision auditée, la compilation et les **1 405 tests Windows exécutés passent**, mais l’audit relève **10 constats : 1 P1, 8 P2 et 1 P3**. Le problème prioritaire est alors la recherche de contenu Office : elle décompresse les documents dans le processus principal sans borne de taille. L’audit RustSec actualisé échoue sur `ctutils 0.4.2`, présent dans le graphe Windows actif. Les corrections réalisées ensuite sont décrites ci-dessous.
 
 ## Suivi des corrections après audit
 
-Les constats et chiffres ci-dessous décrivent la révision auditée. Le suivi suivant décrit les corrections ultérieures, sans clôturer les ID non mentionnés.
+**A01, A02, A03, A05, A06, A07 et A10 sont corrigés. A04, A08 et A09 restent ouverts.** Les constats et chiffres des sections d’audit décrivent la révision initiale. Le suivi suivant décrit les corrections ultérieures.
 
 | ID | Correction | Validation ciblée |
 | --- | --- | --- |
@@ -12,6 +12,11 @@ Les constats et chiffres ci-dessous décrivent la révision auditée. Le suivi s
 | A02 | Mise à jour ciblée de `ctutils` vers 0.4.4 ; notices et empreintes régénérées | Check toutes cibles sans avertissement ; audit RustSec actualisé réussi, 0 vulnérabilité publiée ; avis de maintenance/Tokio conservés |
 | A07 | Nettoyage sur le pool bloquant, référence indépendante du hook GPUI et attente finale avant arrêt de Tokio | Check toutes cibles sans avertissement ; 14 tests d’historique réussis, 1 ignoré ; test de nettoyage bloqué conservé après abandon du hook réussi |
 | A06, A10 | Liste GPUI virtualisée des groupes/fichiers, plages et tailles préparées en arrière-plan ; tailles mixtes affichées en plage ; minimum de tri déterministe | Check toutes cibles sans avertissement ; 3 tests de présentation dont 100 000 fichiers, 15 tests i18n et 6 tests du moteur de doublons réussis ; pas d’essai visuel général |
+| A01, A03 | Extraction Office dédiée au contenu recherché, confinée dans le worker LPAC Windows avec protocole distinct ; limites sur source, XML, texte et durée ; toutes les diapositives et feuilles, chaînes partagées/inline et entités décodées ; documents non vérifiés signalés dans les cinq langues | 12 tests unitaires Office et 3 intégrations avec le vrai worker réussis ; DOCX compressé contenant 32 Mio de XML refusé explicitement ; surcoût d’allocations Rust du parent mesuré à 42 251 octets lors du test ciblé |
+
+**Régression finale après les sept corrections :** `scripts/test-windows.ps1 -Offline` réussit : **1 422 tests exécutés, 0 échec, 50 ignorés**, soit 908 tests de bibliothèque, 447 tests applicatifs et 67 tests d’intégration. Le test enfant d’héritage n’est pas compté deux fois. Le script a reconstruit tous les binaires et exécuté `cargo check --offline --locked --all-targets` sans avertissement du projet. Journal local : [`native-tests-fixed.log`](../../target/code-audit-2026-10-25/native-tests-fixed.log). L’audit RustSec actualisé après A02 réussit avec **0 vulnérabilité publiée** ; les avis de maintenance et la réserve Tokio restent documentés. Aucune nouvelle validation visuelle générale ni exécution Linux n’a été réalisée.
+
+La recherche Office est bornée à 128 Mio de source, 10 000 entrées ZIP, 1 Mio de noms, 16 Mio par partie XML, 64 Mio de XML cumulé et 8 Mio de texte. Le worker Windows dispose d’un job de 512 Mio et d’un délai supervisé de 15 secondes, admission comprise. Les appels natifs de sélection/ouverture de la source restent soumis aux limites R6 ; ce délai ne constitue pas une garantie universelle d’interruption des I/O système. Un dépassement, un document non pris en charge ou un worker absent produit un avertissement de contenu non vérifié, sans repli vers la décompression dans le parent. Le lecteur XML partagé avec le Viewer reste un extracteur ciblé, sans validation générale du schéma Office ou de toute la spécification XML.
 
 ## Révision, méthode et portée
 

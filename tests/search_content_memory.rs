@@ -124,7 +124,7 @@ fn advanced_search_allocations_remain_bounded_as_a_line_grows() {
                     QuickSearchEvent::Batch(entries) => matches += entries.len(),
                     QuickSearchEvent::Finished { .. } => finished = true,
                     QuickSearchEvent::Failed(error) => panic!("{error}"),
-                    QuickSearchEvent::ArchiveSkipped { .. } => {
+                    QuickSearchEvent::ArchiveSkipped { .. } | QuickSearchEvent::ContentSkipped { .. } => {
                         panic!("ordinary text cannot be an archive warning")
                     }
                 }

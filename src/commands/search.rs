@@ -25,6 +25,7 @@ static DISK_IO_LOCKS: Lazy<DashMap<u64, Arc<Mutex<()>>>> = Lazy::new(DashMap::ne
 pub enum QuickSearchEvent {
     Batch(Vec<FileEntry>),
     ArchiveSkipped { path: String, detail: String },
+    ContentSkipped { path: String, detail: String },
     Finished { limited: bool },
     Failed(String),
 }
@@ -171,10 +172,18 @@ pub fn advanced_search(
                     let modified = m.modified().ok()
                         .and_then(|date| date.duration_since(SystemTime::UNIX_EPOCH).ok())
                         .map(|date| date.as_millis() as u64);
-                    let matches = params.matches_metadata(&name, m.is_dir(), m.len(), modified)
-                        && params.content.as_ref().is_none_or(|pattern| {
-                            file_contains_content(path, pattern, options.ignore_accents, &cancellation)
-                        });
+                    let mut matches = params.matches_metadata(&name, m.is_dir(), m.len(), modified);
+                    if let Some(pattern) = params.content.as_ref().filter(|_| matches) {
+                        matches = match file_contains_content(path, pattern, options.ignore_accents, &cancellation) {
+                            Ok(matched) => matched,
+                            Err(_) if cancellation.load(Ordering::Relaxed) => return Ok(()),
+                            Err(error) => {
+                                log::warn!("Content search skipped {}: {error}", path.display());
+                                if sender.send(QuickSearchEvent::ContentSkipped { path: path.to_string_lossy().into_owned(), detail: error.to_string() }).is_err() { return Ok(()); }
+                                false
+                            }
+                        };
+                    }
                     if cancellation.load(Ordering::Relaxed) {
                         return Ok(());
                     }
@@ -427,6 +436,7 @@ fn is_office_doc(path: &std::path::Path) -> bool {
             | "xlsx"
             | "pptx"
             | "docm"
+            | "dotx" | "dotm" | "xltx" | "xltm" | "potx" | "potm" | "ppsx" | "ppsm"
             | "xlsm"
             | "pptm"
             | "odt"
@@ -476,124 +486,6 @@ impl<R: Read> Read for ContentReader<'_, R> {
     }
 }
 
-fn office_file_contains_content(
-    path: &std::path::Path,
-    pattern: &ContentPattern,
-    ignore_accents: bool,
-    cancellation: &AtomicBool,
-) -> bool {
-    let file = match File::open(path) {
-        Ok(f) => f,
-        Err(_) => return false,
-    };
-
-    let mut archive = match zip::ZipArchive::new(file) {
-        Ok(a) => a,
-        Err(_) => return false,
-    };
-
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_lowercase();
-    let targets = match ext.as_str() {
-        "docx" | "docm" => vec!["word/document.xml"],
-        "xlsx" | "xlsm" => vec!["xl/sharedStrings.xml"], // Shared strings is where 99% of text lives
-        "pptx" | "pptm" => {
-            // Powerpoint is tricky, slides are separate. We'll check the first 5 slides for performance
-            vec![
-                "ppt/slides/slide1.xml",
-                "ppt/slides/slide2.xml",
-                "ppt/slides/slide3.xml",
-            ]
-        }
-        "odt" | "ods" | "odp" | "ott" | "ots" | "otp" => vec!["content.xml"],
-        _ => vec!["content.xml", "word/document.xml"],
-    };
-
-    for target in targets {
-        if cancellation.load(Ordering::Relaxed) {
-            return false;
-        }
-        if let Ok(mut content_file) = archive.by_name(target) {
-            if office_entry_contains_content(
-                &mut content_file,
-                pattern,
-                ignore_accents,
-                cancellation,
-            ) {
-                return true;
-            }
-        }
-    }
-
-    false
-}
-
-fn office_entry_contains_content(
-    reader: impl Read,
-    pattern: &ContentPattern,
-    ignore_accents: bool,
-    cancellation: &AtomicBool,
-) -> bool {
-    let mut content = String::new();
-    let mut reader = ContentReader {
-        inner: reader,
-        cancellation,
-    };
-    if reader.read_to_string(&mut content).is_err() {
-        return false;
-    }
-    let mut in_tag = false;
-    let mut tag_buffer = String::new();
-    let mut stripped = String::with_capacity(content.len() / 2);
-
-    for (index, c) in content.chars().enumerate() {
-        if index % 8192 == 0 && cancellation.load(Ordering::Relaxed) {
-            return false;
-        }
-        if c == '<' {
-            in_tag = true;
-            tag_buffer.clear();
-        } else if c == '>' {
-            in_tag = false;
-            let tl = &tag_buffer;
-            if tl.starts_with("w:p")
-                || tl.starts_with("/w:p")
-                || tl.starts_with("w:br")
-                || tl.starts_with("text:p")
-                || tl.starts_with("/text:p")
-                || tl == "p"
-                || tl == "/p"
-            {
-                stripped.push('\n');
-            }
-        } else if in_tag {
-            if tag_buffer.len() < 10 {
-                tag_buffer.push(c);
-            }
-        } else {
-            stripped.push(c);
-        }
-    }
-
-    for line in stripped.lines() {
-        if cancellation.load(Ordering::Relaxed) {
-            return false;
-        }
-        let matched = if ignore_accents {
-            pattern.is_match(&crate::utils::remove_accents(line))
-        } else {
-            pattern.is_match(line)
-        };
-        if matched && !cancellation.load(Ordering::Relaxed) {
-            return true;
-        }
-    }
-    false
-}
-
 fn content_lock<'a>(
     lock: &'a Mutex<()>,
     cancellation: &AtomicBool,
@@ -617,27 +509,20 @@ fn file_contains_content(
     pattern: &ContentPattern,
     ignore_accents: bool,
     cancellation: &AtomicBool,
-) -> bool {
+) -> std::io::Result<bool> {
     if cancellation.load(Ordering::Relaxed) || is_binary_file(path) {
-        return false;
+        return Ok(false);
     }
-
-    let is_office = is_office_doc(path);
-
-    // Preserve the existing serialization per physical disk. The unused SSD
-    // bypass is removed; waiting for another search remains cancellable.
     let vol_id = get_physical_disk_id(path);
-    let lock = DISK_IO_LOCKS
-        .entry(vol_id)
-        .or_insert_with(|| Arc::new(Mutex::new(())))
-        .clone();
-    let Some(_guard) = content_lock(&lock, cancellation) else {
-        return false;
-    };
-    if is_office {
-        office_file_contains_content(path, pattern, ignore_accents, cancellation)
+    let lock = DISK_IO_LOCKS.entry(vol_id).or_insert_with(|| Arc::new(Mutex::new(()))).clone();
+    let Some(_guard) = content_lock(&lock, cancellation) else { return Ok(false); };
+    if is_office_doc(path) {
+        let text = crate::platform::platform().office_search_text(path, &|| {
+            if cancellation.load(Ordering::Relaxed) { Err(std::io::ErrorKind::Interrupted.into()) } else { Ok(()) }
+        })?;
+        Ok(text_reader_contains_content(std::io::Cursor::new(text), pattern, ignore_accents, cancellation))
     } else {
-        read_file_and_check(path, pattern, ignore_accents, cancellation)
+        Ok(read_file_and_check(path, pattern, ignore_accents, cancellation))
     }
 }
 

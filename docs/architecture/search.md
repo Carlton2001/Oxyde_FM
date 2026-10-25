@@ -53,4 +53,34 @@ Les résultats arrivent par lots bornés ; Arrêter conserve ceux déjà reçus.
 
 Valider toute la ligne avant de publier une correspondance ; erreur UTF-8/I/O ou annulation l’invalident. La mémoire de l’automate dépend du motif. La normalisation des séquences combinatoires exceptionnelles peut utiliser un temporaire privé : la borne RAM n’est pas un quota disque.
 
-Cette correction concerne le texte brut. Le parseur Office conserve ses limites et la recherche de contenu dans les archives reste indisponible. Elle ne garantit ni un plafond RSS global ni un instantané du fichier face aux modifications concurrentes. Preuves et incidents : [bilan A09](../reports/2026-10-17-code-review.md).
+Cette borne concerne le texte brut ; le parcours Office est décrit ci-dessous.
+La recherche de contenu dans les archives reste indisponible. Aucun de ces parcours
+ne garantit un plafond RSS global ni un instantané face aux modifications concurrentes.
+Preuves du texte brut : [bilan A09](../reports/2026-10-17-code-review.md).
+
+## Recherche de contenu Office
+
+`Platform::office_search_text` produit du texte entier dans son périmètre ou une
+erreur explicite. Sous Windows, un mode dédié d’`oxyde-image-worker` reçoit seulement
+le handle source en lecture et son extension. Il est lancé en LPAC sans capacité,
+avec le superviseur et l’admission agrégée existants, sans repli local si le worker
+est absent, en erreur ou hors délai. Son admission est distincte des aperçus Office ;
+l’annulation est contrôlée pendant l’attente et la supervision.
+
+Limites : source encodée 128 Mio, 10 000 entrées, 1 Mio de noms cumulés, 16 Mio par
+partie XML et 64 Mio de XML cumulés, 8 Mio de texte en réponse, job de 512 Mio et
+délai de 15 secondes incluant l’attente d’admission. Le parent ne décompresse pas
+le document et valide une réponse texte bornée avant d’utiliser le moteur de
+recherche en flux. Linux utilise l’extracteur local borné, sans garantie LPAC.
+
+Le corps Word, les parties des diapositives et les cellules des feuilles sont
+parcourus sans limite arbitraire aux trois premières diapositives ou aux 64 premières
+colonnes. Les cellules inline et les références de chaînes partagées sont prises
+en charge ; les entités XML partagent leur décodage avec le Viewer. La recherche
+ne calcule pas les formules ou les formats de nombres et ignore les notes de
+présentation OpenDocument, comme le texte principal du Viewer.
+
+Une limite de décompression ou de sortie, un document illisible ou un échec du
+worker produit `ContentSkipped` : le bandeau indique dans les cinq langues que
+certains contenus n’ont pas été vérifiés et donne le premier chemin concerné.
+Aucune troncature Office n’est présentée comme une recherche complète réussie.

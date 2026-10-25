@@ -33,6 +33,10 @@ pub mod preview {
     ) -> io::Result<Vec<u8>> {
         native::run_office_text_in(executable, path, deadline, false)
     }
+    pub fn run_office_search_in(executable: &Path, path: &Path, deadline: Duration,
+        checkpoint: &dyn Fn() -> io::Result<()>) -> io::Result<String> {
+        super::super::windows_office_search::run_in(executable, path, deadline, checkpoint)
+    }
     pub fn supervise(command: Command, deadline: Duration) -> io::Result<Vec<u8>> {
         native::supervise(command, deadline)
     }

@@ -23,7 +23,7 @@ fn collect(root: &Path, options: AdvancedSearchOptions) -> (Vec<FileEntry>, Vec<
                 assert!(!limited);
                 return (files, warnings);
             }
-            QuickSearchEvent::Failed(error) => panic!("{error}"),
+            QuickSearchEvent::Failed(error) | QuickSearchEvent::ContentSkipped { detail: error, .. } => panic!("{error}"),
         }
     }
 }

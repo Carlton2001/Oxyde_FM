@@ -14,6 +14,7 @@ const MAX_CELLS: usize = 64;
 
 mod sheets;
 mod slides;
+pub(crate) mod search;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Odf {
@@ -140,9 +141,19 @@ impl Builder {
 }
 
 fn attribute<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
-    let start = tag.find(&format!("{name}=\""))? + name.len() + 2;
-    let end = tag[start..].find('"')?;
-    Some(&tag[start..start + end])
+    let mut rest = &tag[tag.find(char::is_whitespace)?..];
+    loop {
+        rest = rest.trim_start();
+        let end = rest.find(|c: char| c.is_whitespace() || matches!(c, '=' | '/' | '>'))?;
+        let key = &rest[..end];
+        rest = rest[end..].trim_start().strip_prefix('=')?.trim_start();
+        let quote = rest.chars().next().filter(|c| matches!(c, '\'' | '"'))?;
+        rest = &rest[1..];
+        let end = rest.find(quote)?;
+        let value = &rest[..end];
+        if key == name { return Some(value); }
+        rest = &rest[end + 1..];
+    }
 }
 
 fn heading(style: &str) -> Option<&'static str> {

@@ -1,6 +1,14 @@
 use super::*;
 
 #[test]
+fn attributes_respect_boundaries_spacing_and_both_xml_quotes() {
+    assert_eq!(attribute("c t = 's' r=\"ZZ999\"", "t"), Some("s"));
+    assert_eq!(attribute("sheet name='école budget' r:id = 'r1'", "r:id"), Some("r1"));
+    assert_eq!(attribute("c other-t=\"s\"", "t"), None);
+    assert_eq!(attribute("c t=\"unterminated", "t"), None);
+}
+
+#[test]
 fn word_paragraphs_headings_lists_and_tables_keep_their_order() {
     let xml = r#"<w:document><w:body>
 <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Intro &amp; plan</w:t></w:r></w:p>

@@ -13,7 +13,7 @@ fn results(receiver: std::sync::mpsc::Receiver<QuickSearchEvent>) -> Vec<FileEnt
                 assert!(!limited);
                 return files;
             }
-            QuickSearchEvent::Failed(error) => panic!("{error}"),
+            QuickSearchEvent::Failed(error) | QuickSearchEvent::ContentSkipped { detail: error, .. } => panic!("{error}"),
             QuickSearchEvent::ArchiveSkipped { .. } => panic!("unexpected archive warning"),
         }
     }

@@ -613,6 +613,7 @@ mod tests {
         tab.quick_search = Some(super::super::search::QuickSearchState {
             root: root.clone(), query: "us".into(), running: true, limited: false,
             archive_warnings: Default::default(),
+            content_warnings: Default::default(),
             cancellation: Arc::new(super::super::search::SearchCancellation(token.clone())),
         });
         tab.back_stack.push(tab.path.clone());

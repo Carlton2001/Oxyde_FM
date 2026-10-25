@@ -714,3 +714,11 @@ audio-no-tags = Aucun tag disponible
 audio-album = Album
 audio-track = Piste
 audio-year = Année
+
+
+quick-search-content-skipped =
+    { $count ->
+        [one] Contenu non vérifié : { $number } fichier
+       *[other] Contenu non vérifié : { $number } fichiers
+    }
+quick-search-content-skipped-detail = Recherche de contenu incomplète pour { $path } : document illisible ou limite de ressources atteinte.

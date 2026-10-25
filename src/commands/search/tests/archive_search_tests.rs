@@ -46,7 +46,7 @@
                     assert!(!limited);
                     break;
                 }
-                QuickSearchEvent::Failed(error) => panic!("{error}"),
+                QuickSearchEvent::Failed(error) | QuickSearchEvent::ContentSkipped { detail: error, .. } => panic!("{error}"),
             }
         }
         assert_eq!(skipped.len(), extensions.len());
@@ -90,7 +90,7 @@
                     break;
                 }
                 QuickSearchEvent::Batch(batch) => assert!(batch.is_empty()),
-                QuickSearchEvent::Failed(error) => panic!("{error}"),
+                QuickSearchEvent::Failed(error) | QuickSearchEvent::ContentSkipped { detail: error, .. } => panic!("{error}"),
             }
         }
         assert_eq!(
