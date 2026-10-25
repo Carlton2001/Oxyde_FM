@@ -24,6 +24,7 @@ Oxyde utilise Rust, GPUI et Tokio. Choisir une référence selon le travail à f
 | Réexaminer les dépendances conservées | [Dépendances](security/dependencies.md) |
 | Préparer un essai manuel | [Validation visuelle](guides/visual-checks.md) |
 | Retrouver un audit ou une preuve datée | [Bilans et historique](reports/README.md) |
+| Consulter l’audit du code du 25 octobre 2026 | [Constats, validations et limites](reports/2026-10-25-code-audit.md) |
 
 Les [consignes des agents](../AGENTS.md) restent à la racine. Les chemins de code entre accents graves partent de la racine du dépôt.
 

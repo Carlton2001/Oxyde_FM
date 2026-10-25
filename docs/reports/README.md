@@ -4,6 +4,7 @@ Les références actives décrivent les contrats ; les bilans ci-dessous décriv
 
 | Bilan | Lecture utile |
 | --- | --- |
+| [Audit du code, 25 octobre](2026-10-25-code-audit.md) | Dix constats priorisés, 1 405 tests Windows réussis, sondes de reproduction et audit RustSec actualisé |
 | [Tailles des dossiers et Turbo, 25 octobre](2026-10-25-folder-sizes-turbo.md) | Budgets de parcours, publication par lots et mesures SSD sur fixtures privées |
 | [Cache de distribution, 23 octobre](2026-10-23-distribution-cache.md) | Mesures v2.0.1, isolation de Rustup et migration des uploads vers Node.js 24 |
 | [Audit mémoire du Viewer, 22 octobre](2026-10-22-viewer-memory-audit.md) | Relecture des changements non commités, évictions PDF, annulation des demandes et couverture des diagnostics |
