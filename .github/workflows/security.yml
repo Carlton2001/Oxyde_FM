@@ -3,9 +3,9 @@ name: Windows dependency security
 on:
   push:
     branches: [main]
-    paths: [Cargo.toml, Cargo.lock, scripts/audit-security.ps1, scripts/install-cargo-audit.ps1, scripts/tests/install-cargo-audit.tests.ps1, .github/workflows/security.yml]
+    paths: [Cargo.toml, Cargo.lock, scripts/audit-security.ps1, scripts/install-cargo-audit.ps1, scripts/tests/install-cargo-audit.tests.ps1, scripts/detect-release-commit.ps1, .github/workflows/security.yml, .github/workflows/_audit.yml, .github/workflows/_release-commit.yml]
   pull_request:
-    paths: [Cargo.toml, Cargo.lock, scripts/audit-security.ps1, scripts/install-cargo-audit.ps1, scripts/tests/install-cargo-audit.tests.ps1, .github/workflows/security.yml]
+    paths: [Cargo.toml, Cargo.lock, scripts/audit-security.ps1, scripts/install-cargo-audit.ps1, scripts/tests/install-cargo-audit.tests.ps1, .github/workflows/security.yml, .github/workflows/_audit.yml]
   schedule:
     - cron: '17 7 * * 1'
   workflow_dispatch:
@@ -13,21 +13,16 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  release-commit:
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/_release-commit.yml
   rustsec:
-    runs-on: windows-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Audit locked Windows dependencies
-        shell: pwsh
-        run: ./scripts/audit-security.ps1
-      - name: Preserve security audit report
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: security-audit-windows
-          path: target/security-audit-windows.json
-          if-no-files-found: warn
+    needs: release-commit
+    # The release tag audits a version bump commit; main does not repeat it.
+    if: ${{ !failure() && !cancelled() && needs.release-commit.outputs.release != 'true' }}
+    uses: ./.github/workflows/_audit.yml

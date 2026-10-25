@@ -1,0 +1,48 @@
+name: Windows distribution (reusable)
+
+# Build the Setup and the portable ZIP once; a release run signs these same files.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up cached distribution toolchain
+        uses: ./.github/actions/setup-distribution
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ISCC.exe -ErrorAction SilentlyContinue) -and
+              -not (Test-Path "${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe")) {
+            choco install innosetup --no-progress -y
+          }
+      - name: Test portable storage
+        # Match the distribution profile and target to reuse compiled dependencies.
+        run: cargo test --locked --release --target x86_64-pc-windows-msvc --lib app_paths::tests -- --test-threads=1
+      - name: Build setup and portable ZIP
+        shell: pwsh
+        run: ./scripts/build-distribution.ps1
+      - name: Upload portable distribution
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Oxyde_FM-portable-x64
+          path: |
+            target/distribution/output/*-portable.zip
+            target/distribution/output/*-portable.zip.sha256
+          if-no-files-found: error
+          compression-level: 0
+      - name: Upload unsigned setup
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Oxyde_FM-setup-x64
+          path: target/distribution/output/*_x64-setup.exe
+          if-no-files-found: error
+          compression-level: 0

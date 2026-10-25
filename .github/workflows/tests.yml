@@ -11,7 +11,10 @@ on:
       - 'assets/**'
       - '.cargo/**'
       - scripts/test-windows.ps1
+      - scripts/detect-release-commit.ps1
       - .github/workflows/tests.yml
+      - .github/workflows/_tests.yml
+      - .github/workflows/_release-commit.yml
   pull_request:
     paths:
       - '**.rs'
@@ -22,27 +25,22 @@ on:
       - '.cargo/**'
       - scripts/test-windows.ps1
       - .github/workflows/tests.yml
+      - .github/workflows/_tests.yml
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  release-commit:
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/_release-commit.yml
   native:
-    runs-on: windows-latest
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Install Rust stable
-        run: rustup update stable --no-self-update
-      - name: Restore native Rust dependencies
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          shared-key: windows-native-dev-v1
-          cache-bin: false
-          save-if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
-      - name: Compile all targets, build workers and run native tests
-        shell: pwsh
-        run: ./scripts/test-windows.ps1
+    needs: release-commit
+    # The release tag tests a version bump commit; main does not repeat it.
+    if: ${{ !failure() && !cancelled() && needs.release-commit.outputs.release != 'true' }}
+    uses: ./.github/workflows/_tests.yml

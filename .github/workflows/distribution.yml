@@ -1,9 +1,8 @@
 name: Windows portable distribution
 
 on:
-  # Build the Setup and portable ZIP once per relevant main commit. A release tag reuses
-  # these files for its exact commit (release.yml) instead of compiling them again.
-  # Ordinary source changes do not need to rebuild cached third-party crates.
+  # Release tags may restore caches saved on main, never those of a previous tag.
+  # Build on main only when the cached dependencies or toolchain can change.
   push:
     branches: [main]
     paths:
@@ -12,63 +11,23 @@ on:
       - '.cargo/**'
       - '.github/actions/setup-distribution/**'
       - .github/workflows/distribution.yml
-      - .github/workflows/release.yml
-      - scripts/build-distribution.ps1
-      - scripts/release-build-info.ps1
-      - scripts/wait-release-checks.ps1
-      - 'scripts/tests/release-*.tests.ps1'
-      - scripts/install-cargo-about.ps1
-      - 'scripts/tests/install-cargo-about.tests.ps1'
-      - scripts/tests/setup-distribution.tests.ps1
-      - scripts/update-third-party-licenses.ps1
-      - scripts/third-party-notices.hbs
-      - about.toml
+      - .github/workflows/_distribution.yml
+  # Run by hand for test files or to check packaging scripts before a release.
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  release-commit:
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/_release-commit.yml
   portable:
-    runs-on: windows-latest
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Set up cached distribution toolchain
-        uses: ./.github/actions/setup-distribution
-      - name: Test portable storage
-        run: cargo test --locked --release --target x86_64-pc-windows-msvc --lib app_paths::tests -- --test-threads=1
-      - name: Install Inno Setup
-        shell: pwsh
-        run: |
-          if (-not (Get-Command ISCC.exe -ErrorAction SilentlyContinue) -and
-              -not (Test-Path "${env:ProgramFiles(x86)}/Inno Setup 6/ISCC.exe")) {
-            choco install innosetup --no-progress -y
-          }
-      - name: Build setup and portable ZIP
-        shell: pwsh
-        run: |
-          ./scripts/build-distribution.ps1
-          $metadata = cargo metadata --offline --locked --no-deps --format-version 1 | ConvertFrom-Json
-          $version = ($metadata.packages | Where-Object name -eq 'oxyde').version
-          ./scripts/release-build-info.ps1 -Write -Directory target/distribution/output -Commit $env:GITHUB_SHA -Version $version -RunId $env:GITHUB_RUN_ID
-      - name: Upload portable distribution
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: Oxyde_FM-portable-x64
-          path: |
-            target/distribution/output/*-portable.zip
-            target/distribution/output/*-portable.zip.sha256
-          if-no-files-found: error
-          compression-level: 0
-      - name: Upload setup for the release
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: Oxyde_FM-setup-x64
-          path: |
-            target/distribution/output/*_x64-setup.exe
-            target/distribution/output/build-info.json
-          if-no-files-found: error
-          compression-level: 0
+    needs: release-commit
+    # A version bump keeps the dependency cache key; its tag builds the release files.
+    if: ${{ !failure() && !cancelled() && needs.release-commit.outputs.release != 'true' }}
+    uses: ./.github/workflows/_distribution.yml

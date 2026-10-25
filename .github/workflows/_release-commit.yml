@@ -1,0 +1,28 @@
+name: Detect release commit
+
+# A commit created by scripts/bump-version.ps1 is validated by its v<x.y.z> tag run.
+on:
+  workflow_call:
+    outputs:
+      release:
+        description: Whether the pushed main commit only starts a release.
+        value: ${{ jobs.detect.outputs.release }}
+
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      release: ${{ steps.detect.outputs.release }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Compare package version with the parent commit
+        id: detect
+        shell: pwsh
+        run: ./scripts/detect-release-commit.ps1 | Out-Null
