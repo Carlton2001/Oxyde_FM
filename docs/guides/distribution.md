@@ -140,16 +140,18 @@ publiée doit être supérieure à 1.2.1.
 
 ## Automatisation et validation
 
-Le workflow `.github/workflows/distribution.yml` compile, teste les chemins portables
-et publie le ZIP et son SHA-256 comme artefact GitHub Actions, sans publier de release.
-Il peut être lancé manuellement. Il se lance aussi sur `main` après modification de
+Le workflow `.github/workflows/distribution.yml` compile, teste les chemins portables,
+construit le Setup et le ZIP, puis publie deux artefacts GitHub Actions sans publier de release :
+`Oxyde_FM-portable-x64` (ZIP et SHA-256) et `Oxyde_FM-setup-x64` (Setup non signé et
+`build-info.json`). Ce fichier, écrit par `scripts/release-build-info.ps1`, enregistre le
+commit exact, la version et le SHA-256 du Setup, du ZIP et du fichier de contrôle du ZIP.
+Le workflow peut être lancé manuellement. Il se lance aussi sur `main` après modification de
 `Cargo.toml`, `Cargo.lock`, `.cargo/`, des scripts et réglages de licences, ou des workflows
-et de l'action de distribution, pour préparer le cache des dépendances utilisé par les
-prochaines releases.
+et de l'action de distribution ; il prépare aussi le cache des dépendances.
 
-Les deux workflows de distribution utilisent l'action locale
+Le workflow de distribution utilise l'action locale
 `.github/actions/setup-distribution/action.yml` : Rust **1.98.1** (version fixée pour
-ces workflows uniquement), cache partagé des dépendances compilées et de `cargo-about`
+ce workflow uniquement), cache partagé des dépendances compilées et de `cargo-about`
 **0.9.2**. Mettre à jour la toolchain dans cette action après validation d'une nouvelle
 version de Rust. L'action utilise un `RUSTUP_HOME` dédié sous `RUNNER_TOOL_CACHE`,
 dans un chemin stable contenant la version et la cible MSVC x64. Il contient uniquement
@@ -165,25 +167,37 @@ utilisent `--release --target x86_64-pc-windows-msvc`,
 comme les exécutables livrés, pour partager la compilation des dépendances. La suite
 native de `tests.yml` conserve son profil et ses vérifications propres.
 
-Le cache est enregistré uniquement sur la branche par défaut : GitHub permet aux tags
-de le restaurer, mais ne partage pas les caches entre deux tags distincts. La première
-exécution sur `main` prépare ce cache ; un changement de toolchain, de dépendances ou
-une éviction peut imposer une reconstruction. Une release déclenchée avant la fin de
-cette préparation peut encore travailler sans cache. Pour le remplir ou le rafraîchir
-manuellement, lancer **Windows portable distribution** sur `main` avant le tag.
+Le cache est enregistré uniquement sur la branche par défaut. La release ne compile plus
+et ne restaure aucun cache : les caches d'un tag ne sont pas partagés avec le tag suivant,
+ce qui faisait reconstruire les dépendances à chaque version. Un changement de toolchain,
+de dépendances ou une éviction peut imposer une reconstruction sur `main`.
 Le cache ne remplace aucun test ni la régénération des licences.
-Après adoption de l'environnement Rustup isolé, une nouvelle préparation sur `main`
-est nécessaire avant le tag : les anciennes clés incluent les toolchains du runner.
 La compilation de distribution sélectionne uniquement l'application et ses trois workers ;
 les outils internes comme `copy_benchmark` ne sont pas construits pour le paquet.
 
-Le push d'un tag `v<x.y.z>` lance `.github/workflows/release.yml`. Il vérifie que le tag
-correspond à `Cargo.toml`, construit le Setup et le ZIP, signe le Setup avec la clé
-minisign de l'updater (secrets `TAURI_SIGNING_PRIVATE_KEY` et `_PASSWORD`, partagés avec
-l'édition Tauri), puis génère `latest.json` avec `scripts/write-update-manifest.ps1`.
-Les trois clés Windows du manifeste pointent vers le Setup Inno. Le workflow crée une
-release brouillon ; la publier à la main la rend visible des updaters, qui lisent
-`releases/latest/download/latest.json`.
+Le push d'un tag `v<x.y.z>` lance `.github/workflows/release.yml`, sur un runner Linux. Il vérifie
+que le tag correspond à `Cargo.toml`, puis `scripts/wait-release-checks.ps1` attend les exécutions
+de `tests.yml`, `security.yml` et `distribution.yml` lancées sur `main` (push ou lancement manuel)
+pour le **commit exact du tag**. Le commit de version modifie `Cargo.toml` et `Cargo.lock` et
+déclenche donc ces trois workflows ; ils continuent de tourner en parallèle et la release ne les
+relance pas. Pour chaque workflow, la dernière exécution de ce commit fait foi : un échec, une
+annulation ou un délai dépassé (120 min) arrête la release avant signature. Une exécution d'un
+autre commit, d'une autre branche ou d'une pull request n'est jamais retenue ; si aucune n'apparaît
+dans les 5 minutes, la release échoue et indique de relancer les workflows sur `main`.
+
+La release télécharge ensuite les artefacts de l'exécution de distribution retenue, vérifie avec
+`build-info.json` commit, version et empreintes, signe le Setup avec la clé minisign de l'updater
+(secrets `TAURI_SIGNING_PRIVATE_KEY` et `_PASSWORD`, partagés avec l'édition Tauri), puis génère
+`latest.json` avec `scripts/write-update-manifest.ps1`. Les trois clés Windows du manifeste pointent
+vers le Setup Inno. Le workflow crée une release brouillon ; la publier à la main la rend visible
+des updaters, qui lisent `releases/latest/download/latest.json`. Le brouillon apparaît donc après
+la fin des tests natifs, et non plus avant : la publication manuelle les attendait déjà.
+
+Pour vérifier localement ces règles de réutilisation, avec l'API GitHub simulée :
+
+```powershell
+./scripts/tests/release-reuse.tests.ps1
+```
 
 À chaque exécution de `build-distribution.ps1`, le script régénère les licences des crates
 depuis `Cargo.lock`, avant la compilation et l'assemblage des paquets, même avec `-SkipBuild`.
@@ -198,12 +212,13 @@ Pour mesurer le cache, terminer une première exécution **Windows portable dist
 sur `main`, puis en lancer une deuxième sur le même commit. Relever les clés et résultats
 de restauration, le volume et la durée des transferts/restauration/enregistrement du cache,
 l'installation de `cargo-about`, la préparation/construction des tests (ligne Cargo `Finished`),
-leur exécution (`test result`), les licences, la compilation Rust et le ZIP. Ce workflow
-ne mesure ni Inno Setup ni la signature. Ne pas créer de tag ou de release pour mesurer.
+leur exécution (`test result`), les licences, la compilation Rust, Inno Setup et le ZIP.
+Ce workflow ne mesure pas la signature. Ne pas créer de tag ou de release pour mesurer.
 Les [mesures de référence](../reports/2026-10-22-windows-distribution.md) concernent
 la release v2.0.0. Les [mesures v2.0.1 et la correction de clé](../reports/2026-10-23-distribution-cache.md)
 montrent le gain hébergé et le cache manqué par la release ; la correction d'isolation
-doit encore être vérifiée sur GitHub.
+doit encore être vérifiée sur GitHub. La [réutilisation par la release](../reports/2026-10-25-release-reuse.md)
+supprime la seconde construction.
 La [comparaison locale des parcours Rust](../reports/2026-10-22-distribution-local-tests.md)
 utilise des sources figées et des dossiers de compilation isolés, avec caches vide,
 intégral et limité aux dépendances. Elle exclut les transferts du cache GitHub.

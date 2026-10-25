@@ -4,7 +4,7 @@
 
 ## Suivi des corrections après audit
 
-**A01, A02, A03, A05, A06, A07 et A10 sont corrigés. A04 est classé comme limite acceptée par décision produit ; A08 est différé jusqu’à l’implémentation effective de Linux ; A09 reste ouvert.** Les constats et chiffres des sections d’audit décrivent la révision initiale. Le suivi suivant décrit les corrections ultérieures.
+**A01, A02, A03, A05, A06, A07, A09 et A10 sont corrigés. A04 est classé comme limite acceptée par décision produit ; A08 est différé jusqu’à l’implémentation effective de Linux.** La correction A09 reste à confirmer par une release hébergée. Les constats et chiffres des sections d’audit décrivent la révision initiale. Le suivi suivant décrit les corrections ultérieures.
 
 | ID | Correction | Validation ciblée |
 | --- | --- | --- |
@@ -13,6 +13,7 @@
 | A07 | Nettoyage sur le pool bloquant, référence indépendante du hook GPUI et attente finale avant arrêt de Tokio | Check toutes cibles sans avertissement ; 14 tests d’historique réussis, 1 ignoré ; test de nettoyage bloqué conservé après abandon du hook réussi |
 | A06, A10 | Liste GPUI virtualisée des groupes/fichiers, plages et tailles préparées en arrière-plan ; tailles mixtes affichées en plage ; minimum de tri déterministe | Check toutes cibles sans avertissement ; 3 tests de présentation dont 100 000 fichiers, 15 tests i18n et 6 tests du moteur de doublons réussis ; pas d’essai visuel général |
 | A01, A03 | Extraction Office dédiée au contenu recherché, confinée dans le worker LPAC Windows avec protocole distinct ; limites sur source, XML, texte et durée ; toutes les diapositives et feuilles, chaînes partagées/inline et entités décodées ; documents non vérifiés signalés dans les cinq langues | 12 tests unitaires Office et 3 intégrations avec le vrai worker réussis ; DOCX compressé contenant 32 Mio de XML refusé explicitement ; surcoût d’allocations Rust du parent mesuré à 42 251 octets lors du test ciblé |
+| A09 | La release attend sur le commit exact du tag la réussite des tests natifs, de l’audit et de la distribution lancés sur `main`, puis réutilise les fichiers vérifiés par commit, version et SHA-256 avant signature ([rapport](2026-10-25-release-reuse.md)) | 12 scénarios simulés, dont audit en échec, tests annulés, autre commit/branche/PR, délai, fichiers modifiés ou d’une autre version ; `actionlint` sans erreur ; pas d’exécution hébergée |
 
 **Régression finale après les sept corrections :** `scripts/test-windows.ps1 -Offline` réussit : **1 422 tests exécutés, 0 échec, 50 ignorés**, soit 908 tests de bibliothèque, 447 tests applicatifs et 67 tests d’intégration. Le test enfant d’héritage n’est pas compté deux fois. Le script a reconstruit tous les binaires et exécuté `cargo check --offline --locked --all-targets` sans avertissement du projet. Journal local : [`native-tests-fixed.log`](../../target/code-audit-2026-10-25/native-tests-fixed.log). L’audit RustSec actualisé après A02 réussit avec **0 vulnérabilité publiée** ; les avis de maintenance et la réserve Tokio restent documentés. Aucune nouvelle validation visuelle générale ni exécution Linux n’a été réalisée.
 
