@@ -312,7 +312,10 @@ fn zip_listing_and_workspace_reject_windows_paths_and_streams() {
             "listed {name}"
         );
         assert!(
-            prepare_archive_file_for_open(&archive.join("readme.txt")).is_err(),
+            with_archive_cache_base_for_tests(dir.path(), || {
+                prepare_archive_file_for_open(&archive.join("readme.txt"))
+            })
+            .is_err(),
             "opened {name}"
         );
     }
@@ -348,7 +351,10 @@ fn archive_outputs_and_external_copies_preserve_internet_provenance() {
                 .as_deref(),
             Some(data.as_slice())
         );
-        let cached = prepare_archive_file_for_open(&archive.join("readme.txt")).unwrap();
+        let cached = with_archive_cache_base_for_tests(dir.path(), || {
+            prepare_archive_file_for_open(&archive.join("readme.txt"))
+        })
+        .unwrap();
         assert_eq!(
             platform().read_file_provenance(&cached).unwrap().as_deref(),
             Some(data.as_slice())

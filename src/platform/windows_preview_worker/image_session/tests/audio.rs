@@ -113,11 +113,20 @@ fn persistent_audio_session_reuses_pid_for_grid_hover_and_missing_covers() {
     super::super::run_audio_metadata_in(&executable, &directory.path().join("first.wav")).unwrap();
     let legacy_time = legacy.elapsed();
     eprintln!("Audio covers: cold {cold_time:?}; 8 warm thumbnails {warm_time:?}; legacy single-file JSON {legacy_time:?}; worker private {:.1} MiB; peak working set {:.1} MiB", counters.PrivateUsage as f64 / 1048576.0, counters.PeakWorkingSetSize as f64 / 1048576.0);
+    // The persistent worker keeps duplicated source handles; reap it before
+    // deleting the files, or Windows reports a sharing violation.
+    drop(session);
     drop(first);
     drop(second);
     drop(absent);
     drop(fresh);
+    // The legacy path-based worker opens `first.wav` itself; under a loaded
+    // test run its process can release that handle ~0.5 s after replying.
     for name in ["first.wav", "second.wav", "absent.wav"] {
-        std::fs::remove_file(directory.path().join(name)).unwrap();
+        let started = Instant::now();
+        while let Err(error) = std::fs::remove_file(directory.path().join(name)) {
+            assert!(started.elapsed() < Duration::from_secs(10), "{name}: {error}");
+            std::thread::sleep(Duration::from_millis(20));
+        }
     }
 }
