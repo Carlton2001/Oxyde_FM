@@ -45,7 +45,7 @@ Chaque résultat vérifie l’identité de l’onglet, le chemin, la génératio
 | Recherche rapide | Noms récursifs, insensible à la casse, motifs `*`/`?`, départ après 350 ms ou Entrée ; ni contenu ni archives |
 | Recherche avancée | Critères conservés dans sa fenêtre ; lancement dans le panneau d’origine, sans fermer le formulaire |
 | Recherche dans les archives | Noms/métadonnées via worker dédié ; critères non pris en charge signalés, sans publier des correspondances trompeuses |
-| Doublons | Nom, taille et contenu combinables ; comparer le contenu impose une même taille ; racines recouvrantes dédupliquées |
+| Doublons | Nom, taille et contenu combinables ; comparer le contenu impose une même taille ; racines recouvrantes dédupliquées ; dossiers `$Recycle.Bin` exclus sans distinction de casse, y compris les racines situées dans une corbeille |
 
 Les résultats arrivent par lots bornés ; Arrêter conserve ceux déjà reçus. La vue virtuelle ne propose ni création de dossier ni collage. Ouvrir l’emplacement sélectionne et révèle le fichier dans son dossier.
 

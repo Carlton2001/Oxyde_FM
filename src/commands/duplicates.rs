@@ -55,6 +55,15 @@ pub struct DuplicateSearchOptions {
 
 const PARTIAL_HASH_SIZE: usize = 4096;
 
+fn is_recycle_bin_name(name: &std::ffi::OsStr) -> bool {
+    name.to_string_lossy().eq_ignore_ascii_case("$Recycle.Bin")
+}
+
+fn is_inside_recycle_bin(path: &Path) -> bool {
+    path.components()
+        .any(|component| is_recycle_bin_name(component.as_os_str()))
+}
+
 fn calculate_hash<P: AsRef<Path>>(
     path: P,
     limit: Option<usize>,
@@ -127,6 +136,9 @@ pub async fn find_duplicates(
             };
             let root = std::fs::canonicalize(&path)
                 .map_err(|e| CommandError::IoError(format!("{path}: {e}")))?;
+            if is_inside_recycle_bin(&root) {
+                continue;
+            }
             // Keep ordinary volume paths for hardware detection and navigation.
             let text = root.to_string_lossy();
             let root = if let Some(unc) = text.strip_prefix(r"\\?\UNC\") {
@@ -177,6 +189,14 @@ pub async fn find_duplicates(
 
             for entry in WalkDir::new(root_path)
                 .parallelism(jwalk::Parallelism::RayonNewPool(num_threads))
+                .process_read_dir(|_, _, _, children| {
+                    // Prune the directory before jwalk schedules its contents.
+                    children.retain(|child| {
+                        !child.as_ref().is_ok_and(|entry| {
+                            entry.file_type().is_dir() && is_recycle_bin_name(entry.file_name())
+                        })
+                    });
+                })
                 .into_iter()
                 .filter_map(|e| e.ok())
             {
@@ -485,6 +505,10 @@ pub async fn find_duplicates(
 pub fn cancel_find_duplicates(state: &DuplicateSearchState) {
     state.0.store(true, Ordering::Relaxed);
 }
+
+#[cfg(test)]
+#[path = "duplicates/tests/exclusions.rs"]
+mod exclusion_tests;
 
 #[cfg(test)]
 #[path = "duplicates/tests/sizes.rs"]
