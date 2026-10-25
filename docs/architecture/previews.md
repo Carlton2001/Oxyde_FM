@@ -10,6 +10,11 @@ le glisser-déposer, même lorsqu’aucune cible de dépôt n’est acceptée.
 
 `components/tooltip/hover.rs` partage une session par fenêtre, panneau et onglet/dossier. Délai initial : 750 ms ; tolérance entre éléments : 300 ms. Sortie, clic, défilement, navigation ou menu ferment la session. Timers annulables et révisions écartent les résultats obsolètes.
 
+Sans élément survolé, la bulle se masque immédiatement et libère son aperçu.
+La tolérance de 300 ms conserve seulement la session : un nouvel élément de la
+même région évite le délai initial. Un passage direct entre deux éléments garde
+la bulle affichée, sans fermeture intermédiaire.
+
 Au premier survol, la vue et son aperçu sont préparés pendant les 750 ms, sans affichage anticipé. La tâche annulable possède cette vue jusqu’à publication ; quitter l’élément la libère. Les 750 ms sont un minimum : si l’aperçu est encore en cours, la publication attend son contenu (première frame comprise pour une vidéo) ou son erreur définitive. Texte et aperçu apparaissent ensemble, sans étape « Chargement de l’aperçu… ». Ce délai supplémentaire ne concerne pas les remplacements dans une session déjà visible.
 
 Un remplacement avec nouvelle génération affiche immédiatement les nouvelles métadonnées et l’ancien aperçu en niveaux de gris à 15 % d’opacité, lorsqu’une image précédente est disponible. L’opacité et les niveaux de gris sont appliqués d’un coup au rendu GPU, sans animation, conversion CPU ni copie des pixels. Les dimensions de cet aperçu temporaire sont conservées pendant l’attente. L’aperçu définitif le remplace après 150 ms de survol stable ; un résultat prêt dans le cache est publié immédiatement après validation de la source. Si des pixels sont déjà présents en RAM, la bulle précédente reste nette pendant cette validation asynchrone afin d’éviter un flash d’atténuation. Cette indication de présence ne lit pas le fichier, ne bloque pas sur le verrou du cache et ne permet jamais de publier des pixels non validés. Si aucune image précédente n’est disponible, la bulle précédente reste visible jusqu’au remplacement. Les vidéos et infobulles sans aperçu changent immédiatement. Une transition atténuée attend le contenu ou l’erreur définitive, sans message de chargement superposé. Hors transition atténuée, « Chargement de l’aperçu… » n’apparaît qu’après une seconde.

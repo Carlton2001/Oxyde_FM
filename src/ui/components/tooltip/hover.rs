@@ -23,7 +23,8 @@ type Builder = Rc<dyn Fn(&mut Window, &mut App) -> AnyView>;
 #[derive(Default)]
 struct Timing {
     hovered: Option<String>,
-    visible: bool,
+    // A displayed session stays warm through a gap even while its view is hidden.
+    warm: bool,
     revision: u64,
 }
 
@@ -31,12 +32,12 @@ impl Timing {
     fn reset(&mut self) {
         self.revision += 1;
         self.hovered = None;
-        self.visible = false;
+        self.warm = false;
     }
     fn enter(&mut self, key: String) -> bool {
         self.revision += 1;
         self.hovered = Some(key);
-        self.visible
+        self.warm
     }
     fn leave(&mut self, key: &str) -> bool {
         if self.hovered.as_deref() != Some(key) {
@@ -50,14 +51,17 @@ impl Timing {
         if self.revision != revision || self.hovered.as_deref() != Some(key) {
             return false;
         }
-        self.visible = true;
+        self.warm = true;
         true
     }
+    fn in_gap(&self, revision: u64) -> bool {
+        self.revision == revision && self.hovered.is_none()
+    }
     fn expire(&mut self, revision: u64) -> bool {
-        if self.revision != revision || self.hovered.is_some() {
+        if !self.in_gap(revision) {
             return false;
         }
-        self.visible = false;
+        self.warm = false;
         true
     }
 }
@@ -112,6 +116,36 @@ pub(crate) fn dismiss(window: &mut Window, cx: &mut App) {
 
 fn clear(window: &mut Window, cx: &mut App) {
     dismiss(window, cx);
+}
+
+fn hide_gap(revision: u64, window: &mut Window, cx: &mut App) {
+    let id = window.window_handle().window_id();
+    let hidden = cx
+        .default_global::<Sessions>()
+        .windows
+        .get_mut(&id)
+        .filter(|session| session.timing.in_gap(revision))
+        .and_then(|session| session.tooltip.take())
+        .is_some();
+    if hidden {
+        #[cfg(target_os = "windows")]
+        native_window::hide(id, cx);
+        window.refresh();
+    }
+}
+
+fn expire_bridge(revision: u64, window: &mut Window, cx: &mut App) {
+    let id = window.window_handle().window_id();
+    let expired = cx
+        .default_global::<Sessions>()
+        .windows
+        .get_mut(&id)
+        .is_some_and(|session| session.timing.expire(revision));
+    if expired {
+        // The native surface outlives the session: hide it and release its
+        // retained frames too, even if no further pointer event arrives.
+        clear(window, cx);
+    }
 }
 
 fn publish_tooltip(view: AnyView, window: &mut Window, cx: &mut App) {
@@ -215,23 +249,18 @@ fn hover(
             return;
         }
         session.task = None;
-        if !session.timing.visible {
+        if !session.timing.warm {
             session.clear();
             return;
         }
         let revision = session.timing.revision;
+        // Let all hover listeners handle this movement first: a direct switch
+        // to another item must not briefly hide the shared surface.
+        window.defer(cx, move |window, cx| hide_gap(revision, window, cx));
         let task = window.spawn(cx, async move |cx| {
             cx.background_executor().timer(BRIDGE_DELAY).await;
             let _ = cx.update(|window, cx| {
-                let session = cx
-                    .default_global::<Sessions>()
-                    .windows
-                    .get_mut(&id)
-                    .unwrap();
-                if session.timing.expire(revision) {
-                    session.clear();
-                    window.refresh();
-                }
+                expire_bridge(revision, window, cx);
             });
         });
         cx.default_global::<Sessions>()
@@ -307,8 +336,8 @@ impl SharedTooltipExt for Stateful<Div> {
     }
 }
 
-/// The container keeps the previous tooltip through short gaps, and releases it
-/// immediately outside the list, on navigation, scrolling or a context menu.
+/// Gaps hide the tooltip immediately while keeping the session warm briefly.
+/// Leaving the list, navigation, scrolling or a context menu ends the session.
 pub(crate) fn container(
     owner: Entity<OxydeApp>,
     pane: String,

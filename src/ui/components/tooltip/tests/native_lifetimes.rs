@@ -16,6 +16,29 @@ impl Render for Parent {
 #[::core::prelude::v1::test]
 #[ignore = "Requires a native Windows GPUI renderer; run explicitly in isolation"]
 fn native_hidden_tooltip_releases_preview_pixels_and_video_owner() {
+    check_hidden_tooltip_releases_preview(HideReason::InvalidOwner);
+}
+
+#[::core::prelude::v1::test]
+#[ignore = "Requires a native Windows GPUI renderer; run explicitly in isolation"]
+fn native_expired_bridge_hides_tooltip_without_another_hover() {
+    check_hidden_tooltip_releases_preview(HideReason::BridgeExpired);
+}
+
+#[::core::prelude::v1::test]
+#[ignore = "Requires a native Windows GPUI renderer; run explicitly in isolation"]
+fn native_empty_gap_hides_tooltip_and_preserves_grace_for_next_item() {
+    check_hidden_tooltip_releases_preview(HideReason::EmptyGap);
+}
+
+#[derive(Clone, Copy)]
+enum HideReason {
+    InvalidOwner,
+    BridgeExpired,
+    EmptyGap,
+}
+
+fn check_hidden_tooltip_releases_preview(reason: HideReason) {
     let _ = env_logger::Builder::new()
         .filter_module("gpui_windows::directx_atlas", log::LevelFilter::Debug)
         .try_init();
@@ -99,11 +122,16 @@ fn native_hidden_tooltip_releases_preview_pixels_and_video_owner() {
         cx.default_global::<NativeWindows>()
             .windows
             .insert(id, (handle, idle));
-        cx.default_global::<Sessions>()
+        let session = cx
+            .default_global::<Sessions>()
             .windows
             .entry(id)
-            .or_default()
-            .tooltip = Some(session_view);
+            .or_default();
+        session.tooltip = Some(session_view);
+        session.timing.enter("memory probe".into());
+        assert!(session.timing.show(session.timing.revision, "memory probe"));
+        assert!(session.timing.leave("memory probe"));
+        let expiry = session.timing.revision;
         cx.defer(move |cx| {
             AnyWindowHandle::from(handle)
                 .update(cx, |_, window, cx| {
@@ -114,9 +142,52 @@ fn native_hidden_tooltip_releases_preview_pixels_and_video_owner() {
                 .unwrap();
             AnyWindowHandle::from(parent)
                 .update(cx, |_, window, cx| {
-                    // Exercise the timer's actual invalid-session branch, without
-                    // any pointer-exit event or test-side session removal.
-                    dismiss_invalid_session(window, cx);
+                    // Exercise the actual hide/expiry callback, with
+                    // no further hover event or test-side session removal.
+                    match reason {
+                        HideReason::BridgeExpired => {
+                            super::super::expire_bridge(expiry - 1, window, cx);
+                            assert!(handle.read(cx).unwrap().view.is_some());
+                            assert!(cx.global::<Sessions>().windows[&id].timing.warm);
+                            super::super::expire_bridge(expiry, window, cx);
+                        }
+                        HideReason::EmptyGap => {
+                            // Another hover in the same event invalidates the
+                            // deferred hide; a genuine empty gap hides at once.
+                            let session = cx
+                                .default_global::<Sessions>()
+                                .windows
+                                .get_mut(&id)
+                                .unwrap();
+                            assert!(session.timing.enter("next".into()));
+                            super::super::hide_gap(expiry, window, cx);
+                            assert!(handle.read(cx).unwrap().view.is_some());
+                            let session = cx
+                                .default_global::<Sessions>()
+                                .windows
+                                .get_mut(&id)
+                                .unwrap();
+                            assert!(session.timing.leave("next"));
+                            let revision = session.timing.revision;
+                            super::super::hide_gap(revision, window, cx);
+                            let session = cx
+                                .default_global::<Sessions>()
+                                .windows
+                                .get_mut(&id)
+                                .unwrap();
+                            assert!(session.timing.warm);
+                            assert!(session.timing.enter("after gap".into()));
+                            assert!(!session.timing.expire(revision));
+                            assert!(session.timing.leave("after gap"));
+                            assert!(session.timing.expire(session.timing.revision));
+                            assert!(!session.timing.enter("after expiry".into()));
+                        }
+                        HideReason::InvalidOwner => dismiss_invalid_session(window, cx),
+                    }
+                    let session = &cx.global::<Sessions>().windows[&id];
+                    assert!(session.tooltip.is_none());
+                    assert!(!session.timing.warm);
+                    assert!(handle.read(cx).unwrap().view.is_none());
                 })
                 .unwrap();
             // Clearing frames releases the entity, whose release callback then

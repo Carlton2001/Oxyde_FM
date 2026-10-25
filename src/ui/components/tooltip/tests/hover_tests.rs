@@ -11,16 +11,18 @@ fn first_hover_waits_then_direct_switch_is_immediate() {
 }
 
 #[test]
-fn bridge_keeps_visibility_and_new_hover_invalidates_expiry() {
+fn bridge_keeps_session_warm_and_new_hover_invalidates_expiry() {
     let mut timing = Timing::default();
     timing.enter("a".into());
     timing.show(timing.revision, "a");
     assert!(timing.leave("a"));
     let expiry = timing.revision;
-    assert!(timing.visible);
+    assert!(timing.warm);
+    assert!(timing.in_gap(expiry));
     assert!(timing.enter("b".into()));
+    assert!(!timing.in_gap(expiry));
     assert!(!timing.expire(expiry));
-    assert!(timing.visible);
+    assert!(timing.warm);
     assert_eq!(BRIDGE_DELAY, Duration::from_millis(300));
 }
 
