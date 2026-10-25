@@ -4,7 +4,7 @@
 
 ## Suivi des corrections après audit
 
-**A01, A02, A03, A05, A06, A07 et A10 sont corrigés. A04 est classé comme limite acceptée par décision produit ; A08 et A09 restent ouverts.** Les constats et chiffres des sections d’audit décrivent la révision initiale. Le suivi suivant décrit les corrections ultérieures.
+**A01, A02, A03, A05, A06, A07 et A10 sont corrigés. A04 est classé comme limite acceptée par décision produit ; A08 est différé jusqu’à l’implémentation effective de Linux ; A09 reste ouvert.** Les constats et chiffres des sections d’audit décrivent la révision initiale. Le suivi suivant décrit les corrections ultérieures.
 
 | ID | Correction | Validation ciblée |
 | --- | --- | --- |
@@ -154,6 +154,8 @@ Le callback synchrone `on_app_quit` appelle `this.history.clear()` **avant** de 
 
 ### A08 — Linux : les échappements des points de montage ne sont pas décodés
 
+**Statut après revue : différé.** L’implémentation effective de Linux comme plateforme n’a pas encore commencé. Ce constat concerne le code Linux et ne bloque pas le périmètre Windows actuel. Conserver sa reproduction comme point de contrôle lors de l’implémentation Linux, avant d’annoncer la prise en charge de cette plateforme. Aucune correction de code n’est demandée à ce stade.
+
 **Localisation :** [plateforme Linux](../../src/platform/linux_impl.rs), lignes 579–633.
 
 Le code découpe `/proc/mounts` puis utilise directement le champ `mount` comme chemin. Les champs de montage représentent notamment les espaces et tabulations par des échappements octaux ; leur décodage est décrit par [Linux man-pages, getmntent(3)](https://man7.org/linux/man-pages/man3/getmntent.3.html).
@@ -221,7 +223,7 @@ Les tailles brutes ne doivent pas déclencher des découpages automatiques : par
 1. Corriger A01 en conservant une recherche Office utile et en ajoutant ses tests de ressources ; traiter A03 dans le même périmètre d’extraction.
 2. Actualiser la dépendance de A02 et ajouter la barrière de livraison A09.
 3. Corriger A05 avec les contrôles positifs des sondes natives. A04, initialement proposé ici, est désormais une limite acceptée et ne demande pas de correction.
-4. Virtualiser les résultats A06, déplacer les I/O de fermeture A07, puis traiter A08 sur Linux et A10 dans la présentation des doublons.
+4. Virtualiser les résultats A06, déplacer les I/O de fermeture A07 et traiter A10 dans la présentation des doublons. A08 sera repris lors de l’implémentation effective de Linux.
 
 Les [limites R1–R9](../security/status.md) restent ouvertes selon leur statut documenté : services natifs hors LPAC, ressources globales du parent/GPU non plafonnées universellement, récupération conservatrice, absence de transaction durable multi-archives et garanties Linux différentes. Les tests verts de cet audit ne clôturent pas ces limites.
 
