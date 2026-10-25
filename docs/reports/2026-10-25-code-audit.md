@@ -9,6 +9,7 @@ Les constats et chiffres ci-dessous décrivent la révision auditée. Le suivi s
 | ID | Correction | Validation ciblée |
 | --- | --- | --- |
 | A05 | Lancement du setup via `Platform` et le verrou Windows commun ; flux standard explicites | Check toutes cibles sans avertissement ; 2 tests natifs d’héritage réussis, dont lancement concurrent du setup fixture |
+| A02 | Mise à jour ciblée de `ctutils` vers 0.4.4 ; notices et empreintes régénérées | Check toutes cibles sans avertissement ; audit RustSec actualisé réussi, 0 vulnérabilité publiée ; avis de maintenance/Tokio conservés |
 
 ## Révision, méthode et portée
 
