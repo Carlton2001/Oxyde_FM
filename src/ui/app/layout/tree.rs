@@ -12,58 +12,12 @@ impl OxydeApp {
     ) -> AnyElement {
         match node {
             crate::ui::workspace::LayoutNode::Pane(pane) => {
-                let p_id = pane.id.clone();
                 div()
                     .flex_1()
                     .min_w_0()
                     .size_full()
                     .flex()
                     .relative()
-                    .child(
-                        canvas(|bounds, _window, _cx| bounds, {
-                            let h = handle.clone();
-                            let p_id = p_id.clone();
-                            move |_, bounds: Bounds<Pixels>, _, cx| {
-                                let size = Size {
-                                    width: bounds.size.width.as_f32(),
-                                    height: bounds.size.height.as_f32(),
-                                };
-                                h.update(cx, |this, cx| {
-                                    let width_changed = this
-                                        .pane_sizes
-                                        .get(&p_id)
-                                        .is_none_or(|old| (old.width - size.width).abs() > 1.0);
-                                    let height_changed = this.pane_sizes.get(&p_id)
-                                        .is_some_and(|old| (old.height - size.height).abs() > 1.0);
-                                    this.pane_sizes.insert(p_id.clone(), size);
-                                    if height_changed {
-                                        if let Some(pane) = this.state.find_pane_mut(&p_id) {
-                                            pane.active_tab_mut().keep_cursor_visible(size);
-                                        }
-                                        cx.notify();
-                                    }
-                                    if width_changed {
-                                        if let Some(pane) = this.state.layout.find_pane(&p_id) {
-                                            let parts = pane
-                                                .active_tab()
-                                                .path
-                                                .split(['/', '\\'])
-                                                .filter(|part| !part.is_empty())
-                                                .count();
-                                            if parts > 0 {
-                                                pane.active_tab()
-                                                    .breadcrumb_scroll
-                                                    .scroll_to_item(parts * 2 - 2);
-                                            }
-                                        }
-                                        cx.notify();
-                                    }
-                                });
-                            }
-                        })
-                        .absolute()
-                        .size_full(),
-                    )
                     .child(self.render_pane(pane, handle, cx))
                     .into_any_element()
             }
@@ -74,28 +28,7 @@ impl OxydeApp {
                 weights,
             } => {
                 let total_weight: f32 = weights.iter().sum();
-                let mut container = div().flex_1().min_w_0().size_full().flex().child(
-                    canvas(|bounds, _window, _cx| bounds, {
-                        let h = handle.clone();
-                        let s_id = id.clone();
-                        let axis_copy = axis.clone();
-                        move |_, bounds: Bounds<Pixels>, _window, cx| {
-                            let size = match axis_copy {
-                                crate::ui::workspace::LayoutAxis::Horizontal => {
-                                    bounds.size.width.as_f32()
-                                }
-                                crate::ui::workspace::LayoutAxis::Vertical => {
-                                    bounds.size.height.as_f32()
-                                }
-                            };
-                            h.update(cx, |this, _| {
-                                this.split_sizes.insert(s_id.clone(), size);
-                            });
-                        }
-                    })
-                    .absolute()
-                    .size_full(),
-                );
+                let mut container = div().flex_1().min_w_0().size_full().flex();
 
                 match axis {
                     crate::ui::workspace::LayoutAxis::Horizontal => {

@@ -32,8 +32,9 @@ impl Render for OxydeApp {
         let win_w = size.width.as_f32();
         let win_h = size.height.as_f32();
 
-        self.list_width = (win_w - self.sidebar_display_width() - logical(3.0)).max(1.0);
+        self.list_width = (win_w - self.sidebar_display_width() - logical(1.0)).max(1.0);
         self.list_height = (win_h - crate::ui::components::title_bar::titlebar_h()).max(1.0);
+        self.sync_layout_sizes();
 
         if let Some(DragTarget::SelectionRectangle {
             ref pane_id,
