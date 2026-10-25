@@ -15,7 +15,7 @@ impl DuplicateWindow {
             .id("duplicate-results")
             .flex_1()
             .min_h_0()
-            .p(rems(1.0))
+            .px(rems(1.0))
             .flex()
             .flex_col()
             .gap(rems(0.5));
@@ -136,14 +136,19 @@ impl DuplicateWindow {
                 .text_with_args(Message::DuplicateSizeRange, &range)
                 .to_string()
         };
-        div()
+        let first_name = group
+            .files
+            .first()
+            .map(|file| file.name.clone())
+            .unwrap_or_default();
+        let card = div()
             .id(("group", index))
-            .h(rems(4.0))
+            .h(rems(3.5))
             .w_full()
             .flex_none()
             .tab_index(0)
             .focus_visible(move |s| s.border(rems(0.0625)).border_color(theme.accent))
-            .px(rems(0.5))
+            .px(rems(0.75))
             .bg(theme.header)
             .rounded_t(rems(0.5625))
             .when(!expanded, |header| header.rounded_b(rems(0.5625)))
@@ -153,6 +158,7 @@ impl DuplicateWindow {
             .flex()
             .items_center()
             .gap(rems(0.75))
+            .overflow_hidden()
             .on_click(cx.listener(move |this, _, _, cx| {
                 if !this.collapsed.remove(&index) {
                     this.collapsed.insert(index);
@@ -167,16 +173,21 @@ impl DuplicateWindow {
                     } else {
                         "icons/chevron-right.svg"
                     })
+                    .flex_none()
                     .size(rems(1.0))
                     .text_color(theme.text),
             )
             .child(
                 div()
+                    .flex_none()
                     .font_weight(FontWeight::MEDIUM)
                     .child(cx.i18n().text_with_args(Message::DuplicateGroup, &args)),
             )
             .child(
                 div()
+                    .flex_none()
+                    .flex()
+                    .justify_center()
                     .rounded(rems(0.75))
                     .px(rems(0.5))
                     .py(rems(0.125))
@@ -190,11 +201,17 @@ impl DuplicateWindow {
                         cx.i18n().language(),
                     )),
             )
-            .child(div().flex_1())
             .child(
                 div()
+                    .flex_1()
                     .min_w_0()
                     .truncate()
+                    .text_color(theme.text_muted)
+                    .child(first_name),
+            )
+            .child(
+                div()
+                    .flex_none()
                     .px(rems(0.6))
                     .py(rems(0.2))
                     .rounded(rems(0.375))
@@ -203,7 +220,19 @@ impl DuplicateWindow {
                     .bg(theme.active_background)
                     .text_size(rems(0.75))
                     .child(size),
-            )
+            );
+        // Every row keeps the uniform 4rem slot; the card fills its lower part so an
+        // expanded header stays attached to its files and collapsed cards stay spaced.
+        div()
+            .id(("group-row", index))
+            .h(rems(4.0))
+            .w_full()
+            .flex_none()
+            .flex()
+            .flex_col()
+            .justify_end()
+            .when(!expanded, |row| row.justify_center())
+            .child(card)
     }
 
     fn render_file_row(
