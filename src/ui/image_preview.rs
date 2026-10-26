@@ -150,6 +150,7 @@ fn load_path_mode(path: &Path, renderer: &SvgRenderer, mode: &str, policy: Polic
     }
 }
 
+#[cfg(any(target_os = "windows", test))]
 pub(crate) fn load_path_local(
     path: &Path,
     renderer: &SvgRenderer,

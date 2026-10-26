@@ -37,6 +37,8 @@ pub(super) fn render(
     window: &mut Window,
     cx: &mut Context<OxydeApp>,
 ) -> AnyElement {
+    #[cfg(not(target_os = "windows"))]
+    let _ = window;
     let theme = *cx.theme();
     let bounds = Rc::new(Cell::new(None));
     let paint_bounds = bounds.clone();

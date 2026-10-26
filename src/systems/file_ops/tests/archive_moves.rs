@@ -1,3 +1,4 @@
+#[cfg(target_os = "windows")]
 use super::*;
 
 #[test]

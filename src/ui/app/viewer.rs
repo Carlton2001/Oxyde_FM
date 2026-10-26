@@ -42,7 +42,7 @@ struct Resolved {
 pub(crate) struct Viewer {
     owner: WeakEntity<OxydeApp>,
     /// The owning tab; the Viewer never activates its pane.
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg_attr(not(all(test, target_os = "windows")), allow(dead_code))]
     tab_id: String,
     source: Source,
     file: Option<FileEntry>,

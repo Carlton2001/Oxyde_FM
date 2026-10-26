@@ -4,6 +4,7 @@ use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::OxydeTheme;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
+#[cfg(target_os = "windows")]
 use crate::ui::theme::ThemeContext;
 
 pub(super) fn fields(
@@ -191,6 +192,8 @@ pub(super) fn run_menu(
     window: &mut Window,
     cx: &mut Context<PropertiesWindow>,
 ) -> Div {
+    #[cfg(not(target_os = "windows"))]
+    let _ = window;
     #[cfg(target_os = "windows")]
     if let Some(position) = dialog.run_menu.filter(|_| crate::ui::components::popup::supported(window, cx)) {
         let bounds = dialog.run_bounds.unwrap_or(Bounds::new(position, size(px(0.0), px(0.0))));

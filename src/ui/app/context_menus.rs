@@ -125,6 +125,7 @@ impl OxydeApp {
     }
 
     /// Native menus close on the owner's button-down, before its control sees the click.
+    #[cfg(target_os = "windows")]
     pub(crate) fn note_menu_dismissed(&mut self, index: usize) {
         if index != 0 { return; }
         let owner = self.context_menu_owner.take();

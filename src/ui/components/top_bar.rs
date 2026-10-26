@@ -1,7 +1,7 @@
 use crate::ui::elements::button::{button_style, ButtonVariant};
 mod breadcrumb_fades;
-#[cfg(target_os = "windows")]
 mod breadcrumb_glide;
+#[cfg(target_os = "windows")]
 mod breadcrumb_menu;
 use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::scale::{logical};
@@ -622,7 +622,10 @@ pub fn render_top_bar(
                                             let h = h.clone();
                                             let path = path.clone();
                                             move |_, app| {
+                                                #[cfg(target_os = "windows")]
                                                 let _ = oxyde_lib::platform::clipboard::set_clipboard_text(path.clone());
+                                                #[cfg(not(target_os = "windows"))]
+                                                app.write_to_clipboard(ClipboardItem::new_string(path.clone()));
                                                 h.update(app, |this, cx| { this.context_menus.clear(); cx.notify(); });
                                             }
                                         }),

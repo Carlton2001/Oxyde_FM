@@ -98,7 +98,7 @@ impl HeldParents {
 }
 
 /// Fast regular-file move. Parent binding and source opening precede the checkpoint.
-#[cfg(test)]
+#[cfg(all(test, target_os = "windows"))]
 pub(crate) fn move_file(
     source: &Path,
     destination: &Path,
@@ -116,7 +116,7 @@ pub(crate) fn move_file(
     .map(|(size, _)| size)
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "windows"))]
 pub(super) fn move_file_with_parents(
     source: &Path,
     destination: &Path,

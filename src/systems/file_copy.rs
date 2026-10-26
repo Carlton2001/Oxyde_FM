@@ -307,7 +307,7 @@ fn copy_with_parents_checked(
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "windows"))]
 pub(crate) fn remove_verified_output(path: &Path, expected: &str) -> io::Result<()> {
     let parents = super::path_parents::HeldParents::new(path)?;
     remove_verified_output_checked(path, expected, &parents, None)

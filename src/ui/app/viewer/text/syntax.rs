@@ -41,7 +41,7 @@ pub(super) struct Span {
 }
 
 /// Pays the grammar compilation before the first file needs it.
-#[cfg(test)]
+#[cfg(all(test, target_os = "windows"))]
 pub(super) fn warm() {
     LazyLock::force(&SYNTAXES);
 }

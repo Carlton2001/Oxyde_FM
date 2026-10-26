@@ -7,6 +7,7 @@ use std::time::Duration;
 
 /// Target thumbnail size in pixels (longest side).
 const THUMB_SIZE: u32 = 256;
+#[cfg(target_os = "windows")]
 const VIDEO_THUMB_SIZE: u32 = 640;
 static CACHE_TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -738,6 +739,7 @@ pub fn get_office_document(path: String) -> Result<String, CommandError> {
 }
 
 /// `width height` lines (only their ratio is used), one per page.
+#[cfg(target_os = "windows")]
 pub(super) fn parse_pdf_sizes(text: &str) -> Result<Vec<(f32, f32)>, CommandError> {
     let sizes: Vec<(f32, f32)> = text
         .lines()

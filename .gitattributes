@@ -1,0 +1,2 @@
+# Bash scripts must remain runnable from WSL after a Windows checkout.
+/scripts/*.sh text eol=lf

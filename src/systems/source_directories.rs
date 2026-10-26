@@ -28,7 +28,7 @@ pub(super) struct SourceDirectories {
 }
 
 impl SourceDirectories {
-    #[cfg(test)]
+    #[cfg(all(test, target_os = "windows"))]
     pub fn capture(&mut self, path: &Path, destination: &Path) -> io::Result<()> {
         if self.directories.contains_key(path) {
             return Ok(());

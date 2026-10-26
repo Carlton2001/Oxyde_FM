@@ -5,7 +5,7 @@ use std::path::PathBuf;
 /// For a File Manager, we generally want to allow access to any valid system path.
 /// This prevents relative paths that might be ambiguous.
 pub fn validate_path(path_str: &str) -> Result<PathBuf, CommandError> {
-    let mut path = PathBuf::from(path_str);
+    let path = PathBuf::from(path_str);
     if !path.is_absolute() {
         return Err(CommandError::PathError(format!(
             "Path must be absolute: {}",
@@ -14,7 +14,8 @@ pub fn validate_path(path_str: &str) -> Result<PathBuf, CommandError> {
     }
 
     #[cfg(target_os = "windows")]
-    {
+    let path = {
+        let mut path = path;
         let mut needs_update = None;
         if let Some(file_name) = path.file_name() {
             let name_str = file_name.to_string_lossy();
@@ -26,7 +27,8 @@ pub fn validate_path(path_str: &str) -> Result<PathBuf, CommandError> {
         if let Some(new_name) = needs_update {
             path.set_file_name(new_name);
         }
-    }
+        path
+    };
 
     Ok(path)
 }

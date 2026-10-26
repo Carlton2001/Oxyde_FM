@@ -1,7 +1,7 @@
 use std::path::Path;
 
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
+#[cfg(target_os = "windows")]
+use std::{collections::hash_map::DefaultHasher, hash::{Hash, Hasher}};
 #[cfg(target_os = "windows")]
 use windows::core::PCWSTR;
 #[cfg(target_os = "windows")]
@@ -33,6 +33,8 @@ fn plain_path(path: &Path) -> std::borrow::Cow<'_, str> {
 }
 
 pub fn is_network_path(path: &Path) -> bool {
+    #[cfg(not(target_os = "windows"))]
+    let _ = path;
     #[cfg(target_os = "windows")]
     {
         let path_str = plain_path(path);
@@ -55,6 +57,8 @@ pub fn is_network_path(path: &Path) -> bool {
 }
 
 pub fn get_physical_disk_id(path: &Path) -> u64 {
+    #[cfg(not(target_os = "windows"))]
+    let _ = path;
     #[cfg(target_os = "windows")]
     {
         let path_str = plain_path(path);
@@ -127,6 +131,8 @@ pub fn get_physical_disk_id(path: &Path) -> u64 {
 }
 
 pub fn is_ssd(path: &Path) -> bool {
+    #[cfg(not(target_os = "windows"))]
+    let _ = path;
     #[cfg(target_os = "windows")]
     {
         if is_network_path(path) {
