@@ -599,7 +599,8 @@ impl Platform for LinuxPlatform {
                 if mount.starts_with("/proc")
                     || mount.starts_with("/sys")
                     || mount.starts_with("/dev/pts")
-                    || mount.starts_with("/run")
+                    // udisks2 mounts removable volumes under /run/media/$USER.
+                    || (mount.starts_with("/run") && !mount.starts_with("/run/media/"))
                 {
                     return None;
                 }
