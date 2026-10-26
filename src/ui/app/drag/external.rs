@@ -18,7 +18,9 @@ impl Default for ExternalDropState {
         Self {
             effect: FileDropEffect::None,
             can_copy: true,
-            can_move: true,
+            // Windows reads the source's allowed effects from OLE. GPUI's Wayland and X11
+            // targets only negotiate Copy, so a Linux drop must never remove its source.
+            can_move: cfg!(target_os = "windows"),
             submitted: false,
             directory_paths: Vec::new(),
             directories: Vec::new(),
@@ -63,6 +65,12 @@ fn choose_effect(
     if paths.is_empty() {
         return FileDropEffect::None;
     }
+    // Keyboard focus stays with the Wayland/X11 source, which applies modifiers itself.
+    let modifiers = if cfg!(target_os = "windows") {
+        modifiers
+    } else {
+        Modifiers::default()
+    };
     let copy = super::drag_copy_override(modifiers).unwrap_or_else(|| {
         paths
             .iter()

@@ -565,6 +565,8 @@ pub trait Platform: Send + Sync {
     fn list_drives(&self, skip_hardware_info: bool) -> Vec<DriveInfo>;
     /// Fast mount snapshot; detailed hardware/capacity queries run separately.
     fn list_drive_roots(&self) -> Vec<DriveInfo> { self.list_drives(true) }
+    /// Every mount point, hidden ones included, when roots alone do not separate volumes.
+    fn mount_points(&self) -> Vec<String> { Vec::new() }
 
     /// The returned guard owns the registration. Callbacks only increment revision.
     fn watch_drive_changes(&self, _revision: std::sync::Arc<std::sync::atomic::AtomicU64>)
@@ -699,6 +701,8 @@ pub mod icons;
 mod linux_impl;
 #[cfg(not(target_os = "windows"))]
 mod linux_trash;
+#[cfg(not(target_os = "windows"))]
+mod linux_mounts;
 #[cfg(not(target_os = "windows"))]
 pub use linux_trash::{KdeLimitAction, KdeTrashLimits, TrashRetention};
 #[cfg(target_os = "windows")]

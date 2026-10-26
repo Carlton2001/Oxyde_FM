@@ -461,6 +461,10 @@ impl Platform for LinuxPlatform {
     fn disconnect_network_drive(&self, _path: String, _force: bool) -> Result<(), super::NetworkDisconnectError> {
         Err(super::NetworkDisconnectError::Other("Network drive disconnect is only available on Windows".into()))
     }
+    fn mount_points(&self) -> Vec<String> {
+        super::linux_mounts::mount_points()
+    }
+
     fn eject_drive(&self, path: &str) -> Result<(), String> {
         let output = std::process::Command::new("findmnt")
             .args(["--noheadings", "--output", "SOURCE", "--mountpoint", path])

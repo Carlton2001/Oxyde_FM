@@ -151,6 +151,9 @@ impl OxydeApp {
                         });
                         if let Ok((roots, policies)) = tokio::task::spawn_blocking(|| {
                             let roots = oxyde_lib::platform::platform().list_drive_roots();
+                            #[cfg(not(target_os = "windows"))]
+                            super::drag::volumes::replace_mount_points(
+                                oxyde_lib::platform::platform().mount_points());
                             let policies = super::trash_settings::read_drive_policy(&roots);
                             (roots, policies)
                         }).await {

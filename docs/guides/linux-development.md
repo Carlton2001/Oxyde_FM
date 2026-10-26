@@ -50,8 +50,9 @@ WSL reste utilisable pour `check-linux.sh` ; il ne valide ni GPU, ni bureau, ni 
 Après tout changement de fichier commun, lancer sous Windows
 `./scripts/test-windows.ps1 -Offline` ([procédure](development.md#vérifier-un-changement)).
 Aucune compilation Windows n'est possible depuis Linux : un `cfg` mal placé ne se voit
-qu'à ce moment. **À faire avant de fusionner `linux-foundation` :** suite Windows sur
-`93e9ee3` (cadre des fenêtres) et `4f24ca4` (corbeille) et leurs suites.
+qu'à ce moment. Suite Windows réussie jusqu'à `b84e5c3` (cadre des fenêtres, corbeille).
+**À relancer avant fusion :** la correction M07 touche `drag.rs`, `drag/external.rs`,
+`drive_watchers.rs` et le trait `Platform`.
 
 ## Reste à faire
 
@@ -75,10 +76,17 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
 - Copier/couper/glisser depuis la corbeille désactivés : contrat de transfert à définir.
 
 **Opérations sur les fichiers (jalon 4, avant tout usage réel)**
-- M07 : glisser-déposer entrant annoncé en copie mais exécuté en déplacement ; détection
-  de volume par le premier composant du chemin (`drag.rs`). **Risque de perte de données.**
+- M07, corrigé : un dépôt entrant est toujours une copie, puisque GPUI ne négocie que
+  Copy en Wayland et X11 ; Ctrl et Maj restent à la source, qui garde le clavier. Les
+  volumes se distinguent par le point de montage le plus profond (`/proc/self/mountinfo`,
+  relu en arrière-plan), comparé sans résoudre les liens symboliques. Essayé sous GNOME :
+  Nautilus vers Oxyde, glisser interne vers `/tmp`, puis vers une clé USB en lecture seule
+  (copie proposée, refus propre). Reste : une clé inscriptible.
 - M03/M04 : opérations par chemin malgré les handles retenus ; déplacement exclusif
-  émulé par lien physique puis suppression.
+  émulé par lien physique puis suppression. Deux tests `history_file_undo` échouent
+  sous Linux : l'annulation remplace un dossier substitué entre-temps.
+- Trois tests `file_ops::item_outcomes` exigent un dossier `./target` : ils échouent
+  quand `CARGO_TARGET_DIR` pointe ailleurs.
 - M05 : noms non UTF-8 convertis avec perte ; M06 : fidélité des métadonnées
   (modes, ACL, xattrs, propriétaire) ; T04 : date de création exigée par l'historique.
 - T05 liens symboliques, T06 ouvertures en lecture inutiles, T07 cache d'archives ouvertes,

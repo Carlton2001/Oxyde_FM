@@ -1,18 +1,10 @@
 use super::*;
 
+#[cfg(windows)]
 #[::core::prelude::v1::test]
 fn modifiers_respect_the_sources_allowed_operations() {
-    let paths = vec![if cfg!(windows) {
-        "C:/source/file"
-    } else {
-        "/source/file"
-    }
-    .into()];
-    let target = if cfg!(windows) {
-        "C:/target"
-    } else {
-        "/target"
-    };
+    let paths = vec!["C:/source/file".into()];
+    let target = "C:/target";
     let state = ExternalDropState {
         can_move: false,
         ..Default::default()
@@ -63,6 +55,29 @@ fn virtual_targets_and_recursive_or_noop_drops_are_rejected() {
     assert_eq!(
         transfer_paths(&data, &format!("{source}-other")),
         vec![source.to_owned()]
+    );
+}
+
+#[cfg(not(windows))]
+#[::core::prelude::v1::test]
+fn drops_negotiated_as_copy_never_move_their_sources() {
+    let paths = vec!["/home/user/file".into()];
+    let state = ExternalDropState::default();
+    assert_eq!(
+        choose_effect(&paths, "/home/user/target", Modifiers::default(), &state),
+        FileDropEffect::Copy
+    );
+    assert_eq!(
+        choose_effect(
+            &paths,
+            "/home/user/target",
+            Modifiers {
+                shift: true,
+                ..Default::default()
+            },
+            &state
+        ),
+        FileDropEffect::Copy
     );
 }
 

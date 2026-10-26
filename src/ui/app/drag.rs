@@ -8,6 +8,8 @@ mod popup;
 pub(super) mod external;
 #[cfg(target_os = "windows")]
 pub(super) mod native;
+#[cfg(not(target_os = "windows"))]
+pub(super) mod volumes;
 
 fn actionable_drop_paths(mut paths: Vec<String>, target: &str) -> Vec<String> {
     use crate::ui::components::sidebar::sidebar_paths_equal;
@@ -44,10 +46,17 @@ mod native_input_tests;
 
 /// Returns true if `src` and `dst` are on different drives/volumes.
 /// On Windows this compares the root prefix (e.g. "C:" vs "D:").
+#[cfg(target_os = "windows")]
 pub fn drives_differ(src: &str, dst: &str) -> bool {
     let src_root = std::path::Path::new(src).components().next();
     let dst_root = std::path::Path::new(dst).components().next();
     src_root != dst_root
+}
+
+/// Every absolute Linux path starts with `/`: compare mount points instead.
+#[cfg(not(target_os = "windows"))]
+pub fn drives_differ(src: &str, dst: &str) -> bool {
+    volumes::mounts_differ(src, dst)
 }
 
 impl FileDragPreview {
