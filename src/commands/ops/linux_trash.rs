@@ -53,28 +53,40 @@ pub(crate) fn trash_properties_metadata(path: &std::path::Path) -> Option<(Strin
         item.time_deleted.checked_mul(1000).filter(|time| *time >= 0)))
 }
 
-/// Each requested path must name exactly one item; display names may collide when lossy.
+/// A request names an item by its content path, or by its original path when exactly
+/// one item came from there (Undo of a deletion); lossy display names may collide.
 fn select(items: Vec<trash::TrashItem>, paths: Vec<String>) -> (Vec<trash::TrashItem>, Vec<(String, TrashRestoreIssue)>) {
-    let mut by_path: HashMap<String, Vec<trash::TrashItem>> = HashMap::new();
-    for item in items {
-        if let Some(content) = platform().trash_content_path(&item) {
-            by_path.entry(content.to_string_lossy().into_owned()).or_default().push(item);
-        }
+    let keyed = items.into_iter().filter_map(|item| {
+        let content = platform().trash_content_path(&item)?.to_string_lossy().into_owned();
+        Some((content, item))
+    }).collect();
+    select_keyed(keyed, paths)
+}
+
+fn select_keyed(items: Vec<(String, trash::TrashItem)>, paths: Vec<String>) -> (Vec<trash::TrashItem>, Vec<(String, TrashRestoreIssue)>) {
+    let mut by_content: HashMap<&str, Vec<usize>> = HashMap::new();
+    let mut by_original: HashMap<String, Vec<usize>> = HashMap::new();
+    for (index, (content, item)) in items.iter().enumerate() {
+        by_content.entry(content.as_str()).or_default().push(index);
+        by_original.entry(item.original_path().to_string_lossy().into_owned()).or_default().push(index);
     }
-    let mut selected = Vec::new();
+    let mut chosen = Vec::new();
     let mut failures = Vec::new();
     let mut seen = HashSet::new();
     for path in paths {
         if !seen.insert(path.clone()) {
             continue;
         }
-        match by_path.remove(&path) {
-            Some(mut matches) if matches.len() == 1 => selected.push(matches.remove(0)),
+        let matches = by_content.get(path.as_str()).or_else(|| by_original.get(&path));
+        match matches.map(Vec::as_slice) {
+            // An item requested under both of its paths is still selected once.
+            Some([index]) => if !chosen.contains(index) { chosen.push(*index) },
             Some(_) => failures.push((path, TrashRestoreIssue::Ambiguous)),
             None => failures.push((path, TrashRestoreIssue::Unavailable)),
         }
     }
-    (selected, failures)
+    let mut items: Vec<_> = items.into_iter().map(|(_, item)| Some(item)).collect();
+    (chosen.into_iter().filter_map(|index| items[index].take()).collect(), failures)
 }
 
 fn selection_failure(path: String, issue: TrashRestoreIssue) -> (String, String) {
@@ -148,3 +160,7 @@ pub async fn restore_items(paths: Vec<String>) -> Result<Vec<String>, CommandErr
 pub async fn get_total_recycle_bin_usage() -> Result<(u64, u64), CommandError> {
     platform().recycle_bin_usage().map_err(CommandError::SystemError)
 }
+
+#[cfg(test)]
+#[path = "tests/linux_selection.rs"]
+mod tests;
