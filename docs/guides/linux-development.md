@@ -97,8 +97,9 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
 - M03/M04 : opérations par chemin malgré les handles retenus ; déplacement exclusif
   émulé par lien physique puis suppression. Deux tests `history_file_undo` échouent
   sous Linux : l'annulation remplace un dossier substitué entre-temps.
-- Trois tests `file_ops::item_outcomes` exigent un dossier `./target` : ils échouent
-  quand `CARGO_TARGET_DIR` pointe ailleurs.
+- Six tests (`file_ops::item_outcomes`, `operations::files::icons`) exigent un dossier
+  `./target` : ils échouent quand `CARGO_TARGET_DIR` pointe ailleurs. Les tests
+  `preview_jobs` à délai de 2 s échouent par intermittence quand toute la suite tourne.
 - M05 : noms non UTF-8 convertis avec perte ; M06 : fidélité des métadonnées
   (modes, ACL, xattrs, propriétaire) ; T04 : date de création exigée par l'historique.
 - T05 liens symboliques, T06 ouvertures en lecture inutiles, T07 cache d'archives ouvertes,
