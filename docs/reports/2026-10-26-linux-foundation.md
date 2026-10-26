@@ -5,7 +5,7 @@ toutes les cibles passent `cargo check` sans avertissement du projet et le binai
 principal est construit et lié. **Windows reste la plateforme de référence.**
 
 Date : 26 octobre 2026. Base : `3b55f654764b811ccc85faa548e2feea7deba163`
-(2.0.2), changements locaux sur `codex/linux-foundation`. Aucun commit ni push.
+(2.0.2), changements sur la branche `codex/linux-foundation`.
 L'[audit préalable](2026-10-26-linux-portability-audit.md) reste une photographie
 de cette base, avant les corrections et validations décrites ici.
 

@@ -36,7 +36,7 @@ Puis dans le shell Linux :
 
 ```bash
 export PATH="$HOME/.cargo/bin:$PATH"
-cd /mnt/c/Users/Biluf/Documents/Projects/Oxyde-GPUI
+cd /mnt/c/chemin/vers/Oxyde-GPUI  # checkout Windows vu depuis WSL
 bash scripts/check-linux.sh
 ```
 
