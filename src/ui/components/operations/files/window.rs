@@ -172,7 +172,7 @@ impl Render for FilesWindow {
         let header_actions = div().flex().flex_none().mr(rems(0.375)).child(
             super::super::title_actions::scroll_top(can_top, cx, top_action),
         );
-        div()
+        let root = div()
             .size_full()
             .flex()
             .flex_col()
@@ -292,8 +292,8 @@ impl Render for FilesWindow {
                         window.remove_window();
                     }),
                 ),
-            )
-            .into_any_element()
+            );
+        crate::ui::components::client_decorations::frame(root, theme.border, window)
     }
 }
 

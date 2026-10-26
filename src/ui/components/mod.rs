@@ -1,3 +1,4 @@
+pub(crate) mod client_decorations;
 pub mod conflict_dialog;
 pub mod dropdown;
 pub mod file_list;
@@ -67,6 +68,20 @@ pub(crate) fn context_menu_sections(items: Vec<dropdown::DropdownItem>, i18n: &I
         pending_separator = false;
     }
     result
+}
+
+/// The native Shell submenu behind More options exists only on Windows.
+fn without_unavailable_shell_menu(items: Vec<dropdown::DropdownItem>, i18n: &I18n) -> Vec<dropdown::DropdownItem> {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = i18n;
+        items
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let label = i18n.text(Message::MoreOptions);
+        items.into_iter().filter(|item| item.label != label.as_ref()).collect()
+    }
 }
 
 /// Attach sorting controls to context menus in grid view.
@@ -549,7 +564,7 @@ fn oxyde_context_menu_items_raw(
         })),
     });
 
-    items
+    without_unavailable_shell_menu(items, i18n)
 }
 
 fn pane_context_menu_items_raw(
@@ -559,7 +574,7 @@ fn pane_context_menu_items_raw(
 ) -> Vec<crate::ui::components::dropdown::DropdownItem> {
     use crate::ui::components::dropdown::IconName;
 
-    vec![
+    without_unavailable_shell_menu(vec![
         crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::NewFolder).to_string(),
             icon: Some(IconName::FolderPlus),
@@ -655,7 +670,7 @@ fn pane_context_menu_items_raw(
                 }
             })),
         },
-    ]
+    ], i18n)
 }
 
 pub fn tab_context_menu_items(

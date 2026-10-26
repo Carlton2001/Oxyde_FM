@@ -107,7 +107,7 @@ pub(crate) fn render_conflict_dialog(
         pending.dialog.input = Some(input.clone());
     }
     let advanced = pending.dialog.advanced;
-    let max_width = (window.viewport_size().width / window.rem_size()).max(2.0);
+    let max_width = (crate::ui::components::client_decorations::content_bounds(window).size.width / window.rem_size()).max(2.0);
     pending.dialog.width = max_width;
     let width = pending.dialog.width.min(max_width);
     let sidebar_width = pending.dialog.sidebar_width.min((width - 20.0).max(10.0));

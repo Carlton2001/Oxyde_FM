@@ -199,7 +199,7 @@ impl RenderOnce for Modal {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = *cx.theme();
         if self.standalone {
-            let height_limit = if self.fill_window { window.viewport_size().height } else {
+            let height_limit = if self.fill_window { super::client_decorations::content_bounds(window).size.height } else {
                 crate::ui::components::tool_window::content_height_limit(window, cx)
             };
             let fill_window = self.fill_window;
@@ -240,7 +240,7 @@ impl RenderOnce for Modal {
         let placement =
             window.use_keyed_state(self.id.clone(), cx, |_, _| ModalPlacement::default());
         let bottom_inset = rem_pixels(crate::ui::style::STATUS_BAR_HEIGHT + rems(1.0));
-        let viewport = modal_viewport(window.viewport_size(), bottom_inset);
+        let viewport = modal_viewport(super::client_decorations::content_bounds(window).size, bottom_inset);
         let offset = constrain_offset(placement.read(cx).offset, placement.read(cx).size, viewport);
         let title_drag = placement.clone();
         let measure = placement.clone();
@@ -297,7 +297,7 @@ impl RenderOnce for Modal {
                                     let offset = constrain_offset(
                                         state.offset,
                                         state.size,
-                                        modal_viewport(window.viewport_size(), bottom_inset),
+                                        modal_viewport(super::client_decorations::content_bounds(window).size, bottom_inset),
                                     );
                                     if offset != state.offset {
                                         state.offset = offset;
@@ -314,7 +314,7 @@ impl RenderOnce for Modal {
                                                         state.offset = constrain_offset(
                                                             origin + event.position - start,
                                                             state.size,
-                                                            modal_viewport(window.viewport_size(), bottom_inset),
+                                                            modal_viewport(super::client_decorations::content_bounds(window).size, bottom_inset),
                                                         );
                                                     } else {
                                                         state.drag = None;

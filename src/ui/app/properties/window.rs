@@ -78,6 +78,9 @@ impl OxydeApp {
                         title: Some(title),
                         ..Default::default()
                     }),
+                    // Wayland and X11 parent the window at creation, above its owner.
+                    #[cfg(target_os = "linux")]
+                    kind: WindowKind::Floating,
                     ..Default::default()
                 },
                 move |window, cx| {
@@ -217,7 +220,7 @@ impl Render for PropertiesWindow {
                         on_outside: None,
                         is_dragging: false,
                         width: None,
-                        max_height: window.viewport_size().height.as_f32(),
+                        max_height: crate::ui::components::client_decorations::content_bounds(window).size.height.as_f32(),
                         header: None,
                         on_item_hover: None,
                         on_width_calculated: None,
@@ -227,7 +230,7 @@ impl Render for PropertiesWindow {
             ));
             }
         }
-        root
+        crate::ui::components::client_decorations::frame(root, theme.border, window)
     }
 }
 

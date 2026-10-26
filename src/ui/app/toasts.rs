@@ -272,7 +272,7 @@ impl OxydeApp {
                     .id(("toast", id))
                     .flex_none()
                     .max_w(rem_pixels(rems(width)).min(
-                        (window.viewport_size().width - rem_pixels(rems(2.25))).max(px(1.0)),
+                        (crate::ui::components::client_decorations::content_bounds(window).size.width - rem_pixels(rems(2.25))).max(px(1.0)),
                     ))
                     .px(rems(1.0))
                     .py(rems(0.75))
@@ -370,13 +370,13 @@ impl OxydeApp {
                     })
             }));
         if cards.is_empty() { return div(); }
-        let maximum_height = notification_height(window.viewport_size().height, window.rem_size());
+        let maximum_height = notification_height(crate::ui::components::client_decorations::content_bounds(window).size.height, window.rem_size());
         div().absolute()
             .bottom(crate::ui::style::STATUS_BAR_HEIGHT)
             .right_0()
             .child(crate::ui::components::scroll_area::scroll_area("notification-stack-scroll-state",
                 div().max_w(rem_pixels(rems(stack_width + 1.75)).min(
-                    (window.viewport_size().width - rem_pixels(rems(0.5))).max(px(0.0)),
+                    (crate::ui::components::client_decorations::content_bounds(window).size.width - rem_pixels(rems(0.5))).max(px(0.0)),
                 ))
                     .max_h(maximum_height),
                 div().id("notification-stack-scroll").flex().flex_col().items_end()

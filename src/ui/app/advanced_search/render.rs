@@ -407,10 +407,12 @@ impl Render for AdvancedSearchWindow {
                                 {
                 let width = crate::ui::scale::rem_pixels(rems(13.0));
                 let height = crate::ui::scale::rem_pixels(rems(items.len() as f32 * 1.625 + 1.0));
-                let viewport = window.viewport_size();
+                // The root starts after the Linux shadow margin; menu positions are window points.
+                let shown = crate::ui::components::client_decorations::content_bounds(window);
+                let viewport = shown.size;
                 let position = point(
-                    menu.position.x.min((viewport.width - width).max(px(0.0))),
-                    menu.position.y.min((viewport.height - height).max(px(0.0))),
+                    (menu.position.x - shown.origin.x).min((viewport.width - width).max(px(0.0))),
+                    (menu.position.y - shown.origin.y).min((viewport.height - height).max(px(0.0))),
                 );
                 root = root.child(deferred(
                     div().absolute().left(position.x).top(position.y).child(
@@ -443,6 +445,6 @@ impl Render for AdvancedSearchWindow {
                 }
             }
         }
-        root
+        crate::ui::components::client_decorations::frame(root, theme.border, window)
     }
 }

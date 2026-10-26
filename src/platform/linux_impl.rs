@@ -731,7 +731,8 @@ impl Platform for LinuxPlatform {
     }
 
     fn set_window_owner(&self, _window: raw_window_handle::RawWindowHandle, _owner: raw_window_handle::RawWindowHandle) -> Result<(), String> {
-        Err("Native tool window ownership is unavailable on this platform".into())
+        // Owned windows are opened as GPUI floating windows, parented by Wayland/X11 at creation.
+        Ok(())
     }
 
     fn set_application_icon(&self, _window: raw_window_handle::RawWindowHandle, _icon_bytes: &[u8]) {

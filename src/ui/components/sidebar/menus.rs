@@ -337,7 +337,7 @@ fn sidebar_tree_actions(
             })
         })),
     });
-    items
+    super::super::without_unavailable_shell_menu(items, i18n)
 }
 
 pub(super) fn pinned_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {

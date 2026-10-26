@@ -15,7 +15,7 @@ impl Render for OxydeApp {
         self.sync_viewers(cx);
         self.prepare_created_item_rename(_window, cx);
 
-        let size = _window.viewport_size();
+        let size = crate::ui::components::client_decorations::content_bounds(_window).size;
         if self.network_force_focus_pending {
             self.network_force_focus_pending = false;
             if let Some(confirmation) = &self.network_force_confirmation {
@@ -344,6 +344,6 @@ impl Render for OxydeApp {
         }
 
         root = root.child(deferred(self.render_toasts(_window, cx)));
-        root
+        crate::ui::components::client_decorations::frame(root, theme.border, _window)
     }
 }

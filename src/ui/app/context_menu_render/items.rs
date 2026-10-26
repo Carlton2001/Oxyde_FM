@@ -355,16 +355,12 @@ impl OxydeApp {
                                                 let _ = window_handle_inner.update(
                                                     &mut cx_val,
                                                     |_, _window, app| {
-                                                        let viewport_w = _window
-                                                            .viewport_size()
-                                                            .width;
+                                                        let viewport_w = crate::ui::components::client_decorations::content_bounds(_window).right();
                                                         let parent_visible_y =
                                                             context_menu_visible_top(
                                                                 parent_pos_y,
                                                                 parent_menu_height,
-                                                                _window
-                                                                    .viewport_size()
-                                                                    .height,
+                                                                crate::ui::components::client_decorations::content_bounds(_window).bottom(),
                                                             );
                                                         let open_left = parent_right
                                                             + rem_pixels(rems(13.75))

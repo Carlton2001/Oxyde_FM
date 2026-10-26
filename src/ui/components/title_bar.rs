@@ -1,3 +1,4 @@
+use crate::ui::components::client_decorations::ClientDecorationsExt;
 use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::app::OxydeApp;
 use crate::ui::components::tooltip::Tooltip;
@@ -149,6 +150,7 @@ pub fn render_title_bar(
         .flex_1()
         .h_full()
         .window_control_area(WindowControlArea::Drag)
+        .client_drag_area()
         .on_mouse_down(MouseButton::Middle, |_, window, _| {
             window.minimize_window();
         });

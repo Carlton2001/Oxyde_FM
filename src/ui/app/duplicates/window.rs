@@ -48,7 +48,7 @@ impl Render for DuplicateWindow {
         );
         let results = self.render_results(theme, system_icons, cx);
         let disabled = self.selected.is_empty() || !self.options.iter().any(|v| *v);
-        div()
+        let root = div()
             .id("duplicate-window")
             .child(crate::ui::components::tool_window::pointer_drag(cx.entity(),
                 |this, event, cx| this.move_scrollbar(event, cx), |this, cx| {
@@ -210,6 +210,7 @@ impl Render for DuplicateWindow {
                         .child(cx.i18n().text(Message::AdvancedSearch))
                         .on_click(cx.listener(|this, _, _, cx| this.search(cx))),
                     ),
-            )
+            );
+        crate::ui::components::client_decorations::frame(root, theme.border, window)
     }
 }

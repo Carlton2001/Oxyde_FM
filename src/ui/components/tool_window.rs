@@ -1,3 +1,4 @@
+use crate::ui::components::client_decorations::ClientDecorationsExt;
 use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
@@ -37,15 +38,18 @@ pub(crate) fn content_height_limit(window: &Window, cx: &App) -> Pixels {
 }
 
 pub(crate) fn fit_content_height(height: Pixels, window: &mut Window, cx: &App) {
-    fit_content_height_at_width(height, window.viewport_size().width, window, cx);
+    fit_content_height_at_width(height, super::client_decorations::content_bounds(window).size.width, window, cx);
 }
 
+/// Sizes are those of the content; the Linux shadow margin is added around them.
 pub(crate) fn fit_content_height_at_width(height: Pixels, width: Pixels, window: &mut Window, cx: &App) {
     let target = height.ceil().min(content_height_limit(window, cx));
-    if ((window.viewport_size().height - target).abs() > px(1.0)
-        || (window.viewport_size().width - width).abs() > px(1.0)) && target > px(0.0) {
+    let shown = super::client_decorations::content_bounds(window).size;
+    if ((shown.height - target).abs() > px(1.0)
+        || (shown.width - width).abs() > px(1.0)) && target > px(0.0) {
+        let outer = super::client_decorations::window_size_for(size(width, target), window);
         window.on_next_frame(move |window, _| {
-            window.resize(size(width, target));
+            window.resize(outer);
         });
     }
 }
@@ -178,6 +182,7 @@ fn header_frame(
                 .flex()
                 .items_center()
                 .window_control_area(WindowControlArea::Drag)
+                .client_drag_area()
                 .font_weight(FontWeight::BOLD)
                 .child(div().id("tool-window-title").min_w_0().truncate()
                     .when_some(title_tooltip, |title, tooltip| {

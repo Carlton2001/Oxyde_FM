@@ -149,7 +149,7 @@ impl Render for ViewerWindow {
         window.set_window_title(title.as_ref());
         // The title bar carries the display options; no action bar remains.
         let options = self.viewer.update(cx, |viewer, cx| viewer.render_display_options(cx).mr(rems(0.5)));
-        div()
+        let root = div()
             .size_full()
             .flex()
             .flex_col()
@@ -181,6 +181,7 @@ impl Render for ViewerWindow {
                     .min_h_0()
                     .relative()
                     .child(div().absolute().inset_0().size_full().child(self.viewer.clone())),
-            )
+            );
+        crate::ui::components::client_decorations::frame(root, theme.border, window)
     }
 }

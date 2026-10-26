@@ -181,6 +181,9 @@ impl OxydeApp {
                         appears_transparent: true,
                         ..Default::default()
                     }),
+                    // Wayland and X11 parent the dialog at creation, above its owner.
+                    #[cfg(target_os = "linux")]
+                    kind: WindowKind::Floating,
                     ..Default::default()
                 }
             } else {
@@ -200,6 +203,8 @@ impl OxydeApp {
                         appears_transparent: true,
                         ..Default::default()
                     }),
+                    #[cfg(target_os = "linux")]
+                    kind: WindowKind::Floating,
                     ..Default::default()
                 }
             };
@@ -465,7 +470,9 @@ impl Render for DialogWindow {
                 },
                 crate::ui::scale::rem_pixels(rems(items.len() as f32 * 1.625 + 1.0)),
             );
-            let position = menu_position(menu.position, menu_size, window.viewport_size());
+            // The root starts after the Linux shadow margin; menu positions are window points.
+            let shown = crate::ui::components::client_decorations::content_bounds(window);
+            let position = menu_position(menu.position - shown.origin, menu_size, shown.size);
             root = root.child(deferred(
                 div().absolute().left(position.x).top(position.y).child(
                     crate::ui::components::dropdown::GenericDropdown {
@@ -486,7 +493,7 @@ impl Render for DialogWindow {
                         on_outside: None,
                         width: None,
                         max_height: crate::ui::scale::logical(480.0)
-                            .min(window.viewport_size().height.as_f32()),
+                            .min(shown.size.height.as_f32()),
                         is_dragging: false,
                         header: None,
                         on_item_hover: None,
@@ -506,6 +513,6 @@ impl Render for DialogWindow {
             ));
             }
         }
-        root.into_any_element()
+        crate::ui::components::client_decorations::frame(root, cx.theme().border, window)
     }
 }

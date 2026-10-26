@@ -68,7 +68,7 @@ impl Render for OperationsPanelView {
         let body = app.update(cx, |owner, cx| {
             super::panel::render_operations_panel(owner, app.clone(), cx)
         });
-        div()
+        let root = div()
             .track_focus(&self.focus)
             .size_full()
             .flex()
@@ -101,7 +101,7 @@ impl Render for OperationsPanelView {
                     window.remove_window();
                 },
             ))
-            .child(body)
-            .into_any_element()
+            .child(body);
+        crate::ui::components::client_decorations::frame(root, theme.border, window)
     }
 }
