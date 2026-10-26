@@ -15,8 +15,11 @@ pub fn drive_label(label: &str, path: &str, i18n: &crate::ui::i18n::I18n) -> Str
         args.set("drive", path);
         i18n.text_with_args(crate::ui::i18n::Message::LocalDrive, &args)
             .to_string()
-    } else {
+    } else if cfg!(target_os = "windows") {
         format!("{label} ({path})")
+    } else {
+        // Linux file managers name volumes alone; the drive tooltip shows the path.
+        label.to_string()
     }
 }
 pub fn date_format(cx: &gpui::App) -> DateFormat {
@@ -354,8 +357,10 @@ mod tests {
             }
             assert_eq!(
                 drive_label("Mes données", "D:\\", &i18n),
-                "Mes données (D:)"
+                if cfg!(windows) { "Mes données (D:)" } else { "Mes données" }
             );
+            #[cfg(not(windows))]
+            assert_eq!(drive_label("Root", "/", &i18n), "Root");
         }
     }
 }

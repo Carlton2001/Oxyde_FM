@@ -11,6 +11,7 @@ use oxyde_lib::models::FileProperties;
 
 pub(super) fn label_width(
     presentation: Option<&PropertyPresentation<'_>>,
+    has_file_system: bool,
     theme: OxydeTheme,
     window: &mut Window,
     cx: &mut Context<PropertiesWindow>,
@@ -36,6 +37,7 @@ pub(super) fn label_width(
         .filter(|p| matches!(p.location_label, Message::TrashOriginalLocation))
         .map(|_| Message::TrashOriginalLocation))
     .chain(presentation.and_then(|p| p.deleted_time).map(|_| Message::TrashDeletedAt))
+    .chain(has_file_system.then_some(Message::PropertiesFileSystem))
     .map(|message| {
         let label = cx.i18n().text(message);
         window
@@ -118,7 +120,12 @@ pub(super) fn render(
         )
     };
     let name = if let Some(drive) = &dialog.drive {
-        format!("{} ({})", drive.label, drive.path.trim_end_matches('\\'))
+        if cfg!(target_os = "windows") {
+            format!("{} ({})", drive.label, drive.path.trim_end_matches('\\'))
+        } else {
+            // Linux file managers name volumes alone; the location row below shows the path.
+            drive.label.clone()
+        }
     } else {
         presentation.name.to_owned()
     };
@@ -229,6 +236,12 @@ pub(super) fn render(
             ),
     );
     if let Some(drive) = &dialog.drive {
+        if !cfg!(target_os = "windows") {
+            body = body.child(row(cx.i18n().text(Message::ColumnLocation), drive.path.clone()));
+        }
+        if let Some(file_system) = &drive.file_system {
+            body = body.child(row(cx.i18n().text(Message::PropertiesFileSystem), file_system.clone()));
+        }
         let used = drive.total_bytes.saturating_sub(drive.free_bytes);
         for (label, size) in [
             (Message::PropertiesUsed, used),

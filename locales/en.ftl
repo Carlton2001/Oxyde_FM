@@ -470,6 +470,7 @@ properties-capacity = Capacity
 properties-contains = Contains
 properties-counts = { $files } files, { $folders } folders
 properties-drive = Drive
+properties-file-system = File system
 
 properties-copy-name-double-click = Double-click to copy the name
 

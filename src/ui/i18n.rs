@@ -225,6 +225,7 @@ pub enum Message {
     PropertiesTotalSize,
     PropertiesMultipleLocations,
     PropertiesDrive,
+    PropertiesFileSystem,
 
     MoreOptions,
     NewFolder,
@@ -783,6 +784,7 @@ impl Message {
             Self::PropertiesTotalSize => "properties-total-size",
             Self::PropertiesMultipleLocations => "properties-multiple-locations",
             Self::PropertiesDrive => "properties-drive",
+            Self::PropertiesFileSystem => "properties-file-system",
             Self::Properties => "menu-properties",
             Self::MoreOptions => "menu-more-options",
             Self::NewFolder => "menu-new-folder",
@@ -1597,6 +1599,7 @@ mod tests {
                 Message::PropertiesTotalSize,
                 Message::PropertiesMultipleLocations,
                 Message::PropertiesDrive,
+                Message::PropertiesFileSystem,
 
                 Message::MoreOptions,
                 Message::NewFolder,

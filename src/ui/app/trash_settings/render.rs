@@ -204,11 +204,12 @@ fn render_body(
                             theme.text
                         }),
                 )
-                .child(div().flex_1().min_w_0().truncate().child(format!(
-                    "{} ({})",
-                    drive.label,
-                    drive.path.trim_end_matches('\\')
-                )))
+                .child(div().flex_1().min_w_0().truncate().child(if cfg!(target_os = "windows") {
+                    format!("{} ({})", drive.label, drive.path.trim_end_matches('\\'))
+                } else {
+                    // Linux file managers name volumes alone.
+                    drive.label.clone()
+                }))
                 .child(
                     div()
                         .flex_none()

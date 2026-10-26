@@ -81,6 +81,11 @@ pub trait Volumes: Send + Sync {
 
 ## Interface utilisateur
 
+- Linux nomme un lecteur par son seul libellé (« Root », « Data »), comme Nautilus et
+  Dolphin, dans la barre latérale, les propriétés et la liste de la corbeille ;
+  l'infobulle et la ligne « Emplacement » des propriétés donnent le point de montage.
+  Windows garde « Nom (C:) ».
+- « Propriétés système » n'existe que sous Windows : Linux n'a pas de dialogue équivalent.
 - Partitions non montées dans la section des lecteurs, après les montées, icône atténuée.
   Clic gauche : montage en arrière-plan, puis navigation vers le chemin obtenu. Curseur inchangé.
 - Menu : « Démonter » si `actions.unmount`, « Éjecter » si `actions.eject`. `eject_usb_drive`

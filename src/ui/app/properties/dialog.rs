@@ -16,7 +16,8 @@ pub(crate) fn render(
     let theme = *cx.theme();
     let height_limit = crate::ui::components::tool_window::content_height_limit(window, cx);
     let presentation = dialog.properties.as_ref().map(property_presentation);
-    let label_width = general::label_width(presentation.as_ref(), theme, window, cx);
+    let has_file_system = dialog.drive.as_ref().is_some_and(|drive| drive.file_system.is_some());
+    let label_width = general::label_width(presentation.as_ref(), has_file_system, theme, window, cx);
     let compact = window.viewport_size().width < rems(28.0).to_pixels(window.rem_size());
     let mut body = div().flex().flex_col().gap(rems(0.375));
     if dialog.paths.len() > 1 {
@@ -198,7 +199,8 @@ pub(crate) fn render(
                 )
                 .child(
                     crate::ui::components::tool_window::footer(cx)
-                        .child(
+                        // Linux has no system Properties dialog; xdg-open would just open the item.
+                        .when(cfg!(target_os = "windows"), |footer| footer.child(
                             action_button("properties-system", "".into(), false, cx)
                                 .child(
                                     svg()
@@ -213,7 +215,7 @@ pub(crate) fn render(
                                         this.system_file_properties(window, cx)
                                     });
                                 }),
-                        )
+                        ))
                         .child(
                             action_button("properties-cancel", cx.i18n().text(Message::Cancel), false, cx)
                                 .track_focus(&dialog.focus)

@@ -145,6 +145,11 @@ impl Render for DriveTooltip {
         let usage = drive_usage(self.drive.total_bytes, self.drive.free_bytes);
         let mut body = div().flex().flex_col().items_center().gap(rems(0.5))
             .child(div().max_w(rems(18.0)).text_size(rems(0.8125)).child(self.name.clone()));
+        // Windows names include the drive letter; Linux names omit the mount point.
+        let path_in_name = cfg!(target_os = "windows");
+        if !path_in_name {
+            body = body.child(div().max_w(rems(18.0)).text_size(rems(0.6875)).text_color(theme.text_muted).child(self.drive.path.clone()));
+        }
         if let Some((used, ratio)) = usage {
             let usage_color = theme.drive_usage_color(self.drive.total_bytes, self.drive.free_bytes);
             let chart = canvas(|bounds, _, _| bounds, move |_, bounds, window, _| {
@@ -164,7 +169,7 @@ impl Render for DriveTooltip {
             body = body.child(div().relative().size(rems(4.75)).flex().items_center().justify_center()
                 .child(chart).child(div().text_size(rems(0.875)).font_weight(FontWeight::SEMIBOLD).child(format!("{}%", (ratio * 100.0).round() as u32))))
                 .child(div().text_size(rems(0.6875)).text_color(theme.text_muted).child(cx.i18n().text_with_args(Message::DriveTooltipUsage, &args)));
-        } else {
+        } else if path_in_name {
             body = body.child(div().text_size(rems(0.6875)).text_color(theme.text_muted).child(self.drive.path.clone()));
         }
         CursorTooltip::new(div().bg(theme.surface).text_color(theme.text)

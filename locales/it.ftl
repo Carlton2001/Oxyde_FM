@@ -777,6 +777,7 @@ properties-capacity = Capacità
 properties-contains = Contenuto
 properties-counts = { $files } file, { $folders } cartelle
 properties-drive = Unità
+properties-file-system = File system
 
 properties-copy-name-double-click = Doppio clic per copiare il nome
 
