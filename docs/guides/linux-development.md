@@ -47,10 +47,22 @@ WSL reste utilisable pour `check-linux.sh` ; il ne valide ni GPU, ni bureau, ni 
 
 ## Préserver Windows
 
-Après tout changement de fichier commun, lancer sous Windows
-`./scripts/test-windows.ps1 -Offline` ([procédure](development.md#vérifier-un-changement)).
-Aucune compilation Windows n'est possible depuis Linux : un `cfg` mal placé ne se voit
-qu'à ce moment. Suite Windows réussie jusqu'à `b84e5c3` (cadre des fenêtres, corbeille).
+Après tout changement de fichier commun, vérifier depuis Linux que Windows compile :
+
+```bash
+bash scripts/check-windows.sh          # cargo xwin check, cible MSVC, toutes les cibles
+```
+
+Il détecte `cfg` mal placés et imports cassés, sans lier ni exécuter. Installation unique :
+`sudo dnf install llvm lld clang`, `rustup target add x86_64-pc-windows-msvc`,
+`cargo install --locked cargo-xwin`, puis un premier lancement avec `XWIN_ACCEPT_LICENSE=1`,
+qui accepte la licence Microsoft du CRT et du SDK et les télécharge (1,2 Go dans
+`~/.cache/cargo-xwin`). `scripts/llvm-rc-crate-root.sh` fait chercher à `llvm-rc` les
+ressources depuis la racine de chaque crate, comme sous Windows.
+
+Les tests restent à lancer sous Windows : `./scripts/test-windows.ps1 -Offline`
+([procédure](development.md#vérifier-un-changement)), au moins avant chaque fusion.
+Suite Windows réussie jusqu'à `b84e5c3` ; `check-windows.sh` réussi sur `b544875`.
 **À relancer avant fusion :** la correction M07 touche `drag.rs`, `drag/external.rs`,
 `drive_watchers.rs` et le trait `Platform`.
 

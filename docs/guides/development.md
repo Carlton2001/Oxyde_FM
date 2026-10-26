@@ -29,8 +29,10 @@ La suite Windows complète utilise un TEMP/TMP privé, compile toutes les cibles
 
 Le workflow `.github/workflows/tests.yml` utilise le même script. Linux utilise
 son propre environnement et le script `scripts/check-linux.sh` : voir la
-[préparation Fedora/WSL](linux-development.md). Les tentatives croisées historiques
-sur Windows étaient bloquées par Fontconfig/sysroot.
+[préparation Fedora/WSL](linux-development.md). Depuis Linux, `scripts/check-windows.sh`
+vérifie que la cible Windows compile ([préserver Windows](linux-development.md#préserver-windows)),
+sans exécuter ses tests. Les tentatives croisées historiques vers Linux depuis Windows
+étaient bloquées par Fontconfig/sysroot.
 
 La CI native conserve Rust stable courant et le profil de développement. Elle restaure
 les dépendances Cargo et leurs compilations avec `Swatinem/rust-cache`, épinglé sur un
