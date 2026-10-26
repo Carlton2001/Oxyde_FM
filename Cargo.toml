@@ -89,6 +89,11 @@ lofty = "0.25.4"
 minisign-verify = "0.2"
 base64 = "0.22"
 
+# Already locked through GPUI's Linux backend: UDisks2 over D-Bus, free space by statvfs.
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+rustix = { version = "1.1", default-features = false, features = ["fs", "std"] }
+zbus = { version = "5.19", default-features = false, features = ["async-io", "blocking-api"] }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 # Required by the official COM implementation macro; already used by windows.
 windows-core = "0.62.2"

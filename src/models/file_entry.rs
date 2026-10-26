@@ -140,6 +140,8 @@ pub struct DriveInfo {
     pub media_type: Option<String>,
     pub physical_id: Option<String>,
     pub remote_path: Option<String>,
+    /// Display name of the volume format, such as NTFS, FAT32 or ext4.
+    pub file_system: Option<String>,
 }
 
 impl DriveInfo {

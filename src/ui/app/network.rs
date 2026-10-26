@@ -600,6 +600,7 @@ mod tests {
             media_type: None,
             physical_id: None,
             remote_path: None,
+            file_system: None,
         }
     }
     #[test]

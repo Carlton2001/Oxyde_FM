@@ -546,6 +546,7 @@ mod tests {
             media_type: Some("SSD".into()),
             physical_id: Some("Disk 0".into()),
             remote_path: None,
+            file_system: None,
         };
         let mut root = known.clone();
         root.total_bytes = 0;

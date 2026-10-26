@@ -1,124 +1,38 @@
-//! Linux volume domain: mount table inventory and udisks2 unmounting.
+//! Linux volume domain: UDisks2 inventory, mount table fallback and udisks2 unmounting.
 use super::{MountedDiskImage, Volumes};
 use crate::models::DriveInfo;
 
+mod fallback;
+mod inventory;
 mod mounts;
+mod udisks;
 
 pub struct LinuxVolumes;
 
 impl Volumes for LinuxVolumes {
-    fn list(&self, _skip_hardware_info: bool) -> Vec<DriveInfo> {
-        // Systèmes de fichiers virtuels à ignorer
-        const SKIP_FS: &[&str] = &[
-            "proc",
-            "sysfs",
-            "devtmpfs",
-            "devpts",
-            "tmpfs",
-            "cgroup",
-            "cgroup2",
-            "pstore",
-            "bpf",
-            "tracefs",
-            "debugfs",
-            "hugetlbfs",
-            "mqueue",
-            "fusectl",
-            "configfs",
-            "ramfs",
-            "overlay",
-            "aufs",
-            "squashfs",
-            "efivarfs",
-            "securityfs",
-            "autofs",
-        ];
-
-        let content = std::fs::read_to_string("/proc/mounts").unwrap_or_default();
-        let mut drives: Vec<DriveInfo> = content
-            .lines()
-            .filter_map(|line| {
-                let mut parts = line.splitn(4, ' ');
-                let device = parts.next()?;
-                let mount = parts.next()?;
-                let fs_type = parts.next()?;
-
-                if SKIP_FS.contains(&fs_type) {
-                    return None;
+    fn list(&self, skip_hardware_info: bool) -> Vec<DriveInfo> {
+        let table = mounts::table();
+        let mut drives = match udisks::blocks() {
+            Ok(blocks) => {
+                let mut drives = inventory::mounted(&blocks, &inventory::Session::current());
+                drives.extend(fallback::remote(&table));
+                drives
+            }
+            Err(error) => {
+                static REPORTED: std::sync::Once = std::sync::Once::new();
+                REPORTED.call_once(|| log::warn!("UDisks2 unavailable, listing the mount table: {error}"));
+                fallback::drives(&table)
+            }
+        };
+        if !skip_hardware_info {
+            // Network mounts can block statvfs indefinitely; they keep unknown capacities.
+            for drive in drives.iter_mut().filter(|drive| drive.drive_type != "remote") {
+                if let Ok(stats) = rustix::fs::statvfs(drive.path.as_str()) {
+                    drive.total_bytes = stats.f_blocks.saturating_mul(stats.f_frsize);
+                    drive.free_bytes = stats.f_bavail.saturating_mul(stats.f_frsize);
                 }
-                if mount.starts_with("/proc")
-                    || mount.starts_with("/sys")
-                    || mount.starts_with("/dev/pts")
-                    // udisks2 mounts removable volumes under /run/media/$USER.
-                    || (mount.starts_with("/run") && !mount.starts_with("/run/media/"))
-                {
-                    return None;
-                }
-
-                let label = if mount == "/" {
-                    "Root".to_string()
-                } else {
-                    std::path::Path::new(mount)
-                        .file_name()
-                        .map(|n| n.to_string_lossy().to_string())
-                        .unwrap_or_else(|| mount.to_string())
-                };
-
-                let drive_type = if device.starts_with("//")
-                    || device.starts_with("cifs")
-                    || fs_type == "nfs"
-                    || fs_type == "nfs4"
-                    || fs_type == "smbfs"
-                {
-                    "remote"
-                } else if device.starts_with("/dev/sr")
-                    || device.starts_with("/dev/cdrom")
-                    || fs_type == "iso9660"
-                    || fs_type == "udf"
-                {
-                    "cdrom"
-                } else if device.starts_with("/dev/sd")
-                    || device.starts_with("/dev/nvme")
-                    || device.starts_with("/dev/mmcblk")
-                    || device.starts_with("/dev/vd")
-                {
-                    "fixed"
-                } else {
-                    "fixed"
-                }
-                .to_string();
-
-                Some(DriveInfo {
-                    path: mount.to_string(),
-                    label,
-                    drive_type,
-                    // TODO: remplir via statvfs (nécessite la crate `nix`)
-                    total_bytes: 0,
-                    free_bytes: 0,
-                    media_type: None,
-                    physical_id: None,
-                    remote_path: if device.starts_with("//") {
-                        Some(device.to_string())
-                    } else {
-                        None
-                    },
-                })
-            })
-            .collect();
-
-        if drives.is_empty() {
-            drives.push(DriveInfo {
-                path: "/".to_string(),
-                label: "Root".to_string(),
-                drive_type: "fixed".to_string(),
-                total_bytes: 0,
-                free_bytes: 0,
-                media_type: None,
-                physical_id: None,
-                remote_path: None,
-            });
+            }
         }
-
         drives
     }
 

@@ -1,6 +1,6 @@
 # Volumes
 
-**Statut : pilote en cours, étape 1 faite** (trait extrait, comportement inchangé). Ce
+**Statut : pilote en cours, étapes 1 et 2 faites** (trait extrait, inventaire UDisks2). Ce
 document deviendra le contrat du domaine une fois le pilote terminé.
 
 Le pilote sort les volumes du trait `Platform` dans un trait de domaine et livre, sous
@@ -39,7 +39,10 @@ pub trait Volumes: Send + Sync {
 }
 ```
 
-- `DriveInfo` reste identifié par son chemin. Il gagne `actions: DriveActions { unmount, eject }` ;
+- `DriveInfo` reste identifié par son chemin. `file_system` donne le format affiché dans les
+  Propriétés (NTFS, FAT32, exFAT, ext4…) : `GetVolumeInformationW` sous Windows, `IdType`
+  et `IdVersion` d'UDisks2 sous Linux, rien pour un montage FUSE. Il gagnera
+  `actions: DriveActions { unmount, eject }` ;
   Windows calcule `eject = is_usb()` et `unmount = false`, soit le menu actuel.
 - `UnmountedVolume { id, label, size, removable, fs_type }` forme une liste séparée dans l'état ;
   Windows la renvoie vide.
@@ -49,18 +52,24 @@ pub trait Volumes: Send + Sync {
 ## Linux : `src/platform/linux_volumes/`
 
 - `udisks.rs` : client `zbus::blocking` vers `org.freedesktop.UDisks2` (`GetManagedObjects`).
-  `zbus` 5.19 est déjà verrouillé par GPUI avec son API bloquante : la déclaration Linux
-  ajoute une arête à `Cargo.lock`, aucun crate. À vérifier par `cargo tree` avant/après.
-- `inventory.rs` : fonction pure objets UDisks2 → `DriveInfo`/`UnmountedVolume`, testée sur
-  fixtures. Suit les indications UDisks2 comme Nautilus (`HintIgnore`, `HintSystem`, amovible) :
-  `/boot` et `/boot/efi` disparaissent, `/` reste. Capacité par `statvfs` en mode détaillé.
+  `zbus` 5.19 et `rustix` 1.1 sont déjà verrouillés par GPUI : leur déclaration Linux
+  ajoute deux arêtes à `Cargo.lock`, aucun crate ; `blocking-api` active l'API bloquante.
+- `inventory.rs` : fonction pure objets UDisks2 → `DriveInfo`, testée sur fixtures, comme
+  GVfs : `HintIgnore` masque EFI, récupération et swap ; un volume monté n'apparaît que
+  sous `/run/media/$USER/`, `/media/` ou le dossier personnel, sans composant caché, et `/`
+  reste en tête (« Root »). `/boot` disparaît donc. `HintSystem` ne sert pas : UDisks2 le
+  pose sur tout disque interne, `Data` compris. Optique → `cdrom`, amovible ou USB →
+  `removable`. Capacité par `rustix::fs::statvfs` en mode détaillé, sauf montages réseau.
+  `media_type` reste vide : le renseigner basculerait la surveillance du sondage vers
+  inotify (T11).
 - `actions.rs` : `Filesystem.Mount`/`Unmount` avec `auth.no_user_interaction = false` (GNOME
   affiche son dialogue polkit) ; éjection USB = démontage de toutes les partitions du disque
   puis `Drive.PowerOff`, ou `Drive.Eject` pour un support optique.
 - `signals.rs` : `InterfacesAdded`/`InterfacesRemoved`/`PropertiesChanged` incrémentent la
   révision ; le sondage de 2 s ne reste qu'en repli.
-- Repli sans UDisks2 (WSL, conteneur) : lecture actuelle de `/proc/mounts` et `mountinfo`
-  (`linux_volumes/mounts.rs`), sans montage ni éjection.
+- `fallback.rs` : sans UDisks2 (WSL, conteneur), tous les montages non virtuels de
+  `mountinfo` (`mounts.rs`, échappements décodés), sans montage ni éjection ; avec UDisks2,
+  il n'ajoute que les montages réseau.
 
 ## Windows
 
@@ -88,7 +97,8 @@ manuel de `tests.yml` sur la branche (elle n'est pas fusionnée dans `main`).
 
 1. **Extraire le trait**, déplacements seuls, Linux inchangé. *Fait* : 7 fichiers communs,
    uniquement les appels ; suite Windows encore à passer.
-2. **Inventaire UDisks2** et repli. Essai : `Data`, clé, `/boot/efi` masqué, capacités.
+2. **Inventaire UDisks2** et repli. *Fait* : aucun fichier commun touché ; Root, `Data` et
+   la clé avec leurs capacités, `/boot` et `/boot/efi` masqués.
 3. **Signaux** UDisks2 à la place du sondage.
 4. **Démonter et éjecter** avec authentification ; champ `actions` côté Windows.
 5. **Volumes non montés** et montage au clic.

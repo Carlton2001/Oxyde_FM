@@ -1,18 +1,42 @@
-//! Mount points from the kernel table, so a drop can tell when `rename` crosses a mount.
+//! The kernel mount table: mount points, so a drop can tell when `rename` crosses a
+//! mount, and entries for volumes UDisks2 does not manage.
 
-/// Every mount point of this process's namespace; empty when the table is unreadable.
-pub(super) fn mount_points() -> Vec<String> {
+pub(super) struct MountEntry {
+    pub point: String,
+    pub fs_type: String,
+    pub source: String,
+}
+
+/// Every mount of this process's namespace, in kernel order; empty when unreadable.
+pub(super) fn table() -> Vec<MountEntry> {
     std::fs::read_to_string("/proc/self/mountinfo")
-        .map(|table| parse(&table))
+        .map(|table| entries(&table))
         .unwrap_or_default()
 }
 
-fn parse(table: &str) -> Vec<String> {
-    let mut points: Vec<String> = table
+pub(super) fn mount_points() -> Vec<String> {
+    points(&table())
+}
+
+/// `id parent dev root point options [optional…] - fs_type source super_options`
+fn entries(table: &str) -> Vec<MountEntry> {
+    table
         .lines()
-        .filter_map(|line| line.split(' ').nth(4).map(unescape))
-        .filter(|point| point.starts_with('/'))
-        .collect();
+        .filter_map(|line| {
+            let (mount, filesystem) = line.split_once(" - ")?;
+            let mut filesystem = filesystem.split(' ');
+            Some(MountEntry {
+                point: unescape(mount.split(' ').nth(4)?),
+                fs_type: unescape(filesystem.next()?),
+                source: unescape(filesystem.next()?),
+            })
+        })
+        .filter(|entry| entry.point.starts_with('/'))
+        .collect()
+}
+
+fn points(entries: &[MountEntry]) -> Vec<String> {
+    let mut points: Vec<String> = entries.iter().map(|entry| entry.point.clone()).collect();
     points.sort();
     points.dedup();
     points

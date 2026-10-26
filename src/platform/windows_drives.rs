@@ -56,6 +56,7 @@ pub fn list_drive_roots() -> Vec<DriveInfo> {
                 media_type: None,
                 physical_id: None,
                 remote_path: None,
+                file_system: None,
             })
         })
         .collect()
@@ -370,22 +371,23 @@ pub fn list_drives(skip_hardware_info: bool) -> Vec<DriveInfo> {
                 };
 
                 let mut volume_name = [0u16; 261];
-                let label = if GetVolumeInformationW(
+                let mut file_system_name = [0u16; 261];
+                let volume = GetVolumeInformationW(
                     PCWSTR(root_path.as_ptr()),
                     Some(&mut volume_name),
                     None,
                     None,
                     None,
-                    None,
+                    Some(&mut file_system_name),
                 )
-                .is_ok()
-                {
-                    String::from_utf16_lossy(&volume_name)
-                        .trim_matches(char::from(0))
-                        .to_string()
-                } else {
-                    String::new()
+                .is_ok();
+                let text = |buffer: &[u16]| {
+                    String::from_utf16_lossy(buffer).trim_matches(char::from(0)).to_string()
                 };
+                let label = if volume { text(&volume_name) } else { String::new() };
+                let file_system = volume
+                    .then(|| text(&file_system_name))
+                    .filter(|name| !name.is_empty());
 
                 // Get disk space information
                 let mut free_bytes_available = 0u64;
@@ -548,6 +550,7 @@ pub fn list_drives(skip_hardware_info: bool) -> Vec<DriveInfo> {
                     media_type,
                     physical_id,
                     remote_path,
+                    file_system,
                 });
             }
         }
