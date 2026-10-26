@@ -7,10 +7,12 @@ use log::info;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+#[cfg(target_os = "windows")]
 struct RestorationPaths {
     corrected_path: PathBuf,
 }
 
+#[cfg(target_os = "windows")]
 fn get_restoration_paths(item: &trash::TrashItem) -> RestorationPaths {
     let crate_path = crate::platform::platform()
         .trash_original_path(std::path::Path::new(&item.id))
@@ -40,11 +42,13 @@ fn get_restoration_paths(item: &trash::TrashItem) -> RestorationPaths {
     RestorationPaths { corrected_path }
 }
 
+#[cfg(target_os = "windows")]
 /// Shares the original identity used by trash listings, restore, and properties.
 pub(crate) fn original_trash_path(item: &trash::TrashItem) -> PathBuf {
     get_restoration_paths(item).corrected_path
 }
 
+#[cfg(target_os = "windows")]
 pub(crate) fn item_with_correct_restore_name(item: &trash::TrashItem) -> trash::TrashItem {
     let mut item = item.clone();
     let original_path = original_trash_path(&item);
@@ -57,10 +61,23 @@ pub(crate) fn item_with_correct_restore_name(item: &trash::TrashItem) -> trash::
     item
 }
 
+#[cfg(target_os = "windows")]
 mod trash_listing;
+#[cfg(target_os = "windows")]
 pub use trash_listing::list_trash;
+#[cfg(target_os = "windows")]
 pub(crate) use trash_listing::list_trash_unsorted;
+#[cfg(not(target_os = "windows"))]
+mod linux_trash;
+#[cfg(not(target_os = "windows"))]
+pub use linux_trash::{
+    empty_trash, get_total_recycle_bin_usage, list_trash, purge_recycle_bin, restore_items,
+    restore_items_report, TrashRestoreReport,
+};
+#[cfg(not(target_os = "windows"))]
+pub(crate) use linux_trash::{list_trash_unsorted, trash_properties_metadata};
 
+#[cfg(target_os = "windows")]
 /// Empty the Recycle Bin (permanently delete all items)
 pub async fn empty_trash() -> Result<(), CommandError> {
     let started = std::time::Instant::now();
@@ -78,6 +95,7 @@ pub async fn empty_trash() -> Result<(), CommandError> {
     Ok(())
 }
 
+#[cfg(target_os = "windows")]
 /// Permanently delete specific items from the Recycle Bin
 pub async fn purge_recycle_bin(paths: Vec<String>) -> Result<(), CommandError> {
     let started = std::time::Instant::now();
@@ -189,10 +207,12 @@ pub struct TrashSystemConfig {
     pub nuke_on_delete: bool,
 }
 
+#[cfg(target_os = "windows")]
 pub async fn get_total_recycle_bin_usage() -> Result<(u64, u64), CommandError> {
     crate::platform::platform().recycle_bin_usage().map_err(CommandError::SystemError)
 }
 
+#[cfg(target_os = "windows")]
 fn normalize_restore_path(path: &std::path::Path) -> String {
     path.to_string_lossy()
         .to_lowercase()
@@ -200,7 +220,7 @@ fn normalize_restore_path(path: &std::path::Path) -> String {
         .trim_start_matches("\\\\?\\")
         .to_string()
 }
-#[cfg(test)]
+#[cfg(all(test, target_os = "windows"))]
 fn select_restoration_tasks(
     items: &[trash::TrashItem],
     paths: Vec<String>,
@@ -244,9 +264,12 @@ fn select_restoration_tasks(
     }
     Ok(selected)
 }
+#[cfg(target_os = "windows")]
 mod trash_restore;
+#[cfg(target_os = "windows")]
 pub use trash_restore::{restore_items_report, TrashRestoreReport};
 
+#[cfg(target_os = "windows")]
 pub async fn restore_items(paths: Vec<String>) -> Result<Vec<String>, CommandError> {
     let report = restore_items_report(paths).await?;
     if let Some((_, error)) = report.failures.into_iter().next() {
@@ -593,6 +616,6 @@ mod move_undo_rollback_tests;
 #[path = "ops/tests/new_folder_history_tests.rs"]
 mod new_folder_history_tests;
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "windows"))]
 #[path = "ops/tests/restoration_selection_tests.rs"]
 mod restoration_selection_tests;

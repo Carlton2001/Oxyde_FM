@@ -514,12 +514,41 @@ pub enum Message {
     TrashAvailableSpace,
     TrashSelectedSettings,
     TrashCustomSize,
+    #[cfg(target_os = "windows")]
     TrashMaxCapacity,
+    #[cfg(target_os = "windows")]
     TrashDontMove,
+    #[cfg(target_os = "windows")]
     TrashDeleteImmediately,
     TrashConfirmDelete,
+    #[cfg(target_os = "windows")]
     TrashMegabytes,
+    #[cfg(target_os = "windows")]
     TrashSettingsError,
+    #[cfg(not(target_os = "windows"))]
+    TrashAutoDelete,
+    #[cfg(not(target_os = "windows"))]
+    TrashAutoDeleteOld,
+    #[cfg(not(target_os = "windows"))]
+    TrashRetentionDays,
+    #[cfg(not(target_os = "windows"))]
+    TrashGnomeRetentionNote,
+    #[cfg(not(target_os = "windows"))]
+    TrashKdeTimeLimit,
+    #[cfg(not(target_os = "windows"))]
+    TrashKdeSizeLimit,
+    #[cfg(not(target_os = "windows"))]
+    TrashKdeLimitAction,
+    #[cfg(not(target_os = "windows"))]
+    TrashKdeWarn,
+    #[cfg(not(target_os = "windows"))]
+    TrashKdeDeleteOldest,
+    #[cfg(not(target_os = "windows"))]
+    TrashKdeDeleteLargest,
+    #[cfg(not(target_os = "windows"))]
+    TrashKdeRetentionNote,
+    #[cfg(not(target_os = "windows"))]
+    TrashRetentionError,
     TrashOriginalLocation,
     TrashDeletedAt,
 
@@ -1098,12 +1127,41 @@ impl Message {
             Self::TrashAvailableSpace => "trash-available-space",
             Self::TrashSelectedSettings => "trash-selected-settings",
             Self::TrashCustomSize => "trash-custom-size",
+            #[cfg(target_os = "windows")]
             Self::TrashMaxCapacity => "trash-max-capacity",
+            #[cfg(target_os = "windows")]
             Self::TrashDontMove => "trash-dont-move",
+            #[cfg(target_os = "windows")]
             Self::TrashDeleteImmediately => "trash-delete-immediately",
             Self::TrashConfirmDelete => "trash-confirm-delete",
+            #[cfg(target_os = "windows")]
             Self::TrashMegabytes => "trash-megabytes",
+            #[cfg(target_os = "windows")]
             Self::TrashSettingsError => "trash-settings-error",
+            #[cfg(not(target_os = "windows"))]
+            Self::TrashAutoDelete => "trash-auto-delete",
+            #[cfg(not(target_os = "windows"))]
+            Self::TrashAutoDeleteOld => "trash-auto-delete-old",
+            #[cfg(not(target_os = "windows"))]
+            Self::TrashRetentionDays => "trash-retention-days",
+            #[cfg(not(target_os = "windows"))]
+            Self::TrashGnomeRetentionNote => "trash-gnome-retention-note",
+            #[cfg(not(target_os = "windows"))]
+            Self::TrashKdeTimeLimit => "trash-kde-time-limit",
+            #[cfg(not(target_os = "windows"))]
+            Self::TrashKdeSizeLimit => "trash-kde-size-limit",
+            #[cfg(not(target_os = "windows"))]
+            Self::TrashKdeLimitAction => "trash-kde-limit-action",
+            #[cfg(not(target_os = "windows"))]
+            Self::TrashKdeWarn => "trash-kde-warn",
+            #[cfg(not(target_os = "windows"))]
+            Self::TrashKdeDeleteOldest => "trash-kde-delete-oldest",
+            #[cfg(not(target_os = "windows"))]
+            Self::TrashKdeDeleteLargest => "trash-kde-delete-largest",
+            #[cfg(not(target_os = "windows"))]
+            Self::TrashKdeRetentionNote => "trash-kde-retention-note",
+            #[cfg(not(target_os = "windows"))]
+            Self::TrashRetentionError => "trash-retention-error",
             Self::TrashOriginalLocation => "trash-original-location",
             Self::TrashDeletedAt => "trash-deleted-at",
             Self::SidebarTrash => "sidebar-trash",
@@ -1845,12 +1903,41 @@ mod tests {
                 Message::TrashAvailableSpace,
                 Message::TrashSelectedSettings,
                 Message::TrashCustomSize,
+                #[cfg(target_os = "windows")]
                 Message::TrashMaxCapacity,
+                #[cfg(target_os = "windows")]
                 Message::TrashDontMove,
+                #[cfg(target_os = "windows")]
                 Message::TrashDeleteImmediately,
                 Message::TrashConfirmDelete,
+                #[cfg(target_os = "windows")]
                 Message::TrashMegabytes,
+                #[cfg(target_os = "windows")]
                 Message::TrashSettingsError,
+                #[cfg(not(target_os = "windows"))]
+                Message::TrashAutoDelete,
+                #[cfg(not(target_os = "windows"))]
+                Message::TrashAutoDeleteOld,
+                #[cfg(not(target_os = "windows"))]
+                Message::TrashRetentionDays,
+                #[cfg(not(target_os = "windows"))]
+                Message::TrashGnomeRetentionNote,
+                #[cfg(not(target_os = "windows"))]
+                Message::TrashKdeTimeLimit,
+                #[cfg(not(target_os = "windows"))]
+                Message::TrashKdeSizeLimit,
+                #[cfg(not(target_os = "windows"))]
+                Message::TrashKdeLimitAction,
+                #[cfg(not(target_os = "windows"))]
+                Message::TrashKdeWarn,
+                #[cfg(not(target_os = "windows"))]
+                Message::TrashKdeDeleteOldest,
+                #[cfg(not(target_os = "windows"))]
+                Message::TrashKdeDeleteLargest,
+                #[cfg(not(target_os = "windows"))]
+                Message::TrashKdeRetentionNote,
+                #[cfg(not(target_os = "windows"))]
+                Message::TrashRetentionError,
                 Message::TrashOriginalLocation,
                 Message::TrashDeletedAt,
 

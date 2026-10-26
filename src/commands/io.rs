@@ -357,6 +357,10 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
     let size = if is_dir { 0 } else { metadata.len() };
 
     // Check if this is a trash item and populate trash metadata
+    #[cfg(not(target_os = "windows"))]
+    let (original_path, deleted_time) = crate::commands::ops::trash_properties_metadata(&path_buf)
+        .map_or((None, None), |(original, deleted)| (Some(original), deleted));
+    #[cfg(target_os = "windows")]
     let (original_path, deleted_time) = if path.to_lowercase().contains("$recycle.bin") {
         // Try to get trash metadata
         if let Ok(trash_items) = crate::platform::platform().list_trash_items() {
@@ -407,6 +411,7 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
     })
 }
 
+#[cfg(target_os = "windows")]
 fn trash_properties_metadata(item: &trash::TrashItem) -> (String, Option<i64>) {
     let original = super::ops::original_trash_path(item)
         .to_string_lossy()
@@ -623,7 +628,7 @@ mod directory_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "windows"))]
 mod trash_properties_tests {
     use super::trash_properties_metadata;
 

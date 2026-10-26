@@ -383,13 +383,22 @@ impl Platform for LinuxPlatform {
         trash::os_limited::list().map_err(|error| error.to_string())
     }
     fn restore_trash_items(&self, items: Vec<trash::TrashItem>) -> Result<(), String> {
-        trash::os_limited::restore_all(items).map_err(|error| error.to_string())
+        items.iter().try_for_each(super::linux_trash::restore)
     }
     fn purge_trash_items(&self, items: Vec<trash::TrashItem>) -> Result<(), String> {
-        trash::os_limited::purge_all(items).map_err(|error| error.to_string())
+        super::linux_trash::purge(&items)
     }
     fn empty_trash(&self) -> Result<(), String> {
         self.purge_trash_items(self.list_trash_items()?)
+    }
+    fn trash_content_path(&self, item: &trash::TrashItem) -> Option<std::path::PathBuf> {
+        super::linux_trash::content_path(item)
+    }
+    fn trash_retention(&self) -> Result<super::TrashRetention, String> {
+        super::linux_trash::retention()
+    }
+    fn set_trash_retention(&self, retention: &super::TrashRetention) -> Result<(), String> {
+        super::linux_trash::set_retention(retention)
     }
     fn bulk_expand_excluded(&self, _path: &str, name: &str) -> bool {
         // Preserve the previous shared exclusions; Windows drive rules stay native.
@@ -401,7 +410,13 @@ impl Platform for LinuxPlatform {
 
     fn trash_original_path(&self, _id: &std::path::Path) -> Option<std::path::PathBuf> { None }
 
-    fn trash_transfer_entries(&self, _paths: &[std::path::PathBuf]) -> Result<Vec<super::TrashTransferEntry>, String> { Ok(Vec::new()) }
+    fn trash_transfer_entries(&self, paths: &[std::path::PathBuf]) -> Result<Vec<super::TrashTransferEntry>, String> {
+        // Moving content alone would orphan its record; items leave the trash by restoration.
+        if paths.iter().any(|path| super::linux_trash::inside_trash(path)) {
+            return Err("Items in the trash must be restored before being copied or moved".into());
+        }
+        Ok(Vec::new())
+    }
     fn detach_trash_metadata(&self, _entry: &super::TrashTransferEntry) -> Result<Option<super::DetachedTrashMetadata>, String> { Ok(None) }
 
     fn peek_status(&self) -> Result<super::PeekStatus, String> { Ok(super::PeekStatus::default()) }
@@ -411,18 +426,7 @@ impl Platform for LinuxPlatform {
     fn watch_quick_access_changes(&self, _revision: std::sync::Arc<std::sync::atomic::AtomicU64>) -> Result<Option<Box<dyn Send>>, String> { Ok(None) }
 
     fn recycle_bin_usage(&self) -> Result<(u64, u64), String> {
-        let entries = crate::commands::ops::list_trash().map_err(|error| error.to_string())?;
-        let mut size = 0_u64;
-        for entry in &entries {
-            let mut stack = vec![std::path::PathBuf::from(&entry.path)];
-            while let Some(path) = stack.pop() {
-                let Ok(metadata) = std::fs::symlink_metadata(&path) else { continue; };
-                if metadata.is_dir() {
-                    if let Ok(children) = std::fs::read_dir(path) { stack.extend(children.filter_map(Result::ok).map(|child| child.path())); }
-                } else { size = size.saturating_add(metadata.len()); }
-            }
-        }
-        Ok((size, entries.len() as u64))
+        super::linux_trash::usage()
     }
 
     fn recycle_bin_config(&self, _path: String) -> Result<crate::commands::ops::TrashSystemConfig, String> {

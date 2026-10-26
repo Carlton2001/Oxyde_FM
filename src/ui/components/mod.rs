@@ -798,6 +798,8 @@ fn trash_context_menu_items(i18n: &I18n, handle: Entity<crate::ui::app::OxydeApp
     use dropdown::{DropdownItem, IconName};
     let mut items = Vec::new();
     let all = path.is_none();
+    // Freedesktop items leave the trash only by restoration, keeping content and record together.
+    #[cfg(target_os = "windows")]
     if !all {
         let h = handle.clone();
         items.push(DropdownItem::new(i18n.text(Message::Cut).to_string(), move |_, cx| {

@@ -12,6 +12,7 @@ impl DeletePolicy {
         self.revision
     }
 
+    #[cfg(target_os = "windows")]
     pub(crate) fn invalidate(&mut self) {
         self.revision = self.revision.wrapping_add(1);
     }
@@ -24,6 +25,7 @@ impl DeletePolicy {
         true
     }
 
+    #[cfg(target_os = "windows")]
     pub(crate) fn saved(&mut self, configs: &[TrashSystemConfig]) {
         self.invalidate();
         for config in configs {

@@ -1,17 +1,26 @@
 use super::*;
+#[cfg(target_os = "windows")]
 use oxyde_lib::commands::ops::TrashSystemConfig;
 use oxyde_lib::models::DriveInfo;
 
 mod actions;
 mod confirmation;
 mod deletion_policy;
+#[cfg(target_os = "windows")]
 mod render;
+#[cfg(target_os = "windows")]
 mod settings;
+#[cfg(not(target_os = "windows"))]
+mod linux;
 
 pub(crate) use confirmation::render_delete_confirmation;
+#[cfg(target_os = "windows")]
 pub(crate) use render::render;
+#[cfg(not(target_os = "windows"))]
+pub(crate) use linux::{render, TrashSettings};
 pub(crate) use deletion_policy::{DeletePolicy, read_drive_policy};
 
+#[cfg(target_os = "windows")]
 pub(crate) struct TrashSettings {
     drives: Vec<DriveInfo>,
     configs: Vec<TrashSystemConfig>,
@@ -30,10 +39,12 @@ pub(crate) struct TrashSettings {
     save_focus: FocusHandle,
 }
 
+#[cfg(target_os = "windows")]
 impl TrashSettings {
     pub(super) fn request_id(&self) -> EntityId { self.input.entity_id() }
 }
 
+#[cfg(target_os = "windows")]
 fn capacity_mb(value: &str, percent: bool, total_bytes: u64) -> Option<u64> {
     let number: u64 = value.parse().ok()?;
     if percent {
@@ -50,6 +61,7 @@ fn capacity_mb(value: &str, percent: bool, total_bytes: u64) -> Option<u64> {
     }
 }
 
+#[cfg(target_os = "windows")]
 fn capacity_percent(max_size_mb: u64, total_bytes: u64) -> u64 {
     if total_bytes == 0 {
         return 0;
@@ -68,6 +80,6 @@ pub(crate) struct PendingDelete {
     pub confirm_focus: FocusHandle,
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "windows"))]
 #[path = "trash_settings/tests/capacity.rs"]
 mod tests;

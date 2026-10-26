@@ -378,6 +378,14 @@ pub trait Platform: Send + Sync {
     fn trash_transfer_entries(&self, paths: &[std::path::PathBuf]) -> Result<Vec<TrashTransferEntry>, String>;
     /// Retain metadata for Undo only when the entire payload has left the trash.
     fn detach_trash_metadata(&self, entry: &TrashTransferEntry) -> Result<Option<DetachedTrashMetadata>, String>;
+    /// Freedesktop content of a listed item; its `id` names the `.trashinfo` record.
+    #[cfg(not(target_os = "windows"))]
+    fn trash_content_path(&self, item: &trash::TrashItem) -> Option<std::path::PathBuf>;
+    /// Automatic trash cleanup owned by the desktop (GNOME or KDE); blocking.
+    #[cfg(not(target_os = "windows"))]
+    fn trash_retention(&self) -> Result<TrashRetention, String>;
+    #[cfg(not(target_os = "windows"))]
+    fn set_trash_retention(&self, retention: &TrashRetention) -> Result<(), String>;
 
     /// Final process exit, called only after application cleanup and runtime shutdown.
     /// Windows bypasses DLL detach callbacks that can hang in native graphics drivers.
@@ -689,6 +697,10 @@ mod hardware;
 pub mod icons;
 #[cfg(not(target_os = "windows"))]
 mod linux_impl;
+#[cfg(not(target_os = "windows"))]
+mod linux_trash;
+#[cfg(not(target_os = "windows"))]
+pub use linux_trash::{KdeLimitAction, KdeTrashLimits, TrashRetention};
 #[cfg(target_os = "windows")]
 pub mod network;
 mod thumbnails;
