@@ -1,7 +1,7 @@
 # Volumes
 
-**Statut : plan du pilote, à valider ; rien n'est implémenté.** Ce document deviendra le
-contrat du domaine une fois le pilote terminé.
+**Statut : pilote en cours, étape 1 faite** (trait extrait, comportement inchangé). Ce
+document deviendra le contrat du domaine une fois le pilote terminé.
 
 Le pilote sort les volumes du trait `Platform` dans un trait de domaine et livre, sous
 Linux, l'équivalent de Nautilus : partitions montées et non montées, montage au clic,
@@ -19,18 +19,20 @@ déplacé, pas réécrit.
 
 ## Interface
 
-`Platform` expose `fn volumes(&self) -> &dyn Volumes`, défini dans `src/platform/volumes.rs` :
+`Platform` expose `fn volumes(&self) -> &dyn Volumes`, défini dans `src/platform/volumes.rs`,
+implémenté par `windows_volumes.rs` et `linux_volumes.rs`. Interface visée (les méthodes
+nouvelles et `VolumeError` arrivent aux étapes 4 et 5) :
 
 ```rust
 pub trait Volumes: Send + Sync {
-    fn list(&self, details: bool) -> Vec<DriveInfo>;        // ex-list_drives
-    fn roots(&self) -> Vec<DriveInfo> { self.list(false) }  // ex-list_drive_roots
+    fn list(&self, skip_hardware_info: bool) -> Vec<DriveInfo>; // ex-list_drives
+    fn roots(&self) -> Vec<DriveInfo> { self.list(true) }       // ex-list_drive_roots
     fn mount_points(&self) -> Vec<String> { Vec::new() }
-    fn watch(&self, revision: Arc<AtomicU64>) -> Result<Option<Box<dyn Send>>, String>;
+    fn watch(&self, revision: Arc<AtomicU64>) -> Result<Option<Box<dyn Send>>, String>; // ex-watch_drive_changes
     fn unmounted(&self) -> Vec<UnmountedVolume> { Vec::new() }
     fn mount(&self, id: &str) -> Result<String, VolumeError>;     // chemin monté
     fn unmount(&self, path: &str) -> Result<(), VolumeError>;
-    fn eject(&self, path: &str) -> Result<(), VolumeError>;
+    fn eject(&self, path: &str) -> Result<(), VolumeError>;       // ex-eject_drive
     fn is_ssd(&self, path: &Path) -> bool;
     fn physical_disk_id(&self, path: &Path) -> u64;
     // + les trois méthodes d'images disque, inchangées
@@ -58,7 +60,7 @@ pub trait Volumes: Send + Sync {
 - `signals.rs` : `InterfacesAdded`/`InterfacesRemoved`/`PropertiesChanged` incrémentent la
   révision ; le sondage de 2 s ne reste qu'en repli.
 - Repli sans UDisks2 (WSL, conteneur) : lecture actuelle de `/proc/mounts` et `mountinfo`
-  (`linux_mounts.rs` y est déplacé), sans montage ni éjection.
+  (`linux_volumes/mounts.rs`), sans montage ni éjection.
 
 ## Windows
 
@@ -83,7 +85,8 @@ pub trait Volumes: Send + Sync {
 Chaque étape passe `check-linux.sh`, `check-windows.sh` et ses tests ; les étapes 1 et 4,
 qui touchent Windows, passent aussi la CI Windows sur une PR.
 
-1. **Extraire le trait**, déplacements seuls, Linux inchangé. Aucun comportement ne change.
+1. **Extraire le trait**, déplacements seuls, Linux inchangé. *Fait* : 7 fichiers communs,
+   uniquement les appels ; CI Windows sur PR encore à passer.
 2. **Inventaire UDisks2** et repli. Essai : `Data`, clé, `/boot/efi` masqué, capacités.
 3. **Signaux** UDisks2 à la place du sondage.
 4. **Démonter et éjecter** avec authentification ; champ `actions` côté Windows.

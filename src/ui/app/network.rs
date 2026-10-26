@@ -273,7 +273,7 @@ impl OxydeApp {
         cx.notify();
         cx.spawn(async move |this, cx| {
             let result =
-                tokio::task::spawn_blocking(|| oxyde_lib::platform::platform().list_drives(false))
+                tokio::task::spawn_blocking(|| oxyde_lib::platform::platform().volumes().list(false))
                     .await;
             let _ = this.update(cx, |this, cx| {
                 let Some(dialog) = this
@@ -470,7 +470,7 @@ impl OxydeApp {
             })
             .await;
             let roots =
-                tokio::task::spawn_blocking(|| oxyde_lib::platform::platform().list_drive_roots())
+                tokio::task::spawn_blocking(|| oxyde_lib::platform::platform().volumes().roots())
                     .await;
             let _ = this.update(cx, |this, cx| {
                 this.ejecting_drive = false;

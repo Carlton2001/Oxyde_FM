@@ -42,5 +42,5 @@ fn unescape(field: &str) -> String {
 }
 
 #[cfg(test)]
-#[path = "linux_mounts/tests/parse.rs"]
+#[path = "tests/mounts.rs"]
 mod tests;

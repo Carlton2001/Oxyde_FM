@@ -101,7 +101,7 @@ impl OxydeApp {
                 for (watched_path, watcher) in watchers {
                     watcher.release(&watched_path)?;
                 }
-                oxyde_lib::platform::platform().eject_drive(&path)?;
+                oxyde_lib::platform::platform().volumes().eject(&path)?;
                 Ok::<_, String>(oxyde_lib::commands::system::get_drives(Some(false)))
             }).await;
             let _ = this.update(cx, |this, cx| {
@@ -132,7 +132,7 @@ impl OxydeApp {
                 let revision = std::sync::Arc::new(AtomicU64::new(0));
                 let registration_revision = revision.clone();
                 let registration = tokio::task::spawn_blocking(move || {
-                    oxyde_lib::platform::platform().watch_drive_changes(registration_revision)
+                    oxyde_lib::platform::platform().volumes().watch(registration_revision)
                 }).await;
                 let _registration = match registration {
                     Ok(Ok(guard)) => guard,
@@ -150,10 +150,10 @@ impl OxydeApp {
                             (this.drive_refresh_epoch, this.trash_delete_policy.revision())
                         });
                         if let Ok((roots, policies)) = tokio::task::spawn_blocking(|| {
-                            let roots = oxyde_lib::platform::platform().list_drive_roots();
+                            let roots = oxyde_lib::platform::platform().volumes().roots();
                             #[cfg(not(target_os = "windows"))]
                             super::drag::volumes::replace_mount_points(
-                                oxyde_lib::platform::platform().mount_points());
+                                oxyde_lib::platform::platform().volumes().mount_points());
                             let policies = super::trash_settings::read_drive_policy(&roots);
                             (roots, policies)
                         }).await {
@@ -278,7 +278,7 @@ impl OxydeApp {
         let epoch = self.drive_refresh_epoch;
         self.drive_details_task = Some(cx.spawn(async move |this, cx| {
             if let Ok(details) =
-                tokio::task::spawn_blocking(|| oxyde_lib::platform::platform().list_drives(false))
+                tokio::task::spawn_blocking(|| oxyde_lib::platform::platform().volumes().list(false))
                     .await
             {
                 let _ = this.update(cx, |this, cx| {

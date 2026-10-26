@@ -1,6 +1,6 @@
 use super::windows_com::ComApartment;
 use super::{Platform, ThreadPriority};
-use crate::models::{DriveInfo, QuickAccessItem};
+use crate::models::QuickAccessItem;
 
 pub struct WindowsPlatform;
 
@@ -397,14 +397,8 @@ impl Platform for WindowsPlatform {
         let raw_window_handle::RawWindowHandle::Win32(handle) = window else { return Ok(()); };
         super::windows_disk_images::install_autoplay_handler(windows::Win32::Foundation::HWND(handle.hwnd.get() as *mut std::ffi::c_void))
     }
-    fn mounted_disk_images(&self) -> Result<Vec<super::MountedDiskImage>, String> {
-        super::windows_disk_images::mounted_images()
-    }
-    fn mount_disk_image(&self, path: &str) -> Result<Vec<String>, String> {
-        super::windows_disk_images::mount(path)
-    }
-    fn unmount_disk_image(&self, path: &str) -> Result<(), String> {
-        super::windows_disk_images::unmount(path)
+    fn volumes(&self) -> &dyn super::Volumes {
+        &super::windows_volumes::WindowsVolumes
     }
     fn list_network_shares(&self, server: &str) -> Result<Vec<crate::models::FileEntry>, String> {
         super::network::list_network_entries(Some(server.to_string())).map_err(|error| error.to_string())
@@ -414,18 +408,6 @@ impl Platform for WindowsPlatform {
     }
     fn disconnect_network_drive(&self, path: String, force: bool) -> Result<(), super::NetworkDisconnectError> {
         super::network::disconnect_network_drive(path, force)
-    }
-    fn list_drive_roots(&self) -> Vec<DriveInfo> {
-        super::windows_drives::list_drive_roots()
-    }
-
-    fn watch_drive_changes(&self, revision: std::sync::Arc<std::sync::atomic::AtomicU64>)
-        -> Result<Option<Box<dyn Send>>, String> {
-        super::windows_drives::watch_drive_changes(revision).map(Some)
-    }
-
-    fn eject_drive(&self, path: &str) -> Result<(), String> {
-        super::windows_drives::eject_drive(path)
     }
 
     fn file_icon_source(&self, path: &str, is_dir: bool, preserve_path: bool) -> String {
@@ -493,14 +475,6 @@ impl Platform for WindowsPlatform {
 
     fn is_network_path(&self, path: &std::path::Path) -> bool {
         super::hardware::is_network_path(path)
-    }
-
-    fn physical_disk_id(&self, path: &std::path::Path) -> u64 {
-        super::hardware::get_physical_disk_id(path)
-    }
-
-    fn is_ssd(&self, path: &std::path::Path) -> bool {
-        super::hardware::is_ssd(path)
     }
 
     fn list_network_vicinity(&self) -> Result<Vec<crate::models::FileEntry>, String> {
@@ -706,9 +680,6 @@ impl Platform for WindowsPlatform {
             LCIDToLocaleName(u32::from(GetUserDefaultUILanguage()), Some(&mut buffer), 0)
         };
         (length > 0).then(|| String::from_utf16_lossy(&buffer[..length as usize - 1]))
-    }
-    fn list_drives(&self, skip_hardware_info: bool) -> Vec<DriveInfo> {
-        super::windows_drives::list_drives(skip_hardware_info)
     }
 
     fn open_item(&self, path: &str) -> Result<(), String> {

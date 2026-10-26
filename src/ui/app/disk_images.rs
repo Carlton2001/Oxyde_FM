@@ -15,7 +15,7 @@ impl OxydeApp {
         let epoch = self.drive_refresh_epoch;
         self.disk_image_refresh_task = Some(cx.spawn(async move |this, cx| {
             let result = tokio::task::spawn_blocking(|| {
-                oxyde_lib::platform::platform().mounted_disk_images()
+                oxyde_lib::platform::platform().volumes().mounted_disk_images()
             })
             .await;
             let _ = this.update(cx, |this, cx| {
@@ -134,25 +134,25 @@ impl OxydeApp {
         cx.notify();
         cx.spawn(async move |this, cx| {
             let result = tokio::task::spawn_blocking(move || {
-                let platform = oxyde_lib::platform::platform();
+                let volumes = oxyde_lib::platform::platform().volumes();
                 for (watched_path, watcher) in watchers {
                     if let Err(error) = watcher.release(&watched_path) {
                         return (
                             Err(error),
-                            platform.list_drives(false),
-                            platform.mounted_disk_images(),
+                            volumes.list(false),
+                            volumes.mounted_disk_images(),
                         );
                     }
                 }
                 let outcome = if unmount {
-                    platform.unmount_disk_image(&path).map(|_| Vec::new())
+                    volumes.unmount_disk_image(&path).map(|_| Vec::new())
                 } else {
-                    platform.mount_disk_image(&path)
+                    volumes.mount_disk_image(&path)
                 };
                 (
                     outcome,
-                    platform.list_drives(false),
-                    platform.mounted_disk_images(),
+                    volumes.list(false),
+                    volumes.mounted_disk_images(),
                 )
             })
             .await;

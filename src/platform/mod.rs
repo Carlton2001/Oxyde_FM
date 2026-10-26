@@ -1,4 +1,4 @@
-use crate::models::{DriveInfo, QuickAccessItem};
+use crate::models::QuickAccessItem;
 mod file_names;
 mod file_drag;
 pub use file_drag::{FileDragFeedback, FileDropEffect, FileDropPhase, NativeFileDrop};
@@ -7,6 +7,8 @@ mod memory;
 pub use memory::ProcessMemorySnapshot;
 pub use viewer_media::{decode_media_report, encode_media_report, ViewerMediaCommand, ViewerMediaControl, MEDIA_ENDED, MEDIA_FAILED, MEDIA_LOADING, MEDIA_PAUSED, MEDIA_PLAYING, MEDIA_REPORT_BYTES};
 pub use file_names::FileNameRules;
+mod volumes;
+pub use volumes::Volumes;
 
 #[derive(Debug)]
 pub enum NetworkDisconnectError {
@@ -444,8 +446,6 @@ pub trait Platform: Send + Sync {
     /// Blocking network operations; call on a background worker.
     fn map_network_drive(&self, letter: String, path: String, reconnect: bool, username: Option<String>, password: Option<String>) -> Result<(), String>;
     fn disconnect_network_drive(&self, path: String, force: bool) -> Result<(), NetworkDisconnectError>;
-    fn physical_disk_id(&self, path: &std::path::Path) -> u64;
-    fn is_ssd(&self, path: &std::path::Path) -> bool;
 
     fn thumbnail(&self, path: String) -> Result<image::RgbaImage, crate::models::CommandError> {
         thumbnails::get_thumbnail_raw(path)
@@ -561,21 +561,7 @@ pub trait Platform: Send + Sync {
         Err(std::io::Error::other("PDF previews unavailable on this platform"))
     }
 
-    /// Liste les points de montage / lecteurs disponibles.
-    fn list_drives(&self, skip_hardware_info: bool) -> Vec<DriveInfo>;
-    /// Fast mount snapshot; detailed hardware/capacity queries run separately.
-    fn list_drive_roots(&self) -> Vec<DriveInfo> { self.list_drives(true) }
-    /// Every mount point, hidden ones included, when roots alone do not separate volumes.
-    fn mount_points(&self) -> Vec<String> { Vec::new() }
-
-    /// The returned guard owns the registration. Callbacks only increment revision.
-    fn watch_drive_changes(&self, _revision: std::sync::Arc<std::sync::atomic::AtomicU64>)
-        -> Result<Option<Box<dyn Send>>, String> { Ok(None) }
-    fn eject_drive(&self, path: &str) -> Result<(), String>;
-    /// Blocking disk-image operations; run on a background worker.
-    fn mounted_disk_images(&self) -> Result<Vec<MountedDiskImage>, String>;
-    fn mount_disk_image(&self, path: &str) -> Result<Vec<String>, String>;
-    fn unmount_disk_image(&self, path: &str) -> Result<(), String>;
+    fn volumes(&self) -> &dyn Volumes;
     /// Install on the native window's UI thread; never changes system preferences.
     fn install_disk_image_autoplay_handler(&self, window: raw_window_handle::RawWindowHandle) -> Result<(), String>;
 
@@ -702,7 +688,7 @@ mod linux_impl;
 #[cfg(not(target_os = "windows"))]
 mod linux_trash;
 #[cfg(not(target_os = "windows"))]
-mod linux_mounts;
+mod linux_volumes;
 #[cfg(not(target_os = "windows"))]
 pub use linux_trash::{KdeLimitAction, KdeTrashLimits, TrashRetention};
 #[cfg(target_os = "windows")]
@@ -723,6 +709,8 @@ mod windows_hover_window;
 mod windows_fixed_dialog;
 #[cfg(target_os = "windows")]
 mod windows_drives;
+#[cfg(target_os = "windows")]
+mod windows_volumes;
 #[cfg(target_os = "windows")]
 mod windows_impl;
 #[cfg(target_os = "windows")]

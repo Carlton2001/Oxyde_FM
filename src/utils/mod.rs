@@ -24,11 +24,11 @@ pub mod hardware {
     }
 
     pub fn get_physical_disk_id(path: &std::path::Path) -> u64 {
-        crate::platform::platform().physical_disk_id(path)
+        crate::platform::platform().volumes().physical_disk_id(path)
     }
 
     pub fn is_ssd(path: &std::path::Path) -> bool {
-        crate::platform::platform().is_ssd(path)
+        crate::platform::platform().volumes().is_ssd(path)
     }
 }
 

@@ -1,5 +1,5 @@
 use super::{Platform, ThreadPriority};
-use crate::models::{DriveInfo, QuickAccessItem};
+use crate::models::QuickAccessItem;
 
 pub struct LinuxPlatform;
 
@@ -443,14 +443,8 @@ impl Platform for LinuxPlatform {
     fn install_disk_image_autoplay_handler(&self, _window: raw_window_handle::RawWindowHandle) -> Result<(), String> {
         Ok(())
     }
-    fn mounted_disk_images(&self) -> Result<Vec<super::MountedDiskImage>, String> {
-        Ok(Vec::new())
-    }
-    fn mount_disk_image(&self, _path: &str) -> Result<Vec<String>, String> {
-        Err("Disk image mounting is only supported on Windows".into())
-    }
-    fn unmount_disk_image(&self, _path: &str) -> Result<(), String> {
-        Err("Disk image unmounting is only supported on Windows".into())
+    fn volumes(&self) -> &dyn super::Volumes {
+        &super::linux_volumes::LinuxVolumes
     }
     fn list_network_shares(&self, _server: &str) -> Result<Vec<crate::models::FileEntry>, String> {
         Err("Network discovery is only available on Windows".into())
@@ -461,26 +455,6 @@ impl Platform for LinuxPlatform {
     fn disconnect_network_drive(&self, _path: String, _force: bool) -> Result<(), super::NetworkDisconnectError> {
         Err(super::NetworkDisconnectError::Other("Network drive disconnect is only available on Windows".into()))
     }
-    fn mount_points(&self) -> Vec<String> {
-        super::linux_mounts::mount_points()
-    }
-
-    fn eject_drive(&self, path: &str) -> Result<(), String> {
-        let output = std::process::Command::new("findmnt")
-            .args(["--noheadings", "--output", "SOURCE", "--mountpoint", path])
-            .output().map_err(|error| error.to_string())?;
-        let device = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if !output.status.success() || !device.starts_with("/dev/") {
-            return Err("Cannot identify the mounted device".into());
-        }
-        let output = std::process::Command::new("udisksctl")
-            .args(["unmount", "--block-device", &device, "--no-user-interaction"])
-            .output().map_err(|error| error.to_string())?;
-        if output.status.success() { Ok(()) } else {
-            Err(String::from_utf8_lossy(&output.stderr).trim().into())
-        }
-    }
-
     fn file_icon_source(&self, path: &str, _is_dir: bool, _preserve_path: bool) -> String {
         path.to_string()
     }
@@ -496,14 +470,6 @@ impl Platform for LinuxPlatform {
 
     fn is_network_path(&self, path: &std::path::Path) -> bool {
         super::hardware::is_network_path(path)
-    }
-
-    fn physical_disk_id(&self, path: &std::path::Path) -> u64 {
-        super::hardware::get_physical_disk_id(path)
-    }
-
-    fn is_ssd(&self, path: &std::path::Path) -> bool {
-        super::hardware::is_ssd(path)
     }
 
     fn list_network_vicinity(&self) -> Result<Vec<crate::models::FileEntry>, String> {
@@ -557,121 +523,6 @@ impl Platform for LinuxPlatform {
             .find(|value| !value.is_empty())
             .and_then(|value| value.split(':').find(|locale| !locale.is_empty()).map(str::to_owned))
     }
-    fn list_drives(&self, _skip_hardware_info: bool) -> Vec<DriveInfo> {
-        // Systèmes de fichiers virtuels à ignorer
-        const SKIP_FS: &[&str] = &[
-            "proc",
-            "sysfs",
-            "devtmpfs",
-            "devpts",
-            "tmpfs",
-            "cgroup",
-            "cgroup2",
-            "pstore",
-            "bpf",
-            "tracefs",
-            "debugfs",
-            "hugetlbfs",
-            "mqueue",
-            "fusectl",
-            "configfs",
-            "ramfs",
-            "overlay",
-            "aufs",
-            "squashfs",
-            "efivarfs",
-            "securityfs",
-            "autofs",
-        ];
-
-        let content = std::fs::read_to_string("/proc/mounts").unwrap_or_default();
-        let mut drives: Vec<DriveInfo> = content
-            .lines()
-            .filter_map(|line| {
-                let mut parts = line.splitn(4, ' ');
-                let device = parts.next()?;
-                let mount = parts.next()?;
-                let fs_type = parts.next()?;
-
-                if SKIP_FS.contains(&fs_type) {
-                    return None;
-                }
-                if mount.starts_with("/proc")
-                    || mount.starts_with("/sys")
-                    || mount.starts_with("/dev/pts")
-                    // udisks2 mounts removable volumes under /run/media/$USER.
-                    || (mount.starts_with("/run") && !mount.starts_with("/run/media/"))
-                {
-                    return None;
-                }
-
-                let label = if mount == "/" {
-                    "Root".to_string()
-                } else {
-                    std::path::Path::new(mount)
-                        .file_name()
-                        .map(|n| n.to_string_lossy().to_string())
-                        .unwrap_or_else(|| mount.to_string())
-                };
-
-                let drive_type = if device.starts_with("//")
-                    || device.starts_with("cifs")
-                    || fs_type == "nfs"
-                    || fs_type == "nfs4"
-                    || fs_type == "smbfs"
-                {
-                    "remote"
-                } else if device.starts_with("/dev/sr")
-                    || device.starts_with("/dev/cdrom")
-                    || fs_type == "iso9660"
-                    || fs_type == "udf"
-                {
-                    "cdrom"
-                } else if device.starts_with("/dev/sd")
-                    || device.starts_with("/dev/nvme")
-                    || device.starts_with("/dev/mmcblk")
-                    || device.starts_with("/dev/vd")
-                {
-                    "fixed"
-                } else {
-                    "fixed"
-                }
-                .to_string();
-
-                Some(DriveInfo {
-                    path: mount.to_string(),
-                    label,
-                    drive_type,
-                    // TODO: remplir via statvfs (nécessite la crate `nix`)
-                    total_bytes: 0,
-                    free_bytes: 0,
-                    media_type: None,
-                    physical_id: None,
-                    remote_path: if device.starts_with("//") {
-                        Some(device.to_string())
-                    } else {
-                        None
-                    },
-                })
-            })
-            .collect();
-
-        if drives.is_empty() {
-            drives.push(DriveInfo {
-                path: "/".to_string(),
-                label: "Root".to_string(),
-                drive_type: "fixed".to_string(),
-                total_bytes: 0,
-                free_bytes: 0,
-                media_type: None,
-                physical_id: None,
-                remote_path: None,
-            });
-        }
-
-        drives
-    }
-
     fn open_item(&self, path: &str) -> Result<(), String> {
         std::process::Command::new("xdg-open")
             .arg(path)

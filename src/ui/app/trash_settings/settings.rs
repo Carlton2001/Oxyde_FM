@@ -71,7 +71,8 @@ impl OxydeApp {
             let result = tokio::task::spawn_blocking(|| {
                 let runtime = tokio::runtime::Handle::current();
                 let drives: Vec<_> = oxyde_lib::platform::platform()
-                    .list_drives(true)
+                    .volumes()
+                    .list(true)
                     .into_iter()
                     .filter(|drive| matches!(drive.drive_type.as_str(), "fixed" | "removable"))
                     .collect();

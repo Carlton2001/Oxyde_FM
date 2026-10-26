@@ -3,7 +3,7 @@ use crate::utils::path_security::validate_path;
 use log::info;
 
 pub fn get_drives(skip_hardware_info: Option<bool>) -> Vec<DriveInfo> {
-    crate::platform::platform().list_drives(skip_hardware_info.unwrap_or(false))
+    crate::platform::platform().volumes().list(skip_hardware_info.unwrap_or(false))
 }
 
 pub async fn open_item(path: String) -> Result<(), CommandError> {

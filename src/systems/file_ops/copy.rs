@@ -484,7 +484,7 @@ impl FileOperationManager {
             let mut drives = HashMap::new();
             let mut solid = |path: &Path| {
                 let drive = path.components().next().map(|part| part.as_os_str().to_owned());
-                *drives.entry(drive).or_insert_with(|| platform().is_ssd(path))
+                *drives.entry(drive).or_insert_with(|| platform().volumes().is_ssd(path))
             };
             solid(&target_dir) && files_to_process_arc.iter().all(|(selected, _, _)| solid(selected.path()))
         };
