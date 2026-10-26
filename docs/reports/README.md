@@ -4,6 +4,7 @@ Les références actives décrivent les contrats ; les bilans ci-dessous décriv
 
 | Bilan | Lecture utile |
 | --- | --- |
+| [Fenêtres et corbeille Linux, 26 octobre](2026-10-26-linux-ui-trash.md) | Essais GNOME/Wayland en VM, cadre des fenêtres, corbeille freedesktop séparée, validations et limites |
 | [Premier build Linux, 26 octobre](2026-10-26-linux-foundation.md) | Check et binaire Fedora WSL, tests ciblés Linux, suite Windows complète et limites restantes |
 | [Portabilité Linux, 26 octobre](2026-10-26-linux-portability-audit.md) | Audit préalable, risques pour les fichiers, capacités GPUI vérifiées et jalons du portage |
 | [Audit du code, 25 octobre](2026-10-25-code-audit.md) | Dix constats priorisés, 1 405 tests Windows réussis, sondes de reproduction et audit RustSec actualisé |
