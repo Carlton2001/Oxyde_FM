@@ -490,7 +490,7 @@ impl OxydeApp {
                 // not outlive a normal application shutdown. Keep the last
                 // history owner with the physical cleanup, away from the UI.
                 let cleanup = shutdown::begin_history_cleanup(this.history.clone());
-                let save = this.preferences_save_task.take();
+                let save = this.final_preferences_write();
                 async move {
                     if let Some(save) = save {
                         crate::trace_shutdown_stage("waiting for preference saves");

@@ -2,7 +2,21 @@ use super::OxydeApp;
 use crate::ui::i18n::{I18n, I18nContext, Language, Message};
 use crate::ui::theme::{OxydeTheme, ThemeId};
 use gpui::{Context, Window};
-use oxyde_lib::models::ConfigManager;
+use oxyde_lib::models::{AppConfig, ConfigManager};
+use std::sync::Mutex;
+
+/// Generation of the last snapshot on disk; an older one is never written over it.
+static WRITTEN_GENERATION: Mutex<u64> = Mutex::new(0);
+
+fn write_snapshot(path: &std::path::Path, snapshot: &AppConfig, generation: u64) -> Result<(), oxyde_lib::models::CommandError> {
+    let mut written = WRITTEN_GENERATION.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if *written >= generation {
+        return Ok(());
+    }
+    ConfigManager::write_to_path(path, snapshot)?;
+    *written = generation;
+    Ok(())
+}
 
 impl OxydeApp {
     pub(crate) fn default_turbo_mode(&self) -> bool { self.config.default_turbo_mode }
@@ -322,7 +336,7 @@ impl OxydeApp {
             log::info!("preferences write started; generation={generation}");
             let result = cx
                 .background_executor()
-                .spawn(async move { ConfigManager::write_to_path(&path, &snapshot) })
+                .spawn(async move { write_snapshot(&path, &snapshot, generation) })
                 .await;
             log::info!("preferences write finished; generation={generation}; success={}", result.is_ok());
             if let Err(error) = &result {
@@ -336,6 +350,22 @@ impl OxydeApp {
             });
         }));
         cx.notify();
+    }
+
+    /// Takes over the queued save chain at quit; see `shutdown::begin_preferences_write`.
+    pub(crate) fn final_preferences_write(&mut self) -> Option<super::shutdown::Cleanup> {
+        // Dropping the chain cancels it; an older write still running is ordered by generation.
+        drop(self.preferences_save_task.take()?);
+        let path = self.config_path.clone()?;
+        let snapshot = self.config.clone();
+        let generation = self.preferences_save_generation;
+        Some(super::shutdown::begin_preferences_write(move || {
+            let result = write_snapshot(&path, &snapshot, generation);
+            log::info!("final preferences write finished; generation={generation}; success={}", result.is_ok());
+            if let Err(error) = result {
+                log::warn!("Cannot save preferences: {error:?}");
+            }
+        }))
     }
 
     pub(crate) fn flush_window_geometry(&mut self, cx: &mut Context<Self>) {
@@ -368,3 +398,7 @@ impl OxydeApp {
         self._subscriptions.push(subscription);
     }
 }
+
+#[cfg(test)]
+#[path = "preferences/tests/writes.rs"]
+mod tests;

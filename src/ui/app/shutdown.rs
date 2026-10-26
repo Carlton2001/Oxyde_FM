@@ -3,12 +3,13 @@ use futures::{future::{BoxFuture, Shared}, FutureExt};
 use oxyde_lib::models::HistoryManager;
 use std::sync::{Arc, Mutex};
 
-type Cleanup = Shared<BoxFuture<'static, ()>>;
+pub(super) type Cleanup = Shared<BoxFuture<'static, ()>>;
 
 #[derive(Default)]
 struct PendingCleanup(Mutex<Option<Cleanup>>);
 
 static HISTORY: PendingCleanup = PendingCleanup(Mutex::new(None));
+static PREFERENCES: PendingCleanup = PendingCleanup(Mutex::new(None));
 
 impl PendingCleanup {
     fn schedule(&self, work: impl FnOnce() + Send + 'static) -> Cleanup {
@@ -41,8 +42,15 @@ pub(super) fn begin_history_cleanup(history: Arc<HistoryManager>) -> Cleanup {
     })
 }
 
+/// GPUI runs no foreground task while it waits for quit hooks, so the last
+/// preferences are written here rather than by the queued save chain.
+pub(super) fn begin_preferences_write(write: impl FnOnce() + Send + 'static) -> Cleanup {
+    PREFERENCES.schedule(write)
+}
+
 /// Call after GPUI returns, while Tokio still owns its blocking worker pool.
 pub(crate) fn finish_pending_cleanup() {
+    PREFERENCES.finish();
     HISTORY.finish();
 }
 
