@@ -1,7 +1,7 @@
 # Volumes
 
-**Statut : pilote en cours, étapes 1 et 2 faites** (trait extrait, inventaire UDisks2). Ce
-document deviendra le contrat du domaine une fois le pilote terminé.
+**Statut : pilote en cours, étapes 1 à 3 faites** (trait extrait, inventaire UDisks2,
+notifications de montage). Ce document deviendra le contrat du domaine une fois le pilote terminé.
 
 Le pilote sort les volumes du trait `Platform` dans un trait de domaine et livre, sous
 Linux, l'équivalent de Nautilus : partitions montées et non montées, montage au clic,
@@ -65,8 +65,13 @@ pub trait Volumes: Send + Sync {
 - `actions.rs` : `Filesystem.Mount`/`Unmount` avec `auth.no_user_interaction = false` (GNOME
   affiche son dialogue polkit) ; éjection USB = démontage de toutes les partitions du disque
   puis `Drive.PowerOff`, ou `Drive.Eject` pour un support optique.
-- `signals.rs` : `InterfacesAdded`/`InterfacesRemoved`/`PropertiesChanged` incrémentent la
-  révision ; le sondage de 2 s ne reste qu'en repli.
+- `watch.rs` : un fil attend par `poll` le drapeau `POLLPRI` que le noyau lève sur
+  `/proc/self/mountinfo` à chaque montage ou démontage de l'espace de noms, qu'il vienne
+  d'UDisks2, de `mount` ou d'un client réseau ; chaque changement incrémente la révision.
+  La liste se rafraîchit aussitôt, le sondage passe de 2 s à 30 s et ne reste qu'en repli.
+  Fermer le tube du garde termine le fil. Fonctionne aussi sans UDisks2.
+- `signals.rs` (étape 5) : `InterfacesAdded`/`InterfacesRemoved` d'UDisks2 signaleront les
+  volumes branchés mais non montés, que la table des montages ignore.
 - `fallback.rs` : sans UDisks2 (WSL, conteneur), tous les montages non virtuels de
   `mountinfo` (`mounts.rs`, échappements décodés), sans montage ni éjection ; avec UDisks2,
   il n'ajoute que les montages réseau.
@@ -104,9 +109,11 @@ manuel de `tests.yml` sur la branche (elle n'est pas fusionnée dans `main`).
    uniquement les appels ; suite Windows encore à passer.
 2. **Inventaire UDisks2** et repli. *Fait* : aucun fichier commun touché ; Root, `Data` et
    la clé avec leurs capacités, `/boot` et `/boot/efi` masqués.
-3. **Signaux** UDisks2 à la place du sondage.
+3. **Notifications** à la place du sondage. *Fait* par la table des montages : elle couvre
+   tout ce que la liste affiche ; les signaux UDisks2 rejoignent l'étape 5, la seule à
+   montrer des volumes non montés.
 4. **Démonter et éjecter** avec authentification ; champ `actions` côté Windows.
-5. **Volumes non montés** et montage au clic.
+5. **Volumes non montés** et montage au clic, avec les signaux UDisks2.
 6. *Facultatif* : `is_ssd` (`/sys/block/*/queue/rotational`) et `physical_disk_id` Linux,
    utilisés par le parallélisme des copies.
 7. **Bilan** : fichiers communs touchés par étape, décision sur le domaine suivant.

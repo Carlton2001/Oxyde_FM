@@ -1,4 +1,4 @@
-//! Linux volume domain: UDisks2 inventory, mount table fallback and udisks2 unmounting.
+//! Linux volume domain: UDisks2 inventory, mount table fallback and notifications, udisks2 unmounting.
 use super::{MountedDiskImage, Volumes};
 use crate::models::DriveInfo;
 
@@ -6,6 +6,7 @@ mod fallback;
 mod inventory;
 mod mounts;
 mod udisks;
+mod watch;
 
 pub struct LinuxVolumes;
 
@@ -38,6 +39,11 @@ impl Volumes for LinuxVolumes {
 
     fn mount_points(&self) -> Vec<String> {
         mounts::mount_points()
+    }
+
+    fn watch(&self, revision: std::sync::Arc<std::sync::atomic::AtomicU64>)
+        -> Result<Option<Box<dyn Send>>, String> {
+        watch::start(revision).map(|watch| Some(Box::new(watch) as Box<dyn Send>))
     }
 
     fn eject(&self, path: &str) -> Result<(), String> {
