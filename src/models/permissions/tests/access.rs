@@ -59,3 +59,16 @@ fn execution_sets_and_clears_the_three_bits_together() {
     assert!(executable(0o751));
     assert_eq!(with_executable(0o4755, false), 0o4644);
 }
+
+#[test]
+fn enclosed_levels_change_only_the_chosen_classes_of_each_kind() {
+    let change = EnclosedChange {
+        files: [None, Some(Access::ReadOnly), Some(Access::None)],
+        folders: [None, None, Some(Access::AccessFiles)],
+    };
+    assert!(!change.is_empty() && EnclosedChange::default().is_empty());
+    assert_eq!(change.mode(0o766, false), 0o740);
+    // A file keeps its execution bits: they have their own checkbox.
+    assert_eq!(change.mode(0o755, false), 0o751);
+    assert_eq!(change.mode(0o2770, true), 0o2775);
+}

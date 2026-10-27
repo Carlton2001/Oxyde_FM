@@ -342,8 +342,9 @@ impl Platform for LinuxPlatform {
         &self,
         path: &std::path::Path,
         change: &crate::models::permissions::PermissionChange,
+        cancel: &std::sync::atomic::AtomicBool,
     ) -> Result<(), crate::models::permissions::PermissionError> {
-        super::linux_permissions::write(path, change)
+        super::linux_permissions::write(path, change, cancel)
     }
     #[cfg(target_os = "linux")]
     fn extended_attributes(&self, file: &std::fs::File) -> std::io::Result<super::ExtendedAttributes> {

@@ -641,10 +641,12 @@ pub trait Platform: Send + Sync {
     fn mime_type(&self, _path: &std::path::Path, _is_dir: bool, _language: &str) -> Option<crate::models::MimeType> {
         None
     }
+    /// Stops between enclosed items once `cancel` is set.
     fn set_unix_permissions(
         &self,
         _path: &std::path::Path,
         _change: &crate::models::permissions::PermissionChange,
+        _cancel: &std::sync::atomic::AtomicBool,
     ) -> Result<(), crate::models::permissions::PermissionError> {
         Err(crate::models::permissions::PermissionError::Failed("Unix permissions are unavailable on this platform".into()))
     }

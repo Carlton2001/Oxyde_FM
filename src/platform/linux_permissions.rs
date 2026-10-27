@@ -2,7 +2,15 @@
 //! opened, as Nautilus does through GIO. Account names come from NSS (`getent`).
 use crate::models::permissions::{Account, PermissionChange, PermissionError, UnixPermissions};
 use rustix::fs::{AtFlags, Mode, OFlags, CWD};
-use std::{collections::HashMap, io, os::fd::AsRawFd, path::Path};
+use std::{
+    collections::HashMap,
+    io,
+    os::fd::{AsRawFd, OwnedFd},
+    path::Path,
+    sync::atomic::AtomicBool,
+};
+
+mod enclosed;
 
 /// The target of a link, as the rest of Properties describes it.
 pub(super) fn read(path: &Path) -> io::Result<UnixPermissions> {
@@ -53,8 +61,15 @@ fn names(database: &str, ids: &[u32]) -> HashMap<u32, String> {
         .collect()
 }
 
-/// Applies a change to the object read earlier, never to a replacement.
-pub(super) fn write(path: &Path, change: &PermissionChange) -> Result<(), PermissionError> {
+/// fchmod refuses an O_PATH descriptor; its /proc entry reaches the same object.
+fn chmod(file: &OwnedFd, mode: u32) -> rustix::io::Result<()> {
+    let link = format!("/proc/self/fd/{}", file.as_raw_fd());
+    rustix::fs::chmodat(CWD, link.as_str(), Mode::from_raw_mode(mode), AtFlags::empty())
+}
+
+/// Applies a change to the object read earlier, never to a replacement. The content
+/// of a folder changes first, so that the folder's own change cannot close it.
+pub(super) fn write(path: &Path, change: &PermissionChange, cancel: &AtomicBool) -> Result<(), PermissionError> {
     let failed = |error: io::Error| PermissionError::Failed(error.to_string());
     let file = rustix::fs::open(path, OFlags::PATH | OFlags::CLOEXEC, Mode::empty())
         .map_err(|error| failed(error.into()))?;
@@ -65,6 +80,11 @@ pub(super) fn write(path: &Path, change: &PermissionChange) -> Result<(), Permis
     {
         return Err(PermissionError::Changed);
     }
+    let enclosed = if expected.is_dir && !change.enclosed.is_empty() {
+        enclosed::apply(&file, path, stat.st_dev, &change.enclosed, cancel).map_err(failed)?
+    } else {
+        enclosed::Outcome::default()
+    };
     let mut special = expected.mode & 0o7000;
     if change.group != expected.group.id {
         rustix::fs::chownat(&file, "", None, Some(rustix::fs::Gid::from_raw(change.group)), AtFlags::EMPTY_PATH)
@@ -74,16 +94,16 @@ pub(super) fn write(path: &Path, change: &PermissionChange) -> Result<(), Permis
     }
     let mode = (change.mode & 0o777) | (special & change.mode);
     if mode != stat.st_mode & 0o7777 {
-        // fchmod refuses an O_PATH descriptor; its /proc entry reaches the same object.
-        let link = format!("/proc/self/fd/{}", file.as_raw_fd());
-        rustix::fs::chmodat(CWD, link.as_str(), Mode::from_raw_mode(mode), AtFlags::empty())
-            .map_err(|error| failed(error.into()))?;
+        chmod(&file, mode).map_err(|error| failed(error.into()))?;
     }
     let applied = rustix::fs::fstat(&file).map_err(|error| failed(error.into()))?;
     if (applied.st_mode & 0o777, applied.st_gid) != (mode & 0o777, change.group) {
         return Err(PermissionError::NotKept);
     }
-    Ok(())
+    match enclosed.first {
+        Some(first) => Err(PermissionError::Incomplete { failed: enclosed.failed, first }),
+        None => Ok(()),
+    }
 }
 
 #[cfg(test)]

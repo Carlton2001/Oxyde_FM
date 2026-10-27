@@ -457,11 +457,12 @@ pub fn describe_mime_type(path: &str, is_dir: bool, language: crate::models::pre
 pub async fn set_unix_permissions(
     path: String,
     change: crate::models::permissions::PermissionChange,
+    cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) -> Result<(), crate::models::permissions::PermissionError> {
     use crate::models::permissions::PermissionError;
     let path = validate_path(&path).map_err(|error| PermissionError::Failed(error.to_string()))?;
     let path = crate::utils::path_text::decode(&path.to_string_lossy());
-    tokio::task::spawn_blocking(move || crate::platform::platform().set_unix_permissions(&path, &change))
+    tokio::task::spawn_blocking(move || crate::platform::platform().set_unix_permissions(&path, &change, &cancel))
         .await
         .map_err(|error| PermissionError::Failed(error.to_string()))?
 }

@@ -1,6 +1,15 @@
 use super::*;
 use crate::models::permissions::{with_executable, Access, PermissionClass};
+use crate::models::permissions::EnclosedChange;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+fn write(path: &Path, change: &PermissionChange) -> Result<(), PermissionError> {
+    super::write(path, change, &AtomicBool::new(false))
+}
+
+fn set_mode(path: &Path, mode: u32) {
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).unwrap();
+}
 
 fn file(mode: u32) -> (tempfile::TempDir, std::path::PathBuf) {
     let root = tempfile::tempdir().unwrap();
@@ -33,7 +42,7 @@ fn a_change_applies_levels_and_execution_to_the_object_read() {
     let expected = read(&path).unwrap();
     let mode_wanted = with_executable(Access::ReadOnly.apply(expected.mode, false, PermissionClass::Others), true);
     let group = expected.group.id;
-    write(&path, &PermissionChange { expected, mode: mode_wanted, group }).unwrap();
+    write(&path, &PermissionChange { enclosed: EnclosedChange::default(), expected, mode: mode_wanted, group }).unwrap();
     assert_eq!(mode(&path), 0o755);
 }
 
@@ -41,13 +50,13 @@ fn a_change_applies_levels_and_execution_to_the_object_read() {
 fn a_change_after_another_change_or_a_replacement_is_refused() {
     let (root, path) = file(0o640);
     let expected = read(&path).unwrap();
-    let change = PermissionChange { mode: 0o600, group: expected.group.id, expected };
+    let change = PermissionChange { enclosed: EnclosedChange::default(), mode: 0o600, group: expected.group.id, expected };
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
     assert_eq!(write(&path, &change), Err(PermissionError::Changed));
     assert_eq!(mode(&path), 0o644);
 
     let expected = read(&path).unwrap();
-    let change = PermissionChange { mode: 0o600, group: expected.group.id, expected };
+    let change = PermissionChange { enclosed: EnclosedChange::default(), mode: 0o600, group: expected.group.id, expected };
     std::fs::rename(&path, root.path().join("old")).unwrap();
     std::fs::write(&path, b"replacement").unwrap();
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
@@ -63,7 +72,7 @@ fn a_link_shows_and_changes_its_target() {
     let expected = read(&link).unwrap();
     assert_eq!(expected.mode, 0o600);
     let group = expected.group.id;
-    write(&link, &PermissionChange { expected, mode: 0o640, group }).unwrap();
+    write(&link, &PermissionChange { enclosed: EnclosedChange::default(), expected, mode: 0o640, group }).unwrap();
     assert_eq!(mode(&path), 0o640);
 }
 
@@ -77,7 +86,7 @@ fn special_bits_are_kept_by_a_level_change() {
     assert!(expected.is_dir);
     let wanted = Access::None.apply(expected.mode, true, PermissionClass::Others);
     let group = expected.group.id;
-    write(&folder, &PermissionChange { expected, mode: wanted, group }).unwrap();
+    write(&folder, &PermissionChange { enclosed: EnclosedChange::default(), expected, mode: wanted, group }).unwrap();
     assert_eq!(mode(&folder), 0o3770);
 }
 
@@ -88,7 +97,7 @@ fn the_group_changes_to_one_of_the_users_groups() {
     let (_root, path) = file(0o2750);
     let expected = read(&path).unwrap();
     assert!(expected.groups.iter().any(|group| group.id == gid));
-    write(&path, &PermissionChange { mode: expected.mode, group: gid, expected }).unwrap();
+    write(&path, &PermissionChange { enclosed: EnclosedChange::default(), mode: expected.mode, group: gid, expected }).unwrap();
     let metadata = std::fs::metadata(&path).unwrap();
     assert_eq!(metadata.gid(), gid);
     // The setgid bit stays only if the kernel kept it.
@@ -114,5 +123,86 @@ fn a_file_system_that_ignores_permissions_reports_it() {
     let expected = read(&path).unwrap();
     let wanted = Access::ReadOnly.apply(expected.mode, false, PermissionClass::Group);
     let group = expected.group.id;
-    assert_eq!(write(&path, &PermissionChange { expected, mode: wanted, group }), Err(PermissionError::NotKept));
+    assert_eq!(write(&path, &PermissionChange { enclosed: EnclosedChange::default(), expected, mode: wanted, group }), Err(PermissionError::NotKept));
+}
+
+fn tree() -> (tempfile::TempDir, std::path::PathBuf) {
+    let root = tempfile::tempdir().unwrap();
+    let folder = root.path().join("folder");
+    let deep = folder.join("sub/deep");
+    std::fs::create_dir_all(&deep).unwrap();
+    std::fs::write(folder.join("a.txt"), b"a").unwrap();
+    std::fs::write(folder.join("sub/b.sh"), b"b").unwrap();
+    std::fs::write(deep.join("c"), b"c").unwrap();
+    std::fs::write(root.path().join("outside"), b"o").unwrap();
+    std::os::unix::fs::symlink(root.path().join("outside"), folder.join("link")).unwrap();
+    for (path, mode) in [("folder", 0o755), ("folder/a.txt", 0o644), ("folder/sub", 0o755), ("folder/sub/b.sh", 0o755),
+        ("folder/sub/deep", 0o700), ("folder/sub/deep/c", 0o600), ("outside", 0o666)] {
+        set_mode(&root.path().join(path), mode);
+    }
+    (root, folder)
+}
+
+fn enclosed(folder: &Path, change: EnclosedChange) -> Result<(), PermissionError> {
+    let expected = read(folder).unwrap();
+    let (mode, group) = (expected.mode, expected.group.id);
+    write(folder, &PermissionChange { expected, mode, group, enclosed: change })
+}
+
+#[test]
+fn enclosed_items_change_at_every_depth_without_following_links() {
+    use Access::{AccessFiles, None as NoAccess, ReadOnly};
+    let (root, folder) = tree();
+    enclosed(&folder, EnclosedChange {
+        files: [None, Some(ReadOnly), Some(NoAccess)],
+        folders: [None, Some(AccessFiles), Some(NoAccess)],
+    })
+    .unwrap();
+    for (path, wanted) in [("folder", 0o755), ("folder/a.txt", 0o640), ("folder/sub", 0o750), ("folder/sub/b.sh", 0o751),
+        ("folder/sub/deep", 0o750), ("folder/sub/deep/c", 0o640), ("outside", 0o666)] {
+        assert_eq!(mode(&root.path().join(path)), wanted, "{path}");
+    }
+}
+
+#[test]
+fn a_folder_closing_to_its_owner_is_changed_after_its_content() {
+    let (root, folder) = tree();
+    enclosed(&folder, EnclosedChange {
+        files: [Some(Access::ReadOnly), None, None],
+        folders: [Some(Access::ListFiles), None, None],
+    })
+    .unwrap();
+    assert_eq!(mode(&root.path().join("folder/sub")), 0o455);
+    for path in ["folder/sub", "folder/sub/deep"] {
+        set_mode(&root.path().join(path), 0o755);
+    }
+    assert_eq!(mode(&root.path().join("folder/sub/deep/c")), 0o400);
+}
+
+#[test]
+fn a_folder_closed_to_its_owner_is_opened_then_walked() {
+    let (root, folder) = tree();
+    set_mode(&root.path().join("folder/sub"), 0o000);
+    enclosed(&folder, EnclosedChange {
+        files: [None, None, Some(Access::ReadOnly)],
+        folders: [Some(Access::CreateDelete), None, None],
+    })
+    .unwrap();
+    assert_eq!(mode(&root.path().join("folder/sub")), 0o700);
+    assert_eq!(mode(&root.path().join("folder/sub/deep/c")), 0o604);
+}
+
+#[test]
+fn enclosed_failures_are_counted_and_the_rest_still_changes() {
+    if rustix::process::geteuid().is_root() { return }
+    let (root, folder) = tree();
+    // A folder no one may enter, and that the change does not open, keeps its content.
+    set_mode(&root.path().join("folder/sub/deep"), 0o000);
+    let error = enclosed(&folder, EnclosedChange { files: [None, None, Some(Access::None)], ..Default::default() }).unwrap_err();
+    set_mode(&root.path().join("folder/sub/deep"), 0o700);
+    let PermissionError::Incomplete { failed, first } = error else { panic!("{error:?}") };
+    assert_eq!(failed, 1);
+    assert!(first.contains("deep"), "{first}");
+    assert_eq!(mode(&root.path().join("folder/a.txt")), 0o640);
+    assert_eq!(mode(&root.path().join("folder/sub/deep/c")), 0o600);
 }

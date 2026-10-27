@@ -30,6 +30,31 @@ pub struct PermissionChange {
     pub expected: UnixPermissions,
     pub mode: u32,
     pub group: u32,
+    /// For a folder: levels for everything inside it, applied before its own change.
+    pub enclosed: EnclosedChange,
+}
+
+/// Levels for the files and folders inside a folder, at any depth, as Nautilus's
+/// « Change Permissions for Enclosed Files ». None keeps a class as it is.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct EnclosedChange {
+    pub files: [Option<Access>; 3],
+    pub folders: [Option<Access>; 3],
+}
+
+impl EnclosedChange {
+    pub fn is_empty(&self) -> bool {
+        self.files.iter().chain(&self.folders).all(Option::is_none)
+    }
+
+    /// The mode an enclosed item receives.
+    pub fn mode(&self, mode: u32, is_dir: bool) -> u32 {
+        let levels = if is_dir { &self.folders } else { &self.files };
+        PermissionClass::ALL
+            .into_iter()
+            .zip(levels)
+            .fold(mode, |mode, (class, level)| level.map_or(mode, |level| level.apply(mode, is_dir, class)))
+    }
 }
 
 /// Why a change was not applied.
@@ -41,6 +66,8 @@ pub enum PermissionError {
     NotKept,
     /// The system refused or failed the change; nothing else was attempted after it.
     Failed(String),
+    /// Some enclosed items kept their permissions; the others and the folder changed.
+    Incomplete { failed: u64, first: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -51,6 +78,16 @@ pub enum PermissionClass {
 }
 
 impl PermissionClass {
+    pub const ALL: [Self; 3] = [Self::Owner, Self::Group, Self::Others];
+
+    pub fn index(self) -> usize {
+        match self {
+            Self::Owner => 0,
+            Self::Group => 1,
+            Self::Others => 2,
+        }
+    }
+
     fn shift(self) -> u32 {
         match self {
             Self::Owner => 6,

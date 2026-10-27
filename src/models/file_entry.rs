@@ -136,6 +136,8 @@ pub struct MimeType {
     pub name: String,
     /// For example « image PNG »; None when the database has no description.
     pub description: Option<String>,
+    /// Programs and text may run: Nautilus offers execution for these types only.
+    pub can_be_executable: bool,
 }
 
 #[derive(Debug, Clone)]

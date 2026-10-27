@@ -1,6 +1,6 @@
 # Propriétés Linux
 
-**Statut : étapes 1 et 2 faites, essai visuel attendu** (dixième domaine de l'option B, après les [noms non
+**Statut : étapes 1 à 3 faites, essai visuel attendu** (dixième domaine de l'option B, après les [noms non
 UTF-8](non-utf8-names.md)). Ce document est le contrat du domaine.
 
 ## Périmètre
@@ -23,7 +23,9 @@ système.
   propriétaire, groupe et autres, chacun avec son niveau d'accès.
   - Fichier : Aucun, Lecture seule, Lecture et écriture. Le propriétaire n'a pas
     « Aucun ». La case « Autoriser l'exécution du fichier comme un programme » règle
-    les trois bits d'exécution.
+    les trois bits d'exécution. Elle n'apparaît, comme dans Nautilus (règle de GIO), que
+    pour un type qui peut s'exécuter : sous-type de `application/x-executable` ou de
+    `text/plain`.
   - Dossier : Aucun, Lister les fichiers uniquement, Accéder aux fichiers, Créer et
     supprimer des fichiers.
   - Une combinaison qui ne correspond à aucun niveau s'affiche telle quelle (`rw-`, …)
@@ -40,12 +42,22 @@ système.
   SSSD et LDAP. À défaut, Oxyde affiche le numéro.
 - Un lien symbolique décrit sa cible, comme le reste des Propriétés ; un lien cassé n'a
   pas d'onglet Droits d'accès.
+- **Éléments contenus** (dossier) : la page « Modifier les droits des éléments
+  contenus… » reprend le dialogue de Nautilus. Pour chaque classe, on choisit un niveau
+  pour les fichiers et un pour les dossiers, « Inchangé » par défaut. OK l'applique à
+  toute profondeur, avant le changement du dossier lui-même :
+  - chaque dossier change après son contenu, si bien qu'un dossier qui se ferme à son
+    propriétaire est quand même parcouru ;
+  - un dossier fermé que le changement ouvre est changé d'abord, puis parcouru ;
+  - les liens ne sont jamais suivis et les autres systèmes de fichiers jamais visités ;
+  - chaque élément est changé par le descripteur dont le type a été vérifié ;
+  - les échecs sont comptés, le premier est nommé, les autres éléments changent.
 - **Système de fichiers sans droits Unix** : ntfs-3g (sans son option `permissions`) et
   FAT acceptent `chmod` sans rien garder. Oxyde relit l'objet après le changement et le
   signale au lieu de fermer la fenêtre comme si tout avait réussi.
 - **Type** comme Nautilus, « image PNG (image/png) » : nom de fichier selon `globs2` de
   shared-mime-info (noms exacts, puis poids, puis longueur du motif), sinon contenu
-  (texte UTF-8 ou inconnu). Description dans la langue de l'interface, sinon celle de
+  (en-tête ELF : programme ; texte UTF-8 ; sinon inconnu). Description dans la langue de l'interface, sinon celle de
   la base. Les dossiers gardent le libellé d'Oxyde, souvent absent de la base. Tubes,
   sockets et périphériques sont nommés par leur nature, sans être ouverts.
 
@@ -54,4 +66,6 @@ système.
 1. **Droits d'un élément** : modèle des niveaux, lecture et écriture derrière
    `Platform`, onglet Droits d'accès.
 2. **Type MIME** : type et description du système (shared-mime-info) dans Général.
-3. **Bilan.**
+3. **Éléments contenus** : application récursive, case d'exécution limitée aux types
+   exécutables, retour à la ligne des libellés.
+4. **Bilan.**

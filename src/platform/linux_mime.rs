@@ -1,11 +1,12 @@
 //! Type of an item from the shared MIME database (shared-mime-info), as Nautilus
 //! shows it: by file name, then by content for a file whose name says nothing.
 use crate::models::MimeType;
-use std::{io::Read, path::{Path, PathBuf}, sync::OnceLock};
+use std::{collections::HashMap, io::Read, path::{Path, PathBuf}, sync::OnceLock};
 
 const DIRECTORY: &str = "inode/directory";
 const TEXT: &str = "text/plain";
 const UNKNOWN: &str = "application/octet-stream";
+const EXECUTABLE: &str = "application/x-executable";
 
 struct Glob {
     weight: u32,
@@ -61,6 +62,48 @@ fn parse(text: &str) -> Vec<Glob> {
         .collect()
 }
 
+fn subclasses() -> &'static HashMap<String, Vec<String>> {
+    static SUBCLASSES: OnceLock<HashMap<String, Vec<String>>> = OnceLock::new();
+    SUBCLASSES.get_or_init(|| {
+        let mut parents = HashMap::new();
+        for dir in data_dirs() {
+            let Ok(text) = std::fs::read_to_string(dir.join("mime/subclasses")) else { continue };
+            parse_subclasses(&text, &mut parents);
+        }
+        parents
+    })
+}
+
+/// `child parent` lines of a `subclasses` file.
+fn parse_subclasses(text: &str, parents: &mut HashMap<String, Vec<String>>) {
+    for line in text.lines() {
+        if let Some((child, parent)) = line.split_once(' ') {
+            parents.entry(child.to_owned()).or_default().push(parent.to_owned());
+        }
+    }
+}
+
+/// Whether `mime` is `ancestor` or one of its subclasses; every `text/*` type is a
+/// kind of `text/plain`, as the specification states.
+fn is_a(parents: &HashMap<String, Vec<String>>, mime: &str, ancestor: &str) -> bool {
+    let mut pending = vec![mime.to_owned()];
+    let mut seen = std::collections::HashSet::new();
+    while let Some(mime) = pending.pop() {
+        if mime == ancestor || (ancestor == TEXT && mime.starts_with("text/")) {
+            return true;
+        }
+        if seen.insert(mime.clone()) {
+            pending.extend(parents.get(&mime).into_iter().flatten().cloned());
+        }
+    }
+    false
+}
+
+/// GIO's rule, which Nautilus follows to offer execution.
+fn can_be_executable(parents: &HashMap<String, Vec<String>>, mime: &str) -> bool {
+    is_a(parents, mime, EXECUTABLE) || is_a(parents, mime, TEXT)
+}
+
 /// Literal names first, then the heaviest glob, then the longest one, as the
 /// shared-mime-info specification orders them.
 fn by_name<'a>(globs: &'a [Glob], name: &str) -> Option<&'a str> {
@@ -76,14 +119,18 @@ fn by_name<'a>(globs: &'a [Glob], name: &str) -> Option<&'a str> {
         .map(|glob| glob.mime.as_str())
 }
 
-/// Text without NUL in its first block is plain text; anything else is unknown.
+/// An ELF header makes a program, as the database's magic rule says (libraries are
+/// told apart by name); text without NUL in its first block is plain text; anything
+/// else is unknown.
 fn by_content(path: &Path) -> &'static str {
     let mut block = [0_u8; 4096];
     let read = std::fs::File::open(path).and_then(|mut file| file.read(&mut block));
-    match read {
-        Ok(length) if !block[..length].contains(&0) && utf8_prefix(&block[..length]) => TEXT,
-        _ => UNKNOWN,
+    let Ok(length) = read else { return UNKNOWN };
+    let block = &block[..length];
+    if block.starts_with(b"\x7fELF") && matches!(block.get(5), Some(1 | 2)) {
+        return EXECUTABLE;
     }
+    if !block.contains(&0) && utf8_prefix(block) { TEXT } else { UNKNOWN }
 }
 
 /// UTF-8 text, allowing a character cut at the end of the block.
@@ -135,7 +182,11 @@ pub(super) fn mime_type(path: &Path, is_dir: bool, language: &str) -> MimeType {
             .and_then(|name| by_name(globs(), &name.to_string_lossy()))
             .unwrap_or_else(|| by_content(path))
     };
-    MimeType { description: description(name, language), name: name.to_owned() }
+    MimeType {
+        description: description(name, language),
+        can_be_executable: can_be_executable(subclasses(), name),
+        name: name.to_owned(),
+    }
 }
 
 #[cfg(test)]

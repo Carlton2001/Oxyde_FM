@@ -27,7 +27,7 @@ fn a_file_without_known_name_is_described_by_its_content() {
     let text = root.path().join("notes");
     std::fs::write(&text, "Café\n".repeat(1000)).unwrap();
     let binary = root.path().join("blob");
-    std::fs::write(&binary, [0x7f, b'E', b'L', b'F', 0, 1]).unwrap();
+    std::fs::write(&binary, [0x1f, 0x8b, 0, 0xff]).unwrap();
     assert_eq!(by_content(&text), TEXT);
     assert_eq!(by_content(&binary), UNKNOWN);
 }
@@ -49,4 +49,31 @@ fn a_pipe_is_named_without_being_opened() {
     let pipe = root.path().join("pipe");
     rustix::fs::mknodat(rustix::fs::CWD, &pipe, rustix::fs::FileType::Fifo, rustix::fs::Mode::from_raw_mode(0o600), 0).unwrap();
     assert_eq!(mime_type(&pipe, false, "en").name, "inode/fifo");
+}
+
+#[test]
+fn execution_is_offered_for_programs_and_text_only() {
+    let mut parents = HashMap::new();
+    parse_subclasses(
+        "application/x-shellscript application/x-executable\n\
+         application/x-csh application/x-shellscript\n\
+         application/x-shellscript text/plain\n",
+        &mut parents,
+    );
+    assert!(can_be_executable(&parents, "application/x-csh"));
+    assert!(can_be_executable(&parents, "text/x-python"));
+    assert!(can_be_executable(&parents, EXECUTABLE));
+    assert!(!can_be_executable(&parents, "application/x-cd-image"));
+    assert!(!can_be_executable(&parents, UNKNOWN));
+    assert!(!can_be_executable(&parents, "image/png"));
+}
+
+#[test]
+fn elf_files_are_programs_like_for_gio() {
+    let root = tempfile::tempdir().unwrap();
+    let program = root.path().join("program");
+    std::fs::copy("/usr/bin/true", &program).unwrap();
+    assert_eq!(mime_type(&program, false, "en").name, EXECUTABLE);
+    assert!(mime_type(&program, false, "en").can_be_executable);
+    assert!(!mime_type(Path::new("/nonexistent/disk.iso"), false, "en").can_be_executable);
 }
