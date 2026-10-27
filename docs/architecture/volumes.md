@@ -1,7 +1,6 @@
 # Volumes
 
-**Statut : pilote en cours, étapes 1 à 5 faites** (trait extrait, inventaire UDisks2,
-notifications de montage, démontage et éjection, volumes non montés). Ce document deviendra le contrat du domaine une fois le pilote terminé.
+**Statut : pilote terminé** (étapes 1 à 7, bilan ci-dessous) ; suite Windows encore à passer. Ce document deviendra le contrat du domaine une fois le pilote terminé.
 
 Le pilote sort les volumes du trait `Platform` dans un trait de domaine et livre, sous
 Linux, l'équivalent de Nautilus : partitions montées et non montées, montage au clic,
@@ -101,6 +100,16 @@ pub trait Volumes: Send + Sync {
   vide sans étiquette de système de fichiers. `Filesystem.Mount` sans
   option renvoie le point de montage ; ntfs-3g signale un Windows en veille prolongée ou
   arrêté en démarrage rapide (`WindowsHibernated`).
+- `disks.rs` : disque physique d'un chemin, pour le rythme des copies, recherches et
+  doublons. Le montage le plus profond qui contient le chemin donne sa source `/dev/…` ;
+  `/sys/dev/block/MAJ:MIN` mène à la partition, son parent au disque, et un volume device
+  mapper (LUKS, LVM) à son premier périphérique sous-jacent. Identifiant
+  `(majeur << 20 | mineur) + 1` du disque, `queue/rotational = 0` pour un SSD, hachage de
+  l'hôte avec le bit de poids fort pour un partage réseau, 0 si inconnu (tmpfs, overlay).
+  Les appelants interrogent chaque fichier : réponse gardée 10 s par système de fichiers
+  (`st_dev`, que le noyau réattribue après un remontage). La copie mémorise ses requêtes
+  par `st_dev` hors Windows, où tout chemin commence par `/`. Les clés USB se déclarent
+  rotatives : elles restent sur la voie prudente.
 - `fallback.rs` : sans UDisks2 (WSL, conteneur), tous les montages non virtuels de
   `mountinfo` (`mounts.rs`, échappements décodés), sans montage ni éjection ; avec UDisks2,
   il n'ajoute que les montages réseau.
@@ -154,12 +163,58 @@ manuel de `tests.yml` sur la branche (elle n'est pas fusionnée dans `main`).
    communs touchés `volumes.rs` (types), l'état et la barre latérale (`workspace`,
    `sidebar`), `drive_watchers.rs` et les catalogues ; Windows n'en liste aucun.
 6. *Facultatif* : `is_ssd` (`/sys/block/*/queue/rotational`) et `physical_disk_id` Linux,
-   utilisés par le parallélisme des copies.
-7. **Bilan** : fichiers communs touchés par étape, décision sur le domaine suivant.
+   utilisés par le parallélisme des copies. *Fait* : `disks.rs` (ci-dessous) ; fichiers
+   communs touchés `hardware.rs` (requêtes réservées à Windows) et `file_ops/copy.rs`.
+7. **Bilan** : fichiers communs touchés par étape, décision sur le domaine suivant. *Fait*,
+   voir [Bilan du pilote](#bilan-du-pilote).
 
 **Critère d'arrêt :** si l'étape 1 déborde des appels listés, ou si les étapes 2 à 5 doivent
 retoucher du code commun au-delà de l'interface utilisateur prévue, le pilote s'arrête et
 la suite du portage reste dans la structure actuelle.
+
+## Bilan du pilote
+
+**Résultat.** Les volumes Linux passent d'une lecture brute de `/proc/mounts` au niveau de
+Nautilus : inventaire UDisks2, rafraîchissement immédiat, démontage et éjection avec
+polkit, applications qui bloquent un volume, volumes non montés et montage au clic, noms
+et ordre des gestionnaires Linux, disques physiques et SSD. Le code Linux tient dans
+`linux_volumes/` : environ 1 000 lignes de production et 380 de tests, sans toucher à la
+logique Windows.
+
+**Fichiers communs touchés** (hors `linux_volumes/`, `windows_volumes.rs`, catalogues et
+documentation) :
+
+| Étape | Fichiers communs | Nature |
+| --- | --- | --- |
+| 1. Trait | `platform/mod.rs`, `volumes.rs`, `windows_impl.rs`, `linux_impl.rs`, `commands/system.rs`, `file_ops/copy.rs`, `disk_images.rs`, `drive_watchers.rs`, `network.rs`, `trash_settings/settings.rs`, `utils/mod.rs` | appels seuls, comme prévu |
+| 2. Inventaire | `file_entry.rs` (`file_system`), `windows_drives.rs`, deux tests | champ demandé, affiché sur les deux plateformes |
+| 2 bis. Affichage | `format.rs`, `properties/`, `trash_settings/render.rs`, `tooltip/presentation.rs`, `i18n.rs` | interface |
+| 3. Notifications | `Cargo.toml` | options de `rustix`, aucun crate |
+| 4. Démonter, éjecter | `volumes.rs`, `drive_watchers.rs`, menu des lecteurs, `components/mod.rs`, `i18n.rs` | interface prévue |
+| 5. Non montés | `volumes.rs`, `file_entry.rs` (`volume_bytes`), `windows_drives.rs`, `workspace`, `sidebar/`, `drive_watchers.rs`, onglets, doublons, `i18n.rs` | interface prévue et noms demandés |
+| 6. Disques | `hardware.rs`, `file_ops/copy.rs` | une clé de mémorisation par plateforme |
+
+**Critère d'arrêt.** Non atteint : l'étape 1 est restée aux appels listés ; les étapes
+suivantes n'ont touché le code commun que pour l'interface prévue et deux champs de
+`DriveInfo` demandés pour l'affichage. Côté Windows, seuls changent la ligne « Système de
+fichiers » des Propriétés et le type d'erreur interne de l'éjection.
+
+**Leçons.**
+- Un trait de domaine avec des méthodes par défaut (`mount_points`, `watch`, `actions`,
+  `unmounted`, `mount`, `unmount`) laisse Linux ajouter des capacités sans code Windows.
+- Un dossier par domaine et par plateforme garde les modules sous 300 lignes et testables
+  sur fixtures, sans D-Bus ni sysfs réels.
+- `check-windows.sh` à chaque étape a suffi à garder la compilation Windows ; la suite de
+  tests Windows reste la seule vérification manquante.
+- Pièges rencontrés : une ligne GPUI ne peut pas lire l'application pendant son rendu
+  (l'état passe par la présentation) ; Nautilus garde ses dossiers ouverts quand un autre
+  programme démonte.
+
+**Décision proposée.** Poursuivre l'option B domaine par domaine, quand une fonction Linux
+en a besoin, sur le même modèle : plan court, trait extrait sans changement, puis
+implémentation Linux par étapes testées à la main. Candidats, par utilité immédiate :
+presse-papiers de fichiers (M08, trois méthodes, Ctrl+C/X/V en échec aujourd'hui), accès
+rapide et favoris (T12), corbeille. Le choix revient à l'utilisateur.
 
 ## Décisions
 
