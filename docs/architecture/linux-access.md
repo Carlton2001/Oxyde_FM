@@ -85,10 +85,18 @@ test), sous un autre utilisateur : `unshare --map-auto --map-root-user --mount`,
 dossier lié sur `/mnt` pour ne pas traverser le dossier personnel, puis `setpriv
 --reuid=1000`.
 
-**Suppression séquentielle, mesurée.** Avec 4 processus en parallèle sur des dossiers
-distincts, la suppression est plus lente sur Btrfs (120 000 fichiers : 1,0 s seule,
-1,3 s à 4, 1,65 s à 8), égale sur ext4, à peine plus rapide sur ntfs-3g. Nautilus
-supprime aussi un élément après l'autre : Turbo ne parallélise pas la suppression Linux.
+**Parallélisme, mesuré** (NVMe, cache chaud). Un dossier sélectionné seul est parcouru
+par un seul worker sous Linux ; Turbo supprime déjà jusqu'à 4 éléments sélectionnés à
+la fois. Par la suppression d'Oxyde, Normal puis Turbo :
+
+| Sélection | Btrfs | ext4 (image) |
+| --- | --- | --- |
+| 60 dossiers de 2 000 fichiers | 1,1–1,2 s → 1,25–1,3 s | 0,50 s → 0,20–0,22 s |
+| 8 dossiers de 10 000 fichiers | 0,72–0,74 s → 0,78–0,80 s | 0,32–0,34 s → 0,12–0,14 s |
+| 2 000 dossiers de 20 fichiers | 0,40–0,50 s → 0,46 s | 0,20 s → 0,06–0,08 s |
+
+Sur Btrfs, supprimer en parallèle ralentit d'environ 10 % ; sur ext4, Turbo est 2,5 à
+3 fois plus rapide.
 
 **Choix assumé.** Un disque monté dans l'arbre arrête la suppression, comme
 `rm -r --one-file-system` : supprimer un dossier n'efface jamais le contenu d'un autre
