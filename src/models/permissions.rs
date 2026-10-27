@@ -18,8 +18,12 @@ pub struct UnixPermissions {
     pub is_dir: bool,
     pub owner: Account,
     pub group: Account,
-    /// Groups the owner may give the item, its current group included.
+    /// Groups the user may give the item, its current group included: all of them
+    /// for root, as Nautilus offers an administrator.
     pub groups: Vec<Account>,
+    /// Accounts root may give the item, labelled « login – Real Name » as Nautilus
+    /// does; empty for any other user, who cannot change the owner.
+    pub owners: Vec<Account>,
     /// The current user owns the item or is root.
     pub editable: bool,
 }
@@ -29,25 +33,45 @@ pub struct UnixPermissions {
 pub struct PermissionChange {
     pub expected: UnixPermissions,
     pub mode: u32,
+    pub owner: u32,
     pub group: u32,
     /// For a folder: levels for everything inside it, applied before its own change.
-    pub enclosed: EnclosedChange,
+    pub enclosed: Levels,
 }
 
-/// Levels for the files and folders inside a folder, at any depth, as Nautilus's
-/// « Change Permissions for Enclosed Files ». None keeps a class as it is.
+impl PermissionChange {
+    /// The item as it is: nothing to apply yet.
+    pub fn of(expected: UnixPermissions) -> Self {
+        Self {
+            mode: expected.mode,
+            owner: expected.owner.id,
+            group: expected.group.id,
+            enclosed: Levels::default(),
+            expected,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        (self.mode, self.owner, self.group) == (self.expected.mode, self.expected.owner.id, self.expected.group.id)
+            && self.enclosed.is_empty()
+    }
+}
+
+/// Levels per class for files and for folders: those of the items inside a folder, as
+/// Nautilus's « Change Permissions for Enclosed Files », or those of a selection.
+/// None keeps a class as each item has it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct EnclosedChange {
+pub struct Levels {
     pub files: [Option<Access>; 3],
     pub folders: [Option<Access>; 3],
 }
 
-impl EnclosedChange {
+impl Levels {
     pub fn is_empty(&self) -> bool {
         self.files.iter().chain(&self.folders).all(Option::is_none)
     }
 
-    /// The mode an enclosed item receives.
+    /// The mode an item receives.
     pub fn mode(&self, mode: u32, is_dir: bool) -> u32 {
         let levels = if is_dir { &self.folders } else { &self.files };
         PermissionClass::ALL
@@ -118,9 +142,10 @@ const WRITE: u32 = 2;
 const EXECUTE: u32 = 1;
 
 impl Access {
-    /// The levels offered for a class. The owner of a file is never offered None.
+    /// The levels offered for a class. As in Nautilus, the owner is never offered None.
     pub fn choices(is_dir: bool, class: PermissionClass) -> &'static [Access] {
         match (is_dir, class) {
+            (true, PermissionClass::Owner) => &[Self::ListFiles, Self::AccessFiles, Self::CreateDelete],
             (true, _) => &[Self::None, Self::ListFiles, Self::AccessFiles, Self::CreateDelete],
             (false, PermissionClass::Owner) => &[Self::ReadOnly, Self::ReadWrite],
             (false, _) => &[Self::None, Self::ReadOnly, Self::ReadWrite],
@@ -173,6 +198,15 @@ pub fn executable(mode: u32) -> bool {
 /// Nautilus sets or clears the three execution bits together.
 pub fn with_executable(mode: u32, executable: bool) -> u32 {
     if executable { mode | 0o111 } else { mode & !0o111 }
+}
+
+/// The class bits all these modes share, as one of them; None when they differ.
+/// A file's execution bit is not part of its level, so it is not compared.
+pub fn shared(modes: impl IntoIterator<Item = u32>, is_dir: bool, class: PermissionClass) -> Option<u32> {
+    let mask = if is_dir { 0o7 } else { READ | WRITE } << class.shift();
+    let mut modes = modes.into_iter();
+    let first = modes.next()?;
+    modes.all(|mode| mode & mask == first & mask).then_some(first)
 }
 
 /// `rwx` text of a class, for a combination outside the levels.

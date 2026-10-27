@@ -3,7 +3,7 @@
 //! never followed, other file systems never entered, and each item is changed
 //! through the descriptor whose type was checked.
 use super::chmod;
-use crate::models::permissions::EnclosedChange;
+use crate::models::permissions::Levels;
 use rustix::{fs::{FileType, Mode, OFlags}, io::Errno};
 use std::{
     ffi::OsStr,
@@ -59,7 +59,7 @@ pub(super) fn apply(
     root: &OwnedFd,
     root_path: &Path,
     device: u64,
-    change: &EnclosedChange,
+    change: &Levels,
     cancel: &AtomicBool,
 ) -> std::io::Result<Outcome> {
     let mut outcome = Outcome::default();

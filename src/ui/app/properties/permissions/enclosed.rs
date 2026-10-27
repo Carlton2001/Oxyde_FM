@@ -44,7 +44,7 @@ pub(super) fn render(
             let menu = PermissionMenu::Enclosed { folders, class };
             let current = edit.entries(menu, cx).into_iter().find(|(_, selected, _)| *selected).map(|(label, ..)| label).unwrap_or_default();
             let id = ElementId::Name(format!("permissions-enclosed-{}-{}", folders, class.index()).into());
-            body = body.child(form_row(label, choice(edit, menu, id, current, handle, theme), compact, cx));
+            body = body.child(form_row(label, choice(menu, id, current, true, handle, theme), compact, cx));
         }
     }
     body

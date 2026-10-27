@@ -15,7 +15,7 @@ fn files_share_one_summary_with_exact_total_and_location() {
         path.to_string_lossy().into_owned()
     })
     .collect();
-    let (summary, directories) = inspect_selection(&paths, &AtomicBool::new(false)).unwrap();
+    let (summary, directories, _) = inspect_selection(&paths, &AtomicBool::new(false)).unwrap();
     assert_eq!(summary.files, 2);
     assert_eq!(summary.folders, 0);
     assert_eq!(summary.size, 7);
@@ -39,7 +39,7 @@ fn folders_are_scanned_and_selected_descendants_are_not_counted_twice() {
         .into_iter()
         .map(|path| path.to_string_lossy().into_owned())
         .collect();
-    let (summary, directories) = inspect_selection(&paths, &AtomicBool::new(false)).unwrap();
+    let (summary, directories, _) = inspect_selection(&paths, &AtomicBool::new(false)).unwrap();
     assert_eq!(summary.files, 1);
     assert_eq!(summary.folders, 1);
     assert_eq!(summary.size, 2);

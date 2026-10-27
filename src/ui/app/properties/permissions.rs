@@ -1,37 +1,51 @@
 //! Permissions tab, outside Windows, as Nautilus's Permissions page: an access level
-//! per class, the group and the execution of a file; for a folder, levels for its
-//! content. Everything is applied by OK.
+//! per class, the owner and group and the execution of a file; for a folder, levels
+//! for its content. A selection gets levels for its files and for its folders, a
+//! class whose items differ showing « Mixed » until a level is chosen. Everything is
+//! applied by OK.
 mod enclosed;
 mod item;
+mod save;
 
 use super::{PropertiesDialog, PropertiesWindow};
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::OxydeTheme;
 use gpui::*;
 use oxyde_lib::models::permissions::{
-    symbolic, Access, EnclosedChange, PermissionChange, PermissionClass, PermissionError, UnixPermissions,
+    shared, symbolic, with_executable, Access, Levels, PermissionChange, PermissionClass, UnixPermissions,
 };
 use std::collections::HashMap;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(super) enum PermissionMenu {
-    Access(PermissionClass),
+    Access { folders: bool, class: PermissionClass },
+    Owner,
     Group,
     Enclosed { folders: bool, class: PermissionClass },
 }
 
 #[derive(Clone, Copy)]
 enum Pick {
-    /// None keeps an enclosed class unchanged.
+    /// None keeps a class as each item has it.
     Access(Option<Access>),
+    Owner(u32),
     Group(u32),
 }
 
+pub(super) struct Item {
+    pub(super) path: String,
+    pub(super) loaded: UnixPermissions,
+}
+
 pub(super) struct PermissionsEdit {
-    loaded: UnixPermissions,
-    mode: u32,
+    items: Vec<Item>,
+    levels: Levels,
+    /// Execution of a single file, once its checkbox is clicked.
+    executable: Option<bool>,
+    /// Owner and group of a single item; a selection keeps those of each item.
+    owner: u32,
     group: u32,
-    enclosed: EnclosedChange,
+    enclosed: Levels,
     /// The page for enclosed items is shown instead of the item's own.
     enclosed_page: bool,
     pub(super) menu: Option<PermissionMenu>,
@@ -39,38 +53,92 @@ pub(super) struct PermissionsEdit {
 }
 
 impl PermissionsEdit {
-    pub(super) fn new(loaded: UnixPermissions) -> Self {
-        Self {
-            mode: loaded.mode,
-            group: loaded.group.id,
-            loaded,
-            enclosed: EnclosedChange::default(),
+    pub(super) fn new(items: Vec<Item>) -> Option<Self> {
+        let first = items.first()?;
+        Some(Self {
+            owner: first.loaded.owner.id,
+            group: first.loaded.group.id,
+            items,
+            levels: Levels::default(),
+            executable: None,
+            enclosed: Levels::default(),
             enclosed_page: false,
             menu: None,
             bounds: HashMap::new(),
+        })
+    }
+
+    fn single(&self) -> Option<&UnixPermissions> {
+        match &self.items[..] {
+            [item] => Some(&item.loaded),
+            _ => None,
         }
     }
 
-    /// The change to apply on OK, if anything was changed.
-    pub(super) fn change(&self) -> Option<PermissionChange> {
-        let changed = (self.mode, self.group) != (self.loaded.mode, self.loaded.group.id) || !self.enclosed.is_empty();
-        changed.then(|| PermissionChange {
-            expected: self.loaded.clone(),
-            mode: self.mode,
-            group: self.group,
-            enclosed: self.enclosed.clone(),
-        })
+    fn of_kind(&self, folders: bool) -> impl Iterator<Item = &UnixPermissions> {
+        self.items.iter().map(|item| &item.loaded).filter(move |loaded| loaded.is_dir == folders)
+    }
+
+    fn has_kind(&self, folders: bool) -> bool {
+        self.of_kind(folders).next().is_some()
+    }
+
+    /// Nautilus lets every item of a kind change, or none of them.
+    fn editable(&self, folders: bool) -> bool {
+        self.of_kind(folders).all(|loaded| loaded.editable)
+    }
+
+    fn all_editable(&self) -> bool {
+        self.items.iter().all(|item| item.loaded.editable)
+    }
+
+    /// The mode an item receives on OK.
+    fn mode(&self, loaded: &UnixPermissions) -> u32 {
+        let mode = self.levels.mode(loaded.mode, loaded.is_dir);
+        match self.executable {
+            Some(executable) if !loaded.is_dir => with_executable(mode, executable),
+            _ => mode,
+        }
+    }
+
+    /// The bits of a class the items of a kind share, as they are or as OK leaves them.
+    fn shown(&self, folders: bool, class: PermissionClass, original: bool) -> Option<u32> {
+        let modes = self.of_kind(folders).map(|loaded| if original { loaded.mode } else { self.mode(loaded) });
+        shared(modes.collect::<Vec<_>>(), folders, class)
+    }
+
+    fn levels(&mut self, folders: bool) -> &mut [Option<Access>; 3] {
+        if folders { &mut self.levels.folders } else { &mut self.levels.files }
+    }
+
+    /// What OK applies, item by item; empty when nothing was changed.
+    pub(super) fn changes(&self) -> Vec<(String, PermissionChange)> {
+        let single = self.single().is_some();
+        self.items
+            .iter()
+            .map(|item| {
+                let mut change = PermissionChange::of(item.loaded.clone());
+                change.mode = self.mode(&item.loaded);
+                if single {
+                    (change.owner, change.group) = (self.owner, self.group);
+                }
+                if item.loaded.is_dir {
+                    change.enclosed = self.enclosed.clone();
+                }
+                (item.path.clone(), change)
+            })
+            .filter(|(_, change)| !change.is_empty())
+            .collect()
     }
 
     fn pick(&mut self, menu: PermissionMenu, pick: Pick) {
         match (menu, pick) {
-            (PermissionMenu::Access(class), Pick::Access(Some(access))) => {
-                self.mode = access.apply(self.mode, self.loaded.is_dir, class);
-            }
+            (PermissionMenu::Access { folders, class }, Pick::Access(level)) => self.levels(folders)[class.index()] = level,
             (PermissionMenu::Enclosed { folders, class }, Pick::Access(level)) => {
                 let levels = if folders { &mut self.enclosed.folders } else { &mut self.enclosed.files };
                 levels[class.index()] = level;
             }
+            (PermissionMenu::Owner, Pick::Owner(owner)) => self.owner = owner,
             (PermissionMenu::Group, Pick::Group(group)) => self.group = group,
             _ => {}
         }
@@ -84,12 +152,19 @@ impl PermissionsEdit {
             None => cx.i18n().text(Message::PermissionsUnchanged).to_string(),
         };
         match menu {
-            PermissionMenu::Access(class) => {
-                let current = Access::of(self.mode, self.loaded.is_dir, class);
-                Access::choices(self.loaded.is_dir, class)
+            PermissionMenu::Access { folders, class } => {
+                let chosen = if folders { self.levels.folders } else { self.levels.files }[class.index()];
+                let original = self.shown(folders, class, true);
+                let current = chosen.or_else(|| original.and_then(|mode| Access::of(mode, folders, class)));
+                let mut entries: Vec<_> = Access::choices(folders, class)
                     .iter()
                     .map(|access| (level(Some(*access)), current == Some(*access), Pick::Access(Some(*access))))
-                    .collect()
+                    .collect();
+                // As Nautilus: what the items have, when no level says it, stays a choice.
+                if original.and_then(|mode| Access::of(mode, folders, class)).is_none() {
+                    entries.push((level_label(original, folders, class, cx), chosen.is_none(), Pick::Access(None)));
+                }
+                entries
             }
             PermissionMenu::Enclosed { folders, class } => {
                 let levels = if folders { &self.enclosed.folders } else { &self.enclosed.files };
@@ -99,9 +174,17 @@ impl PermissionsEdit {
                     .map(|access| (level(access), current == access, Pick::Access(access)))
                     .collect()
             }
+            PermissionMenu::Owner => self
+                .single()
+                .map(|loaded| &loaded.owners[..])
+                .unwrap_or_default()
+                .iter()
+                .map(|owner| (owner.name.clone(), owner.id == self.owner, Pick::Owner(owner.id)))
+                .collect(),
             PermissionMenu::Group => self
-                .loaded
-                .groups
+                .single()
+                .map(|loaded| &loaded.groups[..])
+                .unwrap_or_default()
                 .iter()
                 .map(|group| (group.name.clone(), group.id == self.group, Pick::Group(group.id)))
                 .collect(),
@@ -120,11 +203,14 @@ fn access_message(access: Access) -> Message {
     }
 }
 
-/// The current level of a class of the item, or its bits outside the levels.
-fn access_label(edit: &PermissionsEdit, class: PermissionClass, cx: &App) -> String {
-    match Access::of(edit.mode, edit.loaded.is_dir, class) {
-        Some(access) => cx.i18n().text(access_message(access)).to_string(),
-        None => symbolic(edit.mode, class),
+/// A level, the bits outside the levels, or « Mixed » when the items differ.
+fn level_label(shown: Option<u32>, folders: bool, class: PermissionClass, cx: &App) -> String {
+    match shown {
+        Some(mode) => match Access::of(mode, folders, class) {
+            Some(access) => cx.i18n().text(access_message(access)).to_string(),
+            None => symbolic(mode, class),
+        },
+        None => cx.i18n().text(Message::PermissionsMixed).to_string(),
     }
 }
 
@@ -148,14 +234,14 @@ fn form_row(label: Message, value: impl IntoElement, compact: bool, cx: &App) ->
 
 /// A value with a menu of choices when the item is editable, plain text otherwise.
 fn choice(
-    edit: &PermissionsEdit,
     menu: PermissionMenu,
     id: ElementId,
     label: String,
+    editable: bool,
     handle: &Entity<PropertiesWindow>,
     theme: OxydeTheme,
 ) -> AnyElement {
-    if !edit.loaded.editable {
+    if !editable {
         return div().child(label).into_any_element();
     }
     let measure = handle.clone();
@@ -268,61 +354,6 @@ fn menu_view(
     .into_any_element()
 }
 
-impl PropertiesWindow {
-    pub(super) fn save_permissions(&mut self, change: PermissionChange, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(dialog) = self.properties_dialog.as_mut() else {
-            return;
-        };
-        let path = dialog.path.clone();
-        let revision = dialog.revision;
-        dialog.saving = true;
-        dialog.error = None;
-        dialog.validation_error = None;
-        if let Some(edit) = &mut dialog.permissions {
-            edit.menu = None;
-        }
-        window.focus(&dialog.ok_focus, cx);
-        cx.notify();
-        let window_handle = window.window_handle();
-        let cancel = self.cancellation.clone();
-        cx.spawn(async move |this, cx| {
-            let result = oxyde_lib::commands::io::set_unix_permissions(path, change, cancel).await;
-            let _ = window_handle.update(cx, |_, window, cx| {
-                this.update(cx, |this, cx| {
-                    let Some(dialog) = this.properties_dialog.as_mut().filter(|dialog| dialog.revision == revision) else {
-                        return;
-                    };
-                    dialog.saving = false;
-                    match result {
-                        Ok(()) => {
-                            this.close_file_properties(window, cx);
-                            if let Some(owner) = this.owner.upgrade() {
-                                owner.update(cx, |owner, cx| owner.refresh_all(cx));
-                            }
-                        }
-                        Err(PermissionError::Changed) => dialog.validation_error = Some(Message::PermissionsChanged),
-                        Err(PermissionError::NotKept) => dialog.validation_error = Some(Message::PermissionsNotKept),
-                        Err(PermissionError::Failed(detail)) => dialog.error = Some(detail),
-                        Err(PermissionError::Incomplete { failed, first }) => {
-                            let mut args = crate::ui::i18n::FluentArgs::new();
-                            args.set("count", crate::ui::format::format_number(failed, cx.i18n().language()));
-                            args.set("detail", first);
-                            dialog.error = Some(cx.i18n().text_with_args(Message::PermissionsIncomplete, &args).to_string());
-                            // The folder changed: what is shown is now what it has.
-                            if let Some(edit) = &mut dialog.permissions {
-                                edit.loaded.mode = edit.mode;
-                                edit.loaded.group.id = edit.group;
-                                edit.enclosed = EnclosedChange::default();
-                            }
-                            if let Some(owner) = this.owner.upgrade() {
-                                owner.update(cx, |owner, cx| owner.refresh_all(cx));
-                            }
-                        }
-                    }
-                    cx.notify();
-                })
-            });
-        })
-        .detach();
-    }
-}
+#[cfg(test)]
+#[path = "permissions/tests/edit.rs"]
+mod tests;

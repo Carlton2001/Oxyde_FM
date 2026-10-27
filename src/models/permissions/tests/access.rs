@@ -27,7 +27,9 @@ fn folder_levels_follow_nautilus() {
     assert_eq!(Access::of(0o750, true, Group), Some(Access::AccessFiles));
     assert_eq!(Access::of(0o740, true, Group), Some(Access::ListFiles));
     assert_eq!(Access::of(0o750, true, Others), Some(Access::None));
-    assert_eq!(Access::of(0o050, true, Owner), Some(Access::None));
+    // As for a file, Nautilus never offers None to the owner of a folder.
+    assert_eq!(Access::of(0o050, true, Owner), None);
+    assert!(!Access::choices(true, Owner).contains(&Access::None));
 }
 
 #[test]
@@ -62,13 +64,23 @@ fn execution_sets_and_clears_the_three_bits_together() {
 
 #[test]
 fn enclosed_levels_change_only_the_chosen_classes_of_each_kind() {
-    let change = EnclosedChange {
+    let change = Levels {
         files: [None, Some(Access::ReadOnly), Some(Access::None)],
         folders: [None, None, Some(Access::AccessFiles)],
     };
-    assert!(!change.is_empty() && EnclosedChange::default().is_empty());
+    assert!(!change.is_empty() && Levels::default().is_empty());
     assert_eq!(change.mode(0o766, false), 0o740);
     // A file keeps its execution bits: they have their own checkbox.
     assert_eq!(change.mode(0o755, false), 0o751);
     assert_eq!(change.mode(0o2770, true), 0o2775);
+}
+
+#[test]
+fn a_selection_shares_a_level_only_when_every_item_has_its_bits() {
+    assert_eq!(shared([0o640, 0o644], false, Owner), Some(0o640));
+    assert_eq!(shared([0o640, 0o644], false, Others), None);
+    // The execution bit of a file has its own checkbox; a folder's is part of its level.
+    assert_eq!(shared([0o644, 0o755], false, Group), Some(0o644));
+    assert_eq!(shared([0o755, 0o745], true, Group), None);
+    assert_eq!(shared([], true, Owner), None);
 }

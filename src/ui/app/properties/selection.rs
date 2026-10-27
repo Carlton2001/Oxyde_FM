@@ -13,10 +13,12 @@ pub(super) struct SelectionProperties {
     pub location: Option<String>,
 }
 
+/// The selection's summary, the folders to measure, and the permissions of its
+/// items when every one has them.
 fn inspect_selection(
     paths: &[String],
     cancellation: &AtomicBool,
-) -> Result<(SelectionProperties, Vec<String>), String> {
+) -> Result<(SelectionProperties, Vec<String>, Option<Vec<super::permissions::Item>>), String> {
     let mut properties = Vec::with_capacity(paths.len());
     for path in paths {
         if cancellation.load(Ordering::Relaxed) {
@@ -64,7 +66,11 @@ fn inspect_selection(
             summary.size = summary.size.saturating_add(p.size);
         }
     }
-    Ok((summary, directories))
+    let permissions = properties
+        .iter()
+        .map(|p| Some(super::permissions::Item { path: p.path.clone(), loaded: p.permissions.clone()? }))
+        .collect();
+    Ok((summary, directories, permissions))
 }
 
 impl PropertiesWindow {
@@ -79,8 +85,9 @@ impl PropertiesWindow {
                 .update(cx, |this, cx| {
                     let dialog = this.properties_dialog.as_mut()?;
                     let directories = match result {
-                        Ok(Ok((summary, directories))) => {
+                        Ok(Ok((summary, directories, permissions))) => {
                             dialog.selection = Some(summary);
+                            dialog.permissions = permissions.and_then(super::permissions::PermissionsEdit::new);
                             dialog.calculating = !directories.is_empty();
                             Some(directories)
                         }

@@ -27,12 +27,15 @@ système.
     pour un type qui peut s'exécuter : sous-type de `application/x-executable` ou de
     `text/plain`.
   - Dossier : Aucun, Lister les fichiers uniquement, Accéder aux fichiers, Créer et
-    supprimer des fichiers.
+    supprimer des fichiers. Le propriétaire n'a pas « Aucun » non plus.
   - Une combinaison qui ne correspond à aucun niveau s'affiche telle quelle (`rw-`, …)
-    et reste jusqu'à ce qu'un niveau soit choisi.
+    et reste un choix du menu, comme dans Nautilus, pour revenir à l'état d'origine.
 - **Qui peut modifier** : le propriétaire, ou root. Sinon l'onglet est en lecture seule,
-  avec le message de Nautilus. Le groupe se choisit parmi ceux de l'utilisateur ; changer
-  de propriétaire demande root, et Oxyde ne fait que l'afficher.
+  avec le message de Nautilus. Le groupe se choisit parmi ceux de l'utilisateur.
+- **Administrateur** : Nautilus ouvre propriétaire et groupe à tous les comptes quand il
+  a les droits d'administration (emplacements `admin://`). Oxyde fait de même quand il
+  tourne en root : tous les comptes de NSS, nommés « login – Nom réel » d'après le GECOS,
+  et tous les groupes. Oxyde ne demande pas d'élévation.
 - **Application** au bouton OK, comme le reste de la fenêtre, et hors du thread UI. Elle
   vise l'objet ouvert au chargement (même `dev`/inode, mêmes droits et groupe). Si
   l'élément a changé entre-temps, rien n'est appliqué et un message invite à rouvrir.
@@ -42,6 +45,20 @@ système.
   SSSD et LDAP. À défaut, Oxyde affiche le numéro.
 - Un lien symbolique décrit sa cible, comme le reste des Propriétés ; un lien cassé n'a
   pas d'onglet Droits d'accès.
+- **Sélection de plusieurs éléments**, comme Nautilus :
+  - un niveau par classe pour les fichiers et un pour les dossiers (« Accès aux
+    dossiers », « Accès aux fichiers ») quand la sélection a les deux ;
+  - une classe dont les éléments diffèrent affiche « Mixte » ; ce choix reste au menu et
+    rend à chaque élément ses propres bits ;
+  - propriétaire et groupe affichés, communs ou « Plusieurs », sans modification ;
+    pas de case d'exécution ;
+  - modifiable si l'utilisateur peut modifier chaque élément du type ; éléments contenus
+    proposés quand la sélection n'a que des dossiers modifiables ;
+  - OK applique élément par élément, chacun vérifié comme un élément seul. Les échecs
+    sont comptés et le premier est nommé ; les autres éléments changent, et un nouvel OK
+    ne reprend que ce qui reste.
+  - Les noms des comptes sont gardés quelques secondes : une grande sélection ne lance
+    pas un `getent` par élément.
 - **Éléments contenus** (dossier) : la page « Modifier les droits des éléments
   contenus… » reprend le dialogue de Nautilus. Pour chaque classe, on choisit un niveau
   pour les fichiers et un pour les dossiers, « Inchangé » par défaut. OK l'applique à
@@ -76,18 +93,23 @@ système.
 3. **Éléments contenus** : application récursive, case d'exécution limitée aux types
    exécutables, retour à la ligne des libellés.
 4. **Bilan.**
+5. **Écarts fermés** : type par contenu selon GIO, propriétaire pour root, droits d'une
+   sélection.
 
 ## Bilan
 
-**Résultat.** La fenêtre Propriétés d'un élément Linux a un onglet Droits d'accès
-modelé sur Nautilus. On y règle le niveau d'accès du propriétaire, du groupe et des
-autres, le groupe parmi ceux de l'utilisateur et l'exécution d'un programme ou d'un
-script ; pour un dossier, les droits de tout son contenu. L'onglet Général donne le
+**Résultat.** La fenêtre Propriétés d'un élément ou d'une sélection Linux a un onglet
+Droits d'accès modelé sur Nautilus. On y règle le niveau d'accès du propriétaire, du
+groupe et des autres, le groupe parmi ceux de l'utilisateur (le propriétaire aussi pour
+root) et l'exécution d'un programme ou d'un script ; pour un dossier, les droits de
+tout son contenu. L'onglet Général donne le
 type du système, par exemple « image PNG (image/png) ». Validé à l'écran sur Fedora 44.
 
 Vérifié par des tests sur Btrfs, tmpfs et ntfs-3g :
 - niveaux, bits spéciaux et exécution ;
-- changement de groupe ;
+- changement de groupe ; propriétaire et groupe par root, dans un espace de noms
+  utilisateur (`unshare --map-auto --map-root-user`) ;
+- sélection : niveaux partagés ou mixtes, par type, sans propriétaire ni exécution ;
 - lien vers sa cible ;
 - refus d'un élément modifié ou remplacé, élément d'un autre utilisateur en lecture
   seule ;
@@ -97,14 +119,18 @@ Vérifié par des tests sur Btrfs, tmpfs et ntfs-3g :
   plus de 15 000 fichiers du système et du projet, sans aucun écart.
 
 **Écarts restant avec Nautilus.**
-- Pas de droits pour une sélection de plusieurs éléments.
-- Le propriétaire ne se change pas : il faut être root, et Oxyde ne demande pas
-  d'élévation.
+- Pas d'élévation (`admin://` et PolKit) : le propriétaire ne change que si Oxyde
+  tourne en root.
+- Nautilus applique chaque choix immédiatement ; Oxyde, au bouton OK, comme le reste de
+  sa fenêtre.
+- Éléments contenus : Oxyde part de « Inchangé » ; Nautilus 50 préremplit les niveaux
+  d'après le umask.
 
 **Fichiers communs touchés** :
 - `models/permissions.rs` (niveaux, changement, résultats) ;
 - `FileProperties` (`permissions`, `mime_type`) ;
 - `Platform` (`unix_permissions`, `set_unix_permissions`, `mime_type`) ;
+- `commands::io::set_selection_permissions` ;
 - la fenêtre Propriétés : onglets en énumération, module `tabs`.
 
 Windows garde ses onglets et ne reçoit ni droits ni type MIME. La fonctionnalité

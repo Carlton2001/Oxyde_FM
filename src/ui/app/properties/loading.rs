@@ -29,10 +29,10 @@ impl PropertiesWindow {
                                 && properties.link_target.is_none())
                                 .then(|| properties.path.clone());
                             dialog.calculating = scan.is_some();
-                            dialog.permissions = properties
-                                .permissions
-                                .clone()
-                                .map(super::permissions::PermissionsEdit::new);
+                            dialog.permissions = properties.permissions.clone().and_then(|loaded| {
+                                let item = super::permissions::Item { path: properties.path.clone(), loaded };
+                                super::permissions::PermissionsEdit::new(vec![item])
+                            });
                             dialog.properties = Some(properties);
                             scan
                         }

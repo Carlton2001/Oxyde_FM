@@ -87,8 +87,9 @@ impl PropertiesWindow {
         if dialog.saving {
             return;
         }
-        if let Some(change) = dialog.permissions.as_ref().and_then(|edit| edit.change()) {
-            self.save_permissions(change, window, cx);
+        let changes = dialog.permissions.as_ref().map(|edit| edit.changes()).unwrap_or_default();
+        if !changes.is_empty() {
+            self.save_permissions(changes, window, cx);
             return;
         }
         if dialog.shortcut_inputs.is_empty() {

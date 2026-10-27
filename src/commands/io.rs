@@ -467,6 +467,23 @@ pub async fn set_unix_permissions(
         .map_err(|error| PermissionError::Failed(error.to_string()))?
 }
 
+/// Applies the Permissions tab of a selection, one item after the other, each with
+/// its own result; stops once `cancel` is set.
+pub async fn set_selection_permissions(
+    changes: Vec<(String, crate::models::permissions::PermissionChange)>,
+    cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) -> Vec<(String, Result<(), crate::models::permissions::PermissionError>)> {
+    let mut results = Vec::with_capacity(changes.len());
+    for (path, change) in changes {
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            break;
+        }
+        let result = set_unix_permissions(path.clone(), change, cancel.clone()).await;
+        results.push((path, result));
+    }
+    results
+}
+
 #[cfg(target_os = "windows")]
 fn trash_properties_metadata(item: &trash::TrashItem) -> (String, Option<i64>) {
     let original = super::ops::original_trash_path(item)
