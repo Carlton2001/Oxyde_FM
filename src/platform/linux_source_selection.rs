@@ -19,10 +19,15 @@ pub(super) fn open(parent: &File, path: &Path, directory: Option<bool>) -> io::R
             Some(true) => 0x10000,
             Some(false) => 0,
         };
-    OpenOptions::new()
-        .read(true)
-        .custom_flags(flags)
-        .open(directory_path(parent).join(leaf))
+    let path = directory_path(parent).join(leaf);
+    match OpenOptions::new().read(true).custom_flags(flags).open(&path) {
+        // A folder that cannot be listed can still be moved by one rename; listing it
+        // for a copy then fails as `cp` does.
+        Err(error) if directory == Some(true) && error.kind() == io::ErrorKind::PermissionDenied => {
+            OpenOptions::new().read(true).custom_flags(flags | 0x200000).open(path)
+        }
+        result => result,
+    }
 }
 pub(super) fn enumerate(
     directory: &File,

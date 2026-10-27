@@ -44,10 +44,16 @@ impl Platform for LinuxPlatform {
         if !metadata.is_dir() || metadata.file_type().is_symlink() {
             return Err(std::io::Error::other("Archive parent is not an ordinary directory"));
         }
-        std::fs::File::open(path)
+        #[cfg(target_os = "linux")]
+        { super::linux_access::hold_directory(path, false) }
+        #[cfg(not(target_os = "linux"))]
+        { std::fs::File::open(path) }
     }
     fn hold_operation_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
-        std::fs::File::open(path)
+        #[cfg(target_os = "linux")]
+        { super::linux_access::hold_directory(path, true) }
+        #[cfg(not(target_os = "linux"))]
+        { std::fs::File::open(path) }
     }
     fn hold_resolved_operation_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         self.hold_archive_directory(path)
@@ -78,10 +84,17 @@ impl Platform for LinuxPlatform {
         // This fallback is still path based; it does not claim Windows' atomic guarantees.
         std::fs::remove_dir(path)
     }
-    fn open_operation_file(&self, _parent: &std::fs::File, path: &std::path::Path, _read_contents: bool) -> std::io::Result<std::fs::File> {
+    fn open_operation_file(&self, _parent: &std::fs::File, path: &std::path::Path, read_contents: bool) -> std::io::Result<std::fs::File> {
         if !std::fs::symlink_metadata(path)?.is_file() {
             return Err(std::io::Error::other("Operation source is not an ordinary file"));
         }
+        #[cfg(target_os = "linux")]
+        if !read_contents {
+            // Moving changes the parent's entry: the file itself needs no read permission.
+            return super::linux_access::open_unread(path);
+        }
+        #[cfg(not(target_os = "linux"))]
+        let _ = read_contents;
         self.open_file_for_move(path)
     }
     fn track_source_item(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
@@ -198,10 +211,16 @@ impl Platform for LinuxPlatform {
         if replace { self.replace_open_file(file, source, destination) }
         else { self.rename_open_file_exclusive(file, source, destination) }
     }
-    fn remove_operation_tree(&self, _parent: &std::fs::File, path: &std::path::Path, _workers: usize, checkpoint: &(dyn Fn() -> std::io::Result<()> + Sync)) -> std::io::Result<()> {
-        checkpoint()?;
-        if std::fs::symlink_metadata(path)?.is_dir() { std::fs::remove_dir_all(path) }
-        else { std::fs::remove_file(path) }
+    fn remove_operation_tree(&self, parent: &std::fs::File, path: &std::path::Path, _workers: usize, checkpoint: &(dyn Fn() -> std::io::Result<()> + Sync)) -> std::io::Result<()> {
+        #[cfg(target_os = "linux")]
+        { super::linux_file_tree::remove(parent, path, checkpoint) }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = parent;
+            checkpoint()?;
+            if std::fs::symlink_metadata(path)?.is_dir() { std::fs::remove_dir_all(path) }
+            else { std::fs::remove_file(path) }
+        }
     }
     fn create_copy_staging(&self, _parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<(std::fs::File, std::fs::File)> {
         std::fs::create_dir(path)?;

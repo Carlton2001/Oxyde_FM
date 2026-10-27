@@ -900,6 +900,10 @@ mod linux_permissions;
 mod linux_mime;
 #[cfg(target_os = "linux")]
 mod linux_file_names;
+#[cfg(target_os = "linux")]
+mod linux_access;
+#[cfg(target_os = "linux")]
+mod linux_file_tree;
 
 #[cfg(target_os = "windows")]
 mod windows_trash_restore;

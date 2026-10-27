@@ -29,6 +29,7 @@ Oxyde utilise Rust, GPUI et Tokio. Choisir une référence selon le travail à f
 | Modifier le traitement des noms Unix non UTF-8 | [Noms non UTF-8](architecture/non-utf8-names.md) |
 | Modifier les Propriétés Linux (droits d'accès, type MIME) | [Propriétés Linux](architecture/linux-properties.md) |
 | Séparateurs et casse des noms Linux | [Noms et chemins Linux](architecture/linux-names.md) |
+| Droits demandés et suppression définitive sous Linux | [Accès sans lecture](architecture/linux-access.md) |
 | Vérifier l’effet de Turbo et les améliorations restantes | [Couverture de Turbo](reports/2026-10-17-turbo-coverage.md) |
 | Modifier le listing, les filtres ou la recherche | [Navigation et recherche](architecture/search.md) |
 | Diagnostiquer copies, suppressions ou fermeture | [Copie](diagnostics/copy.md), [suppression](diagnostics/delete.md), [fermeture](diagnostics/shutdown.md) |
