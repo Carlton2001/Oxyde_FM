@@ -223,6 +223,16 @@ impl Platform for LinuxPlatform {
     fn remove_copy_staging(&self, _directory: &std::fs::File, pin: std::fs::File, path: &std::path::Path) -> std::io::Result<()> {
         drop(pin);
         std::fs::remove_file(path.join(".pin"))?;
+        // FUSE learns of closes asynchronously and keeps names unlinked while open as
+        // .fuse_hidden files until then.
+        for _ in 0..40 {
+            match std::fs::remove_dir(path) {
+                Err(error) if error.kind() == std::io::ErrorKind::DirectoryNotEmpty && only_fuse_hidden(path) => {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                result => return result,
+            }
+        }
         std::fs::remove_dir(path)
     }
     fn lock_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
@@ -345,6 +355,13 @@ impl Platform for LinuxPlatform {
         source: &std::path::Path,
         destination: &std::path::Path,
     ) -> std::io::Result<()> {
+        // The no-replace rename also publishes on FAT and exFAT, which have no hard links.
+        // FUSE file systems such as ntfs-3g refuse the flag and keep the hard link.
+        #[cfg(target_os = "linux")]
+        match rustix::fs::renameat_with(rustix::fs::CWD, source, rustix::fs::CWD, destination, rustix::fs::RenameFlags::NOREPLACE) {
+            Err(rustix::io::Errno::INVAL) => {}
+            result => return result.map_err(std::io::Error::from),
+        }
         std::fs::hard_link(source, destination)?;
         if let Err(error) = std::fs::remove_file(source) {
             let _ = std::fs::remove_file(destination);
@@ -623,4 +640,10 @@ impl Platform for LinuxPlatform {
     fn popup_point_to_owner(&self, _window: raw_window_handle::RawWindowHandle, _owner: raw_window_handle::RawWindowHandle, point: (f32, f32)) -> Result<(f32, f32), String> { Ok(point) }
     fn popup_family_active(&self, _owner: raw_window_handle::RawWindowHandle) -> bool { false }
     fn popup_work_area_size(&self, _window: raw_window_handle::RawWindowHandle) -> Result<(f32, f32), String> { Err("Native popup work area unavailable".into()) }
+}
+
+fn only_fuse_hidden(directory: &std::path::Path) -> bool {
+    std::fs::read_dir(directory).is_ok_and(|mut entries| {
+        entries.all(|entry| entry.is_ok_and(|entry| entry.file_name().as_encoded_bytes().starts_with(b".fuse_hidden")))
+    })
 }

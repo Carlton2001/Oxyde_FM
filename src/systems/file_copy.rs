@@ -195,6 +195,20 @@ fn history_source_changed(source: &Path) -> io::Error {
     })
 }
 
+/// A hard-linked staging name stays hidden in the staging directory on FUSE file systems
+/// while it is open: the copy continues on the published name.
+#[cfg(not(target_os = "windows"))]
+fn reopen_published(output: std::fs::File, parents: &super::path_parents::HeldParents, destination: &Path) -> std::fs::File {
+    let published = platform().open_copied_file(parents.directory(), destination).and_then(|file| {
+        let same = platform().file_identity(&file)? == platform().file_identity(&output)?;
+        Ok(same.then_some(file))
+    });
+    match published {
+        Ok(Some(file)) => file,
+        _ => output,
+    }
+}
+
 pub(super) struct CopiedFile {
     pub file: std::fs::File,
     pub hash: String,
@@ -298,6 +312,8 @@ fn copy_with_parents_checked(
     drop(checks_timer);
     let publish_timer = super::copy_diagnostics::Timer::start(super::copy_diagnostics::Phase::Publish);
     destination_parents.rename(&output, &staging.file, &destination, replace && !exclusive)?;
+    #[cfg(not(target_os = "windows"))]
+    let output = reopen_published(output, &destination_parents, &destination);
     drop(publish_timer);
     timing.published = true;
     Ok(CopiedFile {
