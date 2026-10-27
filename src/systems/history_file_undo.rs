@@ -739,7 +739,10 @@ fn undo_with(ops: &impl UndoIo, details: &TransactionDetails) -> io::Result<()> 
     let started = std::time::Instant::now();
     log::info!("Move undo journal: moved={:?}; created={:?}; source_dirs={:?}",
         details.moved_files, details.created_files, details.moved_dirs);
-    let result = Plan::new(details).and_then(|plan| apply_plan(ops, plan));
+    let result = Plan::new(details).and_then(|plan| {
+        let renamed = super::history_renamed_dirs::apply(details, false)?;
+        apply_plan(ops, plan).map_err(|error| renamed.revert(error))
+    });
     match &result {
         Ok(()) => log::info!("Move undo completed in {:?}", started.elapsed()),
         Err(error) => log::warn!("Move undo failed in {:?}: {error}", started.elapsed()),

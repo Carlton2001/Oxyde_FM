@@ -333,6 +333,7 @@ mod tests {
             created_links: None,
             moved_links: None,
             directory_attributes: None,
+            renamed_dirs: None,
             renamed_item_identity: None,
             moved_directory_identities: None,
             moved_dirs: None,

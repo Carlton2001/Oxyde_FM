@@ -2,6 +2,7 @@ mod worker;
 mod destinations;
 mod links;
 mod directories;
+mod whole_moves;
 
 use super::{FileOperation, FileOperationManager, OpStatus, FILE_OPS_LOG_TARGET};
 use crate::models::ConflictAction;
@@ -247,6 +248,12 @@ impl FileOperationManager {
         let mut directories_to_create = Vec::new();
         let mut links_to_create = Vec::new();
         let mut directory_sources = HashMap::new();
+        let mut whole_folders = Vec::new();
+        // Folders of one name selected in several places merge into one destination.
+        let mut shared_names = HashMap::new();
+        for source in &sources {
+            *shared_names.entry(source_name(source)?).or_insert(0) += 1;
+        }
         let archive_destination = op.lock().unwrap().archive_path_mappings.iter()
             .any(|(root, _)| target_dir.starts_with(root));
         let mut source_directories = crate::systems::source_directories::SourceDirectories::default();
@@ -273,6 +280,24 @@ impl FileOperationManager {
                 dest_root = crate::systems::transfer_naming::copy_name(src, &target_dir, selected.is_dir(),
                     &copy_name_suffix, &mut reserved_copy_names).map_err(|error| error.to_string())?;
                 if selected.is_dir() { fresh_copy_directories.push(dest_root.clone()); }
+            }
+            // Nautilus renames a folder whole when its name is free on the same volume;
+            // a merge, another volume, the trash or an archive keep the item-by-item path.
+            if is_move
+                && selected.is_dir()
+                && !self_transfer
+                && shared_names.get(&source_name(src)?) == Some(&1)
+                && trash_entries.is_empty()
+                && deferred_moves.is_none()
+                && !archive_destination
+                && op.lock().unwrap().archive_path_mappings.is_empty()
+                && dest_root.symlink_metadata().is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
+                && selected.renames_into(destination_tree.directory()).unwrap_or(false)
+            {
+                total_files += 1;
+                op.lock().unwrap().item_plan(src, dest_root.clone(), 1, false, false);
+                whole_folders.push((selected.clone(), dest_root));
+                continue;
             }
             let mut walker = crate::systems::source_selection::SourceWalk::new(selected.clone());
             loop {
@@ -384,7 +409,8 @@ impl FileOperationManager {
             &target_dir,
             &directories_to_create,
             files_to_process.iter().map(|(_, destination, _)| destination)
-                .chain(links_to_create.iter().map(|(_, destination, _)| destination)),
+                .chain(links_to_create.iter().map(|(_, destination, _)| destination))
+                .chain(whole_folders.iter().map(|(_, destination)| destination)),
             &mut || Self::archive_checkpoint(op).map_err(std::io::Error::other),
         ).map_err(|error| error.to_string())?;
 
@@ -424,6 +450,12 @@ impl FileOperationManager {
 
         follow_turbo_priority(turbo_flag.load(Ordering::Relaxed), ThreadPriority::Normal);
 
+        for (folder, destination) in &whole_folders {
+            Self::archive_checkpoint(op)?;
+            Self::move_whole_directory(op, folder, destination)?;
+            processed_files_atomic.fetch_add(1, Ordering::Relaxed);
+        }
+        drop(whole_folders);
         for directory in &directories_to_create {
             if cancel_flag.load(Ordering::Relaxed) {
                 break;

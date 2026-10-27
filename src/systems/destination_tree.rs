@@ -44,6 +44,10 @@ impl DestinationTree {
         platform().restore_directory_attributes(directory, source)
     }
 
+    pub fn directory(&self) -> &File {
+        self.root.directory()
+    }
+
     pub fn path(&self) -> &Path {
         self.root.resolved_directory()
     }

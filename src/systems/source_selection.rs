@@ -238,6 +238,21 @@ impl SelectedEntry {
     pub fn link(&self) -> Option<&SelectedLink> {
         self.link.as_ref()
     }
+    /// Whether one rename can move this held directory into `destination`.
+    pub fn renames_into(&self, destination: &File) -> io::Result<bool> {
+        match &self.directory {
+            Some(directory) => platform().same_mount(&directory.file, destination),
+            None => Ok(false),
+        }
+    }
+    /// Identity of the held directory, for a rename that must move that same folder.
+    pub fn directory_identity(&self) -> io::Result<HistoryFileIdentity> {
+        let directory = self
+            .directory
+            .as_ref()
+            .ok_or_else(|| io::Error::other("Selected source is not a directory"))?;
+        HistoryFileIdentity::from_file(&directory.file)
+    }
     /// Attributes of the held directory, read before its listing changes its access date.
     /// Unreadable extended attributes are reported and left out.
     pub fn directory_attributes(&self) -> io::Result<crate::platform::DirectoryAttributes> {

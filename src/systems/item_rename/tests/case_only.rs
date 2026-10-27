@@ -208,6 +208,7 @@ fn case_only_rename_uses_the_same_undo_redo_commands_as_ordinary_renames() {
                 created_links: None,
                 moved_links: None,
                 directory_attributes: None,
+                renamed_dirs: None,
                 renamed_item_identity: proof,
                 new_folder_identity: None,
                 created_files: None,

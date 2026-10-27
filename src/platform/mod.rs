@@ -343,6 +343,11 @@ pub trait Platform: Send + Sync {
     fn restore_access_date(&self, _file: &std::fs::File, _accessed: std::time::SystemTime) -> std::io::Result<()> {
         Ok(())
     }
+    /// Whether one rename can move an item from the first folder into the second.
+    /// Windows keeps moving folders item by item.
+    fn same_mount(&self, _first: &std::fs::File, _second: &std::fs::File) -> std::io::Result<bool> {
+        Ok(false)
+    }
     /// Extended attributes and ACLs a copy keeps from this source. None on Windows,
     /// whose native copy keeps its own.
     fn extended_attributes(&self, _file: &std::fs::File) -> std::io::Result<ExtendedAttributes> {

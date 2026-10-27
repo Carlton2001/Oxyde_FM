@@ -179,6 +179,7 @@ impl FileOperationManager {
         locked.created_links.clear();
         locked.moved_links.clear();
         locked.directory_attributes.clear();
+        locked.renamed_dirs.clear();
         locked.moved_file_identities.clear();
         locked.moved_directory_identities.clear();
         Ok(())

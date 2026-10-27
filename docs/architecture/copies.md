@@ -65,9 +65,9 @@ comportement : sa copie native passe déjà par `CopyFileEx`.
   fichiers y apparaissent en `777`, donc exécutables, quel que soit l'original. Il garde
   les attributs `user.*` (en flux nommés), pas les ACL. FAT ne garde ni mode ni
   attributs étendus.
-- Un dossier contenant un sous-dossier en lecture seule (`550`) ne peut pas être
-  déplacé : Oxyde recrée l'arborescence et déplace les fichiers un à un, là où Nautilus
-  renomme le dossier entier. À traiter avec les déplacements.
+- Un dossier contenant un sous-dossier en lecture seule (`550`) ne peut être déplacé que
+  s'il est renommé entier, sur son montage : voir [déplacements](moves.md). D'un volume à
+  l'autre, ses fichiers ne peuvent pas quitter la source, comme avec Nautilus.
 
 ## Étapes
 
@@ -121,4 +121,5 @@ et 460 de tests.
 - Les essais NTFS se font sur une image : `udisksctl loop-setup` puis le montage
   automatique de GNOME, sans toucher aux disques de l'utilisateur.
 
-**Reporté.** Le déplacement d'un dossier entier par renommage (limite ci-dessus).
+**Reporté.** Le déplacement d'un dossier entier par renommage, fait depuis dans les
+[déplacements](moves.md).

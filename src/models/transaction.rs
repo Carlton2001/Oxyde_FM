@@ -32,6 +32,7 @@ pub struct TransactionDetails {
     /// Attributes each folder the transfer created took from its source, for the
     /// folders Undo and Redo recreate. Windows ignores them.
     pub directory_attributes: Option<Vec<(std::path::PathBuf, crate::platform::DirectoryAttributes)>>,
+    pub renamed_dirs: Option<Vec<HistoryRenamedDirectory>>,
     pub new_folder_identity: Option<HistoryFileIdentity>,
 }
 
@@ -44,6 +45,15 @@ pub struct HistoryLink {
     pub path: std::path::PathBuf,
     pub target: std::path::PathBuf,
     pub identity: HistoryLinkIdentity,
+}
+
+/// A folder a move renamed whole, as Nautilus does, from `source` to `path`. Undo
+/// and Redo rename only that same folder, never over an existing name.
+#[derive(Debug, Clone)]
+pub struct HistoryRenamedDirectory {
+    pub source: std::path::PathBuf,
+    pub path: std::path::PathBuf,
+    pub identity: Option<HistoryFileIdentity>,
 }
 
 #[derive(Debug, Clone)]

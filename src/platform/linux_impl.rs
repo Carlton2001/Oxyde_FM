@@ -324,6 +324,10 @@ impl Platform for LinuxPlatform {
         file.set_times(std::fs::FileTimes::new().set_accessed(accessed))
     }
     #[cfg(target_os = "linux")]
+    fn same_mount(&self, first: &std::fs::File, second: &std::fs::File) -> std::io::Result<bool> {
+        super::linux_rename::same_mount(first, second)
+    }
+    #[cfg(target_os = "linux")]
     fn extended_attributes(&self, file: &std::fs::File) -> std::io::Result<super::ExtendedAttributes> {
         super::linux_extended_attributes::read(file)
     }

@@ -28,3 +28,5 @@ mod link_copy;
 mod file_dates;
 #[cfg(target_os = "linux")]
 mod extended_attributes;
+#[cfg(target_os = "linux")]
+mod whole_moves;

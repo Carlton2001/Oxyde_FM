@@ -279,16 +279,18 @@ impl Drop for Journal {
 }
 
 pub(crate) fn redo(details: &TransactionDetails) -> Result<(), CommandError> {
-    redo_with(details, &mut Native).map_err(|error| match CommandError::from(error) {
-        CommandError::HistoryIdentity(failure) => CommandError::HistoryMove(HistoryMoveFailure {
-            issue: match failure.issue {
-                crate::models::error::HistoryIdentityIssue::Changed => Issue::Changed,
-                crate::models::error::HistoryIdentityIssue::Unverified => Issue::Unverified,
-            },
-            detail: failure.path,
-        }),
-        other => other,
-    })
+    super::history_renamed_dirs::apply(details, true)
+        .and_then(|renamed| redo_with(details, &mut Native).map_err(|error| renamed.revert(error)))
+        .map_err(|error| match CommandError::from(error) {
+            CommandError::HistoryIdentity(failure) => CommandError::HistoryMove(HistoryMoveFailure {
+                issue: match failure.issue {
+                    crate::models::error::HistoryIdentityIssue::Changed => Issue::Changed,
+                    crate::models::error::HistoryIdentityIssue::Unverified => Issue::Unverified,
+                },
+                detail: failure.path,
+            }),
+            other => other,
+        })
 }
 fn redo_with(details: &TransactionDetails, checkpoint: &mut impl Checkpoint) -> io::Result<()> {
     let (Some(moved), Some(moved_dirs), Some(hashes)) = (

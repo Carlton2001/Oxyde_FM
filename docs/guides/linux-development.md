@@ -110,8 +110,8 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
   `preview_jobs` à délai de 2 s échouent par intermittence quand toute la suite tourne.
 - M05 : noms non UTF-8 convertis avec perte.
 - M03/M06, faits pour la copie : [copies](../architecture/copies.md) depuis la source
-  vérifiée, par le noyau, avec modes, dates, `user.*` et ACL. Déplacer un dossier entier
-  par renommage et renommer sur ntfs-3g : en cours, voir
+  vérifiée, par le noyau, avec modes, dates, `user.*` et ACL ; un dossier déplacé sur son
+  disque est renommé entier et renommer fonctionne sur ntfs-3g : voir
   [déplacements](../architecture/moves.md).
 - T04, fait : l'identité n'exige plus de date de naissance hors Windows.
 - T05, fait : [liens symboliques](../architecture/links.md), sauf dans les archives.

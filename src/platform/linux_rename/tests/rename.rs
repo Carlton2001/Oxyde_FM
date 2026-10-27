@@ -42,3 +42,12 @@ fn absolute_paths_rename_from_the_working_directory() {
         assert_eq!(std::fs::read(&to).unwrap(), b"a");
     }
 }
+
+#[test]
+fn folders_share_a_mount_only_on_the_same_file_system_and_mount() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(root.path().join("a/b")).unwrap();
+    let open = |path: &Path| std::fs::File::open(path).unwrap();
+    assert!(same_mount(&open(root.path()), &open(&root.path().join("a/b"))).unwrap());
+    assert!(!same_mount(&open(root.path()), &open(Path::new("/proc"))).unwrap());
+}

@@ -241,6 +241,7 @@
                 created_links: None,
                 moved_links: None,
                 directory_attributes: None,
+                renamed_dirs: None,
                 renamed_item_identity: [new, old].into_iter().find_map(|path| {
                     let parents = crate::systems::path_parents::HeldParents::new(path).ok()?;
                     let file = crate::platform::platform()
