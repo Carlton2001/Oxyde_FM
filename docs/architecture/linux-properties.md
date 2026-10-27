@@ -64,7 +64,7 @@ système.
   fichiers et un pour les dossiers, préremplis d'après le umask (lu dans
   `/proc/self/status`) : ceux d'un nouveau fichier et d'un nouveau dossier. Une classe
   dont les bits ne font aucun niveau reste « Inchangé ». « Modifier » retient ces niveaux,
-  « Annuler » ou le retour les abandonne ; OK les applique à toute profondeur, avant le
+  le retour vers Droits d'accès les abandonne ; OK les applique à toute profondeur, avant le
   changement du dossier lui-même :
   - chaque dossier change après son contenu, si bien qu'un dossier qui se ferme à son
     propriétaire est quand même parcouru ;
