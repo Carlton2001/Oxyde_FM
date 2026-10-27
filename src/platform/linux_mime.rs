@@ -1,5 +1,7 @@
 //! Type of an item from the shared MIME database (shared-mime-info), as Nautilus
-//! shows it: by file name, then by content for a file whose name says nothing.
+//! shows it through GIO: by file name when it names one type, else by content.
+mod magic;
+
 use crate::models::MimeType;
 use std::{collections::HashMap, io::Read, path::{Path, PathBuf}, sync::OnceLock};
 
@@ -7,14 +9,23 @@ const DIRECTORY: &str = "inode/directory";
 const TEXT: &str = "text/plain";
 const UNKNOWN: &str = "application/octet-stream";
 const EXECUTABLE: &str = "application/x-executable";
+const ZERO_SIZE: &str = "application/x-zerosize";
 
 struct Glob {
     weight: u32,
     mime: String,
     pattern: glob::Pattern,
     case_sensitive: bool,
-    literal: bool,
-    length: usize,
+    kind: GlobKind,
+}
+
+/// xdgmime looks names up in this order.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum GlobKind {
+    Literal,
+    /// `*` and a suffix: the longest matching suffix wins.
+    Suffix(usize),
+    Full,
 }
 
 fn data_dirs() -> Vec<PathBuf> {
@@ -53,13 +64,30 @@ fn parse(text: &str) -> Vec<Glob> {
             Some(Glob {
                 weight,
                 mime,
-                literal: !pattern.contains(['*', '?', '[']),
-                length: pattern.len(),
+                kind: match pattern.strip_prefix('*') {
+                    _ if !pattern.contains(['*', '?', '[']) => GlobKind::Literal,
+                    Some(suffix) if !suffix.contains(['*', '?', '[']) => GlobKind::Suffix(suffix.len()),
+                    _ => GlobKind::Full,
+                },
                 pattern: glob::Pattern::new(pattern).ok()?,
                 case_sensitive,
             })
         })
         .collect()
+}
+
+/// Content rules of every data directory, highest priority first.
+fn magic_sections() -> &'static [magic::Section] {
+    static SECTIONS: OnceLock<Vec<magic::Section>> = OnceLock::new();
+    SECTIONS.get_or_init(|| {
+        let mut sections: Vec<_> = data_dirs()
+            .into_iter()
+            .filter_map(|dir| std::fs::read(dir.join("mime/magic")).ok())
+            .flat_map(|bytes| magic::parse(&bytes))
+            .collect();
+        sections.sort_by_key(|section| std::cmp::Reverse(section.priority));
+        sections
+    })
 }
 
 fn subclasses() -> &'static HashMap<String, Vec<String>> {
@@ -104,40 +132,70 @@ fn can_be_executable(parents: &HashMap<String, Vec<String>>, mime: &str) -> bool
     is_a(parents, mime, EXECUTABLE) || is_a(parents, mime, TEXT)
 }
 
-/// Literal names first, then the heaviest glob, then the longest one, as the
-/// shared-mime-info specification orders them.
-fn by_name<'a>(globs: &'a [Glob], name: &str) -> Option<&'a str> {
-    globs
-        .iter()
-        .filter(|glob| {
-            glob.pattern.matches_with(name, glob::MatchOptions {
-                case_sensitive: glob.case_sensitive,
-                ..Default::default()
-            })
-        })
-        .max_by_key(|glob| (glob.literal, glob.weight, glob.length))
-        .map(|glob| glob.mime.as_str())
-}
-
-/// An ELF header makes a program, as the database's magic rule says (libraries are
-/// told apart by name); text without NUL in its first block is plain text; anything
-/// else is unknown.
-fn by_content(path: &Path) -> &'static str {
-    let mut block = [0_u8; 4096];
-    let read = std::fs::File::open(path).and_then(|mut file| file.read(&mut block));
-    let Ok(length) = read else { return UNKNOWN };
-    let block = &block[..length];
-    if block.starts_with(b"\x7fELF") && matches!(block.get(5), Some(1 | 2)) {
-        return EXECUTABLE;
+/// Types the name allows, heaviest first, as xdgmime finds them: an exact name alone;
+/// else the longest matching `*suffix`, then the other globs if that left fewer than two.
+/// Exact names ignore case unless marked otherwise. Globs try the exact case first,
+/// then ignore case for those that allow it, when nothing matched.
+fn by_name<'a>(globs: &'a [Glob], name: &str) -> Vec<&'a str> {
+    let literal = globs.iter().filter(|glob| glob.kind == GlobKind::Literal).find(|glob| {
+        glob.pattern.matches_with(name, glob::MatchOptions { case_sensitive: glob.case_sensitive, ..Default::default() })
+    });
+    if let Some(glob) = literal {
+        return vec![glob.mime.as_str()];
     }
-    if !block.contains(&0) && utf8_prefix(block) { TEXT } else { UNKNOWN }
+    let exact = by_glob(globs, name, true);
+    if exact.is_empty() { by_glob(globs, name, false) } else { exact }
 }
 
-/// UTF-8 text, allowing a character cut at the end of the block.
-fn utf8_prefix(bytes: &[u8]) -> bool {
-    match std::str::from_utf8(bytes) {
-        Ok(_) => true,
-        Err(error) => error.error_len().is_none(),
+fn by_glob<'a>(globs: &'a [Glob], name: &str, exact: bool) -> Vec<&'a str> {
+    let matches = |glob: &&Glob| {
+        let case_sensitive = exact || glob.case_sensitive;
+        glob.pattern.matches_with(name, glob::MatchOptions { case_sensitive, ..Default::default() })
+    };
+    let suffixes: Vec<_> = globs.iter().filter(|glob| matches!(glob.kind, GlobKind::Suffix(_))).filter(matches).collect();
+    let longest = suffixes.iter().filter_map(|glob| match glob.kind { GlobKind::Suffix(length) => Some(length), _ => None }).max();
+    let mut found: Vec<_> = suffixes.into_iter().filter(|glob| glob.kind == GlobKind::Suffix(longest.unwrap_or(0))).collect();
+    if found.len() < 2 {
+        found.extend(globs.iter().filter(|glob| glob.kind == GlobKind::Full).filter(matches));
+    }
+    found.sort_by_key(|glob| std::cmp::Reverse(glob.weight));
+    let mut types: Vec<&str> = Vec::new();
+    for glob in found {
+        if !types.contains(&glob.mime.as_str()) {
+            types.push(&glob.mime);
+        }
+    }
+    types
+}
+
+/// GIO's test, measured against `gio info`: no control character other than tab,
+/// line feed, form feed, carriage return and backspace in the first 128 bytes.
+fn looks_like_text(data: &[u8]) -> bool {
+    data.iter().take(128).all(|byte| *byte >= 0x20 || matches!(byte, b'\t' | b'\n' | 0x0c | b'\r' | 0x08))
+}
+
+/// As `g_content_type_guess` given the start of the file: a content rule of priority
+/// 80 or more wins; otherwise it decides between the types the name allows, else the
+/// name's heaviest type; without a name, the content alone, then text or unknown.
+fn by_content<'a>(sections: &'a [magic::Section], path: &Path, named: &[&'a str]) -> &'a str {
+    let mut data = Vec::new();
+    let limit = magic::extent(sections).clamp(4096, 1 << 16) as u64;
+    if std::fs::File::open(path).and_then(|file| file.take(limit).read_to_end(&mut data)).is_err() {
+        return named.first().copied().unwrap_or(UNKNOWN);
+    }
+    let sniffed = magic::lookup(sections, &data);
+    let sniffed_type = sniffed.map(|(mime, _)| mime).or_else(|| looks_like_text(&data).then_some(TEXT));
+    let Some(first) = named.first().copied() else {
+        return sniffed_type.unwrap_or(UNKNOWN);
+    };
+    match (sniffed, sniffed_type) {
+        (Some((mime, priority)), _) if priority >= 80 => mime,
+        (_, Some(sniffed)) => named
+            .iter()
+            .copied()
+            .find(|name| is_a(subclasses(), name, sniffed))
+            .unwrap_or(first),
+        _ => first,
     }
 }
 
@@ -178,9 +236,14 @@ pub(super) fn mime_type(path: &Path, is_dir: bool, language: &str) -> MimeType {
     } else if let Some(mime) = special(path) {
         mime
     } else {
-        path.file_name()
-            .and_then(|name| by_name(globs(), &name.to_string_lossy()))
-            .unwrap_or_else(|| by_content(path))
+        let named = path.file_name().map(|name| by_name(globs(), &name.to_string_lossy())).unwrap_or_default();
+        // GLib does not read an empty file: files of /proc and /sys look empty.
+        let empty = std::fs::metadata(path).is_ok_and(|metadata| metadata.is_file() && metadata.len() == 0);
+        match named[..] {
+            _ if empty => ZERO_SIZE,
+            [only] => only,
+            _ => by_content(magic_sections(), path, &named),
+        }
     };
     MimeType {
         description: description(name, language),

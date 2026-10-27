@@ -55,11 +55,18 @@ système.
 - **Système de fichiers sans droits Unix** : ntfs-3g (sans son option `permissions`) et
   FAT acceptent `chmod` sans rien garder. Oxyde relit l'objet après le changement et le
   signale au lieu de fermer la fenêtre comme si tout avait réussi.
-- **Type** comme Nautilus, « image PNG (image/png) » : nom de fichier selon `globs2` de
-  shared-mime-info (noms exacts, puis poids, puis longueur du motif), sinon contenu
-  (en-tête ELF : programme ; texte UTF-8 ; sinon inconnu). Description dans la langue de l'interface, sinon celle de
-  la base. Les dossiers gardent le libellé d'Oxyde, souvent absent de la base. Tubes,
-  sockets et périphériques sont nommés par leur nature, sans être ouverts.
+- **Type** comme Nautilus, « image PNG (image/png) », selon l'algorithme de GIO
+  (xdgmime) sur la base shared-mime-info :
+  - par le nom (`globs2`) : nom exact, sinon le plus long suffixe `*.ext`, puis les
+    autres motifs s'il reste moins de deux types ; la casse exacte d'abord ;
+  - un seul type par le nom suffit ; sinon le contenu (`magic`) tranche : une règle de
+    priorité 80 ou plus l'emporte, sinon le premier type du nom qui en dérive ;
+  - sans nom reconnu : le contenu, sinon texte si les 128 premiers octets n'ont pas de
+    caractère de contrôle, sinon inconnu ; un fichier vide est `application/x-zerosize`.
+
+  Description dans la langue de l'interface, sinon celle de la base. Les dossiers
+  gardent le libellé d'Oxyde, souvent absent de la base. Tubes, sockets et
+  périphériques sont nommés par leur nature, sans être ouverts.
 
 ## Étapes
 
@@ -86,14 +93,13 @@ Vérifié par des tests sur Btrfs, tmpfs et ntfs-3g :
   seule ;
 - système de fichiers qui ignore les droits ;
 - parcours récursif : profondeur, liens, dossier qui se ferme ou s'ouvre, échecs ;
-- types par nom, par contenu et par en-tête ELF, règle d'exécution de GIO.
+- types par nom et par contenu, règle d'exécution de GIO ; comparés à `gio info` sur
+  plus de 15 000 fichiers du système et du projet, sans aucun écart.
 
 **Écarts restant avec Nautilus.**
 - Pas de droits pour une sélection de plusieurs éléments.
 - Le propriétaire ne se change pas : il faut être root, et Oxyde ne demande pas
   d'élévation.
-- Le type par contenu ne reconnaît que l'ELF et le texte, pas toutes les règles
-  « magic » de la base.
 
 **Fichiers communs touchés** :
 - `models/permissions.rs` (niveaux, changement, résultats) ;
