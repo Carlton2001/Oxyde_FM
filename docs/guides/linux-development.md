@@ -131,8 +131,9 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
 - T15, fait : [identité de bureau](../architecture/desktop-identity.md) ;
   `bash scripts/install-linux-desktop.sh --exec <binaire> --profile ~/oxyde-test`
   installe l'entrée et l'icône pour l'utilisateur.
-- [Propriétés Linux](../architecture/linux-properties.md) comme Nautilus : onglet Droits
-  d'accès (groupe, niveaux, exécution) et type MIME ; essai visuel attendu.
+- Fait : [Propriétés Linux](../architecture/linux-properties.md) comme Nautilus, avec
+  un onglet Droits d'accès (groupe, niveaux, exécution, éléments contenus) et le type
+  MIME. Reste : les droits d'une sélection de plusieurs éléments.
 - T10 : réseau SMB/GVfs ; « Plus d'options » (menu Shell) est masqué hors Windows.
 
 **Avancé et distribution (jalons 6–7)**

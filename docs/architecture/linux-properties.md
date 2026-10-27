@@ -1,7 +1,7 @@
 # Propriétés Linux
 
-**Statut : étapes 1 à 3 faites, essai visuel attendu** (dixième domaine de l'option B, après les [noms non
-UTF-8](non-utf8-names.md)). Ce document est le contrat du domaine.
+**Statut : domaine terminé** (dixième domaine de l'option B, après les [noms non
+UTF-8](non-utf8-names.md)) ; bilan ci-dessous. Ce document est le contrat du domaine.
 
 ## Périmètre
 
@@ -69,3 +69,46 @@ système.
 3. **Éléments contenus** : application récursive, case d'exécution limitée aux types
    exécutables, retour à la ligne des libellés.
 4. **Bilan.**
+
+## Bilan
+
+**Résultat.** La fenêtre Propriétés d'un élément Linux a un onglet Droits d'accès
+modelé sur Nautilus. On y règle le niveau d'accès du propriétaire, du groupe et des
+autres, le groupe parmi ceux de l'utilisateur et l'exécution d'un programme ou d'un
+script ; pour un dossier, les droits de tout son contenu. L'onglet Général donne le
+type du système, par exemple « image PNG (image/png) ». Validé à l'écran sur Fedora 44.
+
+Vérifié par des tests sur Btrfs, tmpfs et ntfs-3g :
+- niveaux, bits spéciaux et exécution ;
+- changement de groupe ;
+- lien vers sa cible ;
+- refus d'un élément modifié ou remplacé, élément d'un autre utilisateur en lecture
+  seule ;
+- système de fichiers qui ignore les droits ;
+- parcours récursif : profondeur, liens, dossier qui se ferme ou s'ouvre, échecs ;
+- types par nom, par contenu et par en-tête ELF, règle d'exécution de GIO.
+
+**Écarts restant avec Nautilus.**
+- Pas de droits pour une sélection de plusieurs éléments.
+- Le propriétaire ne se change pas : il faut être root, et Oxyde ne demande pas
+  d'élévation.
+- Le type par contenu ne reconnaît que l'ELF et le texte, pas toutes les règles
+  « magic » de la base.
+
+**Fichiers communs touchés** :
+- `models/permissions.rs` (niveaux, changement, résultats) ;
+- `FileProperties` (`permissions`, `mime_type`) ;
+- `Platform` (`unix_permissions`, `set_unix_permissions`, `mime_type`) ;
+- la fenêtre Propriétés : onglets en énumération, module `tabs`.
+
+Windows garde ses onglets et ne reçoit ni droits ni type MIME. La fonctionnalité
+`process` de rustix est activée, sans changement de `Cargo.lock`.
+
+**Leçons.**
+- ntfs-3g accepte `chmod` et `chgrp` sans rien garder : relire l'objet après coup est
+  le seul moyen de le savoir.
+- La base MIME classe tout ELF comme programme (`application/x-executable`) ; les
+  bibliothèques se distinguent par leur nom (`*.so*`). Un tri par `e_type` aurait
+  masqué la case d'exécution des programmes PIE, c'est-à-dire de presque tous.
+- Une liste de dossiers à parcourir, plutôt que la récursion, permet de modifier
+  chaque dossier après son contenu sans craindre les arborescences profondes.
