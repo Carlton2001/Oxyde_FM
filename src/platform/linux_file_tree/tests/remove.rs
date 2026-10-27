@@ -53,8 +53,8 @@ fn cancellation_stops_between_items_and_keeps_the_rest() {
         let (_root, folder) = tree();
         let checks = AtomicUsize::new(0);
         let error = remove(&parent(&folder), &folder, workers, &|| {
-            // At most three folders are entered first: the fourth step always removes something.
-            if checks.fetch_add(1, Ordering::Relaxed) >= 4 {
+            // Five folders at most are entered first: the sixth step always removes something.
+            if checks.fetch_add(1, Ordering::Relaxed) >= 6 {
                 Err(io::Error::new(io::ErrorKind::Interrupted, "Operation cancelled"))
             } else {
                 Ok(())
