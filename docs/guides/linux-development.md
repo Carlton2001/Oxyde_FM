@@ -108,9 +108,10 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
 - Six tests (`file_ops::item_outcomes`, `operations::files::icons`) exigent un dossier
   `./target` : ils échouent quand `CARGO_TARGET_DIR` pointe ailleurs. Les tests
   `preview_jobs` à délai de 2 s échouent par intermittence quand toute la suite tourne.
-- M05 : noms non UTF-8 convertis avec perte ; M06 : fidélité des métadonnées
-  (modes, ACL, xattrs, propriétaire), en cours avec M03 pour la copie : voir
-  [Copies Linux](../architecture/copies.md).
+- M05 : noms non UTF-8 convertis avec perte.
+- M03/M06, faits pour la copie : [copies](../architecture/copies.md) depuis la source
+  vérifiée, par le noyau, avec modes, dates, `user.*` et ACL. Reste : déplacer un dossier
+  entier par renommage.
 - T04, fait : l'identité n'exige plus de date de naissance hors Windows.
 - T05, fait : [liens symboliques](../architecture/links.md), sauf dans les archives.
 - T06 ouvertures en lecture inutiles, T07 cache d'archives ouvertes, T08 règles de casse

@@ -1,17 +1,16 @@
-//! Give the folders Undo or Redo recreates the mode and dates the transfer gave them.
+//! Give the folders Undo or Redo recreates the attributes the transfer gave them.
 use super::history_directories::Directories;
 use crate::models::transaction::TransactionDetails;
-use crate::platform::platform;
+use crate::platform::{platform, DirectoryAttributes};
 use std::{
     collections::HashMap,
-    fs::Metadata,
     path::{Path, PathBuf},
 };
 
 #[derive(Default)]
-pub(crate) struct DirectoryAttributes(HashMap<PathBuf, Metadata>);
+pub(crate) struct RecordedDirectories(HashMap<PathBuf, DirectoryAttributes>);
 
-impl DirectoryAttributes {
+impl RecordedDirectories {
     /// The folders the transfer created, by their path: a Redo recreates them.
     pub fn created(details: &TransactionDetails) -> Self {
         Self(details.directory_attributes.iter().flatten().cloned().collect())

@@ -73,7 +73,7 @@ struct Plan {
     moved_links: Vec<HistoryLink>,
     source_dirs: Vec<PathBuf>,
     remove_dirs: Vec<PathBuf>,
-    source_attributes: super::history_directory_attributes::DirectoryAttributes,
+    source_attributes: super::history_directory_attributes::RecordedDirectories,
 }
 fn verified_file(path: &Path, expected: Option<&String>) -> io::Result<String> {
     let metadata = fs::symlink_metadata(path)?;
@@ -375,7 +375,7 @@ impl Plan {
             moved_links,
             source_dirs,
             remove_dirs,
-            source_attributes: super::history_directory_attributes::DirectoryAttributes::sources(details),
+            source_attributes: super::history_directory_attributes::RecordedDirectories::sources(details),
         })
     }
 }

@@ -19,6 +19,17 @@ pub enum NetworkDisconnectError {
     Other(String),
 }
 
+/// Extended attributes a copy keeps, by name: `user.*` and POSIX ACLs on Linux.
+#[derive(Debug, Clone, Default)]
+pub struct ExtendedAttributes(#[cfg_attr(target_os = "windows", allow(dead_code))] Vec<(std::ffi::OsString, Vec<u8>)>);
+
+/// What a copy keeps of a source directory, read before its listing changes it.
+#[derive(Debug, Clone)]
+pub struct DirectoryAttributes {
+    pub metadata: std::fs::Metadata,
+    pub extended: ExtendedAttributes,
+}
+
 mod thread_priority;
 pub use thread_priority::{apply_thread_priority, follow_turbo_priority, RestoreNormalPriority, ThreadPriority};
 
@@ -327,17 +338,22 @@ pub trait Platform: Send + Sync {
     /// Mark the exclusively created output relative to its retained parent.
     fn write_archive_output_provenance(&self, parent: &std::fs::File, file: &std::fs::File, path: &std::path::Path, data: &[u8]) -> std::io::Result<()>;
     fn read_archive_output_provenance(&self, parent: &std::fs::File, file: &std::fs::File, path: &std::path::Path) -> std::io::Result<Option<Vec<u8>>>;
-    /// Blocking copy with native metadata/streams where supported. The callback
     /// Put back a copy's access date after Oxyde read it for verification: FUSE file
     /// systems such as ntfs-3g update it despite `O_NOATIME`. Windows keeps its own.
     fn restore_access_date(&self, _file: &std::fs::File, _accessed: std::time::SystemTime) -> std::io::Result<()> {
         Ok(())
     }
-    /// Give a directory created by a copy the mode and dates of its source, once its
+    /// Extended attributes and ACLs a copy keeps from this source. None on Windows,
+    /// whose native copy keeps its own.
+    fn extended_attributes(&self, _file: &std::fs::File) -> std::io::Result<ExtendedAttributes> {
+        Ok(ExtendedAttributes::default())
+    }
+    /// Give a directory created by a copy the attributes of its source, once its
     /// content is in place. Its owner keeps full access. Windows keeps its own.
-    fn restore_directory_attributes(&self, _directory: &std::fs::File, _source: &std::fs::Metadata) -> std::io::Result<()> {
+    fn restore_directory_attributes(&self, _directory: &std::fs::File, _source: &DirectoryAttributes) -> std::io::Result<()> {
         Ok(())
     }
+    /// Blocking copy with native metadata/streams where supported. The callback
     /// Reports main-stream bytes; only an absent destination is accepted.
     /// A supplied source handle must already hold the same source path/identity.
     /// The destination parent handle must retain the same directory as the path.
@@ -846,6 +862,8 @@ mod linux_source_selection;
 mod linux_links;
 #[cfg(target_os = "linux")]
 mod linux_file_copy;
+#[cfg(target_os = "linux")]
+mod linux_extended_attributes;
 
 #[cfg(target_os = "windows")]
 mod windows_trash_restore;

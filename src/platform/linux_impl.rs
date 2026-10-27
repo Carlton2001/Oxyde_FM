@@ -356,7 +356,11 @@ impl Platform for LinuxPlatform {
         file.set_times(std::fs::FileTimes::new().set_accessed(accessed))
     }
     #[cfg(target_os = "linux")]
-    fn restore_directory_attributes(&self, directory: &std::fs::File, source: &std::fs::Metadata) -> std::io::Result<()> {
+    fn extended_attributes(&self, file: &std::fs::File) -> std::io::Result<super::ExtendedAttributes> {
+        super::linux_extended_attributes::read(file)
+    }
+    #[cfg(target_os = "linux")]
+    fn restore_directory_attributes(&self, directory: &std::fs::File, source: &super::DirectoryAttributes) -> std::io::Result<()> {
         super::linux_file_copy::restore_directory(directory, source)
     }
     fn open_file_for_move(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {

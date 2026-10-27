@@ -380,7 +380,7 @@ fn redo_with(details: &TransactionDetails, checkpoint: &mut impl Checkpoint) -> 
         }
     }
     let directories = Directories::prepare(&paths, &removed)?;
-    let attributes = super::history_directory_attributes::DirectoryAttributes::created(details);
+    let attributes = super::history_directory_attributes::RecordedDirectories::created(details);
     let mut journal = Journal {
         directory_identities,
         directories,

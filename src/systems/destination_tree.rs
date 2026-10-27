@@ -36,7 +36,7 @@ impl DestinationTree {
     }
 
     /// Apply source attributes through the directory retained at its creation.
-    pub fn restore_directory(&self, path: &Path, source: &std::fs::Metadata) -> io::Result<()> {
+    pub fn restore_directory(&self, path: &Path, source: &crate::platform::DirectoryAttributes) -> io::Result<()> {
         let directories = self.directories.lock().unwrap();
         let directory = directories
             .get(path)

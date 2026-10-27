@@ -1,9 +1,9 @@
 # Copies Linux
 
-**Statut : en cours** (sixième domaine de l'option B, après les [volumes](volumes.md), le
-[presse-papiers](clipboard.md), la [surveillance](watchers.md), l'[accès
-rapide](quick-access.md) et les [liens symboliques](links.md)). Ce document deviendra le
-contrat du domaine une fois terminé.
+**Statut : domaine terminé** (sixième domaine de l'option B, après les
+[volumes](volumes.md), le [presse-papiers](clipboard.md), la [surveillance](watchers.md),
+l'[accès rapide](quick-access.md) et les [liens symboliques](links.md)) ; bilan
+ci-dessous, suite Windows encore à passer. Ce document est le contrat du domaine.
 
 ## Périmètre
 
@@ -34,18 +34,25 @@ comportement : sa copie native passe déjà par `CopyFileEx`.
   fichiers le permet, copie côté noyau sinon ; repli sur la boucle actuelle pour les
   systèmes qui refusent (ntfs-3g, FAT, anciens noyaux). La progression, la pause et
   l'annulation restent vérifiées entre deux tranches.
-- Garder ce que garde `cp -p`, sauf le propriétaire, qui exige d'être administrateur :
-  mode, dates d'accès et de modification, attributs étendus `user.*` et ACL. Le contexte
-  SELinux n'est pas recopié : la destination reçoit le sien, comme avec `cp`.
+- Garder mode, dates d'accès et de modification et ACL, comme `cp -p`, et les attributs
+  étendus `user.*`, comme Nautilus ; pas le propriétaire, qui exige d'être administrateur.
+  Le contexte SELinux et les autres espaces d'attributs ne sont pas recopiés : la
+  destination reçoit les siens, comme avec `cp`. Une source sans ACL garde dans la copie
+  l'ACL par défaut héritée de la destination, comme Nautilus.
+- Les attributs étendus s'écrivent avant le mode : écrire `user.*` exige le droit
+  d'écriture, et le mode appliqué ensuite tient l'ACL à jour.
 - setuid et setgid ne sont gardés que si la copie appartient au même propriétaire que
   l'original.
-- Un dossier créé par la copie reçoit mode et dates de l'original une fois son contenu
+- Un dossier créé par la copie reçoit les attributs de l'original une fois son contenu
   copié, du plus profond au plus haut. Son propriétaire garde toujours lecture, écriture
-  et parcours (`mode | 700`), sinon ni Annuler ni la suite de la copie ne pourraient y
-  écrire ; les droits du groupe et des autres sont repris tels quels. Un dossier existant
+  et parcours (`mode | 700`, appliqué après l'ACL), sinon ni Annuler ni la suite de la
+  copie ne pourraient y écrire ; les droits du groupe et des autres sont repris tels
+  quels. Un dossier existant
   dans lequel on fusionne n'est jamais modifié.
 - Un attribut que la destination ne sait pas garder (FAT, certains montages) n'empêche
-  pas la copie : il est signalé dans le journal.
+  pas la copie : il est signalé dans le journal, avec son nom.
+- Annuler et Rétablir redonnent ces attributs aux dossiers qu'ils recréent, à partir du
+  journal de la transaction.
 
 ## Limites connues
 
@@ -55,8 +62,12 @@ comportement : sa copie native passe déjà par `CopyFileEx`.
   propres copies (vérification, Annuler) sans toucher cette date (`O_NOATIME`), et la
   remet après la vérification : ntfs-3g ignore `O_NOATIME`.
 - NTFS monté par ntfs-3g sans l'option `permissions` ne garde aucun mode : tous les
-  fichiers y apparaissent en `777`, donc exécutables, quel que soit l'original. FAT n'en
-  garde pas non plus.
+  fichiers y apparaissent en `777`, donc exécutables, quel que soit l'original. Il garde
+  les attributs `user.*` (en flux nommés), pas les ACL. FAT ne garde ni mode ni
+  attributs étendus.
+- Un dossier contenant un sous-dossier en lecture seule (`550`) ne peut pas être
+  déplacé : Oxyde recrée l'arborescence et déplace les fichiers un à un, là où Nautilus
+  renomme le dossier entier. À traiter avec les déplacements.
 
 ## Étapes
 
@@ -71,6 +82,43 @@ comportement : sa copie native passe déjà par `CopyFileEx`.
    qu'elle a créé. Les dossiers que l'historique recrée (source d'un déplacement annulé,
    destination d'un déplacement ou d'une copie rétablis) les reprennent une fois remplis,
    par le même module (`history_directory_attributes`).
-4. **Attributs étendus et ACL**, fichiers et dossiers, sur la sortie encore privée pour un
-   fichier.
+4. **Attributs étendus et ACL** : `user.*` et ACL d'accès et par défaut, lus sur le
+   descripteur source et écrits sur la sortie encore privée pour un fichier, notés au plan
+   puis au journal pour un dossier (`linux_extended_attributes.rs`).
 5. **Bilan.**
+
+## Bilan
+
+**Résultat.** Une copie Linux lit le fichier que la sélection a vérifié, laisse le noyau
+copier (partage de blocs sur Btrfs : 1 Go copié en une fraction de seconde), et garde du
+fichier et des dossiers ce que gardent `cp -p` et Nautilus : mode (setuid et setgid
+filtrés), dates, attributs `user.*` et ACL. Les dossiers, que ni la copie ni le
+déplacement ne gardaient (un dossier `700` devenait `755`, même déplacé sur un seul
+disque), les gardent maintenant, à travers Annuler et Rétablir. Vérifié par les tests
+sur tmpfs, Btrfs et une image NTFS montée par ntfs-3g ; Btrfs et NTFS essayés à la main.
+Code propre au domaine : 290 lignes de production environ (`linux_file_copy.rs`,
+`linux_extended_attributes.rs`, `copy/directories.rs`, `history_directory_attributes.rs`)
+et 460 de tests.
+
+**Fichiers communs touchés** (hors modules propres au domaine) :
+
+| Étape | Fichiers communs | Nature |
+| --- | --- | --- |
+| 1. Copie noyau | `platform/linux_impl.rs`, `systems/file_copy.rs` | ouverture `O_NOATIME`, date d'accès remise après vérification (méthode `Platform` sans effet sous Windows) |
+| 2. Dossiers | `platform/mod.rs`, `source_selection.rs`, `destination_tree.rs`, `file_ops/copy.rs` | relevé au plan, application par le descripteur retenu |
+| 3. Historique | `models/transaction.rs`, `file_ops.rs`, `execution.rs`, `history_file_undo.rs`, `history_move_redo.rs`, `commands/ops.rs`, chaque constructeur de `TransactionDetails` | champ `directory_attributes` |
+| 4. Attributs étendus | `platform/mod.rs` | types `ExtendedAttributes`, `DirectoryAttributes` |
+
+**Leçons.**
+- Relire une copie pour la vérifier change sa date d'accès : `relatime` la met à jour dès
+  que la date de changement est plus récente, ce qui est toujours le cas d'une copie.
+  `O_NOATIME` suffit sur Btrfs et tmpfs, pas sur ntfs-3g.
+- Un déplacement sur un seul volume recrée les dossiers : tout ce qui vaut pour la copie
+  des dossiers vaut aussi pour lui.
+- Écrire les ACL avant le mode évite d'analyser leur format : le noyau recalcule les
+  entrées propriétaire, masque et autres au `chmod`, ce qui garde l'accès complet du
+  propriétaire.
+- Les essais NTFS se font sur une image : `udisksctl loop-setup` puis le montage
+  automatique de GNOME, sans toucher aux disques de l'utilisateur.
+
+**Reporté.** Le déplacement d'un dossier entier par renommage (limite ci-dessus).

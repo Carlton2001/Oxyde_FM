@@ -26,3 +26,5 @@ mod real_archive_directories;
 mod link_copy;
 #[cfg(target_os = "linux")]
 mod file_dates;
+#[cfg(target_os = "linux")]
+mod extended_attributes;

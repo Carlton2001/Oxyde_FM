@@ -110,3 +110,34 @@ fn a_folder_is_refused_and_an_existing_output_is_kept() {
     assert!(copy_all(&source, &destination, None).is_err());
     assert_eq!(std::fs::read(&destination).unwrap(), b"kept");
 }
+
+#[test]
+fn a_restored_folder_keeps_full_access_for_its_owner_even_with_an_acl() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("source");
+    std::fs::create_dir(&source).unwrap();
+    // user::r-x, user:nobody:r-x, group::r-x, mask::r-x, other::---
+    let mut acl = 2_u32.to_le_bytes().to_vec();
+    for (tag, permissions, id) in [(1_u16, 5_u16, u32::MAX), (2, 5, 65534), (4, 5, u32::MAX), (0x10, 5, u32::MAX), (0x20, 0, u32::MAX)] {
+        acl.extend(tag.to_le_bytes());
+        acl.extend(permissions.to_le_bytes());
+        acl.extend(id.to_le_bytes());
+    }
+    rustix::fs::setxattr(&source, "system.posix_acl_access", &acl, rustix::fs::XattrFlags::empty()).unwrap();
+    let held = File::open(&source).unwrap();
+    let attributes = super::super::DirectoryAttributes {
+        metadata: held.metadata().unwrap(),
+        extended: super::super::linux_extended_attributes::read(&held).unwrap(),
+    };
+    assert_eq!(attributes.metadata.mode() & 0o777, 0o550);
+    let copy = root.path().join("copy");
+    std::fs::create_dir(&copy).unwrap();
+    restore_directory(&File::open(&copy).unwrap(), &attributes).unwrap();
+    let mode = std::fs::metadata(&copy).unwrap().mode() & 0o777;
+    assert_eq!(mode, 0o750);
+    std::fs::write(copy.join("still-writable"), b"").unwrap();
+    // The named entry survives the owner's widened access.
+    let kept = super::super::linux_extended_attributes::read(&File::open(&copy).unwrap()).unwrap();
+    assert_eq!(kept.0.len(), 1);
+    assert_eq!(&kept.0[0].1[12..20], &[2, 0, 5, 0, 0xfe, 0xff, 0, 0]);
+}

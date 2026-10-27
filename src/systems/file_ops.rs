@@ -99,7 +99,7 @@ pub struct FileOperation {
     )>,
     created_links: Vec<crate::models::transaction::HistoryLink>,
     moved_links: Vec<crate::models::transaction::HistoryLink>,
-    directory_attributes: Vec<(PathBuf, std::fs::Metadata)>,
+    directory_attributes: Vec<(PathBuf, crate::platform::DirectoryAttributes)>,
     // Internal execution state.
     pub cancel_flag: Arc<AtomicBool>,
     pub pause_flag: Arc<AtomicBool>,

@@ -41,6 +41,7 @@ pub(super) fn copy(
         let _timer = crate::systems::copy_diagnostics::Timer::start(crate::systems::copy_diagnostics::Phase::Flush);
         output.sync_all()?;
     }
+    super::linux_extended_attributes::copy(input, &output, source);
     output.set_permissions(Permissions::from_mode(mode(&metadata, &output.metadata()?)))?;
     output.set_times(
         FileTimes::new()
@@ -89,15 +90,19 @@ fn copy_remaining(
     }
 }
 
-/// Mode and dates of a source directory, keeping read, write and search for the
-/// owner: Undo and later transfers must still be able to change its content.
-pub(super) fn restore_directory(directory: &File, source: &std::fs::Metadata) -> io::Result<()> {
-    directory.set_permissions(Permissions::from_mode(mode(source, &directory.metadata()?) | 0o700))?;
+/// Attributes of a source directory, keeping read, write and search for the owner:
+/// Undo and later transfers must still be able to change its content. The mode
+/// comes after the ACL, so the owner's full access applies to both.
+pub(super) fn restore_directory(directory: &File, source: &super::DirectoryAttributes) -> io::Result<()> {
+    let extended = super::linux_extended_attributes::write(directory, &source.extended);
+    let metadata = &source.metadata;
+    directory.set_permissions(Permissions::from_mode(mode(metadata, &directory.metadata()?) | 0o700))?;
     directory.set_times(
         FileTimes::new()
-            .set_accessed(source.accessed()?)
-            .set_modified(source.modified()?),
-    )
+            .set_accessed(metadata.accessed()?)
+            .set_modified(metadata.modified()?),
+    )?;
+    extended
 }
 
 /// The source's mode; setuid and setgid only for a copy with the same owner and group.

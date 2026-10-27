@@ -238,13 +238,19 @@ impl SelectedEntry {
     pub fn link(&self) -> Option<&SelectedLink> {
         self.link.as_ref()
     }
-    /// Mode and dates of the held directory, read before its listing changes its access date.
-    pub fn directory_metadata(&self) -> io::Result<Metadata> {
-        self.directory
+    /// Attributes of the held directory, read before its listing changes its access date.
+    /// Unreadable extended attributes are reported and left out.
+    pub fn directory_attributes(&self) -> io::Result<crate::platform::DirectoryAttributes> {
+        let directory = &self
+            .directory
             .as_ref()
             .ok_or_else(|| io::Error::other("Selected source is not a directory"))?
-            .file
-            .metadata()
+            .file;
+        let extended = platform().extended_attributes(directory).unwrap_or_else(|error| {
+            log::warn!("Extended attributes of {} not read: {error}", self.path.display());
+            Default::default()
+        });
+        Ok(crate::platform::DirectoryAttributes { metadata: directory.metadata()?, extended })
     }
     pub fn into_file(self) -> io::Result<SelectedFile> {
         self.file

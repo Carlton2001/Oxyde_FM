@@ -327,9 +327,9 @@ impl FileOperationManager {
                                 )
                             })?;
                     }
-                    match entry.directory_metadata() {
-                        Ok(metadata) => {
-                            directory_sources.insert(dest_path.clone(), metadata);
+                    match entry.directory_attributes() {
+                        Ok(attributes) => {
+                            directory_sources.insert(dest_path.clone(), attributes);
                         }
                         Err(error) => log::warn!(
                             target: FILE_OPS_LOG_TARGET,
