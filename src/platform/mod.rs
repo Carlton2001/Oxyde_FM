@@ -861,6 +861,8 @@ mod linux_source_selection;
 #[cfg(target_os = "linux")]
 mod linux_links;
 #[cfg(target_os = "linux")]
+mod linux_rename;
+#[cfg(target_os = "linux")]
 mod linux_file_copy;
 #[cfg(target_os = "linux")]
 mod linux_extended_attributes;

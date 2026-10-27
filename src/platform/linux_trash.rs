@@ -80,19 +80,8 @@ pub(super) fn restore(item: &trash::TrashItem) -> Result<(), String> {
 }
 
 fn rename_no_replace(from: &Path, to: &Path) -> std::io::Result<()> {
-    use std::ffi::{c_char, c_int, c_uint, CString};
-    unsafe extern "C" {
-        fn renameat2(old_dir: c_int, old_name: *const c_char, new_dir: c_int,
-            new_name: *const c_char, flags: c_uint) -> c_int;
-    }
-    const AT_FDCWD: c_int = -100;
-    const RENAME_NOREPLACE: c_uint = 1;
-    let path = |path: &Path| CString::new(path.as_os_str().as_bytes())
-        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "Path contains a NUL byte"));
-    let (from, to) = (path(from)?, path(to)?);
-    // No replacement fallback: unsupported file systems refuse the restoration.
-    let result = unsafe { renameat2(AT_FDCWD, from.as_ptr(), AT_FDCWD, to.as_ptr(), RENAME_NOREPLACE) };
-    if result == 0 { Ok(()) } else { Err(std::io::Error::last_os_error()) }
+    // Never replaces, including on ntfs-3g, which refuses the no-replace flag.
+    super::linux_rename::exclusive(rustix::fs::CWD, from, rustix::fs::CWD, to)
 }
 
 /// Keep the Trash specification 1.0 directory size cache, read by KDE, in step.

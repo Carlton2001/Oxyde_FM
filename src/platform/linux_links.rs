@@ -1,9 +1,6 @@
 //! Symbolic links transferred as links: always named relative to a held parent
 //! and never followed.
-use rustix::{
-    fs::{AtFlags, RenameFlags},
-    io::Errno,
-};
+use rustix::fs::AtFlags;
 use std::{
     ffi::{OsStr, OsString},
     fs::File,
@@ -33,19 +30,10 @@ fn open(parent: &File, name: &OsStr) -> io::Result<File> {
     super::linux_source_selection::open(parent, Path::new(name), None)
 }
 
-/// Renames between held parents without replacing anything. FUSE file systems
-/// such as ntfs-3g refuse the flag; the fallback then checks the name first.
+/// Renames between held parents without replacing anything.
 fn rename_exclusive(from_parent: &File, from: &OsStr, parent: &File, to: &OsStr) -> io::Result<()> {
-    match rustix::fs::renameat_with(from_parent, from, parent, to, RenameFlags::NOREPLACE) {
-        Err(Errno::INVAL) => {}
-        result => return result.map_err(io::Error::from),
-    }
-    match rustix::fs::statat(parent, to, AtFlags::SYMLINK_NOFOLLOW) {
-        Err(Errno::NOENT) => {}
-        Ok(_) => return Err(io::ErrorKind::AlreadyExists.into()),
-        Err(error) => return Err(error.into()),
-    }
-    rustix::fs::renameat(from_parent, from, parent, to).map_err(io::Error::from)
+    use std::os::fd::AsFd;
+    super::linux_rename::exclusive(from_parent.as_fd(), Path::new(from), parent.as_fd(), Path::new(to))
 }
 
 /// Moves the link itself between held parents of one volume and returns it.

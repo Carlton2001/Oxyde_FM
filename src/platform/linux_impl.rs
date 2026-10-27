@@ -173,46 +173,14 @@ impl Platform for LinuxPlatform {
     ) -> std::io::Result<()> {
         #[cfg(target_os = "linux")]
         {
-            use std::ffi::{CString, c_char, c_int, c_uint};
-            use std::os::unix::{ffi::OsStrExt, io::AsRawFd};
-            unsafe extern "C" {
-                fn renameat2(
-                    old_dir: c_int,
-                    old_name: *const c_char,
-                    new_dir: c_int,
-                    new_name: *const c_char,
-                    flags: c_uint,
-                ) -> c_int;
-            }
-            let leaf = |path: &std::path::Path| -> std::io::Result<CString> {
-                let name = path.file_name().ok_or_else(|| {
-                    std::io::Error::new(
-                        std::io::ErrorKind::InvalidInput,
-                        "Rename path has no file name",
-                    )
-                })?;
-                CString::new(name.as_bytes()).map_err(|_| {
-                    std::io::Error::new(std::io::ErrorKind::InvalidInput, "Invalid rename name")
+            use std::os::fd::AsFd;
+            let leaf = |path: &std::path::Path| -> std::io::Result<std::path::PathBuf> {
+                path.file_name().map(std::path::PathBuf::from).ok_or_else(|| {
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput, "Rename path has no file name")
                 })
             };
-            let source = leaf(source)?;
-            let destination = leaf(destination)?;
-            // RENAME_NOREPLACE. No path-based replacement fallback if unsupported.
             // Linux does not pin source names against concurrent external replacement.
-            let result = unsafe {
-                renameat2(
-                    source_parent.as_raw_fd(),
-                    source.as_ptr(),
-                    parent.as_raw_fd(),
-                    destination.as_ptr(),
-                    1,
-                )
-            };
-            if result == 0 {
-                Ok(())
-            } else {
-                Err(std::io::Error::last_os_error())
-            }
+            super::linux_rename::exclusive(source_parent.as_fd(), &leaf(source)?, parent.as_fd(), &leaf(destination)?)
         }
         #[cfg(not(target_os = "linux"))]
         {
