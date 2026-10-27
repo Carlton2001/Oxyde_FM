@@ -128,10 +128,17 @@ impl WorkspaceState {
         }
     }
 
+    /// Where a new tab or panel opens outside Windows, which opens drive C:.
+    pub fn home_location() -> String {
+        dirs::home_dir()
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "/".to_string())
+    }
+
     /// Insert a full-height column after the column containing the active pane.
     pub fn add_panel_right(&mut self) -> Option<String> {
         let current = self.find_pane(&self.active_pane_id)?.active_tab();
-        let path = if cfg!(target_os = "windows") { "C:\\" } else { "/" }.to_string();
+        let path = if cfg!(target_os = "windows") { "C:\\".to_string() } else { Self::home_location() };
         let view_mode = current.view_mode;
         let mut tab = TabState::new(format!("tab-{}", self.next_tab_id), path);
         self.next_tab_id = self.next_tab_id.wrapping_add(1);
@@ -171,7 +178,7 @@ impl WorkspaceState {
             }
             if pane.tabs.len() == 1 {
                 let path = if pane.tabs[0].is_viewer() {
-                    if cfg!(target_os = "windows") { "C:/" } else { "/" }.into()
+                    if cfg!(target_os = "windows") { "C:/".into() } else { Self::home_location() }
                 } else { pane.tabs[0].path.clone() };
                 let view_mode = pane.tabs[0].view_mode;
                 let id = format!("tab-{}", self.next_tab_id);

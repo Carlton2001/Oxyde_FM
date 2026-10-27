@@ -182,7 +182,7 @@ fn new_panel_is_full_height_after_stacked_panes_and_preserves_tabs() {
     let existing_tab = state.find_pane(&stacked).unwrap().active_tab().id.clone();
     let added = state.add_panel_right().unwrap();
     assert_eq!(state.find_pane(&added).unwrap().active_tab().path,
-        if cfg!(target_os = "windows") { "C:\\" } else { "/" });
+        if cfg!(target_os = "windows") { "C:\\".to_string() } else { WorkspaceState::home_location() });
     assert_eq!(state.find_pane(&stacked).unwrap().active_tab().id, existing_tab);
     let LayoutNode::Split { axis: LayoutAxis::Horizontal, children, .. } = &state.layout else {
         panic!("Expected full-height columns");

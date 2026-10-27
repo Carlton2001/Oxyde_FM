@@ -36,6 +36,39 @@ fn tab_drop_zone_contains_pointer(
 }
 
 impl OxydeApp {
+    fn tab_drive_name(&self, path: &str, cx: &Context<Self>) -> Option<String> {
+        let mut drive_name = None;
+        for item in &self.state.sidebar_items {
+            if let crate::ui::workspace::SidebarItem::Drive { drive, .. } = item {
+                let norm_drive = drive.path.trim_end_matches(['/', '\\']);
+                let norm_tab = path.trim_end_matches(['/', '\\']);
+                let same = if cfg!(target_os = "windows") {
+                    norm_drive.eq_ignore_ascii_case(norm_tab)
+                } else {
+                    norm_drive == norm_tab
+                };
+                if same {
+                    drive_name = Some(if !cfg!(target_os = "windows") {
+                        // Linux names a volume alone, as the sidebar.
+                        crate::ui::format::drive_name(drive, cx.i18n())
+                    } else if drive.label.is_empty() {
+                        {
+                            let mut args = FluentArgs::new();
+                            args.set("drive", norm_drive);
+                            cx.i18n()
+                                .text_with_args(Message::LocalDrive, &args)
+                                .to_string()
+                        }
+                    } else {
+                        format!("{} ({})", drive.label, norm_drive)
+                    });
+                    break;
+                }
+            }
+        }
+        drive_name
+    }
+
     pub(super) fn render_pane_tabs(
         &self,
         pane: &crate::ui::workspace::PaneState,
@@ -59,7 +92,12 @@ impl OxydeApp {
                 let p_id_cap = p_id.clone();
                 move |_, cx| {
                     h.update(cx, |this, cx| {
-                        this.add_tab(&p_id_cap, "C:/".to_string(), true, cx);
+                        let path = if cfg!(target_os = "windows") {
+                            "C:/".to_string()
+                        } else {
+                            crate::ui::workspace::WorkspaceState::home_location()
+                        };
+                        this.add_tab(&p_id_cap, path, true, cx);
                     });
                 }
             }));
@@ -72,6 +110,10 @@ impl OxydeApp {
                 tab_data.path.len() <= 3 && tab_data.path.chars().nth(1) == Some(':');
             let is_virtual = tab_data.is_viewer() || matches!(tab_data.path.as_str(), "__network_vincinity__" | "trash://")
                 || crate::ui::app::search::search_label(&tab_data.path, cx.i18n()).is_some();
+            // Linux names a mount point as its volume in the sidebar, `/` included.
+            let drive_name = (is_root || !cfg!(target_os = "windows"))
+                .then(|| self.tab_drive_name(&tab_data.path, cx))
+                .flatten();
             let label = if tab_data.is_viewer() {
                 cx.i18n().text(Message::ViewerTitle).to_string()
             } else if let Some(label) = crate::ui::app::search::search_label(&tab_data.path, cx.i18n()) {
@@ -80,34 +122,10 @@ impl OxydeApp {
                 cx.i18n().text(Message::SidebarNetwork).to_string()
             } else if tab_data.path == "trash://" {
                 cx.i18n().text(Message::SidebarTrash).to_string()
+            } else if let Some(name) = drive_name {
+                name
             } else if is_root {
-                let mut drive_name = None;
-                for item in &self.state.sidebar_items {
-                    if let crate::ui::workspace::SidebarItem::Drive { drive, .. } = item {
-                        let norm_drive = drive.path.trim_end_matches(['/', '\\']);
-                        let norm_tab = tab_data.path.trim_end_matches(['/', '\\']);
-                        if norm_drive.eq_ignore_ascii_case(norm_tab) {
-                            drive_name = Some(if !cfg!(target_os = "windows") {
-                                // Linux names a volume alone, as the sidebar.
-                                crate::ui::format::drive_name(drive, cx.i18n())
-                            } else if drive.label.is_empty() {
-                                {
-                                    let mut args = FluentArgs::new();
-                                    args.set("drive", norm_drive);
-                                    cx.i18n()
-                                        .text_with_args(Message::LocalDrive, &args)
-                                        .to_string()
-                                }
-                            } else {
-                                format!("{} ({})", drive.label, norm_drive)
-                            });
-                            break;
-                        }
-                    }
-                }
-                drive_name.unwrap_or_else(|| {
-                    tab_data.path.trim_end_matches(['/', '\\']).to_string()
-                })
+                tab_data.path.trim_end_matches(['/', '\\']).to_string()
             } else {
                 tab_data
                     .path
