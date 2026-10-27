@@ -88,7 +88,7 @@ pub fn render_top_bar(
         vec![current_path.as_str()]
     } else {
         current_path
-            .split(['/', '\\'])
+            .split(std::path::is_separator)
             .filter(|s: &&str| !s.is_empty())
             .collect()
     };

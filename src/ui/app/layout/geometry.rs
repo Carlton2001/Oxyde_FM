@@ -50,7 +50,7 @@ impl OxydeApp {
             if previous.is_none_or(|old| (old.width - size.width).abs() > 1.0) {
                 if let Some(pane) = self.state.find_pane(id) {
                     let tab = pane.active_tab();
-                    let parts = tab.path.split(['/', '\\']).filter(|part| !part.is_empty()).count();
+                    let parts = tab.path.split(std::path::is_separator).filter(|part| !part.is_empty()).count();
                     if parts > 0 { tab.breadcrumb_scroll.scroll_to_item(parts * 2 - 2); }
                 }
             }

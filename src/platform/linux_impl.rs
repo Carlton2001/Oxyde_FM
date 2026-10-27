@@ -9,8 +9,8 @@ impl LinuxPlatform {
 }
 
 impl Platform for LinuxPlatform {
-    fn file_name_rules(&self, _directory: &std::fs::File) -> std::io::Result<super::FileNameRules> {
-        Ok(super::FileNameRules::sensitive())
+    fn file_name_rules(&self, directory: &std::fs::File) -> std::io::Result<super::FileNameRules> {
+        super::linux_file_names::rules(directory)
     }
     fn retained_file_path(&self, _file: &std::fs::File, fallback: &std::path::Path) -> std::io::Result<std::path::PathBuf> { Ok(fallback.to_path_buf()) }
     fn run_archive_io_worker(&self, _operation: crate::utils::archive_io_protocol::Operation,

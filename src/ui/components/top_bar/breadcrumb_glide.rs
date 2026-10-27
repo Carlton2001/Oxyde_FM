@@ -48,7 +48,8 @@ pub(super) fn advance(glide: &Glide, scroll: &ScrollHandle, window: &Window) -> 
 
 /// Whether `current` is exactly one folder below `previous`.
 fn entered_child(previous: &str, current: &str) -> bool {
-    const SEPARATORS: [char; 2] = ['/', '\\'];
+    // `\` is a name character outside Windows.
+    const SEPARATORS: fn(char) -> bool = std::path::is_separator;
     let parent = previous.trim_end_matches(SEPARATORS);
     if parent.is_empty() {
         return false;

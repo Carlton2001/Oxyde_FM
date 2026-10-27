@@ -40,8 +40,8 @@ impl OxydeApp {
         let mut drive_name = None;
         for item in &self.state.sidebar_items {
             if let crate::ui::workspace::SidebarItem::Drive { drive, .. } = item {
-                let norm_drive = drive.path.trim_end_matches(['/', '\\']);
-                let norm_tab = path.trim_end_matches(['/', '\\']);
+                let norm_drive = drive.path.trim_end_matches(std::path::is_separator);
+                let norm_tab = path.trim_end_matches(std::path::is_separator);
                 let same = if cfg!(target_os = "windows") {
                     norm_drive.eq_ignore_ascii_case(norm_tab)
                 } else {
@@ -125,11 +125,11 @@ impl OxydeApp {
             } else if let Some(name) = drive_name {
                 name
             } else if is_root {
-                tab_data.path.trim_end_matches(['/', '\\']).to_string()
+                tab_data.path.trim_end_matches(std::path::is_separator).to_string()
             } else {
                 tab_data
                     .path
-                    .split(['/', '\\'])
+                    .split(std::path::is_separator)
                     .rfind(|p| !p.is_empty())
                     .map(oxyde_lib::utils::path_text::display)
                     .unwrap_or_else(|| cx.i18n().text(Message::UnknownItem).to_string())

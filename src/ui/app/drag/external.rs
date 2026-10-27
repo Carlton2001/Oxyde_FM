@@ -47,10 +47,8 @@ fn transfer_paths(data: &ExternalPaths, target: &str) -> Vec<String> {
     super::actionable_drop_paths(paths(data), target)
         .into_iter()
         .filter(|source| {
-            let source = source.replace('\\', "/");
-            let target = target.replace('\\', "/");
             #[cfg(target_os = "windows")]
-            let (source, target) = (source.to_lowercase(), target.to_lowercase());
+            let (source, target) = (source.replace('\\', "/").to_lowercase(), target.replace('\\', "/").to_lowercase());
             !target.starts_with(&format!("{}/", source.trim_end_matches('/')))
         })
         .collect()

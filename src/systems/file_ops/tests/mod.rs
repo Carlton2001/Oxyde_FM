@@ -21,6 +21,8 @@ mod copy_history;
 mod move_history;
 mod transfer_safety;
 mod destination_collisions;
+#[cfg(target_os = "linux")]
+mod caseless_destinations;
 mod real_archive_directories;
 #[cfg(target_os = "linux")]
 mod link_copy;

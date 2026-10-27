@@ -20,6 +20,20 @@ impl FileNameRules {
         }
     }
 
+    #[cfg(target_os = "linux")]
+    pub(super) fn linux_caseless() -> Self {
+        Self {
+            normalize: super::linux_file_names::upcase,
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(super) fn linux_casefold() -> Self {
+        Self {
+            normalize: super::linux_file_names::casefold_key,
+        }
+    }
+
     pub(crate) fn key(self, name: &OsStr) -> OsString {
         (self.normalize)(name)
     }

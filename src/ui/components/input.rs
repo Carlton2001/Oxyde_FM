@@ -73,7 +73,7 @@ fn completion_parts(text: &str) -> Option<(String, String, char)> {
     if text.contains("://") || text.starts_with("::{") {
         return None;
     }
-    let index = text.rfind(['/', '\\'])?;
+    let index = text.rfind(std::path::is_separator)?;
     let separator = std::path::MAIN_SEPARATOR;
     Some((
         native_path_text(&text[..=index]),
@@ -1028,14 +1028,22 @@ mod completion_tests {
 
     #[::core::prelude::v1::test]
     fn splits_native_roots_and_unicode_prefixes() {
-        for (text, parent, prefix, separator) in [
-            ("C:\\Us", "C:\\", "Us", '\\'),
-            ("C:/Users/été", "C:/Users/", "été", '/'),
-            ("\\\\server\\share\\Do", "\\\\server\\share\\", "Do", '\\'),
-            ("/usr/", "/usr/", "", '/'),
-            ("/é", "/", "é", '/'),
-        ] {
-            let _ = separator;
+        #[cfg(target_os = "windows")]
+        let windows = [
+            ("C:\\Us", "C:\\", "Us"),
+            ("\\\\server\\share\\Do", "\\\\server\\share\\", "Do"),
+        ];
+        // `\` belongs to the name outside Windows.
+        #[cfg(not(target_os = "windows"))]
+        let windows = [("/x/a\\b", "/x/", "a\\b")];
+        for (text, parent, prefix) in [
+            ("C:/Users/été", "C:/Users/", "été"),
+            ("/usr/", "/usr/", ""),
+            ("/é", "/", "é"),
+        ]
+        .into_iter()
+        .chain(windows)
+        {
             assert_eq!(completion_parts(text), Some((super::native_path_text(parent), prefix.into(), std::path::MAIN_SEPARATOR)));
         }
         for text in ["", "C:", "search://query", "trash://", "::{shell}"] {

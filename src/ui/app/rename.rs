@@ -211,12 +211,15 @@ impl OxydeApp {
                 cx.notify();
                 return;
             }
-            if name == "."
-                || name == ".."
-                || name.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|'])
-                || name.chars().any(char::is_control)
-                || name.ends_with(['.', ' '])
-            {
+            // Outside Windows, as Nautilus's compression dialog: only `/` and the dot names.
+            let invalid = if cfg!(target_os = "windows") {
+                name.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|'])
+                    || name.chars().any(char::is_control)
+                    || name.ends_with(['.', ' '])
+            } else {
+                name.contains(['/', '\0'])
+            };
+            if name == "." || name == ".." || invalid {
                 self.rename_error = Some(Message::RenameInvalidName);
                 cx.notify();
                 return;

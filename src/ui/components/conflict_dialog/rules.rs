@@ -80,12 +80,12 @@ pub(super) fn category(c: &ConflictEntry) -> usize {
     }
 }
 pub(super) fn parent(path: &str) -> &str {
-    path.rfind(['/', '\\']).map_or("", |i| &path[..=i])
+    path.rfind(std::path::is_separator).map_or("", |i| &path[..=i])
 }
 pub(super) fn ancestors(path: &str) -> impl Iterator<Item = &str> {
     let mut remaining = path;
     std::iter::from_fn(move || {
-        let i = remaining.rfind(['/', '\\'])?;
+        let i = remaining.rfind(std::path::is_separator)?;
         remaining = &remaining[..i];
         Some(remaining)
     })
@@ -144,29 +144,24 @@ mod tests {
     }
     #[test]
     fn closest_parent_decision_is_inherited_and_explicit_choice_wins() {
+        let sep = std::path::MAIN_SEPARATOR;
+        let path = |parts: &[&str]| parts.join(&sep.to_string());
         let mut state = ConflictDialogState::default();
-        state
-            .resolutions
-            .insert("C:\\folder".into(), ConflictAction::Skip);
-        assert_eq!(
-            decision(&state, "C:\\folder\\sub\\file"),
-            Some(ConflictAction::Skip)
-        );
-        assert_eq!(decision(&state, "C:\\folder-other\\file"), None);
-        state
-            .resolutions
-            .insert("C:\\folder\\sub".into(), ConflictAction::Replace);
-        assert_eq!(
-            decision(&state, "C:\\folder\\sub\\file"),
-            Some(ConflictAction::Replace)
-        );
-        state
-            .resolutions
-            .insert("C:\\folder\\sub\\file".into(), ConflictAction::Skip);
-        assert_eq!(
-            decision(&state, "C:\\folder\\sub\\file"),
-            Some(ConflictAction::Skip)
-        );
+        state.resolutions.insert(path(&["", "folder"]), ConflictAction::Skip);
+        assert_eq!(decision(&state, &path(&["", "folder", "sub", "file"])), Some(ConflictAction::Skip));
+        assert_eq!(decision(&state, &path(&["", "folder-other", "file"])), None);
+        state.resolutions.insert(path(&["", "folder", "sub"]), ConflictAction::Replace);
+        assert_eq!(decision(&state, &path(&["", "folder", "sub", "file"])), Some(ConflictAction::Replace));
+        state.resolutions.insert(path(&["", "folder", "sub", "file"]), ConflictAction::Skip);
+        assert_eq!(decision(&state, &path(&["", "folder", "sub", "file"])), Some(ConflictAction::Skip));
+    }
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn a_backslash_is_part_of_a_linux_name() {
+        let mut state = ConflictDialogState::default();
+        state.resolutions.insert("/x/a".into(), ConflictAction::Skip);
+        assert_eq!(decision(&state, "/x/a\\b"), None);
+        assert_eq!(super::parent("/x/a\\b"), "/x/");
     }
     #[test]
     fn filtered_rows_keep_original_indices_and_collapsed_descendants_are_hidden() {

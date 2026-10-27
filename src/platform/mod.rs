@@ -898,6 +898,8 @@ mod linux_extended_attributes;
 mod linux_permissions;
 #[cfg(target_os = "linux")]
 mod linux_mime;
+#[cfg(target_os = "linux")]
+mod linux_file_names;
 
 #[cfg(target_os = "windows")]
 mod windows_trash_restore;

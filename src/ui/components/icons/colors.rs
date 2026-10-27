@@ -69,7 +69,7 @@ pub(super) fn file_icon_color(path: &str, icon: IconType, theme: &OxydeTheme) ->
         IconType::BrokenLink => theme.text_muted,
         IconType::FileText
             if path
-                .rsplit(['/', '\\'])
+                .rsplit(std::path::is_separator)
                 .next()
                 .unwrap_or(path)
                 .rsplit_once('.')

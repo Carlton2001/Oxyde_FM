@@ -168,9 +168,13 @@ pub fn with_grid_sort(
     context_menu_sections(items, i18n)
 }
 
-/// Compare filesystem paths as Windows treats them, ignoring separator, extended
-/// path prefix, trailing separator, and case differences.
+/// Compare filesystem paths as the platform treats them: Windows ignores separator,
+/// extended path prefix, trailing separator, and case differences; elsewhere only a
+/// trailing separator differs, as in the sidebar.
 pub(crate) fn paths_match(left: &str, right: &str) -> bool {
+    if !cfg!(target_os = "windows") {
+        return std::path::Path::new(left) == std::path::Path::new(right);
+    }
     fn normalize(path: &str) -> String {
         let mut path = path.replace('/', "\\");
         if let Some(rest) = path.strip_prefix("\\\\?\\UNC\\") {

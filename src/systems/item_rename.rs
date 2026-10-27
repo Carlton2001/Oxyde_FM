@@ -157,6 +157,10 @@ pub(crate) fn rename_from_history(
 #[path = "item_rename/tests/case_only.rs"]
 mod case_only_tests;
 
+#[cfg(all(test, target_os = "linux"))]
+#[path = "item_rename/tests/linux_case.rs"]
+mod linux_case_tests;
+
 #[cfg(test)]
 mod tests {
     use super::*;

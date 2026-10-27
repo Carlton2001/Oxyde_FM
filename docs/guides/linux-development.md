@@ -116,8 +116,9 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
   [déplacements](../architecture/moves.md).
 - T04, fait : l'identité n'exige plus de date de naissance hors Windows.
 - T05, fait : [liens symboliques](../architecture/links.md), sauf dans les archives.
-- T06 ouvertures en lecture inutiles, T07 cache d'archives ouvertes, T08 règles de casse
-  et `\` traité comme séparateur.
+- T08, fait : [noms et chemins Linux](../architecture/linux-names.md), `\` caractère de
+  nom et casse par dossier (FAT, exFAT, SMB, `casefold`).
+- T06 ouvertures en lecture inutiles, T07 cache d'archives ouvertes.
 
 **Intégration (jalon 5)**
 - M08, fait : [presse-papiers](../architecture/clipboard.md) partagé avec Nautilus.
