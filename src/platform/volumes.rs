@@ -55,6 +55,11 @@ pub trait Volumes: Send + Sync {
     /// The returned guard owns the registration. Callbacks only increment revision.
     fn watch(&self, _revision: std::sync::Arc<std::sync::atomic::AtomicU64>)
         -> Result<Option<Box<dyn Send>>, String> { Ok(None) }
+    /// Whether folders on `drive` are watched by polling rather than system events.
+    /// Windows polls removable storage so that no handle blocks its ejection.
+    fn polls(&self, drive: &DriveInfo) -> bool {
+        drive.is_usb() || drive.media_type.is_none()
+    }
     /// Decided from the listed drive alone, without system calls.
     fn actions(&self, drive: &DriveInfo) -> DriveActions {
         DriveActions { unmount: false, eject: drive.is_usb() }

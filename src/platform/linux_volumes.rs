@@ -51,6 +51,12 @@ impl Volumes for LinuxVolumes {
         watch::start(revision).map(|watch| Some(Box::new(watch) as Box<dyn Send>))
     }
 
+    /// inotify keeps nothing open and sees local changes, FUSE mounts included; only a
+    /// network share changed by another machine needs polling.
+    fn polls(&self, drive: &DriveInfo) -> bool {
+        drive.drive_type == "remote"
+    }
+
     /// As GTK's places sidebar: a removable or optical drive is ejected, another volume
     /// unmounted. Without UDisks2, the mount table offers neither.
     fn actions(&self, drive: &DriveInfo) -> DriveActions {

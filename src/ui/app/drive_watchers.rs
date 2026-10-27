@@ -15,6 +15,14 @@ pub(super) fn path_on_drive(path: &str, root: &str) -> bool {
         .any(|ancestor| sidebar_paths_equal(&ancestor.to_string_lossy(), root))
 }
 
+/// The innermost drive holding `path`: under Linux, `/` holds every other mount.
+fn drive_of<'a>(path: &str, drives: &'a [oxyde_lib::models::DriveInfo]) -> Option<&'a oxyde_lib::models::DriveInfo> {
+    drives
+        .iter()
+        .filter(|drive| path_on_drive(path, &drive.path))
+        .max_by_key(|drive| std::path::Path::new(&drive.path).components().count())
+}
+
 pub(super) struct DriveRefreshSchedule {
     revision: u64,
     next: std::time::Instant,
@@ -432,10 +440,8 @@ impl OxydeApp {
         let wanted: HashMap<_, _> = needed
             .into_iter()
             .map(|path| {
-                let polling = self.state.drives.iter().any(|drive| {
-                    (drive.is_usb() || drive.media_type.is_none())
-                        && path_on_drive(&path, &drive.path)
-                });
+                let polling = drive_of(&path, &self.state.drives)
+                    .is_some_and(|drive| oxyde_lib::platform::platform().volumes().polls(drive));
                 let recursive = recursive_paths.contains(&path);
                 (path, (polling, recursive))
             })
@@ -567,6 +573,10 @@ fn redirect_tabs(
     });
     requests
 }
+
+#[cfg(all(test, not(target_os = "windows")))]
+#[path = "drive_watchers/tests/polling.rs"]
+mod polling_tests;
 
 #[cfg(test)]
 mod tests {
