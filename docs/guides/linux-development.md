@@ -115,10 +115,9 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
 
 **Intégration (jalon 5)**
 - M08 : presse-papiers de fichiers absent (Ctrl+C/X/V renvoient une erreur).
-- Glisser vers d'autres applications, volumes et éjection UDisks2 (T02, T03),
-  surveillance adaptée (T11). Les montages `/run/media` sont listés, mais `list_drives`
-  reste une lecture brute de `/proc/mounts` : `/boot/efi` illisible y apparaît, sans
-  capacité ni type amovible.
+- Glisser vers d'autres applications, surveillance des dossiers adaptée (T11). Volumes :
+  inventaire UDisks2, notifications de montage, démontage et éjection faits (T02, T03) ;
+  volumes non montés à venir, voir le [pilote volumes](../architecture/volumes.md).
 - T12 : favoris GTK/XDG, erreurs de `xdg-open`, « Propriétés » système lancée par `gio open`.
 - T13 : mises à jour automatiques à désactiver ; T15 : icône, fichier `.desktop`, `app_id`.
 - T10 : réseau SMB/GVfs ; « Plus d'options » (menu Shell) est masqué hors Windows.

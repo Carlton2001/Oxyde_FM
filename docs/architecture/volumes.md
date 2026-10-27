@@ -1,7 +1,7 @@
 # Volumes
 
-**Statut : pilote en cours, étapes 1 à 3 faites** (trait extrait, inventaire UDisks2,
-notifications de montage). Ce document deviendra le contrat du domaine une fois le pilote terminé.
+**Statut : pilote en cours, étapes 1 à 4 faites** (trait extrait, inventaire UDisks2,
+notifications de montage, démontage et éjection). Ce document deviendra le contrat du domaine une fois le pilote terminé.
 
 Le pilote sort les volumes du trait `Platform` dans un trait de domaine et livre, sous
 Linux, l'équivalent de Nautilus : partitions montées et non montées, montage au clic,
@@ -21,7 +21,7 @@ déplacé, pas réécrit.
 
 `Platform` expose `fn volumes(&self) -> &dyn Volumes`, défini dans `src/platform/volumes.rs`,
 implémenté par `windows_volumes.rs` et `linux_volumes.rs`. Interface visée (les méthodes
-nouvelles et `VolumeError` arrivent aux étapes 4 et 5) :
+nouvelles arrivent aux étapes 4 et 5) :
 
 ```rust
 pub trait Volumes: Send + Sync {
@@ -30,6 +30,7 @@ pub trait Volumes: Send + Sync {
     fn mount_points(&self) -> Vec<String> { Vec::new() }
     fn watch(&self, revision: Arc<AtomicU64>) -> Result<Option<Box<dyn Send>>, String>; // ex-watch_drive_changes
     fn unmounted(&self) -> Vec<UnmountedVolume> { Vec::new() }
+    fn actions(&self, drive: &DriveInfo) -> DriveActions;         // pur, sans appel système
     fn mount(&self, id: &str) -> Result<String, VolumeError>;     // chemin monté
     fn unmount(&self, path: &str) -> Result<(), VolumeError>;
     fn eject(&self, path: &str) -> Result<(), VolumeError>;       // ex-eject_drive
@@ -41,9 +42,13 @@ pub trait Volumes: Send + Sync {
 
 - `DriveInfo` reste identifié par son chemin. `file_system` donne le format affiché dans les
   Propriétés (NTFS, FAT32, exFAT, ext4…) : `GetVolumeInformationW` sous Windows, `IdType`
-  et `IdVersion` d'UDisks2 sous Linux, rien pour un montage FUSE. Il gagnera
-  `actions: DriveActions { unmount, eject }` ;
-  Windows calcule `eject = is_usb()` et `unmount = false`, soit le menu actuel.
+  et `IdVersion` d'UDisks2 sous Linux, rien pour un montage FUSE.
+- `actions(drive) -> DriveActions { unmount, eject }` décide du menu à partir du lecteur
+  listé, sans champ de plus dans `DriveInfo` : l'implémentation par défaut, celle de
+  Windows, donne `eject = is_usb()` et `unmount = false`, soit le menu actuel, y compris
+  quand le type USB n'arrive qu'avec les détails matériels. Linux suit la barre latérale
+  GTK : un lecteur amovible ou optique s'éjecte, un autre volume se démonte ; ni `/`, ni
+  les montages réseau, ni le repli sans UDisks2 n'offrent d'action.
 - `UnmountedVolume { id, label, size, removable, fs_type }` forme une liste séparée dans l'état ;
   Windows la renvoie vide.
 - `VolumeError` distingue `Cancelled` (authentification annulée : aucun message), `NotAuthorized`,
@@ -62,9 +67,13 @@ pub trait Volumes: Send + Sync {
   `removable`. Capacité par `rustix::fs::statvfs` en mode détaillé, sauf montages réseau.
   `media_type` reste vide : le renseigner basculerait la surveillance du sondage vers
   inotify (T11).
-- `actions.rs` : `Filesystem.Mount`/`Unmount` avec `auth.no_user_interaction = false` (GNOME
-  affiche son dialogue polkit) ; éjection USB = démontage de toutes les partitions du disque
-  puis `Drive.PowerOff`, ou `Drive.Eject` pour un support optique.
+- `actions.rs` : `Filesystem.Unmount` avec des options vides, donc
+  `auth.no_user_interaction = false` : polkit fait afficher son dialogue par GNOME s'il le
+  faut, et l'appel bloque le fil de fond jusqu'à la réponse. Éjection = démontage de toutes
+  les partitions montées du disque puis `Drive.Eject` pour un support optique,
+  `Drive.PowerOff` sinon quand le disque le permet (retrait sûr, comme sous Windows),
+  `Drive.Eject` à défaut. Les erreurs UDisks2 `NotAuthorizedDismissed` → `Cancelled`,
+  `NotAuthorized*` → `NotAuthorized`, `DeviceBusy` → `Busy`. `Mount` arrive à l'étape 5.
 - `watch.rs` : un fil attend par `poll` le drapeau `POLLPRI` que le noyau lève sur
   `/proc/self/mountinfo` à chaque montage ou démontage de l'espace de noms, qu'il vienne
   d'UDisks2, de `mount` ou d'un client réseau ; chaque changement incrémente la révision.
@@ -79,8 +88,8 @@ pub trait Volumes: Send + Sync {
 ## Windows
 
 `WindowsVolumes` dans `windows_drives.rs` reçoit les délégations aujourd'hui dans
-`windows_impl.rs`, sans changer de logique. Seule modification de construction : le champ
-`actions` dans les deux `DriveInfo` de `windows_drives.rs`. Les appels communs
+`windows_impl.rs`, sans changer de logique ; `eject` enveloppe son erreur dans
+`VolumeError::Other`. Les appels communs
 (`drive_watchers`, `network`, `disk_images`, `trash_settings`, `commands/system`, `utils`,
 `file_ops/copy`) passent de `platform().list_drives(…)` à `platform().volumes().list(…)`.
 
@@ -93,11 +102,12 @@ pub trait Volumes: Send + Sync {
 - « Propriétés système » n'existe que sous Windows : Linux n'a pas de dialogue équivalent.
 - Partitions non montées dans la section des lecteurs, après les montées, icône atténuée.
   Clic gauche : montage en arrière-plan, puis navigation vers le chemin obtenu. Curseur inchangé.
-- Menu : « Démonter » si `actions.unmount`, « Éjecter » si `actions.eject`. `eject_usb_drive`
-  devient une libération commune : les surveillances sont relâchées avant l'appel, sinon
-  Linux répond `Busy`.
-- Nouvelles clés dans les cinq catalogues : `drive-unmount`, `drive-unmount-failed`,
-  `drive-mount-failed` (avec le cas d'un NTFS Windows en veille prolongée).
+- Menu : « Démonter » (icône `eject`) si `actions.unmount`, « Éjecter » (`unplug`) si
+  `actions.eject`. `release_drive` remplace `eject_usb_drive` pour les deux : les
+  surveillances sont relâchées avant l'appel, sinon Linux répond `Busy` ; une
+  authentification annulée n'affiche rien.
+- Clés `drive-unmount` et `drive-unmount-failed` dans les cinq catalogues ;
+  `drive-mount-failed` (avec le cas d'un NTFS Windows en veille prolongée) à l'étape 5.
 
 ## Étapes
 
@@ -112,7 +122,9 @@ manuel de `tests.yml` sur la branche (elle n'est pas fusionnée dans `main`).
 3. **Notifications** à la place du sondage. *Fait* par la table des montages : elle couvre
    tout ce que la liste affiche ; les signaux UDisks2 rejoignent l'étape 5, la seule à
    montrer des volumes non montés.
-4. **Démonter et éjecter** avec authentification ; champ `actions` côté Windows.
+4. **Démonter et éjecter** avec authentification. *Fait* : fichiers communs touchés
+   `volumes.rs`, `windows_volumes.rs` (type d'erreur), `drive_watchers.rs`, le menu des
+   lecteurs et les catalogues ; suite Windows à passer.
 5. **Volumes non montés** et montage au clic, avec les signaux UDisks2.
 6. *Facultatif* : `is_ssd` (`/sys/block/*/queue/rotational`) et `physical_disk_id` Linux,
    utilisés par le parallélisme des copies.

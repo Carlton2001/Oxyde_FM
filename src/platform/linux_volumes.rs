@@ -1,7 +1,9 @@
-//! Linux volume domain: UDisks2 inventory, mount table fallback and notifications, udisks2 unmounting.
-use super::{MountedDiskImage, Volumes};
+//! Linux volume domain: UDisks2 inventory, unmounting and ejection, mount table fallback
+//! and notifications.
+use super::{DriveActions, MountedDiskImage, VolumeError, Volumes};
 use crate::models::DriveInfo;
 
+mod actions;
 mod fallback;
 mod inventory;
 mod mounts;
@@ -46,20 +48,22 @@ impl Volumes for LinuxVolumes {
         watch::start(revision).map(|watch| Some(Box::new(watch) as Box<dyn Send>))
     }
 
-    fn eject(&self, path: &str) -> Result<(), String> {
-        let output = std::process::Command::new("findmnt")
-            .args(["--noheadings", "--output", "SOURCE", "--mountpoint", path])
-            .output().map_err(|error| error.to_string())?;
-        let device = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if !output.status.success() || !device.starts_with("/dev/") {
-            return Err("Cannot identify the mounted device".into());
+    /// As GTK's places sidebar: a removable or optical drive is ejected, another volume
+    /// unmounted. Without UDisks2, the mount table offers neither.
+    fn actions(&self, drive: &DriveInfo) -> DriveActions {
+        if !udisks::available() || drive.path == "/" || drive.drive_type == "remote" {
+            return DriveActions::default();
         }
-        let output = std::process::Command::new("udisksctl")
-            .args(["unmount", "--block-device", &device, "--no-user-interaction"])
-            .output().map_err(|error| error.to_string())?;
-        if output.status.success() { Ok(()) } else {
-            Err(String::from_utf8_lossy(&output.stderr).trim().into())
-        }
+        let eject = matches!(drive.drive_type.as_str(), "removable" | "cdrom");
+        DriveActions { unmount: !eject, eject }
+    }
+
+    fn unmount(&self, path: &str) -> Result<(), VolumeError> {
+        actions::unmount(path)
+    }
+
+    fn eject(&self, path: &str) -> Result<(), VolumeError> {
+        actions::eject(path)
     }
 
     fn physical_disk_id(&self, path: &std::path::Path) -> u64 {

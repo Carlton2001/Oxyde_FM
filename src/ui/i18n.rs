@@ -79,6 +79,8 @@ pub enum Message {
 
     EjectDrive,
     EjectDriveFailed,
+    UnmountDrive,
+    UnmountDriveFailed,
     MountDiskImage,
     UnmountDiskImage,
     DiskImageMountFailed,
@@ -640,6 +642,8 @@ impl Message {
         match self {
             Self::EjectDrive => "drive-eject",
             Self::EjectDriveFailed => "drive-eject-failed",
+            Self::UnmountDrive => "drive-unmount",
+            Self::UnmountDriveFailed => "drive-unmount-failed",
             Self::MountDiskImage => "disk-image-mount",
             Self::UnmountDiskImage => "disk-image-unmount",
             Self::DiskImageMountFailed => "disk-image-mount-failed",
@@ -1454,6 +1458,8 @@ mod tests {
 
                 Message::EjectDrive,
                 Message::EjectDriveFailed,
+                Message::UnmountDrive,
+                Message::UnmountDriveFailed,
                 Message::MountDiskImage,
                 Message::UnmountDiskImage,
                 Message::DiskImageMountFailed,

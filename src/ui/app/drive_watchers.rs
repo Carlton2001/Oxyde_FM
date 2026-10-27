@@ -79,10 +79,14 @@ fn merge_drive_roots(
 }
 
 impl OxydeApp {
-    pub(crate) fn eject_usb_drive(&mut self, path: String, cx: &mut Context<Self>) {
+    /// Unmounts or ejects a drive offered by `Volumes::actions`.
+    pub(crate) fn release_drive(&mut self, path: String, eject: bool, cx: &mut Context<Self>) {
         self.context_menus.clear();
-        if self.ejecting_drive || !self.state.drives.iter()
-            .any(|drive| drive.path == path && drive.is_usb()) {
+        let volumes = oxyde_lib::platform::platform().volumes();
+        if self.ejecting_drive || !self.state.drives.iter().any(|drive| {
+            let actions = volumes.actions(drive);
+            drive.path == path && if eject { actions.eject } else { actions.unmount }
+        }) {
             cx.notify();
             return;
         }
@@ -97,12 +101,15 @@ impl OxydeApp {
         cx.notify();
         cx.spawn(async move |this, cx| {
             let result = tokio::task::spawn_blocking(move || {
-                // Release watches and wait for their handles to close before PnP.
+                use oxyde_lib::platform::VolumeError;
+                // Release watches and wait for their handles to close: an open handle keeps
+                // the volume busy.
                 for (watched_path, watcher) in watchers {
-                    watcher.release(&watched_path)?;
+                    watcher.release(&watched_path).map_err(VolumeError::Other)?;
                 }
-                oxyde_lib::platform::platform().volumes().eject(&path)?;
-                Ok::<_, String>(oxyde_lib::commands::system::get_drives(Some(false)))
+                let volumes = oxyde_lib::platform::platform().volumes();
+                if eject { volumes.eject(&path)? } else { volumes.unmount(&path)? }
+                Ok::<_, VolumeError>(oxyde_lib::commands::system::get_drives(Some(false)))
             }).await;
             let _ = this.update(cx, |this, cx| {
                 this.ejecting_drive = false;
@@ -111,11 +118,14 @@ impl OxydeApp {
                         this.apply_drive_snapshot(drives, cx);
                         None
                     },
-                    Ok(Err(error)) => Some(error),
+                    // The user dismissed the authentication dialog.
+                    Ok(Err(oxyde_lib::platform::VolumeError::Cancelled)) => None,
+                    Ok(Err(error)) => Some(error.to_string()),
                     Err(error) => Some(error.to_string()),
                 };
                 if let Some(error) = error {
-                    this.toast(ToastKind::Error, Message::EjectDriveFailed, error, 0, cx);
+                    let message = if eject { Message::EjectDriveFailed } else { Message::UnmountDriveFailed };
+                    this.toast(ToastKind::Error, message, error, 0, cx);
                 }
                 this.reconcile_watchers(cx);
                 cx.notify();

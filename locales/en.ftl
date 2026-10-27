@@ -257,6 +257,7 @@ menu-sort-ascending = Ascending
 menu-sort-descending = Descending
 menu-sort-extension = Extension
 drive-eject = Eject
+drive-unmount = Unmount
 map-network-drive = Map network drive
 disconnect-network-drive = Disconnect network drive
 disconnect-this-network-drive = Disconnect this network drive
@@ -290,6 +291,7 @@ network-disconnected = Network drives disconnected successfully.
 network-working = Working…
 network-loading = Loading drives…
 drive-eject-failed = Unable to eject the drive. Another application may be using it. { $detail }
+drive-unmount-failed = Unable to unmount the volume. Another application may be using it. { $detail }
 
 archive-format = Archive .{ $format }
 compression-fast = Fast

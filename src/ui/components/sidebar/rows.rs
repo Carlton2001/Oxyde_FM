@@ -180,7 +180,7 @@ pub(super) fn render_sidebar_rows(
             // ── Drive item ─────────────────────────────────
             SidebarItem::Drive { drive, is_expanded } => {
                 let path       = drive.path.clone();
-                let is_usb = drive.is_usb();
+                let actions = oxyde_lib::platform::platform().volumes().actions(drive);
                 let is_remote = drive.drive_type == "remote";
                 let has_subs = expandable_drives.contains(&path);
                 let is_sel     = sel.as_deref().is_some_and(|selected| sidebar_paths_equal(selected, &path));
@@ -229,7 +229,7 @@ pub(super) fn render_sidebar_rows(
                         let h = h.clone(); let p = path.clone();
                         move |e, _, cx| {
                             let pos   = e.position;
-                            let mut items = drive_context_menu(cx.i18n(), h.clone(), p.clone(), is_usb, is_remote);
+                            let mut items = drive_context_menu(cx.i18n(), h.clone(), p.clone(), actions, is_remote);
                             if let Some(image) = h.read(cx).mounted_image_for_drive(&p) {
                                 let image_handle = h.clone();
                                 let action = DropdownItem::new(cx.i18n().text(Message::UnmountDiskImage).to_string(), move |_, cx| {

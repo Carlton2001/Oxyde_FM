@@ -263,6 +263,7 @@ menu-sort-ascending = Croissant
 menu-sort-descending = Décroissant
 menu-sort-extension = Extension
 drive-eject = Éjecter
+drive-unmount = Démonter
 map-network-drive = Connecter un lecteur réseau
 disconnect-network-drive = Déconnecter un lecteur réseau
 disconnect-this-network-drive = Déconnecter le lecteur réseau
@@ -296,6 +297,7 @@ network-disconnected = Lecteurs réseau déconnectés avec succès.
 network-working = Opération en cours…
 network-loading = Chargement des lecteurs…
 drive-eject-failed = Impossible d’éjecter le lecteur. Il est peut-être utilisé par une autre application. { $detail }
+drive-unmount-failed = Impossible de démonter le volume. Il est peut-être utilisé par une autre application. { $detail }
 
 archive-format = Archive .{ $format }
 compression-fast = Rapide

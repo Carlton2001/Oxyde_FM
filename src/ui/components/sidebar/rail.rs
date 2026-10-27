@@ -165,7 +165,7 @@ pub(super) fn render_sidebar_rail(
                         cx.i18n(),
                         menu.clone(),
                         menu_path.clone(),
-                        drive.is_usb(),
+                        oxyde_lib::platform::platform().volumes().actions(drive),
                         drive.drive_type == "remote",
                     ),
                     _ => super::menus::location_context_menu(

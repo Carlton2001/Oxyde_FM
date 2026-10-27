@@ -2,6 +2,7 @@ use crate::ui::app::OxydeApp;
 use crate::ui::components::dropdown::{DropdownItem, IconName};
 use crate::ui::i18n::{I18n, Message};
 use gpui::*;
+use oxyde_lib::platform::DriveActions;
 
 // ── Per-item right-click menus ───────────────────────────────────────────────
 
@@ -135,7 +136,7 @@ fn location_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> 
     ]
 }
 
-fn drive_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String, is_usb: bool) -> Vec<DropdownItem> {
+fn drive_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String, actions: DriveActions) -> Vec<DropdownItem> {
     let mut items = vec![
         DropdownItem {
             label: i18n.text(Message::Open).to_string(),
@@ -178,27 +179,31 @@ fn drive_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String, is_usb
             on_hover: None,
         },
     ];
-    // Ejection follows the tree actions, as in Explorer.
-    let eject = is_usb.then(|| {
+    // Unmounting and ejection follow the tree actions, as in Explorer.
+    let release = |message, icon, eject| {
         let h = h.clone();
         let path = path.clone();
         DropdownItem {
-            label: i18n.text(Message::EjectDrive).to_string(),
-            icon: Some(IconName::Unplug),
+            label: i18n.text(message).to_string(),
+            icon: Some(icon),
             badge: None,
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
             on_click: std::rc::Rc::new(move |_, app| {
-                h.update(app, |this, cx| this.eject_usb_drive(path.clone(), cx));
+                h.update(app, |this, cx| this.release_drive(path.clone(), eject, cx));
             }),
             on_hover: None,
         }
-    });
+    };
+    let releases: Vec<_> = [
+        actions.unmount.then(|| release(Message::UnmountDrive, IconName::Eject, false)),
+        actions.eject.then(|| release(Message::EjectDrive, IconName::Unplug, true)),
+    ].into_iter().flatten().collect();
     items.extend(sidebar_tree_actions(i18n, h, path, false));
     let index = items.iter().position(|item| item.label == i18n.text(Message::Properties).as_ref())
         .unwrap_or(items.len());
-    items.splice(index..index, eject);
+    items.splice(index..index, releases);
     items
 }
 
@@ -352,9 +357,9 @@ pub(super) fn location_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: Stri
     super::super::context_menu_sections(items, i18n)
 }
 
-pub(super) fn drive_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String, is_usb: bool, is_remote: bool) -> Vec<DropdownItem> {
+pub(super) fn drive_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String, releases: DriveActions, is_remote: bool) -> Vec<DropdownItem> {
     let actions = super::super::network::network_actions(i18n, h.clone(), &path, is_remote);
-    let items = super::super::network::insert_after_open(drive_context_menu_raw(i18n, h, path, is_usb), actions, i18n);
+    let items = super::super::network::insert_after_open(drive_context_menu_raw(i18n, h, path, releases), actions, i18n);
     super::super::context_menu_sections(items, i18n)
 }
 

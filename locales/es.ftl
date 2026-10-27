@@ -447,6 +447,7 @@ menu-sort-descending = Descendente
 menu-sort-extension = Extensión
 
 drive-eject = Expulsar
+drive-unmount = Desmontar
 
 map-network-drive = Conectar a unidad de red
 
@@ -513,6 +514,7 @@ network-working = Procesando…
 network-loading = Cargando unidades…
 
 drive-eject-failed = No se pudo expulsar la unidad. Puede que otra aplicación la esté usando. { $detail }
+drive-unmount-failed = No se pudo desmontar el volumen. Puede que otra aplicación lo esté usando. { $detail }
 
 archive-format = Archivo comprimido .{ $format }
 

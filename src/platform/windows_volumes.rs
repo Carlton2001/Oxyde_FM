@@ -1,5 +1,5 @@
 //! Windows volume domain: assembles drives, hardware queries and disk images.
-use super::{MountedDiskImage, Volumes};
+use super::{MountedDiskImage, VolumeError, Volumes};
 use crate::models::DriveInfo;
 
 pub struct WindowsVolumes;
@@ -18,8 +18,8 @@ impl Volumes for WindowsVolumes {
         super::windows_drives::watch_drive_changes(revision).map(Some)
     }
 
-    fn eject(&self, path: &str) -> Result<(), String> {
-        super::windows_drives::eject_drive(path)
+    fn eject(&self, path: &str) -> Result<(), VolumeError> {
+        super::windows_drives::eject_drive(path).map_err(VolumeError::Other)
     }
 
     fn physical_disk_id(&self, path: &std::path::Path) -> u64 {

@@ -447,6 +447,7 @@ menu-sort-descending = Absteigend
 menu-sort-extension = Erweiterung
 
 drive-eject = Auswerfen
+drive-unmount = Aushängen
 
 map-network-drive = Netzlaufwerk verbinden
 
@@ -513,6 +514,7 @@ network-working = Vorgang läuft…
 network-loading = Laufwerke werden geladen…
 
 drive-eject-failed = Laufwerk konnte nicht ausgeworfen werden. Eine andere Anwendung verwendet es möglicherweise. { $detail }
+drive-unmount-failed = Datenträger konnte nicht ausgehängt werden. Eine andere Anwendung verwendet ihn möglicherweise. { $detail }
 
 archive-format = Archiv .{ $format }
 

@@ -1,14 +1,20 @@
-//! UDisks2 client: block devices with a filesystem and the drive that holds them.
+//! UDisks2 client: block devices with a filesystem, the drive that holds them, and the
+//! calls that unmount and eject them.
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use zbus::blocking::{fdo::ObjectManagerProxy, Connection};
-use zbus::zvariant::{ObjectPath, OwnedValue};
+use zbus::blocking::{fdo::ObjectManagerProxy, Connection, Proxy};
+use zbus::zvariant::{ObjectPath, OwnedValue, Value};
 
 const BLOCK: &str = "org.freedesktop.UDisks2.Block";
 const FILESYSTEM: &str = "org.freedesktop.UDisks2.Filesystem";
 const DRIVE: &str = "org.freedesktop.UDisks2.Drive";
+const SERVICE: &str = "org.freedesktop.UDisks2";
+
+static AVAILABLE: AtomicBool = AtomicBool::new(false);
 
 pub(super) struct Block {
+    pub object: String,
     pub device: String,
     pub label: String,
     /// UDisks2 `IdType` and `IdVersion`, such as `vfat` and `FAT32`.
@@ -22,35 +28,50 @@ pub(super) struct Block {
 
 #[derive(Clone)]
 pub(super) struct Drive {
+    pub object: String,
     pub removable: bool,
     pub optical: bool,
     pub usb: bool,
+    pub ejectable: bool,
+    pub can_power_off: bool,
 }
 
 type Properties = HashMap<String, OwnedValue>;
 
-/// Blocking D-Bus call; run on a background worker.
-pub(super) fn blocks() -> zbus::Result<Vec<Block>> {
+/// Whether the last listing reached UDisks2.
+pub(super) fn available() -> bool {
+    AVAILABLE.load(Ordering::Relaxed)
+}
+
+fn with_connection<T>(call: impl FnOnce(&Connection) -> zbus::Result<T>) -> zbus::Result<T> {
     static CONNECTION: Mutex<Option<Connection>> = Mutex::new(None);
-    let mut slot = CONNECTION.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    let connection = match slot.as_ref() {
-        Some(connection) => connection.clone(),
-        None => slot.insert(Connection::system()?).clone(),
-    };
-    let objects = ObjectManagerProxy::builder(&connection)
-        .destination("org.freedesktop.UDisks2")?
-        .path("/org/freedesktop/UDisks2")?
-        .build()
-        .and_then(|proxy| proxy.get_managed_objects().map_err(zbus::Error::from));
-    let objects = match objects {
-        Ok(objects) => objects,
-        Err(error) => {
-            // Reconnect on the next call, in case the bus connection itself failed.
-            *slot = None;
-            return Err(error);
+    let connection = {
+        let mut slot = CONNECTION.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        match slot.as_ref() {
+            Some(connection) => connection.clone(),
+            None => slot.insert(Connection::system()?).clone(),
         }
     };
-    drop(slot);
+    let result = call(&connection);
+    if matches!(&result, Err(error) if !matches!(error, zbus::Error::MethodError(..) | zbus::Error::FDO(_))) {
+        // Reconnect on the next call, in case the bus connection itself failed.
+        *CONNECTION.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+    }
+    result
+}
+
+/// Blocking D-Bus call; run on a background worker.
+pub(super) fn blocks() -> zbus::Result<Vec<Block>> {
+    let objects = with_connection(|connection| {
+        ObjectManagerProxy::builder(connection)
+            .destination(SERVICE)?
+            .path("/org/freedesktop/UDisks2")?
+            .build()?
+            .get_managed_objects()
+            .map_err(zbus::Error::from)
+    });
+    AVAILABLE.store(objects.is_ok(), Ordering::Relaxed);
+    let objects = objects?;
 
     let interfaces: HashMap<String, HashMap<&str, &Properties>> = objects
         .iter()
@@ -61,14 +82,15 @@ pub(super) fn blocks() -> zbus::Result<Vec<Block>> {
         .collect();
     let drives: HashMap<&str, Drive> = interfaces
         .iter()
-        .filter_map(|(path, interfaces)| Some((path.as_str(), drive(interfaces.get(DRIVE)?))))
+        .filter_map(|(path, interfaces)| Some((path.as_str(), drive(path, interfaces.get(DRIVE)?))))
         .collect();
     let mut blocks: Vec<Block> = interfaces
-        .values()
-        .filter_map(|interfaces| {
+        .iter()
+        .filter_map(|(object, interfaces)| {
             let block = interfaces.get(BLOCK)?;
             let drive_path = block.get("Drive").and_then(|value| value.downcast_ref::<ObjectPath>().ok());
             Some(Block {
+                object: object.clone(),
                 device: bytes_string(block.get("PreferredDevice")).unwrap_or_default(),
                 label: string(block, "IdLabel"),
                 id_type: string(block, "IdType"),
@@ -83,11 +105,23 @@ pub(super) fn blocks() -> zbus::Result<Vec<Block>> {
     Ok(blocks)
 }
 
-fn drive(properties: &Properties) -> Drive {
+/// Calls `method` with an empty option map, so that polkit may ask for authentication.
+pub(super) fn call(object: &str, interface: &str, method: &str) -> zbus::Result<()> {
+    with_connection(|connection| {
+        let options: HashMap<&str, Value> = HashMap::new();
+        Proxy::new(connection, SERVICE, object, interface)?.call_method(method, &(options,))?;
+        Ok(())
+    })
+}
+
+fn drive(object: &str, properties: &Properties) -> Drive {
     Drive {
+        object: object.to_string(),
         removable: boolean(properties, "Removable") || boolean(properties, "MediaRemovable"),
         optical: boolean(properties, "Optical"),
         usb: string(properties, "ConnectionBus") == "usb",
+        ejectable: boolean(properties, "Ejectable"),
+        can_power_off: boolean(properties, "CanPowerOff"),
     }
 }
 

@@ -35,7 +35,7 @@ pub(crate) fn context_menu_sections(items: Vec<dropdown::DropdownItem>, i18n: &I
         &[Message::ExpandAll, Message::CollapseAll],
         &[Message::MapNetworkDrive, Message::DisconnectNetworkDrive, Message::DisconnectThisNetworkDrive],
         &[Message::MountDiskImage, Message::UnmountDiskImage, Message::PinQuickAccess,
-            Message::UnpinQuickAccess, Message::EjectDrive, Message::TrashRestore, Message::TrashRestoreAll],
+            Message::UnpinQuickAccess, Message::UnmountDrive, Message::EjectDrive, Message::TrashRestore, Message::TrashRestoreAll],
         &[Message::Cut, Message::Copy, Message::Paste],
         &[Message::NewFolder],
         &[Message::SelectAll],

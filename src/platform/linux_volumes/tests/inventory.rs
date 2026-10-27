@@ -1,10 +1,20 @@
 use super::*;
 
-const INTERNAL: Drive = Drive { removable: false, optical: false, usb: false };
-const USB_KEY: Drive = Drive { removable: true, optical: false, usb: true };
+fn drive(removable: bool, optical: bool, usb: bool) -> Drive {
+    Drive { object: String::new(), removable, optical, usb, ejectable: removable, can_power_off: usb }
+}
+
+fn internal() -> Drive {
+    drive(false, false, false)
+}
+
+fn usb_key() -> Drive {
+    drive(true, false, true)
+}
 
 fn block(device: &str, label: &str, hint_ignore: bool, mounts: Option<&[&str]>, drive: Drive) -> Block {
     Block {
+        object: format!("/org/freedesktop/UDisks2/block_devices/{}", device.trim_start_matches("/dev/")),
         device: device.into(),
         label: label.into(),
         id_type: String::new(),
@@ -22,15 +32,15 @@ fn session() -> Session {
 /// A Fedora machine with a Windows disk and a live USB key, as UDisks2 reports it.
 fn machine() -> Vec<Block> {
     vec![
-        block("/dev/nvme0n1p1", "BigSpace", false, Some(&[]), INTERNAL),
-        block("/dev/nvme1n1p1", "", true, Some(&["/boot/efi"]), INTERNAL),
-        block("/dev/nvme1n1p4", "", true, Some(&[]), INTERNAL),
-        block("/dev/nvme1n1p5", "Data", false, Some(&["/run/media/user/Data"]), INTERNAL),
-        block("/dev/nvme1n1p6", "boot", false, Some(&["/boot"]), INTERNAL),
-        block("/dev/nvme1n1p7", "fedora", false, Some(&["/"]), INTERNAL),
-        block("/dev/sda", "Fedora-Live", false, None, USB_KEY),
-        block("/dev/sda1", "Fedora-Live", false, Some(&["/run/media/user/Fedora-Live"]), USB_KEY),
-        block("/dev/sda2", "BOOT", true, Some(&[]), USB_KEY),
+        block("/dev/nvme0n1p1", "BigSpace", false, Some(&[]), internal()),
+        block("/dev/nvme1n1p1", "", true, Some(&["/boot/efi"]), internal()),
+        block("/dev/nvme1n1p4", "", true, Some(&[]), internal()),
+        block("/dev/nvme1n1p5", "Data", false, Some(&["/run/media/user/Data"]), internal()),
+        block("/dev/nvme1n1p6", "boot", false, Some(&["/boot"]), internal()),
+        block("/dev/nvme1n1p7", "fedora", false, Some(&["/"]), internal()),
+        block("/dev/sda", "Fedora-Live", false, None, usb_key()),
+        block("/dev/sda1", "Fedora-Live", false, Some(&["/run/media/user/Fedora-Live"]), usb_key()),
+        block("/dev/sda2", "BOOT", true, Some(&[]), usb_key()),
     ]
 }
 
@@ -73,7 +83,7 @@ fn only_mounts_the_user_owns_are_shown() {
 
 #[test]
 fn root_stays_first_even_when_udisks2_does_not_know_it() {
-    let blocks = vec![block("/dev/sdb1", "", false, Some(&["/run/media/user/4A2B"]), USB_KEY)];
+    let blocks = vec![block("/dev/sdb1", "", false, Some(&["/run/media/user/4A2B"]), usb_key())];
     let drives = mounted(&blocks, &session());
     assert_eq!(drives[0].path, "/");
     assert_eq!(drives[0].label, "Root");
@@ -82,14 +92,14 @@ fn root_stays_first_even_when_udisks2_does_not_know_it() {
 
 #[test]
 fn optical_media_are_cd_drives() {
-    let disc = Drive { removable: true, optical: true, usb: false };
+    let disc = drive(true, true, false);
     let blocks = vec![block("/dev/sr0", "DVD", false, Some(&["/run/media/user/DVD"]), disc)];
     assert_eq!(mounted(&blocks, &session())[1].drive_type, "cdrom");
 }
 
 #[test]
 fn volumes_name_their_file_system_as_file_managers_do() {
-    let mut data = block("/dev/nvme1n1p5", "Data", false, Some(&["/run/media/user/Data"]), INTERNAL);
+    let mut data = block("/dev/nvme1n1p5", "Data", false, Some(&["/run/media/user/Data"]), internal());
     data.id_type = "ntfs".into();
     assert_eq!(mounted(&[data], &session())[1].file_system.as_deref(), Some("NTFS"));
     for (kind, version, name) in [
