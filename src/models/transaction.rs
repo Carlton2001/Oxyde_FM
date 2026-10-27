@@ -64,14 +64,20 @@ impl Transaction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HistoryFileIdentity {
     identity: crate::platform::FileIdentity,
-    created: std::time::SystemTime,
+    created: Option<std::time::SystemTime>,
 }
 
 impl HistoryFileIdentity {
     pub(crate) fn from_file(file: &std::fs::File) -> std::io::Result<Self> {
+        let created = file.metadata()?.created();
+        #[cfg(target_os = "windows")]
+        let created = Some(created?);
+        // Unix file systems without birth time, such as ntfs-3g, rely on the identifier.
+        #[cfg(not(target_os = "windows"))]
+        let created = created.ok();
         Ok(Self {
             identity: crate::platform::platform().file_identity(file)?,
-            created: file.metadata()?.created()?,
+            created,
         })
     }
 
