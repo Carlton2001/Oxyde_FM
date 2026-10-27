@@ -1,0 +1,152 @@
+//! Unix permissions as Nautilus presents them: an access level for the owner, the
+//! group and others, plus the execution bits of a file. Only the access bits of the
+//! chosen class change; the other bits, special ones included, are kept.
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Account {
+    pub id: u32,
+    pub name: String,
+}
+
+/// What the Permissions tab reads, and what an applied change must still find.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnixPermissions {
+    pub device: u64,
+    pub inode: u64,
+    /// Permission and special bits, without the file type.
+    pub mode: u32,
+    pub is_dir: bool,
+    pub owner: Account,
+    pub group: Account,
+    /// Groups the owner may give the item, its current group included.
+    pub groups: Vec<Account>,
+    /// The current user owns the item or is root.
+    pub editable: bool,
+}
+
+/// A change requested from the Permissions tab.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PermissionChange {
+    pub expected: UnixPermissions,
+    pub mode: u32,
+    pub group: u32,
+}
+
+/// Why a change was not applied.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PermissionError {
+    /// The item is another object, or its permissions or group changed since loading.
+    Changed,
+    /// The file system accepted the change without keeping it, as ntfs-3g and FAT do.
+    NotKept,
+    /// The system refused or failed the change; nothing else was attempted after it.
+    Failed(String),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PermissionClass {
+    Owner,
+    Group,
+    Others,
+}
+
+impl PermissionClass {
+    fn shift(self) -> u32 {
+        match self {
+            Self::Owner => 6,
+            Self::Group => 3,
+            Self::Others => 0,
+        }
+    }
+}
+
+/// An access level; files and folders offer different ones.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Access {
+    None,
+    /// Files only.
+    ReadOnly,
+    /// Files only.
+    ReadWrite,
+    /// Folders only: `r--`.
+    ListFiles,
+    /// Folders only: `r-x`.
+    AccessFiles,
+    /// Folders only: `rwx`.
+    CreateDelete,
+}
+
+const READ: u32 = 4;
+const WRITE: u32 = 2;
+const EXECUTE: u32 = 1;
+
+impl Access {
+    /// The levels offered for a class. The owner of a file is never offered None.
+    pub fn choices(is_dir: bool, class: PermissionClass) -> &'static [Access] {
+        match (is_dir, class) {
+            (true, _) => &[Self::None, Self::ListFiles, Self::AccessFiles, Self::CreateDelete],
+            (false, PermissionClass::Owner) => &[Self::ReadOnly, Self::ReadWrite],
+            (false, _) => &[Self::None, Self::ReadOnly, Self::ReadWrite],
+        }
+    }
+
+    /// The level shown for these bits, or None for a combination outside the levels.
+    /// A file's execution bit is not part of its level.
+    pub fn of(mode: u32, is_dir: bool, class: PermissionClass) -> Option<Access> {
+        let bits = (mode >> class.shift()) & 0o7;
+        let level = if is_dir {
+            match bits {
+                0 => Self::None,
+                READ => Self::ListFiles,
+                b if b == READ | EXECUTE => Self::AccessFiles,
+                0o7 => Self::CreateDelete,
+                _ => return None,
+            }
+        } else {
+            match bits & !EXECUTE {
+                0 => Self::None,
+                READ => Self::ReadOnly,
+                b if b == READ | WRITE => Self::ReadWrite,
+                _ => return None,
+            }
+        };
+        Self::choices(is_dir, class).contains(&level).then_some(level)
+    }
+
+    /// The mode with this level for the class. A file keeps its execution bit.
+    pub fn apply(self, mode: u32, is_dir: bool, class: PermissionClass) -> u32 {
+        let shift = class.shift();
+        let kept = if is_dir { 0 } else { (mode >> shift) & EXECUTE };
+        let bits = match self {
+            Self::None => 0,
+            Self::ReadOnly | Self::ListFiles => READ,
+            Self::ReadWrite => READ | WRITE,
+            Self::AccessFiles => READ | EXECUTE,
+            Self::CreateDelete => READ | WRITE | EXECUTE,
+        };
+        (mode & !(0o7 << shift)) | ((bits | kept) << shift)
+    }
+}
+
+/// Whether a file runs as a program: its owner may execute it.
+pub fn executable(mode: u32) -> bool {
+    mode & 0o100 != 0
+}
+
+/// Nautilus sets or clears the three execution bits together.
+pub fn with_executable(mode: u32, executable: bool) -> u32 {
+    if executable { mode | 0o111 } else { mode & !0o111 }
+}
+
+/// `rwx` text of a class, for a combination outside the levels.
+pub fn symbolic(mode: u32, class: PermissionClass) -> String {
+    let bits = (mode >> class.shift()) & 0o7;
+    [(READ, 'r'), (WRITE, 'w'), (EXECUTE, 'x')]
+        .into_iter()
+        .map(|(bit, letter)| if bits & bit != 0 { letter } else { '-' })
+        .collect()
+}
+
+#[cfg(test)]
+#[path = "permissions/tests/access.rs"]
+mod tests;

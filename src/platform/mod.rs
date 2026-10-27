@@ -632,6 +632,23 @@ pub trait Platform: Send + Sync {
     fn shortcut_info(&self, path: &std::path::Path) -> Option<crate::models::ShortcutInfo>;
     fn set_shortcut_info(&self, path: &str, info: &crate::models::ShortcutInfo) -> Result<(), String>;
 
+    /// Unix permissions shown by the Permissions tab; None where the system shows
+    /// its own (Windows) or the item cannot be read.
+    fn unix_permissions(&self, _path: &std::path::Path) -> Option<crate::models::permissions::UnixPermissions> {
+        None
+    }
+    /// Type and description from the system's MIME database; None on Windows.
+    fn mime_type(&self, _path: &std::path::Path, _is_dir: bool, _language: &str) -> Option<crate::models::MimeType> {
+        None
+    }
+    fn set_unix_permissions(
+        &self,
+        _path: &std::path::Path,
+        _change: &crate::models::permissions::PermissionChange,
+    ) -> Result<(), crate::models::permissions::PermissionError> {
+        Err(crate::models::permissions::PermissionError::Failed("Unix permissions are unavailable on this platform".into()))
+    }
+
     /// Affiche la boîte de dialogue propriétés native pour un fichier/dossier.
     fn show_properties_dialog(&self, path: &str);
 
@@ -871,6 +888,10 @@ mod linux_rename;
 mod linux_file_copy;
 #[cfg(target_os = "linux")]
 mod linux_extended_attributes;
+#[cfg(target_os = "linux")]
+mod linux_permissions;
+#[cfg(target_os = "linux")]
+mod linux_mime;
 
 #[cfg(target_os = "windows")]
 mod windows_trash_restore;

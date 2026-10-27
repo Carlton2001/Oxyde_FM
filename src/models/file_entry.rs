@@ -123,6 +123,19 @@ pub struct FileProperties {
     /// Target text of a symbolic link, outside Windows.
     pub link_target: Option<String>,
     pub is_broken_link: bool,
+    /// Unix permissions for the Permissions tab, outside Windows.
+    pub permissions: Option<crate::models::permissions::UnixPermissions>,
+    /// Type from the system's MIME database, outside Windows; filled in the
+    /// interface language by `describe_mime_type`.
+    pub mime_type: Option<MimeType>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MimeType {
+    /// For example `image/png`.
+    pub name: String,
+    /// For example « image PNG »; None when the database has no description.
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone)]

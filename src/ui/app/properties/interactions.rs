@@ -6,7 +6,7 @@ use gpui::*;
 impl PropertiesWindow {
     pub(super) fn select_properties_tab(
         &mut self,
-        shortcut: bool,
+        tab: super::PropertiesTab,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -31,7 +31,7 @@ impl PropertiesWindow {
                     info.run_window,
                 )
             });
-        if shortcut && dialog.shortcut_inputs.is_empty() {
+        if tab == super::PropertiesTab::Shortcut && dialog.shortcut_inputs.is_empty() {
             let Some((values, run_window)) = values else {
                 return;
             };
@@ -71,8 +71,11 @@ impl PropertiesWindow {
             dialog.run_window = run_window;
         }
         let dialog = self.properties_dialog.as_mut().unwrap();
-        dialog.shortcut_tab = shortcut;
+        dialog.tab = tab;
         dialog.run_menu = None;
+        if let Some(edit) = &mut dialog.permissions {
+            edit.menu = None;
+        }
         window.focus(&dialog.focus, cx);
         cx.notify();
     }
@@ -82,6 +85,10 @@ impl PropertiesWindow {
             return;
         };
         if dialog.saving {
+            return;
+        }
+        if let Some(change) = dialog.permissions.as_ref().and_then(|edit| edit.change()) {
+            self.save_permissions(change, window, cx);
             return;
         }
         if dialog.shortcut_inputs.is_empty() {

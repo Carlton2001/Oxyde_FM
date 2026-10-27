@@ -2,7 +2,9 @@ mod dialog;
 mod general;
 mod interactions;
 mod loading;
+mod permissions;
 mod shortcut;
+mod tabs;
 mod window;
 mod selection;
 
@@ -48,7 +50,8 @@ pub(crate) struct PropertiesDialog {
     error: Option<String>,
     focus: FocusHandle,
     ok_focus: FocusHandle,
-    shortcut_tab: bool,
+    tab: PropertiesTab,
+    permissions: Option<permissions::PermissionsEdit>,
     shortcut_inputs: Vec<Entity<TextInput>>,
     run_window: i32,
     run_menu: Option<Point<Pixels>>,
@@ -56,6 +59,15 @@ pub(crate) struct PropertiesDialog {
     run_bounds: Option<Bounds<Pixels>>,
     saving: bool,
     validation_error: Option<Message>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PropertiesTab {
+    General,
+    /// Windows shortcuts.
+    Shortcut,
+    /// Unix permissions, outside Windows.
+    Permissions,
 }
 
 struct PropertyPresentation<'a> {
@@ -125,6 +137,8 @@ mod property_presentation_tests {
             shortcut: None,
             link_target: None,
             is_broken_link: false,
+            permissions: None,
+            mime_type: None,
         }
     }
 

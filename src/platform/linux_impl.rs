@@ -328,6 +328,24 @@ impl Platform for LinuxPlatform {
         super::linux_rename::same_mount(first, second)
     }
     #[cfg(target_os = "linux")]
+    fn unix_permissions(&self, path: &std::path::Path) -> Option<crate::models::permissions::UnixPermissions> {
+        super::linux_permissions::read(path)
+            .inspect_err(|error| log::warn!("Permissions of {}: {error}", path.display()))
+            .ok()
+    }
+    #[cfg(target_os = "linux")]
+    fn mime_type(&self, path: &std::path::Path, is_dir: bool, language: &str) -> Option<crate::models::MimeType> {
+        Some(super::linux_mime::mime_type(path, is_dir, language))
+    }
+    #[cfg(target_os = "linux")]
+    fn set_unix_permissions(
+        &self,
+        path: &std::path::Path,
+        change: &crate::models::permissions::PermissionChange,
+    ) -> Result<(), crate::models::permissions::PermissionError> {
+        super::linux_permissions::write(path, change)
+    }
+    #[cfg(target_os = "linux")]
     fn extended_attributes(&self, file: &std::fs::File) -> std::io::Result<super::ExtendedAttributes> {
         super::linux_extended_attributes::read(file)
     }

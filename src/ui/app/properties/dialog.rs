@@ -1,5 +1,5 @@
 use super::super::{Coller, Copier, Couper, Ouvrir, Renommer, Supprimer};
-use super::{general, property_presentation, shortcut, PropertiesWindow};
+use super::{general, permissions, property_presentation, shortcut, tabs, PropertiesTab, PropertiesWindow};
 use crate::ui::components::tool_window::action_button;
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::ThemeContext;
@@ -22,7 +22,7 @@ pub(crate) fn render(
     let mut body = div().flex().flex_col().gap(rems(0.375));
     if dialog.paths.len() > 1 {
         body = super::selection::render(dialog, label_width, compact, theme, cx);
-    } else if let Some(p) = dialog.properties.as_ref().filter(|_| !dialog.shortcut_tab) {
+    } else if let Some(p) = dialog.properties.as_ref().filter(|_| dialog.tab == PropertiesTab::General) {
         body = general::render(
             body,
             view,
@@ -33,8 +33,10 @@ pub(crate) fn render(
             theme,
             cx,
         );
-    } else if dialog.shortcut_tab {
+    } else if dialog.tab == PropertiesTab::Shortcut {
         body = shortcut::fields(body, dialog, &handle, compact, theme, cx);
+    } else if let Some(edit) = dialog.permissions.as_ref().filter(|_| dialog.tab == PropertiesTab::Permissions) {
+        body = permissions::render(body, dialog, edit, &handle, compact, theme, cx);
     } else if dialog.error.is_none() {
         body = body.child(cx.i18n().text(Message::PropertiesLoading));
     }
@@ -42,7 +44,8 @@ pub(crate) fn render(
         .properties
         .as_ref()
         .is_some_and(|properties| properties.shortcut.is_some());
-    let property_tabs = shortcut::tabs(dialog, &handle, has_shortcut, theme, cx);
+    let has_permissions = dialog.permissions.is_some();
+    let property_tabs = tabs::render(dialog, &handle, has_shortcut, has_permissions, theme, cx);
     if dialog.saving {
         body = body.child(cx.i18n().text(Message::ShortcutSaving));
     }
@@ -72,7 +75,7 @@ pub(crate) fn render(
     let title_close = handle;
     let body = crate::ui::components::scroll_area::scroll_area("properties-body-scroll-state", div(),
         div().id("properties-body")
-            .when(!has_shortcut, |body| body.px(rems(1.0)).py(rems(1.25)))
+            .when(!has_shortcut && !has_permissions, |body| body.px(rems(1.0)).py(rems(1.25)))
             .child(body), false, window, cx);
     div()
         .absolute()
@@ -87,7 +90,9 @@ pub(crate) fn render(
                         return;
                     }
                     if let Some(dialog) = &mut this.properties_dialog {
-                        if dialog.run_menu.take().is_some() {
+                        if dialog.run_menu.take().is_some()
+                            || dialog.permissions.as_mut().is_some_and(|edit| edit.menu.take().is_some())
+                        {
                             cx.notify();
                             return;
                         }
@@ -145,7 +150,7 @@ pub(crate) fn render(
                 "tab" => {
                     if let Some(dialog) = &this.properties_dialog {
                         let mut focuses = vec![dialog.focus.clone()];
-                        if dialog.shortcut_tab {
+                        if dialog.tab == PropertiesTab::Shortcut {
                             focuses.extend(
                                 dialog
                                     .shortcut_inputs

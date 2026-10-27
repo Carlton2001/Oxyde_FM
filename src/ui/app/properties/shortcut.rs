@@ -2,7 +2,6 @@ use super::PropertiesWindow;
 use super::{general, PropertiesDialog};
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::OxydeTheme;
-use gpui::prelude::FluentBuilder;
 use gpui::*;
 #[cfg(target_os = "windows")]
 use crate::ui::theme::ThemeContext;
@@ -108,82 +107,6 @@ pub(super) fn fields(
     body
 }
 
-pub(super) fn tabs(
-    dialog: &PropertiesDialog,
-    handle: &Entity<PropertiesWindow>,
-    has_shortcut: bool,
-    theme: OxydeTheme,
-    cx: &mut Context<PropertiesWindow>,
-) -> Option<Div> {
-    let mut property_tabs = None;
-    if has_shortcut {
-        let mut tabs = div()
-            .flex()
-            .flex_none()
-            .items_center()
-            .px(rems(1.25))
-            .bg(theme.dialog_tabs)
-            .gap(rems(0.25))
-            .border_b(rems(0.0625))
-            .border_color(theme.border);
-        for (shortcut, message, icon) in [
-            (false, Message::PropertiesGeneral, "icons/file-text.svg"),
-            (true, Message::PropertiesShortcut, "icons/link.svg"),
-        ] {
-            let tab = handle.clone();
-            let active = shortcut == dialog.shortcut_tab;
-            tabs =
-                tabs.child(
-                    div()
-                        .id(if shortcut {
-                            "properties-shortcut-tab"
-                        } else {
-                            "properties-general-tab"
-                        })
-                        .px(rems(1.0))
-                        .py(rems(0.75))
-                        .text_size(rems(0.8125))
-                        .font_weight(FontWeight::MEDIUM)
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .gap(rems(0.5))
-                        .when(!active, |tab| {
-                            tab.hover(move |style| style.bg(theme.hover).text_color(theme.text))
-                        })
-                        .child(svg().path(icon).size(rems(0.875)).flex_none().text_color(
-                            if active {
-                                theme.accent
-                            } else {
-                                theme.text
-                            },
-                        ))
-                        .rounded_none()
-                        .border_b(rems(0.0625))
-                        .border_color(if active {
-                            theme.accent
-                        } else {
-                            transparent_black()
-                        })
-                        .text_color(if active {
-                            theme.accent
-                        } else {
-                            theme.text_muted
-                        })
-                        .child(cx.i18n().text(message))
-                        .on_click(move |_, window, cx| {
-                            cx.stop_propagation();
-                            tab.update(cx, |this, cx| {
-                                this.select_properties_tab(shortcut, window, cx)
-                            });
-                        }),
-                );
-        }
-        property_tabs = Some(tabs);
-    }
-    property_tabs
-}
-
 pub(super) fn run_menu(
     mut body: Div,
     dialog: &PropertiesDialog,
@@ -198,7 +121,7 @@ pub(super) fn run_menu(
     if let Some(position) = dialog.run_menu.filter(|_| crate::ui::components::popup::supported(window, cx)) {
         let bounds = dialog.run_bounds.unwrap_or(Bounds::new(position, size(px(0.0), px(0.0))));
         crate::ui::components::popup::show("shortcut-run", crate::ui::components::popup::PopupAnchor::element(bounds), handle.clone(), window, cx,
-            |view| view.properties_dialog.as_ref().is_some_and(|dialog| dialog.run_menu.is_some() && dialog.shortcut_tab),
+            |view| view.properties_dialog.as_ref().is_some_and(|dialog| dialog.run_menu.is_some() && dialog.tab == super::PropertiesTab::Shortcut),
             |view, _, cx| run_choices(&cx.entity(), *cx.theme(), view.properties_dialog.as_ref().map_or(1, |dialog| dialog.run_window), cx).into_any_element(),
             |view, _, cx| { if let Some(dialog) = &mut view.properties_dialog { dialog.run_menu = None; cx.notify(); } });
         return body;

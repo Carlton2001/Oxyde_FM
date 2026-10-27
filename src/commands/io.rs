@@ -319,6 +319,8 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
             shortcut: None,
             link_target: None,
             is_broken_link: false,
+            permissions: None,
+            mime_type: None,
         };
 
         if let Ok(Some(name)) = crate::platform::platform().shell_item_friendly_name(&path) {
@@ -328,7 +330,8 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
         return Ok(props);
     }
 
-    let path_buf = validate_path(&path)?;
+    // Reading keeps the bytes of a name that is not UTF-8.
+    let path_buf = crate::utils::path_text::decode(&validate_path(&path)?.to_string_lossy());
     // Outside Windows a link describes its target, as in Nautilus; a broken link
     // falls back to the link itself.
     #[cfg(not(target_os = "windows"))]
@@ -418,6 +421,9 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
     };
 
     let shortcut = get_shortcut_info(&path_buf);
+    let permissions = (!is_broken_link)
+        .then(|| crate::platform::platform().unix_permissions(&path_buf))
+        .flatten();
 
     Ok(FileProperties {
         name,
@@ -436,7 +442,28 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
         shortcut,
         link_target,
         is_broken_link,
+        permissions,
+        mime_type: None,
     })
+}
+
+/// Type of a listed item in the interface language, where the system has a MIME
+/// database. Reads the start of a file whose name says nothing.
+pub fn describe_mime_type(path: &str, is_dir: bool, language: crate::models::preferences::Language) -> Option<crate::models::MimeType> {
+    crate::platform::platform().mime_type(&crate::utils::path_text::decode(path), is_dir, language.as_str())
+}
+
+/// Applies the Permissions tab; the platform checks it still reaches the object read.
+pub async fn set_unix_permissions(
+    path: String,
+    change: crate::models::permissions::PermissionChange,
+) -> Result<(), crate::models::permissions::PermissionError> {
+    use crate::models::permissions::PermissionError;
+    let path = validate_path(&path).map_err(|error| PermissionError::Failed(error.to_string()))?;
+    let path = crate::utils::path_text::decode(&path.to_string_lossy());
+    tokio::task::spawn_blocking(move || crate::platform::platform().set_unix_permissions(&path, &change))
+        .await
+        .map_err(|error| PermissionError::Failed(error.to_string()))?
 }
 
 #[cfg(target_os = "windows")]

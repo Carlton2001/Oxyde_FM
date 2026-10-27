@@ -4,9 +4,15 @@ impl PropertiesWindow {
     pub(super) fn load(&mut self, path: String, cx: &mut Context<Self>) {
         let revision = 0;
         let cancellation = self.cancellation.clone();
+        let language = crate::ui::i18n::I18nContext::i18n(&**cx).language();
         self._calculation = Some(cx.spawn(async move |this, cx| {
             let result = tokio::task::spawn_blocking(move || {
-                oxyde_lib::commands::io::get_file_properties(path)
+                let mut properties = oxyde_lib::commands::io::get_file_properties(path)?;
+                // A link keeps its own label; a broken one has no type to read.
+                if properties.link_target.is_none() {
+                    properties.mime_type = oxyde_lib::commands::io::describe_mime_type(&properties.path, properties.is_dir, language);
+                }
+                Ok::<_, oxyde_lib::models::CommandError>(properties)
             })
             .await;
             let scan = this
@@ -23,6 +29,10 @@ impl PropertiesWindow {
                                 && properties.link_target.is_none())
                                 .then(|| properties.path.clone());
                             dialog.calculating = scan.is_some();
+                            dialog.permissions = properties
+                                .permissions
+                                .clone()
+                                .map(super::permissions::PermissionsEdit::new);
                             dialog.properties = Some(properties);
                             scan
                         }

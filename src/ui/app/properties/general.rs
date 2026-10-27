@@ -177,6 +177,15 @@ pub(super) fn render(
         cx.i18n().text(Message::FileTypeBrokenLink).to_string()
     } else if p.link_target.is_some() {
         cx.i18n().text(Message::FileTypeSymlink).to_string()
+    } else if let Some(mime) = &p.mime_type {
+        // As Nautilus: « image PNG (image/png) ». Oxyde names folders itself, since
+        // the database often lacks that translation.
+        let description = if p.is_dir {
+            Some(cx.i18n().text(Message::FileTypeFolder).to_string())
+        } else {
+            mime.description.clone()
+        };
+        description.map_or_else(|| mime.name.clone(), |description| format!("{description} ({})", mime.name))
     } else if p.is_dir {
         cx.i18n().text(Message::FileTypeFolder).to_string()
     } else {
