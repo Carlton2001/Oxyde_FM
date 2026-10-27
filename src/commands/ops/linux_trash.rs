@@ -3,6 +3,7 @@
 use crate::models::error::{TrashRestoreFailure, TrashRestoreIssue};
 use crate::models::{CommandError, TrashEntry};
 use crate::platform::platform;
+use crate::utils::path_text::encode;
 use log::info;
 use std::collections::{HashMap, HashSet};
 
@@ -30,8 +31,8 @@ fn entry(item: &trash::TrashItem) -> Option<TrashEntry> {
     let is_dir = metadata.is_dir();
     Some(TrashEntry {
         name: item.name.to_string_lossy().into_owned(),
-        path: content.to_string_lossy().into_owned(),
-        original_path: item.original_path().to_string_lossy().into_owned(),
+        path: encode(&content),
+        original_path: encode(&item.original_path()),
         is_dir,
         size: if is_dir { 0 } else { metadata.len() },
         deleted_time,
@@ -49,7 +50,7 @@ pub(crate) fn trash_properties_metadata(path: &std::path::Path) -> Option<(Strin
     }
     let items = platform().list_trash_items().ok()?;
     let item = items.iter().find(|item| platform().trash_content_path(item).as_deref() == Some(path))?;
-    Some((item.original_path().to_string_lossy().into_owned(),
+    Some((encode(&item.original_path()),
         item.time_deleted.checked_mul(1000).filter(|time| *time >= 0)))
 }
 
@@ -57,7 +58,7 @@ pub(crate) fn trash_properties_metadata(path: &std::path::Path) -> Option<(Strin
 /// one item came from there (Undo of a deletion); lossy display names may collide.
 fn select(items: Vec<trash::TrashItem>, paths: Vec<String>) -> (Vec<trash::TrashItem>, Vec<(String, TrashRestoreIssue)>) {
     let keyed = items.into_iter().filter_map(|item| {
-        let content = platform().trash_content_path(&item)?.to_string_lossy().into_owned();
+        let content = encode(&platform().trash_content_path(&item)?);
         Some((content, item))
     }).collect();
     select_keyed(keyed, paths)
@@ -68,7 +69,7 @@ fn select_keyed(items: Vec<(String, trash::TrashItem)>, paths: Vec<String>) -> (
     let mut by_original: HashMap<String, Vec<usize>> = HashMap::new();
     for (index, (content, item)) in items.iter().enumerate() {
         by_content.entry(content.as_str()).or_default().push(index);
-        by_original.entry(item.original_path().to_string_lossy().into_owned()).or_default().push(index);
+        by_original.entry(encode(&item.original_path())).or_default().push(index);
     }
     let mut chosen = Vec::new();
     let mut failures = Vec::new();
@@ -134,7 +135,7 @@ pub async fn restore_items_report(paths: Vec<String>) -> Result<TrashRestoreRepo
         ..Default::default()
     };
     for item in selected {
-        let original = item.original_path().to_string_lossy().into_owned();
+        let original = encode(&item.original_path());
         match platform().restore_trash_items(vec![item]) {
             Ok(()) => report.restored.push(original),
             Err(error) => {

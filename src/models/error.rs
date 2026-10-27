@@ -177,6 +177,33 @@ impl SourceSelectionFailure {
     }
 }
 
+/// A name that is not UTF-8 reached an operation that would rebuild it from text.
+/// The operation is refused before any effect; renaming the item fixes it.
+#[derive(Clone, Debug)]
+pub struct UnrepresentablePathFailure {
+    /// Shown with U+FFFD in place of each invalid byte.
+    pub path: String,
+}
+impl fmt::Display for UnrepresentablePathFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Unrepresentable path [{}]", self.path)
+    }
+}
+impl std::error::Error for UnrepresentablePathFailure {}
+impl UnrepresentablePathFailure {
+    /// Refuses the first path holding a name that is not UTF-8.
+    pub fn check<'a>(paths: impl IntoIterator<Item = &'a str>) -> Result<(), Self> {
+        match paths.into_iter().find(|path| crate::utils::path_text::is_encoded(path)) {
+            Some(path) => Err(Self { path: crate::utils::path_text::display(path) }),
+            None => Ok(()),
+        }
+    }
+    pub fn from_message(message: &str) -> Option<String> {
+        let (_, value) = message.split_once("Unrepresentable path [")?;
+        Some(value.rsplit_once(']')?.0.to_owned())
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct HistoryUndoRecoveryFailure {
     pub locations: String,

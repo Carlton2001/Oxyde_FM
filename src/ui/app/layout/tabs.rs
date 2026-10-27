@@ -131,8 +131,8 @@ impl OxydeApp {
                     .path
                     .split(['/', '\\'])
                     .rfind(|p| !p.is_empty())
-                    .unwrap_or(cx.i18n().text(Message::UnknownItem).as_ref())
-                    .to_string()
+                    .map(oxyde_lib::utils::path_text::display)
+                    .unwrap_or_else(|| cx.i18n().text(Message::UnknownItem).to_string())
             };
 
             let position = if t_ix == 0 {

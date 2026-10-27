@@ -248,7 +248,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
             })
             .child({
                 let path_str = path.clone();
-                let file_name = file.name.clone();
+                let file_name = crate::ui::format::entry_name(file, cx.i18n());
 
                 div()
                     .w(px(name_w))

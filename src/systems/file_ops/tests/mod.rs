@@ -30,3 +30,5 @@ mod file_dates;
 mod extended_attributes;
 #[cfg(target_os = "linux")]
 mod whole_moves;
+#[cfg(target_os = "linux")]
+mod invalid_names;

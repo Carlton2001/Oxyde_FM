@@ -12,6 +12,8 @@ pub(super) fn check_conflicts_real(
 ) -> Result<Vec<ConflictEntry>, CommandError> {
     let mut conflicts = Vec::new();
     let mut summaries = TreeSummaries::default();
+    crate::models::error::UnrepresentablePathFailure::check(paths.iter().chain([&target_dir]).map(String::as_str))
+        .map_err(|failure| CommandError::PathError(failure.to_string()))?;
     let target_base = validate_path(&target_dir)?;
 
     let sources: Vec<_> = paths.iter().map(PathBuf::from).collect();

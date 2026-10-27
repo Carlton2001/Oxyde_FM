@@ -108,7 +108,8 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
 - Six tests (`file_ops::item_outcomes`, `operations::files::icons`) exigent un dossier
   `./target` : ils échouent quand `CARGO_TARGET_DIR` pointe ailleurs. Les tests
   `preview_jobs` à délai de 2 s échouent par intermittence quand toute la suite tourne.
-- M05 : noms non UTF-8 convertis avec perte.
+- M05, fait : [noms non UTF-8](../architecture/non-utf8-names.md) distincts de leurs
+  sosies, marqués comme dans Nautilus, renommables ; les autres opérations les refusent.
 - M03/M06, faits pour la copie : [copies](../architecture/copies.md) depuis la source
   vérifiée, par le noyau, avec modes, dates, `user.*` et ACL ; un dossier déplacé sur son
   disque est renommé entier et renommer fonctionne sur ntfs-3g : voir

@@ -927,6 +927,8 @@ transfer-source-changed = El origen se ha sustituido o ya no es un archivo o car
 transfer-source-unverified = No se puede verificar la identidad del origen en esta ubicación. La operación se ha detenido; los elementos ya transferidos se conservan. Pruebe desde una carpeta local compatible.
 
 trash-restore-ambiguous = Varios elementos de la papelera proceden de la misma ubicación. Abra la papelera y seleccione el elemento concreto que desea restaurar. Los elementos ya restaurados se conservan.
+invalid-encoding-name = { $name } (codificación no válida)
+unrepresentable-path = El nombre de «{ $path }» no es un texto UTF-8 válido. Cámbiele el nombre antes de copiarlo, moverlo, eliminarlo o comprimirlo; no se ha modificado nada.
 trash-restore-changed = El elemento de la papelera cambió después de seleccionarlo. Se detuvo la restauración. Actualice la papelera y vuelva a seleccionar el elemento. Los elementos ya restaurados se conservan.
 trash-restore-conflict = Ya existe un archivo o carpeta en la ubicación de restauración. Se conserva y el elemento afectado sigue en la papelera. Cambie el nombre o mueva el destino e inténtelo de nuevo.
 trash-restore-unavailable = No se pudo restaurar este elemento. Compruebe que sigue en la papelera y que su carpeta original existe y es accesible. Inténtelo de nuevo. Los elementos ya restaurados se conservan.

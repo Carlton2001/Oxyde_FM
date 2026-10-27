@@ -2,7 +2,6 @@ use crate::models::{CommandError, FileEntry, FileProperties, FolderSizeResult};
 use crate::utils::path_security::validate_path;
 use log::info;
 use std::fs;
-use std::path::PathBuf;
 use std::time::SystemTime;
 
 pub async fn list_dir(
@@ -92,7 +91,7 @@ fn list_dir_blocking(
     show_system: bool,
     ordered: bool,
 ) -> Result<Vec<FileEntry>, CommandError> {
-    let path_buf = PathBuf::from(&path);
+    let path_buf = crate::utils::path_text::decode(&path);
     if let Some((archive, internal)) = crate::utils::archive::resolve_virtual_path(&path_buf) {
         if archive.is_file() {
             let mut entries = crate::commands::archive::list_archive_contents(
@@ -143,6 +142,10 @@ fn sort_file_entries(entries: &mut [FileEntry]) {
 #[cfg(test)]
 #[path = "io/tests/listing_preparation.rs"]
 mod listing_preparation_tests;
+
+#[cfg(all(test, unix))]
+#[path = "io/tests/invalid_names.rs"]
+mod invalid_name_tests;
 
 /// Worker-only local creation: capture the newly created object before closing it.
 pub fn create_local_folder(
@@ -200,8 +203,11 @@ pub async fn rename_item_controlled_with_identity(
     cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) -> Result<Option<crate::models::transaction::HistoryFileIdentity>, CommandError> {
     if cancel.load(std::sync::atomic::Ordering::Relaxed) { return Err(CommandError::IoError("Cancelled".into())); }
+    // Renaming is how a name that is not UTF-8 gets fixed, so both sides keep its bytes.
     let old_pb = validate_path(&old_path)?;
+    let old_pb = crate::utils::path_text::decode(&old_pb.to_string_lossy());
     let new_pb = validate_path(&new_path)?;
+    let new_pb = crate::utils::path_text::decode(&new_pb.to_string_lossy());
     if let Some((archive, internal)) = crate::systems::archive_workspace::virtual_source(&old_pb) {
         return crate::systems::archive_recovery::scope(|| {
         use crate::systems::archive_workspace::{
@@ -396,7 +402,7 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
 
             // Find matching trash item
             if let Some(item) = trash_items.iter().find(|item| {
-                let item_id = normalize(&PathBuf::from(&item.id));
+                let item_id = normalize(&std::path::PathBuf::from(&item.id));
                 item_id == normalized_target
             }) {
                 let (original, deleted) = trash_properties_metadata(item);

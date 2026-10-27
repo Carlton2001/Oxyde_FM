@@ -382,6 +382,16 @@ mod tests {
 }
 
 /// Resolve archive limits at render time, including stored operation failures.
+/// The name shown for an entry; one that is not UTF-8 is marked as GLib marks it.
+pub fn entry_name(file: &oxyde_lib::models::FileEntry, i18n: &crate::ui::i18n::I18n) -> String {
+    if !file.has_invalid_name() {
+        return file.name.clone();
+    }
+    let mut args = crate::ui::i18n::FluentArgs::new();
+    args.set("name", file.name.clone());
+    i18n.text_with_args(crate::ui::i18n::Message::InvalidEncodingName, &args).to_string()
+}
+
 pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
     use crate::ui::i18n::{FluentArgs, Message};
     use oxyde_lib::models::error::{ArchiveLimitFailure, ArchiveLimitKind};
@@ -412,6 +422,11 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
     }
     if let Some(changed) = oxyde_lib::models::error::HistoryDeleteFailure::from_message(detail) {
         return i18n.text(if changed { Message::HistoryDeleteChanged } else { Message::HistoryDeleteUnverified }).to_string();
+    }
+    if let Some(path) = oxyde_lib::models::error::UnrepresentablePathFailure::from_message(detail) {
+        let mut args = FluentArgs::new();
+        args.set("path", path);
+        return i18n.text_with_args(Message::UnrepresentablePath, &args).to_string();
     }
     if let Some(issue) = oxyde_lib::models::error::TrashRestoreFailure::from_message(detail) {
         use oxyde_lib::models::error::TrashRestoreIssue;

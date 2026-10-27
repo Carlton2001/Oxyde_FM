@@ -165,7 +165,7 @@ pub(super) fn render_grid_file_list(
                                 .map(|index| {
                                     let file = &files[*index];
                                     let path = file.path.clone();
-                                    let name = file.name.clone();
+                                    let name = crate::ui::format::entry_name(file, cx.i18n());
                                     let is_dir = file.is_dir;
                                     let provisional_size = is_dir && file.is_calculated && provisional_sizes.contains(&path);
                                     let has_subdirectories = is_dir

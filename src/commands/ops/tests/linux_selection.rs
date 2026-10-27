@@ -42,3 +42,23 @@ fn an_item_requested_under_both_paths_is_selected_once() {
     assert_eq!(selected.len(), 1);
     assert!(failures.is_empty());
 }
+
+#[test]
+fn an_original_name_that_is_not_utf8_is_not_confused_with_its_lookalike() {
+    use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+    let invalid = std::path::Path::new(OsStr::from_bytes(b"/home/u/a\xffb"));
+    let item = |id: &str, original: &std::path::Path| trash::TrashItem {
+        id: id.into(),
+        name: original.file_name().unwrap().into(),
+        original_parent: original.parent().unwrap().into(),
+        time_deleted: 0,
+    };
+    let listing = vec![
+        ("/t/files/1".to_owned(), item("/t/info/1.trashinfo", invalid)),
+        ("/t/files/2".to_owned(), item("/t/info/2.trashinfo", std::path::Path::new("/home/u/a\u{FFFD}b"))),
+    ];
+    let (selected, failures) = select_keyed(listing, vec![crate::utils::path_text::encode(invalid)]);
+    assert!(failures.is_empty());
+    assert_eq!(selected.len(), 1);
+    assert_eq!(selected[0].original_path(), invalid);
+}

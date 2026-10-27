@@ -157,7 +157,7 @@ impl Tooltip {
                 location, extra, notice, network: None,
                 size: (file.size, file.is_dir, file.is_calculated), date: file.modified,
             };
-            Self::new_for_file(file.name.clone(), file.path.clone(), info, previews, cx).into()
+            Self::new_for_file(crate::ui::format::entry_name(&file, cx.i18n()), file.path.clone(), info, previews, cx).into()
         }
     }
     /// Keep action labels and their optional keyboard shortcut on one line.

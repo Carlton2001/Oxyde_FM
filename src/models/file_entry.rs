@@ -78,6 +78,12 @@ impl FileEntry {
     pub fn needs_mount_for_browsing(&self) -> bool {
         self.is_disk_image() && crate::utils::disk_image::mount_format(Path::new(&self.path))
     }
+    /// The entry's own name is not UTF-8; `name` shows it with U+FFFD.
+    pub fn has_invalid_name(&self) -> bool {
+        Path::new(&self.path)
+            .file_name()
+            .is_some_and(|name| crate::utils::path_text::is_encoded(&name.to_string_lossy()))
+    }
 }
 
 #[cfg(test)]
@@ -263,7 +269,7 @@ pub(crate) fn file_entry_from_metadata(path: &Path, metadata: &std::fs::Metadata
         content_stamp: FileStamp::for_entry(path, metadata),
         archive_path: None,
         name,
-        path: path.to_string_lossy().to_string(),
+        path: crate::utils::path_text::encode(path),
         is_dir,
         is_hidden,
         is_system,

@@ -1,8 +1,8 @@
 use crate::ui::components::sidebar::sidebar_paths_equal;
+use oxyde_lib::utils::path_text::{decode, encode};
 use notify::{Config, Event, EventKind, PollWatcher, RecommendedWatcher, RecursiveMode, Watcher};
 use std::{
     collections::{HashMap, HashSet},
-    path::Path,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
@@ -63,7 +63,7 @@ impl DirectoryChanges {
             return;
         }
         for path in &event.paths {
-            if sidebar_paths_equal(&path.to_string_lossy(), root) {
+            if sidebar_paths_equal(&encode(path), root) {
                 self.rescan();
                 continue;
             }
@@ -72,7 +72,7 @@ impl DirectoryChanges {
             let child = path.ancestors().find(|ancestor| {
                 ancestor
                     .parent()
-                    .is_some_and(|parent| sidebar_paths_equal(&parent.to_string_lossy(), root))
+                    .is_some_and(|parent| sidebar_paths_equal(&encode(parent), root))
             });
             let Some(child) = child else {
                 self.rescan();
@@ -82,7 +82,7 @@ impl DirectoryChanges {
                 self.listing = true;
             }
             if !self.all_sizes {
-                self.children.insert(child.to_string_lossy().into_owned());
+                self.children.insert(encode(child));
                 if self.children.len() > 256 {
                     self.all_sizes = true;
                     self.children.clear();
@@ -163,7 +163,7 @@ impl DirectoryWatcher {
             Box::new(RecommendedWatcher::new(callback, config)?)
         };
         watcher.watch(
-            Path::new(path),
+            &decode(path),
             if recursive {
                 RecursiveMode::Recursive
             } else {
@@ -185,7 +185,7 @@ impl DirectoryWatcher {
 
     pub(in crate::ui::app) fn release(mut self, path: &str) -> Result<(), String> {
         self.watcher
-            .unwatch(Path::new(path))
+            .unwatch(&decode(path))
             .map_err(|error| error.to_string())?;
         // The configure reply is a FIFO barrier for Windows' queued unwatch.
         self.watcher

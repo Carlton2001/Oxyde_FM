@@ -13,6 +13,7 @@ pub use archive_limits::ArchiveLimits;
 pub mod archive_security;
 pub mod disk_image;
 pub mod path_security;
+pub mod path_text;
 pub mod preview;
 pub mod preview_protocol;
 pub mod audio_metadata;

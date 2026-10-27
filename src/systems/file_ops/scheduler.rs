@@ -141,7 +141,11 @@ impl FileOperationManager {
             let mut permit = Some(initial_permit);
             let operation = op_clone.clone();
             let mut execution = Box::pin(async move {
-                match Self::check_queued_conflicts(operation.clone()).await {
+                let checked = match Self::check_representable(&operation) {
+                    Ok(()) => Self::check_queued_conflicts(operation.clone()).await,
+                    Err(error) => Err(error),
+                };
+                match checked {
                     Ok(())
                         if !operation
                             .lock()
@@ -272,6 +276,20 @@ impl FileOperationManager {
                 a == b || a.starts_with(&format!("{b}/")) || b.starts_with(&format!("{a}/"))
             })
         })
+    }
+
+    /// Names that are not UTF-8 are refused before any effect: the operations
+    /// below rebuild paths from text and journal them as text.
+    fn check_representable(op: &Arc<Mutex<FileOperation>>) -> Result<(), String> {
+        let locked = op.lock().unwrap();
+        let paths: Vec<_> = locked
+            .sources
+            .iter()
+            .chain(locked.destination.iter())
+            .map(|path| path.to_string_lossy())
+            .collect();
+        crate::models::error::UnrepresentablePathFailure::check(paths.iter().map(|path| path.as_ref()))
+            .map_err(|failure| failure.to_string())
     }
 
     async fn check_queued_conflicts(op: Arc<Mutex<FileOperation>>) -> Result<(), String> {

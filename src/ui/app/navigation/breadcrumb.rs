@@ -26,7 +26,8 @@ impl OxydeApp {
         };
         self.invalidate_breadcrumb_validation();
         self.breadcrumb_editing = true;
-        let path = crate::ui::components::input::native_path_text(&path);
+        // A name that is not UTF-8 is edited with U+FFFD.
+        let path = crate::ui::components::input::native_path_text(&oxyde_lib::utils::path_text::display(&path));
         self.breadcrumb_text = path.clone();
         self.breadcrumb_invalid = false;
         self.breadcrumb_pane_id = Some(pane_id);

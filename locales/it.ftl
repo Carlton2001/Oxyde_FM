@@ -927,6 +927,8 @@ transfer-source-changed = L’origine è stata sostituita o non è più un file 
 transfer-source-unverified = Non è possibile verificare l’identità dell’origine in questa posizione. L’operazione è stata interrotta; gli elementi già trasferiti vengono conservati. Prova da una cartella locale compatibile.
 
 trash-restore-ambiguous = Più elementi del cestino provengono dalla stessa posizione. Apri il cestino e seleziona l’elemento preciso da ripristinare. Gli elementi già ripristinati vengono conservati.
+invalid-encoding-name = { $name } (codifica non valida)
+unrepresentable-path = Il nome di «{ $path }» non è un testo UTF-8 valido. Rinominalo prima di copiarlo, spostarlo, eliminarlo o comprimerlo; non è stato modificato nulla.
 trash-restore-changed = L’elemento del cestino è cambiato dopo la selezione. Il ripristino è stato interrotto. Aggiorna il cestino e seleziona nuovamente l’elemento. Gli elementi già ripristinati vengono conservati.
 trash-restore-conflict = Un file o una cartella esiste già nella posizione di ripristino. Viene conservato e l’elemento interessato resta nel cestino. Rinomina o sposta la destinazione e riprova.
 trash-restore-unavailable = Impossibile ripristinare questo elemento. Verifica che sia ancora nel cestino e che la cartella originale esista e sia accessibile, poi riprova. Gli elementi già ripristinati vengono conservati.

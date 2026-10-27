@@ -533,10 +533,10 @@ pub fn render_top_bar(
                             } else if part.ends_with(':') {
                                 drive_display(part, view)
                             } else {
-                                part.to_string()
+                                oxyde_lib::utils::path_text::display(part)
                             }
                         } else {
-                            part.to_string()
+                            oxyde_lib::utils::path_text::display(part)
                         };
 
                         let segment_bounds = std::rc::Rc::new(std::cell::Cell::new(Bounds::<Pixels>::default()));

@@ -114,11 +114,12 @@ impl OxydeApp {
         if self.breadcrumb_editing {
             self.cancel_breadcrumb_edit(cx);
         }
+        // A name that is not UTF-8 is edited with U+FFFD, as GLib offers it.
         let initial_name = std::path::Path::new(&path)
             .file_name()
             .and_then(|name| name.to_str())
-            .unwrap_or("")
-            .to_string();
+            .map(oxyde_lib::utils::path_text::display)
+            .unwrap_or_default();
         let selected_len = initial_selection_len(&initial_name, is_dir, extension);
         let initial_selection = Some(0..selected_len);
 
@@ -242,7 +243,8 @@ impl OxydeApp {
         let current_name = std::path::Path::new(&path)
             .file_name()
             .and_then(|name| name.to_str())
-            .unwrap_or("");
+            .map(oxyde_lib::utils::path_text::display)
+            .unwrap_or_default();
         if self.editing_text == current_name {
             self.cancel_rename(cx);
             return;
