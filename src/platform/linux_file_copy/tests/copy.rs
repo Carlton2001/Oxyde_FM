@@ -3,7 +3,8 @@ use std::time::{Duration, SystemTime};
 
 fn copy_all(source: &Path, destination: &Path, held: Option<&File>) -> io::Result<Vec<u64>> {
     let mut steps = Vec::new();
-    copy(source, destination, held, &mut |_| Ok(()), &mut |copied| {
+    let parent = File::open(destination.parent().unwrap())?;
+    copy(source, destination, held, &parent, &mut |_| Ok(()), &mut |copied| {
         steps.push(copied);
         Ok(())
     })?;
@@ -90,7 +91,8 @@ fn a_progress_refusal_stops_the_copy() {
     std::fs::write(&source, pattern(BUFFER * 3)).unwrap();
     let destination = root.path().join("copy");
     let mut calls = 0;
-    let error = copy(&source, &destination, None, &mut |_| Ok(()), &mut |_| {
+    let parent = File::open(root.path()).unwrap();
+    let error = copy(&source, &destination, None, &parent, &mut |_| Ok(()), &mut |_| {
         calls += 1;
         if calls > 1 { Err(io::ErrorKind::Interrupted.into()) } else { Ok(()) }
     })

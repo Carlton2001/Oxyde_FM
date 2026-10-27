@@ -31,6 +31,7 @@ Oxyde utilise Rust, GPUI et Tokio. Choisir une référence selon le travail à f
 | Séparateurs et casse des noms Linux | [Noms et chemins Linux](architecture/linux-names.md) |
 | Droits demandés et suppression définitive sous Linux | [Accès sans lecture](architecture/linux-access.md) |
 | Cache des fichiers ouverts depuis une archive sous Linux | [Cache Linux](architecture/linux-open-cache.md) |
+| Effets des opérations Linux sur les dossiers et objets tenus | [Dossiers tenus](architecture/linux-held-effects.md) |
 | Vérifier l’effet de Turbo et les améliorations restantes | [Couverture de Turbo](reports/2026-10-17-turbo-coverage.md) |
 | Modifier le listing, les filtres ou la recherche | [Navigation et recherche](architecture/search.md) |
 | Diagnostiquer copies, suppressions ou fermeture | [Copie](diagnostics/copy.md), [suppression](diagnostics/delete.md), [fermeture](diagnostics/shutdown.md) |

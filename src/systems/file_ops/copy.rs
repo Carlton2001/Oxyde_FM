@@ -607,6 +607,7 @@ impl FileOperationManager {
             let deferred_moves = deferred_moves.clone();
             let recovery_context = crate::systems::archive_recovery::context();
             let recovery_target = recovery_target.clone();
+            let failure = error_captured.clone();
 
             let handle = std::thread::spawn(move || crate::systems::archive_recovery::with_context(recovery_context, || {
                 Self::run_copy_worker(worker::CopyWorkerInputs {
@@ -625,6 +626,9 @@ impl FileOperationManager {
                     destination_tree,
                     deferred_moves,
                     recovery_target,
+                })
+                .inspect_err(|error| {
+                    failure.lock().unwrap().get_or_insert_with(|| error.clone());
                 })
             }));
             handles.push(handle);

@@ -102,9 +102,6 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
   relu en arrière-plan), comparé sans résoudre les liens symboliques. Essayé sous GNOME :
   Nautilus vers Oxyde, glisser interne vers `/tmp`, puis vers une clé USB en lecture seule
   (copie proposée, refus propre). Reste : une clé inscriptible.
-- M03/M04 : opérations par chemin malgré les handles retenus ; déplacement exclusif
-  émulé par lien physique puis suppression. Deux tests `history_file_undo` échouent
-  sous Linux : l'annulation remplace un dossier substitué entre-temps.
 - Six tests (`file_ops::item_outcomes`, `operations::files::icons`) exigent un dossier
   `./target` : ils échouent quand `CARGO_TARGET_DIR` pointe ailleurs. Les tests
   `preview_jobs` à délai de 2 s échouent par intermittence quand toute la suite tourne.
@@ -123,6 +120,9 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
   Turbo supprime en parallèle, sauf sur Btrfs.
 - T07, fait : [cache des fichiers ouverts depuis une archive](../architecture/linux-open-cache.md),
   éviction sous bail d'écriture, dossier de l'utilisateur.
+- M03/M04, faits : [effets par dossiers tenus](../architecture/linux-held-effects.md),
+  renommage et suppression de l'objet vérifié où qu'il soit, sans jamais toucher un
+  remplaçant ; publication exclusive, y compris sur ntfs-3g.
 
 **Intégration (jalon 5)**
 - M08, fait : [presse-papiers](../architecture/clipboard.md) partagé avec Nautilus.

@@ -2,7 +2,7 @@
 //! only the source descriptor the selection verified.
 use rustix::io::Errno;
 use std::{
-    fs::{File, FileTimes, OpenOptions, Permissions},
+    fs::{File, FileTimes, Permissions},
     io,
     os::unix::fs::{FileExt, MetadataExt, PermissionsExt},
     path::Path,
@@ -17,6 +17,7 @@ pub(super) fn copy(
     source: &Path,
     destination: &Path,
     held_source: Option<&File>,
+    destination_parent: &File,
     created: &mut dyn FnMut(&File) -> io::Result<()>,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
 ) -> io::Result<()> {
@@ -32,7 +33,7 @@ pub(super) fn copy(
     if !metadata.is_file() {
         return Err(io::Error::other("Copy source is not an ordinary file"));
     }
-    let output = OpenOptions::new().write(true).create_new(true).open(destination)?;
+    let output = super::linux_held::create_file(destination_parent, destination)?;
     created(&output)?;
     // Explicit offsets: a held descriptor may already have been read to its end.
     let mut copied = kernel_copy(input, &output, progress)?;

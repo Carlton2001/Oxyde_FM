@@ -52,7 +52,9 @@ impl FileOperationManager {
         let _priority_guard = RestoreNormalPriority;
 
         loop {
-            if cancel.load(Ordering::Relaxed) {
+            // A failed worker ends the batch: idle workers would otherwise wait for
+            // items that nobody takes any more.
+            if cancel.load(Ordering::Relaxed) || error_share.lock().unwrap().is_some() {
                 break;
             }
 

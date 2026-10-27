@@ -58,20 +58,35 @@ impl Platform for LinuxPlatform {
     fn hold_resolved_operation_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         self.hold_archive_directory(path)
     }
-    fn ensure_operation_directory(&self, _parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<(std::fs::File, bool)> {
-        let created = match std::fs::create_dir(path) {
-            Ok(()) => true,
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => false,
-            Err(error) => return Err(error),
-        };
-        Ok((self.hold_archive_directory(path)?, created))
+    fn ensure_operation_directory(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<(std::fs::File, bool)> {
+        #[cfg(target_os = "linux")]
+        { super::linux_held::ensure_directory(parent, path) }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = parent;
+            let created = match std::fs::create_dir(path) {
+                Ok(()) => true,
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => false,
+                Err(error) => return Err(error),
+            };
+            Ok((self.hold_archive_directory(path)?, created))
+        }
     }
-    fn track_operation_directory(&self, _parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
-        self.hold_archive_directory(path)
+    fn track_operation_directory(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        #[cfg(target_os = "linux")]
+        { super::linux_held::open_directory(parent, super::linux_held::leaf(path)?) }
+        #[cfg(not(target_os = "linux"))]
+        { let _ = parent; self.hold_archive_directory(path) }
     }
-    fn create_journal_directory(&self, _parent: &std::fs::File, path: &std::path::Path, _hidden: bool) -> std::io::Result<std::fs::File> {
-        std::fs::create_dir(path)?;
-        self.hold_archive_directory(path)
+    fn create_journal_directory(&self, parent: &std::fs::File, path: &std::path::Path, _hidden: bool) -> std::io::Result<std::fs::File> {
+        #[cfg(target_os = "linux")]
+        { super::linux_held::create_directory(parent, path) }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = parent;
+            std::fs::create_dir(path)?;
+            self.hold_archive_directory(path)
+        }
     }
     fn restore_journal_directory(&self, directory: &std::fs::File, _path: &std::path::Path, permissions: std::fs::Permissions, _hidden: bool) -> std::io::Result<()> {
         directory.set_permissions(permissions)
@@ -81,21 +96,23 @@ impl Platform for LinuxPlatform {
         if self.file_identity(&directory)? != expected {
             return Err(std::io::Error::other("Source directory changed; its replacement was preserved"));
         }
-        // This fallback is still path based; it does not claim Windows' atomic guarantees.
-        std::fs::remove_dir(path)
-    }
-    fn open_operation_file(&self, _parent: &std::fs::File, path: &std::path::Path, read_contents: bool) -> std::io::Result<std::fs::File> {
-        if !std::fs::symlink_metadata(path)?.is_file() {
-            return Err(std::io::Error::other("Operation source is not an ordinary file"));
-        }
         #[cfg(target_os = "linux")]
-        if !read_contents {
-            // Moving changes the parent's entry: the file itself needs no read permission.
-            return super::linux_access::open_unread(path);
-        }
+        { super::linux_held::remove_directory(parent, path, &directory) }
         #[cfg(not(target_os = "linux"))]
-        let _ = read_contents;
-        self.open_file_for_move(path)
+        { std::fs::remove_dir(path) }
+    }
+    fn open_operation_file(&self, parent: &std::fs::File, path: &std::path::Path, read_contents: bool) -> std::io::Result<std::fs::File> {
+        // Moving changes the parent's entry: the file itself needs no read permission.
+        #[cfg(target_os = "linux")]
+        { super::linux_held::open_file(parent, path, read_contents) }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = (parent, read_contents);
+            if !std::fs::symlink_metadata(path)?.is_file() {
+                return Err(std::io::Error::other("Operation source is not an ordinary file"));
+            }
+            self.open_file_for_move(path)
+        }
     }
     fn track_source_item(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         #[cfg(target_os = "linux")]
@@ -138,38 +155,23 @@ impl Platform for LinuxPlatform {
         super::linux_links::remove(parent, path, verify)
     }
     fn open_copied_file(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        // Verifying a copy must not replace the access date it kept.
         #[cfg(target_os = "linux")]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            if !std::fs::symlink_metadata(path)?.is_file() {
-                return Err(std::io::Error::other("Operation source is not an ordinary file"));
-            }
-            // O_NOATIME | O_NOFOLLOW: verifying a copy must not replace the access date it kept.
-            // Only the owner may ask for it; another owner's file is opened normally.
-            match std::fs::OpenOptions::new().read(true).custom_flags(0x40000 | 0x20000).open(path) {
-                Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {}
-                result => return result,
-            }
-        }
-        self.open_operation_file(parent, path, true)
+        { super::linux_held::open_copy(parent, path) }
+        #[cfg(not(target_os = "linux"))]
+        { self.open_operation_file(parent, path, true) }
     }
     fn open_rename_item(
         &self,
-        _parent: &std::fs::File,
+        parent: &std::fs::File,
         path: &std::path::Path,
     ) -> std::io::Result<std::fs::File> {
+        // Metadata-only, including the final symlink itself.
         #[cfg(target_os = "linux")]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            // O_PATH | O_NOFOLLOW: metadata-only, including the final symlink itself.
-            std::fs::OpenOptions::new()
-                .read(true)
-                .custom_flags(0x200000 | 0x20000)
-                .open(path)
-        }
+        { super::linux_held::open_item(parent, path) }
         #[cfg(not(target_os = "linux"))]
         {
-            let _ = path;
+            let _ = (parent, path);
             Err(std::io::Error::new(
                 std::io::ErrorKind::Unsupported,
                 "Exclusive item rename is unavailable on this platform",
@@ -178,38 +180,35 @@ impl Platform for LinuxPlatform {
     }
     fn rename_operation_item(
         &self,
-        _file: &std::fs::File,
+        file: &std::fs::File,
         source: &std::path::Path,
         source_parent: &std::fs::File,
         parent: &std::fs::File,
         destination: &std::path::Path,
     ) -> std::io::Result<()> {
         #[cfg(target_os = "linux")]
-        {
-            use std::os::fd::AsFd;
-            let leaf = |path: &std::path::Path| -> std::io::Result<std::path::PathBuf> {
-                path.file_name().map(std::path::PathBuf::from).ok_or_else(|| {
-                    std::io::Error::new(std::io::ErrorKind::InvalidInput, "Rename path has no file name")
-                })
-            };
-            // Linux does not pin source names against concurrent external replacement.
-            super::linux_rename::exclusive(source_parent.as_fd(), &leaf(source)?, parent.as_fd(), &leaf(destination)?)
-        }
+        { super::linux_held::rename_item(file, source_parent, source, parent, destination) }
         #[cfg(not(target_os = "linux"))]
         {
-            let _ = (source, source_parent, parent, destination);
+            let _ = (file, source, source_parent, parent, destination);
             Err(std::io::Error::new(
                 std::io::ErrorKind::Unsupported,
                 "Exclusive item rename is unavailable on this platform",
             ))
         }
     }
-    fn remove_copied_file(&self, _file: &std::fs::File, path: &std::path::Path) -> std::io::Result<()> {
-        std::fs::remove_file(path)
+    fn remove_copied_file(&self, file: &std::fs::File, path: &std::path::Path) -> std::io::Result<()> {
+        self.remove_open_file(file, path)
     }
-    fn rename_operation_file(&self, file: &std::fs::File, source: &std::path::Path, _parent: &std::fs::File, destination: &std::path::Path, replace: bool) -> std::io::Result<()> {
-        if replace { self.replace_open_file(file, source, destination) }
-        else { self.rename_open_file_exclusive(file, source, destination) }
+    fn rename_operation_file(&self, file: &std::fs::File, source: &std::path::Path, parent: &std::fs::File, destination: &std::path::Path, replace: bool) -> std::io::Result<()> {
+        #[cfg(target_os = "linux")]
+        { super::linux_held::rename_file(file, source, parent, destination, replace) }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = parent;
+            if replace { self.replace_open_file(file, source, destination) }
+            else { self.rename_open_file_exclusive(file, source, destination) }
+        }
     }
     #[cfg(target_os = "linux")]
     fn parallel_deletion(&self, path: &std::path::Path) -> bool {
@@ -226,33 +225,66 @@ impl Platform for LinuxPlatform {
             else { std::fs::remove_file(path) }
         }
     }
-    fn create_copy_staging(&self, _parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<(std::fs::File, std::fs::File)> {
-        std::fs::create_dir(path)?;
-        let result = (|| {
-            let directory = std::fs::File::open(path)?;
-            let pin = std::fs::OpenOptions::new().read(true).write(true).create_new(true).open(path.join(".pin"))?;
-            Ok((directory, pin))
-        })();
-        if result.is_err() { let _ = std::fs::remove_dir(path); }
-        result
+    fn create_copy_staging(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<(std::fs::File, std::fs::File)> {
+        #[cfg(target_os = "linux")]
+        {
+            let directory = super::linux_held::create_directory(parent, path)?;
+            match super::linux_held::create_file(&directory, std::path::Path::new(".pin")) {
+                Ok(pin) => Ok((directory, pin)),
+                Err(error) => {
+                    let _ = super::linux_held::remove_directory(parent, path, &directory);
+                    Err(error)
+                }
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = parent;
+            std::fs::create_dir(path)?;
+            let result = (|| {
+                let directory = std::fs::File::open(path)?;
+                let pin = std::fs::OpenOptions::new().read(true).write(true).create_new(true).open(path.join(".pin"))?;
+                Ok((directory, pin))
+            })();
+            if result.is_err() { let _ = std::fs::remove_dir(path); }
+            result
+        }
     }
-    fn create_operation_output(&self, _parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
-        std::fs::OpenOptions::new().read(true).write(true).create_new(true).open(path)
+    fn create_operation_output(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        #[cfg(target_os = "linux")]
+        { super::linux_held::create_file(parent, path) }
+        #[cfg(not(target_os = "linux"))]
+        { let _ = parent; std::fs::OpenOptions::new().read(true).write(true).create_new(true).open(path) }
     }
-    fn remove_copy_staging(&self, _directory: &std::fs::File, pin: std::fs::File, path: &std::path::Path) -> std::io::Result<()> {
-        drop(pin);
-        std::fs::remove_file(path.join(".pin"))?;
+    fn remove_copy_staging(&self, directory: &std::fs::File, pin: std::fs::File, path: &std::path::Path) -> std::io::Result<()> {
+        #[cfg(target_os = "linux")]
+        {
+            let pin_path = path.join(".pin");
+            // Unlinked while open, a FUSE name would linger as .fuse_hidden: close first.
+            let pin_file = super::linux_held::open_item(directory, &pin_path)?;
+            if self.file_identity(&pin_file)? != self.file_identity(&pin)? {
+                return Err(std::io::Error::other("Copy staging marker was replaced; it was kept"));
+            }
+            drop(pin);
+            super::linux_held::remove(&pin_file, &pin_path)?;
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = directory;
+            drop(pin);
+            std::fs::remove_file(path.join(".pin"))?;
+        }
         // FUSE learns of closes asynchronously and keeps names unlinked while open as
         // .fuse_hidden files until then.
         for _ in 0..40 {
-            match std::fs::remove_dir(path) {
+            match self.remove_staging_directory(directory, path) {
                 Err(error) if error.kind() == std::io::ErrorKind::DirectoryNotEmpty && only_fuse_hidden(path) => {
                     std::thread::sleep(std::time::Duration::from_millis(5));
                 }
                 result => return result,
             }
         }
-        std::fs::remove_dir(path)
+        self.remove_staging_directory(directory, path)
     }
     fn lock_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         let file = std::fs::OpenOptions::new().read(true).write(true).create(true).truncate(false).open(path)?;
@@ -333,25 +365,28 @@ impl Platform for LinuxPlatform {
     fn read_archive_output_provenance(&self, _parent: &std::fs::File, _file: &std::fs::File, _path: &std::path::Path) -> std::io::Result<Option<Vec<u8>>> { Ok(None) }
     fn replace_open_file(
         &self,
-        _file: &std::fs::File,
+        file: &std::fs::File,
         source: &std::path::Path,
         destination: &std::path::Path,
     ) -> std::io::Result<()> {
-        std::fs::rename(source, destination)
+        #[cfg(target_os = "linux")]
+        { super::linux_held::rename_file(file, source, &super::linux_held::hold_parent(destination)?, destination, true) }
+        #[cfg(not(target_os = "linux"))]
+        { let _ = file; std::fs::rename(source, destination) }
     }
     fn copy_file_with_progress(
         &self,
         source: &std::path::Path,
         destination: &std::path::Path,
         held_source: Option<&std::fs::File>,
-        _destination_parent: &std::fs::File,
+        destination_parent: &std::fs::File,
         created: &mut dyn FnMut(&std::fs::File) -> std::io::Result<()>,
         progress: &mut dyn FnMut(u64) -> std::io::Result<()>,
     ) -> std::io::Result<()> {
         #[cfg(target_os = "linux")]
-        { super::linux_file_copy::copy(source, destination, held_source, created, progress) }
+        { super::linux_file_copy::copy(source, destination, held_source, destination_parent, created, progress) }
         #[cfg(not(target_os = "linux"))]
-        { let _ = (source, destination, held_source, created, progress); Err(std::io::ErrorKind::Unsupported.into()) }
+        { let _ = (source, destination, held_source, destination_parent, created, progress); Err(std::io::ErrorKind::Unsupported.into()) }
     }
     fn restore_access_date(&self, file: &std::fs::File, accessed: std::time::SystemTime) -> std::io::Result<()> {
         file.set_times(std::fs::FileTimes::new().set_accessed(accessed))
@@ -396,40 +431,38 @@ impl Platform for LinuxPlatform {
     }
     fn rename_open_file_exclusive(
         &self,
-        _file: &std::fs::File,
+        file: &std::fs::File,
         source: &std::path::Path,
         destination: &std::path::Path,
     ) -> std::io::Result<()> {
-        // The no-replace rename also publishes on FAT and exFAT, which have no hard links.
-        // FUSE file systems such as ntfs-3g refuse the flag and keep the hard link.
         #[cfg(target_os = "linux")]
-        match rustix::fs::renameat_with(rustix::fs::CWD, source, rustix::fs::CWD, destination, rustix::fs::RenameFlags::NOREPLACE) {
-            Err(rustix::io::Errno::INVAL) => {}
-            result => return result.map_err(std::io::Error::from),
+        { super::linux_held::rename_file(file, source, &super::linux_held::hold_parent(destination)?, destination, false) }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = file;
+            std::fs::hard_link(source, destination)?;
+            if let Err(error) = std::fs::remove_file(source) {
+                let _ = std::fs::remove_file(destination);
+                return Err(error);
+            }
+            Ok(())
         }
-        std::fs::hard_link(source, destination)?;
-        if let Err(error) = std::fs::remove_file(source) {
-            let _ = std::fs::remove_file(destination);
-            return Err(error);
-        }
-        Ok(())
     }
     fn remove_open_file(
         &self,
         file: &std::fs::File,
         path: &std::path::Path,
     ) -> std::io::Result<()> {
-        use std::os::unix::fs::MetadataExt;
-        let held = file.metadata()?;
-        if held.is_dir() {
-            return self.remove_open_empty_directory(file, path);
+        // The held object only, file or empty folder, never a replacement at its path.
+        #[cfg(target_os = "linux")]
+        { super::linux_held::remove(file, path) }
+        #[cfg(not(target_os = "linux"))]
+        {
+            if file.metadata()?.is_dir() {
+                return self.remove_open_empty_directory(file, path);
+            }
+            std::fs::remove_file(path)
         }
-        // Unlink the held object only, never a replacement published at its path.
-        let current = std::fs::symlink_metadata(path)?;
-        if (current.dev(), current.ino()) != (held.dev(), held.ino()) {
-            return Err(std::io::Error::other("The file was replaced before its removal"));
-        }
-        std::fs::remove_file(path)
     }
     fn remove_open_empty_directory(
         &self,
@@ -443,13 +476,17 @@ impl Platform for LinuxPlatform {
                 "Ordinary directory required",
             ));
         }
-        let parents = crate::systems::path_parents::HeldParents::new(path)?;
-        // Existing fallback remains path based; no Windows-style atomic claim.
-        self.remove_empty_operation_directory(
-            parents.directory(),
-            &parents.resolved_path(path)?,
-            self.file_identity(directory)?,
-        )
+        #[cfg(target_os = "linux")]
+        { super::linux_held::remove(directory, path) }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let parents = crate::systems::path_parents::HeldParents::new(path)?;
+            self.remove_empty_operation_directory(
+                parents.directory(),
+                &parents.resolved_path(path)?,
+                self.file_identity(directory)?,
+            )
+        }
     }
     fn list_trash_items(&self) -> Result<Vec<trash::TrashItem>, String> {
         trash::os_limited::list().map_err(|error| error.to_string())
@@ -664,6 +701,16 @@ impl Platform for LinuxPlatform {
     fn popup_point_to_owner(&self, _window: raw_window_handle::RawWindowHandle, _owner: raw_window_handle::RawWindowHandle, point: (f32, f32)) -> Result<(f32, f32), String> { Ok(point) }
     fn popup_family_active(&self, _owner: raw_window_handle::RawWindowHandle) -> bool { false }
     fn popup_work_area_size(&self, _window: raw_window_handle::RawWindowHandle) -> Result<(f32, f32), String> { Err("Native popup work area unavailable".into()) }
+}
+
+impl LinuxPlatform {
+    /// The staging folder itself, by its held identity.
+    fn remove_staging_directory(&self, directory: &std::fs::File, path: &std::path::Path) -> std::io::Result<()> {
+        #[cfg(target_os = "linux")]
+        { super::linux_held::remove(directory, path) }
+        #[cfg(not(target_os = "linux"))]
+        { let _ = directory; std::fs::remove_dir(path) }
+    }
 }
 
 fn only_fuse_hidden(directory: &std::path::Path) -> bool {

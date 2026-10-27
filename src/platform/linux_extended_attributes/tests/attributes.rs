@@ -39,7 +39,8 @@ fn a_copied_file_keeps_user_attributes_and_its_acl_but_not_other_namespaces() {
     assert_eq!(kept_names, ["system.posix_acl_access", "user.xdg.origin.url"]);
 
     let destination = root.path().join("copy");
-    super::super::linux_file_copy::copy(&source, &destination, None, &mut |_| Ok(()), &mut |_| Ok(())).unwrap();
+    let parent = File::open(root.path()).unwrap();
+    super::super::linux_file_copy::copy(&source, &destination, None, &parent, &mut |_| Ok(()), &mut |_| Ok(())).unwrap();
     let copied = read(&File::open(&destination).unwrap()).unwrap();
     assert_eq!(copied.0, kept.0);
     assert_eq!(std::fs::metadata(&destination).unwrap().mode() & 0o7777, 0o640);

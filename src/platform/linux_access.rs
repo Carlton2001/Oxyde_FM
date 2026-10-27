@@ -24,7 +24,3 @@ pub(super) fn hold_directory(path: &Path, follow: bool) -> io::Result<File> {
     }
 }
 
-/// The file itself, never its link, without reading it.
-pub(super) fn open_unread(path: &Path) -> io::Result<File> {
-    OpenOptions::new().read(true).custom_flags(O_PATH | O_NOFOLLOW).open(path)
-}
