@@ -19,15 +19,15 @@ pub async fn open_item(path: String) -> Result<(), CommandError> {
 }
 
 pub fn get_quick_access_items() -> Result<Vec<QuickAccessItem>, CommandError> {
-    Ok(crate::platform::platform().get_quick_access_items())
+    Ok(crate::platform::platform().quick_access().items())
 }
 
 pub fn add_to_quick_access(path: String) -> Result<(), CommandError> {
-    crate::platform::platform().pin_quick_access(&path)
+    crate::platform::platform().quick_access().pin(&path)
 }
 
 pub fn remove_from_quick_access(path: String) -> Result<(), CommandError> {
-    crate::platform::platform().unpin_quick_access(&path)
+    crate::platform::platform().quick_access().unpin(&path)
 }
 
 pub fn clear_app_cache() -> Result<(), CommandError> {

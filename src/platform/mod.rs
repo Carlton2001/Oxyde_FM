@@ -1,4 +1,3 @@
-use crate::models::QuickAccessItem;
 mod file_names;
 mod file_drag;
 pub use file_drag::{FileDragFeedback, FileDropEffect, FileDropPhase, NativeFileDrop};
@@ -8,8 +7,10 @@ pub use memory::ProcessMemorySnapshot;
 pub use viewer_media::{decode_media_report, encode_media_report, ViewerMediaCommand, ViewerMediaControl, MEDIA_ENDED, MEDIA_FAILED, MEDIA_LOADING, MEDIA_PAUSED, MEDIA_PLAYING, MEDIA_REPORT_BYTES};
 pub use file_names::FileNameRules;
 mod file_clipboard;
+mod quick_access;
 mod volumes;
 pub use file_clipboard::FileClipboard;
+pub use quick_access::QuickAccess;
 pub use volumes::{DriveActions, UnmountedVolume, VolumeError, Volumes};
 
 #[derive(Debug)]
@@ -570,21 +571,7 @@ pub trait Platform: Send + Sync {
     /// Ouvre un fichier ou dossier avec l'application par défaut de l'OS.
     fn open_item(&self, path: &str) -> Result<(), String>;
 
-    /// Retourne les éléments de l'Accès Rapide (Windows) ou des Favoris GTK (Linux).
-    fn get_quick_access_items(&self) -> Vec<QuickAccessItem>;
-
-    fn pin_quick_access(&self, path: &str) -> Result<(), crate::models::CommandError> {
-        let _ = path;
-        Err(crate::models::CommandError::SystemError(
-            "Quick access is only supported on Windows".into(),
-        ))
-    }
-    fn unpin_quick_access(&self, path: &str) -> Result<(), crate::models::CommandError> {
-        let _ = path;
-        Err(crate::models::CommandError::SystemError(
-            "Quick access is only supported on Windows".into(),
-        ))
-    }
+    fn quick_access(&self) -> &dyn QuickAccess;
     /// Best-effort native name of a virtual Shell item; ordinary properties keep their fallback.
     fn shell_item_friendly_name(&self, path: &str) -> Result<Option<String>, String> {
         let _ = path;
@@ -594,9 +581,6 @@ pub trait Platform: Send + Sync {
     fn open_peek(&self, path: &str) -> Result<(), String>;
     fn shortcut_info(&self, path: &std::path::Path) -> Option<crate::models::ShortcutInfo>;
     fn set_shortcut_info(&self, path: &str, info: &crate::models::ShortcutInfo) -> Result<(), String>;
-    /// The returned guard owns the watcher. All these calls run in the background.
-    fn watch_quick_access_changes(&self, revision: std::sync::Arc<std::sync::atomic::AtomicU64>)
-        -> Result<Option<Box<dyn Send>>, String>;
 
     /// Affiche la boîte de dialogue propriétés native pour un fichier/dossier.
     fn show_properties_dialog(&self, path: &str);
@@ -678,6 +662,10 @@ mod windows_clipboard_write;
 mod windows_file_clipboard;
 #[cfg(not(target_os = "windows"))]
 mod linux_file_clipboard;
+#[cfg(target_os = "windows")]
+mod windows_quick_access;
+#[cfg(not(target_os = "windows"))]
+mod linux_quick_access;
 mod hardware;
 #[cfg(target_os = "windows")]
 pub mod icons;

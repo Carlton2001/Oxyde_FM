@@ -1,5 +1,4 @@
 use super::{Platform, ThreadPriority};
-use crate::models::QuickAccessItem;
 
 pub struct LinuxPlatform;
 
@@ -440,7 +439,9 @@ impl Platform for LinuxPlatform {
     fn open_peek(&self, _path: &str) -> Result<(), String> { Err("Peek is only available on Windows".into()) }
     fn shortcut_info(&self, _path: &std::path::Path) -> Option<crate::models::ShortcutInfo> { None }
     fn set_shortcut_info(&self, _path: &str, _info: &crate::models::ShortcutInfo) -> Result<(), String> { Err("Shortcut editing is only available on Windows".into()) }
-    fn watch_quick_access_changes(&self, _revision: std::sync::Arc<std::sync::atomic::AtomicU64>) -> Result<Option<Box<dyn Send>>, String> { Ok(None) }
+    fn quick_access(&self) -> &dyn super::QuickAccess {
+        &super::linux_quick_access::LinuxQuickAccess
+    }
 
     fn recycle_bin_usage(&self) -> Result<(u64, u64), String> {
         super::linux_trash::usage()
@@ -538,53 +539,6 @@ impl Platform for LinuxPlatform {
             .spawn()
             .map(|_| ())
             .map_err(|e| e.to_string())
-    }
-
-    fn get_quick_access_items(&self) -> Vec<QuickAccessItem> {
-        // Format GTK bookmarks : "file:///chemin/vers/dossier [Nom optionnel]"
-        let home = dirs::home_dir().unwrap_or_default();
-        let bookmarks_path = home.join(".config/gtk-3.0/bookmarks");
-
-        let content = match std::fs::read_to_string(&bookmarks_path) {
-            Ok(c) => c,
-            Err(_) => {
-                return vec![QuickAccessItem {
-                    name: "Dossier personnel".to_string(),
-                    path: home.to_string_lossy().to_string(),
-                }]
-            }
-        };
-
-        content
-            .lines()
-            .filter_map(|line| {
-                let line = line.trim();
-                if line.is_empty() {
-                    return None;
-                }
-
-                let mut parts = line.splitn(2, ' ');
-                let uri = parts.next()?;
-                let name_hint = parts.next();
-
-                let path = uri.strip_prefix("file://")?;
-                let decoded = percent_encoding::percent_decode_str(path)
-                    .decode_utf8_lossy()
-                    .to_string();
-
-                let name = name_hint.map(|n| n.to_string()).unwrap_or_else(|| {
-                    std::path::Path::new(&decoded)
-                        .file_name()
-                        .map(|n| n.to_string_lossy().to_string())
-                        .unwrap_or_else(|| decoded.clone())
-                });
-
-                Some(QuickAccessItem {
-                    name,
-                    path: decoded,
-                })
-            })
-            .collect()
     }
 
     fn show_properties_dialog(&self, path: &str) {

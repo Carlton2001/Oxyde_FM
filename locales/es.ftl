@@ -278,6 +278,7 @@ sidebar-locations = UBICACIONES
 sidebar-network = Red
 
 sidebar-trash = Papelera
+sidebar-home = Carpeta personal
 
 size-tiny = Minúsculo (< 10 KB)
 

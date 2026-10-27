@@ -278,6 +278,7 @@ sidebar-locations = ORTE
 sidebar-network = Netzwerk
 
 sidebar-trash = Papierkorb
+sidebar-home = Persönlicher Ordner
 
 size-tiny = Winzig (< 10 KB)
 

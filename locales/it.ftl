@@ -278,6 +278,7 @@ sidebar-locations = POSIZIONI
 sidebar-network = Rete
 
 sidebar-trash = Cestino
+sidebar-home = Cartella home
 
 size-tiny = Minuscolo (< 10 KB)
 

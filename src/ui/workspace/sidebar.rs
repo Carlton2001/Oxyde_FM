@@ -6,9 +6,14 @@ impl WorkspaceState {
     pub fn refresh_sidebar(&mut self) {
         let mut new_items = Vec::new();
 
-        if !self.pinned_items.is_empty() {
+        // As in Nautilus, the home folder heads the bookmarks without being one of them.
+        #[cfg(not(target_os = "windows"))]
+        let home = dirs::home_dir().map(|home| QuickAccessItem { name: String::new(), path: home.to_string_lossy().into_owned() });
+        #[cfg(target_os = "windows")]
+        let home: Option<QuickAccessItem> = None;
+        if home.is_some() || !self.pinned_items.is_empty() {
             new_items.push(SidebarItem::Header(Message::SidebarQuickAccess));
-            for item in &self.pinned_items {
+            for item in home.iter().chain(&self.pinned_items) {
                 new_items.push(SidebarItem::Pinned { item: item.clone() });
             }
         }

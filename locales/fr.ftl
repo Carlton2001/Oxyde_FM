@@ -161,6 +161,7 @@ sidebar-drives = LECTEURS
 sidebar-locations = EMPLACEMENTS
 sidebar-network = Réseau
 sidebar-trash = Corbeille
+sidebar-home = Dossier personnel
 size-tiny = Minuscule (< 10 Ko)
 size-small = Petit (10 Ko - 1 Mo)
 size-medium = Moyen (1 Mo - 100 Mo)

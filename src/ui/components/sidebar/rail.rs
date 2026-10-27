@@ -85,13 +85,15 @@ pub(super) fn render_sidebar_rail(
             ),
             SidebarItem::OneDrive { item } => (item.path.clone(), item.name.clone(), Some("icons/cloudy.svg"), None),
             SidebarItem::Pinned { item }
-                if item.path == "__network_vincinity__" || item.path == "trash://" =>
+                if item.path == "__network_vincinity__" || item.path == "trash://" || item.name.is_empty() =>
             {
                 (
                     item.path.clone(),
                     pinned_display_name(item, cx.i18n()),
                     Some(if item.path == "trash://" {
                         "icons/trash-sidebar.svg"
+                    } else if item.name.is_empty() {
+                        "icons/house.svg"
                     } else {
                         "icons/globe.svg"
                     }),

@@ -1,6 +1,5 @@
 use super::windows_com::ComApartment;
 use super::{Platform, ThreadPriority};
-use crate::models::QuickAccessItem;
 
 pub struct WindowsPlatform;
 
@@ -327,10 +326,8 @@ impl Platform for WindowsPlatform {
     fn open_peek(&self, path: &str) -> Result<(), String> { super::windows_peek::open_peek(path) }
     fn shortcut_info(&self, path: &std::path::Path) -> Option<crate::models::ShortcutInfo> { super::windows_shortcuts::get_shortcut_info(path) }
     fn set_shortcut_info(&self, path: &str, info: &crate::models::ShortcutInfo) -> Result<(), String> { super::windows_shortcuts::set_shortcut_info(path, info) }
-    fn watch_quick_access_changes(&self, revision: std::sync::Arc<std::sync::atomic::AtomicU64>) -> Result<Option<Box<dyn Send>>, String> {
-        let root = std::env::var_os("APPDATA").ok_or("APPDATA is unavailable")?;
-        let recent = std::path::PathBuf::from(root).join("Microsoft/Windows/Recent");
-        crate::systems::quick_access_watcher::watch(&recent, revision).map(|watcher| Some(Box::new(watcher) as Box<dyn Send>))
+    fn quick_access(&self) -> &dyn super::QuickAccess {
+        &super::windows_quick_access::WindowsQuickAccess
     }
 
     fn recycle_bin_usage(&self) -> Result<(u64, u64), String> {
@@ -710,23 +707,6 @@ impl Platform for WindowsPlatform {
         Ok(())
     }
 
-    fn get_quick_access_items(&self) -> Vec<QuickAccessItem> {
-        super::windows_shell::get_quick_access_items().unwrap_or_default()
-    }
-
-    fn pin_quick_access(&self, path: &str) -> Result<(), crate::models::CommandError> {
-        super::windows_shell::execute_shell_verb_by_canonical_name(
-            path,
-            &["pintohome", "pintofavorites"],
-        )
-    }
-
-    fn unpin_quick_access(&self, path: &str) -> Result<(), crate::models::CommandError> {
-        super::windows_shell::execute_shell_verb_by_canonical_name(
-            path,
-            &["unpinfromhome", "unpinfromquickaccess"],
-        )
-    }
 
     fn shell_item_friendly_name(&self, path: &str) -> Result<Option<String>, String> {
         super::windows_shell_properties::friendly_name(path)

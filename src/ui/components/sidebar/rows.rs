@@ -65,6 +65,7 @@ pub(super) fn render_sidebar_rows(
                 let sel_bg:   Hsla = theme.selected;
                 let hov_bg:   Hsla = if is_sel { theme.selection_hover } else { theme.hover };
                 let is_dimmed = item.name.starts_with('.');
+                let is_home   = item.name.is_empty();
 
                 div()
                     .id(SharedString::from(format!("sb-pin-{}", path)))
@@ -140,9 +141,10 @@ pub(super) fn render_sidebar_rows(
                                 let icon_path = if is_onedrive { "icons/cloudy.svg" } else { match path.as_str() {
                                     "__network_vincinity__" => "icons/globe.svg",
                                     "trash://" => "icons/trash-sidebar.svg",
+                                    _ if is_home => "icons/house.svg",
                                     _ => "icons/pin.svg",
                                 }};
-                                svg().path(icon_path).size_4().text_color(if path == "__network_vincinity__" || path == "trash://" { theme.text } else { theme.accent })
+                                svg().path(icon_path).size_4().text_color(if is_home || path == "__network_vincinity__" || path == "trash://" { theme.text } else { theme.accent })
                             })
                     )
                     .child(

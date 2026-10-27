@@ -155,6 +155,7 @@ sidebar-drives = DRIVES
 sidebar-locations = LOCATIONS
 sidebar-network = Network
 sidebar-trash = Trash
+sidebar-home = Home
 size-tiny = Tiny (< 10 KB)
 size-small = Small (10 KB - 1 MB)
 size-medium = Medium (1 MB - 100 MB)

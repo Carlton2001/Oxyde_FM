@@ -119,7 +119,7 @@ impl OxydeApp {
             let revision = Arc::new(AtomicU64::new(0));
             let callback_revision = revision.clone();
             let registration = tokio::task::spawn_blocking(move || {
-                oxyde_lib::platform::platform().watch_quick_access_changes(callback_revision)
+                oxyde_lib::platform::platform().quick_access().watch(callback_revision)
             })
             .await;
             let _guard = match registration {

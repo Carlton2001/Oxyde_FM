@@ -49,6 +49,8 @@ fn pinned_display_name(item: &oxyde_lib::models::QuickAccessItem, i18n: &I18n) -
     match item.path.as_str() {
         "__network_vincinity__" => i18n.text(Message::SidebarNetwork).to_string(),
         "trash://" => i18n.text(Message::SidebarTrash).to_string(),
+        // The home folder among the places.
+        _ if item.name.is_empty() => i18n.text(Message::SidebarHome).to_string(),
         _ => item.name.clone(),
     }
 }
