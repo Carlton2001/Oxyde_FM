@@ -33,10 +33,10 @@ fn open(parent: &File, name: &OsStr) -> io::Result<File> {
     super::linux_source_selection::open(parent, Path::new(name), None)
 }
 
-/// Renames within one held parent without replacing anything. FUSE file systems
+/// Renames between held parents without replacing anything. FUSE file systems
 /// such as ntfs-3g refuse the flag; the fallback then checks the name first.
-fn rename_exclusive(parent: &File, from: &OsStr, to: &OsStr) -> io::Result<()> {
-    match rustix::fs::renameat_with(parent, from, parent, to, RenameFlags::NOREPLACE) {
+fn rename_exclusive(from_parent: &File, from: &OsStr, parent: &File, to: &OsStr) -> io::Result<()> {
+    match rustix::fs::renameat_with(from_parent, from, parent, to, RenameFlags::NOREPLACE) {
         Err(Errno::INVAL) => {}
         result => return result.map_err(io::Error::from),
     }
@@ -45,7 +45,26 @@ fn rename_exclusive(parent: &File, from: &OsStr, to: &OsStr) -> io::Result<()> {
         Ok(_) => return Err(io::ErrorKind::AlreadyExists.into()),
         Err(error) => return Err(error.into()),
     }
-    rustix::fs::renameat(parent, from, parent, to).map_err(io::Error::from)
+    rustix::fs::renameat(from_parent, from, parent, to).map_err(io::Error::from)
+}
+
+/// Moves the link itself between held parents of one volume and returns it.
+/// `replace` swaps it in over an existing non-directory; another volume fails
+/// with `CrossesDevices`.
+pub(super) fn rename(
+    source_parent: &File,
+    source: &Path,
+    parent: &File,
+    destination: &Path,
+    replace: bool,
+) -> io::Result<File> {
+    let (from, to) = (leaf(source)?, leaf(destination)?);
+    if replace {
+        rustix::fs::renameat(source_parent, from, parent, to)?;
+    } else {
+        rename_exclusive(source_parent, from, parent, to)?;
+    }
+    open(parent, to)
 }
 
 /// Creates the link exclusively, or swaps it in over an existing non-directory
@@ -74,7 +93,7 @@ pub(super) fn remove(
 ) -> io::Result<()> {
     let name = leaf(path)?;
     let staged = staging_name();
-    rename_exclusive(parent, name, OsStr::new(&staged))?;
+    rename_exclusive(parent, name, parent, OsStr::new(&staged))?;
     let checked = open(parent, OsStr::new(&staged)).and_then(|link| {
         if !link.metadata()?.file_type().is_symlink() {
             return Err(io::Error::other(format!("Not a symbolic link: {}", path.display())));
@@ -82,7 +101,7 @@ pub(super) fn remove(
         verify(&link)
     });
     if let Err(error) = checked {
-        if let Err(restore) = rename_exclusive(parent, OsStr::new(&staged), name) {
+        if let Err(restore) = rename_exclusive(parent, OsStr::new(&staged), parent, name) {
             return Err(io::Error::new(
                 error.kind(),
                 format!("{error}; link retained as {staged}: {restore}"),

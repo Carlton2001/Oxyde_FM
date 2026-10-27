@@ -72,6 +72,41 @@ enum Effect {
         permissions: fs::Permissions,
         hidden: bool,
     },
+    /// The link moved again from `source` to `path`.
+    MovedLink(crate::models::transaction::HistoryLink),
+}
+
+/// Accept only the journal's link, still pointing to the same target.
+fn same_link(link: &crate::models::transaction::HistoryLink, current: &fs::File) -> io::Result<()> {
+    let identity = link
+        .identity
+        .snapshot()
+        .ok_or_else(|| super::history_move::move_identity_failure(&link.source, false))?;
+    let metadata = current.metadata()?;
+    match platform().source_link_target(current, &metadata) {
+        Some(Ok(target)) if target == link.target && identity.matches(current)? => Ok(()),
+        Some(Err(error)) => Err(error),
+        _ => Err(super::history_move::move_identity_failure(&link.source, true)),
+    }
+}
+fn move_journal_link(
+    directories: &mut Directories,
+    link: &crate::models::transaction::HistoryLink,
+    from: &Path,
+    to: &Path,
+) -> io::Result<()> {
+    let source = directories.file_parents(from)?;
+    let destination = directories.file_parents(to)?;
+    let moved = super::link_moves::move_link(
+        source.directory(),
+        from,
+        destination.directory(),
+        to,
+        &link.target,
+        false,
+        &mut |current| same_link(link, current),
+    )?;
+    link.identity.refresh_from_file(&moved)
 }
 struct Journal {
     directory_identities: HashMap<PathBuf, crate::models::transaction::HistoryDirectoryIdentity>,
@@ -194,6 +229,10 @@ impl Journal {
                         .map(|_| ())
                     })();
                     (to, result)
+                }
+                Effect::MovedLink(link) => {
+                    let result = move_journal_link(&mut self.directories, &link, &link.path, &link.source);
+                    (link.path, result)
                 }
                 Effect::Removed {
                     path,
@@ -324,7 +363,13 @@ fn redo_with(details: &TransactionDetails, checkpoint: &mut impl Checkpoint) -> 
             .ok_or_else(|| super::history_move::move_identity_failure(path, false))?;
         directory_identities.insert(path.clone(), identity.clone());
     }
+    let links = details.moved_links.clone().unwrap_or_default();
     let mut paths = created.clone();
+    for link in &links {
+        for path in [&link.source, &link.path] {
+            paths.push(path.parent().ok_or_else(|| io::Error::other("Move Redo path has no parent"))?.to_path_buf());
+        }
+    }
     for (source, destination) in moved.iter().chain(moved_dirs) {
         for path in [source, destination] {
             let path = Path::new(path);
@@ -388,6 +433,13 @@ fn redo_with(details: &TransactionDetails, checkpoint: &mut impl Checkpoint) -> 
                 Err(error) => return Err(error),
             }
         }
+        for link in &links {
+            let parents = journal.directories.file_parents(&link.source)?;
+            same_link(link, &platform().track_source_item(parents.directory(), &link.source)?)?;
+            if fs::symlink_metadata(&link.path).is_ok() {
+                return Err(failure(Issue::Conflict, link.path.to_string_lossy()));
+            }
+        }
         for path in &created {
             match journal.directories.directory(path) {
                 Ok(_) => return Err(failure(Issue::Conflict, path.to_string_lossy())),
@@ -409,6 +461,13 @@ fn redo_with(details: &TransactionDetails, checkpoint: &mut impl Checkpoint) -> 
                 identities.get(destination).copied(),
                 checkpoint,
             )?;
+        }
+        for link in &links {
+            journal.ensure(link.path.parent().unwrap(), checkpoint)?;
+            checkpoint.before(Phase::Move, &link.source)?;
+            move_journal_link(&mut journal.directories, link, &link.source, &link.path)
+                .map_err(|error| at(error, &link.path))?;
+            journal.effects.push(Effect::MovedLink(link.clone()));
         }
         for (_, destination) in moved_dirs {
             journal.ensure(Path::new(destination), checkpoint)?;

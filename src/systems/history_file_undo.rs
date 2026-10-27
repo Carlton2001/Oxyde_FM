@@ -1,7 +1,7 @@
 //! Reversible Copy/Move Undo effects, retained until every filesystem phase succeeds.
 use super::history_move::hash_file;
 use super::path_parents::HeldParents;
-use crate::models::transaction::{HistoryCreatedLink, HistoryDirectoryIdentity, HistoryFileIdentity};
+use crate::models::transaction::{HistoryLink, HistoryDirectoryIdentity, HistoryFileIdentity};
 use crate::models::{CommandError, TransactionDetails};
 use crate::platform::platform;
 use std::collections::{HashMap, HashSet};
@@ -69,7 +69,8 @@ struct Plan {
     identities: HashMap<PathBuf, HistoryFileIdentity>,
     files: Vec<FileMove>,
     discard: Vec<(PathBuf, String)>,
-    links: Vec<HistoryCreatedLink>,
+    links: Vec<HistoryLink>,
+    moved_links: Vec<HistoryLink>,
     source_dirs: Vec<PathBuf>,
     remove_dirs: Vec<PathBuf>,
 }
@@ -94,7 +95,7 @@ fn verified_file(path: &Path, expected: Option<&String>) -> io::Result<String> {
     Ok(hash)
 }
 /// Accept only the created link itself, still pointing where it was copied to point.
-fn verified_link(link: &HistoryCreatedLink, current: &fs::File) -> io::Result<()> {
+fn verified_link(link: &HistoryLink, current: &fs::File) -> io::Result<()> {
     let identity = link.identity.snapshot().ok_or_else(|| {
         io::Error::other(crate::models::error::HistoryIdentityFailure {
             issue: crate::models::error::HistoryIdentityIssue::Unverified,
@@ -187,6 +188,7 @@ impl Plan {
             source_dirs: vec![],
             discard: verified_outputs(created, &hashes, &HashSet::new())?,
             links,
+            moved_links: vec![],
             remove_dirs: sorted_directories(created_dirs),
         })
     }
@@ -270,6 +272,24 @@ impl Plan {
                 hash,
             });
         }
+        let moved_links = details.moved_links.clone().unwrap_or_default();
+        for link in moved_links.iter().rev() {
+            match fs::symlink_metadata(&link.source) {
+                Ok(_) => {
+                    return Err(io::Error::new(
+                        ErrorKind::AlreadyExists,
+                        format!(
+                            "Cannot undo move; original path exists: {}",
+                            link.source.display()
+                        ),
+                    ));
+                }
+                Err(error) if error.kind() == ErrorKind::NotFound => {}
+                Err(error) => return Err(error),
+            }
+            let parents = HeldParents::new(&link.path)?;
+            verified_link(link, &platform().track_source_item(parents.directory(), &link.path)?)?;
+        }
         let discard = verified_outputs(created, &hashes, &moved_targets)?;
         let identities: HashMap<_, _> = details
             .copied_file_identities
@@ -350,6 +370,7 @@ impl Plan {
             files,
             discard,
             links: vec![],
+            moved_links,
             source_dirs,
             remove_dirs,
         })
@@ -391,7 +412,9 @@ fn sorted_directories(paths: &[String]) -> Vec<PathBuf> {
 
 enum Effect {
     Move(FileMove),
-    RemovedLink(HistoryCreatedLink),
+    RemovedLink(HistoryLink),
+    /// The link moved back from `path` to `source`.
+    RestoredLink(HistoryLink),
     CreatedDir(PathBuf),
     RemovedDir {
         path: PathBuf,
@@ -483,7 +506,26 @@ impl Journal {
         self.discarded.push((saved, hash, identity));
         Ok(())
     }
-    fn remove_link(&mut self, link: HistoryCreatedLink) -> io::Result<()> {
+    fn restore_link(&mut self, ops: &impl UndoIo, link: HistoryLink) -> io::Result<()> {
+        if let Some(parent) = link.source.parent() {
+            self.ensure_dir(ops, parent)?;
+        }
+        let from = self.directories.file_parents(&link.path)?;
+        let to = self.directories.file_parents(&link.source)?;
+        let restored = super::link_moves::move_link(
+            from.directory(),
+            &link.path,
+            to.directory(),
+            &link.source,
+            &link.target,
+            false,
+            &mut |current| verified_link(&link, current),
+        )?;
+        link.identity.refresh_from_file(&restored)?;
+        self.effects.push(Effect::RestoredLink(link));
+        Ok(())
+    }
+    fn remove_link(&mut self, link: HistoryLink) -> io::Result<()> {
         let parents = self.directories.file_parents(&link.path)?;
         platform().remove_link(parents.directory(), &link.path, &mut |current| {
             verified_link(&link, current)
@@ -566,6 +608,23 @@ impl Journal {
                         link.identity.refresh_from_file(&created)
                     });
                     (link.path, result)
+                }
+                Effect::RestoredLink(link) => {
+                    let result = (|| {
+                        let from = self.directories.file_parents(&link.source)?;
+                        let to = self.directories.file_parents(&link.path)?;
+                        let moved = super::link_moves::move_link(
+                            from.directory(),
+                            &link.source,
+                            to.directory(),
+                            &link.path,
+                            &link.target,
+                            false,
+                            &mut |current| verified_link(&link, current),
+                        )?;
+                        link.identity.refresh_from_file(&moved)
+                    })();
+                    (link.source, result)
                 }
                 Effect::CreatedDir(path) => {
                     let result = self.directories.remove(&path).and_then(|removed| {
@@ -702,7 +761,13 @@ fn apply_plan(ops: &impl UndoIo, plan: Plan) -> io::Result<()> {
     paths.extend(
         plan.links
             .iter()
+            .chain(&plan.moved_links)
             .filter_map(|link| link.path.parent().map(Path::to_path_buf)),
+    );
+    paths.extend(
+        plan.moved_links
+            .iter()
+            .filter_map(|link| link.source.parent().map(Path::to_path_buf)),
     );
     let mut directories =
         super::history_directories::Directories::prepare(&paths, &plan.remove_dirs)?;
@@ -733,6 +798,9 @@ fn apply_plan(ops: &impl UndoIo, plan: Plan) -> io::Result<()> {
                 journal.ensure_dir(ops, parent)?;
             }
             journal.transfer(ops, effect)?;
+        }
+        for link in plan.moved_links.into_iter().rev() {
+            journal.restore_link(ops, link)?;
         }
         for directory in plan.source_dirs {
             journal.ensure_dir(ops, &directory)?;

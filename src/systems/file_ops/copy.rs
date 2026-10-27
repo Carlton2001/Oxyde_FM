@@ -329,10 +329,7 @@ impl FileOperationManager {
                     continue;
                 }
                 if let Some(link) = entry.link() {
-                    if is_move || deferred_moves.is_some() {
-                        return Err(format!("Moving symbolic links is not supported yet: {:?}", entry.path()));
-                    }
-                    if archive_destination {
+                    if deferred_moves.is_some() || archive_destination {
                         return Err(format!("Symbolic links cannot be copied into archives yet: {:?}", entry.path()));
                     }
                     // A broken link at the destination still occupies its name.
@@ -440,7 +437,7 @@ impl FileOperationManager {
         }
         for (link, destination, replace_existing) in &links_to_create {
             Self::archive_checkpoint(op)?;
-            Self::copy_link(op, &destination_tree, link, destination, *replace_existing)?;
+            Self::transfer_link(op, &destination_tree, link, destination, *replace_existing, is_move)?;
             processed_files_atomic.fetch_add(1, Ordering::Relaxed);
         }
         drop(links_to_create);

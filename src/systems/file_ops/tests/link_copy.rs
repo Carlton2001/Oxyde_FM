@@ -139,13 +139,85 @@ fn a_link_cannot_replace_a_folder() {
     assert_eq!(std::fs::read_dir(&target).unwrap().count(), 1);
 }
 
+fn move_operation(sources: Vec<PathBuf>, target: &Path) -> Arc<Mutex<FileOperation>> {
+    Arc::new(Mutex::new(FileOperation::new(
+        FileOpType::Move,
+        sources,
+        Some(target.to_path_buf()),
+        None,
+    )))
+}
+
+fn assert_linked_folder(folder: &Path, outside: &Path) {
+    assert_eq!(std::fs::read(folder.join("data.txt")).unwrap(), b"data");
+    assert_link(&folder.join("to-file"), "data.txt");
+    assert_link(&folder.join("to-folder"), outside.to_str().unwrap());
+    assert_link(&folder.join("broken"), "missing");
+    assert_eq!(std::fs::read(outside.join("witness")).unwrap(), b"outside");
+    assert_eq!(std::fs::read_dir(outside).unwrap().count(), 1);
+}
+
+/// Move a folder of links, then undo, redo and undo again.
+fn move_round_trip(source_root: &Path, target_root: &Path) {
+    let (source, _) = linked_folder(source_root);
+    let target = target_root.join("moved-into");
+    std::fs::create_dir(&target).unwrap();
+    let outside = source_root.join("outside");
+    let moved = target.join("source");
+    let history = Arc::new(HistoryManager::new());
+    let op = move_operation(vec![source.clone()], &target);
+    runtime().block_on(async {
+        FileOperationManager::execute_operation(history.clone(), op.clone()).await;
+        assert_eq!(op.lock().unwrap().status, OpStatus::Completed);
+        assert!(source.symlink_metadata().is_err());
+        assert_linked_folder(&moved, &outside);
+
+        crate::commands::ops::undo_last_action(&history).await.unwrap();
+        assert!(moved.symlink_metadata().is_err());
+        assert_linked_folder(&source, &outside);
+
+        crate::commands::ops::redo_last_action(&history).await.unwrap();
+        assert!(source.symlink_metadata().is_err());
+        assert_linked_folder(&moved, &outside);
+
+        crate::commands::ops::undo_last_action(&history).await.unwrap();
+        assert_linked_folder(&source, &outside);
+    });
+}
+
 #[::core::prelude::v1::test]
-fn moving_links_is_refused_before_any_change() {
+fn moved_links_keep_their_targets_and_undo_and_redo_follow_them() {
+    let root = tempfile::tempdir().unwrap();
+    move_round_trip(root.path(), root.path());
+}
+
+#[::core::prelude::v1::test]
+fn links_moved_to_another_volume_are_recreated_then_removed() {
+    use std::os::unix::fs::MetadataExt;
+    let Ok(other) = tempfile::tempdir_in("/dev/shm") else { return };
+    let root = tempfile::tempdir().unwrap();
+    let device = |path: &Path| std::fs::metadata(path).unwrap().dev();
+    // Fedora mounts /tmp and /dev/shm separately: a rename between them fails.
+    if device(root.path()) == device(other.path()) {
+        return;
+    }
+    move_round_trip(root.path(), other.path());
+}
+
+#[::core::prelude::v1::test]
+fn undo_keeps_a_moved_link_replaced_since_the_move() {
     let root = tempfile::tempdir().unwrap();
     let (source, target) = linked_folder(root.path());
-    let error = FileOperationManager::perform_copy(&operation(), vec![source.clone()], Some(target.clone()), true, None)
-        .unwrap_err();
-    assert!(error.contains("symbolic links"), "{error}");
-    assert_eq!(std::fs::read_dir(&source).unwrap().count(), 4);
-    assert_eq!(std::fs::read_dir(&target).unwrap().count(), 0);
+    let link = target.join("to-file");
+    let history = Arc::new(HistoryManager::new());
+    let op = move_operation(vec![source.join("to-file")], &target);
+    runtime().block_on(async {
+        FileOperationManager::execute_operation(history.clone(), op.clone()).await;
+        assert_eq!(op.lock().unwrap().status, OpStatus::Completed);
+        std::fs::remove_file(&link).unwrap();
+        symlink("data.txt", &link).unwrap();
+        assert!(crate::commands::ops::undo_last_action(&history).await.is_err());
+        assert_link(&link, "data.txt");
+        assert!(source.join("to-file").symlink_metadata().is_err());
+    });
 }

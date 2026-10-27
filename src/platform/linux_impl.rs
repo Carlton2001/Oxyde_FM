@@ -117,6 +117,10 @@ impl Platform for LinuxPlatform {
         super::linux_links::create(parent, path, target, replace)
     }
     #[cfg(target_os = "linux")]
+    fn rename_link(&self, source_parent: &std::fs::File, source: &std::path::Path, parent: &std::fs::File, destination: &std::path::Path, replace: bool) -> std::io::Result<std::fs::File> {
+        super::linux_links::rename(source_parent, source, parent, destination, replace)
+    }
+    #[cfg(target_os = "linux")]
     fn remove_link(&self, parent: &std::fs::File, path: &std::path::Path, verify: &mut dyn FnMut(&std::fs::File) -> std::io::Result<()>) -> std::io::Result<()> {
         super::linux_links::remove(parent, path, verify)
     }

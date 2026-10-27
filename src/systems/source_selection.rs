@@ -119,13 +119,32 @@ impl SelectedLink {
                 io::ErrorKind::NotFound => SourceSelectionFailure::changed(&self.path),
                 _ => error,
             })?;
+        self.matches(&current)
+    }
+    fn matches(&self, current: &File) -> io::Result<()> {
         let metadata = current.metadata()?;
-        let target = platform().source_link_target(&current, &metadata);
-        match (self.identity.matches(&current), target) {
+        let target = platform().source_link_target(current, &metadata);
+        match (self.identity.matches(current), target) {
             (Ok(true), Some(Ok(target))) if target == self.target => Ok(()),
             (Ok(_), Some(Ok(_)) | None) => Err(SourceSelectionFailure::changed(&self.path)),
             _ => Err(SourceSelectionFailure::unverified(&self.path)),
         }
+    }
+    /// Move this same link into the held destination parent and return it.
+    pub fn move_to(&self, parent: &File, destination: &Path, replace: bool) -> io::Result<File> {
+        super::link_moves::move_link(
+            &self.parent.file,
+            &self.path,
+            parent,
+            destination,
+            &self.target,
+            replace,
+            &mut |current| self.matches(current),
+        )
+        .map_err(|error| match error.kind() {
+            io::ErrorKind::NotFound => SourceSelectionFailure::changed(&self.path),
+            _ => error,
+        })
     }
 }
 

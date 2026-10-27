@@ -27,14 +27,16 @@ pub struct TransactionDetails {
     pub copied_file_hashes: Option<Vec<(String, String)>>,
     pub copied_file_identities: Option<Vec<(String, HistoryFileIdentity)>>,
     pub copied_directory_identities: Option<Vec<(String, HistoryDirectoryIdentity)>>,
-    pub created_links: Option<Vec<HistoryCreatedLink>>,
+    pub created_links: Option<Vec<HistoryLink>>,
+    pub moved_links: Option<Vec<HistoryLink>>,
     pub new_folder_identity: Option<HistoryFileIdentity>,
 }
 
-/// A symbolic link a copy created as a link. Undo removes it only while it is
-/// still that link with that target; Redo recreates it from the same source.
+/// A symbolic link a transfer created or moved as a link, from `source` to
+/// `path`. Undo removes or moves back only that same link with that target;
+/// Redo recreates or moves it again from an unchanged source.
 #[derive(Debug, Clone)]
-pub struct HistoryCreatedLink {
+pub struct HistoryLink {
     pub source: std::path::PathBuf,
     pub path: std::path::PathBuf,
     pub target: std::path::PathBuf,

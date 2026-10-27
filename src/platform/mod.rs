@@ -265,6 +265,11 @@ pub trait Platform: Send + Sync {
     fn create_link(&self, _parent: &std::fs::File, _path: &std::path::Path, _target: &std::path::Path, _replace: bool) -> std::io::Result<std::fs::File> {
         Err(std::io::ErrorKind::Unsupported.into())
     }
+    /// Move a link itself between held parents of one volume and return it;
+    /// another volume fails with `CrossesDevices`.
+    fn rename_link(&self, _source_parent: &std::fs::File, _source: &std::path::Path, _parent: &std::fs::File, _destination: &std::path::Path, _replace: bool) -> std::io::Result<std::fs::File> {
+        Err(std::io::ErrorKind::Unsupported.into())
+    }
     /// Remove a link of the held parent once `verify` accepts that exact link.
     fn remove_link(&self, _parent: &std::fs::File, _path: &std::path::Path, _verify: &mut dyn FnMut(&std::fs::File) -> std::io::Result<()>) -> std::io::Result<()> {
         Err(std::io::ErrorKind::Unsupported.into())

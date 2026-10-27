@@ -35,7 +35,7 @@ transferts refusent les points de reparse.
   cassé. Les propriétés montrent la cible du lien et décrivent l'objet visé ; un lien
   cassé y décrit le lien lui-même. Windows garde une seule icône de lien.
 - **Tailles de dossiers** : un lien n'est jamais mesuré, ni parcouru dans une mesure.
-- **Copier, déplacer** (étape 2) : comme `cp -P` et Nautilus, le lien est reproduit avec le
+- **Copier, déplacer** (étapes 2 et 3) : comme `cp -P` et Nautilus, le lien est reproduit avec le
   même texte de cible, jamais suivi. Création exclusive par `symlinkat`, qui refuse un nom
   existant ; déplacement sur le même volume par renommage du lien.
 
@@ -65,13 +65,18 @@ transferts refusent les points de reparse.
      et échoue ; un retour arrière le recrée. Rétablir recrée les liens depuis la même
      source, si elle pointe toujours vers la même cible et si la destination est libre. Un
      remplacement bloque l'annulation, comme pour un fichier.
-   - *Pas encore* : déplacer, compresser ou copier vers une archive un lien, ou un dossier
-     qui en contient, est refusé avant tout changement avec un message explicite (étapes 3
-     et 4).
-3. **Déplacer un lien**, Linux seul : même volume, renommage du lien entre parents retenus
-   (`renameat2` sans remplacement, déjà utilisé par le renommage) ; autre volume, copie
-   comme à l'étape 2 puis retrait du lien source après revérification. Annuler renomme ou
-   recrée en sens inverse, avec les mêmes contrôles.
+   - *Pas encore* : compresser ou copier vers une archive un lien, ou un dossier qui en
+     contient, est refusé avant tout changement avec un message explicite (étape 4).
+3. *Fait.* **Déplacer un lien**, Linux seul (`link_moves::move_link`) : lien revérifié,
+   puis renommé entre parents retenus sans remplacement (`renameat2` `NOREPLACE`, ou nom
+   vérifié puis renommage sur ntfs-3g qui refuse l'option) et revérifié une fois déplacé ;
+   un lien substitué entre-temps est remis à sa place. Sur un autre volume, le lien est
+   recréé à la destination puis la source n'est retirée que si c'est toujours le même lien
+   ; sinon la copie est retirée et le déplacement échoue. Le journal note les liens
+   déplacés (`moved_links`). Annuler exige un emplacement d'origine libre et le même lien
+   à la destination, recrée les dossiers d'origine et le ramène par le même chemin ;
+   Rétablir refait le déplacement avec les mêmes contrôles. Les retours arrière déplacent
+   en sens inverse et mettent à jour l'identité d'un lien recréé.
 4. **Compresser** : un lien est archivé comme lien (tar, zip, 7z le savent), à étudier
    avec les [limites des archives](archives.md) ; reporté si le format l'interdit.
 5. **Bilan.**

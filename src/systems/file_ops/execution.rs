@@ -92,7 +92,8 @@ impl FileOperationManager {
             || !locked.moved_files.is_empty()
             || !locked.moved_dirs.is_empty()
             || !locked.copied_files.is_empty()
-            || !locked.created_links.is_empty();
+            || !locked.created_links.is_empty()
+            || !locked.moved_links.is_empty();
         if final_status == OpStatus::Completed || has_effects {
             let virtual_effects = locked
                 .sources
@@ -127,6 +128,8 @@ impl FileOperationManager {
                         || !locked.created_dirs.is_empty()
                         || !locked.moved_files.is_empty()
                         || !locked.moved_dirs.is_empty()
+                        || !locked.created_links.is_empty()
+                        || !locked.moved_links.is_empty()
                 }
                 _ => true,
             };
@@ -148,6 +151,7 @@ impl FileOperationManager {
                 let details = TransactionDetails {
                     deleted_items: Some(locked.deleted_items.clone()),
                     created_links: Some(locked.created_links.clone()),
+                    moved_links: Some(locked.moved_links.clone()),
                     renamed_item_identity: None,
                     moved_directory_identities: Some(
                         locked.moved_directory_identities.iter()
