@@ -23,6 +23,10 @@ impl FileOperationManager {
             .filter_map(|path| sources.get(&path).map(|source| (path, source)))
             .collect();
         created.sort_by_key(|(path, _)| std::cmp::Reverse(path.components().count()));
+        // Undo and Redo give them again to the folders they recreate.
+        op.lock().unwrap().directory_attributes.extend(
+            created.iter().map(|(path, source)| (path.clone(), (*source).clone())),
+        );
         for (path, source) in created {
             if let Err(error) = tree.restore_directory(&path, source) {
                 log::warn!(

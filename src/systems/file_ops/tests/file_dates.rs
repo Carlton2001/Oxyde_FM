@@ -110,18 +110,19 @@ fn unlock(root: &Path) {
 }
 
 #[::core::prelude::v1::test]
-fn copied_folders_keep_their_mode_and_dates_and_undo_removes_them() {
+fn copied_folders_keep_their_mode_and_dates_through_undo_and_redo() {
     let root = tempfile::tempdir().unwrap();
     let (source, dates) = dated_folders(root.path(), 0o550);
     let target = root.path().join("target");
     std::fs::create_dir(&target).unwrap();
     let history = transfer(FileOpType::Copy, &source, &target);
-    assert_copied_folders(&target.join("private"), dates);
-    tokio::runtime::Runtime::new()
-        .unwrap()
-        .block_on(crate::commands::ops::undo_last_action(&history))
-        .unwrap();
-    assert!(target.join("private").symlink_metadata().is_err());
+    let copied = target.join("private");
+    assert_copied_folders(&copied, dates);
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(crate::commands::ops::undo_last_action(&history)).unwrap();
+    assert!(copied.symlink_metadata().is_err());
+    runtime.block_on(crate::commands::ops::redo_last_action(&history)).unwrap();
+    assert_copied_folders(&copied, dates);
     unlock(root.path());
 }
 
@@ -149,29 +150,40 @@ fn a_folder_merged_into_keeps_its_own_mode_and_dates() {
     unlock(root.path());
 }
 
+/// Move the dated folders, then undo and redo: every recreated folder keeps
+/// the original mode and dates.
+fn move_round_trip(source_root: &Path, target: &Path) {
+    // A move must empty the source: `locked` stays writable here.
+    let (source, dates) = dated_folders(source_root, 0o750);
+    let moved = target.join("private");
+    let history = transfer(FileOpType::Move, &source, target);
+    assert!(source.symlink_metadata().is_err());
+    assert_copied_folders(&moved, dates);
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(crate::commands::ops::undo_last_action(&history)).unwrap();
+    assert!(moved.symlink_metadata().is_err());
+    assert_copied_folders(&source, dates);
+    runtime.block_on(crate::commands::ops::redo_last_action(&history)).unwrap();
+    assert!(source.symlink_metadata().is_err());
+    assert_copied_folders(&moved, dates);
+}
+
 #[::core::prelude::v1::test]
-fn folders_moved_to_another_volume_keep_their_mode_and_dates() {
+fn folders_moved_to_another_volume_keep_their_mode_and_dates_through_undo_and_redo() {
     use std::os::unix::fs::MetadataExt;
     let Ok(other) = tempfile::tempdir_in("/dev/shm") else { return };
     let root = tempfile::tempdir().unwrap();
     if std::fs::metadata(root.path()).unwrap().dev() == std::fs::metadata(other.path()).unwrap().dev() {
         return;
     }
-    // A move must empty the source: `locked` stays writable here.
-    let (source, dates) = dated_folders(root.path(), 0o750);
-    transfer(FileOpType::Move, &source, other.path());
-    assert!(source.symlink_metadata().is_err());
-    assert_copied_folders(&other.path().join("private"), dates);
+    move_round_trip(root.path(), other.path());
     unlock(other.path());
 }
 
 #[::core::prelude::v1::test]
-fn folders_moved_on_one_volume_keep_their_mode_and_dates() {
+fn folders_moved_on_one_volume_keep_their_mode_and_dates_through_undo_and_redo() {
     let root = tempfile::tempdir().unwrap();
-    let (source, dates) = dated_folders(root.path(), 0o750);
     let target = root.path().join("target");
     std::fs::create_dir(&target).unwrap();
-    transfer(FileOpType::Move, &source, &target);
-    assert!(source.symlink_metadata().is_err());
-    assert_copied_folders(&target.join("private"), dates);
+    move_round_trip(root.path(), &target);
 }

@@ -496,6 +496,8 @@ pub async fn redo_last_action(
                             }
                         }
                     }
+                    crate::systems::history_directory_attributes::DirectoryAttributes::created(&tx.details)
+                        .apply(&mut directories, &made_dirs);
                 }
             }
             TransactionType::Move => {

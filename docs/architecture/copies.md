@@ -52,7 +52,8 @@ comportement : sa copie native passe déjà par `CopyFileEx`.
 - La date d'accès reprise ne survit qu'à la première lecture, comme avec `cp -p` : la
   copie a forcément une date de changement plus récente, et `relatime` met alors l'accès
   à jour. Nautilus lit le fichier dès l'ouverture de ses Propriétés. Oxyde relit ses
-  propres copies (vérification, Annuler) sans toucher cette date (`O_NOATIME`).
+  propres copies (vérification, Annuler) sans toucher cette date (`O_NOATIME`), et la
+  remet après la vérification : ntfs-3g ignore `O_NOATIME`.
 - NTFS monté par ntfs-3g sans l'option `permissions` ne garde aucun mode : tous les
   fichiers y apparaissent en `777`, donc exécutables, quel que soit l'original. FAT n'en
   garde pas non plus.
@@ -66,9 +67,10 @@ comportement : sa copie native passe déjà par `CopyFileEx`.
    au plan, avant de le lister, et les applique à la fin aux dossiers qu'elle a créés, par
    leur descripteur retenu (méthode `Platform` sans effet sous Windows). Vaut aussi pour
    un déplacement, qui recrée les dossiers même sur un seul volume.
-3. **Annuler et Rétablir** : les dossiers que l'historique recrée (source d'un déplacement
-   annulé, destination d'un déplacement ou d'une copie rétablis) reprennent eux aussi mode
-   et dates.
+3. **Annuler et Rétablir** : la copie inscrit au journal mode et dates de chaque dossier
+   qu'elle a créé. Les dossiers que l'historique recrée (source d'un déplacement annulé,
+   destination d'un déplacement ou d'une copie rétablis) les reprennent une fois remplis,
+   par le même module (`history_directory_attributes`).
 4. **Attributs étendus et ACL**, fichiers et dossiers, sur la sortie encore privée pour un
    fichier.
 5. **Bilan.**

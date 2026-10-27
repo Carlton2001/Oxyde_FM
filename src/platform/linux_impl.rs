@@ -352,6 +352,9 @@ impl Platform for LinuxPlatform {
         #[cfg(not(target_os = "linux"))]
         { let _ = (source, destination, held_source, created, progress); Err(std::io::ErrorKind::Unsupported.into()) }
     }
+    fn restore_access_date(&self, file: &std::fs::File, accessed: std::time::SystemTime) -> std::io::Result<()> {
+        file.set_times(std::fs::FileTimes::new().set_accessed(accessed))
+    }
     #[cfg(target_os = "linux")]
     fn restore_directory_attributes(&self, directory: &std::fs::File, source: &std::fs::Metadata) -> std::io::Result<()> {
         super::linux_file_copy::restore_directory(directory, source)

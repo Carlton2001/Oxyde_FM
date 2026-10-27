@@ -99,6 +99,7 @@ pub struct FileOperation {
     )>,
     created_links: Vec<crate::models::transaction::HistoryLink>,
     moved_links: Vec<crate::models::transaction::HistoryLink>,
+    directory_attributes: Vec<(PathBuf, std::fs::Metadata)>,
     // Internal execution state.
     pub cancel_flag: Arc<AtomicBool>,
     pub pause_flag: Arc<AtomicBool>,
@@ -164,6 +165,7 @@ impl FileOperation {
             copied_directory_identities: Vec::new(),
             created_links: Vec::new(),
             moved_links: Vec::new(),
+            directory_attributes: Vec::new(),
             cancel_flag: self.cancel_flag.clone(),
             pause_flag: self.pause_flag.clone(),
             turbo_flag: self.turbo_flag.clone(),
@@ -225,6 +227,7 @@ impl FileOperation {
             copied_directory_identities: Vec::new(),
             created_links: Vec::new(),
             moved_links: Vec::new(),
+            directory_attributes: Vec::new(),
             cancel_flag: Arc::new(AtomicBool::new(false)),
             pause_flag: Arc::new(AtomicBool::new(false)),
             turbo_flag: Arc::new(AtomicBool::new(false)),

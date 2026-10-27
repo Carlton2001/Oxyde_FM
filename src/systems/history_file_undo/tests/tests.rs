@@ -409,6 +409,7 @@
                 deleted_items: None,
                 created_links: None,
                 moved_links: None,
+                directory_attributes: None,
                 renamed_item_identity: None,
                 moved_directory_identities: None,
                 new_folder_identity: None,
@@ -951,6 +952,7 @@
                 moved_links: vec![],
                 source_dirs: vec![link.join("created")],
                 remove_dirs: vec![],
+                source_attributes: Default::default(),
             },
         )
         .unwrap();
@@ -993,6 +995,7 @@
                 moved_links: vec![],
                 source_dirs: vec![],
                 remove_dirs: vec![link.join("empty")],
+                source_attributes: Default::default(),
             },
         )
         .unwrap();

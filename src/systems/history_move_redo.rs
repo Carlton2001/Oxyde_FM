@@ -380,6 +380,7 @@ fn redo_with(details: &TransactionDetails, checkpoint: &mut impl Checkpoint) -> 
         }
     }
     let directories = Directories::prepare(&paths, &removed)?;
+    let attributes = super::history_directory_attributes::DirectoryAttributes::created(details);
     let mut journal = Journal {
         directory_identities,
         directories,
@@ -475,6 +476,15 @@ fn redo_with(details: &TransactionDetails, checkpoint: &mut impl Checkpoint) -> 
         for source in &removed {
             journal.remove(source, checkpoint)?;
         }
+        let recreated: Vec<_> = journal
+            .effects
+            .iter()
+            .filter_map(|effect| match effect {
+                Effect::Created(path) => Some(path.clone()),
+                _ => None,
+            })
+            .collect();
+        attributes.apply(&mut journal.directories, &recreated);
         Ok(())
     })();
     if let Err(error) = result {

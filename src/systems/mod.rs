@@ -26,6 +26,7 @@ pub(crate) mod history_file_undo;
 pub(crate) mod history_links;
 mod link_moves;
 pub(crate) mod history_directories;
+pub(crate) mod history_directory_attributes;
 pub(crate) mod item_rename;
 pub(crate) mod new_folder_history;
 pub mod quick_access_watcher;

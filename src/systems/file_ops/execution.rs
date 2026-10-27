@@ -152,6 +152,7 @@ impl FileOperationManager {
                     deleted_items: Some(locked.deleted_items.clone()),
                     created_links: Some(locked.created_links.clone()),
                     moved_links: Some(locked.moved_links.clone()),
+                    directory_attributes: Some(locked.directory_attributes.clone()),
                     renamed_item_identity: None,
                     moved_directory_identities: Some(
                         locked.moved_directory_identities.iter()

@@ -29,6 +29,9 @@ pub struct TransactionDetails {
     pub copied_directory_identities: Option<Vec<(String, HistoryDirectoryIdentity)>>,
     pub created_links: Option<Vec<HistoryLink>>,
     pub moved_links: Option<Vec<HistoryLink>>,
+    /// Mode and dates each folder the transfer created took from its source, for the
+    /// folders Undo and Redo recreate. Windows ignores them.
+    pub directory_attributes: Option<Vec<(std::path::PathBuf, std::fs::Metadata)>>,
     pub new_folder_identity: Option<HistoryFileIdentity>,
 }
 

@@ -296,10 +296,17 @@ fn copy_with_parents_checked(
     )?;
     drop(native_timer);
     let mut output = staging.open_output()?;
-    timing.bytes = output.metadata()?.len();
+    let metadata = output.metadata()?;
+    timing.bytes = metadata.len();
     let hash_timer = super::copy_diagnostics::Timer::start(super::copy_diagnostics::Phase::Hash);
     let hash = hash(&mut output, progress)?;
     drop(hash_timer);
+    if let Err(error) = metadata
+        .accessed()
+        .and_then(|accessed| platform().restore_access_date(&output, accessed))
+    {
+        log::warn!("Access date not kept for {}: {error}", destination.display());
+    }
     let checks_timer = Timer::start(Phase::Checks);
     if expected.is_some_and(|expected| expected != hash) {
         // The output is still private: failure never publishes unexpected bytes.

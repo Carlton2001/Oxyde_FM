@@ -73,6 +73,7 @@ struct Plan {
     moved_links: Vec<HistoryLink>,
     source_dirs: Vec<PathBuf>,
     remove_dirs: Vec<PathBuf>,
+    source_attributes: super::history_directory_attributes::DirectoryAttributes,
 }
 fn verified_file(path: &Path, expected: Option<&String>) -> io::Result<String> {
     let metadata = fs::symlink_metadata(path)?;
@@ -190,6 +191,7 @@ impl Plan {
             links,
             moved_links: vec![],
             remove_dirs: sorted_directories(created_dirs),
+            source_attributes: Default::default(),
         })
     }
     fn new(details: &TransactionDetails) -> io::Result<Self> {
@@ -373,6 +375,7 @@ impl Plan {
             moved_links,
             source_dirs,
             remove_dirs,
+            source_attributes: super::history_directory_attributes::DirectoryAttributes::sources(details),
         })
     }
 }
@@ -815,6 +818,15 @@ fn apply_plan(ops: &impl UndoIo, plan: Plan) -> io::Result<()> {
         for directory in plan.remove_dirs {
             journal.remove_dir(ops, &directory)?;
         }
+        let recreated: Vec<_> = journal
+            .effects
+            .iter()
+            .filter_map(|effect| match effect {
+                Effect::CreatedDir(path) => Some(path.clone()),
+                _ => None,
+            })
+            .collect();
+        plan.source_attributes.apply(&mut journal.directories, &recreated);
         Ok::<_, io::Error>(())
     })();
     if let Err(error) = result {
