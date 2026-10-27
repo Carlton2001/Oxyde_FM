@@ -52,3 +52,24 @@ fn listing_creation_time_comes_from_the_supplied_metadata() {
     let actual = file_entry_from_metadata(&path, &metadata);
     assert_eq!(actual.created, expected);
 }
+
+#[cfg(unix)]
+#[test]
+fn links_behave_like_their_target_and_broken_links_stay_links() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::create_dir(root.path().join("folder")).unwrap();
+    std::fs::write(root.path().join("file"), b"payload").unwrap();
+    for (link, target) in [("to-folder", "folder"), ("to-file", "file"), ("broken", "missing")] {
+        std::os::unix::fs::symlink(target, root.path().join(link)).unwrap();
+    }
+    let entry = |name: &str| get_file_entry_from_path(&root.path().join(name)).unwrap();
+    let folder = entry("to-folder");
+    assert!(folder.is_symlink && folder.is_dir && !folder.is_junction);
+    assert_eq!(folder.size, 0);
+    let file = entry("to-file");
+    assert!(file.is_symlink && !file.is_dir);
+    assert_eq!(file.size, 7);
+    let broken = entry("broken");
+    assert!(broken.is_symlink && !broken.is_dir);
+    assert_eq!(broken.size, "missing".len() as u64);
+}

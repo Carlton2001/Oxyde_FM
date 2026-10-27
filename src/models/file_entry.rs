@@ -225,11 +225,17 @@ pub(crate) fn file_entry_from_metadata(path: &Path, metadata: &std::fs::Metadata
     let (is_hidden, is_system, is_reparse_point) =
         crate::utils::get_file_attributes(metadata, &name);
 
+    let is_symlink = metadata.file_type().is_symlink();
+
     // For is_dir, we want to know if it behaves like a directory.
     // On Windows, a Junction/SymlinkDir has the Directory attribute in its symlink_metadata too.
-    let is_dir = metadata.is_dir();
-
-    let is_symlink = metadata.file_type().is_symlink();
+    // Unix describes the link itself: follow it, so that a link to a folder opens like one
+    // and a link to a file shows that file's size. A broken link stays a plain link.
+    #[cfg(not(target_os = "windows"))]
+    let target = is_symlink.then(|| std::fs::metadata(path).ok()).flatten();
+    #[cfg(target_os = "windows")]
+    let target: Option<std::fs::Metadata> = None;
+    let is_dir = target.as_ref().map_or(metadata.is_dir(), std::fs::Metadata::is_dir);
 
     // On Windows, junctions are reparse points that are dirs but (historically) returned false for is_symlink in older Rust,
     // but modern Rust might return true.
@@ -244,7 +250,7 @@ pub(crate) fn file_entry_from_metadata(path: &Path, metadata: &std::fs::Metadata
     let is_junction = is_reparse_point && is_dir && !is_symlink;
 
     // Retrieve size: if it's a file, get len. If symlink/junction, size is usually 0/irrelevant for listing.
-    let size = if is_dir { 0 } else { metadata.len() };
+    let size = if is_dir { 0 } else { target.as_ref().unwrap_or(metadata).len() };
 
     FileEntry {
         native_kind: None,
