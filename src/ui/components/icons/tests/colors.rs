@@ -50,3 +50,25 @@ fn categories_use_the_active_palette_for_every_theme() {
         }
     }
 }
+
+#[cfg(not(target_os = "windows"))]
+#[::core::prelude::v1::test]
+fn links_show_their_kind_with_folder_and_link_colors() {
+    let theme = OxydeTheme::light();
+    let link = |is_dir, is_broken_link| oxyde_lib::models::FileEntry {
+        name: "link".into(),
+        path: "/home/link".into(),
+        is_symlink: true,
+        is_dir,
+        is_broken_link,
+        ..Default::default()
+    };
+    for (entry, icon, color) in [
+        (link(true, false), IconType::FolderSymlink, theme.file_icons.folder),
+        (link(false, false), IconType::FileSymlink, theme.file_icons.code),
+        (link(false, true), IconType::BrokenLink, theme.text_muted),
+    ] {
+        assert_eq!(super::super::entry_icon(&entry), icon);
+        assert_eq!(file_icon_color(&entry.path, icon, &theme), color);
+    }
+}

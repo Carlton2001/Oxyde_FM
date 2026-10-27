@@ -39,6 +39,7 @@ async fn list_dir_impl(path: String, show_hidden: Option<bool>, show_system: Opt
                 is_hidden: false,
                 is_system: false,
                 is_symlink: false,
+                is_broken_link: false,
                 is_junction: false,
                 size: t.size,
                 modified: t.modified,
@@ -310,6 +311,8 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
             folders_count: None,
             files_count: None,
             shortcut: None,
+            link_target: None,
+            is_broken_link: false,
         };
 
         if let Ok(Some(name)) = crate::platform::platform().shell_item_friendly_name(&path) {
@@ -320,7 +323,24 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
     }
 
     let path_buf = validate_path(&path)?;
-    let metadata = fs::metadata(&path_buf)?;
+    // Outside Windows a link describes its target, as in Nautilus; a broken link
+    // falls back to the link itself.
+    #[cfg(not(target_os = "windows"))]
+    let link_target = fs::symlink_metadata(&path_buf)?
+        .file_type()
+        .is_symlink()
+        .then(|| fs::read_link(&path_buf))
+        .transpose()?
+        .map(|target| target.to_string_lossy().into_owned());
+    #[cfg(target_os = "windows")]
+    let link_target: Option<String> = None;
+    let (metadata, is_broken_link) = match fs::metadata(&path_buf) {
+        Ok(metadata) => (metadata, false),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound && link_target.is_some() => {
+            (fs::symlink_metadata(&path_buf)?, true)
+        }
+        Err(error) => return Err(error.into()),
+    };
 
     let name = path_buf
         .file_name()
@@ -408,6 +428,8 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
         folders_count: None,
         files_count: None,
         shortcut,
+        link_target,
+        is_broken_link,
     })
 }
 

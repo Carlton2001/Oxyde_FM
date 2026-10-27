@@ -163,6 +163,7 @@ file-type-folder = Ordner
 file-type-file = Datei
 
 file-type-symlink = Symbolischer Link
+file-type-broken-link = Defekter Link
 
 file-type-junction = Verzeichnisverknüpfung
 
@@ -779,6 +780,7 @@ drive-tooltip-usage = { $used } / { $total }
 properties-system = Systemeigenschaften
 properties-created = Erstellt
 properties-accessed = Zugriff
+properties-link-target = Linkziel
 properties-used = Belegter Speicher
 properties-capacity = Kapazität
 properties-contains = Inhalt

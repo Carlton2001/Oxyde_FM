@@ -30,7 +30,10 @@ transferts refusent les points de reparse.
 
 - **Afficher** : un lien vers un dossier se comporte comme un dossier (navigation dans le
   chemin du lien, comme Nautilus), un lien vers un fichier montre la taille du fichier ; un
-  lien cassé reste un lien. L'icône et le type « Lien symbolique » restent ceux du lien.
+  lien cassé reste un lien. Comme dans Nautilus, l'icône dit où mène le lien (dossier,
+  fichier, nulle part) et le type « Lien brisé » remplace « Lien symbolique » pour un lien
+  cassé. Les propriétés montrent la cible du lien et décrivent l'objet visé ; un lien
+  cassé y décrit le lien lui-même. Windows garde une seule icône de lien.
 - **Tailles de dossiers** : un lien n'est jamais mesuré, ni parcouru dans une mesure.
 - **Copier, déplacer** (étape 2) : comme `cp -P` et Nautilus, le lien est reproduit avec le
   même texte de cible, jamais suivi. Création exclusive par `symlinkat`, qui refuse un nom

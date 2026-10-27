@@ -17,7 +17,10 @@ impl PropertiesWindow {
                         .filter(|dialog| dialog.revision == revision)?;
                     let scan = match result {
                         Ok(Ok(properties)) => {
-                            let scan = (properties.is_dir && dialog.drive.is_none())
+                            // A link is never measured, nor its target walked.
+                            let scan = (properties.is_dir
+                                && dialog.drive.is_none()
+                                && properties.link_target.is_none())
                                 .then(|| properties.path.clone());
                             dialog.calculating = scan.is_some();
                             dialog.properties = Some(properties);

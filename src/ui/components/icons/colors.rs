@@ -60,12 +60,13 @@ impl FileIconPalette {
 pub(super) fn file_icon_color(path: &str, icon: IconType, theme: &OxydeTheme) -> Hsla {
     let palette = theme.file_icons;
     match icon {
-        IconType::Folder | IconType::FolderOpen => palette.folder,
+        IconType::Folder | IconType::FolderOpen | IconType::FolderSymlink => palette.folder,
         IconType::Archive => palette.archive,
         IconType::FileImage => palette.image,
         IconType::Music => palette.audio,
         IconType::FileVideo => palette.video,
-        IconType::FileCode | IconType::Link2 => palette.code,
+        IconType::FileCode | IconType::Link2 | IconType::FileSymlink => palette.code,
+        IconType::BrokenLink => theme.text_muted,
         IconType::FileText
             if path
                 .rsplit(['/', '\\'])

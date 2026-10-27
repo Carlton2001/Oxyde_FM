@@ -31,6 +31,7 @@ impl OxydeApp {
                 let message = match label.as_str() {
                     "Dossier" => Some(Message::FileTypeFolder), "Fichier" => Some(Message::FileTypeFile),
                     "Symlink" => Some(Message::FileTypeSymlink), "Junction" => Some(Message::FileTypeJunction),
+                    "BrokenLink" => Some(Message::FileTypeBrokenLink),
                     "Réseau" => Some(Message::SidebarNetwork), _ => None,
                 };
                 let text = message.map(|message| i18n.text(message).to_string()).unwrap_or_else(|| label.clone());

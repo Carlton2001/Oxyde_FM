@@ -34,6 +34,7 @@ pub fn get_type_filter_items(
                 "Dossier" => i18n.text(Message::FileTypeFolder).to_string(),
                 "Fichier" => i18n.text(Message::FileTypeFile).to_string(),
                 "Symlink" => i18n.text(Message::FileTypeSymlink).to_string(),
+                "BrokenLink" => i18n.text(Message::FileTypeBrokenLink).to_string(),
                 "Junction" => i18n.text(Message::FileTypeJunction).to_string(),
                 _ => ext.clone(),
             },

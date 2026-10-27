@@ -88,6 +88,9 @@ pub(super) fn sizes_button(pane_id: &str, active: bool, handle: Entity<OxydeApp>
 /// Symlinks and junctions are identified before extension/dir detection.
 pub(crate) fn file_type_label(f: &FileEntry) -> String {
     if network_entry(f) { return "Réseau".to_string(); }
+    if f.is_broken_link {
+        return "BrokenLink".to_string();
+    }
     if f.is_symlink {
         return "Symlink".to_string();
     }
@@ -107,6 +110,8 @@ pub(crate) fn file_type_label(f: &FileEntry) -> String {
 pub(crate) fn file_type_display(f: &FileEntry, i18n: &crate::ui::i18n::I18n) -> String {
     let message = if network_entry(f) {
         Some(Message::SidebarNetwork)
+    } else if f.is_broken_link {
+        Some(Message::FileTypeBrokenLink)
     } else if f.is_symlink {
         Some(Message::FileTypeSymlink)
     } else if f.is_junction {

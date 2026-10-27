@@ -64,12 +64,13 @@ fn links_behave_like_their_target_and_broken_links_stay_links() {
     }
     let entry = |name: &str| get_file_entry_from_path(&root.path().join(name)).unwrap();
     let folder = entry("to-folder");
-    assert!(folder.is_symlink && folder.is_dir && !folder.is_junction);
+    assert!(folder.is_symlink && folder.is_dir && !folder.is_junction && !folder.is_broken_link);
     assert_eq!(folder.size, 0);
     let file = entry("to-file");
-    assert!(file.is_symlink && !file.is_dir);
+    assert!(file.is_symlink && !file.is_dir && !file.is_broken_link);
     assert_eq!(file.size, 7);
     let broken = entry("broken");
-    assert!(broken.is_symlink && !broken.is_dir);
+    assert!(broken.is_symlink && !broken.is_dir && broken.is_broken_link);
+    assert!(!entry("file").is_broken_link);
     assert_eq!(broken.size, "missing".len() as u64);
 }

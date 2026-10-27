@@ -31,6 +31,8 @@ pub struct FileEntry {
     pub is_hidden: bool,
     pub is_system: bool,
     pub is_symlink: bool,
+    /// A symbolic link whose target cannot be reached.
+    pub is_broken_link: bool,
     pub is_junction: bool,
     pub size: u64,
     pub folders_count: Option<u64>,
@@ -112,6 +114,9 @@ pub struct FileProperties {
     pub folders_count: Option<u64>,
     pub files_count: Option<u64>,
     pub shortcut: Option<ShortcutInfo>,
+    /// Target text of a symbolic link, outside Windows.
+    pub link_target: Option<String>,
+    pub is_broken_link: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -263,6 +268,7 @@ pub(crate) fn file_entry_from_metadata(path: &Path, metadata: &std::fs::Metadata
         is_hidden,
         is_system,
         is_symlink,
+        is_broken_link: is_symlink && cfg!(not(target_os = "windows")) && target.is_none(),
         is_junction,
         size,
         folders_count: None,

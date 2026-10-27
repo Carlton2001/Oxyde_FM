@@ -29,6 +29,13 @@ pub enum IconType {
     FileCode,
     Link,
     Link2,
+    // Windows keeps one icon for symbolic links and junctions.
+    #[cfg_attr(target_os = "windows", allow(dead_code))]
+    FolderSymlink,
+    #[cfg_attr(target_os = "windows", allow(dead_code))]
+    FileSymlink,
+    #[cfg_attr(target_os = "windows", allow(dead_code))]
+    BrokenLink,
     ExternalLink,
     FileSpreadsheet,
     FileStack,
@@ -61,6 +68,9 @@ impl IconType {
             Self::FileCode => "icons/file-code.svg",
             Self::Link => "icons/link.svg",
             Self::Link2 => "icons/link2.svg",
+            Self::FolderSymlink => "icons/folder-symlink.svg",
+            Self::FileSymlink => "icons/file-symlink.svg",
+            Self::BrokenLink => "icons/link-2-off.svg",
             Self::ExternalLink => "icons/external-link.svg",
             Self::FileSpreadsheet => "icons/file-spreadsheet.svg",
             Self::FileStack => "icons/file-stack.svg",
@@ -88,7 +98,21 @@ pub(crate) fn entry_icon(file: &oxyde_lib::models::FileEntry) -> IconType {
         if !category.is_empty() { return IconType::Box; }
     }
     if oxyde_lib::commands::io::is_network_server(&file.path) { return IconType::Monitor; }
+    #[cfg(not(target_os = "windows"))]
+    if file.is_symlink { return link_icon(file.is_dir, file.is_broken_link); }
     get_icon_type(&file.name, file.is_dir, Some(&file.path), file.is_symlink, file.is_junction)
+}
+
+/// As in Nautilus, a link shows whether it leads to a folder, a file or nowhere.
+#[cfg(not(target_os = "windows"))]
+pub(crate) fn link_icon(is_dir: bool, broken: bool) -> IconType {
+    if broken {
+        IconType::BrokenLink
+    } else if is_dir {
+        IconType::FolderSymlink
+    } else {
+        IconType::FileSymlink
+    }
 }
 
 // ---------------------------------------------------------------------------

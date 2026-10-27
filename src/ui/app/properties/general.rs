@@ -31,6 +31,7 @@ pub(super) fn label_width(
         Message::PropertiesCreated,
         Message::ColumnModified,
         Message::PropertiesAccessed,
+        Message::PropertiesLinkTarget,
     ]
     .into_iter()
     .chain(presentation
@@ -93,6 +94,13 @@ pub(super) fn render(
 ) -> Div {
     let dialog = view.properties_dialog.as_ref().unwrap();
     let row = |label, value| property_row(label, value, label_width, compact, theme);
+    #[cfg(not(target_os = "windows"))]
+    let icon = if p.link_target.is_some() {
+        crate::ui::components::icons::link_icon(p.is_dir, p.is_broken_link)
+    } else {
+        get_icon_type(presentation.name, p.is_dir, Some(&p.path), false, false)
+    };
+    #[cfg(target_os = "windows")]
     let icon = get_icon_type(presentation.name, p.is_dir, Some(&p.path), false, false);
     let graphic = if let Some(drive) = &dialog.drive {
         if cfg!(target_os = "windows") && view.use_system_icons(cx) {
@@ -165,7 +173,11 @@ pub(super) fn render(
                     .child(name),
             ),
     );
-    let file_type = if p.is_dir {
+    let file_type = if p.is_broken_link {
+        cx.i18n().text(Message::FileTypeBrokenLink).to_string()
+    } else if p.link_target.is_some() {
+        cx.i18n().text(Message::FileTypeSymlink).to_string()
+    } else if p.is_dir {
         cx.i18n().text(Message::FileTypeFolder).to_string()
     } else {
         std::path::Path::new(presentation.name)
@@ -293,6 +305,9 @@ pub(super) fn render(
             );
         }
     } else {
+        if let Some(target) = &p.link_target {
+            body = body.child(row(cx.i18n().text(Message::PropertiesLinkTarget), target.clone()));
+        }
         body = body
             .child(row(
                 cx.i18n().text(presentation.location_label),

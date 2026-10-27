@@ -123,6 +123,8 @@ mod property_presentation_tests {
             folders_count: None,
             files_count: None,
             shortcut: None,
+            link_target: None,
+            is_broken_link: false,
         }
     }
 
