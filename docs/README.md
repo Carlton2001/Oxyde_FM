@@ -25,6 +25,7 @@ Oxyde utilise Rust, GPUI et Tokio. Choisir une référence selon le travail à f
 | Modifier le traitement des liens symboliques | [Liens symboliques](architecture/links.md) |
 | Modifier la copie Linux d'un fichier et ce qu'elle garde | [Copies Linux](architecture/copies.md) |
 | Modifier le déplacement ou le renommage sous Linux | [Déplacements Linux](architecture/moves.md) |
+| Modifier l'identifiant, l'entrée de bureau ou l'icône Linux | [Identité de bureau](architecture/desktop-identity.md) |
 | Vérifier l’effet de Turbo et les améliorations restantes | [Couverture de Turbo](reports/2026-10-17-turbo-coverage.md) |
 | Modifier le listing, les filtres ou la recherche | [Navigation et recherche](architecture/search.md) |
 | Diagnostiquer copies, suppressions ou fermeture | [Copie](diagnostics/copy.md), [suppression](diagnostics/delete.md), [fermeture](diagnostics/shutdown.md) |

@@ -323,6 +323,7 @@ pub(super) fn present(_view: &AnyView, parent: &mut Window, cx: &mut App) -> boo
             let handle = cx
                 .open_window(
                     WindowOptions {
+                        app_id: Some(crate::ui::APP_ID.into()),
                         kind: WindowKind::PopUp,
                         titlebar: None,
                         focus: false,

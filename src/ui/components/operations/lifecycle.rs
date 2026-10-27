@@ -45,6 +45,7 @@ pub(crate) fn open_operations_window(app: Entity<OxydeApp>, cx: &mut App) {
         };
         if let Err(error) = cx.open_window(
             WindowOptions {
+                app_id: Some(crate::ui::APP_ID.into()),
                 window_bounds: Some(crate::ui::app::tool_geometry::restore("icons/download.svg", Bounds::new(
                     point(px(160.0), px(140.0)),
                     size(px(720.0), px(560.0)),

@@ -145,6 +145,7 @@ fn main() {
             });
             cx.open_window(
                 WindowOptions {
+                    app_id: Some(crate::ui::APP_ID.into()),
                     window_bounds: Some(window_bounds),
                     window_min_size: Some(min_size),
                     titlebar: Some(TitlebarOptions {

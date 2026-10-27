@@ -1,0 +1,24 @@
+[Desktop Entry]
+Type=Application
+Name=Oxyde
+GenericName=File Manager
+GenericName[fr]=Gestionnaire de fichiers
+GenericName[de]=Dateimanager
+GenericName[es]=Gestor de archivos
+GenericName[it]=Gestore di file
+Comment=Modern and fast file manager
+Comment[fr]=Gestionnaire de fichiers moderne et rapide
+Comment[de]=Moderner und schneller Dateimanager
+Comment[es]=Gestor de archivos moderno y rápido
+Comment[it]=Gestore di file moderno e veloce
+Keywords=folder;manager;explore;disk;filesystem;files;
+Keywords[fr]=dossier;gestionnaire;explorateur;disque;fichiers;
+Keywords[de]=Ordner;Verwaltung;Explorer;Datenträger;Dateien;
+Keywords[es]=carpeta;gestor;explorador;disco;archivos;
+Keywords[it]=cartella;gestore;esplora;disco;file;
+Exec=oxyde
+Icon=io.github.Carlton2001.Oxyde
+Terminal=false
+StartupNotify=true
+StartupWMClass=io.github.Carlton2001.Oxyde
+Categories=Utility;Core;FileManager;

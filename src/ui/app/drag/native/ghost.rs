@@ -69,6 +69,7 @@ pub(super) fn open(
         };
         let result = cx.open_window(
             WindowOptions {
+                app_id: Some(crate::ui::APP_ID.into()),
                 kind: WindowKind::PopUp,
                 titlebar: None,
                 focus: false,

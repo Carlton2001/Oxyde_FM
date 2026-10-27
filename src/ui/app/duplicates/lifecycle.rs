@@ -60,6 +60,7 @@ impl OxydeApp {
             }
             let result = cx.open_window(
                 WindowOptions {
+                    app_id: Some(crate::ui::APP_ID.into()),
                     window_bounds: Some(crate::ui::app::tool_geometry::restore("icons/copy.svg", Bounds::new(
                         point(px(160.0), px(140.0)),
                         size(

@@ -389,6 +389,7 @@ fn show_inner<T: 'static>(
         };
         let result = cx.open_window(
             WindowOptions {
+                app_id: Some(crate::ui::APP_ID.into()),
                 kind: WindowKind::PopUp,
                 titlebar: None,
                 show: false,

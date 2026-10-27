@@ -22,3 +22,7 @@ pub mod style;
 pub mod theme;
 pub mod workspace;
 pub(crate) mod window_geometry;
+
+/// Wayland `app_id` and X11 class of every Oxyde window: GNOME finds the desktop
+/// entry and icon of that name to group the windows and show them in the dash.
+pub const APP_ID: &str = "io.github.Carlton2001.Oxyde";

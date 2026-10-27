@@ -51,6 +51,7 @@ impl OxydeApp {
             }
             let result = cx.open_window(
                 WindowOptions {
+                    app_id: Some(crate::ui::APP_ID.into()),
                     window_bounds: Some(crate::ui::app::tool_geometry::restore("icons/search.svg", Bounds::new(
                         point(px(160.0), px(140.0)),
                         size(px(760.0), px(520.0)),
