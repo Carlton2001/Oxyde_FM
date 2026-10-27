@@ -1,6 +1,6 @@
 # Volumes
 
-**Statut : pilote terminé** (étapes 1 à 7, bilan ci-dessous) ; suite Windows encore à passer. Ce document deviendra le contrat du domaine une fois le pilote terminé.
+**Statut : pilote terminé** (étapes 1 à 7, bilan ci-dessous) ; suite Windows passée. Ce document est le contrat du domaine.
 
 Le pilote sort les volumes du trait `Platform` dans un trait de domaine et livre, sous
 Linux, l'équivalent de Nautilus : partitions montées et non montées, montage au clic,

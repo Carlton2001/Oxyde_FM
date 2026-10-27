@@ -1,7 +1,8 @@
 # Presse-papiers de fichiers
 
-**Statut : domaine en cours** (deuxième domaine de l'option B, après les
-[volumes](volumes.md)). Ce document deviendra le contrat du domaine une fois terminé.
+**Statut : domaine terminé** (deuxième domaine de l'option B, après les
+[volumes](volumes.md)) ; bilan ci-dessous, suite Windows passée. Ce document est le
+contrat du domaine.
 
 ## Périmètre
 
@@ -71,4 +72,42 @@ pub trait FileClipboard: Send + Sync {
    ou coupe et les menus ouverts se ferment, sans perte de focus. Retenu : l'échange avec
    le gestionnaire de fichiers du bureau compte plus que ce clignotement, absent sous KDE
    et les compositeurs wlroots, où `wl-copy` passe par `ext-data-control`.
-4. **Bilan.**
+4. *Fait.* **Bilan**, ci-dessous.
+
+## Bilan
+
+**Résultat.** Ctrl+C/X/V et le bouton Coller fonctionnent sous Linux entre fenêtres
+d'Oxyde et, avec `wl-clipboard`, avec Nautilus dans les deux sens, copie et coupe. Le code
+Linux tient en 160 lignes de production et 30 de tests ; Windows délègue à son code
+inchangé et sa suite de tests passe.
+
+**Fichiers communs touchés** (hors `linux_file_clipboard/`, `windows_file_clipboard.rs` et
+documentation) :
+
+| Étape | Fichiers communs | Nature |
+| --- | --- | --- |
+| 1. Trait | `platform/mod.rs`, `windows_impl.rs`, `linux_impl.rs`, `ui/app/clipboard.rs`, `drive_watchers.rs` | appels seuls, comme prévu |
+| 2. Linux | `ui/app/clipboard.rs` | règles de collage prévues |
+| 2 bis. Copie vers NTFS | `linux_impl.rs`, `systems/file_copy.rs` | publication Linux, hors domaine |
+| 3. Nautilus | `ui/app/clipboard.rs`, signature du trait | texte écrit par l'interface seulement sans `wl-copy` |
+| 3 bis. Sources NTFS | `models/transaction.rs` | identité sans date de naissance, hors domaine |
+
+**Hors domaine, révélé par les essais sur NTFS (ntfs-3g).** Le domaine a servi de premier
+essai réel du moteur de copie Linux ; deux défauts de l'audit de portabilité sont corrigés :
+- **M04, en partie** : la publication exclusive essaie `renameat2(RENAME_NOREPLACE)`, qui
+  marche aussi sur FAT et exFAT ; ntfs-3g refuse ce drapeau et garde le lien physique, dont
+  le nom caché `.fuse_hidden` est désormais attendu au nettoyage.
+- **T04** : hors Windows, l'identité d'un fichier n'exige plus de date de naissance, que
+  ntfs-3g ne fournit pas ; l'identifiant seul fait foi, comme pour la copie temporaire.
+  Un fichier supprimé puis remplacé par un autre qui reprend son numéro n'est plus détecté
+  sur ces systèmes de fichiers.
+
+**Leçons.**
+- Les limites de GPUI se contournent hors de GPUI sans le modifier : un processus auxiliaire
+  (`wl-copy`) porte ce que la boucle Wayland de GPUI ne sait pas offrir.
+- Un trait de domaine peut renvoyer une consigne à l'interface (`set_files` → écrire le
+  texte) plutôt que de multiplier les `cfg` dans l'appelant.
+- Tester sur un volume NTFS, pas seulement btrfs : les deux défauts du moteur de copie
+  n'apparaissaient qu'avec FUSE.
+
+**Suite.** Le domaine suivant est la [surveillance des dossiers](watchers.md) (T11).

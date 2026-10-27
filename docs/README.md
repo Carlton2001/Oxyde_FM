@@ -20,6 +20,7 @@ Oxyde utilise Rust, GPUI et Tokio. Choisir une référence selon le travail à f
 | Comprendre les opérations et leurs bilans | [Opérations](architecture/operations.md) |
 | Comprendre le domaine volumes (pilote Linux/UDisks2) | [Volumes](architecture/volumes.md) |
 | Modifier copier, couper et coller des fichiers | [Presse-papiers](architecture/clipboard.md) |
+| Modifier la surveillance des dossiers (événements ou sondage) | [Surveillance](architecture/watchers.md) |
 | Vérifier l’effet de Turbo et les améliorations restantes | [Couverture de Turbo](reports/2026-10-17-turbo-coverage.md) |
 | Modifier le listing, les filtres ou la recherche | [Navigation et recherche](architecture/search.md) |
 | Diagnostiquer copies, suppressions ou fermeture | [Copie](diagnostics/copy.md), [suppression](diagnostics/delete.md), [fermeture](diagnostics/shutdown.md) |
