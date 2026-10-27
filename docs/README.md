@@ -23,6 +23,7 @@ Oxyde utilise Rust, GPUI et Tokio. Choisir une référence selon le travail à f
 | Modifier la surveillance des dossiers (événements ou sondage) | [Surveillance](architecture/watchers.md) |
 | Modifier l'accès rapide (favoris) et l'ouverture par le bureau | [Accès rapide](architecture/quick-access.md) |
 | Modifier le traitement des liens symboliques | [Liens symboliques](architecture/links.md) |
+| Modifier la copie Linux d'un fichier et ce qu'elle garde | [Copies Linux](architecture/copies.md) |
 | Vérifier l’effet de Turbo et les améliorations restantes | [Couverture de Turbo](reports/2026-10-17-turbo-coverage.md) |
 | Modifier le listing, les filtres ou la recherche | [Navigation et recherche](architecture/search.md) |
 | Diagnostiquer copies, suppressions ou fermeture | [Copie](diagnostics/copy.md), [suppression](diagnostics/delete.md), [fermeture](diagnostics/shutdown.md) |

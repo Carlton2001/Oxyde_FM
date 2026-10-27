@@ -109,16 +109,21 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
   `./target` : ils échouent quand `CARGO_TARGET_DIR` pointe ailleurs. Les tests
   `preview_jobs` à délai de 2 s échouent par intermittence quand toute la suite tourne.
 - M05 : noms non UTF-8 convertis avec perte ; M06 : fidélité des métadonnées
-  (modes, ACL, xattrs, propriétaire) ; T04 : date de création exigée par l'historique.
-- T05 liens symboliques, T06 ouvertures en lecture inutiles, T07 cache d'archives ouvertes,
-  T08 règles de casse et `\` traité comme séparateur.
+  (modes, ACL, xattrs, propriétaire), en cours avec M03 pour la copie : voir
+  [Copies Linux](../architecture/copies.md).
+- T04, fait : l'identité n'exige plus de date de naissance hors Windows.
+- T05, fait : [liens symboliques](../architecture/links.md), sauf dans les archives.
+- T06 ouvertures en lecture inutiles, T07 cache d'archives ouvertes, T08 règles de casse
+  et `\` traité comme séparateur.
 
 **Intégration (jalon 5)**
-- M08 : presse-papiers de fichiers absent (Ctrl+C/X/V renvoient une erreur).
-- Glisser vers d'autres applications, surveillance des dossiers adaptée (T11). Volumes
+- M08, fait : [presse-papiers](../architecture/clipboard.md) partagé avec Nautilus.
+- T11, fait : [surveillance](../architecture/watchers.md) par inotify hors partages réseau.
+- Glisser vers d'autres applications. Volumes
   faits (T02, T03) : inventaire UDisks2, notifications, démontage et éjection, volumes non
   montés, disques physiques et SSD ; voir le [pilote volumes](../architecture/volumes.md).
-- T12 : favoris GTK/XDG, erreurs de `xdg-open`, « Propriétés » système lancée par `gio open`.
+- T12, fait : [accès rapide](../architecture/quick-access.md) partagé avec Nautilus,
+  erreurs de `xdg-open` signalées, Propriétés d'Oxyde seules.
 - T13 : mises à jour automatiques à désactiver ; T15 : icône, fichier `.desktop`, `app_id`.
 - T10 : réseau SMB/GVfs ; « Plus d'options » (menu Shell) est masqué hors Windows.
 
