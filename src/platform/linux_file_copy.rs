@@ -89,6 +89,17 @@ fn copy_remaining(
     }
 }
 
+/// Mode and dates of a source directory, keeping read, write and search for the
+/// owner: Undo and later transfers must still be able to change its content.
+pub(super) fn restore_directory(directory: &File, source: &std::fs::Metadata) -> io::Result<()> {
+    directory.set_permissions(Permissions::from_mode(mode(source, &directory.metadata()?) | 0o700))?;
+    directory.set_times(
+        FileTimes::new()
+            .set_accessed(source.accessed()?)
+            .set_modified(source.modified()?),
+    )
+}
+
 /// The source's mode; setuid and setgid only for a copy with the same owner and group.
 fn mode(source: &std::fs::Metadata, output: &std::fs::Metadata) -> u32 {
     let mode = source.mode() & 0o7777;

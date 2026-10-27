@@ -1,6 +1,7 @@
 mod worker;
 mod destinations;
 mod links;
+mod directories;
 
 use super::{FileOperation, FileOperationManager, OpStatus, FILE_OPS_LOG_TARGET};
 use crate::models::ConflictAction;
@@ -245,6 +246,7 @@ impl FileOperationManager {
         let mut files_to_process = Vec::new();
         let mut directories_to_create = Vec::new();
         let mut links_to_create = Vec::new();
+        let mut directory_sources = HashMap::new();
         let archive_destination = op.lock().unwrap().archive_path_mappings.iter()
             .any(|(root, _)| target_dir.starts_with(root));
         let mut source_directories = crate::systems::source_directories::SourceDirectories::default();
@@ -324,6 +326,16 @@ impl FileOperationManager {
                                     entry.path()
                                 )
                             })?;
+                    }
+                    match entry.directory_metadata() {
+                        Ok(metadata) => {
+                            directory_sources.insert(dest_path.clone(), metadata);
+                        }
+                        Err(error) => log::warn!(
+                            target: FILE_OPS_LOG_TARGET,
+                            "Source directory attributes unavailable for {}: {error}",
+                            entry.path().display()
+                        ),
                     }
                     directories_to_create.push(dest_path);
                     continue;
@@ -630,6 +642,7 @@ impl FileOperationManager {
         if cancel_flag.load(Ordering::Relaxed) {
             return Err("Operation cancelled".to_string());
         }
+        Self::restore_created_directories(op, &destination_tree, &directory_sources);
 
         // Release planned source directory pins before bottom-up cleanup. Deferred
         // archive sources retain only the ancestors of their still-held files.

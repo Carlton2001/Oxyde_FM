@@ -238,6 +238,14 @@ impl SelectedEntry {
     pub fn link(&self) -> Option<&SelectedLink> {
         self.link.as_ref()
     }
+    /// Mode and dates of the held directory, read before its listing changes its access date.
+    pub fn directory_metadata(&self) -> io::Result<Metadata> {
+        self.directory
+            .as_ref()
+            .ok_or_else(|| io::Error::other("Selected source is not a directory"))?
+            .file
+            .metadata()
+    }
     pub fn into_file(self) -> io::Result<SelectedFile> {
         self.file
             .ok_or_else(|| io::Error::other("Selected source is not a file"))

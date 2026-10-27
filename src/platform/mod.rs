@@ -328,6 +328,11 @@ pub trait Platform: Send + Sync {
     fn write_archive_output_provenance(&self, parent: &std::fs::File, file: &std::fs::File, path: &std::path::Path, data: &[u8]) -> std::io::Result<()>;
     fn read_archive_output_provenance(&self, parent: &std::fs::File, file: &std::fs::File, path: &std::path::Path) -> std::io::Result<Option<Vec<u8>>>;
     /// Blocking copy with native metadata/streams where supported. The callback
+    /// Give a directory created by a copy the mode and dates of its source, once its
+    /// content is in place. Its owner keeps full access. Windows keeps its own.
+    fn restore_directory_attributes(&self, _directory: &std::fs::File, _source: &std::fs::Metadata) -> std::io::Result<()> {
+        Ok(())
+    }
     /// Reports main-stream bytes; only an absent destination is accepted.
     /// A supplied source handle must already hold the same source path/identity.
     /// The destination parent handle must retain the same directory as the path.

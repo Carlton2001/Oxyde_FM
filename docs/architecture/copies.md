@@ -63,8 +63,12 @@ comportement : sa copie native passe déjà par `CopyFileEx`.
    descripteur retenu à des positions explicites, essaie `copy_file_range` par tranches,
    puis la boucle actuelle ; date d'accès reprise ; setuid et setgid filtrés.
 2. **Droits et dates des dossiers** : la copie note mode et dates de chaque dossier source
-   au plan, et les applique à la fin aux dossiers qu'elle a créés, par leur descripteur
-   retenu (méthode `Platform` sans effet sous Windows).
-3. **Attributs étendus et ACL**, fichiers et dossiers, sur la sortie encore privée pour un
+   au plan, avant de le lister, et les applique à la fin aux dossiers qu'elle a créés, par
+   leur descripteur retenu (méthode `Platform` sans effet sous Windows). Vaut aussi pour
+   un déplacement, qui recrée les dossiers même sur un seul volume.
+3. **Annuler et Rétablir** : les dossiers que l'historique recrée (source d'un déplacement
+   annulé, destination d'un déplacement ou d'une copie rétablis) reprennent eux aussi mode
+   et dates.
+4. **Attributs étendus et ACL**, fichiers et dossiers, sur la sortie encore privée pour un
    fichier.
-4. **Bilan.**
+5. **Bilan.**

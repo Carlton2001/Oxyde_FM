@@ -352,6 +352,10 @@ impl Platform for LinuxPlatform {
         #[cfg(not(target_os = "linux"))]
         { let _ = (source, destination, held_source, created, progress); Err(std::io::ErrorKind::Unsupported.into()) }
     }
+    #[cfg(target_os = "linux")]
+    fn restore_directory_attributes(&self, directory: &std::fs::File, source: &std::fs::Metadata) -> std::io::Result<()> {
+        super::linux_file_copy::restore_directory(directory, source)
+    }
     fn open_file_for_move(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         std::fs::File::open(path)
     }

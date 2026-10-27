@@ -35,6 +35,15 @@ impl DestinationTree {
         crate::models::transaction::HistoryDirectoryIdentity::from_file(file)
     }
 
+    /// Apply source attributes through the directory retained at its creation.
+    pub fn restore_directory(&self, path: &Path, source: &std::fs::Metadata) -> io::Result<()> {
+        let directories = self.directories.lock().unwrap();
+        let directory = directories
+            .get(path)
+            .ok_or_else(|| io::Error::other("Created directory was not retained"))?;
+        platform().restore_directory_attributes(directory, source)
+    }
+
     pub fn path(&self) -> &Path {
         self.root.resolved_directory()
     }
