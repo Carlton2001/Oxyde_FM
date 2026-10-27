@@ -279,6 +279,8 @@ pub struct OxydeApp {
     pub _drive_refresh_task: Option<Task<()>>,
     pub(super) drive_details_task: Option<Task<()>>,
     pub(crate) ejecting_drive: bool,
+    /// UDisks2 object being mounted from the sidebar.
+    pub(crate) mounting_volume: Option<String>,
     pub(crate) mounted_disk_images: Vec<oxyde_lib::platform::MountedDiskImage>,
     pub(super) disk_image_refresh_task: Option<Task<()>>,
     pub(crate) shift_delete: bool,
@@ -469,6 +471,7 @@ impl OxydeApp {
             _drive_refresh_task: None,
             drive_details_task: None,
             ejecting_drive: false,
+            mounting_volume: None,
             mounted_disk_images: Vec::new(),
             disk_image_refresh_task: None,
             network_dialog: None,

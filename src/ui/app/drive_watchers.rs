@@ -109,12 +109,14 @@ impl OxydeApp {
                 }
                 let volumes = oxyde_lib::platform::platform().volumes();
                 if eject { volumes.eject(&path)? } else { volumes.unmount(&path)? }
-                Ok::<_, VolumeError>(oxyde_lib::commands::system::get_drives(Some(false)))
+                Ok::<_, VolumeError>((oxyde_lib::commands::system::get_drives(Some(false)), volumes.unmounted()))
             }).await;
             let _ = this.update(cx, |this, cx| {
                 this.ejecting_drive = false;
                 let error = match result {
-                    Ok(Ok(drives)) => {
+                    Ok(Ok((drives, unmounted))) => {
+                        // An unmounted partition comes back as a volume to mount.
+                        this.state.unmounted_volumes = unmounted;
                         this.apply_drive_snapshot(drives, cx);
                         None
                     },
@@ -133,6 +135,48 @@ impl OxydeApp {
                     this.toast(ToastKind::Error, message, error, 0, cx);
                 }
                 this.reconcile_watchers(cx);
+                cx.notify();
+            });
+        }).detach();
+    }
+
+    /// Mounts a sidebar volume in the background, then opens it in the active pane.
+    pub(crate) fn mount_volume(&mut self, id: String, cx: &mut Context<Self>) {
+        self.context_menus.clear();
+        if self.mounting_volume.is_some() || self.ejecting_drive {
+            return;
+        }
+        self.mounting_volume = Some(id.clone());
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            use oxyde_lib::platform::VolumeError;
+            let result = tokio::task::spawn_blocking(move || {
+                let volumes = oxyde_lib::platform::platform().volumes();
+                let path = volumes.mount(&id)?;
+                Ok::<_, VolumeError>((path, oxyde_lib::commands::system::get_drives(Some(false)), volumes.unmounted()))
+            }).await;
+            let _ = this.update(cx, |this, cx| {
+                this.mounting_volume = None;
+                let failure = match result {
+                    Ok(Ok((path, drives, unmounted))) => {
+                        this.drive_refresh_epoch = this.drive_refresh_epoch.wrapping_add(1);
+                        this.state.unmounted_volumes = unmounted;
+                        this.apply_drive_snapshot(drives, cx);
+                        this.reconcile_watchers(cx);
+                        this.sidebar_selected_path = Some(path.clone());
+                        let pane = this.state.active_pane_id.clone();
+                        this.navigate_to(&pane, path, cx);
+                        None
+                    }
+                    // The user dismissed the authentication dialog.
+                    Ok(Err(VolumeError::Cancelled)) => None,
+                    Ok(Err(VolumeError::WindowsHibernated)) => Some((Message::DriveMountHibernated, String::new())),
+                    Ok(Err(error)) => Some((Message::DriveMountFailed, error.to_string())),
+                    Err(error) => Some((Message::DriveMountFailed, error.to_string())),
+                };
+                if let Some((message, detail)) = failure {
+                    this.toast(ToastKind::Error, message, detail, 0, cx);
+                }
                 cx.notify();
             });
         }).detach();
@@ -164,13 +208,14 @@ impl OxydeApp {
                         let (epoch, policy_revision) = h.update(&mut cx, |this, _| {
                             (this.drive_refresh_epoch, this.trash_delete_policy.revision())
                         });
-                        if let Ok((roots, policies)) = tokio::task::spawn_blocking(|| {
+                        if let Ok((roots, unmounted, policies)) = tokio::task::spawn_blocking(|| {
                             let roots = oxyde_lib::platform::platform().volumes().roots();
+                            let unmounted = oxyde_lib::platform::platform().volumes().unmounted();
                             #[cfg(not(target_os = "windows"))]
                             super::drag::volumes::replace_mount_points(
                                 oxyde_lib::platform::platform().volumes().mount_points());
                             let policies = super::trash_settings::read_drive_policy(&roots);
-                            (roots, policies)
+                            (roots, unmounted, policies)
                         }).await {
                             h.update(&mut cx, |this, cx| {
                                 if this.ejecting_drive || this.drive_refresh_epoch != epoch
@@ -181,6 +226,8 @@ impl OxydeApp {
                                 if changed {
                                     this.drive_refresh_epoch = this.drive_refresh_epoch.wrapping_add(1);
                                 }
+                                // apply_drive_roots rebuilds the sidebar.
+                                this.state.unmounted_volumes = unmounted;
                                 this.apply_drive_roots(roots, cx);
                                 if this.trash_delete_policy.replace(policy_revision, policies) {
                                     cx.notify();
@@ -562,6 +609,7 @@ mod tests {
             physical_id: Some("Disk 0".into()),
             remote_path: None,
             file_system: None,
+            volume_bytes: 0,
         };
         let mut root = known.clone();
         root.total_bytes = 0;

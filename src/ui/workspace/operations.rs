@@ -24,6 +24,7 @@ impl WorkspaceState {
             pinned_items,
             onedrive_items: Vec::new(),
             drives,
+            unmounted_volumes: Vec::new(),
             layout: LayoutNode::Pane(Box::new(initial_pane)),
             active_pane_id: pane_id,
             expanded_paths: std::collections::HashSet::new(),

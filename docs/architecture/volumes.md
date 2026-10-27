@@ -1,7 +1,7 @@
 # Volumes
 
-**Statut : pilote en cours, étapes 1 à 4 faites** (trait extrait, inventaire UDisks2,
-notifications de montage, démontage et éjection). Ce document deviendra le contrat du domaine une fois le pilote terminé.
+**Statut : pilote en cours, étapes 1 à 5 faites** (trait extrait, inventaire UDisks2,
+notifications de montage, démontage et éjection, volumes non montés). Ce document deviendra le contrat du domaine une fois le pilote terminé.
 
 Le pilote sort les volumes du trait `Platform` dans un trait de domaine et livre, sous
 Linux, l'équivalent de Nautilus : partitions montées et non montées, montage au clic,
@@ -49,10 +49,11 @@ pub trait Volumes: Send + Sync {
   quand le type USB n'arrive qu'avec les détails matériels. Linux suit la barre latérale
   GTK : un lecteur amovible ou optique s'éjecte, un autre volume se démonte ; ni `/`, ni
   les montages réseau, ni le repli sans UDisks2 n'offrent d'action.
-- `UnmountedVolume { id, label, size, removable, fs_type }` forme une liste séparée dans l'état ;
-  Windows la renvoie vide.
+- `UnmountedVolume { id, label, size, removable, file_system }` forme une liste séparée dans
+  l'état (`unmounted_volumes`) ; Windows la renvoie vide. Sous Linux, `id` est l'objet bloc
+  UDisks2 ; `mount` refuse tout autre chemin D-Bus.
 - `VolumeError` distingue `Cancelled` (authentification annulée : aucun message), `NotAuthorized`,
-  `Busy(applications)` (fichiers ouverts) et `Other(detail)`.
+  `Busy(applications)` (fichiers ouverts), `WindowsHibernated` et `Other(detail)`.
 
 ## Linux : `src/platform/linux_volumes/`
 
@@ -62,7 +63,9 @@ pub trait Volumes: Send + Sync {
 - `inventory.rs` : fonction pure objets UDisks2 → `DriveInfo`, testée sur fixtures, comme
   GVfs : `HintIgnore` masque EFI, récupération et swap ; un volume monté n'apparaît que
   sous `/run/media/$USER/`, `/media/` ou le dossier personnel, sans composant caché, et `/`
-  reste en tête (« Root »). `/boot` disparaît donc. `HintSystem` ne sert pas : UDisks2 le
+  reste en tête (« Root »), suivi des disques internes, puis amovibles, puis optiques,
+  chacun par nom (tri naturel) ; les volumes non montés suivent le même ordre, internes
+  d'abord. `/boot` disparaît donc. `HintSystem` ne sert pas : UDisks2 le
   pose sur tout disque interne, `Data` compris. Optique → `cdrom`, amovible ou USB →
   `removable`. Capacité par `rustix::fs::statvfs` en mode détaillé, sauf montages réseau.
   `media_type` reste vide : le renseigner basculerait la surveillance du sondage vers
@@ -84,8 +87,20 @@ pub trait Volumes: Send + Sync {
   d'UDisks2, de `mount` ou d'un client réseau ; chaque changement incrémente la révision.
   La liste se rafraîchit aussitôt, le sondage passe de 2 s à 30 s et ne reste qu'en repli.
   Fermer le tube du garde termine le fil. Fonctionne aussi sans UDisks2.
-- `signals.rs` (étape 5) : `InterfacesAdded`/`InterfacesRemoved` d'UDisks2 signaleront les
-  volumes branchés mais non montés, que la table des montages ignore.
+- `signals.rs` : `InterfacesAdded`/`InterfacesRemoved` d'UDisks2, et ses
+  `PropertiesChanged` sur `Filesystem` ou `Block` (points de montage, libellés), incrémentent
+  la même révision : les volumes branchés sans être montés, que la table des montages
+  ignore, et l'état qu'UDisks2 enregistre après le noyau. Progression des tâches et
+  mesures SMART sont ignorées.
+  Le fil a sa propre connexion ; un itérateur bloquant ne se réveille pas, il s'arrête donc
+  au signal suivant la libération du garde.
+- `inventory::unmounted` : systèmes de fichiers (`IdUsage = filesystem`) sans point de
+  montage, comme le moniteur de volumes GVfs : `HintIgnore` les masque, un disque entier
+  partitionné cède la place à ses partitions, une entrée `/etc/fstab` hors des lieux de
+  l'utilisateur reste masquée sauf `x-gvfs-show` (`x-gvfs-hide` masque toujours). Libellé
+  vide sans étiquette de système de fichiers. `Filesystem.Mount` sans
+  option renvoie le point de montage ; ntfs-3g signale un Windows en veille prolongée ou
+  arrêté en démarrage rapide (`WindowsHibernated`).
 - `fallback.rs` : sans UDisks2 (WSL, conteneur), tous les montages non virtuels de
   `mountinfo` (`mounts.rs`, échappements décodés), sans montage ni éjection ; avec UDisks2,
   il n'ajoute que les montages réseau.
@@ -101,18 +116,23 @@ pub trait Volumes: Send + Sync {
 ## Interface utilisateur
 
 - Linux nomme un lecteur par son seul libellé (« Root », « Data »), comme Nautilus et
-  Dolphin, dans la barre latérale, les propriétés et la liste de la corbeille ;
-  l'infobulle et la ligne « Emplacement » des propriétés donnent le point de montage.
-  Windows garde « Nom (C:) ».
+  Dolphin, dans la barre latérale, les onglets, les propriétés et la liste de la
+  corbeille (`format::drive_name`) ; l'infobulle et la ligne « Emplacement » des propriétés
+  donnent le point de montage. Sans étiquette, le volume, monté ou non, s'appelle
+  « Volume de 487 Go » d'après la taille de sa partition (`DriveInfo::volume_bytes`, clé
+  `unlabeled-volume`), comme Nautilus, plutôt que par l'UUID qui nomme son dossier de
+  montage ; les volumes nommés passent avant. Windows garde « Nom (C:) ».
 - « Propriétés système » n'existe que sous Windows : Linux n'a pas de dialogue équivalent.
-- Partitions non montées dans la section des lecteurs, après les montées, icône atténuée.
-  Clic gauche : montage en arrière-plan, puis navigation vers le chemin obtenu. Curseur inchangé.
+- Volumes non montés (`SidebarItem::Volume`, `sidebar/volume_row.rs`) dans la section des
+  lecteurs, après les montés, icône et libellé atténués, infobulle « format · taille ».
+  Clic gauche : montage en arrière-plan (`mount_volume`), puis navigation vers le chemin
+  obtenu. Curseur inchangé, pas de menu contextuel, absents du rail replié.
 - Menu : « Démonter » (icône `eject`) si `actions.unmount`, « Éjecter » (`unplug`) si
   `actions.eject`. `release_drive` remplace `eject_usb_drive` pour les deux : les
   surveillances sont relâchées avant l'appel, sinon Linux répond `Busy` ; une
   authentification annulée n'affiche rien.
-- Clés `drive-unmount` et `drive-unmount-failed` dans les cinq catalogues ;
-  `drive-mount-failed` (avec le cas d'un NTFS Windows en veille prolongée) à l'étape 5.
+- Clés `drive-unmount`, `drive-unmount-failed`, `drive-holders`, `drive-mount-failed` et
+  `drive-mount-hibernated` dans les cinq catalogues.
 
 ## Étapes
 
@@ -130,7 +150,9 @@ manuel de `tests.yml` sur la branche (elle n'est pas fusionnée dans `main`).
 4. **Démonter et éjecter** avec authentification. *Fait* : fichiers communs touchés
    `volumes.rs`, `windows_volumes.rs` (type d'erreur), `drive_watchers.rs`, le menu des
    lecteurs et les catalogues ; suite Windows à passer.
-5. **Volumes non montés** et montage au clic, avec les signaux UDisks2.
+5. **Volumes non montés** et montage au clic, avec les signaux UDisks2. *Fait* : fichiers
+   communs touchés `volumes.rs` (types), l'état et la barre latérale (`workspace`,
+   `sidebar`), `drive_watchers.rs` et les catalogues ; Windows n'en liste aucun.
 6. *Facultatif* : `is_ssd` (`/sys/block/*/queue/rotational`) et `physical_disk_id` Linux,
    utilisés par le parallélisme des copies.
 7. **Bilan** : fichiers communs touchés par étape, décision sur le domaine suivant.

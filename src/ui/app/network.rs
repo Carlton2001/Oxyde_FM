@@ -601,6 +601,7 @@ mod tests {
             physical_id: None,
             remote_path: None,
             file_system: None,
+            volume_bytes: 0,
         }
     }
     #[test]

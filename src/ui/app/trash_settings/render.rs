@@ -208,7 +208,7 @@ fn render_body(
                     format!("{} ({})", drive.label, drive.path.trim_end_matches('\\'))
                 } else {
                     // Linux file managers name volumes alone.
-                    drive.label.clone()
+                    crate::ui::format::drive_name(drive, cx.i18n())
                 }))
                 .child(
                     div()

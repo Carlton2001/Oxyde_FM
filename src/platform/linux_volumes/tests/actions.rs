@@ -12,6 +12,10 @@ fn block(object: &str, mounts: Option<&[&str]>, drive: Option<Drive>) -> Block {
         label: String::new(),
         id_type: String::new(),
         id_version: String::new(),
+        id_usage: "filesystem".into(),
+        size: 0,
+        partitioned: false,
+        fstab: None,
         hint_ignore: false,
         mount_points: mounts.map(|points| points.iter().map(|point| point.to_string()).collect()),
         drive,
@@ -52,4 +56,12 @@ fn dismissed_authentication_and_busy_volumes_are_recognised() {
     assert_eq!(error("org.freedesktop.UDisks2.Error.DeviceBusy"), VolumeError::Busy(Vec::new()));
     assert_eq!(error("org.freedesktop.UDisks2.Error.NotAuthorizedCanObtain"), VolumeError::NotAuthorized);
     assert_eq!(error("org.freedesktop.UDisks2.Error.Failed"), VolumeError::Other("detail".into()));
+}
+
+#[test]
+fn a_hibernated_windows_volume_is_recognised() {
+    assert!(hibernated("Error mounting /dev/nvme1n1p3: Windows is hibernated, refused to mount."));
+    assert!(hibernated("The NTFS partition is in an unsafe state. Please resume and shutdown Windows fully (no hibernation or fast restarting.)"));
+    assert!(!hibernated("wrong fs type, bad option, bad superblock"));
+    assert!(matches!(mount("/org/freedesktop/UDisks2/drives/key"), Err(VolumeError::Other(_))));
 }

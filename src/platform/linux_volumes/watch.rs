@@ -1,5 +1,6 @@
 //! Mount notifications: the kernel flags `/proc/self/mountinfo` on every mount and
 //! unmount of our namespace, whether UDisks2, `mount` or a network client made it.
+//! UDisks2 signals add the devices that are plugged without being mounted.
 use rustix::event::{poll, PollFd, PollFlags};
 use rustix::pipe::{pipe_with, PipeFlags};
 use std::os::fd::OwnedFd;
@@ -9,6 +10,7 @@ use std::sync::Arc;
 /// Dropping the guard closes the pipe, which ends the watching thread.
 pub(super) struct Watch {
     _stop: OwnedFd,
+    _signals: Option<super::signals::Signals>,
 }
 
 pub(super) fn start(revision: Arc<AtomicU64>) -> Result<Watch, String> {
@@ -16,9 +18,16 @@ pub(super) fn start(revision: Arc<AtomicU64>) -> Result<Watch, String> {
     let (stopped, stop) = pipe_with(PipeFlags::CLOEXEC).map_err(|error| error.to_string())?;
     std::thread::Builder::new()
         .name("oxyde-mount-watch".into())
-        .spawn(move || run(&mounts, &stopped, &revision))
+        .spawn({
+            let revision = revision.clone();
+            move || run(&mounts, &stopped, &revision)
+        })
         .map_err(|error| error.to_string())?;
-    Ok(Watch { _stop: stop })
+    // Without UDisks2, the mount table alone still reports every mounted volume.
+    let signals = super::signals::start(revision)
+        .inspect_err(|error| log::info!("UDisks2 signals unavailable: {error}"))
+        .ok();
+    Ok(Watch { _stop: stop, _signals: signals })
 }
 
 fn run(mounts: &std::fs::File, stopped: &OwnedFd, revision: &AtomicU64) {

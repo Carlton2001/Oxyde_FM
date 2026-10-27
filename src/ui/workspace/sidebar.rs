@@ -29,6 +29,9 @@ impl WorkspaceState {
                 self.populate_subdir(&drive.path, 1, &mut new_items);
             }
         }
+        for volume in &self.unmounted_volumes {
+            new_items.push(SidebarItem::Volume { volume: volume.clone() });
+        }
 
         new_items.push(SidebarItem::Header(Message::SidebarLocations));
         #[cfg(target_os = "windows")]

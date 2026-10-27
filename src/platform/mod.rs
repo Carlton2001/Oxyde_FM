@@ -8,7 +8,7 @@ pub use memory::ProcessMemorySnapshot;
 pub use viewer_media::{decode_media_report, encode_media_report, ViewerMediaCommand, ViewerMediaControl, MEDIA_ENDED, MEDIA_FAILED, MEDIA_LOADING, MEDIA_PAUSED, MEDIA_PLAYING, MEDIA_REPORT_BYTES};
 pub use file_names::FileNameRules;
 mod volumes;
-pub use volumes::{DriveActions, VolumeError, Volumes};
+pub use volumes::{DriveActions, UnmountedVolume, VolumeError, Volumes};
 
 #[derive(Debug)]
 pub enum NetworkDisconnectError {

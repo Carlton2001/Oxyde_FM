@@ -57,6 +57,7 @@ pub fn list_drive_roots() -> Vec<DriveInfo> {
                 physical_id: None,
                 remote_path: None,
                 file_system: None,
+                volume_bytes: 0,
             })
         })
         .collect()
@@ -551,6 +552,7 @@ pub fn list_drives(skip_hardware_info: bool) -> Vec<DriveInfo> {
                     physical_id,
                     remote_path,
                     file_system,
+                    volume_bytes: 0,
                 });
             }
         }

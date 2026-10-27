@@ -79,7 +79,7 @@ pub(super) fn render_sidebar_rail(
         let (path, label, icon, text) = match item {
             SidebarItem::Drive { drive, .. } => (
                 drive.path.clone(),
-                crate::ui::format::drive_label(&drive.label, &drive.path, cx.i18n()),
+                crate::ui::format::drive_name(drive, cx.i18n()),
                 None,
                 Some(drive.path.chars().next().unwrap_or('/').to_string()),
             ),

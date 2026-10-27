@@ -8,7 +8,7 @@ fn workspace() -> WorkspaceState {
         layout: LayoutNode::Pane(Box::new(pane)),
         pinned_items: Vec::new(),
         onedrive_items: Vec::new(),
-        drives: Vec::new(),
+        drives: Vec::new(), unmounted_volumes: Vec::new(),
         expanded_paths: Default::default(),
         sidebar_items: Vec::new(),
         sidebar_nodes: Default::default(),

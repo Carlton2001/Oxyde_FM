@@ -40,6 +40,7 @@ pub(super) fn root() -> DriveInfo {
         physical_id: None,
         remote_path: None,
         file_system: None,
+        volume_bytes: 0,
     }
 }
 
@@ -110,5 +111,6 @@ fn drive(entry: &MountEntry) -> Option<DriveInfo> {
         physical_id: None,
         remote_path: device.starts_with("//").then(|| device.to_string()),
         file_system: super::inventory::file_system(fs_type, ""),
+        volume_bytes: 0,
     })
 }

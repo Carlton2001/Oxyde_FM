@@ -58,8 +58,9 @@ pub(super) fn render_sidebar_tree(
                 measure(pinned_display_name(item, _cx.i18n()).to_string()) + logical(60.0)
             }
             SidebarItem::Drive { drive, .. } => {
-                measure(crate::ui::format::drive_label(&drive.label, &drive.path, _cx.i18n()).to_string()) + logical(60.0)
+                measure(crate::ui::format::drive_name(drive, _cx.i18n())) + logical(60.0)
             }
+            SidebarItem::Volume { volume } => measure(super::volume_row::name(volume, _cx.i18n())) + logical(60.0),
             SidebarItem::Directory { node, depth, .. } => {
                 (*depth as f32 * logical(12.0)) + measure(node.name.clone()) + logical(60.0)
             }
@@ -95,6 +96,7 @@ pub(super) fn render_sidebar_tree(
         .find_pane(&view.state.active_pane_id)
         .map(|pane| pane.active_tab().path.clone());
     let show_tooltips = view.context_menus.is_empty();
+    let mounting_volume = view.mounting_volume.clone();
 
     // Clamp before rendering the toolbar so its state matches the visible rows.
     let scroll = view.sidebar_scroll.0.borrow().base_handle.clone();
@@ -150,6 +152,7 @@ pub(super) fn render_sidebar_tree(
                                 expandable_drives,
                                 show_tooltips,
                                 use_system_icons,
+                                mounting_volume: mounting_volume.clone(),
                             };
                             let render_rows = move |range: std::ops::Range<usize>, cx: &mut App| {
                                 render_sidebar_rows(range, cx, &items_for_list, &h, &sel, &presentation)

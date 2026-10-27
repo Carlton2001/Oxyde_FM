@@ -101,7 +101,7 @@ impl DuplicateWindow {
             .map(|d| {
                 (
                     d.path.clone(),
-                    crate::ui::format::drive_label(&d.label, &d.path, cx.i18n()),
+                    crate::ui::format::drive_name(d, cx.i18n()),
                     Self::disk_label(d, cx),
                 )
             })

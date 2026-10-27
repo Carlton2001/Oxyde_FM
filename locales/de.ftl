@@ -339,6 +339,7 @@ drag-items = { $count ->
 native-menu-loading = Menü wird geladen…
 
 local-drive = Lokaler Datenträger ({ $drive })
+unlabeled-volume = { $size } Datenträger
 
 unknown-item = Unbekannt
 
@@ -516,6 +517,8 @@ network-loading = Laufwerke werden geladen…
 drive-eject-failed = Laufwerk konnte nicht ausgeworfen werden. Eine andere Anwendung verwendet es möglicherweise. { $detail }
 drive-unmount-failed = Datenträger konnte nicht ausgehängt werden. Eine andere Anwendung verwendet ihn möglicherweise. { $detail }
 drive-holders = Geöffnet in: { $applications }.
+drive-mount-failed = Datenträger konnte nicht eingehängt werden. { $detail }
+drive-mount-hibernated = Windows wurde nicht vollständig heruntergefahren (Ruhezustand oder Schnellstart), daher bleibt dieser Datenträger gesperrt. Fahren Sie Windows vollständig herunter und versuchen Sie es erneut.
 
 archive-format = Archiv .{ $format }
 

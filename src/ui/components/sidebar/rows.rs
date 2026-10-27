@@ -20,6 +20,8 @@ pub(super) struct SidebarRowPresentation {
     pub(super) expandable_drives: HashSet<String>,
     pub(super) show_tooltips: bool,
     pub(super) use_system_icons: bool,
+    /// Rows render while the app is being updated: they cannot read it.
+    pub(super) mounting_volume: Option<String>,
 }
 
 pub(super) fn render_sidebar_rows(
@@ -32,7 +34,7 @@ pub(super) fn render_sidebar_rows(
 ) -> Vec<AnyElement> {
     let SidebarRowPresentation {
         row_w, pinned_paths: pinned_paths_for_list, expandable_drives,
-        show_tooltips, use_system_icons,
+        show_tooltips, use_system_icons, mounting_volume,
     } = presentation;
     let (row_w, show_tooltips, use_system_icons) = (*row_w, *show_tooltips, *use_system_icons);
     let items  = items_for_list.to_vec();
@@ -187,7 +189,7 @@ pub(super) fn render_sidebar_rows(
                 let is_exp     = *is_expanded;
                 let sel_bg:    Hsla = theme.selected;
                 let hov_bg:    Hsla = if is_sel { theme.selection_hover } else { theme.hover };
-                let label      = crate::ui::format::drive_label(&drive.label, &drive.path, cx.i18n());
+                let label      = crate::ui::format::drive_name(drive, cx.i18n());
 
                 div()
                     .id(SharedString::from(format!("sb-drv-{}", path)))
@@ -312,6 +314,11 @@ pub(super) fn render_sidebar_rows(
                         }
                     })
                     .into_any_element()
+            }
+
+            SidebarItem::Volume { volume } => {
+                let mounting = mounting_volume.as_deref() == Some(volume.id.as_str());
+                super::volume_row::render(item, volume, row_w, show_tooltips, mounting, h, theme, cx)
             }
 
             // ── Directory item ─────────────────────────────

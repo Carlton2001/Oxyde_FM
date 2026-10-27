@@ -1,6 +1,6 @@
 //! Linux volume domain: UDisks2 inventory, unmounting and ejection, mount table fallback
 //! and notifications.
-use super::{DriveActions, MountedDiskImage, VolumeError, Volumes};
+use super::{DriveActions, MountedDiskImage, UnmountedVolume, VolumeError, Volumes};
 use crate::models::DriveInfo;
 
 mod actions;
@@ -8,6 +8,7 @@ mod fallback;
 mod holders;
 mod inventory;
 mod mounts;
+mod signals;
 mod udisks;
 mod watch;
 
@@ -57,6 +58,16 @@ impl Volumes for LinuxVolumes {
         }
         let eject = matches!(drive.drive_type.as_str(), "removable" | "cdrom");
         DriveActions { unmount: !eject, eject }
+    }
+
+    fn unmounted(&self) -> Vec<UnmountedVolume> {
+        udisks::blocks()
+            .map(|blocks| inventory::unmounted(&blocks, &inventory::Session::current()))
+            .unwrap_or_default()
+    }
+
+    fn mount(&self, id: &str) -> Result<String, VolumeError> {
+        actions::mount(id)
     }
 
     fn unmount(&self, path: &str) -> Result<(), VolumeError> {

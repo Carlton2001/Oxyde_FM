@@ -9,6 +9,16 @@ pub struct DriveActions {
     pub eject: bool,
 }
 
+/// A filesystem the system knows but has not mounted; `id` is what `mount` takes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnmountedVolume {
+    pub id: String,
+    pub label: String,
+    pub size: u64,
+    pub removable: bool,
+    pub file_system: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VolumeError {
     /// The user dismissed the authentication dialog: nothing to report.
@@ -16,6 +26,8 @@ pub enum VolumeError {
     /// Files are still open on the volume, by the named processes when they are known.
     Busy(Vec<String>),
     NotAuthorized,
+    /// Windows hibernated, or shut down with Fast Startup, and left its NTFS volume in use.
+    WindowsHibernated,
     Other(String),
 }
 
@@ -26,6 +38,7 @@ impl std::fmt::Display for VolumeError {
             // The failure messages already say that an application uses the volume.
             Self::Busy(holders) => formatter.write_str(&holders.join(", ")),
             Self::NotAuthorized => formatter.write_str("Not authorized"),
+            Self::WindowsHibernated => formatter.write_str("Windows is hibernated"),
             Self::Other(detail) => formatter.write_str(detail),
         }
     }
@@ -45,6 +58,11 @@ pub trait Volumes: Send + Sync {
     /// Decided from the listed drive alone, without system calls.
     fn actions(&self, drive: &DriveInfo) -> DriveActions {
         DriveActions { unmount: false, eject: drive.is_usb() }
+    }
+    fn unmounted(&self) -> Vec<UnmountedVolume> { Vec::new() }
+    /// Mounts an `UnmountedVolume` and returns its mount point.
+    fn mount(&self, _id: &str) -> Result<String, VolumeError> {
+        Err(VolumeError::Other("Mounting is not supported".into()))
     }
     fn unmount(&self, _path: &str) -> Result<(), VolumeError> {
         Err(VolumeError::Other("Unmounting is not supported".into()))

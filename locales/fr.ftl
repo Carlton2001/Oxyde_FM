@@ -198,6 +198,7 @@ drag-items = { $count ->
 
 native-menu-loading = Chargement du menu…
 local-drive = Disque local ({ $drive })
+unlabeled-volume = Volume de { $size }
 unknown-item = Inconnu
 menu-expand-all = Développer tout
 menu-collapse-all = Réduire tout
@@ -299,6 +300,8 @@ network-loading = Chargement des lecteurs…
 drive-eject-failed = Impossible d’éjecter le lecteur. Il est peut-être utilisé par une autre application. { $detail }
 drive-unmount-failed = Impossible de démonter le volume. Il est peut-être utilisé par une autre application. { $detail }
 drive-holders = Ouvert dans : { $applications }.
+drive-mount-failed = Impossible de monter le volume. { $detail }
+drive-mount-hibernated = Windows n’a pas été complètement arrêté (veille prolongée ou démarrage rapide) : ce volume reste verrouillé. Arrêtez complètement Windows, puis réessayez.
 
 archive-format = Archive .{ $format }
 compression-fast = Rapide

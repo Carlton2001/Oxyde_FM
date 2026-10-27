@@ -82,6 +82,8 @@ pub enum Message {
     UnmountDrive,
     UnmountDriveFailed,
     DriveHolders,
+    DriveMountFailed,
+    DriveMountHibernated,
     MountDiskImage,
     UnmountDiskImage,
     DiskImageMountFailed,
@@ -635,6 +637,7 @@ pub enum Message {
     DragItems,
     NativeMenuLoading,
     LocalDrive,
+    UnlabeledVolume,
     UnknownItem,
 }
 
@@ -646,6 +649,8 @@ impl Message {
             Self::UnmountDrive => "drive-unmount",
             Self::UnmountDriveFailed => "drive-unmount-failed",
             Self::DriveHolders => "drive-holders",
+            Self::DriveMountFailed => "drive-mount-failed",
+            Self::DriveMountHibernated => "drive-mount-hibernated",
             Self::MountDiskImage => "disk-image-mount",
             Self::UnmountDiskImage => "disk-image-unmount",
             Self::DiskImageMountFailed => "disk-image-mount-failed",
@@ -1252,6 +1257,7 @@ impl Message {
             Self::DragItems => "drag-items",
             Self::NativeMenuLoading => "native-menu-loading",
             Self::LocalDrive => "local-drive",
+            Self::UnlabeledVolume => "unlabeled-volume",
             Self::UnknownItem => "unknown-item",
         }
     }
@@ -1463,6 +1469,8 @@ mod tests {
                 Message::UnmountDrive,
                 Message::UnmountDriveFailed,
                 Message::DriveHolders,
+                Message::DriveMountFailed,
+                Message::DriveMountHibernated,
                 Message::MountDiskImage,
                 Message::UnmountDiskImage,
                 Message::DiskImageMountFailed,
@@ -2032,6 +2040,7 @@ mod tests {
                 Message::DragItems,
                 Message::NativeMenuLoading,
                 Message::LocalDrive,
+                Message::UnlabeledVolume,
                 Message::UnknownItem,
             ];
             let mut args = FluentArgs::new();
@@ -2083,6 +2092,7 @@ mod tests {
             args.set("limit", "256 Mo");
             args.set("locations", "C:/école/récupération");
             args.set("applications", "nautilus");
+            args.set("size", "487 Go");
             for message in messages {
                 let pattern = i18n
                     .active

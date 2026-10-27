@@ -11,6 +11,6 @@ fn dropping_the_guard_ends_the_watch() {
         finished.send(()).unwrap();
     });
     assert!(matches!(completion.recv_timeout(Duration::from_millis(50)), Err(mpsc::RecvTimeoutError::Timeout)));
-    drop(Watch { _stop: stop });
+    drop(Watch { _stop: stop, _signals: None });
     completion.recv_timeout(Duration::from_secs(2)).unwrap();
 }

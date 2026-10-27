@@ -22,6 +22,22 @@ pub fn drive_label(label: &str, path: &str, i18n: &crate::ui::i18n::I18n) -> Str
         label.to_string()
     }
 }
+/// A drive's display name. Linux names a volume without label by its size, as Nautilus.
+pub fn drive_name(drive: &oxyde_lib::models::DriveInfo, i18n: &crate::ui::i18n::I18n) -> String {
+    if cfg!(target_os = "windows") || !drive.label.is_empty() || drive.volume_bytes == 0 {
+        drive_label(&drive.label, &drive.path, i18n)
+    } else {
+        unlabeled_volume(drive.volume_bytes, i18n)
+    }
+}
+
+/// « Volume de 487 Go »: a filesystem without label, mounted or not.
+pub fn unlabeled_volume(bytes: u64, i18n: &crate::ui::i18n::I18n) -> String {
+    let mut args = crate::ui::i18n::FluentArgs::new();
+    args.set("size", format_size(bytes, false, false, i18n.language()));
+    i18n.text_with_args(crate::ui::i18n::Message::UnlabeledVolume, &args).to_string()
+}
+
 pub fn date_format(cx: &gpui::App) -> DateFormat {
     cx.global::<DateFormatPreference>().0
 }

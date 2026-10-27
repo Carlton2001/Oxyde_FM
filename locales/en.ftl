@@ -192,6 +192,7 @@ drag-items = { $count ->
 
 native-menu-loading = Loading menu…
 local-drive = Local Disk ({ $drive })
+unlabeled-volume = { $size } Volume
 unknown-item = Unknown
 menu-expand-all = Expand all
 menu-collapse-all = Collapse all
@@ -293,6 +294,8 @@ network-loading = Loading drives…
 drive-eject-failed = Unable to eject the drive. Another application may be using it. { $detail }
 drive-unmount-failed = Unable to unmount the volume. Another application may be using it. { $detail }
 drive-holders = Open in: { $applications }.
+drive-mount-failed = Unable to mount the volume. { $detail }
+drive-mount-hibernated = Windows was not fully shut down (hibernation or Fast Startup), so this volume stays locked. Shut Windows down completely, then try again.
 
 archive-format = Archive .{ $format }
 compression-fast = Fast

@@ -87,7 +87,10 @@ impl OxydeApp {
                         let norm_drive = drive.path.trim_end_matches(['/', '\\']);
                         let norm_tab = tab_data.path.trim_end_matches(['/', '\\']);
                         if norm_drive.eq_ignore_ascii_case(norm_tab) {
-                            drive_name = Some(if drive.label.is_empty() {
+                            drive_name = Some(if !cfg!(target_os = "windows") {
+                                // Linux names a volume alone, as the sidebar.
+                                crate::ui::format::drive_name(drive, cx.i18n())
+                            } else if drive.label.is_empty() {
                                 {
                                     let mut args = FluentArgs::new();
                                     args.set("drive", norm_drive);

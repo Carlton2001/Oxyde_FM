@@ -339,6 +339,7 @@ drag-items = { $count ->
 native-menu-loading = Caricamento del menu…
 
 local-drive = Disco locale ({ $drive })
+unlabeled-volume = Volume da { $size }
 
 unknown-item = Sconosciuto
 
@@ -516,6 +517,8 @@ network-loading = Caricamento delle unità…
 drive-eject-failed = Impossibile espellere l’unità. Un’altra applicazione potrebbe usarla. { $detail }
 drive-unmount-failed = Impossibile smontare il volume. Un’altra applicazione potrebbe usarlo. { $detail }
 drive-holders = Aperto in: { $applications }.
+drive-mount-failed = Impossibile montare il volume. { $detail }
+drive-mount-hibernated = Windows non è stato arrestato completamente (ibernazione o avvio rapido), quindi questo volume resta bloccato. Arresta completamente Windows, quindi riprova.
 
 archive-format = Archivio .{ $format }
 

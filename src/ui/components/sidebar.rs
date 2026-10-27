@@ -4,6 +4,7 @@ mod rail;
 mod rows;
 mod toolbar;
 mod tree;
+mod volume_row;
 
 use crate::ui::app::OxydeApp;
 use crate::ui::i18n::{I18n, Message};
@@ -29,7 +30,7 @@ const SIDEBAR_ROW_H: Rems = rems(1.75);
 fn sidebar_row_h() -> f32 { rem_pixels(SIDEBAR_ROW_H).as_f32() }
 
 pub(crate) fn sidebar_item_height(item: &SidebarItem) -> f32 {
-    if matches!(item, SidebarItem::Drive { .. }) { rem_pixels(rems(2.25)).as_f32() }
+    if matches!(item, SidebarItem::Drive { .. } | SidebarItem::Volume { .. }) { rem_pixels(rems(2.25)).as_f32() }
     else { sidebar_row_h() }
 }
 

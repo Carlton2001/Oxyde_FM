@@ -113,6 +113,10 @@ pub enum SidebarItem {
         drive: DriveInfo,
         is_expanded: bool,
     },
+    /// A filesystem that a left click mounts; Windows lists none.
+    Volume {
+        volume: oxyde_lib::platform::UnmountedVolume,
+    },
     Directory {
         node: SidebarNode,
         depth: usize,
@@ -257,6 +261,7 @@ pub struct WorkspaceState {
     pub pinned_items: Vec<QuickAccessItem>,
     pub onedrive_items: Vec<QuickAccessItem>,
     pub drives: Vec<DriveInfo>,
+    pub unmounted_volumes: Vec<oxyde_lib::platform::UnmountedVolume>,
     pub layout: LayoutNode,
     pub active_pane_id: String,
     pub expanded_paths: std::collections::HashSet<String>,

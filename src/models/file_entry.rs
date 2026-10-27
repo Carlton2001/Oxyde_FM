@@ -142,6 +142,8 @@ pub struct DriveInfo {
     pub remote_path: Option<String>,
     /// Display name of the volume format, such as NTFS, FAT32 or ext4.
     pub file_system: Option<String>,
+    /// Partition size, which names a volume without label; 0 when unknown.
+    pub volume_bytes: u64,
 }
 
 impl DriveInfo {

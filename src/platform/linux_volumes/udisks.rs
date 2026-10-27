@@ -9,7 +9,8 @@ use zbus::zvariant::{ObjectPath, OwnedValue, Value};
 const BLOCK: &str = "org.freedesktop.UDisks2.Block";
 const FILESYSTEM: &str = "org.freedesktop.UDisks2.Filesystem";
 const DRIVE: &str = "org.freedesktop.UDisks2.Drive";
-const SERVICE: &str = "org.freedesktop.UDisks2";
+const PARTITION_TABLE: &str = "org.freedesktop.UDisks2.PartitionTable";
+pub(super) const SERVICE: &str = "org.freedesktop.UDisks2";
 
 static AVAILABLE: AtomicBool = AtomicBool::new(false);
 
@@ -20,7 +21,14 @@ pub(super) struct Block {
     /// UDisks2 `IdType` and `IdVersion`, such as `vfat` and `FAT32`.
     pub id_type: String,
     pub id_version: String,
+    /// `filesystem`, `crypto`, `raid`, `other` or empty.
+    pub id_usage: String,
+    pub size: u64,
     pub hint_ignore: bool,
+    /// A whole disk partitioned: its partitions are the volumes.
+    pub partitioned: bool,
+    /// `/etc/fstab` mount point and options, when the system configures the filesystem.
+    pub fstab: Option<(String, String)>,
     /// `None` without a filesystem; empty when the filesystem is not mounted.
     pub mount_points: Option<Vec<String>>,
     pub drive: Option<Drive>,
@@ -95,7 +103,11 @@ pub(super) fn blocks() -> zbus::Result<Vec<Block>> {
                 label: string(block, "IdLabel"),
                 id_type: string(block, "IdType"),
                 id_version: string(block, "IdVersion"),
+                id_usage: string(block, "IdUsage"),
+                size: block.get("Size").and_then(|value| value.downcast_ref::<u64>().ok()).unwrap_or(0),
                 hint_ignore: boolean(block, "HintIgnore"),
+                partitioned: interfaces.contains_key(PARTITION_TABLE),
+                fstab: fstab(block),
                 mount_points: interfaces.get(FILESYSTEM).map(|filesystem| mount_points(filesystem)),
                 drive: drive_path.and_then(|path| drives.get(path.as_str()).cloned()),
             })
@@ -111,6 +123,14 @@ pub(super) fn call(object: &str, interface: &str, method: &str) -> zbus::Result<
         let options: HashMap<&str, Value> = HashMap::new();
         Proxy::new(connection, SERVICE, object, interface)?.call_method(method, &(options,))?;
         Ok(())
+    })
+}
+
+/// `Filesystem.Mount`, which returns the mount point UDisks2 chose.
+pub(super) fn mount(object: &str) -> zbus::Result<String> {
+    with_connection(|connection| {
+        let options: HashMap<&str, Value> = HashMap::new();
+        Proxy::new(connection, SERVICE, object, FILESYSTEM)?.call("Mount", &(options,))
     })
 }
 
@@ -140,6 +160,13 @@ fn string(properties: &Properties, name: &str) -> String {
 fn bytes_string(value: Option<&OwnedValue>) -> Option<String> {
     let bytes = Vec::<u8>::try_from(value?.try_clone().ok()?).ok()?;
     Some(String::from_utf8_lossy(bytes.strip_suffix(&[0]).unwrap_or(&bytes)).into_owned())
+}
+
+/// `Configuration` is `a(sa{sv})`; the `fstab` entry holds `dir` and `opts` as byte strings.
+fn fstab(block: &Properties) -> Option<(String, String)> {
+    let entries = Vec::<(String, HashMap<String, OwnedValue>)>::try_from(block.get("Configuration")?.try_clone().ok()?).ok()?;
+    let (_, entry) = entries.into_iter().find(|(kind, _)| kind == "fstab")?;
+    Some((bytes_string(entry.get("dir"))?, bytes_string(entry.get("opts")).unwrap_or_default()))
 }
 
 fn mount_points(filesystem: &Properties) -> Vec<String> {

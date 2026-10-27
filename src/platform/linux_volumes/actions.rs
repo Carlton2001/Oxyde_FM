@@ -13,6 +13,24 @@ pub(super) struct Release {
     pub drive: Option<(String, &'static str)>,
 }
 
+/// Mounts a block listed by `inventory::unmounted` where UDisks2 chooses, under
+/// `/run/media/$USER`.
+pub(super) fn mount(id: &str) -> Result<String, VolumeError> {
+    if !id.starts_with("/org/freedesktop/UDisks2/block_devices/") {
+        return Err(VolumeError::Other(format!("{id} is not a UDisks2 block device")));
+    }
+    udisks::mount(id).map_err(|error| match volume_error(error) {
+        VolumeError::Other(detail) if hibernated(&detail) => VolumeError::WindowsHibernated,
+        error => error,
+    })
+}
+
+/// ntfs-3g refuses a volume that Windows hibernated, including after a Fast Startup shutdown.
+fn hibernated(detail: &str) -> bool {
+    let detail = detail.to_lowercase();
+    ["hibernat", "fast restart", "fast startup"].iter().any(|clue| detail.contains(clue))
+}
+
 pub(super) fn unmount(path: &str) -> Result<(), VolumeError> {
     let blocks = udisks::blocks().map_err(volume_error)?;
     let block = mounted_at(&blocks, path)?;
