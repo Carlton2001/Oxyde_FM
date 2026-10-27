@@ -127,6 +127,11 @@ impl WorkspaceState {
         let mut state = Self::new();
         state.layout = layout;
 
+        state.layout.visit_panes_mut(&mut |pane| {
+            for tab in &mut pane.tabs {
+                tab.restored = true;
+            }
+        });
         let mut first_pane_id = None;
         let mut next_tab_id = 1u64;
         state.layout.visit_panes(&mut |pane| {

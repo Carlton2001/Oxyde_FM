@@ -415,6 +415,30 @@ impl OxydeApp {
         self.request_tab_listing(pane_id, tab_idx, path, reset_scroll, cx);
     }
 
+    /// A restored tab whose location vanished while Oxyde was closed opens home,
+    /// as a tab on a volume removed while Oxyde runs does.
+    fn leave_vanished_location(&mut self, tab_id: &str, cx: &mut Context<Self>) {
+        let Some(home) = dirs::home_dir().map(|path| path.to_string_lossy().into_owned()) else {
+            return;
+        };
+        let mut request = None;
+        self.state.layout.visit_panes_mut(&mut |pane| {
+            if let Some(index) = pane.tabs.iter().position(|tab| tab.id == tab_id) {
+                let tab = &mut pane.tabs[index];
+                tab.reset_folder_sizes();
+                tab.path = home.clone();
+                tab.selected_paths.clear();
+                tab.selection_anchor = None;
+                tab.load_status = crate::ui::workspace::TabLoadStatus::Loading;
+                request = Some((pane.id.clone(), index));
+            }
+        });
+        if let Some((pane, index)) = request {
+            self.request_tab_files(&pane, index, home, true, cx);
+            self.save_workspace(cx);
+        }
+    }
+
     pub(super) fn request_tab_listing(
         &mut self,
         pane_id: &str,
@@ -497,10 +521,12 @@ impl OxydeApp {
                     // A tab can be moved to another pane while its listing is in flight.
                     // Its stable id, not the pane captured at request time, owns the result.
                     let mut refresh_subdirectory_flags = false;
+                    let mut vanished = false;
                     if let Some(tab) = this.state.find_tab_mut(&tab_id) {
                         if tab.path != path {
                             return;
                         }
+                        let restored = std::mem::take(&mut tab.restored);
                         match result {
                             Ok(()) => {
                                 tab.archive_root = archive_root;
@@ -517,9 +543,15 @@ impl OxydeApp {
                                 tab.clear_files();
                                 tab.load_status = crate::ui::errors::path_load_status(&error);
                                 log::warn!("Cannot list {}: {error:?}", path);
+                                vanished = restored
+                                    && matches!(error, oxyde_lib::models::CommandError::PathNotFound(_));
                             }
                         }
                         cx.notify();
+                    }
+                    if vanished {
+                        this.leave_vanished_location(&tab_id, cx);
+                        return;
                     }
                     // A watcher burst during the listing needs one follow-up,
                     // not another concurrent directory read on every tick.

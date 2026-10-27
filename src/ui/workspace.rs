@@ -141,6 +141,9 @@ pub struct TabState {
     pub search_text: String,
     pub search_revision: u64,
     pub pending_reveal: Option<String>,
+    /// Restored from the saved workspace and not listed yet: a location that
+    /// vanished meanwhile, such as an unmounted volume, falls back home.
+    pub restored: bool,
     pub id: String,
     pub path: String,
     pub archive_root: Option<std::path::PathBuf>,

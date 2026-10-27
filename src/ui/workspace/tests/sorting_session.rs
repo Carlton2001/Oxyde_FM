@@ -24,6 +24,9 @@ fn sort_preferences_round_trip_independently_for_every_tab_in_split_panes() {
         let tab = &restored.find_pane(pane).unwrap().tabs[index];
         assert_eq!(tab.sort_column, column);
         assert_eq!(tab.sort_direction, direction);
+        // Only restored tabs may fall back home if their location vanished.
+        assert!(tab.restored);
+        assert!(!state.find_pane(pane).unwrap().tabs[index].restored);
     }
 }
 

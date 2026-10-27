@@ -71,6 +71,7 @@ impl TabState {
             search_text: String::new(),
             search_revision: 0,
             pending_reveal: None,
+            restored: false,
             path: path.clone(),
             archive_root: None,
             files: Default::default(),
