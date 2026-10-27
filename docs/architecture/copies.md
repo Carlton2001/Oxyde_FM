@@ -47,6 +47,16 @@ comportement : sa copie native passe déjà par `CopyFileEx`.
 - Un attribut que la destination ne sait pas garder (FAT, certains montages) n'empêche
   pas la copie : il est signalé dans le journal.
 
+## Limites connues
+
+- La date d'accès reprise ne survit qu'à la première lecture, comme avec `cp -p` : la
+  copie a forcément une date de changement plus récente, et `relatime` met alors l'accès
+  à jour. Nautilus lit le fichier dès l'ouverture de ses Propriétés. Oxyde relit ses
+  propres copies (vérification, Annuler) sans toucher cette date (`O_NOATIME`).
+- NTFS monté par ntfs-3g sans l'option `permissions` ne garde aucun mode : tous les
+  fichiers y apparaissent en `777`, donc exécutables, quel que soit l'original. FAT n'en
+  garde pas non plus.
+
 ## Étapes
 
 1. **Copier depuis la source vérifiée, par le noyau** : `copy_file_with_progress` lit le

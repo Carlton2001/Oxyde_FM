@@ -834,6 +834,8 @@ mod windows_source_selection;
 mod linux_source_selection;
 #[cfg(target_os = "linux")]
 mod linux_links;
+#[cfg(target_os = "linux")]
+mod linux_file_copy;
 
 #[cfg(target_os = "windows")]
 mod windows_trash_restore;

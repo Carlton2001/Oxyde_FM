@@ -125,6 +125,19 @@ impl Platform for LinuxPlatform {
         super::linux_links::remove(parent, path, verify)
     }
     fn open_copied_file(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            if !std::fs::symlink_metadata(path)?.is_file() {
+                return Err(std::io::Error::other("Operation source is not an ordinary file"));
+            }
+            // O_NOATIME | O_NOFOLLOW: verifying a copy must not replace the access date it kept.
+            // Only the owner may ask for it; another owner's file is opened normally.
+            match std::fs::OpenOptions::new().read(true).custom_flags(0x40000 | 0x20000).open(path) {
+                Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {}
+                result => return result,
+            }
+        }
         self.open_operation_file(parent, path, true)
     }
     fn open_rename_item(
@@ -329,37 +342,15 @@ impl Platform for LinuxPlatform {
         &self,
         source: &std::path::Path,
         destination: &std::path::Path,
-        _held_source: Option<&std::fs::File>,
+        held_source: Option<&std::fs::File>,
         _destination_parent: &std::fs::File,
         created: &mut dyn FnMut(&std::fs::File) -> std::io::Result<()>,
         progress: &mut dyn FnMut(u64) -> std::io::Result<()>,
     ) -> std::io::Result<()> {
-        use std::io::{Read, Write};
-        let mut input = std::fs::File::open(source)?;
-        let metadata = input.metadata()?;
-        let mut output = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(destination)?;
-        created(&output)?;
-        let mut buffer = vec![0_u8; 1024 * 1024];
-        let mut copied = 0;
-        loop {
-            progress(copied)?;
-            let count = input.read(&mut buffer)?;
-            if count == 0 {
-                break;
-            }
-            output.write_all(&buffer[..count])?;
-            copied += count as u64;
-        }
-        {
-            let _timer = crate::systems::copy_diagnostics::Timer::start(crate::systems::copy_diagnostics::Phase::Flush);
-            output.sync_all()?;
-        }
-        output.set_permissions(metadata.permissions())?;
-        output.set_times(std::fs::FileTimes::new().set_modified(metadata.modified()?))?;
-        Ok(())
+        #[cfg(target_os = "linux")]
+        { super::linux_file_copy::copy(source, destination, held_source, created, progress) }
+        #[cfg(not(target_os = "linux"))]
+        { let _ = (source, destination, held_source, created, progress); Err(std::io::ErrorKind::Unsupported.into()) }
     }
     fn open_file_for_move(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         std::fs::File::open(path)

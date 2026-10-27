@@ -125,6 +125,8 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
 - T12, fait : [accès rapide](../architecture/quick-access.md) partagé avec Nautilus,
   erreurs de `xdg-open` signalées, Propriétés d'Oxyde seules.
 - T13 : mises à jour automatiques à désactiver ; T15 : icône, fichier `.desktop`, `app_id`.
+- Propriétés Linux comme Nautilus : permissions modifiables (propriétaire, groupe, droits,
+  exécutable) et informations propres à Linux.
 - T10 : réseau SMB/GVfs ; « Plus d'options » (menu Shell) est masqué hors Windows.
 
 **Avancé et distribution (jalons 6–7)**

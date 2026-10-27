@@ -24,3 +24,5 @@ mod destination_collisions;
 mod real_archive_directories;
 #[cfg(target_os = "linux")]
 mod link_copy;
+#[cfg(target_os = "linux")]
+mod file_dates;
