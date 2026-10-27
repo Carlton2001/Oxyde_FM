@@ -28,18 +28,16 @@ impl OxydeApp {
         let Some(pane) = self.state.find_pane(&self.state.active_pane_id) else { return; };
         let paths: Vec<_> = pane.active_tab().selected_paths.iter().cloned().collect();
         if paths.is_empty() { return; }
-        #[cfg(not(target_os = "windows"))]
         let text = paths.join("\n");
         cx.spawn(async move |this, cx| {
             let result = tokio::task::spawn_blocking(move || oxyde_lib::platform::platform().file_clipboard().set_files(paths, cut)).await;
             let _ = this.update(cx, |this, cx| {
-                // GPUI shares only text with other applications: they receive the paths.
-                #[cfg(not(target_os = "windows"))]
-                if matches!(result, Ok(Ok(()))) {
+                // Applications the platform cannot offer files to receive their paths.
+                if matches!(result, Ok(Ok(true))) {
                     cx.write_to_clipboard(ClipboardItem::new_string(text));
                 }
                 match result {
-                    Ok(Ok(())) => this.toast(ToastKind::Info, if cut { Message::ToastCut } else { Message::ToastCopied }, String::new(), 0, cx),
+                    Ok(Ok(_)) => this.toast(ToastKind::Info, if cut { Message::ToastCut } else { Message::ToastCopied }, String::new(), 0, cx),
                     Ok(Err(error)) => this.toast(ToastKind::Error, Message::ToastFailed, error, 0, cx),
                     Err(error) => this.toast(ToastKind::Error, Message::ToastFailed, error.to_string(), 0, cx),
                 }
@@ -55,28 +53,23 @@ impl OxydeApp {
         let Some(pane) = self.state.find_pane(&self.state.active_pane_id) else { return; };
         let target_dir = pane.active_tab().path.clone();
         if target_dir.starts_with("search://") { return; }
+        #[cfg(target_os = "windows")]
+        let text = None;
         #[cfg(not(target_os = "windows"))]
-        let system = cx.read_from_clipboard();
-        // Files another application offers through GPUI come first, as in Zed; Linux
-        // GPUI offers none yet.
-        #[cfg(not(target_os = "windows"))]
-        if let Some(paths) = system.as_ref().and_then(external_paths) {
-            self.execute_file_copy(paths, target_dir, cx);
-            return;
-        }
+        let text = {
+            let system = cx.read_from_clipboard();
+            // Files another application offers through GPUI come first, as in Zed; Linux
+            // GPUI offers none yet.
+            if let Some(paths) = system.as_ref().and_then(external_paths) {
+                self.execute_file_copy(paths, target_dir, cx);
+                return;
+            }
+            system.and_then(|item| item.text())
+        };
         cx.spawn(async move |this, cx| {
-            let result = tokio::task::spawn_blocking(|| oxyde_lib::platform::platform().file_clipboard().get_files()).await;
+            let result = tokio::task::spawn_blocking(|| oxyde_lib::platform::platform().file_clipboard().get_files(text)).await;
             let _ = this.update(cx, |this, cx| {
                 match result {
-                    // Text copied elsewhere since replaces Oxyde's files, as in any clipboard.
-                    #[cfg(not(target_os = "windows"))]
-                    Ok(Ok((paths, _))) if !paths.is_empty()
-                        && system.as_ref().and_then(ClipboardItem::text) != Some(paths.join("\n")) =>
-                    {
-                        oxyde_lib::platform::platform().file_clipboard().discard();
-                        this.clipboard_has_files = false;
-                        cx.notify();
-                    }
                     Ok(Ok((paths, is_cut))) if !paths.is_empty() => {
                         if is_cut { this.execute_file_move(paths, target_dir, cx); }
                         else { this.execute_file_copy(paths, target_dir, cx); }

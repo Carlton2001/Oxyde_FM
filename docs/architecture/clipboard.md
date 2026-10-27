@@ -29,10 +29,11 @@ jamais rempli sous Linux), puis le presse-papiers interne.
 
 ```rust
 pub trait FileClipboard: Send + Sync {
-    fn set_files(&self, paths: Vec<String>, cut: bool) -> Result<(), String>;
-    fn get_files(&self) -> Result<(Vec<String>, bool), String>;
+    // Ok(true) : l'interface écrit aussi les chemins en texte.
+    fn set_files(&self, paths: Vec<String>, cut: bool) -> Result<bool, String>;
+    // `text` : texte du presse-papiers système, qui périme une sélection offerte en texte.
+    fn get_files(&self, text: Option<String>) -> Result<(Vec<String>, bool), String>;
     fn has_file_format(&self) -> bool;
-    fn discard(&self) {} // le presse-papiers système a remplacé les fichiers
 }
 ```
 
@@ -40,26 +41,34 @@ pub trait FileClipboard: Send + Sync {
   `Preferred DropEffect`), sans changement.
 - **Linux** (`linux_file_clipboard.rs`) garde la sélection en mémoire, pour toutes les
   fenêtres du processus. Une sélection coupée ne se colle qu'une fois, comme dans les
-  gestionnaires de fichiers : ses sources ont déménagé.
+  gestionnaires de fichiers : ses sources ont déménagé. Quand `wl-copy` est installé, un
+  processus `wl-copy --foreground` l'offre au format de Nautilus et se termine dès qu'une
+  autre sélection la remplace : sa fin périme la sélection. Au collage, une sélection
+  périmée laisse place à `wl-paste`, qui lit les fichiers copiés ou coupés ailleurs
+  (`linux_file_clipboard/wayland.rs`).
 
 ## Interface utilisateur, hors Windows
 
-- Copier ou couper écrit aussi les chemins, un par ligne, en texte par GPUI : un terminal
-  ou un éditeur les reçoit.
+- Sans `wl-copy`, copier ou couper écrit les chemins, un par ligne, en texte par GPUI ;
+  avec lui, le presse-papiers ne contient que les fichiers, et « Copier le chemin » reste
+  le moyen d'obtenir du texte.
 - Coller prend d'abord les fichiers que GPUI fournit d'une autre application (copie), puis
-  la sélection d'Oxyde, seulement si le texte du presse-papiers système est encore celui
-  qu'Oxyde y a écrit : un texte copié ailleurs depuis remplace les fichiers, comme dans
-  tout presse-papiers, et `discard` les oublie.
-- Coller dans Nautilus des fichiers copiés dans Oxyde donne leurs chemins en texte, et
-  l'inverse ne colle rien : limite de GPUI, comme dans Zed.
-- Après un texte copié ailleurs, le bouton Coller reste actif jusqu'au premier collage :
-  le griser plus tôt demanderait de lire le presse-papiers Wayland à chaque sondage.
+  la sélection d'Oxyde tant que le presse-papiers système l'offre encore : sans `wl-copy`,
+  tant que son texte est celui qu'Oxyde y a écrit. Sinon, les fichiers lus par `wl-paste`.
+- Sans `wl-copy`, après un texte copié ailleurs, le bouton Coller reste actif jusqu'au
+  premier collage ; avec lui, il se grise au sondage suivant. Il ne s'active pas pour des
+  fichiers copiés ailleurs : les détecter demanderait `wl-paste` à chaque sondage, mais
+  Ctrl+V les colle.
 
 ## Étapes
 
 1. *Fait.* **Extraire le trait**, déplacements seuls : trois méthodes de `Platform`, deux fichiers
    communs (`ui/app/clipboard.rs`, `drive_watchers.rs`).
 2. *Fait.* **Presse-papiers Linux** et règles de collage ci-dessus.
-3. *Essai à part* : échanges avec Nautilus par `wl-copy`/`wl-paste` quand ils sont
-   installés. Abandonné si le focus d'Oxyde vacille.
+3. *Fait.* Échanges avec Nautilus par `wl-copy`/`wl-paste` quand ils sont installés,
+   dans les deux sens, copie et coupe. Sous GNOME, faute de protocole de presse-papiers en
+   arrière-plan, `wl-copy` prend le focus un instant : la fenêtre clignote à chaque copie
+   ou coupe et les menus ouverts se ferment, sans perte de focus. Retenu : l'échange avec
+   le gestionnaire de fichiers du bureau compte plus que ce clignotement, absent sous KDE
+   et les compositeurs wlroots, où `wl-copy` passe par `ext-data-control`.
 4. **Bilan.**
