@@ -68,6 +68,8 @@ pub(crate) enum PropertiesTab {
     Shortcut,
     /// Unix permissions, outside Windows.
     Permissions,
+    /// Permissions of everything inside the folders, outside Windows.
+    Contents,
 }
 
 struct PropertyPresentation<'a> {

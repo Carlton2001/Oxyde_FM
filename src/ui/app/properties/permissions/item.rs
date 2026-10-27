@@ -109,31 +109,5 @@ pub(super) fn render(
             cx,
         ));
     }
-    // As Nautilus: offered when every item is a folder its user may change.
-    if !edit.has_kind(false) && edit.all_editable() {
-        let open = handle.clone();
-        body = body.child(general::divider(theme)).child(
-            div()
-                .flex()
-                .flex_col()
-                .items_start()
-                .gap(rems(0.5))
-                .child(
-                    crate::ui::components::tool_window::action_button(
-                        "permissions-enclosed",
-                        cx.i18n().text(Message::PermissionsEnclosed),
-                        false,
-                        cx,
-                    )
-                    .on_click(move |_, _, cx| update(&open, cx, |edit| {
-                        edit.menu = None;
-                        edit.enclosed_page = true;
-                    })),
-                )
-                .when(edit.enclosed.is_some(), |section| {
-                    section.child(div().text_color(theme.text_muted).child(cx.i18n().text(Message::PermissionsEnclosedPending)))
-                }),
-        );
-    }
     body
 }

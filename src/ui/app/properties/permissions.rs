@@ -45,12 +45,10 @@ pub(super) struct PermissionsEdit {
     /// Owner and group of a single item; a selection keeps those of each item.
     owner: u32,
     group: u32,
-    /// Levels for enclosed items, once « Change » confirmed them; applied by OK.
-    enclosed: Option<Levels>,
-    /// What the enclosed page shows, prefilled from the umask as Nautilus does.
-    enclosed_draft: Levels,
-    /// The page for enclosed items is shown instead of the item's own.
-    enclosed_page: bool,
+    /// Levels of the Contents tab, prefilled from the umask as Nautilus does.
+    enclosed: Levels,
+    /// Its checkbox: OK applies those levels inside the folders.
+    enclosed_apply: bool,
     pub(super) menu: Option<PermissionMenu>,
     bounds: HashMap<PermissionMenu, Bounds<Pixels>>,
 }
@@ -64,9 +62,8 @@ impl PermissionsEdit {
             items,
             levels: Levels::default(),
             executable: None,
-            enclosed: None,
-            enclosed_draft: enclosed_defaults,
-            enclosed_page: false,
+            enclosed: enclosed_defaults,
+            enclosed_apply: false,
             menu: None,
             bounds: HashMap::new(),
         })
@@ -94,6 +91,11 @@ impl PermissionsEdit {
 
     fn all_editable(&self) -> bool {
         self.items.iter().all(|item| item.loaded.editable)
+    }
+
+    /// As Nautilus: when every item is a folder its user may change.
+    pub(super) fn offers_enclosed(&self) -> bool {
+        !self.has_kind(false) && self.all_editable()
     }
 
     /// The mode an item receives on OK.
@@ -126,8 +128,8 @@ impl PermissionsEdit {
                 if single {
                     (change.owner, change.group) = (self.owner, self.group);
                 }
-                if let Some(enclosed) = self.enclosed.as_ref().filter(|_| item.loaded.is_dir) {
-                    change.enclosed = enclosed.clone();
+                if self.enclosed_apply && item.loaded.is_dir {
+                    change.enclosed = self.enclosed.clone();
                 }
                 (item.path.clone(), change)
             })
@@ -139,7 +141,7 @@ impl PermissionsEdit {
         match (menu, pick) {
             (PermissionMenu::Access { folders, class }, Pick::Access(level)) => self.levels(folders)[class.index()] = level,
             (PermissionMenu::Enclosed { folders, class }, Pick::Access(level)) => {
-                let levels = if folders { &mut self.enclosed_draft.folders } else { &mut self.enclosed_draft.files };
+                let levels = if folders { &mut self.enclosed.folders } else { &mut self.enclosed.files };
                 levels[class.index()] = level;
             }
             (PermissionMenu::Owner, Pick::Owner(owner)) => self.owner = owner,
@@ -171,7 +173,7 @@ impl PermissionsEdit {
                 entries
             }
             PermissionMenu::Enclosed { folders, class } => {
-                let levels = if folders { &self.enclosed_draft.folders } else { &self.enclosed_draft.files };
+                let levels = if folders { &self.enclosed.folders } else { &self.enclosed.files };
                 let current = levels[class.index()];
                 // A umask matching no level leaves the class unchanged, as Nautilus does.
                 current
@@ -309,16 +311,18 @@ fn choice(
         .into_any_element()
 }
 
+/// The Permissions tab, or the Contents tab when `enclosed`.
 pub(super) fn render(
     body: Div,
     dialog: &PropertiesDialog,
     edit: &PermissionsEdit,
+    enclosed: bool,
     handle: &Entity<PropertiesWindow>,
     compact: bool,
     theme: OxydeTheme,
     cx: &mut Context<PropertiesWindow>,
 ) -> Div {
-    let body = if edit.enclosed_page {
+    let body = if enclosed {
         enclosed::render(body, edit, handle, compact, theme, cx)
     } else {
         item::render(body, dialog, edit, handle, compact, theme, cx)

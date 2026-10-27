@@ -52,20 +52,21 @@ système.
     rend à chaque élément ses propres bits ;
   - propriétaire et groupe affichés, communs ou « Plusieurs », sans modification ;
     pas de case d'exécution ;
-  - modifiable si l'utilisateur peut modifier chaque élément du type ; éléments contenus
-    proposés quand la sélection n'a que des dossiers modifiables ;
+  - modifiable si l'utilisateur peut modifier chaque élément du type ; onglet Contenu
+    quand la sélection n'a que des dossiers modifiables ;
   - OK applique élément par élément, chacun vérifié comme un élément seul. Les échecs
     sont comptés et le premier est nommé ; les autres éléments changent, et un nouvel OK
     ne reprend que ce qui reste.
   - Les noms des comptes sont gardés quelques secondes : une grande sélection ne lance
     pas un `getent` par élément.
-- **Éléments contenus** (dossier) : la page « Modifier les droits des éléments
-  contenus… » reprend le dialogue de Nautilus 50. Pour chaque classe, un niveau pour les
-  fichiers et un pour les dossiers, préremplis d'après le umask (lu dans
+- **Onglet Contenu** (dossiers seulement) : il reprend le dialogue « Modifier les droits
+  des éléments contenus » de Nautilus 50 sans sous-écran. Pour chaque classe, un niveau
+  pour les fichiers et un pour les dossiers, préremplis d'après le umask (lu dans
   `/proc/self/status`) : ceux d'un nouveau fichier et d'un nouveau dossier. Une classe
-  dont les bits ne font aucun niveau reste « Inchangé ». « Modifier » retient ces niveaux,
-  le retour vers Droits d'accès les abandonne ; OK les applique à toute profondeur, avant le
-  changement du dossier lui-même :
+  dont les bits ne font aucun niveau reste « Inchangé ». Rien ne change à l'intérieur
+  tant que la case « Modifier les droits des éléments contenus » n'est pas cochée ; OK
+  applique alors ces niveaux à toute profondeur, avant le changement du dossier
+  lui-même :
   - chaque dossier change après son contenu, si bien qu'un dossier qui se ferme à son
     propriétaire est quand même parcouru ;
   - un dossier fermé que le changement ouvre est changé d'abord, puis parcouru ;
@@ -97,8 +98,8 @@ système.
    exécutables, retour à la ligne des libellés.
 4. **Bilan.**
 5. **Écarts fermés** : type par contenu selon GIO, propriétaire pour root, droits d'une
-   sélection, éléments contenus préremplis d'après le umask ; valeurs fixes alignées
-   sur le texte des menus.
+   sélection, éléments contenus préremplis d'après le umask dans un onglet Contenu ;
+   valeurs fixes alignées sur le texte des menus.
 
 ## Bilan
 

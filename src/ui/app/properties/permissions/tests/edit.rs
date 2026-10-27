@@ -70,12 +70,14 @@ fn a_single_item_changes_its_group_and_execution() {
 fn enclosed_levels_reach_folders_only_and_need_every_item_editable() {
     let mut edit = PermissionsEdit::new(vec![item("one", 0o755, true, true), item("two", 0o700, true, false)], Levels::default()).unwrap();
     assert!(edit.editable(false) && !edit.editable(true) && !edit.all_editable());
-    // The page's levels apply only once « Change » confirmed them.
-    edit.enclosed_draft.files[2] = Some(Access::None);
-    assert!(edit.changes().is_empty());
-    edit.enclosed = Some(edit.enclosed_draft.clone());
+    // The Contents tab applies its levels only once its checkbox is ticked.
+    edit.enclosed.files[2] = Some(Access::None);
+    assert!(edit.changes().is_empty() && !edit.offers_enclosed());
+    edit.enclosed_apply = true;
     assert_eq!(edit.changes().len(), 2);
     let mut edit = PermissionsEdit::new(vec![item("dir", 0o755, true, true), item("file", 0o644, false, true)], Levels::default()).unwrap();
-    edit.enclosed = Some(Levels { files: [None, None, Some(Access::None)], ..Default::default() });
+    edit.enclosed = Levels { files: [None, None, Some(Access::None)], ..Default::default() };
+    edit.enclosed_apply = true;
+    assert!(!edit.offers_enclosed());
     assert_eq!(edit.changes().iter().map(|(path, _)| path.as_str()).collect::<Vec<_>>(), ["/selection/dir"]);
 }

@@ -71,7 +71,7 @@ impl PropertiesWindow {
                             item.loaded.group.id = change.group;
                         }
                         if results.iter().all(|(_, result)| applied(result)) {
-                            edit.enclosed = None;
+                            edit.enclosed_apply = false;
                         }
                     }
                     let failed: u64 = results

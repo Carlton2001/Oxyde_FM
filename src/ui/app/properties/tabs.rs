@@ -4,12 +4,14 @@ use crate::ui::theme::OxydeTheme;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
 
-/// General first, then the tabs the item has: Shortcut on Windows, Permissions elsewhere.
+/// General first, then the tabs the item has: Shortcut on Windows, Permissions
+/// elsewhere, and Contents for folders whose permissions may change.
 pub(super) fn render(
     dialog: &PropertiesDialog,
     handle: &Entity<PropertiesWindow>,
     has_shortcut: bool,
     has_permissions: bool,
+    has_contents: bool,
     theme: OxydeTheme,
     cx: &mut Context<PropertiesWindow>,
 ) -> Option<Div> {
@@ -29,6 +31,7 @@ pub(super) fn render(
         (PropertiesTab::General, "properties-general-tab", Message::PropertiesGeneral, "icons/file-text.svg", true),
         (PropertiesTab::Shortcut, "properties-shortcut-tab", Message::PropertiesShortcut, "icons/link.svg", has_shortcut),
         (PropertiesTab::Permissions, "properties-permissions-tab", Message::PropertiesPermissions, "icons/key.svg", has_permissions),
+        (PropertiesTab::Contents, "properties-contents-tab", Message::PropertiesContents, "icons/folder-tree.svg", has_contents),
     ] {
         if !shown {
             continue;

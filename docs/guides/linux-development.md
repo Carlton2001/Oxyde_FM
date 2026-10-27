@@ -132,8 +132,8 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
   `bash scripts/install-linux-desktop.sh --exec <binaire> --profile ~/oxyde-test`
   installe l'entrée et l'icône pour l'utilisateur.
 - Fait : [Propriétés Linux](../architecture/linux-properties.md) comme Nautilus, avec
-  un onglet Droits d'accès (groupe, niveaux, exécution, éléments contenus, sélection,
-  propriétaire pour root) et le type MIME selon GIO. Les tests de root se lancent dans
+  les onglets Droits d’accès (groupe, niveaux, exécution, sélection,
+  propriétaire pour root) et Contenu (éléments contenus), et le type MIME selon GIO. Les tests de root se lancent dans
   un espace de noms utilisateur : `unshare --map-auto --map-root-user <binaire de test>
   linux_permissions`.
 - T10 : réseau SMB/GVfs ; « Plus d'options » (menu Shell) est masqué hors Windows.

@@ -1,7 +1,6 @@
-//! Levels for everything inside a folder, as Nautilus's « Change Permissions for
-//! Enclosed Files »: per class, for files and for folders, prefilled from the umask.
-//! « Change » keeps them for OK; going back without it drops them, so the window's own
-//! Cancel stays the only one.
+//! Contents tab: levels for everything inside the folders, as Nautilus's « Change
+//! Permissions for Enclosed Files »: per class, for files and for folders, prefilled
+//! from the umask. Nothing inside changes unless its checkbox is ticked before OK.
 use super::{choice, form_row, update, PermissionMenu, PermissionsEdit};
 use crate::ui::app::properties::{general, PropertiesWindow};
 use crate::ui::i18n::{I18nContext, Message};
@@ -17,24 +16,24 @@ pub(super) fn render(
     theme: OxydeTheme,
     cx: &mut Context<PropertiesWindow>,
 ) -> Div {
-    let back = handle.clone();
+    let toggle = handle.clone();
+    let apply = edit.enclosed_apply;
     body = body
         .child(
             div()
-                .id("permissions-enclosed-back")
+                .id("permissions-enclosed-apply")
                 .flex()
-                .items_center()
-                .gap(rems(0.375))
-                .text_color(theme.accent)
-                .child(svg().path("icons/chevron-left.svg").size(rems(0.875)).flex_none().text_color(theme.accent))
-                .child(cx.i18n().text(Message::PropertiesPermissions))
-                .on_click(move |_, _, cx| update(&back, cx, |edit| {
+                .items_start()
+                .gap(rems(0.5))
+                .min_w_0()
+                .child(div().flex_none().mt(rems(0.0625)).child(crate::ui::elements::checkbox::checkbox(theme, apply, false)))
+                .child(div().flex_1().min_w_0().child(cx.i18n().text(Message::PermissionsEnclosed)))
+                .on_click(move |_, _, cx| update(&toggle, cx, move |edit| {
                     edit.menu = None;
-                    edit.enclosed = None;
-                    edit.enclosed_page = false;
+                    edit.enclosed_apply = !apply;
                 })),
         )
-        .child(div().mt(rems(0.75)).mb(rems(0.5)).text_color(theme.text_muted).child(cx.i18n().text(Message::PermissionsEnclosedHint)));
+        .child(div().mt(rems(0.5)).text_color(theme.text_muted).child(cx.i18n().text(Message::PermissionsEnclosedHint)));
     for (folders, title) in [(false, Message::PermissionsFiles), (true, Message::PermissionsFolders)] {
         body = body
             .child(general::divider(theme))
@@ -47,22 +46,9 @@ pub(super) fn render(
             let menu = PermissionMenu::Enclosed { folders, class };
             let current = edit.entries(menu, cx).into_iter().find(|(_, selected, _)| *selected).map(|(label, ..)| label).unwrap_or_default();
             let id = ElementId::Name(format!("permissions-enclosed-{}-{}", folders, class.index()).into());
-            body = body.child(form_row(label, choice(menu, id, current, true, handle, theme), compact, cx));
+            // The levels are shown as text until the checkbox makes them apply.
+            body = body.child(form_row(label, choice(menu, id, current, apply, handle, theme), compact, cx));
         }
     }
-    let confirm = handle.clone();
-    body.child(general::divider(theme)).child(
-        div()
-            .flex()
-            .justify_end()
-            .gap(rems(0.5))
-            .child(
-                crate::ui::components::tool_window::action_button("permissions-enclosed-change", cx.i18n().text(Message::PermissionsChange), true, cx)
-                    .on_click(move |_, _, cx| update(&confirm, cx, |edit| {
-                        edit.menu = None;
-                        edit.enclosed = Some(edit.enclosed_draft.clone());
-                        edit.enclosed_page = false;
-                    })),
-            ),
-    )
+    body
 }
