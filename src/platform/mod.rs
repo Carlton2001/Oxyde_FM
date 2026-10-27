@@ -7,7 +7,9 @@ mod memory;
 pub use memory::ProcessMemorySnapshot;
 pub use viewer_media::{decode_media_report, encode_media_report, ViewerMediaCommand, ViewerMediaControl, MEDIA_ENDED, MEDIA_FAILED, MEDIA_LOADING, MEDIA_PAUSED, MEDIA_PLAYING, MEDIA_REPORT_BYTES};
 pub use file_names::FileNameRules;
+mod file_clipboard;
 mod volumes;
+pub use file_clipboard::FileClipboard;
 pub use volumes::{DriveActions, UnmountedVolume, VolumeError, Volumes};
 
 #[derive(Debug)]
@@ -644,15 +646,7 @@ pub trait Platform: Send + Sync {
     fn popup_family_active(&self, owner: raw_window_handle::RawWindowHandle) -> bool;
     fn popup_work_area_size(&self, window: raw_window_handle::RawWindowHandle) -> Result<(f32, f32), String>;
 
-    /// Transfers selected file paths through the native file clipboard.
-    fn set_clipboard_files(&self, paths: Vec<String>, cut: bool) -> Result<(), String>;
-
-    /// Reads file paths and their copy/move intent from the native clipboard.
-    fn get_clipboard_files(&self) -> Result<(Vec<String>, bool), String>;
-
-    /// Checks whether the supported file-transfer format is advertised, without
-    /// opening or reading the clipboard. Paste must still validate its payload.
-    fn clipboard_has_file_format(&self) -> bool;
+    fn file_clipboard(&self) -> &dyn FileClipboard;
 
     /// Builds a plain-data snapshot of an OS context menu for a file or folder.
     fn native_context_menu_items(
@@ -680,6 +674,10 @@ pub trait Platform: Send + Sync {
 pub mod clipboard;
 #[cfg(target_os = "windows")]
 mod windows_clipboard_write;
+#[cfg(target_os = "windows")]
+mod windows_file_clipboard;
+#[cfg(not(target_os = "windows"))]
+mod linux_file_clipboard;
 mod hardware;
 #[cfg(target_os = "windows")]
 pub mod icons;

@@ -267,7 +267,7 @@ impl OxydeApp {
                         .timer(std::time::Duration::from_millis(500))
                         .await;
                     let clipboard_has_files = tokio::task::spawn_blocking(|| {
-                        oxyde_lib::platform::platform().clipboard_has_file_format()
+                        oxyde_lib::platform::platform().file_clipboard().has_file_format()
                     }).await.unwrap_or(false);
                     h.update(&mut cx, |this, cx| {
                         if this.clipboard_has_files != clipboard_has_files {

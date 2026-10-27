@@ -516,16 +516,8 @@ impl Platform for LinuxPlatform {
         (name.starts_with('.'), false, false)
     }
 
-    fn set_clipboard_files(&self, _paths: Vec<String>, _cut: bool) -> Result<(), String> {
-        Err("File clipboard is not available on this platform yet".to_string())
-    }
-
-    fn get_clipboard_files(&self) -> Result<(Vec<String>, bool), String> {
-        Err("File clipboard is not available on this platform yet".to_string())
-    }
-
-    fn clipboard_has_file_format(&self) -> bool {
-        false
+    fn file_clipboard(&self) -> &dyn super::FileClipboard {
+        &super::linux_file_clipboard::LinuxFileClipboard
     }
 
     fn regional_locale(&self) -> Option<String> {
