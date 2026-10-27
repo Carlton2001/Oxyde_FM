@@ -1,8 +1,9 @@
 # Liens symboliques
 
-**Statut : en cours** (cinquième domaine de l'option B, après les [volumes](volumes.md), le
-[presse-papiers](clipboard.md), la [surveillance](watchers.md) et l'[accès
-rapide](quick-access.md)). Ce document deviendra le contrat du domaine une fois terminé.
+**Statut : domaine terminé** (cinquième domaine de l'option B, après les
+[volumes](volumes.md), le [presse-papiers](clipboard.md), la [surveillance](watchers.md) et
+l'[accès rapide](quick-access.md)) ; bilan ci-dessous, suite Windows encore à passer. Ce
+document est le contrat du domaine.
 
 ## Périmètre
 
@@ -77,6 +78,51 @@ transferts refusent les points de reparse.
    à la destination, recrée les dossiers d'origine et le ramène par le même chemin ;
    Rétablir refait le déplacement avec les mêmes contrôles. Les retours arrière déplacent
    en sens inverse et mettent à jour l'identité d'un lien recréé.
-4. **Compresser** : un lien est archivé comme lien (tar, zip, 7z le savent), à étudier
-   avec les [limites des archives](archives.md) ; reporté si le format l'interdit.
-5. **Bilan.**
+4. *Reporté, par choix de sécurité.* **Compresser** : les formats savent stocker un lien
+   (tar, zip par le mode Unix, 7z), mais Oxyde refuse les entrées-liens à l'ouverture, à
+   l'extraction et dans l'espace de travail des archives, car un lien extrait puis suivi
+   par une entrée suivante peut écrire hors de la destination. Une archive contenant un
+   lien serait donc illisible par Oxyde lui-même ; archiver la cible à la place
+   recopierait silencieusement des données extérieures (un lien vers `Documents`
+   embarquerait tout le dossier). Compresser ou copier vers une archive un lien, ou un
+   dossier qui en contient, est donc refusé avant toute écriture, avec un message traduit
+   qui l'explique (`ArchiveLinkRefusal`). Lever ce refus demande un chantier propre :
+   extraire les liens en dernier, sans jamais les suivre, avec une cible confinée à la
+   destination.
+5. *Fait.* **Bilan**, ci-dessous.
+
+## Bilan
+
+**Résultat.** Sous Linux, un lien se montre, s'ouvre, se renomme, se supprime, se copie
+et se déplace comme dans Nautilus : un lien vers un dossier s'ouvre comme un dossier,
+l'icône dit où il mène, un lien brisé est signalé, les propriétés montrent sa cible, et
+copier ou déplacer reproduit le lien sans jamais le suivre, sur un même volume comme d'un
+volume à l'autre (Btrfs et NTFS vérifiés à la main), avec Annuler et Rétablir. Avant ce
+domaine, copier, déplacer ou compresser un dossier contenant un seul lien échouait en
+entier. Le code propre aux liens tient en 320 lignes de production environ
+(`linux_links.rs`, `link_moves.rs`, `copy/links.rs`, `history_links.rs`) et 340 de tests.
+
+**Fichiers communs touchés** (hors modules propres aux liens, catalogues et icônes) :
+
+| Étape | Fichiers communs | Nature |
+| --- | --- | --- |
+| 1. Afficher | `models/file_entry.rs` | Linux seul, par `cfg` |
+| 1 bis. Icônes, type, propriétés | `ui/components/icons.rs`, `icons/colors.rs`, `file_list/presentation.rs`, `filters.rs`, `layout/measurements.rs`, `properties/general.rs`, `properties/loading.rs`, `commands/io.rs` | Linux seul, sauf un champ de plus |
+| 2. Copier | `platform/mod.rs`, `linux_impl.rs`, `source_selection.rs`, `file_ops/copy.rs`, `commands/ops/conflicts.rs`, `commands/ops.rs`, `history_file_undo.rs`, `execution.rs` | méthodes `Platform` par défaut refusées sous Windows |
+| 2–3. Journal | `models/transaction.rs`, `file_ops.rs` et chaque constructeur de `TransactionDetails` | deux champs `created_links`, `moved_links` |
+| 3. Déplacer | `history_file_undo.rs`, `history_move_redo.rs` | nouveaux effets, rollback compris |
+| 4. Archives | `compression_sources.rs`, `models/error.rs`, `ui/format.rs` | refus typé et traduit |
+
+**Leçons.**
+- Lire la cible sur le descripteur `O_PATH` du lien capturé (`readlinkat` à chemin vide)
+  plutôt que sur son nom : une substitution entre deux vérifications ne change pas le lien
+  lu.
+- Un lien brisé occupe toujours son nom : `exists()` le manque, `symlink_metadata` non.
+  L'analyse des conflits et la détection de remplacement doivent utiliser le second.
+- ntfs-3g refuse `RENAME_NOREPLACE` aussi pour les liens ; le repli vérifie le nom libre
+  puis renomme, avec une fenêtre de course impossible à fermer sur ce système.
+- `TransactionDetails` sans valeur par défaut impose de toucher chaque constructeur à
+  chaque nouveau champ : un `Default` mériterait d'être envisagé.
+
+**Reporté.** Liens dans les archives (étape 4). Sous Windows, les liens symboliques et
+jonctions restent refusés par les transferts, sans changement.

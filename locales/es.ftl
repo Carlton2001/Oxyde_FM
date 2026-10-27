@@ -976,6 +976,7 @@ settings-onedrive-description = Mostrar OneDrive en la barra lateral cuando est�
 
 trash-restore-summary = Restauración terminada: { $restored } elemento(s) restaurado(s), { $failed } fallido(s). Los demás elementos se procesaron. Consulte el registro para más detalles.
 transfer-destination-collision = Varios elementos seleccionados tendrían el mismo destino: { $path }. Cámbieles el nombre o transfiéralos por separado. No se ha transferido ningún archivo.
+archive-link-refused = Un archivo comprimido no puede contener un enlace simbólico: { $path }. Oxyde rechaza los enlaces al abrir y extraer archivos comprimidos, para que ninguna extracción pueda escribir fuera de su destino. No se ha modificado nada.
 
 grouping = Agrupar por
 group-none = Ninguno

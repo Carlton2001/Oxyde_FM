@@ -221,3 +221,19 @@ fn undo_keeps_a_moved_link_replaced_since_the_move() {
         assert!(source.join("to-file").symlink_metadata().is_err());
     });
 }
+
+#[::core::prelude::v1::test]
+fn compressing_links_is_refused_before_any_archive_exists() {
+    let root = tempfile::tempdir().unwrap();
+    let (source, target) = linked_folder(root.path());
+    let archive = target.join("source.zip");
+    let op = Arc::new(Mutex::new(FileOperation::new(
+        FileOpType::Compress,
+        vec![source.clone()],
+        Some(archive.clone()),
+        None,
+    )));
+    let error = FileOperationManager::perform_compress(&op, vec![source], Some(archive)).unwrap_err();
+    assert!(crate::models::error::ArchiveLinkRefusal::from_message(&error).is_some(), "{error}");
+    assert_eq!(std::fs::read_dir(&target).unwrap().count(), 0);
+}

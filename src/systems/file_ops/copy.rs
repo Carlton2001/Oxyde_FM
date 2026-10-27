@@ -330,7 +330,7 @@ impl FileOperationManager {
                 }
                 if let Some(link) = entry.link() {
                     if deferred_moves.is_some() || archive_destination {
-                        return Err(format!("Symbolic links cannot be copied into archives yet: {:?}", entry.path()));
+                        return Err(crate::models::error::ArchiveLinkRefusal::error(entry.path()).to_string());
                     }
                     // A broken link at the destination still occupies its name.
                     let replace_existing = !self_transfer && dest_path.symlink_metadata().is_ok();

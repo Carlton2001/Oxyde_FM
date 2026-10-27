@@ -675,6 +675,7 @@ settings-onedrive-description = Afficher OneDrive dans la barre latérale lorsqu
 
 trash-restore-summary = Restauration terminée : { $restored } élément(s) restauré(s), { $failed } en échec. Les autres éléments ont été traités. Consultez le journal pour le détail des erreurs.
 transfer-destination-collision = Plusieurs éléments sélectionnés aboutiraient à la même destination : { $path }. Renommez-les ou transférez-les séparément. Aucun fichier n’a été transféré.
+archive-link-refused = Une archive ne peut pas contenir de lien symbolique : { $path }. Oxyde refuse les liens à l’ouverture et à l’extraction des archives, pour qu’aucune extraction ne puisse écrire hors de sa destination. Rien n’a été modifié.
 
 grouping = Grouper par
 group-none = Aucun

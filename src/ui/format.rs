@@ -428,6 +428,11 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
         args.set("path", display_paths(path));
         return i18n.text_with_args(Message::TransferDestinationCollision, &args).to_string();
     }
+    if let Some(path) = oxyde_lib::models::error::ArchiveLinkRefusal::from_message(detail) {
+        let mut args = FluentArgs::new();
+        args.set("path", display_paths(path));
+        return i18n.text_with_args(Message::ArchiveLinkRefused, &args).to_string();
+    }
     if let Some(changed) = oxyde_lib::models::error::SourceSelectionFailure::from_message(detail) {
         return i18n.text(if changed { Message::TransferSourceChanged } else { Message::TransferSourceUnverified }).to_string();
     }

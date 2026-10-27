@@ -17,6 +17,27 @@ impl TransferDestinationCollision {
     }
 }
 
+/// Archives hold neither symbolic links nor their targets: opening and
+/// extraction refuse link entries, so compression refuses them too.
+#[derive(Debug)]
+pub struct ArchiveLinkRefusal {
+    pub path: String,
+}
+impl fmt::Display for ArchiveLinkRefusal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Archive link refused: {}", self.path)
+    }
+}
+impl std::error::Error for ArchiveLinkRefusal {}
+impl ArchiveLinkRefusal {
+    pub(crate) fn error(path: &std::path::Path) -> std::io::Error {
+        std::io::Error::other(Self { path: path.to_string_lossy().into_owned() })
+    }
+    pub fn from_message(message: &str) -> Option<&str> {
+        message.split_once("Archive link refused: ").map(|(_, path)| path)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TrashRestoreIssue {
     Ambiguous,

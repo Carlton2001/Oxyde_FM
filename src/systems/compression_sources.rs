@@ -110,10 +110,7 @@ pub(super) fn plan_controlled(
                 break;
             };
             if source_entry.link().is_some() {
-                return Err(io::Error::other(format!(
-                    "Symbolic links cannot be compressed yet: {}",
-                    source_entry.path().display()
-                )));
+                return Err(crate::models::error::ArchiveLinkRefusal::error(source_entry.path()));
             }
             let relative = source_entry
                 .path()
