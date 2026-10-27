@@ -1,8 +1,8 @@
 # Surveillance des dossiers
 
-**Statut : plan** (troisième domaine de l'option B, après les [volumes](volumes.md) et le
-[presse-papiers](clipboard.md)). Ce document deviendra le contrat du domaine une fois
-terminé.
+**Statut : domaine terminé** (troisième domaine de l'option B, après les
+[volumes](volumes.md) et le [presse-papiers](clipboard.md)) ; bilan ci-dessous, suite
+Windows encore à passer. Ce document est le contrat du domaine.
 
 ## Périmètre
 
@@ -42,11 +42,37 @@ Si inotify échoue (limite `max_user_watches` atteinte sur un très grand arbre)
 déjà gérée par `DirectoryWatcher` relance une lecture ; le repli automatique vers le
 sondage n'est ajouté que si l'essai le montre nécessaire.
 
+**Débordement à l'installation.** `notify` installe une surveillance récursive en lisant
+chaque sous-dossier, et chaque lecture produit un événement d'ouverture. Au-delà d'environ
+16 000 dossiers (dossier personnel : 17 600), la file du noyau (`max_queued_events`)
+déborde avant la fin de l'installation, et le débordement demande de tout remesurer : toutes
+les tailles passaient en provisoire juste après leur calcul. Un débordement signalé moins
+d'une seconde après l'installation est donc ignoré : les changements perdus datent de
+l'installation, que la vérification d'écart de `reconcile_folder_size_watcher` couvre déjà.
+
 ## Étapes
 
-1. **Extraire la règle** dans `Volumes::polls`, sans changement : `drive_watchers.rs` seul.
-2. **Règle Linux** et tests sur fixtures (`/`, `/run/media/…`, partage réseau imbriqué).
+1. *Fait.* **Extraire la règle** dans `Volumes::polls`, sans changement : `drive_watchers.rs` seul.
+2. *Fait.* **Règle Linux** et tests sur fixtures (`/`, `/run/media/…`, partage réseau imbriqué).
    Essai à la main : fichier créé dans un terminal (btrfs, Data, clé USB) visible tout de
    suite ; démontage et éjection d'une clé ouverte dans un onglet ; tailles en direct d'un
    dossier modifié.
-3. **Bilan.**
+3. *Fait.* **Bilan**, ci-dessous.
+
+## Bilan
+
+**Résultat.** Sous Linux, un changement fait ailleurs (terminal, Nautilus) apparaît tout de
+suite au lieu de 2 s, et les tailles de dossiers suivent les événements au lieu d'un
+parcours complet toutes les 30 s ; clés USB et NTFS compris, sans gêner le démontage.
+
+**Fichiers communs touchés** : `drive_watchers.rs` (lecteur le plus profond, appel de
+`polls`), `drive_watchers/changes.rs` (débordement à l'installation), `volumes.rs`. Sous
+Windows, la règle est inchangée ; le choix du lecteur le plus profond équivaut à l'ancien
+pour des lecteurs à lettre, qui ne s'imbriquent pas.
+
+**Leçons.**
+- Un domaine peut tenir en une méthode : la règle métier reste dans l'interface, seule la
+  décision propre au système passe par `Volumes`.
+- Passer du sondage aux événements change aussi le volume d'événements : les grands
+  arbres débordent la file du noyau dès l'installation. Le journal de diagnostic
+  temporaire a trouvé la cause en un essai.

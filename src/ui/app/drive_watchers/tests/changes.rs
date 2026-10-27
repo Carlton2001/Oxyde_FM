@@ -201,3 +201,25 @@ fn recursive_changes(polling: bool) {
     watcher.release(&path).unwrap();
     directory.close().unwrap();
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn installing_a_recursive_watch_on_a_large_tree_does_not_invalidate_every_size() {
+    let root = tempfile::tempdir().unwrap();
+    // Each folder read during installation queues an event: more than the
+    // default inotify queue of 16 384.
+    for index in 0..20_000 {
+        std::fs::create_dir_all(root.path().join(format!("{}", index % 100)).join(format!("{index}"))).unwrap();
+    }
+    let changes: WatcherChanges = Default::default();
+    let path = root.path().to_string_lossy().into_owned();
+    let _watcher = DirectoryWatcher::create(&path, false, true, changes.clone()).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(1500));
+    assert!(changes.lock().unwrap().get(&path).is_none_or(|change| !change.all_sizes));
+    std::fs::write(root.path().join("7").join("7").join("new"), "x").unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    let queue = changes.lock().unwrap();
+    let change = queue.get(&path).unwrap();
+    assert!(!change.all_sizes);
+    assert_eq!(change.children, HashSet::from([root.path().join("7").to_string_lossy().into_owned()]));
+}

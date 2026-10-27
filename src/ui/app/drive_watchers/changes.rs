@@ -9,6 +9,9 @@ use std::{
     },
 };
 
+/// Overflow reported this soon after installation stems from the installation itself.
+const INSTALLATION_SETTLE: std::time::Duration = std::time::Duration::from_secs(1);
+
 pub type WatcherChanges = Arc<Mutex<HashMap<String, DirectoryChanges>>>;
 
 pub(in crate::ui::app) enum SizeChanges {
@@ -119,12 +122,22 @@ impl DirectoryWatcher {
         let watched_path = path.to_owned();
         let failed = Arc::new(AtomicBool::new(false));
         let callback_failed = failed.clone();
+        let installed = Arc::new(std::sync::OnceLock::new());
+        let callback_installed = installed.clone();
         let callback = move |result: notify::Result<Event>| {
             if result.is_err() {
                 callback_failed.store(true, Ordering::Relaxed);
             }
             // Reading directories for a size scan must not trigger another scan.
             if matches!(&result, Ok(event) if matches!(event.kind, EventKind::Access(_))) {
+                return;
+            }
+            // Installing a recursive inotify watch reads every subfolder; on a large
+            // tree those reads overflow the kernel queue before the installation
+            // returns. The installation's own gap check already covers that time.
+            if matches!(&result, Ok(event) if event.need_rescan())
+                && callback_installed.get().is_none_or(|installed: &std::time::Instant| installed.elapsed() < INSTALLATION_SETTLE)
+            {
                 return;
             }
             if let Ok(mut queue) = changes.lock() {
@@ -157,6 +170,7 @@ impl DirectoryWatcher {
                 RecursiveMode::NonRecursive
             },
         )?;
+        let _ = installed.set(std::time::Instant::now());
         Ok(Self {
             polling,
             recursive,
