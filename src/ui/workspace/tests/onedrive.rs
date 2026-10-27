@@ -15,9 +15,11 @@ fn onedrive_roots_follow_pins_before_drive_separator() {
     let mut state = workspace();
     state.onedrive_items.push(QuickAccessItem { name: "OneDrive".into(), path: "C:\\Cloud".into() });
     state.refresh_sidebar();
-    assert!(matches!(state.sidebar_items[1], SidebarItem::Pinned { .. }));
-    assert!(matches!(&state.sidebar_items[2], SidebarItem::OneDrive { item } if item.path == "C:\\Cloud"));
-    assert!(matches!(state.sidebar_items[3], SidebarItem::Header(Message::SidebarDrives)));
+    // Linux heads the pins with the home folder.
+    let pinned = state.sidebar_items.iter()
+        .position(|i| matches!(i, SidebarItem::Pinned { item } if item.path == "C:\\Pinned")).unwrap();
+    assert!(matches!(&state.sidebar_items[pinned + 1], SidebarItem::OneDrive { item } if item.path == "C:\\Cloud"));
+    assert!(matches!(state.sidebar_items[pinned + 2], SidebarItem::Header(Message::SidebarDrives)));
     state.refresh_sidebar();
     assert_eq!(state.sidebar_items.iter().filter(|i| matches!(i, SidebarItem::OneDrive { .. })).count(), 1);
 }
