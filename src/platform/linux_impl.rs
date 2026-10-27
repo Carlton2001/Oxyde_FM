@@ -298,9 +298,19 @@ impl Platform for LinuxPlatform {
         }
         result
     }
-    fn open_cache_cleanup(&self, _path: &std::path::Path, _directory: bool) -> std::io::Result<std::fs::File> {
-        // Unix flock cannot prove that external readers have closed a file.
-        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Safe cache eviction requires Windows sharing checks"))
+    fn open_cache_cleanup(&self, path: &std::path::Path, directory: bool) -> std::io::Result<std::fs::File> {
+        #[cfg(target_os = "linux")]
+        { super::linux_cache::open_cleanup(path, directory) }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = (path, directory);
+            // Unix flock cannot prove that external readers have closed a file.
+            Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Safe cache eviction requires an exclusive check"))
+        }
+    }
+    #[cfg(target_os = "linux")]
+    fn confirm_cache_cleanup(&self, file: &std::fs::File) -> std::io::Result<()> {
+        super::linux_cache::still_exclusive(file)
     }
     fn ensure_archive_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         match std::fs::create_dir(path) {
@@ -406,9 +416,19 @@ impl Platform for LinuxPlatform {
     }
     fn remove_open_file(
         &self,
-        _file: &std::fs::File,
+        file: &std::fs::File,
         path: &std::path::Path,
     ) -> std::io::Result<()> {
+        use std::os::unix::fs::MetadataExt;
+        let held = file.metadata()?;
+        if held.is_dir() {
+            return self.remove_open_empty_directory(file, path);
+        }
+        // Unlink the held object only, never a replacement published at its path.
+        let current = std::fs::symlink_metadata(path)?;
+        if (current.dev(), current.ino()) != (held.dev(), held.ino()) {
+            return Err(std::io::Error::other("The file was replaced before its removal"));
+        }
         std::fs::remove_file(path)
     }
     fn remove_open_empty_directory(

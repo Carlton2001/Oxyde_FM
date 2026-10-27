@@ -334,7 +334,13 @@ pub trait Platform: Send + Sync {
         temporary: &std::path::Path,
         write: &mut dyn FnMut(&mut std::fs::File) -> std::io::Result<()>,
     ) -> std::io::Result<()>;
+    /// Open a cache entry for eviction: refused while another reader holds it open.
     fn open_cache_cleanup(&self, path: &std::path::Path, directory: bool) -> std::io::Result<std::fs::File>;
+    /// Confirm, just before deletion, that no reader opened an entry since its cleanup
+    /// handle was obtained. Windows sharing already refuses such openers.
+    fn confirm_cache_cleanup(&self, _file: &std::fs::File) -> std::io::Result<()> {
+        Ok(())
+    }
     fn ensure_archive_directory(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     fn create_archive_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     /// Read/write bounded native Internet provenance; unsupported platforms use None.
@@ -907,6 +913,8 @@ mod linux_mime;
 mod linux_file_names;
 #[cfg(target_os = "linux")]
 mod linux_access;
+#[cfg(target_os = "linux")]
+mod linux_cache;
 #[cfg(target_os = "linux")]
 mod linux_file_tree;
 

@@ -58,6 +58,7 @@ Un déplacement retire uniquement les sources effectivement copiées ; les confl
 - Publication exclusive, contrôle des destinations et récupération des effets partiels dans le parent.
 - Pas d’adoption ni de purge d’un objet étranger ou d’un cache ancien dépourvu de preuve suffisante.
 - Le cache Windows récupérable utilise des preuves persistantes authentifiées ; clé perdue/corrompue et états incomplets restent protégés.
+- Le cache Linux n'évince qu'avec un bail d'écriture sur chaque fichier, preuve qu'aucun lecteur ne le tient ouvert : voir [cache Linux](linux-open-cache.md).
 - La fidélité indépendante des contenus/métadonnées n’est établie que pour le périmètre TAR non compressé de R9. Les autres formats et résultats de workers n’ont pas cette garantie générale.
 - Linux garde les codecs locaux ; le confinement Windows et ses validations ne s’y appliquent pas.
 

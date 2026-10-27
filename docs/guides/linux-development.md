@@ -121,7 +121,8 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
 - T06, fait : [accès sans lecture et suppression](../architecture/linux-access.md),
   déplacer sans lire, dossiers traversables, pause et annulation à chaque élément ;
   Turbo supprime en parallèle, sauf sur Btrfs.
-- T07 cache d'archives ouvertes.
+- T07, fait : [cache des fichiers ouverts depuis une archive](../architecture/linux-open-cache.md),
+  éviction sous bail d'écriture, dossier de l'utilisateur.
 
 **Intégration (jalon 5)**
 - M08, fait : [presse-papiers](../architecture/clipboard.md) partagé avec Nautilus.

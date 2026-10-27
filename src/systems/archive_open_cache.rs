@@ -107,7 +107,7 @@ impl CacheEntry {
         )?;
         let base = match TEST_BASE.with(|value| value.borrow().clone()) {
             Some(base) => base,
-            None => crate::app_paths::temporary_dir()?,
+            None => base()?,
         };
         let started = Instant::now();
         loop {
@@ -296,6 +296,19 @@ impl CacheEntry {
     pub fn attach_recovery(&self, owner: &mut super::archive_owned_tree::OwnedTree) {
         owner.attach_recovery(self.recovery.clone());
     }
+}
+
+/// Windows `%TEMP%` belongs to the user; Linux `/tmp` is shared by every account, so
+/// the user cache folder holds the copies there.
+fn base() -> io::Result<PathBuf> {
+    #[cfg(target_os = "linux")]
+    {
+        let base = crate::app_paths::cache_dir().ok_or_else(|| io::Error::other("No user cache folder"))?;
+        fs::create_dir_all(&base)?;
+        Ok(base)
+    }
+    #[cfg(not(target_os = "linux"))]
+    crate::app_paths::temporary_dir()
 }
 
 fn seconds(time: SystemTime) -> io::Result<u64> {
@@ -523,6 +536,9 @@ impl Session {
             // All data handles were obtained exclusively before any deletion.
             // Existing readers prevent the whole eviction, including readers that
             // allow FILE_SHARE_DELETE. Directories are deleted by held identity.
+            for file in nodes.iter().map(|node| &node.file).chain([&marker]) {
+                platform().confirm_cache_cleanup(file)?;
+            }
             for node in nodes {
                 platform().remove_open_file(&node.file, &node.path)?;
                 drop(node.file);
@@ -661,9 +677,29 @@ impl Scan {
     }
 }
 
-#[cfg(all(test, target_os = "windows"))]
+#[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "linux")]
+    #[path = "linux_cleanup.rs"]
+    mod linux_cleanup;
+    /// A process spawned by a concurrent test shares the cache lock until it execs:
+    /// wait for it as `CacheEntry::new` does. The pending-entry limit is not retried.
+    fn prepare(base: &Path, policy: Policy, now: u64) -> io::Result<CacheEntry> {
+        let started = Instant::now();
+        loop {
+            match CacheEntry::prepare(base, policy, now) {
+                Err(error)
+                    if error.kind() == io::ErrorKind::WouldBlock
+                        && error.get_ref().and_then(|inner| inner.downcast_ref::<ArchiveCacheIssue>()).is_none()
+                        && started.elapsed() < Duration::from_secs(5) =>
+                {
+                    std::thread::sleep(Duration::from_millis(5))
+                }
+                result => return result,
+            }
+        }
+    }
     fn policy() -> Policy {
         Policy {
             max_bytes: 1024 * 1024,
@@ -674,7 +710,7 @@ mod tests {
         }
     }
     fn seed(base: &Path, now: u64) -> PathBuf {
-        let entry = CacheEntry::prepare(base, policy(), now).unwrap();
+        let entry = prepare(base, policy(), now).unwrap();
         let path = entry.payload().join("document.txt");
         fs::write(&path, b"safe cached document").unwrap();
         entry.finish(path).unwrap()
@@ -690,7 +726,7 @@ mod tests {
             fs::create_dir(&path).unwrap();
         }
         fs::write(path.join("witness"), b"preserved").unwrap();
-        assert!(CacheEntry::prepare(base.path(), policy(), now + 7200).is_err());
+        assert!(prepare(base.path(), policy(), now + 7200).is_err());
         assert_eq!(fs::read(path.join("witness")).unwrap(), b"preserved");
         assert!(cached.exists());
     }
@@ -705,7 +741,7 @@ mod tests {
             max_entries: 10,
             ..policy()
         };
-        let entry = CacheEntry::prepare(base.path(), constrained, now + 10).unwrap();
+        let entry = prepare(base.path(), constrained, now + 10).unwrap();
         let second = entry.payload().join("small.txt");
         fs::write(&second, b"tiny").unwrap();
         entry.finish(second.clone()).unwrap();
@@ -718,7 +754,7 @@ mod tests {
         let base = tempfile::tempdir().unwrap();
         let now = seconds(SystemTime::now()).unwrap();
         let old = seed(base.path(), now);
-        let entry = CacheEntry::prepare(base.path(), policy(), now + 61).unwrap();
+        let entry = prepare(base.path(), policy(), now + 61).unwrap();
         assert!(!old.exists());
         drop(entry);
     }
@@ -736,17 +772,18 @@ mod tests {
             .unwrap()
             .set_modified(modified)
             .unwrap();
-        assert!(CacheEntry::prepare(base.path(), policy(), now + 61).is_err());
+        assert!(prepare(base.path(), policy(), now + 61).is_err());
         assert_eq!(fs::read(path).unwrap(), b"user edited document");
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn pressure_skips_open_oldest_entry_and_evicts_the_next_closed_one() {
         use std::os::windows::fs::OpenOptionsExt;
         let base = tempfile::tempdir().unwrap();
         let now = seconds(SystemTime::now()).unwrap();
         let oldest = seed(base.path(), now);
-        let entry = CacheEntry::prepare(
+        let entry = prepare(
             base.path(),
             Policy {
                 max_entries: 2,
@@ -763,7 +800,7 @@ mod tests {
             .share_mode(7)
             .open(&oldest)
             .unwrap();
-        let entry = CacheEntry::prepare(
+        let entry = prepare(
             base.path(),
             Policy {
                 max_entries: 2,
@@ -778,6 +815,7 @@ mod tests {
         drop(entry);
     }
 
+    #[cfg(target_os = "windows")]
     #[test]
     fn cleanup_and_quota_scan_never_follow_a_cache_junction() {
         use std::os::windows::process::CommandExt;
@@ -797,7 +835,7 @@ mod tests {
             "{}",
             String::from_utf8_lossy(&output.stderr)
         );
-        assert!(CacheEntry::prepare(base.path(), policy(), now + 7200).is_err());
+        assert!(prepare(base.path(), policy(), now + 7200).is_err());
         assert_eq!(fs::read(&witness).unwrap(), b"outside");
         assert!(path.exists());
         fs::remove_dir(link).unwrap();
@@ -808,9 +846,10 @@ mod tests {
         let base = tempfile::tempdir().unwrap();
         let now = seconds(SystemTime::now()).unwrap();
         let path = seed(base.path(), now);
-        assert!(CacheEntry::prepare(base.path(), policy(), now + 10).is_err());
+        assert!(prepare(base.path(), policy(), now + 10).is_err());
         assert_eq!(fs::read(path).unwrap(), b"safe cached document");
     }
+    #[cfg(target_os = "windows")]
     #[test]
     fn expired_open_file_is_preserved_even_when_its_reader_allows_deletion() {
         use std::os::windows::fs::OpenOptionsExt;
@@ -822,10 +861,10 @@ mod tests {
             .share_mode(7)
             .open(&path)
             .unwrap();
-        assert!(CacheEntry::prepare(base.path(), policy(), now + 7200).is_err());
+        assert!(prepare(base.path(), policy(), now + 7200).is_err());
         assert_eq!(fs::read(&path).unwrap(), b"safe cached document");
         drop(reader);
-        let entry = CacheEntry::prepare(base.path(), policy(), now + 7200).unwrap();
+        let entry = prepare(base.path(), policy(), now + 7200).unwrap();
         assert!(!path.exists());
         drop(entry);
     }
@@ -840,7 +879,7 @@ mod tests {
             .unwrap()
             .set_modified(UNIX_EPOCH + Duration::from_secs(now + 7190))
             .unwrap();
-        assert!(CacheEntry::prepare(base.path(), policy(), now + 7200).is_err());
+        assert!(prepare(base.path(), policy(), now + 7200).is_err());
         assert!(path.exists());
     }
     #[test]
@@ -851,17 +890,17 @@ mod tests {
             max_entries: 10,
             ..policy()
         };
-        let first = CacheEntry::prepare(base.path(), policy, now).unwrap();
+        let first = prepare(base.path(), policy, now).unwrap();
         let payload = first.payload().to_path_buf();
         let mut others = Vec::new();
         for _ in 1..MAX_PENDING_ENTRIES {
-            others.push(CacheEntry::prepare(base.path(), policy, now).unwrap());
+            others.push(prepare(base.path(), policy, now).unwrap());
         }
-        let error = CacheEntry::prepare(base.path(), policy, now).err().unwrap();
+        let error = prepare(base.path(), policy, now).err().unwrap();
         assert_eq!(error.kind(), io::ErrorKind::WouldBlock);
         drop(first);
         assert!(!payload.exists());
-        assert!(CacheEntry::prepare(base.path(), policy, now).is_ok());
+        assert!(prepare(base.path(), policy, now).is_ok());
         drop(others);
     }
 
@@ -873,13 +912,13 @@ mod tests {
             max_entries: 10,
             ..policy()
         };
-        let first = CacheEntry::prepare(base.path(), policy, now).unwrap();
+        let first = prepare(base.path(), policy, now).unwrap();
         let mut deep = fs::canonicalize(first.payload()).unwrap();
         for _ in 0..=MAX_SCAN_DEPTH {
             deep = deep.join("d");
             fs::create_dir(&deep).unwrap();
         }
-        let second = CacheEntry::prepare(base.path(), policy, now + 61).unwrap();
+        let second = prepare(base.path(), policy, now + 61).unwrap();
         assert!(deep.exists());
         drop(first);
         let abandoned = second.directory.as_ref().unwrap().path().to_path_buf();
@@ -888,7 +927,7 @@ mod tests {
         drop(second._guard);
         drop(second._session);
         assert_eq!(directory, abandoned);
-        let third = CacheEntry::prepare(base.path(), policy, now + 122).unwrap();
+        let third = prepare(base.path(), policy, now + 122).unwrap();
         assert!(!abandoned.exists());
         drop(third);
     }
@@ -901,7 +940,7 @@ mod tests {
             max_entries: 10,
             ..policy()
         };
-        let mut entry = CacheEntry::prepare(base.path(), policy, now).unwrap();
+        let mut entry = prepare(base.path(), policy, now).unwrap();
         entry.marker.set_len(0).unwrap();
         entry.marker.seek(SeekFrom::Start(0)).unwrap();
         serde_json::to_writer(
@@ -918,7 +957,7 @@ mod tests {
         fs::write(&unknown, b"keep").unwrap();
         let _ = entry.directory.take().unwrap().keep();
         drop(entry);
-        drop(CacheEntry::prepare(base.path(), policy, now + 122).unwrap());
+        drop(prepare(base.path(), policy, now + 122).unwrap());
         assert_eq!(fs::read(unknown).unwrap(), b"keep");
     }
 }
