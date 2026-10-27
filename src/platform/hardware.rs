@@ -56,10 +56,9 @@ pub fn is_network_path(path: &Path) -> bool {
     false
 }
 
+/// Linux answers from `linux_volumes::disks`.
+#[cfg(target_os = "windows")]
 pub fn get_physical_disk_id(path: &Path) -> u64 {
-    #[cfg(not(target_os = "windows"))]
-    let _ = path;
-    #[cfg(target_os = "windows")]
     {
         let path_str = plain_path(path);
         if let Some(stripped) = path_str.strip_prefix("\\\\") {
@@ -130,10 +129,9 @@ pub fn get_physical_disk_id(path: &Path) -> u64 {
     0
 }
 
+/// Linux answers from `linux_volumes::disks`.
+#[cfg(target_os = "windows")]
 pub fn is_ssd(path: &Path) -> bool {
-    #[cfg(not(target_os = "windows"))]
-    let _ = path;
-    #[cfg(target_os = "windows")]
     {
         if is_network_path(path) {
             return false;

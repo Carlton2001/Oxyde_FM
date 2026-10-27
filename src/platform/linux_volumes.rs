@@ -4,6 +4,7 @@ use super::{DriveActions, MountedDiskImage, UnmountedVolume, VolumeError, Volume
 use crate::models::DriveInfo;
 
 mod actions;
+mod disks;
 mod fallback;
 mod holders;
 mod inventory;
@@ -79,11 +80,11 @@ impl Volumes for LinuxVolumes {
     }
 
     fn physical_disk_id(&self, path: &std::path::Path) -> u64 {
-        super::hardware::get_physical_disk_id(path)
+        disks::disk(path).id
     }
 
     fn is_ssd(&self, path: &std::path::Path) -> bool {
-        super::hardware::is_ssd(path)
+        disks::disk(path).ssd
     }
 
     fn mounted_disk_images(&self) -> Result<Vec<MountedDiskImage>, String> {

@@ -483,7 +483,11 @@ impl FileOperationManager {
             // One storage query per drive or share, not per file.
             let mut drives = HashMap::new();
             let mut solid = |path: &Path| {
+                #[cfg(target_os = "windows")]
                 let drive = path.components().next().map(|part| part.as_os_str().to_owned());
+                // Every path starts at `/`: the filesystem tells the drives apart.
+                #[cfg(not(target_os = "windows"))]
+                let drive = path.metadata().ok().map(|metadata| std::os::unix::fs::MetadataExt::dev(&metadata));
                 *drives.entry(drive).or_insert_with(|| platform().volumes().is_ssd(path))
             };
             solid(&target_dir) && files_to_process_arc.iter().all(|(selected, _, _)| solid(selected.path()))
