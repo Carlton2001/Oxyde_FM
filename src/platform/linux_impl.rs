@@ -533,20 +533,42 @@ impl Platform for LinuxPlatform {
             .find(|value| !value.is_empty())
             .and_then(|value| value.split(':').find(|locale| !locale.is_empty()).map(str::to_owned))
     }
+    /// xdg-open hands the item to the desktop and exits with its verdict; outside a
+    /// desktop it may run the application itself, which is then reaped in the background.
     fn open_item(&self, path: &str) -> Result<(), String> {
-        std::process::Command::new("xdg-open")
+        use std::process::Stdio;
+        let mut child = std::process::Command::new("xdg-open")
             .arg(path)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .spawn()
-            .map(|_| ())
-            .map_err(|e| e.to_string())
+            .map_err(|error| format!("xdg-open: {error}"))?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        loop {
+            match child.try_wait().map_err(|error| error.to_string())? {
+                Some(status) if status.success() => return Ok(()),
+                Some(status) => {
+                    // GNOME's gio reports a missing file and a missing application alike.
+                    return Err(match status.code() {
+                        Some(3) => "xdg-open misses a required tool".to_string(),
+                        _ => format!("The desktop could not open {path}"),
+                    })
+                }
+                None if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+                None => {
+                    std::thread::spawn(move || child.wait());
+                    return Ok(());
+                }
+            }
+        }
     }
 
-    fn show_properties_dialog(&self, path: &str) {
-        // Tentative via `gio info` ou `nautilus --properties` selon l'environnement
-        let _ = std::process::Command::new("gio")
-            .args(["open", path])
-            .spawn();
-    }
+    /// Linux desktops share no properties dialog; Oxyde's own Properties window serves
+    /// them, and the interface offers no system button. `gio open` used to open the item.
+    fn show_properties_dialog(&self, _path: &str) {}
 
     fn install_pointer_capture(&self, _window: raw_window_handle::RawWindowHandle) -> Result<(), String> {
         // X11/Wayland already provide a button grab through GPUI.
