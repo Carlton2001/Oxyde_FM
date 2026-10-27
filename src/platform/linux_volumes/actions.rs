@@ -16,7 +16,7 @@ pub(super) struct Release {
 pub(super) fn unmount(path: &str) -> Result<(), VolumeError> {
     let blocks = udisks::blocks().map_err(volume_error)?;
     let block = mounted_at(&blocks, path)?;
-    udisks::call(&block.object, FILESYSTEM, "Unmount").map_err(volume_error)
+    udisks::call(&block.object, FILESYSTEM, "Unmount").map_err(|error| named(volume_error(error), block))
 }
 
 pub(super) fn eject(path: &str) -> Result<(), VolumeError> {
@@ -26,7 +26,13 @@ pub(super) fn eject(path: &str) -> Result<(), VolumeError> {
         match udisks::call(object, FILESYSTEM, "Unmount") {
             // A partition unmounted meanwhile is already released.
             Err(zbus::Error::MethodError(name, ..)) if name.as_str() == NOT_MOUNTED => {}
-            result => result.map_err(volume_error)?,
+            result => result.map_err(|error| {
+                let error = volume_error(error);
+                match blocks.iter().find(|block| &block.object == object) {
+                    Some(block) => named(error, block),
+                    None => error,
+                }
+            })?,
         }
     }
     match release.drive {
@@ -60,6 +66,14 @@ pub(super) fn release(blocks: &[Block], path: &str) -> Result<Release, VolumeErr
     Ok(Release { unmount, drive: method.map(|method| (drive.object.clone(), method)) })
 }
 
+/// Names the processes that keep a busy filesystem open.
+fn named(error: VolumeError, block: &Block) -> VolumeError {
+    match error {
+        VolumeError::Busy(_) => VolumeError::Busy(super::holders::holders(block.mount_points.as_deref().unwrap_or_default())),
+        error => error,
+    }
+}
+
 fn mounted_at<'a>(blocks: &'a [Block], path: &str) -> Result<&'a Block, VolumeError> {
     blocks
         .iter()
@@ -76,7 +90,7 @@ pub(super) fn volume_error(error: zbus::Error) -> VolumeError {
     match name.as_str().strip_prefix("org.freedesktop.UDisks2.Error.") {
         Some("NotAuthorizedDismissed" | "Cancelled") => VolumeError::Cancelled,
         Some("NotAuthorized" | "NotAuthorizedCanObtain") => VolumeError::NotAuthorized,
-        Some("DeviceBusy") => VolumeError::Busy,
+        Some("DeviceBusy") => VolumeError::Busy(Vec::new()),
         _ => VolumeError::Other(detail.clone().unwrap_or_else(|| name.to_string())),
     }
 }

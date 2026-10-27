@@ -515,6 +515,7 @@ network-loading = Caricamento delle unità…
 
 drive-eject-failed = Impossibile espellere l’unità. Un’altra applicazione potrebbe usarla. { $detail }
 drive-unmount-failed = Impossibile smontare il volume. Un’altra applicazione potrebbe usarlo. { $detail }
+drive-holders = Aperto in: { $applications }.
 
 archive-format = Archivio .{ $format }
 

@@ -13,8 +13,8 @@ pub struct DriveActions {
 pub enum VolumeError {
     /// The user dismissed the authentication dialog: nothing to report.
     Cancelled,
-    /// Files are still open on the volume.
-    Busy,
+    /// Files are still open on the volume, by the named processes when they are known.
+    Busy(Vec<String>),
     NotAuthorized,
     Other(String),
 }
@@ -23,8 +23,8 @@ impl std::fmt::Display for VolumeError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Cancelled => formatter.write_str("Cancelled"),
-            // The failure messages already name an application using the volume.
-            Self::Busy => Ok(()),
+            // The failure messages already say that an application uses the volume.
+            Self::Busy(holders) => formatter.write_str(&holders.join(", ")),
             Self::NotAuthorized => formatter.write_str("Not authorized"),
             Self::Other(detail) => formatter.write_str(detail),
         }

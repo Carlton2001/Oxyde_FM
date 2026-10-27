@@ -515,6 +515,7 @@ network-loading = Laufwerke werden geladen…
 
 drive-eject-failed = Laufwerk konnte nicht ausgeworfen werden. Eine andere Anwendung verwendet es möglicherweise. { $detail }
 drive-unmount-failed = Datenträger konnte nicht ausgehängt werden. Eine andere Anwendung verwendet ihn möglicherweise. { $detail }
+drive-holders = Geöffnet in: { $applications }.
 
 archive-format = Archiv .{ $format }
 

@@ -81,6 +81,7 @@ pub enum Message {
     EjectDriveFailed,
     UnmountDrive,
     UnmountDriveFailed,
+    DriveHolders,
     MountDiskImage,
     UnmountDiskImage,
     DiskImageMountFailed,
@@ -644,6 +645,7 @@ impl Message {
             Self::EjectDriveFailed => "drive-eject-failed",
             Self::UnmountDrive => "drive-unmount",
             Self::UnmountDriveFailed => "drive-unmount-failed",
+            Self::DriveHolders => "drive-holders",
             Self::MountDiskImage => "disk-image-mount",
             Self::UnmountDiskImage => "disk-image-unmount",
             Self::DiskImageMountFailed => "disk-image-mount-failed",
@@ -1460,6 +1462,7 @@ mod tests {
                 Message::EjectDriveFailed,
                 Message::UnmountDrive,
                 Message::UnmountDriveFailed,
+                Message::DriveHolders,
                 Message::MountDiskImage,
                 Message::UnmountDiskImage,
                 Message::DiskImageMountFailed,
@@ -2079,6 +2082,7 @@ mod tests {
             args.set("speed", "42 Mo/s");
             args.set("limit", "256 Mo");
             args.set("locations", "C:/école/récupération");
+            args.set("applications", "nautilus");
             for message in messages {
                 let pattern = i18n
                     .active

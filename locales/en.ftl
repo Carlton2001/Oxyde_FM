@@ -292,6 +292,7 @@ network-working = Working…
 network-loading = Loading drives…
 drive-eject-failed = Unable to eject the drive. Another application may be using it. { $detail }
 drive-unmount-failed = Unable to unmount the volume. Another application may be using it. { $detail }
+drive-holders = Open in: { $applications }.
 
 archive-format = Archive .{ $format }
 compression-fast = Fast

@@ -5,6 +5,7 @@ use crate::models::DriveInfo;
 
 mod actions;
 mod fallback;
+mod holders;
 mod inventory;
 mod mounts;
 mod udisks;

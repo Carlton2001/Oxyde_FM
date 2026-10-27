@@ -1,5 +1,5 @@
 use super::{drive_watchers, OxydeApp, ToastKind};
-use crate::ui::i18n::Message;
+use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::components::sidebar::sidebar_paths_equal;
 use gpui::*;
 mod changes;
@@ -120,6 +120,11 @@ impl OxydeApp {
                     },
                     // The user dismissed the authentication dialog.
                     Ok(Err(oxyde_lib::platform::VolumeError::Cancelled)) => None,
+                    Ok(Err(oxyde_lib::platform::VolumeError::Busy(holders))) if !holders.is_empty() => {
+                        let mut args = crate::ui::i18n::FluentArgs::new();
+                        args.set("applications", holders.join(", "));
+                        Some(cx.i18n().text_with_args(Message::DriveHolders, &args).to_string())
+                    }
                     Ok(Err(error)) => Some(error.to_string()),
                     Err(error) => Some(error.to_string()),
                 };

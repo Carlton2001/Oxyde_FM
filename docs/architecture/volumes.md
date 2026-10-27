@@ -52,7 +52,7 @@ pub trait Volumes: Send + Sync {
 - `UnmountedVolume { id, label, size, removable, fs_type }` forme une liste séparée dans l'état ;
   Windows la renvoie vide.
 - `VolumeError` distingue `Cancelled` (authentification annulée : aucun message), `NotAuthorized`,
-  `Busy` (fichiers ouverts) et `Other(detail)`.
+  `Busy(applications)` (fichiers ouverts) et `Other(detail)`.
 
 ## Linux : `src/platform/linux_volumes/`
 
@@ -74,6 +74,11 @@ pub trait Volumes: Send + Sync {
   `Drive.PowerOff` sinon quand le disque le permet (retrait sûr, comme sous Windows),
   `Drive.Eject` à défaut. Les erreurs UDisks2 `NotAuthorizedDismissed` → `Cancelled`,
   `NotAuthorized*` → `NotAuthorized`, `DeviceBusy` → `Busy`. `Mount` arrive à l'étape 5.
+- `holders.rs` : sur `Busy`, comme le dialogue « Volume occupé » de GNOME, parcourt `/proc`
+  (dossier courant, racine, exécutable, descripteurs, projections) et nomme les processus
+  de l'utilisateur qui gardent le volume ouvert ; le message ajoute « Ouvert dans :
+  nautilus. ». Nautilus n'est prévenu que des démontages lancés par GNOME : sinon, il
+  garde ses dossiers ouverts.
 - `watch.rs` : un fil attend par `poll` le drapeau `POLLPRI` que le noyau lève sur
   `/proc/self/mountinfo` à chaque montage ou démontage de l'espace de noms, qu'il vienne
   d'UDisks2, de `mount` ou d'un client réseau ; chaque changement incrémente la révision.

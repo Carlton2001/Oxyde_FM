@@ -49,7 +49,7 @@ fn dismissed_authentication_and_busy_volumes_are_recognised() {
         volume_error(zbus::Error::MethodError(name, Some("detail".into()), message))
     };
     assert_eq!(error("org.freedesktop.UDisks2.Error.NotAuthorizedDismissed"), VolumeError::Cancelled);
-    assert_eq!(error("org.freedesktop.UDisks2.Error.DeviceBusy"), VolumeError::Busy);
+    assert_eq!(error("org.freedesktop.UDisks2.Error.DeviceBusy"), VolumeError::Busy(Vec::new()));
     assert_eq!(error("org.freedesktop.UDisks2.Error.NotAuthorizedCanObtain"), VolumeError::NotAuthorized);
     assert_eq!(error("org.freedesktop.UDisks2.Error.Failed"), VolumeError::Other("detail".into()));
 }

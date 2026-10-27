@@ -298,6 +298,7 @@ network-working = Opération en cours…
 network-loading = Chargement des lecteurs…
 drive-eject-failed = Impossible d’éjecter le lecteur. Il est peut-être utilisé par une autre application. { $detail }
 drive-unmount-failed = Impossible de démonter le volume. Il est peut-être utilisé par une autre application. { $detail }
+drive-holders = Ouvert dans : { $applications }.
 
 archive-format = Archive .{ $format }
 compression-fast = Rapide
