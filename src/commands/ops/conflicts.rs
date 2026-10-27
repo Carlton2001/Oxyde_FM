@@ -32,7 +32,7 @@ pub(super) fn check_conflicts_real(
             if crate::systems::transfer_naming::same_entry(&source_path, &target_path) {
                 continue;
             }
-            if target_path.exists() {
+            if occupied(&target_path) {
                 // Initial top-level conflict found
                 add_conflict_recursive(&source_path, &target_path, &mut conflicts, &mut summaries)?;
             }
@@ -40,6 +40,25 @@ pub(super) fn check_conflicts_real(
     }
 
     Ok(conflicts)
+}
+
+// Outside Windows a link is copied as a link: a broken link still takes its
+// name, and a link to a folder is one item rather than a merged folder.
+#[cfg(not(target_os = "windows"))]
+fn occupied(path: &std::path::Path) -> bool {
+    path.symlink_metadata().is_ok()
+}
+#[cfg(target_os = "windows")]
+fn occupied(path: &std::path::Path) -> bool {
+    path.exists()
+}
+#[cfg(not(target_os = "windows"))]
+fn copied_as_link(path: &std::path::Path) -> bool {
+    path.symlink_metadata().is_ok_and(|metadata| metadata.file_type().is_symlink())
+}
+#[cfg(target_os = "windows")]
+fn copied_as_link(_path: &std::path::Path) -> bool {
+    false
 }
 
 fn add_conflict_recursive(
@@ -52,7 +71,7 @@ fn add_conflict_recursive(
     let mut target_entry = get_file_entry_from_path(target_path)?;
     source_entry.name = target_entry.name.clone();
 
-    if source_entry.is_dir {
+    if source_entry.is_dir && !copied_as_link(source_path) {
         summaries.get(source_path).apply(&mut source_entry);
         summaries.get(target_path).apply(&mut target_entry);
 
@@ -73,7 +92,7 @@ fn add_conflict_recursive(
             let entry_name = entry.file_name();
             let target_child_path = target_path.join(&entry_name);
 
-            if target_child_path.exists() {
+            if occupied(&target_child_path) {
                 add_conflict_recursive(&entry_path, &target_child_path, conflicts, summaries)?;
             }
         }

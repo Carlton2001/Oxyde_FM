@@ -205,6 +205,7 @@ fn case_only_rename_uses_the_same_undo_redo_commands_as_ordinary_renames() {
                 target_dir: None,
                 old_path: Some(old.to_string_lossy().into_owned()),
                 new_path: Some(new.to_string_lossy().into_owned()),
+                created_links: None,
                 renamed_item_identity: proof,
                 new_folder_identity: None,
                 created_files: None,

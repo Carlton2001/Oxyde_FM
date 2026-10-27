@@ -238,6 +238,7 @@
             TransactionType::Rename,
             TransactionDetails {
                 deleted_items: None,
+                created_links: None,
                 renamed_item_identity: [new, old].into_iter().find_map(|path| {
                     let parents = crate::systems::path_parents::HeldParents::new(path).ok()?;
                     let file = crate::platform::platform()

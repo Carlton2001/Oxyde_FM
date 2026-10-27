@@ -470,10 +470,24 @@ pub async fn redo_last_action(
                         }
                     }
                     tx.details.copied_directory_identities = Some(identities);
+                    let links = tx.details.created_links.clone().unwrap_or_default();
+                    if let Err(error) = crate::systems::history_links::redo(&links) {
+                        return Err(rollback_copy_directories(
+                            &mut directories,
+                            &made_dirs,
+                            CommandError::from(error),
+                        ));
+                    }
                     if !files.is_empty() {
                         match perform_copy_with_progress(files, Arc::new(AtomicBool::new(false))) {
                             Ok(identities) => tx.details.copied_file_identities = Some(identities),
                             Err(error) => {
+                                let error = match crate::systems::history_links::remove(&links) {
+                                    Ok(()) => error,
+                                    Err(rollback) => CommandError::IoError(format!(
+                                        "{error}; rollback incomplete: {rollback}"
+                                    )),
+                                };
                                 return Err(rollback_copy_directories(
                                     &mut directories,
                                     &made_dirs,

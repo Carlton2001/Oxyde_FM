@@ -1,5 +1,6 @@
 mod worker;
 mod destinations;
+mod links;
 
 use super::{FileOperation, FileOperationManager, OpStatus, FILE_OPS_LOG_TARGET};
 use crate::models::ConflictAction;
@@ -243,6 +244,9 @@ impl FileOperationManager {
         // 2. Calculate size and build file list with resolution checks
         let mut files_to_process = Vec::new();
         let mut directories_to_create = Vec::new();
+        let mut links_to_create = Vec::new();
+        let archive_destination = op.lock().unwrap().archive_path_mappings.iter()
+            .any(|(root, _)| target_dir.starts_with(root));
         let mut source_directories = crate::systems::source_directories::SourceDirectories::default();
         let mut reserved_copy_names = std::collections::HashSet::new();
         let mut fresh_copy_directories = Vec::new();
@@ -252,6 +256,7 @@ impl FileOperationManager {
         for (selected, canonical_src) in selected_sources.iter().zip(&canonical_sources) {
             let first_file = files_to_process.len();
             let first_directory = directories_to_create.len();
+            let first_link = links_to_create.len();
             let mut skipped = false;
             Self::archive_checkpoint(op)?;
             let src = selected.path();
@@ -323,6 +328,28 @@ impl FileOperationManager {
                     directories_to_create.push(dest_path);
                     continue;
                 }
+                if let Some(link) = entry.link() {
+                    if is_move || deferred_moves.is_some() {
+                        return Err(format!("Moving symbolic links is not supported yet: {:?}", entry.path()));
+                    }
+                    if archive_destination {
+                        return Err(format!("Symbolic links cannot be copied into archives yet: {:?}", entry.path()));
+                    }
+                    // A broken link at the destination still occupies its name.
+                    let replace_existing = !self_transfer && dest_path.symlink_metadata().is_ok();
+                    if replace_existing
+                        && resolutions
+                            .as_ref()
+                            .and_then(|map| Self::get_resolution(entry.path(), map))
+                            != Some(ConflictAction::Replace)
+                    {
+                        skipped = true;
+                        continue;
+                    }
+                    total_files += 1;
+                    links_to_create.push((link.clone(), dest_path, replace_existing));
+                    continue;
+                }
                 let replace_existing = !self_transfer && dest_path.exists();
                 if replace_existing
                     && resolutions
@@ -339,14 +366,16 @@ impl FileOperationManager {
                 files_to_process.push((file, dest_path, replace_existing));
             }
             op.lock().unwrap().item_plan(src, dest_root,
-                files_to_process.len() - first_file + directories_to_create.len() - first_directory,
+                files_to_process.len() - first_file + directories_to_create.len() - first_directory
+                    + links_to_create.len() - first_link,
                 skipped, is_move && selected.is_dir());
         }
 
         destinations::validate(
             &target_dir,
             &directories_to_create,
-            files_to_process.iter().map(|(_, destination, _)| destination),
+            files_to_process.iter().map(|(_, destination, _)| destination)
+                .chain(links_to_create.iter().map(|(_, destination, _)| destination)),
             &mut || Self::archive_checkpoint(op).map_err(std::io::Error::other),
         ).map_err(|error| error.to_string())?;
 
@@ -409,6 +438,12 @@ impl FileOperationManager {
                 .map_err(|e| format!("Cannot create directory {:?}: {e}", directory))?;
             op.lock().unwrap().item_directory(directory, true);
         }
+        for (link, destination, replace_existing) in &links_to_create {
+            Self::archive_checkpoint(op)?;
+            Self::copy_link(op, &destination_tree, link, destination, *replace_existing)?;
+            processed_files_atomic.fetch_add(1, Ordering::Relaxed);
+        }
+        drop(links_to_create);
         // A rename preserves the file itself and does not read its contents.
         // Let the filesystem determine volume boundaries (including mount points),
         // rather than trusting the UI's disk estimate. Only cross-volume moves copy.

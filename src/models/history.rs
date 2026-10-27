@@ -308,6 +308,7 @@ mod tests {
             TransactionType::Copy,
             TransactionDetails {
                 deleted_items: None,
+                created_links: None,
                 renamed_item_identity: None,
                 moved_directory_identities: None,
                 new_folder_identity: None,

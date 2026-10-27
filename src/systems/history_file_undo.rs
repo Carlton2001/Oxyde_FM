@@ -1,7 +1,7 @@
 //! Reversible Copy/Move Undo effects, retained until every filesystem phase succeeds.
 use super::history_move::hash_file;
 use super::path_parents::HeldParents;
-use crate::models::transaction::{HistoryDirectoryIdentity, HistoryFileIdentity};
+use crate::models::transaction::{HistoryCreatedLink, HistoryDirectoryIdentity, HistoryFileIdentity};
 use crate::models::{CommandError, TransactionDetails};
 use crate::platform::platform;
 use std::collections::{HashMap, HashSet};
@@ -69,6 +69,7 @@ struct Plan {
     identities: HashMap<PathBuf, HistoryFileIdentity>,
     files: Vec<FileMove>,
     discard: Vec<(PathBuf, String)>,
+    links: Vec<HistoryCreatedLink>,
     source_dirs: Vec<PathBuf>,
     remove_dirs: Vec<PathBuf>,
 }
@@ -91,6 +92,21 @@ fn verified_file(path: &Path, expected: Option<&String>) -> io::Result<String> {
         )));
     }
     Ok(hash)
+}
+/// Accept only the created link itself, still pointing where it was copied to point.
+fn verified_link(link: &HistoryCreatedLink, current: &fs::File) -> io::Result<()> {
+    let identity = link.identity.snapshot().ok_or_else(|| {
+        io::Error::other(crate::models::error::HistoryIdentityFailure {
+            issue: crate::models::error::HistoryIdentityIssue::Unverified,
+            path: link.path.to_string_lossy().into_owned(),
+        })
+    })?;
+    let metadata = current.metadata()?;
+    match platform().source_link_target(current, &metadata) {
+        Some(Ok(target)) if target == link.target && identity.matches(current)? => Ok(()),
+        Some(Err(error)) => Err(error),
+        _ => Err(super::file_copy::identity_changed(&link.path)),
+    }
 }
 impl Plan {
     fn copy(details: &TransactionDetails) -> io::Result<Self> {
@@ -158,12 +174,19 @@ impl Plan {
                 return Err(super::file_copy::identity_changed(&path));
             }
         }
+        let links = details.created_links.clone().unwrap_or_default();
+        for link in &links {
+            let parents = HeldParents::new(&link.path)?;
+            let current = platform().track_source_item(parents.directory(), &link.path)?;
+            verified_link(link, &current)?;
+        }
         Ok(Self {
             directory_identities,
             identities,
             files: vec![],
             source_dirs: vec![],
             discard: verified_outputs(created, &hashes, &HashSet::new())?,
+            links,
             remove_dirs: sorted_directories(created_dirs),
         })
     }
@@ -326,6 +349,7 @@ impl Plan {
             identities,
             files,
             discard,
+            links: vec![],
             source_dirs,
             remove_dirs,
         })
@@ -367,6 +391,7 @@ fn sorted_directories(paths: &[String]) -> Vec<PathBuf> {
 
 enum Effect {
     Move(FileMove),
+    RemovedLink(HistoryCreatedLink),
     CreatedDir(PathBuf),
     RemovedDir {
         path: PathBuf,
@@ -458,6 +483,14 @@ impl Journal {
         self.discarded.push((saved, hash, identity));
         Ok(())
     }
+    fn remove_link(&mut self, link: HistoryCreatedLink) -> io::Result<()> {
+        let parents = self.directories.file_parents(&link.path)?;
+        platform().remove_link(parents.directory(), &link.path, &mut |current| {
+            verified_link(&link, current)
+        })?;
+        self.effects.push(Effect::RemovedLink(link));
+        Ok(())
+    }
     fn remove_dir(&mut self, ops: &impl UndoIo, path: &Path) -> io::Result<()> {
         let Some(metadata) = self.directories.metadata(path)? else {
             return Ok(());
@@ -521,6 +554,18 @@ impl Journal {
                         )
                     })();
                     (effect.to, result)
+                }
+                Effect::RemovedLink(link) => {
+                    let result = self.directories.file_parents(&link.path).and_then(|parents| {
+                        let created = platform().create_link(
+                            parents.directory(),
+                            &link.path,
+                            &link.target,
+                            false,
+                        )?;
+                        link.identity.refresh_from_file(&created)
+                    });
+                    (link.path, result)
                 }
                 Effect::CreatedDir(path) => {
                     let result = self.directories.remove(&path).and_then(|removed| {
@@ -654,6 +699,11 @@ fn apply_plan(ops: &impl UndoIo, plan: Plan) -> io::Result<()> {
     for (path, _) in &plan.discard {
         paths.push(staging_parent(path, &plan.remove_dirs)?.to_path_buf());
     }
+    paths.extend(
+        plan.links
+            .iter()
+            .filter_map(|link| link.path.parent().map(Path::to_path_buf)),
+    );
     let mut directories =
         super::history_directories::Directories::prepare(&paths, &plan.remove_dirs)?;
     for path in &plan.source_dirs {
@@ -690,6 +740,9 @@ fn apply_plan(ops: &impl UndoIo, plan: Plan) -> io::Result<()> {
         for (path, hash) in plan.discard {
             let identity = plan.identities.get(&path).copied();
             journal.stage(ops, path, hash, &plan.remove_dirs, identity)?;
+        }
+        for link in plan.links {
+            journal.remove_link(link)?;
         }
         for directory in plan.remove_dirs {
             journal.remove_dir(ops, &directory)?;

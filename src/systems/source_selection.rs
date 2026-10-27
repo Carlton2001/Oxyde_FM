@@ -95,12 +95,47 @@ impl SelectedFile {
     }
 }
 
+/// A symbolic link transferred as a link: its own identity and target text,
+/// captured without following it.
+#[derive(Clone)]
+pub(super) struct SelectedLink {
+    path: PathBuf,
+    parent: Arc<BoundDirectory>,
+    identity: HistoryFileIdentity,
+    target: PathBuf,
+}
+impl SelectedLink {
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+    pub fn target(&self) -> &Path {
+        &self.target
+    }
+    /// Confirm through the held parent that the same link still has the same target.
+    pub fn verify(&self) -> io::Result<()> {
+        let current = platform()
+            .track_source_item(&self.parent.file, &self.path)
+            .map_err(|error| match error.kind() {
+                io::ErrorKind::NotFound => SourceSelectionFailure::changed(&self.path),
+                _ => error,
+            })?;
+        let metadata = current.metadata()?;
+        let target = platform().source_link_target(&current, &metadata);
+        match (self.identity.matches(&current), target) {
+            (Ok(true), Some(Ok(target))) if target == self.target => Ok(()),
+            (Ok(_), Some(Ok(_)) | None) => Err(SourceSelectionFailure::changed(&self.path)),
+            _ => Err(SourceSelectionFailure::unverified(&self.path)),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub(super) struct SelectedEntry {
     path: PathBuf,
     parent: Arc<BoundDirectory>,
     directory: Option<Arc<BoundDirectory>>,
     file: Option<SelectedFile>,
+    link: Option<SelectedLink>,
 }
 impl SelectedEntry {
     pub fn select(path: &Path) -> io::Result<Self> {
@@ -116,6 +151,22 @@ impl SelectedEntry {
     fn child(path: PathBuf, parent: Arc<BoundDirectory>) -> io::Result<Self> {
         let captured = platform().track_source_item(&parent.file, &path)?;
         let metadata: Metadata = captured.metadata()?;
+        if let Some(target) = platform().source_link_target(&captured, &metadata) {
+            let link = SelectedLink {
+                path: path.clone(),
+                parent: Arc::clone(&parent),
+                identity: HistoryFileIdentity::from_file(&captured)
+                    .map_err(|_| SourceSelectionFailure::unverified(&path))?,
+                target: target?,
+            };
+            return Ok(Self {
+                path,
+                parent,
+                directory: None,
+                file: None,
+                link: Some(link),
+            });
+        }
         if platform().file_attributes(&metadata, "").2
             || (!metadata.is_dir() && !metadata.is_file())
         {
@@ -153,6 +204,7 @@ impl SelectedEntry {
             parent,
             directory,
             file,
+            link: None,
         })
     }
     pub fn path(&self) -> &Path {
@@ -164,9 +216,12 @@ impl SelectedEntry {
     pub fn is_dir(&self) -> bool {
         self.directory.is_some()
     }
+    pub fn link(&self) -> Option<&SelectedLink> {
+        self.link.as_ref()
+    }
     pub fn into_file(self) -> io::Result<SelectedFile> {
         self.file
-            .ok_or_else(|| io::Error::other("Selected source is a directory"))
+            .ok_or_else(|| io::Error::other("Selected source is not a file"))
     }
     pub fn size(&self) -> u64 {
         self.file.as_ref().map_or(0, |file| file.size)

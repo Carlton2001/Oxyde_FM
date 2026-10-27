@@ -407,6 +407,7 @@
             let name = |path: &Path| path.to_string_lossy().into_owned();
             let details = TransactionDetails {
                 deleted_items: None,
+                created_links: None,
                 renamed_item_identity: None,
                 moved_directory_identities: None,
                 new_folder_identity: None,
@@ -945,6 +946,7 @@
                 identities: HashMap::new(),
                 files: vec![],
                 discard: vec![],
+                links: vec![],
                 source_dirs: vec![link.join("created")],
                 remove_dirs: vec![],
             },
@@ -985,6 +987,7 @@
                 identities: HashMap::new(),
                 files: vec![],
                 discard: vec![],
+                links: vec![],
                 source_dirs: vec![],
                 remove_dirs: vec![link.join("empty")],
             },

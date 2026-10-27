@@ -23,6 +23,7 @@
             )]),
             copied_file_identities: None,
             copied_directory_identities: None,
+            created_links: None,
             renamed_item_identity: None,
             moved_directory_identities: None,
             new_folder_identity: None,

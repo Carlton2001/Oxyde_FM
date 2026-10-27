@@ -108,6 +108,18 @@ impl Platform for LinuxPlatform {
         #[cfg(not(target_os = "linux"))]
         { let _ = (directory, visitor); Err(std::io::ErrorKind::Unsupported.into()) }
     }
+    #[cfg(target_os = "linux")]
+    fn source_link_target(&self, captured: &std::fs::File, metadata: &std::fs::Metadata) -> Option<std::io::Result<std::path::PathBuf>> {
+        metadata.file_type().is_symlink().then(|| super::linux_links::target(captured))
+    }
+    #[cfg(target_os = "linux")]
+    fn create_link(&self, parent: &std::fs::File, path: &std::path::Path, target: &std::path::Path, replace: bool) -> std::io::Result<std::fs::File> {
+        super::linux_links::create(parent, path, target, replace)
+    }
+    #[cfg(target_os = "linux")]
+    fn remove_link(&self, parent: &std::fs::File, path: &std::path::Path, verify: &mut dyn FnMut(&std::fs::File) -> std::io::Result<()>) -> std::io::Result<()> {
+        super::linux_links::remove(parent, path, verify)
+    }
     fn open_copied_file(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         self.open_operation_file(parent, path, true)
     }

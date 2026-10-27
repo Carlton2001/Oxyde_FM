@@ -23,6 +23,7 @@ mod compression_output;
 pub(crate) mod history_move;
 pub(crate) mod history_move_redo;
 pub(crate) mod history_file_undo;
+pub(crate) mod history_links;
 pub(crate) mod history_directories;
 pub(crate) mod item_rename;
 pub(crate) mod new_folder_history;

@@ -27,7 +27,18 @@ pub struct TransactionDetails {
     pub copied_file_hashes: Option<Vec<(String, String)>>,
     pub copied_file_identities: Option<Vec<(String, HistoryFileIdentity)>>,
     pub copied_directory_identities: Option<Vec<(String, HistoryDirectoryIdentity)>>,
+    pub created_links: Option<Vec<HistoryCreatedLink>>,
     pub new_folder_identity: Option<HistoryFileIdentity>,
+}
+
+/// A symbolic link a copy created as a link. Undo removes it only while it is
+/// still that link with that target; Redo recreates it from the same source.
+#[derive(Debug, Clone)]
+pub struct HistoryCreatedLink {
+    pub source: std::path::PathBuf,
+    pub path: std::path::PathBuf,
+    pub target: std::path::PathBuf,
+    pub identity: HistoryLinkIdentity,
 }
 
 #[derive(Debug, Clone)]
@@ -96,6 +107,9 @@ pub struct HistoryDirectoryIdentity {
 /// A Move proof follows the logical file through cross-volume publication and
 /// rollback. It is shared by history snapshots and never retains a file handle.
 pub type HistoryMoveIdentity = HistoryDirectoryIdentity;
+
+/// A link removed by Undo and restored by rollback gets a new identifier.
+pub type HistoryLinkIdentity = HistoryDirectoryIdentity;
 
 impl HistoryDirectoryIdentity {
     /// No object exists yet: only an exclusive journal creation may supply its proof.

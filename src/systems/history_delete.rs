@@ -330,6 +330,7 @@ mod tests {
             moved_files: None,
             moved_file_identities: None,
             trash_metadata_backups: None,
+            created_links: None,
             renamed_item_identity: None,
             moved_directory_identities: None,
             moved_dirs: None,

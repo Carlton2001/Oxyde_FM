@@ -91,7 +91,8 @@ impl FileOperationManager {
             || !locked.overwritten_files.is_empty()
             || !locked.moved_files.is_empty()
             || !locked.moved_dirs.is_empty()
-            || !locked.copied_files.is_empty();
+            || !locked.copied_files.is_empty()
+            || !locked.created_links.is_empty();
         if final_status == OpStatus::Completed || has_effects {
             let virtual_effects = locked
                 .sources
@@ -116,6 +117,7 @@ impl FileOperationManager {
                 FileOpType::Copy => {
                     !locked.created_files.is_empty()
                         || !locked.created_dirs.is_empty()
+                        || !locked.created_links.is_empty()
                         // Keep an overwrite-only copy as an undo-history
                         // barrier so Undo cannot accidentally target an older action.
                         || !locked.overwritten_files.is_empty()
@@ -145,6 +147,7 @@ impl FileOperationManager {
 
                 let details = TransactionDetails {
                     deleted_items: Some(locked.deleted_items.clone()),
+                    created_links: Some(locked.created_links.clone()),
                     renamed_item_identity: None,
                     moved_directory_identities: Some(
                         locked.moved_directory_identities.iter()

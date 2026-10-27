@@ -163,9 +163,9 @@ fn move_preserves_empty_directories() {
     assert!(!source.exists());
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 #[test]
-fn copy_rejects_symbolic_links_instead_of_following_them() {
+fn copy_recreates_symbolic_links_instead_of_following_them() {
     use std::os::unix::fs::symlink;
 
     let temp = tempfile::tempdir().unwrap();
@@ -177,14 +177,16 @@ fn copy_rejects_symbolic_links_instead_of_following_them() {
     std::fs::write(&outside, b"outside source tree").unwrap();
     symlink(&outside, source.join("link.txt")).unwrap();
 
-    assert!(FileOperationManager::perform_copy(
+    FileOperationManager::perform_copy(
         &operation(),
         vec![source.clone()],
         Some(target.clone()),
         false,
         None,
     )
-    .is_err());
-    assert!(target.join("source/link.txt").exists() == false);
+    .unwrap();
+    let copied = target.join("source/link.txt");
+    assert!(copied.symlink_metadata().unwrap().file_type().is_symlink());
+    assert_eq!(std::fs::read_link(copied).unwrap(), outside);
     assert_eq!(std::fs::read(outside).unwrap(), b"outside source tree");
 }

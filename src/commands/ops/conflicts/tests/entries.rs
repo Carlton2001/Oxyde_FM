@@ -44,3 +44,29 @@ fn conflict_preparation_rechecks_changed_targets_and_keeps_file_directory_totals
     assert_eq!(replacement[0].target.size, 9);
     assert_eq!(replacement[0].target.files_count, Some(1));
 }
+
+#[cfg(not(target_os = "windows"))]
+#[test]
+fn links_conflict_as_single_items_including_broken_targets() {
+    let root = tempfile::tempdir().unwrap();
+    let outside = root.path().join("outside");
+    let source = root.path().join("source");
+    let target = root.path().join("target");
+    for directory in [&outside, &source, &target.join("folder")] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    std::fs::write(outside.join("child"), b"outside").unwrap();
+    std::fs::write(target.join("folder/child"), b"target").unwrap();
+    std::os::unix::fs::symlink(&outside, source.join("folder")).unwrap();
+    std::os::unix::fs::symlink("missing", target.join("broken")).unwrap();
+    std::fs::write(source.join("broken"), b"source").unwrap();
+    let conflicts = check_conflicts_real(
+        ["folder", "broken"]
+            .map(|name| source.join(name).to_string_lossy().into_owned())
+            .into(),
+        target.to_string_lossy().into_owned(),
+    )
+    .unwrap();
+    let names: Vec<_> = conflicts.iter().map(|conflict| conflict.name.as_str()).collect();
+    assert_eq!(names, ["folder", "broken"]);
+}

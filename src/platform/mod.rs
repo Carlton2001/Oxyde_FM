@@ -255,6 +255,20 @@ pub trait Platform: Send + Sync {
     fn open_copy_source(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     /// Enumerate the opened directory itself. Each invocation starts at its beginning.
     fn enumerate_source_directory(&self, directory: &std::fs::File, visitor: &mut dyn FnMut(std::ffi::OsString) -> std::io::Result<()>) -> std::io::Result<()>;
+    /// Target of a captured symbolic link that transfers copy as a link. `None`
+    /// keeps the entry refused, as Windows does for every reparse point.
+    fn source_link_target(&self, _captured: &std::fs::File, _metadata: &std::fs::Metadata) -> Option<std::io::Result<std::path::PathBuf>> {
+        None
+    }
+    /// Create a symbolic link in the held parent and return the link itself.
+    /// `replace` swaps it in over an existing non-directory in one rename.
+    fn create_link(&self, _parent: &std::fs::File, _path: &std::path::Path, _target: &std::path::Path, _replace: bool) -> std::io::Result<std::fs::File> {
+        Err(std::io::ErrorKind::Unsupported.into())
+    }
+    /// Remove a link of the held parent once `verify` accepts that exact link.
+    fn remove_link(&self, _parent: &std::fs::File, _path: &std::path::Path, _verify: &mut dyn FnMut(&std::fs::File) -> std::io::Result<()>) -> std::io::Result<()> {
+        Err(std::io::ErrorKind::Unsupported.into())
+    }
     /// Hold a rename source, including directories and the reparse entry itself.
     /// Windows prevents replacement after opening and resolves only the held parent's child.
     fn open_rename_item(
@@ -813,6 +827,8 @@ mod windows_trash_clipboard;
 mod windows_source_selection;
 #[cfg(target_os = "linux")]
 mod linux_source_selection;
+#[cfg(target_os = "linux")]
+mod linux_links;
 
 #[cfg(target_os = "windows")]
 mod windows_trash_restore;

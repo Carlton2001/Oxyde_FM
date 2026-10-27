@@ -109,6 +109,12 @@ pub(super) fn plan_controlled(
             let Some(source_entry) = walk.next(&mut check)? else {
                 break;
             };
+            if source_entry.link().is_some() {
+                return Err(io::Error::other(format!(
+                    "Symbolic links cannot be compressed yet: {}",
+                    source_entry.path().display()
+                )));
+            }
             let relative = source_entry
                 .path()
                 .strip_prefix(&source)
