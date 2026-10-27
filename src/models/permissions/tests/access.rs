@@ -84,3 +84,16 @@ fn a_selection_shares_a_level_only_when_every_item_has_its_bits() {
     assert_eq!(shared([0o755, 0o745], true, Group), None);
     assert_eq!(shared([], true, Owner), None);
 }
+
+#[test]
+fn enclosed_levels_start_from_the_umask_as_nautilus() {
+    use Access::{AccessFiles, CreateDelete, ReadOnly, ReadWrite};
+    let usual = Levels::from_umask(0o022);
+    assert_eq!(usual.files, [Some(ReadWrite), Some(ReadOnly), Some(ReadOnly)]);
+    assert_eq!(usual.folders, [Some(CreateDelete), Some(AccessFiles), Some(AccessFiles)]);
+    let private = Levels::from_umask(0o077);
+    assert_eq!(private.files, [Some(ReadWrite), Some(Access::None), Some(Access::None)]);
+    assert_eq!(private.folders, [Some(CreateDelete), Some(Access::None), Some(Access::None)]);
+    // Write without read is no level: that class stays as each item has it.
+    assert_eq!(Levels::from_umask(0o042).folders[1], None);
+}

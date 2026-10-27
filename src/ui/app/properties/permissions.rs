@@ -45,7 +45,10 @@ pub(super) struct PermissionsEdit {
     /// Owner and group of a single item; a selection keeps those of each item.
     owner: u32,
     group: u32,
-    enclosed: Levels,
+    /// Levels for enclosed items, once « Change » confirmed them; applied by OK.
+    enclosed: Option<Levels>,
+    /// What the enclosed page shows, prefilled from the umask as Nautilus does.
+    enclosed_draft: Levels,
     /// The page for enclosed items is shown instead of the item's own.
     enclosed_page: bool,
     pub(super) menu: Option<PermissionMenu>,
@@ -53,7 +56,7 @@ pub(super) struct PermissionsEdit {
 }
 
 impl PermissionsEdit {
-    pub(super) fn new(items: Vec<Item>) -> Option<Self> {
+    pub(super) fn new(items: Vec<Item>, enclosed_defaults: Levels) -> Option<Self> {
         let first = items.first()?;
         Some(Self {
             owner: first.loaded.owner.id,
@@ -61,7 +64,8 @@ impl PermissionsEdit {
             items,
             levels: Levels::default(),
             executable: None,
-            enclosed: Levels::default(),
+            enclosed: None,
+            enclosed_draft: enclosed_defaults,
             enclosed_page: false,
             menu: None,
             bounds: HashMap::new(),
@@ -122,8 +126,8 @@ impl PermissionsEdit {
                 if single {
                     (change.owner, change.group) = (self.owner, self.group);
                 }
-                if item.loaded.is_dir {
-                    change.enclosed = self.enclosed.clone();
+                if let Some(enclosed) = self.enclosed.as_ref().filter(|_| item.loaded.is_dir) {
+                    change.enclosed = enclosed.clone();
                 }
                 (item.path.clone(), change)
             })
@@ -135,7 +139,7 @@ impl PermissionsEdit {
         match (menu, pick) {
             (PermissionMenu::Access { folders, class }, Pick::Access(level)) => self.levels(folders)[class.index()] = level,
             (PermissionMenu::Enclosed { folders, class }, Pick::Access(level)) => {
-                let levels = if folders { &mut self.enclosed.folders } else { &mut self.enclosed.files };
+                let levels = if folders { &mut self.enclosed_draft.folders } else { &mut self.enclosed_draft.files };
                 levels[class.index()] = level;
             }
             (PermissionMenu::Owner, Pick::Owner(owner)) => self.owner = owner,
@@ -167,9 +171,13 @@ impl PermissionsEdit {
                 entries
             }
             PermissionMenu::Enclosed { folders, class } => {
-                let levels = if folders { &self.enclosed.folders } else { &self.enclosed.files };
+                let levels = if folders { &self.enclosed_draft.folders } else { &self.enclosed_draft.files };
                 let current = levels[class.index()];
-                std::iter::once(None)
+                // A umask matching no level leaves the class unchanged, as Nautilus does.
+                current
+                    .is_none()
+                    .then_some(None)
+                    .into_iter()
                     .chain(Access::choices(folders, class).iter().copied().map(Some))
                     .map(|access| (level(access), current == access, Pick::Access(access)))
                     .collect()
@@ -232,6 +240,21 @@ fn form_row(label: Message, value: impl IntoElement, compact: bool, cx: &App) ->
     crate::ui::components::modal::responsive_form_row(cx.i18n().text(label), value, rems(6.0), compact, cx)
 }
 
+/// A value that cannot be changed, its text where a menu's would be.
+fn plain(label: String) -> AnyElement {
+    div()
+        .flex_1()
+        .min_w_0()
+        .h(rems(2.0))
+        .px(rems(0.625))
+        .flex()
+        .items_center()
+        .border(rems(0.0625))
+        .border_color(transparent_black())
+        .child(div().min_w_0().truncate().child(label))
+        .into_any_element()
+}
+
 /// A value with a menu of choices when the item is editable, plain text otherwise.
 fn choice(
     menu: PermissionMenu,
@@ -242,7 +265,7 @@ fn choice(
     theme: OxydeTheme,
 ) -> AnyElement {
     if !editable {
-        return div().child(label).into_any_element();
+        return plain(label);
     }
     let measure = handle.clone();
     let open = handle.clone();

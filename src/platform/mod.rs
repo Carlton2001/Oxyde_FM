@@ -637,6 +637,10 @@ pub trait Platform: Send + Sync {
     fn unix_permissions(&self, _path: &std::path::Path) -> Option<crate::models::permissions::UnixPermissions> {
         None
     }
+    /// The process umask, which new files receive; None where it cannot be read.
+    fn umask(&self) -> Option<u32> {
+        None
+    }
     /// Type and description from the system's MIME database; None on Windows.
     fn mime_type(&self, _path: &std::path::Path, _is_dir: bool, _language: &str) -> Option<crate::models::MimeType> {
         None

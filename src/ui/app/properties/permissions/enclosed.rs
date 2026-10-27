@@ -1,5 +1,6 @@
 //! Levels for everything inside a folder, as Nautilus's « Change Permissions for
-//! Enclosed Files »: per class, for files and for folders, Unchanged by default.
+//! Enclosed Files »: per class, for files and for folders, prefilled from the umask.
+//! « Change » keeps them for OK; going back without it drops them.
 use super::{choice, form_row, update, PermissionMenu, PermissionsEdit};
 use crate::ui::app::properties::{general, PropertiesWindow};
 use crate::ui::i18n::{I18nContext, Message};
@@ -28,6 +29,7 @@ pub(super) fn render(
                 .child(cx.i18n().text(Message::PropertiesPermissions))
                 .on_click(move |_, _, cx| update(&back, cx, |edit| {
                     edit.menu = None;
+                    edit.enclosed = None;
                     edit.enclosed_page = false;
                 })),
         )
@@ -47,5 +49,28 @@ pub(super) fn render(
             body = body.child(form_row(label, choice(menu, id, current, true, handle, theme), compact, cx));
         }
     }
-    body
+    let cancel = handle.clone();
+    let confirm = handle.clone();
+    body.child(general::divider(theme)).child(
+        div()
+            .flex()
+            .justify_end()
+            .gap(rems(0.5))
+            .child(
+                crate::ui::components::tool_window::action_button("permissions-enclosed-cancel", cx.i18n().text(Message::Cancel), false, cx)
+                    .on_click(move |_, _, cx| update(&cancel, cx, |edit| {
+                        edit.menu = None;
+                        edit.enclosed = None;
+                        edit.enclosed_page = false;
+                    })),
+            )
+            .child(
+                crate::ui::components::tool_window::action_button("permissions-enclosed-change", cx.i18n().text(Message::PermissionsChange), true, cx)
+                    .on_click(move |_, _, cx| update(&confirm, cx, |edit| {
+                        edit.menu = None;
+                        edit.enclosed = Some(edit.enclosed_draft.clone());
+                        edit.enclosed_page = false;
+                    })),
+            ),
+    )
 }

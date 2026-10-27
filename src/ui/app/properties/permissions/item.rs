@@ -1,6 +1,6 @@
 //! The permissions of the item, or of the selection: owner, group and others, each
 //! with its access, for files and for folders when the selection has both.
-use super::{choice, form_row, level_label, update, PermissionMenu, PermissionsEdit};
+use super::{choice, form_row, level_label, plain, update, PermissionMenu, PermissionsEdit};
 use crate::ui::app::properties::{general, PropertiesDialog, PropertiesWindow};
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::OxydeTheme;
@@ -62,8 +62,8 @@ pub(super) fn render(
             let name = account_name(&loaded.owners, &loaded.owner, edit.owner);
             choice(PermissionMenu::Owner, "permissions-owner-choice".into(), name, true, handle, theme)
         }
-        Some(loaded) => div().child(loaded.owner.name.clone()).into_any_element(),
-        None => div().child(shared_name(edit, |loaded| &loaded.owner, cx)).into_any_element(),
+        Some(loaded) => plain(loaded.owner.name.clone()),
+        None => plain(shared_name(edit, |loaded| &loaded.owner, cx)),
     };
     body = body.child(form_row(Message::PermissionsOwner, owner, compact, cx));
     body = access(body, PermissionClass::Owner, Message::PermissionsAccess, cx).child(general::divider(theme));
@@ -72,8 +72,8 @@ pub(super) fn render(
             let name = account_name(&loaded.groups, &loaded.group, edit.group);
             choice(PermissionMenu::Group, "permissions-group".into(), name, true, handle, theme)
         }
-        Some(loaded) => div().child(loaded.group.name.clone()).into_any_element(),
-        None => div().child(shared_name(edit, |loaded| &loaded.group, cx)).into_any_element(),
+        Some(loaded) => plain(loaded.group.name.clone()),
+        None => plain(shared_name(edit, |loaded| &loaded.group, cx)),
     };
     body = body.child(form_row(Message::PermissionsGroup, group, compact, cx));
     body = access(body, PermissionClass::Group, Message::PermissionsAccess, cx).child(general::divider(theme));
@@ -130,7 +130,7 @@ pub(super) fn render(
                         edit.enclosed_page = true;
                     })),
                 )
-                .when(!edit.enclosed.is_empty(), |section| {
+                .when(edit.enclosed.is_some(), |section| {
                     section.child(div().text_color(theme.text_muted).child(cx.i18n().text(Message::PermissionsEnclosedPending)))
                 }),
         );

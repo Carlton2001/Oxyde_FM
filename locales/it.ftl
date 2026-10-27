@@ -957,6 +957,7 @@ permissions-mixed = Misto
 permissions-folder-access = Accesso alle cartelle
 permissions-file-access = Accesso ai file
 permissions-selection-incomplete = Non è stato possibile modificare { $count } elementi; gli altri sì. Primo errore: { $detail }
+permissions-change = Modifica
 trash-restore-changed = L’elemento del cestino è cambiato dopo la selezione. Il ripristino è stato interrotto. Aggiorna il cestino e seleziona nuovamente l’elemento. Gli elementi già ripristinati vengono conservati.
 trash-restore-conflict = Un file o una cartella esiste già nella posizione di ripristino. Viene conservato e l’elemento interessato resta nel cestino. Rinomina o sposta la destinazione e riprova.
 trash-restore-unavailable = Impossibile ripristinare questo elemento. Verifica che sia ancora nel cestino e che la cartella originale esista e sia accessibile, poi riprova. Gli elementi già ripristinati vengono conservati.

@@ -53,6 +53,13 @@ pub(super) fn read(path: &Path) -> io::Result<UnixPermissions> {
     })
 }
 
+/// Read from /proc: setting the umask to learn it would race with other threads.
+pub(super) fn umask() -> Option<u32> {
+    let status = std::fs::read_to_string("/proc/self/status").ok()?;
+    let value = status.lines().find_map(|line| line.strip_prefix("Umask:"))?;
+    u32::from_str_radix(value.trim(), 8).ok()
+}
+
 /// NSS answers, kept a few seconds: the items of a selection share their accounts,
 /// and each question is a `getent` process.
 struct Accounts {

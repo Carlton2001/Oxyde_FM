@@ -232,3 +232,12 @@ fn gecos_names_follow_nautilus() {
     assert_eq!(real_name("svc", ""), None);
     assert_eq!(real_name("svc", ",,,"), None);
 }
+
+#[test]
+fn the_umask_read_is_the_one_new_files_receive() {
+    use std::os::unix::fs::OpenOptionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("new");
+    std::fs::OpenOptions::new().write(true).create_new(true).mode(0o666).open(&path).unwrap();
+    assert_eq!(mode(&path), 0o666 & !umask().unwrap());
+}

@@ -334,6 +334,10 @@ impl Platform for LinuxPlatform {
             .ok()
     }
     #[cfg(target_os = "linux")]
+    fn umask(&self) -> Option<u32> {
+        super::linux_permissions::umask()
+    }
+    #[cfg(target_os = "linux")]
     fn mime_type(&self, path: &std::path::Path, is_dir: bool, language: &str) -> Option<crate::models::MimeType> {
         Some(super::linux_mime::mime_type(path, is_dir, language))
     }

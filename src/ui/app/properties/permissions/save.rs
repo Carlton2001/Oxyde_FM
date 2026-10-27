@@ -4,7 +4,7 @@
 use crate::ui::app::properties::PropertiesWindow;
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use gpui::*;
-use oxyde_lib::models::permissions::{Levels, PermissionChange, PermissionError};
+use oxyde_lib::models::permissions::{PermissionChange, PermissionError};
 
 /// Text of a failure, named after its item in a selection.
 fn detail(path: &str, error: &PermissionError, cx: &App) -> String {
@@ -71,7 +71,7 @@ impl PropertiesWindow {
                             item.loaded.group.id = change.group;
                         }
                         if results.iter().all(|(_, result)| applied(result)) {
-                            edit.enclosed = Levels::default();
+                            edit.enclosed = None;
                         }
                     }
                     let failed: u64 = results

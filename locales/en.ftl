@@ -650,6 +650,7 @@ permissions-mixed = Mixed
 permissions-folder-access = Folder access
 permissions-file-access = File access
 permissions-selection-incomplete = { $count } items could not be changed; the others were. First failure: { $detail }
+permissions-change = Change
 trash-restore-changed = The Recycle Bin item changed after selection. Restoration stopped. Refresh the Recycle Bin and select the item again. Items already restored were kept.
 trash-restore-conflict = A file or folder already exists at the restore location. It was kept, and the affected item remains in the Recycle Bin. Rename or move the destination and try again.
 trash-restore-unavailable = This item could not be restored. Check that it is still in the Recycle Bin and that its original folder exists and is accessible, then try again. Items already restored were kept.

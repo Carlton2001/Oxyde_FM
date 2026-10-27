@@ -71,6 +71,17 @@ impl Levels {
         self.files.iter().chain(&self.folders).all(Option::is_none)
     }
 
+    /// What Nautilus proposes for enclosed items: the levels of a new file (`rw-` for
+    /// each class) and of a new folder (`rwx`) under this umask. A class whose bits
+    /// match no level stays unchanged.
+    pub fn from_umask(umask: u32) -> Self {
+        let levels = |is_dir: bool| {
+            let mode = if is_dir { 0o777 } else { 0o666 } & !umask;
+            PermissionClass::ALL.map(|class| Access::of(mode, is_dir, class))
+        };
+        Self { files: levels(false), folders: levels(true) }
+    }
+
     /// The mode an item receives.
     pub fn mode(&self, mode: u32, is_dir: bool) -> u32 {
         let levels = if is_dir { &self.folders } else { &self.files };

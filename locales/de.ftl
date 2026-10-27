@@ -957,6 +957,7 @@ permissions-mixed = Gemischt
 permissions-folder-access = Ordnerzugriff
 permissions-file-access = Dateizugriff
 permissions-selection-incomplete = { $count } Elemente konnten nicht geändert werden; die übrigen wurden geändert. Erster Fehler: { $detail }
+permissions-change = Ändern
 trash-restore-changed = Das Papierkorbelement wurde nach der Auswahl geändert. Die Wiederherstellung wurde gestoppt. Aktualisieren Sie den Papierkorb und wählen Sie das Element erneut aus. Bereits wiederhergestellte Elemente bleiben erhalten.
 trash-restore-conflict = Am Zielort der Wiederherstellung existiert bereits eine Datei oder ein Ordner. Sie bleiben erhalten, das betroffene Element bleibt im Papierkorb. Benennen Sie das Ziel um oder verschieben Sie es und versuchen Sie es erneut.
 trash-restore-unavailable = Dieses Element konnte nicht wiederhergestellt werden. Prüfen Sie, ob es noch im Papierkorb liegt und sein ursprünglicher Ordner existiert und zugänglich ist. Versuchen Sie es erneut. Bereits wiederhergestellte Elemente bleiben erhalten.

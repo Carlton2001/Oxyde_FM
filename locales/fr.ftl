@@ -656,6 +656,7 @@ permissions-mixed = Mixte
 permissions-folder-access = Accès aux dossiers
 permissions-file-access = Accès aux fichiers
 permissions-selection-incomplete = { $count } éléments n’ont pas pu être modifiés ; les autres l’ont été. Premier échec : { $detail }
+permissions-change = Modifier
 trash-restore-changed = L’élément de la corbeille a changé depuis sa sélection. La restauration a été arrêtée. Actualisez la corbeille puis sélectionnez à nouveau l’élément. Les éléments déjà restaurés sont conservés.
 trash-restore-conflict = Un fichier ou un dossier existe déjà à l’emplacement de restauration. Il a été conservé et l’élément concerné reste dans la corbeille. Renommez ou déplacez la destination puis réessayez.
 trash-restore-unavailable = Cet élément n’a pas pu être restauré. Vérifiez qu’il est toujours dans la corbeille et que son dossier d’origine existe et est accessible, puis réessayez. Les éléments déjà restaurés sont conservés.

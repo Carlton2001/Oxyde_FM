@@ -467,6 +467,11 @@ pub async fn set_unix_permissions(
         .map_err(|error| PermissionError::Failed(error.to_string()))?
 }
 
+/// Levels Nautilus proposes for enclosed items, from the umask (`022` when unknown).
+pub fn enclosed_defaults() -> crate::models::permissions::Levels {
+    crate::models::permissions::Levels::from_umask(crate::platform::platform().umask().unwrap_or(0o022))
+}
+
 /// Applies the Permissions tab of a selection, one item after the other, each with
 /// its own result; stops once `cancel` is set.
 pub async fn set_selection_permissions(

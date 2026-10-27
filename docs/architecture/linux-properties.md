@@ -60,9 +60,12 @@ système.
   - Les noms des comptes sont gardés quelques secondes : une grande sélection ne lance
     pas un `getent` par élément.
 - **Éléments contenus** (dossier) : la page « Modifier les droits des éléments
-  contenus… » reprend le dialogue de Nautilus. Pour chaque classe, on choisit un niveau
-  pour les fichiers et un pour les dossiers, « Inchangé » par défaut. OK l'applique à
-  toute profondeur, avant le changement du dossier lui-même :
+  contenus… » reprend le dialogue de Nautilus 50. Pour chaque classe, un niveau pour les
+  fichiers et un pour les dossiers, préremplis d'après le umask (lu dans
+  `/proc/self/status`) : ceux d'un nouveau fichier et d'un nouveau dossier. Une classe
+  dont les bits ne font aucun niveau reste « Inchangé ». « Modifier » retient ces niveaux,
+  « Annuler » ou le retour les abandonne ; OK les applique à toute profondeur, avant le
+  changement du dossier lui-même :
   - chaque dossier change après son contenu, si bien qu'un dossier qui se ferme à son
     propriétaire est quand même parcouru ;
   - un dossier fermé que le changement ouvre est changé d'abord, puis parcouru ;
@@ -94,7 +97,8 @@ système.
    exécutables, retour à la ligne des libellés.
 4. **Bilan.**
 5. **Écarts fermés** : type par contenu selon GIO, propriétaire pour root, droits d'une
-   sélection.
+   sélection, éléments contenus préremplis d'après le umask ; valeurs fixes alignées
+   sur le texte des menus.
 
 ## Bilan
 
@@ -123,8 +127,6 @@ Vérifié par des tests sur Btrfs, tmpfs et ntfs-3g :
   tourne en root.
 - Nautilus applique chaque choix immédiatement ; Oxyde, au bouton OK, comme le reste de
   sa fenêtre.
-- Éléments contenus : Oxyde part de « Inchangé » ; Nautilus 50 préremplit les niveaux
-  d'après le umask.
 
 **Fichiers communs touchés** :
 - `models/permissions.rs` (niveaux, changement, résultats) ;

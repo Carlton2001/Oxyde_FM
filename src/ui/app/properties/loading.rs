@@ -12,7 +12,7 @@ impl PropertiesWindow {
                 if properties.link_target.is_none() {
                     properties.mime_type = oxyde_lib::commands::io::describe_mime_type(&properties.path, properties.is_dir, language);
                 }
-                Ok::<_, oxyde_lib::models::CommandError>(properties)
+                Ok::<_, oxyde_lib::models::CommandError>((properties, oxyde_lib::commands::io::enclosed_defaults()))
             })
             .await;
             let scan = this
@@ -22,7 +22,7 @@ impl PropertiesWindow {
                         .as_mut()
                         .filter(|dialog| dialog.revision == revision)?;
                     let scan = match result {
-                        Ok(Ok(properties)) => {
+                        Ok(Ok((properties, enclosed_defaults))) => {
                             // A link is never measured, nor its target walked.
                             let scan = (properties.is_dir
                                 && dialog.drive.is_none()
@@ -31,7 +31,7 @@ impl PropertiesWindow {
                             dialog.calculating = scan.is_some();
                             dialog.permissions = properties.permissions.clone().and_then(|loaded| {
                                 let item = super::permissions::Item { path: properties.path.clone(), loaded };
-                                super::permissions::PermissionsEdit::new(vec![item])
+                                super::permissions::PermissionsEdit::new(vec![item], enclosed_defaults)
                             });
                             dialog.properties = Some(properties);
                             scan

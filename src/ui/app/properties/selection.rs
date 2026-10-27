@@ -14,11 +14,11 @@ pub(super) struct SelectionProperties {
 }
 
 /// The selection's summary, the folders to measure, and the permissions of its
-/// items when every one has them.
+/// items when every one has them, with the levels proposed for enclosed items.
 fn inspect_selection(
     paths: &[String],
     cancellation: &AtomicBool,
-) -> Result<(SelectionProperties, Vec<String>, Option<Vec<super::permissions::Item>>), String> {
+) -> Result<(SelectionProperties, Vec<String>, Option<super::permissions::PermissionsEdit>), String> {
     let mut properties = Vec::with_capacity(paths.len());
     for path in paths {
         if cancellation.load(Ordering::Relaxed) {
@@ -69,7 +69,8 @@ fn inspect_selection(
     let permissions = properties
         .iter()
         .map(|p| Some(super::permissions::Item { path: p.path.clone(), loaded: p.permissions.clone()? }))
-        .collect();
+        .collect::<Option<_>>()
+        .and_then(|items| super::permissions::PermissionsEdit::new(items, oxyde_lib::commands::io::enclosed_defaults()));
     Ok((summary, directories, permissions))
 }
 
@@ -87,7 +88,7 @@ impl PropertiesWindow {
                     let directories = match result {
                         Ok(Ok((summary, directories, permissions))) => {
                             dialog.selection = Some(summary);
-                            dialog.permissions = permissions.and_then(super::permissions::PermissionsEdit::new);
+                            dialog.permissions = permissions;
                             dialog.calculating = !directories.is_empty();
                             Some(directories)
                         }
