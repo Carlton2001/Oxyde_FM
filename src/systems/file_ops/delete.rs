@@ -61,7 +61,9 @@ impl FileOperationManager {
         let core_count = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(4);
-        let concurrency = core_count.clamp(2, 4);
+        // On Btrfs, concurrent removals are slower than one after the other.
+        let parallel = real_sources.iter().all(|source| platform().parallel_deletion(source));
+        let concurrency = if parallel { core_count.clamp(2, 4) } else { 1 };
         // Turbo shares one budget: a single selected folder gets every worker
         // for its subfolders; several items split them. Fixed per item start.
         let tree_workers = (concurrency / total_items.min(concurrency)).max(1);

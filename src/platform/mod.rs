@@ -307,11 +307,16 @@ pub trait Platform: Send + Sync {
     fn remove_copied_file(&self, file: &std::fs::File, path: &std::path::Path) -> std::io::Result<()>;
     /// Rename by source identity into the retained destination parent on Windows.
     fn rename_operation_file(&self, file: &std::fs::File, source: &std::path::Path, parent: &std::fs::File, destination: &std::path::Path, replace: bool) -> std::io::Result<()>;
-    /// Remove the selected object and its children by retained identities on Windows.
-    /// Reparse entries are removed themselves; their targets are never traversed.
-    /// `workers` above one lets Windows remove independent subfolders in parallel;
+    /// Remove the selected object and its children by retained identities.
+    /// Reparse entries and links are removed themselves; their targets are never traversed.
+    /// `workers` above one removes independent subfolders in parallel;
     /// the checkpoint is then called from several threads.
     fn remove_operation_tree(&self, parent: &std::fs::File, path: &std::path::Path, workers: usize, checkpoint: &(dyn Fn() -> std::io::Result<()> + Sync)) -> std::io::Result<()>;
+    /// Whether Turbo removes several items of the folder of `path` faster at once
+    /// than one after the other.
+    fn parallel_deletion(&self, _path: &std::path::Path) -> bool {
+        true
+    }
     /// Exclusively create hidden copy staging and a retained non-deletable marker on Windows.
     fn create_copy_staging(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<(std::fs::File, std::fs::File)>;
     /// Create a private archive writer relative to staging; retain rename/delete

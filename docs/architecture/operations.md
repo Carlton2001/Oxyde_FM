@@ -28,13 +28,13 @@ Les reçus réels priment sur la progression. Les transferts suivent les descend
 
 La préférence fixe le mode initial des six types d’opérations ; le bouton agit sur une seule opération. Elle pilote également les calculs de tailles de dossiers, y compris ceux déjà en cours et ceux des Propriétés ; les boutons des opérations restent indépendants de ces calculs. Turbo ne pilote ni navigation, ni recherche, ni aperçus. Sans Turbo, les threads de travail passent en mode d’arrière-plan Windows.
 
-Les priorités passent toutes par `apply_thread_priority` / `follow_turbo_priority` (`src/platform/thread_priority.rs`). Chaque transition est absolue — y compris le retour à `THREAD_PRIORITY_NORMAL` — et un état déjà appliqué n’est pas renvoyé au système. `RestoreNormalPriority` rend les threads réutilisés à la priorité normale ; un échec natif inattendu est journalisé. Linux n’applique aucune priorité.
+Les priorités passent toutes par `apply_thread_priority` / `follow_turbo_priority` (`src/platform/thread_priority.rs`). Chaque transition est absolue — y compris le retour à `THREAD_PRIORITY_NORMAL` — et un état déjà appliqué n’est pas renvoyé au système. `RestoreNormalPriority` rend les threads réutilisés à la priorité normale ; un échec natif inattendu est journalisé. Linux n’applique aucune priorité : baisser celle d’un thread est irréversible sans privilège, et les disques NVMe sans ordonnanceur ignorent celle des entrées-sorties. Sous Linux, Turbo n’agit que par la concurrence.
 
 | Opération | Priorité Turbo | Concurrence Turbo | Moment d’application |
 | --- | --- | --- | --- |
 | Copie, déplacement entre volumes | Normale | SSD (sources et destination) : jusqu’à 4 fichiers dès 2 fichiers. Disque rotatif, réseau ou inconnu : jusqu’à 4 seulement si au moins 8 fichiers de moins de 32 Mio en moyenne | Priorité : entre fichiers et pendant la copie. Concurrence : aux frontières de fichiers. |
 | Renommage sur le même volume | Normale | Aucune | Au démarrage de l’opération |
-| Suppression définitive | Haute, dès le démarrage | Jusqu’à 4 éléments sélectionnés ; dans un dossier sélectionné seul, ses sous-dossiers de premier niveau sur jusqu’à 4 workers | Priorité : entre éléments et pendant le parcours. Workers : fixés au démarrage de chaque élément. |
+| Suppression définitive | Haute, dès le démarrage | Jusqu’à 4 éléments sélectionnés ; dans un dossier sélectionné seul, ses sous-dossiers de premier niveau sur jusqu’à 4 workers. Linux : un seul worker sur Btrfs, plus lent en parallèle ([mesures](linux-access.md#bilan)) | Priorité : entre éléments et pendant le parcours. Workers : fixés au démarrage de chaque élément. |
 | Corbeille | Normale | Aucune | Avant chaque lot et aux points de contrôle du Shell, dossiers compris |
 | Compression | Priorité du processus worker | ZIP, 7z, TAR.ZST : [limites](archives.md#compression-et-turbo-sous-windows) | Aux frontières de fichiers ou de blocs ; TAR.ZST au démarrage du flux |
 | Extraction | Priorité du processus worker | Aucune ; le décodage reste monothread | Aux points de contrôle |

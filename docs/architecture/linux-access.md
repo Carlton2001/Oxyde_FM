@@ -85,24 +85,33 @@ test), sous un autre utilisateur : `unshare --map-auto --map-root-user --mount`,
 dossier lié sur `/mnt` pour ne pas traverser le dossier personnel, puis `setpriv
 --reuid=1000`.
 
-**Parallélisme, mesuré** (NVMe, cache chaud). Un dossier sélectionné seul est parcouru
-par un seul worker sous Linux ; Turbo supprime déjà jusqu'à 4 éléments sélectionnés à
-la fois. Par la suppression d'Oxyde, Normal puis Turbo :
+**Turbo et parallélisme, mesurés** (NVMe, cache chaud). Supprimer en parallèle
+ralentit Btrfs, dont les verrous sérialisent les suppressions, et accélère ext4. Sous
+Linux, Turbo supprime donc comme sous Windows (jusqu'à 4 éléments sélectionnés à la
+fois ; dans un dossier sélectionné seul, ses sous-dossiers sur jusqu'à 4 workers),
+sauf quand le dossier d'un élément est sur Btrfs : un seul worker, Turbo ou non. Par
+la suppression d'Oxyde, Normal puis Turbo en parallèle :
 
 | Sélection | Btrfs | ext4 (image) |
 | --- | --- | --- |
 | 60 dossiers de 2 000 fichiers | 1,1–1,2 s → 1,25–1,3 s | 0,50 s → 0,20–0,22 s |
 | 8 dossiers de 10 000 fichiers | 0,72–0,74 s → 0,78–0,80 s | 0,32–0,34 s → 0,12–0,14 s |
 | 2 000 dossiers de 20 fichiers | 0,40–0,50 s → 0,46 s | 0,20 s → 0,06–0,08 s |
+| 1 dossier, 400 sous-dossiers de 50 fichiers | 0,18–0,20 s → 0,22–0,24 s | 0,08 s → 0,04 s |
+| 1 dossier, 64 fichiers de 16 Mio | 0,02 s → 0,02 s | 0,04 s → 0,02 s |
 
-Sur Btrfs, supprimer en parallèle ralentit d'environ 10 % ; sur ext4, Turbo est 2,5 à
-3 fois plus rapide.
+Un dossier plat de 20 000 fichiers ne change pas : ses fichiers restent supprimés un à
+un par le thread qui le liste, comme sous Windows. Le parcours parallèle garde les
+mêmes garanties : chaque worker vérifie pause et annulation, un échec arrête les
+autres à leur point de contrôle suivant, et le dossier sélectionné part en dernier.
+Le test des workers couvre arbre, liens, annulation, dossier illisible et disque monté.
 
 **Choix assumé.** Un disque monté dans l'arbre arrête la suppression, comme
 `rm -r --one-file-system` : supprimer un dossier n'efface jamais le contenu d'un autre
 disque. Il faut le démonter d'abord.
 
-**Fichiers communs touchés** : aucun hors `src/platform/` ; Windows ne change pas.
+**Fichiers communs touchés** : `Platform::parallel_deletion` (vrai par défaut) choisit
+le nombre de workers de la suppression définitive ; Windows ne change pas.
 
 **Leçons.**
 - Déplacer un dossier demande d'écrire dedans (son entrée `..` change) : `mv` échoue

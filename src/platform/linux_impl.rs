@@ -211,12 +211,16 @@ impl Platform for LinuxPlatform {
         if replace { self.replace_open_file(file, source, destination) }
         else { self.rename_open_file_exclusive(file, source, destination) }
     }
-    fn remove_operation_tree(&self, parent: &std::fs::File, path: &std::path::Path, _workers: usize, checkpoint: &(dyn Fn() -> std::io::Result<()> + Sync)) -> std::io::Result<()> {
+    #[cfg(target_os = "linux")]
+    fn parallel_deletion(&self, path: &std::path::Path) -> bool {
+        super::linux_file_tree::parallel(path)
+    }
+    fn remove_operation_tree(&self, parent: &std::fs::File, path: &std::path::Path, workers: usize, checkpoint: &(dyn Fn() -> std::io::Result<()> + Sync)) -> std::io::Result<()> {
         #[cfg(target_os = "linux")]
-        { super::linux_file_tree::remove(parent, path, checkpoint) }
+        { super::linux_file_tree::remove(parent, path, workers, checkpoint) }
         #[cfg(not(target_os = "linux"))]
         {
-            let _ = parent;
+            let _ = (parent, workers);
             checkpoint()?;
             if std::fs::symlink_metadata(path)?.is_dir() { std::fs::remove_dir_all(path) }
             else { std::fs::remove_file(path) }

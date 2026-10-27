@@ -119,7 +119,8 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
 - T08, fait : [noms et chemins Linux](../architecture/linux-names.md), `\` caractère de
   nom et casse par dossier (FAT, exFAT, SMB, `casefold`).
 - T06, fait : [accès sans lecture et suppression](../architecture/linux-access.md),
-  déplacer sans lire, dossiers traversables, pause et annulation à chaque élément.
+  déplacer sans lire, dossiers traversables, pause et annulation à chaque élément ;
+  Turbo supprime en parallèle, sauf sur Btrfs.
 - T07 cache d'archives ouvertes.
 
 **Intégration (jalon 5)**
