@@ -80,3 +80,21 @@ fn traversable_ancestors_and_write_only_targets_are_enough() {
     assert_eq!(std::fs::read(drop_box.join("copied")).unwrap(), b"c");
     assert_eq!(std::fs::read(drop_box.join("moved")).unwrap(), b"m");
 }
+
+/// Rights given by ACL entries rather than mode bits, for another user than the owner:
+/// `OXYDE_TEST_ACL=<fixture>`, laid out by its owner as
+/// - `shared` `0700` with `u:<tester>:--x`, holding `public` `0700` with `u:<tester>:rwx`
+///   and `public/file` `0600`, unreadable by the tester;
+/// - `drop` `0700` with `u:<tester>:-wx`;
+/// - `mine`, owned by the tester, holding `copied`.
+#[test]
+fn rights_given_by_acl_entries_are_enough() {
+    let Some(fixture) = std::env::var_os("OXYDE_TEST_ACL").map(PathBuf::from) else { return };
+    let (file, drop_box) = (fixture.join("shared/public/file"), fixture.join("drop"));
+    assert!(std::fs::read(&file).is_err() && std::fs::read_dir(&drop_box).is_err(), "fixture grants too much");
+    transfer(&file, &drop_box, true).unwrap();
+    transfer(&fixture.join("mine/copied"), &drop_box, false).unwrap();
+    assert!(std::fs::symlink_metadata(drop_box.join("file")).unwrap().is_file());
+    assert_eq!(std::fs::symlink_metadata(drop_box.join("copied")).unwrap().len(), 7);
+    assert!(std::fs::symlink_metadata(&file).is_err());
+}

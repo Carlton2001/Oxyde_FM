@@ -36,3 +36,5 @@ mod whole_moves;
 mod invalid_names;
 #[cfg(target_os = "linux")]
 mod unread_access;
+#[cfg(target_os = "linux")]
+mod linux_delete_control;

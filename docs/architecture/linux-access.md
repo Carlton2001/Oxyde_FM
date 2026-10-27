@@ -71,17 +71,28 @@ Vérifié par des tests :
 - annulation au quatrième point de contrôle : arbre partiellement supprimé, reste
   intact ;
 - sous-dossier illisible : refus `PermissionDenied` nommant le dossier, contenu gardé ;
-- tmpfs monté dans l'arbre (espace de noms utilisateur) : non visité, son contenu reste.
+- tmpfs monté dans l'arbre (espace de noms utilisateur) : non visité, son contenu reste ;
+- suppression réelle de 40 000 fichiers : la pause fige l'arbre, l'annulation en garde
+  le reste (avant : tout le dossier partait malgré la pause) ;
+- droits donnés par ACL à un autre utilisateur que le propriétaire (`u:…:--x` sur
+  l'ancêtre, `u:…:-wx` sur la destination, fichier illisible) : déplacement et copie
+  réussissent ; sans ces entrées, `mv` est refusé.
 
 Le test du montage se lance avec `OXYDE_TEST_MOUNTED=<dossier>:<montage dedans>`, par
 exemple sous `unshare --map-root-user --mount` après `mount -t tmpfs none <montage>`.
+Le test des ACL se lance avec `OXYDE_TEST_ACL=<dossier préparé>` (disposition dans le
+test), sous un autre utilisateur : `unshare --map-auto --map-root-user --mount`, le
+dossier lié sur `/mnt` pour ne pas traverser le dossier personnel, puis `setpriv
+--reuid=1000`.
 
-**Écarts restant.**
-- La suppression Linux reste séquentielle, comme `remove_dir_all` avant : Turbo n'y
-  ajoute pas de parallélisme.
-- Un dossier monté dans l'arbre est refusé plutôt que démonté ou contourné, comme
-  `rm -r --one-file-system`.
-- Les ACL ne sont pas testées à part : le noyau les applique aux mêmes appels.
+**Suppression séquentielle, mesurée.** Avec 4 processus en parallèle sur des dossiers
+distincts, la suppression est plus lente sur Btrfs (120 000 fichiers : 1,0 s seule,
+1,3 s à 4, 1,65 s à 8), égale sur ext4, à peine plus rapide sur ntfs-3g. Nautilus
+supprime aussi un élément après l'autre : Turbo ne parallélise pas la suppression Linux.
+
+**Choix assumé.** Un disque monté dans l'arbre arrête la suppression, comme
+`rm -r --one-file-system` : supprimer un dossier n'efface jamais le contenu d'un autre
+disque. Il faut le démonter d'abord.
 
 **Fichiers communs touchés** : aucun hors `src/platform/` ; Windows ne change pas.
 
