@@ -1,8 +1,8 @@
 # Accès rapide et ouverture
 
-**Statut : en cours** (quatrième domaine de l'option B, après les [volumes](volumes.md),
-le [presse-papiers](clipboard.md) et la [surveillance](watchers.md)). Ce document deviendra
-le contrat du domaine une fois terminé.
+**Statut : domaine terminé** (quatrième domaine de l'option B, après les
+[volumes](volumes.md), le [presse-papiers](clipboard.md) et la [surveillance](watchers.md)) ;
+bilan ci-dessous, suite Windows encore à passer. Ce document est le contrat du domaine.
 
 ## Périmètre
 
@@ -58,4 +58,31 @@ pub trait QuickAccess: Send + Sync {
 2. *Fait.* **Favoris GTK** : lecture, épingler, désépingler, surveillance ; tests sur
    fichiers temporaires.
 3. *Fait.* **Dossier personnel, ouverture, Propriétés système.**
-4. **Bilan**, après essai à la main.
+4. *Fait.* **Bilan**, ci-dessous.
+
+## Bilan
+
+**Résultat.** Sous Linux, l'accès rapide montre le dossier personnel puis les favoris de
+Nautilus ; épingler, désépingler et les changements faits ailleurs fonctionnent. Ouvrir un
+fichier sans application signale l'échec. Le code Linux tient en 150 lignes de production
+et 50 de tests.
+
+**Fichiers communs touchés** (hors `linux_quick_access/`, `windows_quick_access.rs`,
+catalogues et documentation) :
+
+| Étape | Fichiers communs | Nature |
+| --- | --- | --- |
+| 1. Trait | `platform/mod.rs`, `windows_impl.rs`, `linux_impl.rs`, `commands/system.rs`, `ui/app/shell_features.rs` | appels seuls, comme prévu |
+| 3. Dossier personnel | `workspace/sidebar.rs`, `sidebar.rs`, `sidebar/rows.rs`, `sidebar/rail.rs`, `i18n.rs`, icône `house` | interface, Linux seul |
+| 3. Ouverture | `linux_impl.rs` | Linux seul |
+
+**Leçons.**
+- Respecter `XDG_CONFIG_HOME` dès qu'un domaine écrit un fichier du bureau : le profil de
+  test isolé protège alors les vraies données sans autre précaution.
+- GNOME identifie un fichier par son contenu : un essai d'échec d'ouverture demande un
+  fichier binaire, pas seulement une extension inconnue.
+
+**Reporté : domaine Réseau (T10).** Nautilus passe par GVfs pour le voisinage réseau, les
+adresses `smb://` et `sftp://` et leurs montages dans `/run/user/<uid>/gvfs`. Oxyde, fondé
+sur des chemins, devra découvrir, se connecter (mot de passe), monter, puis naviguer ces
+montages : un domaine à part, décidé pour plus tard.
