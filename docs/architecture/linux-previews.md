@@ -50,22 +50,28 @@ décodage reste ainsi hors du processus de l'interface.
 
 ## Vidéo au survol (GStreamer)
 
-- `platform/linux_video.rs` (côté worker) : `playbin flags=video`, donc ni piste
-  audio ni sous-titres décodés. Le puits est un `appsink` sans horloge précédé de
+- `platform/linux_video.rs` (côté worker) : `playbin3 flags=video`, qui ne
+  sélectionne que le flux vidéo : ni piste audio ni sous-titres décodés ou mis en
+  file. `playbin` gardait l'audio ignoré en file : 770 Mio contre 205 Mio pour une
+  vidéo HEVC 4K. Le puits est un `appsink` sans horloge précédé de
   `videoconvert ! videoscale`, avec des caps BGRA, pixels carrés et 640 px au plus par
   côté. `videoscale` garde les proportions et n'agrandit pas les petites vidéos.
   Chaque image part avec son horodatage, que l'interface utilise pour cadencer. En
-  fin de flux, une pause de 200 ms puis un retour au début font boucler la vidéo,
-  comme sous Windows. Un flux qui se termine sans image est une erreur.
+  fin de flux, une pause de 200 ms puis un redémarrage depuis READY font boucler la
+  vidéo, comme la réouverture sous Windows. La fin de flux et le choix des flux sont
+  lus sur le bus par type exact : les types étendus de GStreamer partagent des bits
+  avec EOS et ERROR. Un fichier sans flux vidéo est refusé dès que `playbin3` a
+  choisi ses flux. Un flux qui se termine sans image est une erreur.
 - `platform/linux_video/stream.rs` (côté parent) : un seul worker vidéo à la fois.
   Les paquets ont le format de Windows (longueur, secondes, nanosecondes, trame) et
   sont vérifiés : 2 Mio et 640 × 640 au plus. L'annulation est vérifiée toutes les
   50 ms ; sans image pendant 15 s, l'aperçu est « expiré ».
-- Mesure : première image en 73 ms pour un H.264 1080p, 63 Mio de mémoire.
+- Mesures : première image en 60 ms pour un H.264 1080p (74 Mio), en 150 ms pour un
+  HEVC 4K avec libde265 (215 Mio), décodé à environ 29 images par seconde.
 - Codecs : ceux de GStreamer installés. Fedora ne fournit pas de décodeur HEVC
-  logiciel libre : une vidéo H.265 (iPhone, 4K) affiche « Aperçu indisponible »,
-  comme Totem et le miniaturiseur de Nautilus sans codecs supplémentaires
-  (RPM Fusion). Oxyde ne propose pas d'installer de codec.
+  logiciel libre : sans codecs RPM Fusion, une vidéo H.265 (iPhone, 4K) affiche
+  « Aperçu indisponible », comme Totem et le miniaturiseur de Nautilus. Oxyde ne
+  propose pas d'installer de codec.
 
 ## Limites
 

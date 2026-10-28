@@ -22,10 +22,9 @@ pub(super) struct MapInfo {
     pub reserved: [*mut c_void; 4],
 }
 
-/// The public head of `GstBuffer`, stable across GStreamer 1.x: its timestamps are
-/// fields that C reads through macros, without an accessor.
+/// `GstMiniObject`, the head of buffers and messages.
 #[repr(C)]
-pub(super) struct Buffer {
+pub(super) struct MiniObject {
     pub kind: usize,
     pub refcount: c_int,
     pub lockstate: c_int,
@@ -35,8 +34,21 @@ pub(super) struct Buffer {
     pub free: *const c_void,
     pub priv_uint: c_uint,
     pub priv_pointer: *mut c_void,
+}
+
+/// The public heads of `GstBuffer` and `GstMessage`, stable across GStreamer 1.x:
+/// C reads these fields through macros, without accessors.
+#[repr(C)]
+pub(super) struct Buffer {
+    pub mini_object: MiniObject,
     pub pool: *mut c_void,
     pub pts: u64,
+}
+
+#[repr(C)]
+pub(super) struct Message {
+    pub mini_object: MiniObject,
+    pub kind: c_uint,
 }
 
 // The app sink library brings GStreamer core and GLib as dependencies.
@@ -56,13 +68,14 @@ library! { Gst from "libgstapp-1.0.so.0" {
     gst_bin_get_by_name: fn(Object, *const c_char) -> Object;
     gst_object_unref: fn(Object);
     gst_element_set_state: fn(Object, c_int) -> c_int;
-    gst_element_seek_simple: fn(Object, c_int, c_int, i64) -> c_int;
     gst_element_get_bus: fn(Object) -> Object;
-    gst_bus_pop_filtered: fn(Object, c_uint) -> Object;
-    gst_message_parse_error: fn(Object, *mut *mut GError, *mut *mut c_char);
-    gst_mini_object_unref: fn(Object);
+    gst_bus_pop: fn(Object) -> *mut Message;
+    gst_message_parse_error: fn(*mut Message, *mut *mut GError, *mut *mut c_char);
+    gst_message_streams_selected_get_size: fn(*mut Message) -> c_uint;
+    gst_message_streams_selected_get_stream: fn(*mut Message, c_uint) -> Object;
+    gst_stream_get_stream_type: fn(Object) -> c_uint;
+    gst_mini_object_unref: fn(*mut c_void);
     gst_app_sink_try_pull_sample: fn(Object, u64) -> Object;
-    gst_app_sink_is_eos: fn(Object) -> c_int;
     gst_sample_get_buffer: fn(Object) -> *mut Buffer;
     gst_sample_get_caps: fn(Object) -> Object;
     gst_caps_get_structure: fn(Object, c_uint) -> Object;

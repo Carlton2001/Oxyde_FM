@@ -16,18 +16,22 @@ pub(super) use stream::stream;
 /// Longest side of hover frames, as on Windows.
 const SIDE: u32 = 640;
 /// Video only, scaled by playbin's own converter, then BGRA for the UI. The sink
-/// does not wait for the clock: the UI paces frames by their timestamps.
-const PLAYER: &CStr = c"playbin flags=video";
+/// does not wait for the clock: the UI paces frames by their timestamps. playbin3
+/// selects the video stream alone, where playbin still queued the ignored audio:
+/// 205 MiB instead of 770 MiB for a 4K HEVC clip.
+const PLAYER: &CStr = c"playbin3 flags=video";
 const SINK: &CStr = c"videoconvert ! videoscale ! \
     video/x-raw,format=BGRA,pixel-aspect-ratio=1/1,width=[1,640],height=[1,640] ! \
     appsink name=frames sync=false max-buffers=2";
-// GstState, GstFormat, GstSeekFlags, GstMessageType, GstMapFlags, G_TYPE_STRING.
+// GstState, GstMessageType, GstStreamType, GstMapFlags, G_TYPE_STRING.
 const NULL: i32 = 1;
+const READY: i32 = 2;
 const PLAYING: i32 = 4;
 const STATE_CHANGE_FAILURE: i32 = 0;
-const TIME: i32 = 3;
-const FLUSH_TO_KEY_UNIT: i32 = 1 | 4;
+const MESSAGE_EOS: u32 = 1 << 0;
 const MESSAGE_ERROR: u32 = 1 << 1;
+const MESSAGE_STREAMS_SELECTED: u32 = (1 << 31) + 5;
+const STREAM_VIDEO: u32 = 1 << 2;
 const MAP_READ: u32 = 1;
 const STRING: usize = 16 << 2;
 /// Pause between loops, as on Windows.
@@ -91,7 +95,7 @@ fn open(gst: &'static Gst, path: &Path) -> Result<(Pipeline, Owned, Owned), Comm
             return Err(CommandError::Other(error_text(gst, error, "Cannot build the video output")));
         }
         forget_warning(gst, &mut error);
-        // The bin's floating reference goes to playbin, which owns it from here.
+        // The bin's floating reference goes to playbin3, which owns it from here.
         let sink = (gst.gst_bin_get_by_name)(output, c"frames".as_ptr());
         let mut value = Value { kind: 0, data: [0; 2] };
         (gst.g_value_init)(&mut value, (gst.gst_element_get_type)());
@@ -114,25 +118,54 @@ fn open(gst: &'static Gst, path: &Path) -> Result<(Pipeline, Owned, Owned), Comm
         }
         let (sink, bus) = (Owned(gst, sink), Owned(gst, bus));
         if (gst.gst_element_set_state)(pipeline.0 .1, PLAYING) == STATE_CHANGE_FAILURE {
-            return Err(CommandError::Other(pending_error(gst, &bus).unwrap_or_else(|| "Cannot play the video".into())));
+            return Err(CommandError::Other(events(gst, &bus).error.unwrap_or_else(|| "Cannot play the video".into())));
         }
         Ok((pipeline, sink, bus))
     }
 }
 
-/// The first error the pipeline posted, if any.
-fn pending_error(gst: &Gst, bus: &Owned) -> Option<String> {
-    // SAFETY: a live bus; the message is released once parsed.
+/// What the pipeline posted since the last look.
+#[derive(Default)]
+struct Events {
+    error: Option<String>,
+    ended: bool,
+    /// Once playbin3 has chosen its streams, whether one of them is a video.
+    video: Option<bool>,
+}
+
+/// Every pending message, sorted by its exact type: extended types share bits with
+/// the basic ones, so a filtered pop for the end of stream also takes stream lists.
+fn events(gst: &Gst, bus: &Owned) -> Events {
+    let mut events = Events::default();
+    // SAFETY: a live bus; each message and stream is released once read.
     unsafe {
-        let message = (gst.gst_bus_pop_filtered)(bus.1, MESSAGE_ERROR);
-        if message.is_null() {
-            return None;
+        loop {
+            let message = (gst.gst_bus_pop)(bus.1);
+            if message.is_null() {
+                return events;
+            }
+            match (*message).kind {
+                MESSAGE_ERROR if events.error.is_none() => {
+                    let (mut error, mut debug) = (std::ptr::null_mut(), std::ptr::null_mut());
+                    (gst.gst_message_parse_error)(message, &mut error, &mut debug);
+                    (gst.g_free)(debug.cast());
+                    events.error = Some(error_text(gst, error, "Video decoding failed"));
+                }
+                MESSAGE_EOS => events.ended = true,
+                MESSAGE_STREAMS_SELECTED => {
+                    events.video = Some((0..(gst.gst_message_streams_selected_get_size)(message)).any(|index| {
+                        let stream = (gst.gst_message_streams_selected_get_stream)(message, index);
+                        let video = !stream.is_null() && (gst.gst_stream_get_stream_type)(stream) & STREAM_VIDEO != 0;
+                        if !stream.is_null() {
+                            (gst.gst_object_unref)(stream);
+                        }
+                        video
+                    }));
+                }
+                _ => {}
+            }
+            (gst.gst_mini_object_unref)(message.cast());
         }
-        let (mut error, mut debug) = (std::ptr::null_mut(), std::ptr::null_mut());
-        (gst.gst_message_parse_error)(message, &mut error, &mut debug);
-        (gst.g_free)(debug.cast());
-        (gst.gst_mini_object_unref)(message);
-        Some(error_text(gst, error, "Video decoding failed"))
     }
 }
 
@@ -174,12 +207,21 @@ pub(super) fn decode(path: &Path, on_frame: &mut dyn FnMut(RgbaImage, Duration) 
     let (pipeline, sink, bus) = open(gst, path)?;
     let mut pts = Duration::ZERO;
     let mut looped_frame = false;
+    // The bus says when the stream ended: the sink also reports an end before playbin3
+    // has added it, once it knows the streams. Frames still queued come first.
+    let mut ended = false;
     loop {
-        if let Some(error) = pending_error(gst, &bus) {
+        let events = events(gst, &bus);
+        if let Some(error) = events.error {
             return Err(CommandError::Other(error));
         }
+        if events.video == Some(false) {
+            return Err(CommandError::Other("No video stream".into()));
+        }
+        ended |= events.ended;
+        let timeout = if ended { 0 } else { PULL_TIMEOUT_NS };
         // SAFETY: a live app sink; the sample is released once copied.
-        let sample = unsafe { (gst.gst_app_sink_try_pull_sample)(sink.1, PULL_TIMEOUT_NS) };
+        let sample = unsafe { (gst.gst_app_sink_try_pull_sample)(sink.1, timeout) };
         if !sample.is_null() {
             let copied = frame(gst, sample, pts);
             // SAFETY: the reference the pull returned.
@@ -190,17 +232,25 @@ pub(super) fn decode(path: &Path, on_frame: &mut dyn FnMut(RgbaImage, Duration) 
             if !on_frame(image, pts) {
                 return Ok(());
             }
-        // SAFETY: a live app sink.
-        } else if unsafe { (gst.gst_app_sink_is_eos)(sink.1) } != 0 {
+        } else if ended {
             if !looped_frame {
                 return Err(CommandError::Other("Video stream ended without a frame".into()));
             }
             std::thread::sleep(LOOP_PAUSE);
-            // SAFETY: a live pipeline; the flush clears the sink's end of stream.
-            if unsafe { (gst.gst_element_seek_simple)(pipeline.0 .1, TIME, FLUSH_TO_KEY_UNIT, 0) } == 0 {
+            // Like the Windows reader opened again; READY keeps the file.
+            // SAFETY: a live pipeline.
+            let restarted = unsafe {
+                (gst.gst_element_set_state)(pipeline.0 .1, READY) != STATE_CHANGE_FAILURE
+                    && (gst.gst_element_set_state)(pipeline.0 .1, PLAYING) != STATE_CHANGE_FAILURE
+            };
+            if !restarted {
                 return Err(CommandError::Other("Cannot loop the video".into()));
             }
             looped_frame = false;
+            ended = false;
+        } else {
+            // A sink that playbin3 has not started yet answers at once.
+            std::thread::sleep(Duration::from_millis(10));
         }
     }
 }
