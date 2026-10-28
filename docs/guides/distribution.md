@@ -125,6 +125,9 @@ Paramètres › À propos permet de vérifier puis d'installer. L'installation l
 (60 s au plus), remplace les fichiers et relance Oxyde. En mode portable, le bouton ouvre la
 page des releases.
 
+Hors Windows, `Platform::updates_itself` est faux : ni vérification ni bouton. Comme
+Nautilus, Oxyde laisse les paquets RPM, DEB ou Flatpak au gestionnaire du système.
+
 ## Version et tag
 
 ```powershell

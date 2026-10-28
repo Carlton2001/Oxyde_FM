@@ -174,6 +174,8 @@ pub trait Platform: Send + Sync {
     fn onedrive_installed(&self) -> bool { false }
     fn onedrive_folders(&self) -> Vec<crate::models::QuickAccessItem> { Vec::new() }
     fn show_startup_error(&self, _title: &str, message: &str) { eprintln!("{message}"); }
+    /// Whether Oxyde installs its own releases; Linux packages update through the system.
+    fn updates_itself(&self) -> bool { false }
     /// HTTPS GET into memory, bounded by `limit` bytes.
     fn download(&self, _url: &str, _limit: usize) -> std::io::Result<Vec<u8>> {
         Err(std::io::Error::from(std::io::ErrorKind::Unsupported))

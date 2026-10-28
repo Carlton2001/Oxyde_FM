@@ -23,6 +23,9 @@ impl OxydeApp {
 
     /// Check once per session, shortly after startup.
     pub(crate) fn schedule_update_check(&mut self, cx: &mut Context<Self>) {
+        if !oxyde_lib::platform::platform().updates_itself() {
+            return;
+        }
         cx.spawn(async move |this, cx| {
             cx.background_executor().timer(AUTOMATIC_CHECK_DELAY).await;
             let _ = this.update(cx, |this, cx| this.check_for_updates(false, cx));
