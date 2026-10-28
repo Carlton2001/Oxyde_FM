@@ -87,20 +87,26 @@ impl Worker {
     }
 
     fn wait_readable(&self, deadline: Instant) -> io::Result<()> {
-        use rustix::event::{poll, PollFd, PollFlags, Timespec};
         loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
             if remaining.is_zero() {
                 return Err(io::Error::new(io::ErrorKind::TimedOut, "Preview worker exceeded its deadline"));
             }
-            let timeout = Timespec { tv_sec: remaining.as_secs() as i64, tv_nsec: remaining.subsec_nanos().into() };
-            let mut descriptors = [PollFd::new(&self.output, PollFlags::IN)];
-            match poll(&mut descriptors, Some(&timeout)) {
-                // Readable, or closed: the read tells which.
-                Ok(ready) if ready > 0 => return Ok(()),
-                Ok(_) | Err(rustix::io::Errno::INTR) => {}
-                Err(error) => return Err(error.into()),
+            if self.readable(remaining)? {
+                return Ok(());
             }
+        }
+    }
+
+    /// Output to read, or closed (the read tells which), within `timeout`.
+    pub(super) fn readable(&self, timeout: Duration) -> io::Result<bool> {
+        use rustix::event::{poll, PollFd, PollFlags, Timespec};
+        let timeout = Timespec { tv_sec: timeout.as_secs() as i64, tv_nsec: timeout.subsec_nanos().into() };
+        let mut descriptors = [PollFd::new(&self.output, PollFlags::IN)];
+        match poll(&mut descriptors, Some(&timeout)) {
+            Ok(ready) => Ok(ready > 0),
+            Err(rustix::io::Errno::INTR) => Ok(false),
+            Err(error) => Err(error.into()),
         }
     }
 }

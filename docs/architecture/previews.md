@@ -244,7 +244,8 @@ bornées à 512 octets et les réponses à des états d’un octet. Changement d
 fermeture et dernier propriétaire annulent le lecteur, retirent sa surface et
 récoltent son processus. Les anciens aperçus ne peuvent publier dans un nouveau
 Viewer. Linux conserve un message d’aperçu indisponible pour audio/vidéo ; ce
-lecteur natif n’y est pas implémenté.
+lecteur natif n’y est pas implémenté. Les vidéos muettes de survol passent par
+GStreamer ([aperçus Linux](linux-previews.md)).
 
 Le double clic dans un aperçu image ou vidéo bascule le plein écran ; Échap
 le quitte. Au survol du média, un bouton `maximize-2` apparaît dans son coin
@@ -389,7 +390,7 @@ communs : cette séparation ne garantit pas une disponibilité immédiate sous
 pression mémoire ou lorsque toutes les places de processus sont occupées.
 
 Sous Linux, poppler rend ces pages dans un worker d'Oxyde, aux mêmes tailles ; voir
-le [PDF sous Linux](linux-pdf.md). La suite décrit Windows.
+les [aperçus Linux](linux-previews.md). La suite décrit Windows.
 
 Les miniatures PDF de la grille et les aperçus PDF partagent une session native
 dédiée de `oxyde.exe` (`pdf-previews`), distincte de celle du Viewer et des

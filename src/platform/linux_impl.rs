@@ -576,6 +576,19 @@ impl Platform for LinuxPlatform {
         super::linux_pdf::run_session(path)
     }
 
+    fn video_frames(
+        &self,
+        path: String,
+        mut on_frame: Box<dyn FnMut(image::RgbaImage, std::time::Duration) -> bool + Send>,
+        cancelled: Box<dyn Fn() -> bool + Send>,
+    ) -> Result<(), crate::models::CommandError> {
+        Ok(super::linux_video::stream(std::path::Path::new(&path), &mut on_frame, &cancelled)?)
+    }
+
+    fn decode_video_worker(&self, path: String, on_frame: &mut dyn FnMut(image::RgbaImage, std::time::Duration) -> bool) -> Result<(), crate::models::CommandError> {
+        super::linux_video::decode(std::path::Path::new(&path), on_frame)
+    }
+
     fn install_disk_image_autoplay_handler(&self, _window: raw_window_handle::RawWindowHandle) -> Result<(), String> {
         Ok(())
     }

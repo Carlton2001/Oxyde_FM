@@ -773,6 +773,8 @@ mod linux_library;
 #[cfg(not(target_os = "windows"))]
 mod linux_pdf;
 #[cfg(not(target_os = "windows"))]
+mod linux_video;
+#[cfg(not(target_os = "windows"))]
 mod linux_worker;
 #[cfg(not(target_os = "windows"))]
 mod linux_trash;
