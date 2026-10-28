@@ -23,8 +23,12 @@ propriétés ne connaissent pas les URI.
   répond à `ask-password` en bloquant jusqu'à la réponse du dialogue.
   - `connect` : `g_file_mount_enclosing_volume` (déjà monté : succès), puis
     `g_file_get_path` → `Local(chemin FUSE)`, sinon `Browse(URI)` (serveur, réseau).
+    Le dossier FUSE peut arriver après GIO, surtout juste après un démontage du même
+    partage : `connect` l'attend 2 s au plus.
   - `children` : énumère une URI montée ; une liste d'un serveur construit l'URI de chaque
-    partage depuis le serveur, car `standard::target-uri` perd un port non standard.
+    partage depuis le serveur, car `standard::target-uri` perd un port non standard et
+    `g_file_get_child` d'un serveur donne `._partage`.
+  - `Owned` ne garde jamais un pointeur nul : GLib signale un `g_object_unref(NULL)`.
     `network:///` suit les cibles (serveurs découverts par WS-Discovery, DNS-SD, SMB).
     Remonte d'abord sans jamais demander d'identifiants (actualisation, onglet restauré).
   - `mounts` : dossiers du répertoire FUSE de type réseau (`smb-share`, `sftp`, `ftp`,
@@ -47,7 +51,10 @@ propriétés ne connaissent pas les URI.
   l'URI ; un serveur est listé par URI et retenu pour la session. Fermer le dialogue
   revient à l'emplacement précédent ; un échec affiche « Impossible de se connecter » et
   le détail de GVfs dans une notification.
-- Dialogue fixe `RemoteLogin` (`components/remote_login_dialog.rs`) : message de GVfs
+- Dialogue fixe `RemoteLogin` (`components/remote_login_dialog.rs`), dont les valeurs
+  sont gardées à la saisie : un champ qui rappelle Oxyde (Entrée) ne peut être relu
+  pendant sa propre mise à jour.
+  Il montre : message de GVfs
   sans sa ligne de titre, utilisateur, domaine et mot de passe selon les drapeaux,
   connexion anonyme et mémorisation (trousseau, « Remember forever » de GNOME) quand le
   serveur les permet ; « Identifiants refusés » au second essai.

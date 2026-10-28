@@ -63,9 +63,10 @@ fn mounts_lists_and_unmounts_a_live_share() {
     let shares = children(&format!("{server}/")).expect("server shares");
     let listed = shares.iter().find(|child| child.name.eq_ignore_ascii_case(share)).expect("share listed");
     assert!(listed.directory);
-    assert!(listed.uri.to_lowercase().starts_with(&server.to_lowercase()), "{listed:?}");
+    assert!(listed.uri.eq_ignore_ascii_case(&uri.trim_end_matches('/')), "{listed:?}");
 
     unmount(&path).expect("unmount");
     assert!(share_mount(&mounts()).is_none());
     unmount(&path).expect("unmounting twice succeeds");
 }
+

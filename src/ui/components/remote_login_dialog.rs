@@ -55,8 +55,8 @@ pub(crate) fn render_remote_login_dialog(
         }
         let input = login.inputs[index].clone();
         let field = if login.anonymous {
-            let value = input.read(cx).content();
-            let shown = if index == 2 { "*".repeat(value.chars().count()) } else { value.to_string() };
+            let value = &login.values[index];
+            let shown = if index == 2 { "*".repeat(value.chars().count()) } else { value.clone() };
             crate::ui::components::input::read_only_field(shown, cx).into_any_element()
         } else {
             input.into_any_element()

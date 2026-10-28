@@ -33,7 +33,8 @@ struct Owned(&'static Gio, Object);
 
 impl Owned {
     fn new(gio: &'static Gio, object: Object) -> Option<Self> {
-        (!object.is_null()).then_some(Self(gio, object))
+        // Lazily: a null pointer must never reach `drop`.
+        (!object.is_null()).then(|| Self(gio, object))
     }
 }
 
@@ -145,9 +146,21 @@ pub(super) fn connect(uri: &str, ask: &mut dyn FnMut(&RemotePrompt) -> RemoteAns
     let file = file_for_uri(gio, uri)?;
     mount(gio, &file, ask)?;
     Ok(match local_path(gio, &file) {
-        Some(path) => RemoteLocation::Local(path),
+        Some(path) => {
+            appear(&path);
+            RemoteLocation::Local(path)
+        }
         None => RemoteLocation::Browse(uri_of(gio, file.1)),
     })
+}
+
+/// `gvfsd-fuse` learns of a mount by signal, after GIO: its folder can lag behind,
+/// especially right after the same share was unmounted.
+fn appear(path: &Path) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    while std::fs::symlink_metadata(path).is_err() && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
 }
 
 struct Asking<'a> {
@@ -255,7 +268,8 @@ pub(super) fn children(uri: &str) -> Result<Vec<RemoteChild>, RemoteError> {
     let parent = file_for_uri(gio, uri)?;
     // A refresh or a reopened tab mounts again with saved credentials, never a prompt.
     mount(gio, &parent, &mut |_| RemoteAnswer::Cancel)?;
-    // The neighborhood points at servers; a share's target drops a non-default port.
+    // The neighborhood points at servers. A server's shares are named from its URI: their
+    // target drops a non-default port and GIO's child of a server is `._share`.
     let targets = uri.get(..10).is_some_and(|scheme| scheme.eq_ignore_ascii_case("network://"));
     let mut error = std::ptr::null_mut();
     // SAFETY: a live file; the enumerator and each info are released after use.
@@ -278,6 +292,9 @@ pub(super) fn children(uri: &str) -> Result<Vec<RemoteChild>, RemoteError> {
             let target = borrowed((gio.g_file_info_get_attribute_string)(info.1, c"standard::target-uri".as_ptr()));
             let uri = if targets && !target.is_empty() {
                 target
+            } else if let Some((_, share)) = target.trim_end_matches('/').rsplit_once('/').filter(|_| kind == MOUNTABLE) {
+                // A share of this server, by the server URI that keeps its port.
+                format!("{}/{share}", uri.trim_end_matches('/'))
             } else {
                 let child = Owned::new(gio, (gio.g_file_get_child)(parent.1, (gio.g_file_info_get_name)(info.1)));
                 child.map(|child| uri_of(gio, child.1)).unwrap_or_default()

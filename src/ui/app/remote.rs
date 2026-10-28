@@ -10,6 +10,8 @@ pub(crate) struct RemoteLogin {
     pub prompt: RemotePrompt,
     /// User, domain and password.
     pub inputs: Vec<Entity<TextInput>>,
+    /// Kept as typed: an input calling back cannot be read while it updates.
+    pub values: [String; 3],
     pub anonymous: bool,
     pub remember: bool,
     pub focus: FocusHandle,
@@ -89,14 +91,20 @@ impl OxydeApp {
             return;
         }
         let handle = cx.entity();
-        let initial = [prompt.user.clone(), prompt.domain.clone(), String::new()];
-        let inputs: Vec<_> = initial.into_iter().enumerate().map(|(index, value)| {
+        let values = [prompt.user.clone(), prompt.domain.clone(), String::new()];
+        let inputs: Vec<_> = values.iter().cloned().enumerate().map(|(index, value)| {
+            let change = handle.clone();
             let submit = handle.clone();
             let cancel = handle.clone();
             let menu = handle.clone();
             cx.new(|cx| {
                 let input = TextInput::new(
-                    cx, "", value, |_, _, _| {},
+                    cx, "", value,
+                    move |text, _, cx| change.update(cx, |this, _| {
+                        if let Some(login) = &mut this.remote_login {
+                            login.values[index] = text.to_string();
+                        }
+                    }),
                     move |window, cx| submit.update(cx, |this, cx| this.answer_remote_login(false, window, cx)),
                     move |window, cx| cancel.update(cx, |this, cx| this.answer_remote_login(true, window, cx)),
                     move |input, selected, point, window, cx| {
@@ -115,6 +123,7 @@ impl OxydeApp {
             prompt,
             initial,
             inputs,
+            values,
             anonymous: false,
             remember: false,
             focus: cx.focus_handle(),
@@ -131,11 +140,11 @@ impl OxydeApp {
         } else if login.anonymous {
             RemoteAnswer::Anonymous
         } else {
-            let value = |index: usize| login.inputs[index].read(cx).content().to_string();
+            let [user, domain, password] = std::mem::take(&mut login.values);
             RemoteAnswer::Login {
-                user: value(0).trim().to_string(),
-                domain: value(1).trim().to_string(),
-                password: value(2),
+                user: user.trim().to_string(),
+                domain: domain.trim().to_string(),
+                password,
                 remember: login.remember && login.prompt.saving,
             }
         };
