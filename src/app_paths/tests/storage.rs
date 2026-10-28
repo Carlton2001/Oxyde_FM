@@ -91,9 +91,18 @@ fn portable_process_routes_configuration_caches_and_environment_locally() {
     std::fs::create_dir(root.path().join("data")).unwrap();
     let executable = root.path().join(if cfg!(windows) { "storage-test.exe" } else { "storage-test" });
     std::fs::copy(std::env::current_exe().unwrap(), &executable).unwrap();
-    let output = std::process::Command::new(executable)
+    let run = || std::process::Command::new(&executable)
         .args(["--exact", "app_paths::tests::portable_process_routes_configuration_caches_and_environment_locally", "--nocapture"])
-        .env(CHILD, root.path()).current_dir(unrelated.path()).output().unwrap();
+        .env(CHILD, root.path()).current_dir(unrelated.path()).output();
+    // Linux: a process forked by another test while the copy was open for writing holds
+    // that descriptor until it executes, and the copy is busy until then.
+    let mut output = run();
+    for _ in 0..100 {
+        if !matches!(&output, Err(error) if error.kind() == std::io::ErrorKind::ExecutableFileBusy) { break }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        output = run();
+    }
+    let output = output.unwrap();
     assert!(output.status.success(), "{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
     assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
     assert_eq!(std::fs::read(root.path().join("data/config.json")).unwrap(), b"portable session");
