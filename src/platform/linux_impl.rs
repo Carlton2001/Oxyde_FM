@@ -604,6 +604,10 @@ impl Platform for LinuxPlatform {
         super::linux_media::run(path)
     }
 
+    fn run_media_registry_worker(&self) -> std::io::Result<()> {
+        super::linux_gstreamer::refresh_registry()
+    }
+
     fn decode_video_worker(&self, path: String, on_frame: &mut dyn FnMut(image::RgbaImage, std::time::Duration) -> bool) -> Result<(), crate::models::CommandError> {
         super::linux_video::decode(std::path::Path::new(&path), on_frame)
     }

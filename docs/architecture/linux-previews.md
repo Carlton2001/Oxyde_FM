@@ -1,8 +1,8 @@
 # Aperçus PDF et vidéo sous Linux
 
-**Statut : PDF et survol vidéo vérifiés ; lecteur du Viewer implémenté, vérification
-visuelle en attente** (T09 de l'[audit de
-portabilité](../reports/2026-10-26-linux-portability-audit.md)).
+**Statut : PDF, survol vidéo et lecteur du Viewer vérifiés ; workers confinés par
+bubblewrap, vérification visuelle en attente** (T09 et premier volet de M09 de
+l'[audit de portabilité](../reports/2026-10-26-linux-portability-audit.md)).
 Windows ne change pas.
 
 ## Principe : comme Nautilus
@@ -27,9 +27,56 @@ décodage reste ainsi hors du processus de l'interface.
   rôle de la limite de mémoire engagée du job Windows. L'espace d'adressage
   (`RLIMIT_AS`) compterait le code mappé : le binaire de debug pèse 1 Gio.
   `MALLOC_ARENA_MAX=2` évite que glibc réserve 64 Mio par fil de décodage.
-- Mort avec le parent : le worker surveille son parent toutes les 500 ms et se tue
-  s'il a changé. `PR_SET_PDEATHSIG` ne convient pas : le signal suit le fil qui a
-  lancé le worker, et un pool peut retirer ce fil.
+- Mort avec le parent : Oxyde garde l'autre bout de l'entrée standard du worker
+  jusqu'à le libérer. Un fil du worker attend la fermeture de ce tube (`poll` sans
+  lire les données) et se tue alors. `PR_SET_PDEATHSIG` ne convient pas : le signal
+  suit le fil qui a lancé le worker, et un pool peut retirer ce fil. Le parent réel
+  n'est pas visible non plus, car le bac à sable a son propre espace de processus.
+
+## Confinement (bubblewrap)
+
+GNOME confine ainsi ses miniaturiseurs, et glycin ses chargeurs d'images.
+`platform/linux_sandbox.rs` lance chaque worker par `bwrap` :
+
+- Espaces de noms : utilisateur (sans espace imbriqué, `--disable-userns`), processus,
+  réseau, IPC, nom d'hôte et cgroup. Nouvelle session : pas d'injection dans le
+  terminal.
+- Fichiers : racine vide, `/usr` en lecture seule et ses liens (`/lib64`…),
+  `/etc/ld.so.cache`, `/proc` et `/dev` minimaux, `/tmp` vide. Le binaire d'Oxyde est
+  monté seul s'il est hors de `/usr`. Le document est ouvert par Oxyde et monté seul
+  par son descripteur (`--ro-bind-fd`) à `/oxyde/source.<extension>`. L'extension
+  sert aux formats sans signature. Le worker ne voit aucun autre fichier de
+  l'utilisateur. Variables d'environnement effacées, puis fixées une à une.
+- Selon le mode :
+  - PDF : `/etc/fonts`, polices, configuration et cache fontconfig de l'utilisateur,
+    en lecture seule.
+  - Survol vidéo : le registre GStreamer d'Oxyde, en lecture seule.
+  - Lecteur du Viewer : le registre, plus les sockets PulseAudio
+    (`$XDG_RUNTIME_DIR/pulse/native`, servie par PipeWire) et PipeWire, avec
+    `/etc/pulse`, `/etc/pipewire` et `/etc/machine-id`. Aucun accès au GPU : le
+    décodage est logiciel.
+- Filtre seccomp (`linux_sandbox/seccomp.rs`), compilé par libseccomp, chargée à
+  l'exécution, puis installé par bubblewrap. Comme Flatpak, c'est une liste de refus,
+  qui renvoie `EPERM` : administration du noyau, mémoire d'autres processus
+  (`ptrace`, `process_vm_*`), montages et espaces de noms, `bpf`, `io_uring`,
+  `userfaultfd`, `perf_event_open`, clés, `TIOCSTI`/`TIOCLINUX`, changement de
+  `personality`. Toute socket autre que locale (`AF_UNIX`) renvoie `EAFNOSUPPORT`.
+  Les appels d'une autre architecture tuent le worker. glycin préfère une liste
+  d'autorisations ; elle casserait au gré des versions de GStreamer, de ses greffons
+  et de glibc.
+- Registre GStreamer : un balayage complet des greffons coûte 2,5 s. Oxyde garde son
+  propre registre dans `<cache>/Oxyde/gstreamer-1.0/registry.bin`. Avant le premier
+  worker multimédia de la session, un worker `media-registry` le met à jour : il
+  n'ouvre aucun document et seul ce dossier lui est accessible en écriture. Les
+  autres workers le lisent sans pouvoir le modifier (`GST_REGISTRY_UPDATE=no`). Un
+  worker compromis ne peut donc ni changer les greffons que chargent les suivants,
+  ni toucher au registre des autres programmes. Les greffons de l'utilisateur
+  (`~/.local/share/gstreamer-1.0`) ne sont pas chargés.
+- Sans bubblewrap utilisable (absent, ou espaces de noms utilisateur interdits), le
+  worker est lancé directement, comme le fait glycin. Le journal le signale une fois.
+  Sans libseccomp, le confinement reste, sans filtre d'appels système.
+- Coût : 40 ms pour une miniature PDF, 80 ms jusqu'à la première image d'une vidéo
+  1080p.
 
 ## PDF (poppler)
 
@@ -117,15 +164,23 @@ directement du worker vers la sortie par défaut du bureau (PipeWire).
 
 ## Limites
 
-- Les workers ne sont **pas confinés** : ils ont les droits de l'utilisateur
-  (M09/R5). Ils isolent les plantages, pas les fuites de données.
-- Le mode vidéo du worker exige un chemin UTF-8, comme sous Windows.
+- Le confinement n'est pas celui du LPAC Windows. Le noyau reste exposé aux appels
+  système autorisés. Le lecteur du Viewer parle au serveur de son, qui accepte aussi
+  la capture : c'est le même accès qu'une application Flatpak autorisée à utiliser
+  PulseAudio. Sans bubblewrap utilisable, les workers ont les droits de
+  l'utilisateur.
+- Les autres décodeurs (archives, images, Office, pochettes audio) tournent encore
+  dans Oxyde : c'est le reste de M09.
+- Sans bac à sable, le mode vidéo exige un chemin UTF-8, comme sous Windows.
 - Les images du lecteur traversent un tube puis une texture GPU neuve par image :
   environ 110 Mio/s en 720p à 30 images par seconde.
 
 ## Tests
 
-`cargo test --offline --lib -- linux_pdf linux_video linux_media` : rendu, rotation, pages hors
+`cargo test --offline --lib -- linux_sandbox linux_pdf linux_video linux_media`.
+Bac à sable : le worker lit son document et ne voit pas un fichier voisin ; sockets
+réseau, `unshare` et `ptrace` refusés ; seul le lecteur atteint le serveur de son.
+Décodage : rendu, rotation, pages hors
 document, fichiers endommagés, échelle et forme des vidéos, boucle, annulation ; lecture à la
 taille du Viewer, pause, recherche, fin, son seul. Les
 vidéos sont encodées par `gst-launch-1.0` pendant le test (ignoré sans encodeur).

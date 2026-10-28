@@ -1,9 +1,10 @@
 //! Self-workers for native decoders, as Nautilus runs its thumbnailers apart: a
-//! hostile file can only end that process, bounded in private memory and in time.
+//! hostile file only reaches a confined process, bounded in private memory and in time.
+use super::linux_sandbox::{self, Profile};
 use std::io::{self, Read, Write};
 use std::os::unix::process::CommandExt;
 use std::path::Path;
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::process::{Child, ChildStdin, ChildStdout, Stdio};
 use std::time::{Duration, Instant};
 
 /// The Windows parent sends it once the job is attached; the worker waits for it.
@@ -16,16 +17,23 @@ pub(super) struct Worker {
 }
 
 impl Worker {
-    /// `memory_bytes` bounds private writable memory; mapped code does not count.
+    /// `memory_bytes` bounds private writable memory; mapped code does not count. The
+    /// worker receives `path` already open, so it needs no access to the user's files.
     pub(super) fn start(executable: &Path, mode: &str, path: Option<&Path>, memory_bytes: u64) -> io::Result<Self> {
-        let mut command = Command::new(executable);
-        command.arg("--oxyde-preview-worker-v1").arg(mode);
-        if let Some(path) = path {
-            command.arg(path);
+        let profile = Profile::of(mode);
+        if profile.reads_media() {
+            refresh_media_registry(executable);
         }
+        let source = path.map(|path| std::fs::File::open(path).map(|file| (path, file))).transpose()?;
         // glibc reserves 64 MiB per thread arena, which decoders with many threads would
-        // spend on reservations rather than pixels.
-        command.env("MALLOC_ARENA_MAX", "2").stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
+        // spend on reservations rather than pixels: the launch limits arenas to two.
+        let mut launch = linux_sandbox::command(executable, profile, source)?;
+        let command = &mut launch.command;
+        command.arg("--oxyde-preview-worker-v1").arg(mode);
+        if let Some(source) = &launch.source {
+            command.arg(source);
+        }
+        command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
         // SAFETY: a single raw system call between fork and exec.
         unsafe {
             command.pre_exec(move || {
@@ -118,14 +126,35 @@ impl Drop for Worker {
     }
 }
 
-/// Worker side: end with Oxyde even while a decoder holds the main thread. The
-/// parent's death signal would follow its spawning thread, which a pool may retire.
+/// GStreamer scans every plugin when its registry is missing or outdated, which costs
+/// seconds: a worker that opens no document brings Oxyde's registry up to date once per
+/// session, before the first media worker. Other workers only read it.
+fn refresh_media_registry(executable: &Path) {
+    static REFRESHED: std::sync::Mutex<bool> = std::sync::Mutex::new(false);
+    let mut refreshed = REFRESHED.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    if std::mem::replace(&mut *refreshed, true) {
+        return;
+    }
+    let deadline = Instant::now() + Duration::from_secs(60);
+    if let Err(error) = Worker::start(executable, "media-registry", None, 1024 * 1024 * 1024)
+        .and_then(|mut worker| worker.read_to_end(0, deadline)) {
+        log::warn!("GStreamer registry not refreshed: {error}");
+    }
+}
+
+/// Worker side: end with Oxyde even while a decoder holds the main thread. Oxyde holds
+/// the other end of standard input until it lets the worker go; neither the parent's
+/// death signal, tied to its spawning thread, nor the parent process, hidden by the
+/// sandbox's own, can tell.
 pub(super) fn exit_with_parent() {
-    let parent = rustix::process::getppid();
-    std::thread::spawn(move || loop {
-        std::thread::sleep(Duration::from_millis(500));
-        if rustix::process::getppid() != parent {
-            let _ = rustix::process::kill_process(rustix::process::getpid(), rustix::process::Signal::KILL);
-        }
+    use rustix::event::{poll, PollFd, PollFlags};
+    use std::os::fd::AsFd;
+    std::thread::spawn(|| {
+        let input = io::stdin();
+        let input = input.as_fd();
+        // Only the end of the pipe wakes it: the data is left to the worker.
+        let mut descriptors = [PollFd::new(&input, PollFlags::empty())];
+        while matches!(poll(&mut descriptors, None), Ok(0) | Err(rustix::io::Errno::INTR)) {}
+        let _ = rustix::process::kill_process(rustix::process::getpid(), rustix::process::Signal::KILL);
     });
 }

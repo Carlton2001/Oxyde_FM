@@ -23,6 +23,10 @@ pub(crate) fn run_if_requested() -> bool {
             if arguments.next().is_some() { return Err(std::io::Error::other("Unexpected PDF session argument")); }
             return oxyde_lib::platform::platform().run_pdf_preview_session_worker();
         }
+        if mode == "media-registry" {
+            if arguments.next().is_some() { return Err(std::io::Error::other("Unexpected registry argument")); }
+            return oxyde_lib::platform::platform().run_media_registry_worker();
+        }
         let path = arguments
             .next()
             .ok_or_else(|| std::io::Error::other("Missing preview source"))?;

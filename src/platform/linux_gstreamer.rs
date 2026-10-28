@@ -11,6 +11,12 @@ use std::time::Duration;
 mod library;
 
 // GstState.
+/// Worker side: initializing GStreamer scans the plugins that changed and writes the
+/// registry the sandbox names.
+pub(super) fn refresh_registry() -> std::io::Result<()> {
+    gst().map(|_| ()).ok_or_else(|| std::io::Error::other("GStreamer unavailable"))
+}
+
 pub(super) const READY: i32 = 2;
 pub(super) const PAUSED: i32 = 3;
 pub(super) const PLAYING: i32 = 4;

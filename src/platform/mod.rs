@@ -635,6 +635,11 @@ pub trait Platform: Send + Sync {
     fn run_pdf_preview_session_worker(&self) -> std::io::Result<()> {
         Err(std::io::Error::other("PDF previews unavailable on this platform"))
     }
+    /// Brings the media decoders' plugin registry up to date; opens no document.
+    #[doc(hidden)]
+    fn run_media_registry_worker(&self) -> std::io::Result<()> {
+        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Media registry worker unavailable"))
+    }
 
     fn volumes(&self) -> &dyn Volumes;
     /// Install on the native window's UI thread; never changes system preferences.
@@ -776,6 +781,8 @@ mod linux_library;
 mod linux_media;
 #[cfg(not(target_os = "windows"))]
 mod linux_pdf;
+#[cfg(not(target_os = "windows"))]
+mod linux_sandbox;
 #[cfg(not(target_os = "windows"))]
 mod linux_video;
 #[cfg(not(target_os = "windows"))]

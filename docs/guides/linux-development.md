@@ -49,9 +49,9 @@ Une corbeille isolée ne reçoit que les suppressions faites sur le même systè
 fichiers que `$P`. **Les réglages GNOME de la corbeille (`gsettings`) restent globaux.**
 Ne lancer aucune écriture (suppression, déplacement, collage, glisser) sur des données réelles.
 
-Les trois workers auxiliaires sont des `main` vides sous Linux : aucun confinement.
-Les rendus PDF et vidéo passent par un worker d'Oxyde lui-même, non confiné ; voir
-les [aperçus Linux](../architecture/linux-previews.md). Après modification, reconstruire avec
+Les trois workers auxiliaires sont des `main` vides sous Linux. Les rendus PDF et vidéo
+passent par un worker d'Oxyde lui-même, confiné par bubblewrap et seccomp ; voir les
+[aperçus Linux](../architecture/linux-previews.md#confinement-bubblewrap). Après modification, reconstruire avec
 `cargo build --offline --bins`.
 WSL reste utilisable pour `check-linux.sh` ; il ne valide ni GPU, ni bureau, ni volumes.
 
@@ -150,7 +150,9 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
   vérification visuelle en attente. « Plus d'options » (menu Shell) est masqué hors Windows.
 
 **Avancé et distribution (jalons 6–7)**
-- T09 : [poppler et GStreamer](../architecture/linux-previews.md) dans un worker ; PDF
-  et survol vidéo vérifiés, lecteur du Viewer en attente de vérification visuelle.
-  M09/R5 : workers confinés Linux.
+- T09 : [poppler et GStreamer](../architecture/linux-previews.md) dans un worker ; PDF,
+  survol vidéo et lecteur du Viewer vérifiés.
+  M09/R5 : ces workers sont confinés par bubblewrap et seccomp. Reste à déplacer dans
+  des workers confinés les décodeurs qui tournent encore dans Oxyde (archives,
+  images, Office, pochettes audio).
 - T14 : CI Linux distincte ; paquets RPM puis DEB, essai Silverblue.
