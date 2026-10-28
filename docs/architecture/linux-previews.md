@@ -160,7 +160,14 @@ directement du worker vers la sortie par défaut du bureau (PipeWire).
   peints dans la fenêtre, comme pour les images. Leur visibilité suit les
   événements de souris de GPUI : la position globale du pointeur, que Windows
   interroge toutes les 100 ms, n'existe pas sous Wayland.
-- Plafonds : 1 Gio de mémoire privée pour le worker.
+- Plafonds : 1 Gio de mémoire privée pour le worker. Sans autre réglage, les
+  décodeurs logiciels lancent un fil par cœur, et chaque fil garde des images : sur
+  32 cœurs, 760 Mio pour une vidéo HEVC 4K, puis des allocations refusées, d'où des
+  images corrompues, puis l'échec de la lecture. `Player` règle donc à 4 les fils
+  (`max-threads`, `n-threads`) de chaque élément que `playbin3` ajoute
+  (`element-setup`), survol compris. Cette vidéo se lit alors à 30 images par
+  seconde avec 490 à 560 Mio, y compris à 3840 × 2160. Le décodeur seul atteint 85
+  images par seconde.
 
 ## Limites
 

@@ -10,6 +10,15 @@ pub(super) struct Value {
     pub data: [u64; 2],
 }
 
+/// The public head of `GParamSpec`.
+#[repr(C)]
+pub(super) struct ParamSpec {
+    pub instance: *mut c_void,
+    pub name: *const c_char,
+    pub flags: c_uint,
+    pub value_type: usize,
+}
+
 /// `GstMapInfo`.
 #[repr(C)]
 pub(super) struct MapInfo {
@@ -59,6 +68,10 @@ library! { Gst from "libgstapp-1.0.so.0" {
     g_value_set_string: fn(*mut Value, *const c_char);
     g_value_set_object: fn(*mut Value, Object);
     g_value_set_boxed: fn(*mut Value, Object);
+    g_value_set_int: fn(*mut Value, c_int);
+    g_value_set_uint: fn(*mut Value, c_uint);
+    g_object_class_find_property: fn(*mut c_void, *const c_char) -> *const ParamSpec;
+    g_signal_connect_data: fn(Object, *const c_char, *const c_void, *mut c_void, *const c_void, c_uint) -> std::ffi::c_ulong;
     g_value_unset: fn(*mut Value);
     g_object_set_property: fn(Object, *const c_char, *const Value);
     gst_init_check: fn(*mut c_int, *mut c_void, *mut *mut GError) -> c_int;

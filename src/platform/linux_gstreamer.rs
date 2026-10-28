@@ -3,7 +3,7 @@
 use crate::models::CommandError;
 use image::RgbaImage;
 use library::{gst, GError, Gst, MapInfo, Object, Value};
-use std::ffi::{CStr, CString};
+use std::ffi::{c_int, c_void, CStr, CString};
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::time::Duration;
@@ -32,7 +32,14 @@ const STREAM_VIDEO: u32 = 1 << 2;
 const TIME: i32 = 3;
 const SEEK: i32 = 1 | 4 | 32 | 64;
 const MAP_READ: u32 = 1;
+const INT: usize = 6 << 2;
+const UINT: usize = 7 << 2;
 const STRING: usize = 16 << 2;
+/// Software decoders and converters otherwise start a thread per core, each decoder
+/// thread holding frames: 760 MiB for a 4K HEVC video on 32 cores, beyond the worker's
+/// memory, where allocations then fail into corrupted pictures and errors. With four,
+/// FFmpeg decodes that video at 85 frames a second in 280 MiB.
+const THREADS: u32 = 4;
 
 /// A GStreamer object, released when dropped.
 struct Owned(&'static Gst, Object);
@@ -53,6 +60,31 @@ fn error_text(gst: &Gst, error: *mut GError, fallback: &str) -> String {
         let message = CStr::from_ptr((*error).message).to_string_lossy().into_owned();
         (gst.g_error_free)(error);
         message
+    }
+}
+
+/// playbin3's `element-setup`: bounds the threads of each element it adds, decoders
+/// included, while they are still stopped.
+unsafe extern "C" fn limit_threads(_player: Object, element: Object, _data: *mut c_void) {
+    let Some(gst) = gst() else { return };
+    // SAFETY: a live element, whose instance starts with its class (G_OBJECT_GET_CLASS).
+    unsafe {
+        let class = *element.cast::<*mut c_void>();
+        for name in [c"max-threads", c"n-threads"] {
+            let property = (gst.g_object_class_find_property)(class, name.as_ptr());
+            if property.is_null() || !matches!((*property).value_type, INT | UINT) {
+                continue;
+            }
+            let mut value = Value { kind: 0, data: [0; 2] };
+            (gst.g_value_init)(&mut value, (*property).value_type);
+            if (*property).value_type == INT {
+                (gst.g_value_set_int)(&mut value, THREADS as c_int);
+            } else {
+                (gst.g_value_set_uint)(&mut value, THREADS);
+            }
+            (gst.g_object_set_property)(element, name.as_ptr(), &value);
+            (gst.g_value_unset)(&mut value);
+        }
     }
 }
 
@@ -161,6 +193,9 @@ impl Player {
             }
             let pipeline = Owned(gst, pipeline);
             forget_warning(gst, &mut error);
+            let handler: unsafe extern "C" fn(Object, Object, *mut c_void) = limit_threads;
+            (gst.g_signal_connect_data)(pipeline.1, c"element-setup".as_ptr(), handler as *const c_void,
+                std::ptr::null_mut(), std::ptr::null(), 0);
             let output = (gst.gst_parse_bin_from_description)(output.as_ptr(), 1, &mut error);
             if output.is_null() {
                 (gst.gst_element_set_state)(pipeline.1, NULL);
