@@ -130,6 +130,8 @@ pub(super) struct Player {
     bus: Owned,
     /// The output's capsfilter named `size`, when it has one.
     size: Option<Owned>,
+    /// The output's first element named `source`, which receives decoded frames.
+    source: Option<Owned>,
 }
 
 impl Drop for Player {
@@ -161,6 +163,7 @@ impl Player {
             forget_warning(gst, &mut error);
             let sink = (gst.gst_bin_get_by_name)(output, c"frames".as_ptr());
             let size = (gst.gst_bin_get_by_name)(output, c"size".as_ptr());
+            let source = (gst.gst_bin_get_by_name)(output, c"source".as_ptr());
             // The bin's floating reference goes to playbin3, which owns it from here.
             let mut value = Value { kind: 0, data: [0; 2] };
             (gst.g_value_init)(&mut value, (gst.gst_element_get_type)());
@@ -169,7 +172,7 @@ impl Player {
             (gst.g_value_unset)(&mut value);
             let bus = (gst.gst_element_get_bus)(pipeline.1);
             if sink.is_null() || bus.is_null() {
-                for object in [sink, bus, size].into_iter().filter(|object| !object.is_null()) {
+                for object in [sink, bus, size, source].into_iter().filter(|object| !object.is_null()) {
                     (gst.gst_object_unref)(object);
                 }
                 return Err(CommandError::Other("Incomplete media pipeline".into()));
@@ -179,6 +182,7 @@ impl Player {
                 sink: Owned(gst, sink),
                 bus: Owned(gst, bus),
                 size: (!size.is_null()).then(|| Owned(gst, size)),
+                source: (!source.is_null()).then(|| Owned(gst, source)),
                 pipeline,
             };
             let uri = (gst.gst_filename_to_uri)(name.as_ptr(), &mut error);
@@ -274,6 +278,39 @@ impl Player {
         let nanoseconds = i64::try_from(position.as_nanos()).unwrap_or(i64::MAX);
         // SAFETY: a live pipeline.
         unsafe { (self.gst.gst_element_seek_simple)(self.pipeline.1, TIME, SEEK, nanoseconds) != 0 }
+    }
+
+    /// The decoded picture's display size, square pixels: stable while the output is
+    /// scaled, unlike the frames, whose rounding would move the Viewer's layout.
+    pub(super) fn source_size(&self) -> Option<(u32, u32)> {
+        let source = self.source.as_ref()?;
+        let gst = self.gst;
+        // SAFETY: a live element; the pad and caps references are released below.
+        unsafe {
+            let pad = (gst.gst_element_get_static_pad)(source.1, c"sink".as_ptr());
+            if pad.is_null() {
+                return None;
+            }
+            let caps = (gst.gst_pad_get_current_caps)(pad);
+            (gst.gst_object_unref)(pad);
+            if caps.is_null() {
+                return None;
+            }
+            let structure = (gst.gst_caps_get_structure)(caps, 0);
+            let (mut width, mut height, mut numerator, mut denominator) = (0, 0, 1, 1);
+            let known = !structure.is_null()
+                && (gst.gst_structure_get_int)(structure, c"width".as_ptr(), &mut width) != 0
+                && (gst.gst_structure_get_int)(structure, c"height".as_ptr(), &mut height) != 0;
+            if known && (gst.gst_structure_get_fraction)(structure, c"pixel-aspect-ratio".as_ptr(), &mut numerator, &mut denominator) == 0 {
+                (numerator, denominator) = (1, 1);
+            }
+            (gst.gst_mini_object_unref)(caps);
+            if !known || width <= 0 || height <= 0 || numerator <= 0 || denominator <= 0 {
+                return None;
+            }
+            let width = (i64::from(width) * i64::from(numerator) / i64::from(denominator)).clamp(1, i64::from(u32::MAX));
+            Some((width as u32, height as u32))
+        }
     }
 
     /// Replaces the caps of the `size` capsfilter, which renegotiates the scaler.

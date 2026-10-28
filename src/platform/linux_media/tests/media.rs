@@ -64,7 +64,7 @@ fn video_plays_at_the_viewer_size_then_pauses_seeks_and_ends() {
     let frame = control.frame.lock().unwrap().take().unwrap();
     assert_eq!(frame.dimensions(), (320, 180), "Scaled to the Viewer, keeping 16:9");
     wait_for(&control, "playing", |control| control.status() == MEDIA_PLAYING && control.duration_ms() == 2000);
-    assert_eq!(control.video_dimensions.load(Ordering::Acquire), 320 << 32 | 180);
+    assert_eq!(control.video_dimensions.load(Ordering::Acquire), 1280 << 32 | 720, "The source size, not the scaled one");
 
     control.command.lock().unwrap().paused = true;
     wait_for(&control, "paused", |control| control.status() == MEDIA_PAUSED);

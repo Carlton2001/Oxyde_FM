@@ -9,7 +9,9 @@ use std::sync::mpsc::{self, TryRecvError};
 use std::time::{Duration, Instant};
 
 /// Sound and picture, without subtitles; the sound goes to the desktop's default output.
-const PLAYER: &CStr = c"playbin3 flags=video+audio+soft-volume+deinterlace";
+/// Native video leaves the picture unscaled up to the output, which then knows the
+/// source size and converts and scales in one pass.
+const PLAYER: &CStr = c"playbin3 flags=video+audio+soft-volume+deinterlace+native-video";
 const PULL_TIMEOUT: Duration = Duration::from_millis(20);
 const REPORT_INTERVAL: Duration = Duration::from_millis(100);
 /// Resizing renegotiates the scaler: wait until the Viewer's size settles.
@@ -18,7 +20,7 @@ const RESIZE_SETTLE: Duration = Duration::from_millis(150);
 /// Frames scaled to the displayed size, without enlarging; the sink follows the clock,
 /// dropping a frame rather than delaying the sound when Oxyde falls behind.
 fn video_output(width: u32, height: u32) -> CString {
-    CString::new(format!("videoconvert ! videoscale ! capsfilter name=size caps=\"{}\" ! \
+    CString::new(format!("videoconvertscale name=source ! capsfilter name=size caps=\"{}\" ! \
         appsink name=frames max-buffers=1 drop=true", caps(width, height))).expect("no NUL in caps")
 }
 
@@ -108,8 +110,8 @@ pub(in crate::platform) fn run(path: &Path) -> io::Result<()> {
         if let Some(sample) = sample {
             shown = sample.identity();
             let (image, _) = sample.image(MAX_SIDE).map_err(io::Error::other)?;
-            size = [image.width(), image.height()];
-            packet(FRAME, &[&size[0].to_le_bytes(), &size[1].to_le_bytes(), image.as_raw()], &mut output)?;
+            size = player.source_size().map_or([image.width(), image.height()], |(width, height)| [width, height]);
+            packet(FRAME, &[&image.width().to_le_bytes(), &image.height().to_le_bytes(), image.as_raw()], &mut output)?;
         } else if started.elapsed() < PULL_TIMEOUT / 4 {
             // Nothing new at once: paused, sound alone, or a sink not started yet.
             std::thread::sleep(PULL_TIMEOUT);

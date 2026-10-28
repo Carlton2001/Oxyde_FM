@@ -87,6 +87,9 @@ library! { Gst from "libgstapp-1.0.so.0" {
     gst_sample_get_caps: fn(Object) -> Object;
     gst_caps_get_structure: fn(Object, c_uint) -> Object;
     gst_structure_get_int: fn(Object, *const c_char, *mut c_int) -> c_int;
+    gst_structure_get_fraction: fn(Object, *const c_char, *mut c_int, *mut c_int) -> c_int;
+    gst_element_get_static_pad: fn(Object, *const c_char) -> Object;
+    gst_pad_get_current_caps: fn(Object) -> Object;
     gst_buffer_map: fn(*mut Buffer, *mut MapInfo, c_uint) -> c_int;
     gst_buffer_unmap: fn(*mut Buffer, *mut MapInfo);
 }}

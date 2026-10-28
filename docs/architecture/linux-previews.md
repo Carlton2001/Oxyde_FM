@@ -85,7 +85,12 @@ directement du worker vers la sortie par défaut du bureau (PipeWire).
   (`playbin3`, puits `appsink` nommé `frames`, filtre de caps `size` facultatif, bus
   lu par type exact, position, durée, recherche à l'image clé la plus proche).
 - `platform/linux_media/worker.rs` (mode `viewer-media`) : `playbin3` avec image et
-  son, sans sous-titres. Le puits suit l'horloge audio et jette une image plutôt que
+  son, sans sous-titres. Avec `native-video`, `playbin3` laisse l'image décodée
+  intacte jusqu'à la sortie d'Oxyde, qui convertit et met à l'échelle en une seule
+  passe (`videoconvertscale`) et lit la taille source sur son entrée. Les rapports
+  donnent cette taille source, non celle de l'image réduite : l'arrondi de l'image
+  réduite changeait le ratio, donc le cadre calculé par l'interface, donc la taille
+  demandée, et la vidéo et sa barre tremblaient. Le puits suit l'horloge audio et jette une image plutôt que
   de retarder le son si Oxyde prend du retard (`max-buffers=1 drop=true`). Les images
   sont mises à l'échelle à la taille affichée en pixels physiques (3840 px au plus,
   sans agrandissement), renégociée 150 ms après la fin d'un redimensionnement. En
@@ -104,7 +109,10 @@ directement du worker vers la sortie par défaut du bureau (PipeWire).
   fin de la session. `VideoLayout` peint l'image dans le cadre de la vidéo. En
   plein écran, la barre flottante est peinte dans la fenêtre du Viewer, par-dessus
   l'image, au lieu d'une fenêtre séparée que Wayland ne sait pas placer. Elle
-  disparaît sans fondu de sortie.
+  disparaît sans fondu de sortie. Les boutons superposés à la vidéo sont aussi
+  peints dans la fenêtre, comme pour les images. Leur visibilité suit les
+  événements de souris de GPUI : la position globale du pointeur, que Windows
+  interroge toutes les 100 ms, n'existe pas sous Wayland.
 - Plafonds : 1 Gio de mémoire privée pour le worker.
 
 ## Limites

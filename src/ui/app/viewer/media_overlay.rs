@@ -1,6 +1,6 @@
 //! Hover affordances above an image or video: fullscreen and skipping to the
-//! neighboring media of the same kind. Images draw them in the Viewer; video
-//! sits under GPUI's composition, so its affordances use owned popups.
+//! neighboring media of the same kind. Images draw them in the Viewer; Windows
+//! video sits under GPUI's composition, so its affordances use owned popups.
 use super::Viewer;
 use crate::ui::{elements::motion, scale::rem_pixels};
 use gpui::{prelude::*, *};
@@ -250,6 +250,16 @@ impl Viewer {
                         this.overlay.resting = resting;
                         cx.notify();
                     }
+                    // Without a native video surface (Linux), GPUI reports motion and
+                    // leaving itself; polling, which only Windows answers, would hide
+                    // the chips between two moves.
+                    if !cfg!(target_os = "windows") {
+                        let keep = this.overlay.pointer.is_some();
+                        if !keep {
+                            this.overlay.timer = None;
+                        }
+                        return keep;
+                    }
                     let overlay = &this.overlay;
                     let scale = overlay.scale.max(0.1);
                     let pointer = overlay.owner_raw
@@ -311,10 +321,12 @@ impl Viewer {
 
     /// The layer above the content: in-window chips for images, popups for video.
     pub(super) fn render_overlay(&mut self, window: &Window, failed: bool, cx: &mut Context<Self>) -> AnyElement {
+        let video = self.native_media && !self.audio && !failed && !self.blocked;
         // Chips stay mounted while the next image loads, under a resting pointer.
         let image = self.file.as_ref().and_then(media_kind) == Some(MediaKind::Image)
             && !matches!(self.content, super::content::Content::Unavailable);
-        let video = self.native_media && !self.audio && !failed && !self.blocked;
+        // GPUI paints Linux video frames itself, so nothing covers chips drawn in the Viewer.
+        let in_window = image || (video && !cfg!(target_os = "windows"));
         self.overlay.fullscreen = window.is_fullscreen();
         self.overlay.video = video;
         self.overlay.enabled = image || video;
@@ -333,7 +345,7 @@ impl Viewer {
                 // without this window it would report none and hide the chips.
                 this.overlay.scale = window.scale_factor();
                 this.overlay.owner_raw = HasWindowHandle::window_handle(window).ok().map(|raw| raw.as_raw());
-                if this.overlay.video {
+                if this.overlay.video && cfg!(target_os = "windows") {
                     this.place_overlay_popups(window, cx);
                 }
             });
@@ -341,7 +353,7 @@ impl Viewer {
         .absolute()
         .size_full();
         let layer = div().absolute().inset_0().child(measure);
-        if !image {
+        if !in_window {
             return layer.into_any_element();
         }
         let area = self.overlay.area.origin;
