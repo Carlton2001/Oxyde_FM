@@ -1,5 +1,6 @@
 pub mod button;
 pub(crate) mod checkbox;
+pub(crate) mod radio;
 pub(crate) mod toggle;
 pub(crate) mod motion;
 pub mod stepper;

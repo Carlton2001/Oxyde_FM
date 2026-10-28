@@ -75,32 +75,30 @@ pub(crate) fn render_remote_login_dialog(
         body = body.child(form_row(cx.i18n().text(label), field, cx));
     }
     if prompt.saving && !login.anonymous {
-        // One focus stop for the three choices, like the archive formats of the rename dialog.
+        // GTK's stacked radio sentences under the fields; one focus stop for the group.
         let mut choices = div()
             .id("remote-remember")
             .track_focus(&login.controls[REMEMBER])
-            .flex().flex_1().min_w_0().gap(rems(0.25)).p(rems(0.125)).rounded_md()
+            .flex().flex_col().min_w_0().px(rems(0.25)).rounded_md()
             .border(rems(0.0625))
             .border_color(if login.controls[REMEMBER].is_focused(window) { theme.accent } else { theme.surface.alpha(0.0) });
         for (index, (save, label)) in SAVES.into_iter().enumerate() {
             let select = handle.clone();
             choices = choices.child(
-                button_style(
-                    action_button(("remote-remember-choice", index)).flex_1().min_w_0().text_center(),
-                    theme,
-                    if login.save == save { ButtonVariant::Primary } else { ButtonVariant::Secondary },
-                    true,
-                )
-                .child(div().text_ellipsis().child(cx.i18n().text(label)))
-                .on_click(move |_, window, cx| select.update(cx, |view, cx| {
-                    if let Some(login) = &view.remote_login {
-                        window.focus(&login.controls[REMEMBER], cx);
-                    }
-                    view.set_remote_password_save(save, cx);
-                })),
+                div()
+                    .id(("remote-remember-choice", index))
+                    .flex().items_center().gap(rems(0.5)).py_1().min_w_0()
+                    .child(crate::ui::elements::radio::radio(theme, login.save == save))
+                    .child(div().min_w_0().child(cx.i18n().text(label)))
+                    .on_click(move |_, window, cx| select.update(cx, |view, cx| {
+                        if let Some(login) = &view.remote_login {
+                            window.focus(&login.controls[REMEMBER], cx);
+                        }
+                        view.set_remote_password_save(save, cx);
+                    })),
             );
         }
-        body = body.child(form_row(cx.i18n().text(Message::RemoteRemember), choices, cx));
+        body = body.child(form_row(SharedString::default(), choices, cx));
     }
     if prompt.retry {
         body = body.child(div().text_color(theme.error).child(cx.i18n().text(Message::RemoteRetry)));
@@ -171,8 +169,8 @@ pub(crate) fn render_remote_login_dialog(
                     }
                     "enter" | "space" if focused(CANCEL) => view.answer_remote_login(true, window, cx),
                     "space" if focused(ANONYMOUS) => view.toggle_remote_anonymous(cx),
-                    "space" | "right" | "left" if focused(REMEMBER) => {
-                        let save = cycled(login.save, event.keystroke.key == "left");
+                    "space" | "right" | "left" | "down" | "up" if focused(REMEMBER) => {
+                        let save = cycled(login.save, matches!(event.keystroke.key.as_str(), "left" | "up"));
                         view.set_remote_password_save(save, cx);
                     }
                     "space" if focused(CONNECT) => view.answer_remote_login(false, window, cx),

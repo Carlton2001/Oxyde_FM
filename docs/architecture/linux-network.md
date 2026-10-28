@@ -60,11 +60,12 @@ propriétés ne connaissent pas les URI.
   pendant sa propre mise à jour.
   Il montre : message de GVfs sans sa ligne de titre, utilisateur, domaine et mot de
   passe selon les drapeaux, connexion anonyme quand le serveur la permet, « Identifiants
-  refusés » au second essai, et « Mémoriser » : Jamais (par défaut), Cette session ou
-  Toujours, les trois choix du dialogue de GNOME (`GPasswordSave`). Oxyde n'écrit rien :
-  GVfs garde le mot de passe dans le processus du montage (Jamais), dans la collection
-  de session du trousseau, effacée à la déconnexion (Cette session), ou dans le trousseau
-  « Connexion » (Toujours), où Nautilus le retrouve ; « Mots de passe et clés » le
+  refusés » au second essai, et les trois choix du dialogue de GTK (`GPasswordSave`),
+  en boutons radio empilés aux phrases complètes de GTK pour qu'aucune langue ne les
+  tronque : oublier immédiatement (par défaut), retenir jusqu'à la déconnexion, retenir
+  indéfiniment. Oxyde n'écrit rien : GVfs garde le mot de passe dans le processus du
+  montage, dans la collection de session du trousseau, effacée à la déconnexion, ou dans
+  le trousseau « Connexion », où Nautilus le retrouve ; « Mots de passe et clés » le
   supprime.
 - Le fil d'Ariane commence au partage, nommé comme dans la barre latérale ; l'onglet
   aussi.
