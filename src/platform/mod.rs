@@ -769,6 +769,12 @@ mod linux_impl;
 #[cfg(not(target_os = "windows"))]
 mod linux_gio;
 #[cfg(not(target_os = "windows"))]
+mod linux_library;
+#[cfg(not(target_os = "windows"))]
+mod linux_pdf;
+#[cfg(not(target_os = "windows"))]
+mod linux_worker;
+#[cfg(not(target_os = "windows"))]
 mod linux_trash;
 #[cfg(not(target_os = "windows"))]
 mod linux_volumes;
@@ -888,12 +894,10 @@ pub(crate) fn finish_archive_worker_shutdown() -> Result<(), String> {
 }
 
 /// Internal worker dispatch; never called by the UI to bypass process isolation.
-#[cfg(target_os = "windows")]
 pub fn local_preview_worker_reply(mode: &str, path: &std::path::Path) -> crate::utils::preview_protocol::Reply {
     platform().decode_preview_worker(mode, path)
 }
 
-#[cfg(target_os = "windows")]
 pub fn local_video_preview_worker(path: String, mut on_frame: impl FnMut(image::RgbaImage,std::time::Duration) -> bool) -> Result<(), crate::models::CommandError> {
     platform().decode_video_worker(path, &mut on_frame)
 }

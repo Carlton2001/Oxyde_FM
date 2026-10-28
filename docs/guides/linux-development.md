@@ -50,6 +50,9 @@ fichiers que `$P`. **Les réglages GNOME de la corbeille (`gsettings`) restent g
 Ne lancer aucune écriture (suppression, déplacement, collage, glisser) sur des données réelles.
 
 Les trois workers auxiliaires sont des `main` vides sous Linux : aucun confinement.
+Le rendu PDF passe par un worker d'Oxyde lui-même, non confiné ; voir le
+[PDF sous Linux](../architecture/linux-pdf.md). Après modification, reconstruire avec
+`cargo build --offline --bins`.
 WSL reste utilisable pour `check-linux.sh` ; il ne valide ni GPU, ni bureau, ni volumes.
 
 ## Préserver Windows
@@ -147,5 +150,7 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
   vérification visuelle en attente. « Plus d'options » (menu Shell) est masqué hors Windows.
 
 **Avancé et distribution (jalons 6–7)**
-- T09 : aperçus PDF et vidéo, lecteur intégré ; M09/R5 : workers confinés Linux.
+- T09, PDF implémenté : [miniatures, survol et Viewer par poppler](../architecture/linux-pdf.md)
+  dans un worker, vérification visuelle en attente ; restent vidéo et lecteur intégré.
+  M09/R5 : workers confinés Linux.
 - T14 : CI Linux distincte ; paquets RPM puis DEB, essai Silverblue.

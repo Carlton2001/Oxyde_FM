@@ -33,6 +33,7 @@ Oxyde utilise Rust, GPUI et Tokio. Choisir une référence selon le travail à f
 | Cache des fichiers ouverts depuis une archive sous Linux | [Cache Linux](architecture/linux-open-cache.md) |
 | Effets des opérations Linux sur les dossiers et objets tenus | [Dossiers tenus](architecture/linux-held-effects.md) |
 | Partages réseau Linux par GVfs | [Réseau Linux](architecture/linux-network.md) |
+| PDF Linux par poppler dans un worker | [PDF Linux](architecture/linux-pdf.md) |
 | Vérifier l’effet de Turbo et les améliorations restantes | [Couverture de Turbo](reports/2026-10-17-turbo-coverage.md) |
 | Modifier le listing, les filtres ou la recherche | [Navigation et recherche](architecture/search.md) |
 | Diagnostiquer copies, suppressions ou fermeture | [Copie](diagnostics/copy.md), [suppression](diagnostics/delete.md), [fermeture](diagnostics/shutdown.md) |

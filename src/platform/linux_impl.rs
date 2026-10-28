@@ -551,6 +551,31 @@ impl Platform for LinuxPlatform {
         Ok(())
     }
 
+    fn initialize_preview_worker(&self) -> std::io::Result<()> {
+        super::linux_worker::exit_with_parent();
+        Ok(())
+    }
+
+    fn decode_preview_worker(&self, mode: &str, path: &std::path::Path) -> crate::utils::preview_protocol::Reply {
+        super::linux_pdf::decode(mode, path)
+    }
+
+    fn pdf_thumbnail(&self, path: String) -> Result<image::RgbaImage, crate::models::CommandError> {
+        super::linux_pdf::thumbnail(std::path::Path::new(&path), false)
+    }
+
+    fn pdf_grid_thumbnail(&self, path: String) -> Result<image::RgbaImage, crate::models::CommandError> {
+        super::linux_pdf::thumbnail(std::path::Path::new(&path), true)
+    }
+
+    fn open_pdf_session(&self, path: &std::path::Path) -> Result<Box<dyn super::PdfSession>, crate::models::CommandError> {
+        Ok(Box::new(super::linux_pdf::Session::open(path)?))
+    }
+
+    fn run_pdf_session_worker(&self, path: &std::path::Path) -> std::io::Result<()> {
+        super::linux_pdf::run_session(path)
+    }
+
     fn install_disk_image_autoplay_handler(&self, _window: raw_window_handle::RawWindowHandle) -> Result<(), String> {
         Ok(())
     }

@@ -1,44 +1,11 @@
 //! GIO entry points, loaded at first use: without GLib, remote locations alone are missing.
+use super::super::linux_library::library;
+pub(super) use super::super::linux_library::{GError, Object};
 use std::ffi::{c_char, c_int, c_uint, c_ulong, c_void};
 
-pub(super) type Object = *mut c_void;
 pub(super) type ReadyCallback = unsafe extern "C" fn(source: Object, result: Object, data: *mut c_void);
 
-#[repr(C)]
-pub(super) struct GError {
-    pub domain: u32,
-    pub code: c_int,
-    pub message: *mut c_char,
-}
-
-macro_rules! functions {
-    ($($name:ident: fn($($argument:ty),*) $(-> $output:ty)?;)*) => {
-        #[allow(non_snake_case)]
-        pub(super) struct Gio {
-            // GIO loads GVfs modules that cannot be unloaded: the library stays mapped.
-            _library: libloading::Library,
-            $(pub $name: unsafe extern "C" fn($($argument),*) $(-> $output)?,)*
-        }
-
-        impl Gio {
-            fn load() -> Result<Self, libloading::Error> {
-                // SAFETY: GIO runs no constructor beyond GLib's type registration.
-                let library = unsafe { libloading::Library::new("libgio-2.0.so.0")? };
-                $(
-                    // SAFETY: each signature is the one of the GIO 2.x headers.
-                    let $name = unsafe {
-                        *library.get::<unsafe extern "C" fn($($argument),*) $(-> $output)?>(
-                            concat!(stringify!($name), "\0").as_bytes(),
-                        )?
-                    };
-                )*
-                Ok(Self { _library: library, $($name,)* })
-            }
-        }
-    };
-}
-
-functions! {
+library! { Gio from "libgio-2.0.so.0" {
     g_free: fn(*mut c_void);
     g_error_free: fn(*mut GError);
     g_io_error_quark: fn() -> u32;
@@ -75,7 +42,7 @@ functions! {
     g_mount_operation_set_anonymous: fn(Object, c_int);
     g_mount_operation_set_password_save: fn(Object, c_uint);
     g_mount_operation_reply: fn(Object, c_uint);
-}
+}}
 
 pub(super) fn gio() -> Option<&'static Gio> {
     static GIO: std::sync::OnceLock<Option<Gio>> = std::sync::OnceLock::new();

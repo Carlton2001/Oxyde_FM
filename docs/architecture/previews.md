@@ -388,6 +388,9 @@ prennent plus le verrou global des aperçus fixes. Les budgets agrégés restent
 communs : cette séparation ne garantit pas une disponibilité immédiate sous
 pression mémoire ou lorsque toutes les places de processus sont occupées.
 
+Sous Linux, poppler rend ces pages dans un worker d'Oxyde, aux mêmes tailles ; voir
+le [PDF sous Linux](linux-pdf.md). La suite décrit Windows.
+
 Les miniatures PDF de la grille et les aperçus PDF partagent une session native
 dédiée de `oxyde.exe` (`pdf-previews`), distincte de celle du Viewer et des
 icônes Shell. Un document est ouvert, rendu puis libéré à chaque requête ; le

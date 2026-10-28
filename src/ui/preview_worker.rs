@@ -72,8 +72,10 @@ pub(crate) fn run_if_requested() -> bool {
             }
             return Ok(());
         }
-        let reply = if mode == "image" {
-            match super::image_preview::load_path_local(
+        // Linux decodes images in Oxyde itself until its workers are confined.
+        #[cfg(target_os = "windows")]
+        if mode == "image" {
+            let reply = match super::image_preview::load_path_local(
                 path,
                 &gpui::SvgRenderer::new(std::sync::Arc::new(())),
             ) {
@@ -108,10 +110,10 @@ pub(crate) fn run_if_requested() -> bool {
                     limit: matches!(error, super::image_preview::PreviewError::Limit(_)),
                     detail: error.to_string(),
                 },
-            }
-        } else {
-            oxyde_lib::platform::local_preview_worker_reply(&mode, path)
-        };
+            };
+            return preview_protocol::encode(reply, &mut std::io::stdout().lock());
+        }
+        let reply = oxyde_lib::platform::local_preview_worker_reply(&mode, path);
         preview_protocol::encode(reply, &mut std::io::stdout().lock())
     })();
     if let Err(error) = result {

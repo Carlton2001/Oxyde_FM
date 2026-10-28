@@ -739,7 +739,6 @@ pub fn get_office_document(path: String) -> Result<String, CommandError> {
 }
 
 /// `width height` lines (only their ratio is used), one per page.
-#[cfg(target_os = "windows")]
 pub(super) fn parse_pdf_sizes(text: &str) -> Result<Vec<(f32, f32)>, CommandError> {
     let sizes: Vec<(f32, f32)> = text
         .lines()
