@@ -557,8 +557,21 @@ impl Platform for LinuxPlatform {
     fn volumes(&self) -> &dyn super::Volumes {
         &super::linux_volumes::LinuxVolumes
     }
-    fn list_network_shares(&self, _server: &str) -> Result<Vec<crate::models::FileEntry>, String> {
-        Err("Network discovery is only available on Windows".into())
+    fn list_network_shares(&self, uri: &str) -> Result<Vec<crate::models::FileEntry>, String> {
+        let children = super::linux_gio::children(uri).map_err(|error| error.to_string())?;
+        Ok(children.into_iter().map(|child| crate::models::FileEntry {
+            name: child.name,
+            path: child.uri,
+            is_dir: child.directory,
+            is_calculated: true,
+            ..Default::default()
+        }).collect())
+    }
+    fn is_remote_uri(&self, text: &str) -> bool {
+        super::linux_gio::is_remote_uri(text)
+    }
+    fn connect_remote(&self, uri: &str, ask: &mut dyn FnMut(&super::RemotePrompt) -> super::RemoteAnswer) -> Result<super::RemoteLocation, super::RemoteError> {
+        super::linux_gio::connect(uri, ask)
     }
     fn map_network_drive(&self, _letter: String, _path: String, _reconnect: bool, _username: Option<String>, _password: Option<String>) -> Result<(), String> {
         Err("Network drive mapping is only available on Windows".into())
@@ -583,8 +596,9 @@ impl Platform for LinuxPlatform {
         super::hardware::is_network_path(path)
     }
 
+    /// Nautilus' « Networks »: servers GVfs discovers by WS-Discovery, DNS-SD and SMB.
     fn list_network_vicinity(&self) -> Result<Vec<crate::models::FileEntry>, String> {
-        Err("Network neighborhood is unavailable on this platform".to_string())
+        self.list_network_shares("network:///")
     }
 
     fn shell_delete(&self, paths: &[std::path::PathBuf], recycle: bool) -> Result<(), String> {

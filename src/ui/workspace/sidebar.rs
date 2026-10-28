@@ -39,7 +39,6 @@ impl WorkspaceState {
         }
 
         new_items.push(SidebarItem::Header(Message::SidebarLocations));
-        #[cfg(target_os = "windows")]
         new_items.push(SidebarItem::Pinned {
             item: QuickAccessItem {
                 name: "Réseau".to_string(),

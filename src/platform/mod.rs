@@ -9,7 +9,9 @@ pub use file_names::FileNameRules;
 mod file_clipboard;
 mod quick_access;
 mod volumes;
+mod remote;
 pub use file_clipboard::FileClipboard;
+pub use remote::{RemoteAnswer, RemoteError, RemoteLocation, RemotePrompt};
 pub use quick_access::QuickAccess;
 pub use volumes::{DriveActions, UnmountedVolume, VolumeError, Volumes};
 
@@ -506,7 +508,14 @@ pub trait Platform: Send + Sync {
 
     /// Lists entries in the operating system's network neighborhood.
     fn list_network_vicinity(&self) -> Result<Vec<crate::models::FileEntry>, String>;
+    /// Shares of a `\\server`, or on Linux the entries of a remote URI that `connect_remote` browses.
     fn list_network_shares(&self, server: &str) -> Result<Vec<crate::models::FileEntry>, String>;
+    /// Locations that `connect_remote` opens, such as `smb://server/share` on Linux.
+    fn is_remote_uri(&self, _text: &str) -> bool { false }
+    /// Mounts the location when needed, asking `ask` for credentials. Blocking.
+    fn connect_remote(&self, _uri: &str, _ask: &mut dyn FnMut(&RemotePrompt) -> RemoteAnswer) -> Result<RemoteLocation, RemoteError> {
+        Err(RemoteError::Unsupported)
+    }
 
     fn is_network_path(&self, path: &std::path::Path) -> bool;
     /// Blocking network operations; call on a background worker.
@@ -757,6 +766,8 @@ mod hardware;
 pub mod icons;
 #[cfg(not(target_os = "windows"))]
 mod linux_impl;
+#[cfg(not(target_os = "windows"))]
+mod linux_gio;
 #[cfg(not(target_os = "windows"))]
 mod linux_trash;
 #[cfg(not(target_os = "windows"))]

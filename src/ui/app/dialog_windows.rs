@@ -33,18 +33,20 @@ pub(super) enum DialogKind {
     Rename,
     Network,
     NetworkForce,
+    RemoteLogin,
     TrashDelete,
     SettingsConfirmation,
     Notice,
 }
 
-pub(super) const DIALOG_KINDS: usize = 8;
+pub(super) const DIALOG_KINDS: usize = 9;
 
 impl DialogKind {
-    pub(super) const FIXED: [Self; 6] = [
+    pub(super) const FIXED: [Self; 7] = [
         Self::Rename,
         Self::Network,
         Self::NetworkForce,
+        Self::RemoteLogin,
         Self::TrashDelete,
         Self::SettingsConfirmation,
         Self::Notice,
@@ -65,7 +67,7 @@ impl DialogKind {
             Self::Trash | Self::TrashDelete => "icons/trash-2.svg",
             Self::Conflict => "icons/copy-x.svg",
             Self::Rename => "icons/pencil.svg",
-            Self::Network | Self::NetworkForce => "icons/server.svg",
+            Self::Network | Self::NetworkForce | Self::RemoteLogin => "icons/server.svg",
             Self::SettingsConfirmation => "icons/settings.svg",
             Self::Notice => "icons/circle-x.svg",
         }

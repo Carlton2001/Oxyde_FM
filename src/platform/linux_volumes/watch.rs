@@ -1,6 +1,7 @@
 //! Mount notifications: the kernel flags `/proc/self/mountinfo` on every mount and
 //! unmount of our namespace, whether UDisks2, `mount` or a network client made it.
-//! UDisks2 signals add the devices that are plugged without being mounted.
+//! UDisks2 signals add the devices that are plugged without being mounted, GVfs signals
+//! the network shares mounted in its FUSE folder.
 use rustix::event::{poll, PollFd, PollFlags};
 use rustix::pipe::{pipe_with, PipeFlags};
 use std::os::fd::OwnedFd;
@@ -11,6 +12,7 @@ use std::sync::Arc;
 pub(super) struct Watch {
     _stop: OwnedFd,
     _signals: Option<super::signals::Signals>,
+    _gvfs: Option<super::signals::Signals>,
 }
 
 pub(super) fn start(revision: Arc<AtomicU64>) -> Result<Watch, String> {
@@ -24,10 +26,13 @@ pub(super) fn start(revision: Arc<AtomicU64>) -> Result<Watch, String> {
         })
         .map_err(|error| error.to_string())?;
     // Without UDisks2, the mount table alone still reports every mounted volume.
-    let signals = super::signals::start(revision)
+    let signals = super::signals::start(revision.clone())
         .inspect_err(|error| log::info!("UDisks2 signals unavailable: {error}"))
         .ok();
-    Ok(Watch { _stop: stop, _signals: signals })
+    let gvfs = super::signals::gvfs(revision)
+        .inspect_err(|error| log::info!("GVfs signals unavailable: {error}"))
+        .ok();
+    Ok(Watch { _stop: stop, _signals: signals, _gvfs: gvfs })
 }
 
 fn run(mounts: &std::fs::File, stopped: &OwnedFd, revision: &AtomicU64) {

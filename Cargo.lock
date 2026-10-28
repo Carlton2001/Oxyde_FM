@@ -4454,6 +4454,7 @@ dependencies = [
  "image",
  "jwalk",
  "lazy_static",
+ "libloading",
  "lofty",
  "log",
  "minisign-verify",

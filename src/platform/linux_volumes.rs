@@ -15,6 +15,41 @@ mod watch;
 
 pub struct LinuxVolumes;
 
+/// Shares GVfs mounted, for Oxyde or Nautilus, as GTK's sidebar lists them.
+fn gvfs_shares() -> Vec<DriveInfo> {
+    super::linux_gio::mounts().into_iter().map(|mount| DriveInfo {
+        file_system: protocol(&mount.uri).map(str::to_string),
+        path: mount.path.to_string_lossy().into_owned(),
+        label: mount.name,
+        drive_type: "remote".into(),
+        total_bytes: 0,
+        free_bytes: 0,
+        media_type: None,
+        physical_id: None,
+        remote_path: Some(mount.uri),
+        volume_bytes: 0,
+    }).collect()
+}
+
+fn protocol(uri: &str) -> Option<&'static str> {
+    let scheme = uri.split_once("://")?.0.to_ascii_lowercase();
+    Some(match scheme.as_str() {
+        "smb" => "SMB",
+        "sftp" => "SFTP",
+        "ftp" | "ftps" => "FTP",
+        "dav" | "davs" => "WebDAV",
+        "afp" => "AFP",
+        "nfs" => "NFS",
+        _ => return None,
+    })
+}
+
+fn gvfs_share(path: &str) -> bool {
+    let path = std::path::Path::new(path);
+    super::linux_gio::fuse_root().is_some_and(|root| path.parent() == Some(root.as_path()))
+        && path.file_name().is_some_and(super::linux_gio::network_mount_name)
+}
+
 impl Volumes for LinuxVolumes {
     fn list(&self, skip_hardware_info: bool) -> Vec<DriveInfo> {
         let table = mounts::table();
@@ -22,12 +57,15 @@ impl Volumes for LinuxVolumes {
             Ok(blocks) => {
                 let mut drives = inventory::mounted(&blocks, &inventory::Session::current());
                 drives.extend(fallback::remote(&table));
+                drives.extend(gvfs_shares());
                 drives
             }
             Err(error) => {
                 static REPORTED: std::sync::Once = std::sync::Once::new();
                 REPORTED.call_once(|| log::warn!("UDisks2 unavailable, listing the mount table: {error}"));
-                fallback::drives(&table)
+                let mut drives = fallback::drives(&table);
+                drives.extend(gvfs_shares());
+                drives
             }
         };
         if !skip_hardware_info {
@@ -60,6 +98,9 @@ impl Volumes for LinuxVolumes {
     /// As GTK's places sidebar: a removable or optical drive is ejected, another volume
     /// unmounted. Without UDisks2, the mount table offers neither.
     fn actions(&self, drive: &DriveInfo) -> DriveActions {
+        if gvfs_share(&drive.path) {
+            return DriveActions { unmount: true, eject: false };
+        }
         if !udisks::available() || drive.path == "/" || drive.drive_type == "remote" {
             return DriveActions::default();
         }
@@ -78,6 +119,9 @@ impl Volumes for LinuxVolumes {
     }
 
     fn unmount(&self, path: &str) -> Result<(), VolumeError> {
+        if gvfs_share(path) {
+            return super::linux_gio::unmount(std::path::Path::new(path));
+        }
         actions::unmount(path)
     }
 

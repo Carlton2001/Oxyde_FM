@@ -1,5 +1,6 @@
 //! UDisks2 announces plugged and removed devices, which the mount table does not show
-//! while they stay unmounted, and the mount points it records after the kernel's.
+//! while they stay unmounted, and the mount points it records after the kernel's; GVfs
+//! announces the network shares it mounts.
 use super::udisks::SERVICE;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -10,7 +11,7 @@ use zbus::zvariant::OwnedValue;
 use zbus::MatchRule;
 
 /// A blocking signal iterator cannot be woken: dropping the guard ends the thread at the
-/// next UDisks2 signal.
+/// next signal.
 pub(super) struct Signals {
     stopped: Arc<AtomicBool>,
 }
@@ -29,11 +30,30 @@ pub(super) fn start(revision: Arc<AtomicU64>) -> zbus::Result<Signals> {
         .sender(SERVICE)?
         .path_namespace("/org/freedesktop/UDisks2")?
         .build();
+    listen(connection, rule, revision, "oxyde-udisks-signals", relevant)
+}
+
+/// GVfs mounts network shares inside its single FUSE mount, which the mount table does
+/// not see change: its mount tracker announces them, for Oxyde as for Nautilus.
+pub(super) fn gvfs(revision: Arc<AtomicU64>) -> zbus::Result<Signals> {
+    let connection = Connection::session()?;
+    let rule = MatchRule::builder()
+        .msg_type(Type::Signal)
+        .interface("org.gtk.vfs.MountTracker")?
+        .path("/org/gtk/vfs/mounttracker")?
+        .build();
+    listen(connection, rule, revision, "oxyde-gvfs-signals", |_| true)
+}
+
+fn listen(
+    connection: Connection, rule: MatchRule<'static>, revision: Arc<AtomicU64>, name: &str,
+    relevant: fn(&zbus::Message) -> bool,
+) -> zbus::Result<Signals> {
     let signals = MessageIterator::for_match_rule(rule, &connection, None)?;
     let stopped = Arc::new(AtomicBool::new(false));
     let stop = stopped.clone();
     std::thread::Builder::new()
-        .name("oxyde-udisks-signals".into())
+        .name(name.into())
         .spawn(move || {
             let _connection = connection;
             for message in signals.flatten() {

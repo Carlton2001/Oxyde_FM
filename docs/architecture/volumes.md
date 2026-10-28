@@ -113,6 +113,8 @@ pub trait Volumes: Send + Sync {
 - `fallback.rs` : sans UDisks2 (WSL, conteneur), tous les montages non virtuels de
   `mountinfo` (`mounts.rs`, échappements décodés), sans montage ni éjection ; avec UDisks2,
   il n'ajoute que les montages réseau.
+- Partages GVfs : voir [Réseau Linux](linux-network.md) ; listés avec Démonter, signalés
+  par le suivi de montages GVfs.
 
 ## Windows
 

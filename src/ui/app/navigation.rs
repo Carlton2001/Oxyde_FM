@@ -476,6 +476,10 @@ impl OxydeApp {
             self.request_trash_files(tab_id, request_id, pane_width, reset_scroll, cx);
             return;
         }
+        if oxyde_lib::platform::platform().is_remote_uri(&path) && !self.browsable_remotes.contains(&path) {
+            self.connect_remote_tab(tab_id, request_id, path, cx);
+            return;
+        }
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {

@@ -515,6 +515,14 @@ network-disconnected = Unidades de red desconectadas correctamente.
 network-working = Procesando…
 
 network-loading = Cargando unidades…
+remote-login-title = Se necesita autenticación
+remote-domain = Dominio
+remote-anonymous = Conectar de forma anónima
+remote-remember = Recordar la contraseña
+remote-retry = Credenciales rechazadas. Inténtelo de nuevo.
+remote-connect = Conectar
+remote-connect-failed = No se puede conectar con esta ubicación.
+remote-connect-failed-toast = No se puede conectar: { $detail }
 
 drive-eject-failed = No se pudo expulsar la unidad. Puede que otra aplicación la esté usando. { $detail }
 drive-unmount-failed = No se pudo desmontar el volumen. Puede que otra aplicación lo esté usando. { $detail }

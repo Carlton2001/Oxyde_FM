@@ -53,8 +53,7 @@ async fn list_dir_impl(path: String, show_hidden: Option<bool>, show_system: Opt
         return Ok(entries);
     }
 
-    #[cfg(target_os = "windows")]
-    if path == "__network_vincinity__" || is_network_server(&path) {
+    if path == "__network_vincinity__" || is_network_server(&path) || crate::platform::platform().is_remote_uri(&path) {
         let network_path = path.clone();
         let entries =
             tokio::task::spawn_blocking(move || {
@@ -77,8 +76,16 @@ async fn list_dir_impl(path: String, show_hidden: Option<bool>, show_system: Opt
     .map_err(|e| CommandError::IoError(e.to_string()))?
 }
 
-/// A bare UNC server is enumerated through the network provider, not filesystem metadata.
+/// A bare server is enumerated through the network provider, not filesystem metadata:
+/// `\\server` on Windows, `smb://server/` elsewhere.
 pub fn is_network_server(path: &str) -> bool {
+    if !cfg!(target_os = "windows") {
+        return crate::platform::platform().is_remote_uri(path)
+            && path.split_once("://").is_some_and(|(scheme, rest)| {
+                let server = rest.trim_end_matches('/');
+                !scheme.eq_ignore_ascii_case("network") && !server.is_empty() && !server.contains('/')
+            });
+    }
     path.strip_prefix("\\\\").is_some_and(|tail| {
         let server = tail.trim_end_matches('\\');
         !server.is_empty() && !server.contains(['\\', '/']) && server != "?" && server != "."
@@ -591,6 +598,18 @@ mod directory_tests {
     use crate::systems::file_ops::FileOperationManager;
 
     #[test]
+    #[cfg(not(target_os = "windows"))]
+    fn network_servers_are_remote_uris_without_a_share() {
+        for path in ["smb://server", "smb://server/", "sftp://user@host:22/"] {
+            assert!(is_network_server(path));
+        }
+        for path in ["smb://server/share", "smb:///", "network:///", "/srv/server", "\\\\server"] {
+            assert!(!is_network_server(path));
+        }
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
     fn network_server_detection_keeps_share_paths_in_the_file_system() {
         for path in ["\\\\server", "\\\\server\\", "\\\\192.168.1.2", "\\\\PCS", "\\\\PCS\\"] {
             assert!(is_network_server(path));

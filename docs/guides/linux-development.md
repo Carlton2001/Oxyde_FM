@@ -142,7 +142,9 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
   propriétaire pour root) et Contenu (éléments contenus), et le type MIME selon GIO. Les tests de root se lancent dans
   un espace de noms utilisateur : `unshare --map-auto --map-root-user <binaire de test>
   linux_permissions`.
-- T10 : réseau SMB/GVfs ; « Plus d'options » (menu Shell) est masqué hors Windows.
+- T10, implémenté : [réseau](../architecture/linux-network.md) par GVfs comme Nautilus,
+  partages montés au chemin FUSE, identifiants demandés, liste `network:///` ;
+  vérification visuelle en attente. « Plus d'options » (menu Shell) est masqué hors Windows.
 
 **Avancé et distribution (jalons 6–7)**
 - T09 : aperçus PDF et vidéo, lecteur intégré ; M09/R5 : workers confinés Linux.

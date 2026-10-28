@@ -515,6 +515,14 @@ network-disconnected = Netzlaufwerke erfolgreich getrennt.
 network-working = Vorgang läuft…
 
 network-loading = Laufwerke werden geladen…
+remote-login-title = Legitimierung erforderlich
+remote-domain = Domäne
+remote-anonymous = Anonym verbinden
+remote-remember = Passwort merken
+remote-retry = Anmeldedaten abgelehnt. Bitte erneut versuchen.
+remote-connect = Verbinden
+remote-connect-failed = Verbindung zu diesem Ort nicht möglich.
+remote-connect-failed-toast = Verbindung nicht möglich: { $detail }
 
 drive-eject-failed = Laufwerk konnte nicht ausgeworfen werden. Eine andere Anwendung verwendet es möglicherweise. { $detail }
 drive-unmount-failed = Datenträger konnte nicht ausgehängt werden. Eine andere Anwendung verwendet ihn möglicherweise. { $detail }

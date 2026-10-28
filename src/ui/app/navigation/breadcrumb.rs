@@ -169,7 +169,8 @@ async fn validate_path_in_background(
 ) -> bool {
     tokio::task::spawn_blocking(move || {
         path == "__network_vincinity__"
-            || (cfg!(target_os = "windows") && oxyde_lib::commands::io::is_network_server(&path))
+            || oxyde_lib::commands::io::is_network_server(&path)
+            || oxyde_lib::platform::platform().is_remote_uri(&path)
             || is_dir(&path)
     })
     .await

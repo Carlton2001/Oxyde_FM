@@ -185,6 +185,7 @@ impl OxydeApp {
 
     pub(crate) fn peek_file(&mut self, path: String, cx: &mut Context<Self>) {
         if self.network_dialog.is_some()
+            || self.remote_login.is_some()
             || self.editing_view.is_some()
             || self.settings_confirmation.is_some()
             || self.network_force_confirmation.is_some()

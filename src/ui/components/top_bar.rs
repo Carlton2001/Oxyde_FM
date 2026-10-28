@@ -32,6 +32,16 @@ fn drive_display(part: &str, view: &OxydeApp) -> String {
     part.to_string()
 }
 
+/// The mounted network share holding `path`, whose local root means nothing to users.
+fn remote_share<'a>(path: &str, view: &'a OxydeApp) -> Option<&'a oxyde_lib::models::DriveInfo> {
+    if cfg!(target_os = "windows") {
+        return None;
+    }
+    view.state.drives.iter().find(|drive| {
+        drive.drive_type == "remote" && drive.remote_path.is_some() && std::path::Path::new(path).starts_with(&drive.path)
+    })
+}
+
 fn breadcrumb_root_icon(path: &str, view: &OxydeApp) -> &'static str {
     if path == "trash://" || path.starts_with("trash:\\\\") {
         return "icons/trash-sidebar.svg";
@@ -84,8 +94,14 @@ pub fn render_top_bar(
     };
     let theme = *_cx.theme();
 
+    // A GVfs share starts at its mount, named as in the sidebar, as Nautilus shows it.
+    let share = remote_share(&current_path, view);
     let path_parts: Vec<&str> = if special_path_label.is_some() {
         vec![current_path.as_str()]
+    } else if let Some(share) = share {
+        std::iter::once(share.path.as_str())
+            .chain(current_path.get(share.path.len()..).unwrap_or_default().split(std::path::is_separator).filter(|s| !s.is_empty()))
+            .collect()
     } else {
         current_path
             .split(std::path::is_separator)
@@ -354,6 +370,8 @@ pub fn render_top_bar(
 
                         if index == 0 && special_path_label.is_some() {
                             accumulated_path = current_path.clone();
+                        } else if index == 0 && share.is_some() {
+                            accumulated_path = part.to_string();
                         } else if index == 0 && part.ends_with(':') {
                             accumulated_path = format!("{}{separator}", part);
                         } else {
@@ -530,6 +548,8 @@ pub fn render_top_bar(
                         let display_label = if index == 0 {
                             if let Some(label) = special_path_label.as_ref() {
                                 label.clone()
+                            } else if let Some(share) = share {
+                                share.label.clone()
                             } else if part.ends_with(':') {
                                 drive_display(part, view)
                             } else {

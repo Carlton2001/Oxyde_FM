@@ -43,6 +43,7 @@ mod context_menu_render;
 pub use drag::drives_differ;
 use toasts::{Toast, ToastKind};
 pub(crate) mod network;
+pub(crate) mod remote;
 pub mod selection;
 mod item_pointer;
 pub(crate) mod search;
@@ -290,6 +291,9 @@ pub struct OxydeApp {
     pub(crate) trash_settings: Option<trash_settings::TrashSettings>,
     dialog_windows_open: [bool; dialog_windows::DIALOG_KINDS],
     pub(crate) network_dialog: Option<network::NetworkDialog>,
+    pub(crate) remote_login: Option<remote::RemoteLogin>,
+    /// Servers and network lists connected this session, listed by URI.
+    pub(super) browsable_remotes: std::collections::HashSet<String>,
     pub(crate) network_dialog_revision: u64,
     pub(crate) network_force_confirmation: Option<network::NetworkForceConfirmation>,
     pub(crate) network_force_focus_pending: bool,
@@ -475,6 +479,8 @@ impl OxydeApp {
             mounted_disk_images: Vec::new(),
             disk_image_refresh_task: None,
             network_dialog: None,
+            remote_login: None,
+            browsable_remotes: std::collections::HashSet::new(),
             trash_settings: None,
             dialog_windows_open: [false; dialog_windows::DIALOG_KINDS],
             pending_trash_delete: None,
