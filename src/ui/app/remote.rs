@@ -3,7 +3,7 @@
 //! its local path; servers and the network list stay listed by URI.
 use super::*;
 use crate::ui::components::input::{TextInput, TextInputOptions};
-use oxyde_lib::platform::{RemoteAnswer, RemoteError, RemoteLocation, RemotePrompt};
+use oxyde_lib::platform::{PasswordSave, RemoteAnswer, RemoteError, RemoteLocation, RemotePrompt};
 use tokio::sync::{mpsc, oneshot};
 
 pub(crate) struct RemoteLogin {
@@ -13,11 +13,11 @@ pub(crate) struct RemoteLogin {
     /// Kept as typed: an input calling back cannot be read while it updates.
     pub values: [String; 3],
     pub anonymous: bool,
-    pub remember: bool,
+    pub save: PasswordSave,
     pub focus: FocusHandle,
     /// The first field to type in.
     pub initial: FocusHandle,
-    /// Anonymous, remember, cancel and connect.
+    /// Anonymous, password saving, cancel and connect.
     pub controls: Vec<FocusHandle>,
     reply: Option<oneshot::Sender<RemoteAnswer>>,
 }
@@ -125,7 +125,7 @@ impl OxydeApp {
             inputs,
             values,
             anonymous: false,
-            remember: false,
+            save: PasswordSave::Never,
             focus: cx.focus_handle(),
             controls: (0..4).map(|_| cx.focus_handle()).collect(),
             reply: Some(reply),
@@ -145,7 +145,7 @@ impl OxydeApp {
                 user: user.trim().to_string(),
                 domain: domain.trim().to_string(),
                 password,
-                remember: login.remember && login.prompt.saving,
+                save: if login.prompt.saving { login.save } else { PasswordSave::Never },
             }
         };
         if let Some(reply) = login.reply.take() {
@@ -163,13 +163,15 @@ impl OxydeApp {
         }
     }
 
-    pub(crate) fn toggle_remote_login(&mut self, remember: bool, cx: &mut Context<Self>) {
+    pub(crate) fn toggle_remote_anonymous(&mut self, cx: &mut Context<Self>) {
+        let Some(login) = self.remote_login.as_mut().filter(|login| login.prompt.anonymous) else { return };
+        login.anonymous = !login.anonymous;
+        cx.notify();
+    }
+
+    pub(crate) fn set_remote_password_save(&mut self, save: PasswordSave, cx: &mut Context<Self>) {
         let Some(login) = &mut self.remote_login else { return };
-        if remember {
-            login.remember = !login.remember;
-        } else if login.prompt.anonymous {
-            login.anonymous = !login.anonymous;
-        }
+        login.save = save;
         cx.notify();
     }
 }

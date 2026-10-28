@@ -15,10 +15,21 @@ pub struct RemotePrompt {
     pub retry: bool,
 }
 
+/// How long the password outlives the mount, as GNOME's mount dialog offers.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum PasswordSave {
+    /// Forgotten once the share is unmounted.
+    #[default]
+    Never,
+    /// Kept until the user logs out.
+    Session,
+    /// Kept in the user's keyring.
+    Permanently,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RemoteAnswer {
-    /// `remember` keeps the password in the keyring, as GNOME's « Remember forever ».
-    Login { user: String, domain: String, password: String, remember: bool },
+    Login { user: String, domain: String, password: String, save: PasswordSave },
     Anonymous,
     Cancel,
 }

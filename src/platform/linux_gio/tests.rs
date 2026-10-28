@@ -40,15 +40,22 @@ fn mounts_lists_and_unmounts_a_live_share() {
         if prompt.retry {
             RemoteAnswer::Cancel
         } else {
-            RemoteAnswer::Login { user: user.clone(), domain: prompt.domain.clone(), password: "wrong".into(), remember: false }
+            RemoteAnswer::Login { user: user.clone(), domain: prompt.domain.clone(), password: "wrong".into(), save: PasswordSave::Never }
         }
     });
-    assert_eq!(refused, Err(RemoteError::Cancelled));
-    assert_eq!(prompts.len(), 2, "{prompts:?}");
-    assert!(prompts[0].needs_password && !prompts[0].retry && prompts[1].retry);
+    // A password saved in the keyring mounts without asking: nothing to refuse then.
+    if let Ok(RemoteLocation::Local(path)) = &refused {
+        assert!(prompts.is_empty(), "{prompts:?}");
+        eprintln!("Saved credentials mounted the share: the refusal is not tested");
+        unmount(path).expect("unmount with saved credentials");
+    } else {
+        assert_eq!(refused, Err(RemoteError::Cancelled));
+        assert_eq!(prompts.len(), 2, "{prompts:?}");
+        assert!(prompts[0].needs_password && !prompts[0].retry && prompts[1].retry);
+    }
 
     let location = connect(&uri, &mut |prompt| RemoteAnswer::Login {
-        user: user.clone(), domain: prompt.domain.clone(), password: password.clone(), remember: false,
+        user: user.clone(), domain: prompt.domain.clone(), password: password.clone(), save: PasswordSave::Never,
     })
     .expect("mount");
     let RemoteLocation::Local(path) = location else { panic!("{location:?}") };
@@ -69,4 +76,5 @@ fn mounts_lists_and_unmounts_a_live_share() {
     assert!(share_mount(&mounts()).is_none());
     unmount(&path).expect("unmounting twice succeeds");
 }
+
 

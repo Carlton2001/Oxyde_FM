@@ -58,10 +58,14 @@ propriétés ne connaissent pas les URI.
 - Dialogue fixe `RemoteLogin` (`components/remote_login_dialog.rs`), dont les valeurs
   sont gardées à la saisie : un champ qui rappelle Oxyde (Entrée) ne peut être relu
   pendant sa propre mise à jour.
-  Il montre : message de GVfs
-  sans sa ligne de titre, utilisateur, domaine et mot de passe selon les drapeaux,
-  connexion anonyme et mémorisation (trousseau, « Remember forever » de GNOME) quand le
-  serveur les permet ; « Identifiants refusés » au second essai.
+  Il montre : message de GVfs sans sa ligne de titre, utilisateur, domaine et mot de
+  passe selon les drapeaux, connexion anonyme quand le serveur la permet, « Identifiants
+  refusés » au second essai, et « Mémoriser » : Jamais (par défaut), Cette session ou
+  Toujours, les trois choix du dialogue de GNOME (`GPasswordSave`). Oxyde n'écrit rien :
+  GVfs garde le mot de passe dans le processus du montage (Jamais), dans la collection
+  de session du trousseau, effacée à la déconnexion (Cette session), ou dans le trousseau
+  « Connexion » (Toujours), où Nautilus le retrouve ; « Mots de passe et clés » le
+  supprime.
 - Le fil d'Ariane commence au partage, nommé comme dans la barre latérale ; l'onglet
   aussi.
 

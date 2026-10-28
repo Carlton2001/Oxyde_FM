@@ -1,6 +1,6 @@
 //! GVfs through GIO, as Nautilus uses it: mounting with credentials, enumerating the
 //! network and the shares of a server, and mounted shares at their local FUSE path.
-use super::remote::{RemoteAnswer, RemoteError, RemoteLocation, RemotePrompt};
+use super::remote::{PasswordSave, RemoteAnswer, RemoteError, RemoteLocation, RemotePrompt};
 use super::VolumeError;
 use library::{gio, GError, Gio, Object};
 use std::ffi::{c_char, c_uint, c_void, CStr, CString};
@@ -235,13 +235,18 @@ unsafe extern "C" fn ask_password(
         let gio = asking.gio;
         // GMountOperationResult: handled, aborted.
         let reply = match (asking.ask)(&prompt) {
-            RemoteAnswer::Login { user, domain, password, remember } => {
+            RemoteAnswer::Login { user, domain, password, save } => {
                 (gio.g_mount_operation_set_anonymous)(operation, 0);
                 (gio.g_mount_operation_set_username)(operation, text(&user).as_ptr());
                 (gio.g_mount_operation_set_domain)(operation, text(&domain).as_ptr());
                 (gio.g_mount_operation_set_password)(operation, text(&password).as_ptr());
-                // GPasswordSave: never, for the session, permanently.
-                (gio.g_mount_operation_set_password_save)(operation, if remember { 2 } else { 0 });
+                // GPasswordSave, in declaration order.
+                let save = match save {
+                    PasswordSave::Never => 0,
+                    PasswordSave::Session => 1,
+                    PasswordSave::Permanently => 2,
+                };
+                (gio.g_mount_operation_set_password_save)(operation, save);
                 0
             }
             RemoteAnswer::Anonymous => {

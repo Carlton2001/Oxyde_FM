@@ -11,7 +11,7 @@ mod quick_access;
 mod volumes;
 mod remote;
 pub use file_clipboard::FileClipboard;
-pub use remote::{RemoteAnswer, RemoteError, RemoteLocation, RemotePrompt};
+pub use remote::{PasswordSave, RemoteAnswer, RemoteError, RemoteLocation, RemotePrompt};
 pub use quick_access::QuickAccess;
 pub use volumes::{DriveActions, UnmountedVolume, VolumeError, Volumes};
 
