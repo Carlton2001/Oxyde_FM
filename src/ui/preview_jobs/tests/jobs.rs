@@ -5,8 +5,12 @@ use std::sync::{mpsc, Condvar, Mutex};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
+/// Tests that occupy every slot of the global still queue run one at a time.
+static SATURATING: Mutex<()> = Mutex::new(());
+
 #[test]
 fn preview_jobs_viewer_and_hover_bypass_a_saturated_grid_queue() {
+    let _saturating = SATURATING.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let runtime = runtime();
     let occupied = still_queue().slots.clone().try_acquire_many_owned(MAX_STILL_JOBS as u32).unwrap();
     let (metadata, hover) = {
@@ -23,6 +27,7 @@ fn preview_jobs_viewer_and_hover_bypass_a_saturated_grid_queue() {
 
 #[test]
 fn preview_jobs_icons_bypass_saturated_previews_and_keep_their_own_limit() {
+    let _saturating = SATURATING.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let runtime = runtime();
     let occupied = still_queue()
         .slots
