@@ -16,11 +16,11 @@ mod label_tests {
 
     #[test]
     fn mapped_drive_uses_share_name_instead_of_remote_volume_label() {
-        for path in ["\\\\PCS\\so39i Agde", "\\\\PCS\\so39i Agde\\", "\\\\PCS\\so39i Agde\\folder"] {
-            assert_eq!(mounted_drive_label("Data".into(), Some(path)), "so39i Agde");
+        for path in ["\\\\SERVEUR\\Partage commun", "\\\\SERVEUR\\Partage commun\\", "\\\\SERVEUR\\Partage commun\\folder"] {
+            assert_eq!(mounted_drive_label("Data".into(), Some(path)), "Partage commun");
         }
         assert_eq!(mounted_drive_label("Data".into(), None), "Data");
-        assert_eq!(mounted_drive_label("Data".into(), Some("\\\\PCS")), "Data");
+        assert_eq!(mounted_drive_label("Data".into(), Some("\\\\SERVEUR")), "Data");
         assert_eq!(mounted_drive_label(String::new(), None), "Local Disk");
     }
 }

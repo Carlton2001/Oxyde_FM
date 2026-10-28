@@ -49,7 +49,9 @@ fn breadcrumb_root_icon(path: &str, view: &OxydeApp) -> &'static str {
     if path == "__network_vincinity__" {
         return "icons/globe.svg";
     }
-    if path.starts_with("\\\\") || path.starts_with("::{") || path.starts_with('?') {
+    if path.starts_with("\\\\") || path.starts_with("::{") || path.starts_with('?')
+        || oxyde_lib::platform::platform().is_remote_uri(path)
+    {
         return "icons/network.svg";
     }
     if path.starts_with("search://") {

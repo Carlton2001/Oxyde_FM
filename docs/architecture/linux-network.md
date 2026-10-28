@@ -44,7 +44,11 @@ propriétés ne connaissent pas les URI.
 
 ## Interface
 
-- « Réseau » paraît dans la barre latérale (réglage existant) et liste `network:///`.
+- « Réseau » paraît dans la barre latérale (réglage existant) et liste `network:///` :
+  serveurs annoncés par WS-Discovery (`wsdd`, PC Windows), DNS-SD (Avahi : NAS, Mac,
+  imprimantes) ou le parcours SMB, comme « Autres emplacements › Réseaux » de Nautilus.
+  Un serveur qui ne s'annonce pas s'ouvre par son adresse. La barre d'adresse de cette
+  vue montre `network:///`, comme Nautilus, au lieu du `\\` de Windows.
 - La barre d'adresse accepte `smb://serveur/partage` et les autres schémas GVfs.
 - `request_tab_listing` connecte avant de lister toute URI distante (`app/remote.rs`) :
   un partage ouvre son chemin local dans le même onglet, sans entrée d'historique pour

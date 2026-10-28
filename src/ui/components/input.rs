@@ -82,9 +82,12 @@ fn completion_parts(text: &str) -> Option<(String, String, char)> {
     ))
 }
 
+/// What the address bar shows for the network view, as Windows Explorer or Nautilus.
+const NETWORK_TEXT: &str = if cfg!(target_os = "windows") { "\\\\" } else { "network:///" };
+
 pub(crate) fn native_path_text(path: &str) -> String {
     if path == "__network_vincinity__" {
-        return "\\\\".to_string();
+        return NETWORK_TEXT.to_string();
     }
     if cfg!(target_os = "windows") && !path.contains("://") && !path.starts_with("::{") {
         path.replace('/', "\\")
@@ -95,7 +98,7 @@ pub(crate) fn native_path_text(path: &str) -> String {
 
 pub(crate) fn navigation_path_text(text: &str) -> String {
     let path = native_path_text(text.trim());
-    if path == "\\\\" { "__network_vincinity__".to_string() } else { path }
+    if path == NETWORK_TEXT { "__network_vincinity__".to_string() } else { path }
 }
 
 fn completion_matches(name: &str, prefix: &str) -> bool {
@@ -1053,16 +1056,15 @@ mod completion_tests {
 
     #[::core::prelude::v1::test]
     fn native_display_preserves_virtual_paths_and_unc_roots() {
-        assert_eq!(super::native_path_text("__network_vincinity__"), "\\\\");
+        let network = if cfg!(target_os = "windows") { "\\\\" } else { "network:///" };
+        assert_eq!(super::native_path_text("__network_vincinity__"), network);
+        assert_eq!(super::navigation_path_text(&format!(" {network} ")), "__network_vincinity__");
+        assert_eq!(super::navigation_path_text("\\\\SERVEUR"), "\\\\SERVEUR");
         assert_eq!(
-            super::navigation_path_text(" \\\\ "),
-            "__network_vincinity__"
+            super::navigation_path_text("\\\\SERVEUR\\Partage commun"),
+            "\\\\SERVEUR\\Partage commun"
         );
-        assert_eq!(super::navigation_path_text("\\\\PCS"), "\\\\PCS");
-        assert_eq!(
-            super::navigation_path_text("\\\\PCS\\so39i Agde"),
-            "\\\\PCS\\so39i Agde"
-        );
+        assert_eq!(super::navigation_path_text("smb://SERVEUR/"), "smb://SERVEUR/");
         assert_eq!(super::native_path_text("trash://"), "trash://");
         assert_eq!(super::native_path_text("search://query"), "search://query");
         if cfg!(target_os = "windows") {

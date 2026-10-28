@@ -523,8 +523,8 @@ mod system_icon_tests {
             };
             assert_eq!(entry_icon(&entry), expected);
         }
-        let server = if cfg!(target_os = "windows") { "\\\\PCS" } else { "smb://PCS/" };
-        let share = if cfg!(target_os = "windows") { "\\\\PCS\\so39i Agde" } else { "smb://PCS/so39i Agde" };
+        let server = if cfg!(target_os = "windows") { "\\\\SERVEUR" } else { "smb://SERVEUR/" };
+        let share = if cfg!(target_os = "windows") { "\\\\SERVEUR\\Partage commun" } else { "smb://SERVEUR/Partage commun" };
         assert_eq!(entry_icon(&oxyde_lib::models::FileEntry { path: server.into(), ..Default::default() }), IconType::Monitor);
         assert_eq!(entry_icon(&oxyde_lib::models::FileEntry { path: share.into(), is_dir: true, ..Default::default() }), IconType::Folder);
     }

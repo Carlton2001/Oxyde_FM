@@ -611,10 +611,10 @@ mod directory_tests {
     #[test]
     #[cfg(target_os = "windows")]
     fn network_server_detection_keeps_share_paths_in_the_file_system() {
-        for path in ["\\\\server", "\\\\server\\", "\\\\192.168.1.2", "\\\\PCS", "\\\\PCS\\"] {
+        for path in ["\\\\server", "\\\\server\\", "\\\\192.168.1.2", "\\\\SERVEUR", "\\\\SERVEUR\\"] {
             assert!(is_network_server(path));
         }
-        for path in ["\\\\server\\share", "\\\\server\\share\\folder", "\\\\PCS\\so39i Agde", "\\\\", "\\\\?\\C:\\", "\\\\.\\pipe", "C:\\", "::{device}"] {
+        for path in ["\\\\server\\share", "\\\\server\\share\\folder", "\\\\SERVEUR\\Partage commun", "\\\\", "\\\\?\\C:\\", "\\\\.\\pipe", "C:\\", "::{device}"] {
             assert!(!is_network_server(path));
         }
     }

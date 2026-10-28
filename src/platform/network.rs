@@ -154,7 +154,7 @@ pub fn get_network_resources(path: Option<String>) -> Result<Vec<NetResource>, S
                 }
 
                 // --- NEW: Discover Connected Servers (Mapped Drives / Active UNC Sessions) ---
-                // This captures servers like PCS16 that are reachable but might not respond to WSD/UPnP discovery
+                // This captures servers that are reachable but might not respond to WSD/UPnP discovery
                 let mut connected_handle = windows::Win32::Foundation::HANDLE::default();
                 if WNetOpenEnumW(
                     RESOURCE_CONNECTED,
