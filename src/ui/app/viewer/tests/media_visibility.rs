@@ -8,6 +8,7 @@ fn hiding_video_for_settings_preserves_playback_and_explicit_pause() {
         control: Arc::new(ViewerMediaControl::default()),
         paused: false,
         cancellation: crate::ui::preview_jobs::Cancellation::default(),
+        frame: Default::default(),
     };
     media.control.seek(12_345);
     for blocked in [false, true, false] {
@@ -32,6 +33,7 @@ fn external_open_pauses_without_seeking_or_stopping_the_session() {
             control: Arc::new(ViewerMediaControl::default()),
             paused: false,
             cancellation: crate::ui::preview_jobs::Cancellation::default(),
+            frame: Default::default(),
         };
         media.control.seek(12_345);
         let seek_id = media.control.command.lock().unwrap().seek_id;

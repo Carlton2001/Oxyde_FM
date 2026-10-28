@@ -585,6 +585,25 @@ impl Platform for LinuxPlatform {
         Ok(super::linux_video::stream(std::path::Path::new(&path), &mut on_frame, &cancelled)?)
     }
 
+    fn viewer_media_parent(&self, handle: raw_window_handle::RawWindowHandle) -> Option<u64> {
+        // Only tells the Viewer's windows apart: GPUI paints the frames itself.
+        use raw_window_handle::RawWindowHandle;
+        match handle {
+            RawWindowHandle::Wayland(handle) => Some(handle.surface.as_ptr() as u64),
+            RawWindowHandle::Xlib(handle) => Some(handle.window as u64),
+            RawWindowHandle::Xcb(handle) => Some(u64::from(handle.window.get())),
+            _ => None,
+        }
+    }
+
+    fn play_viewer_media(&self, path: &std::path::Path, control: &super::ViewerMediaControl) -> std::io::Result<()> {
+        super::linux_media::supervise(path, control)
+    }
+
+    fn run_viewer_media_worker(&self, path: &std::path::Path) -> std::io::Result<()> {
+        super::linux_media::run(path)
+    }
+
     fn decode_video_worker(&self, path: String, on_frame: &mut dyn FnMut(image::RgbaImage, std::time::Duration) -> bool) -> Result<(), crate::models::CommandError> {
         super::linux_video::decode(std::path::Path::new(&path), on_frame)
     }

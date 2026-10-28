@@ -1,7 +1,8 @@
 # Aperçus PDF et vidéo sous Linux
 
-**Statut : implémenté, vérification visuelle en attente** (T09 de l'[audit de
-portabilité](../reports/2026-10-26-linux-portability-audit.md), hors lecteur intégré).
+**Statut : PDF et survol vidéo vérifiés ; lecteur du Viewer implémenté, vérification
+visuelle en attente** (T09 de l'[audit de
+portabilité](../reports/2026-10-26-linux-portability-audit.md)).
 Windows ne change pas.
 
 ## Principe : comme Nautilus
@@ -73,17 +74,52 @@ décodage reste ainsi hors du processus de l'interface.
   « Aperçu indisponible », comme Totem et le miniaturiseur de Nautilus. Oxyde ne
   propose pas d'installer de codec.
 
+## Lecteur audio et vidéo du Viewer
+
+Sous Windows, le worker affiche la vidéo dans une surface native placée au-dessus de
+la fenêtre. Wayland ne permet pas à GPUI d'insérer une surface étrangère : sous
+Linux, le worker envoie les images et GPUI les peint lui-même. Le son sort
+directement du worker vers la sortie par défaut du bureau (PipeWire).
+
+- `platform/linux_gstreamer.rs` : `Player` commun au survol et au lecteur
+  (`playbin3`, puits `appsink` nommé `frames`, filtre de caps `size` facultatif, bus
+  lu par type exact, position, durée, recherche à l'image clé la plus proche).
+- `platform/linux_media/worker.rs` (mode `viewer-media`) : `playbin3` avec image et
+  son, sans sous-titres. Le puits suit l'horloge audio et jette une image plutôt que
+  de retarder le son si Oxyde prend du retard (`max-buffers=1 drop=true`). Les images
+  sont mises à l'échelle à la taille affichée en pixels physiques (3840 px au plus,
+  sans agrandissement), renégociée 150 ms après la fin d'un redimensionnement. En
+  pause, l'image de pré-roulement n'est envoyée qu'une fois ; une image est identifiée
+  par son tampon et son horodatage, car les pools réutilisent les tampons. Rapports
+  toutes les 100 ms au format de Windows (25 octets), suivis de la dernière recherche
+  appliquée. La fin de lecture reste arrêtée ; une recherche en repart.
+- `platform/linux_media.rs` (côté parent) : commandes de 21 octets (pause, recherche,
+  taille), envoyées à chaque changement et relevées toutes les 20 ms. Les images sont
+  vérifiées (3840 × 3840 au plus, longueur exacte) puis déposées dans
+  `ViewerMediaControl::frame`, avec un `Notify`. Une position antérieure à la
+  dernière recherche n'est pas publiée, pour que la barre ne recule pas. Sans
+  rapport pendant 15 s, la session échoue.
+- Interface : la tâche de la session attend une image ou 80 ms, crée la
+  `RenderImage`, et libère la précédente du GPU (`drop_image`), y compris après la
+  fin de la session. `VideoLayout` peint l'image dans le cadre de la vidéo. En
+  plein écran, la barre flottante est peinte dans la fenêtre du Viewer, par-dessus
+  l'image, au lieu d'une fenêtre séparée que Wayland ne sait pas placer. Elle
+  disparaît sans fondu de sortie.
+- Plafonds : 1 Gio de mémoire privée pour le worker.
+
 ## Limites
 
 - Les workers ne sont **pas confinés** : ils ont les droits de l'utilisateur
   (M09/R5). Ils isolent les plantages, pas les fuites de données.
 - Le mode vidéo du worker exige un chemin UTF-8, comme sous Windows.
-- Le lecteur audio et vidéo du Viewer reste indisponible.
+- Les images du lecteur traversent un tube puis une texture GPU neuve par image :
+  environ 110 Mio/s en 720p à 30 images par seconde.
 
 ## Tests
 
-`cargo test --offline --lib -- linux_pdf linux_video` : rendu, rotation, pages hors
-document, fichiers endommagés, échelle et forme des vidéos, boucle, annulation. Les
+`cargo test --offline --lib -- linux_pdf linux_video linux_media` : rendu, rotation, pages hors
+document, fichiers endommagés, échelle et forme des vidéos, boucle, annulation ; lecture à la
+taille du Viewer, pause, recherche, fin, son seul. Les
 vidéos sont encodées par `gst-launch-1.0` pendant le test (ignoré sans encodeur).
 Les tests côté parent lancent le vrai worker et exigent d'abord
 `cargo build --offline --bins`.

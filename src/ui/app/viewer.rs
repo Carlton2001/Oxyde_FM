@@ -452,9 +452,6 @@ impl Viewer {
                 let path = file.path.clone();
                 self.load_audio(path, cx);
             }
-            if !cfg!(target_os = "windows") {
-                self.native_media = false;
-            }
             return;
         }
         let file = file.clone();

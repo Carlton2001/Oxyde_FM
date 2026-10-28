@@ -1,9 +1,9 @@
-//! GStreamer and its app sink, loaded at first use in the worker.
+//! GStreamer and its app sink, loaded at first use in a worker.
 use super::super::linux_library::library;
 pub(super) use super::super::linux_library::{GError, Object};
 use std::ffi::{c_char, c_int, c_uint, c_void};
 
-/// `GValue`, enough for a string or object property.
+/// `GValue`, enough for a string, object or boxed property.
 #[repr(C)]
 pub(super) struct Value {
     pub kind: usize,
@@ -58,6 +58,7 @@ library! { Gst from "libgstapp-1.0.so.0" {
     g_value_init: fn(*mut Value, usize) -> *mut Value;
     g_value_set_string: fn(*mut Value, *const c_char);
     g_value_set_object: fn(*mut Value, Object);
+    g_value_set_boxed: fn(*mut Value, Object);
     g_value_unset: fn(*mut Value);
     g_object_set_property: fn(Object, *const c_char, *const Value);
     gst_init_check: fn(*mut c_int, *mut c_void, *mut *mut GError) -> c_int;
@@ -65,9 +66,14 @@ library! { Gst from "libgstapp-1.0.so.0" {
     gst_parse_launch: fn(*const c_char, *mut *mut GError) -> Object;
     gst_parse_bin_from_description: fn(*const c_char, c_int, *mut *mut GError) -> Object;
     gst_element_get_type: fn() -> usize;
+    gst_caps_get_type: fn() -> usize;
+    gst_caps_from_string: fn(*const c_char) -> Object;
     gst_bin_get_by_name: fn(Object, *const c_char) -> Object;
     gst_object_unref: fn(Object);
     gst_element_set_state: fn(Object, c_int) -> c_int;
+    gst_element_seek_simple: fn(Object, c_int, c_int, i64) -> c_int;
+    gst_element_query_position: fn(Object, c_int, *mut i64) -> c_int;
+    gst_element_query_duration: fn(Object, c_int, *mut i64) -> c_int;
     gst_element_get_bus: fn(Object) -> Object;
     gst_bus_pop: fn(Object) -> *mut Message;
     gst_message_parse_error: fn(*mut Message, *mut *mut GError, *mut *mut c_char);
@@ -76,6 +82,7 @@ library! { Gst from "libgstapp-1.0.so.0" {
     gst_stream_get_stream_type: fn(Object) -> c_uint;
     gst_mini_object_unref: fn(*mut c_void);
     gst_app_sink_try_pull_sample: fn(Object, u64) -> Object;
+    gst_app_sink_try_pull_preroll: fn(Object, u64) -> Object;
     gst_sample_get_buffer: fn(Object) -> *mut Buffer;
     gst_sample_get_caps: fn(Object) -> Object;
     gst_caps_get_structure: fn(Object, c_uint) -> Object;

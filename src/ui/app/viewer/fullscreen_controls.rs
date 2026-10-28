@@ -126,19 +126,11 @@ impl Viewer {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.fullscreen_controls.enabled {
+        // Without a native surface (Linux), the Viewer paints the bar itself.
+        if !self.fullscreen_controls.enabled || !cfg!(target_os = "windows") {
             return;
         }
-        let margin = crate::ui::scale::rem_pixels(rems(1.0));
-        let width = (bounds.size.width - margin * 2.0)
-            .max(px(1.0))
-            .min(crate::ui::scale::rem_pixels(rems(64.0)));
-        let height = crate::ui::scale::rem_pixels(rems(3.5625));
-        let origin = bounds.origin
-            + point(
-                (bounds.size.width - width) / 2.0,
-                (bounds.size.height - height - margin).max(px(0.0)),
-            );
+        let Bounds { origin, size: Size { width, height } } = fullscreen_bar_bounds(bounds);
         let scale = window.scale_factor();
         self.fullscreen_controls.rect = [
             origin.x.as_f32(),
@@ -220,6 +212,36 @@ impl Viewer {
             if let Some(handle) = ready { draw_controls(handle.into(), cx); }
         });
     }
+}
+
+impl Viewer {
+    /// The floating bar painted over GPUI's own video frames, as the popup shows it.
+    pub(super) fn render_fullscreen_bar(&self, cx: &mut Context<Self>) -> Stateful<Div> {
+        let hover = cx.entity().downgrade();
+        let moving = hover.clone();
+        div().id("fullscreen-playback-controls")
+            .size_full().p(rems(0.5))
+            .text_size(rems(0.8125)).font_weight(FontWeight::NORMAL)
+            .on_hover(move |hovered, _, cx| { let _ = hover.update(cx, |this, cx| {
+                this.fullscreen_controls.hovered = *hovered;
+                this.wake_controls(cx);
+            }); })
+            .on_mouse_move(move |_, _, cx| { let _ = moving.update(cx, |this, cx| this.wake_controls(cx)); })
+            .child(div().size_full().rounded_lg().overflow_hidden().child(self.render_media_bar(cx)))
+    }
+}
+
+/// Where the floating bar sits in fullscreen bounds.
+pub(super) fn fullscreen_bar_bounds(bounds: Bounds<Pixels>) -> Bounds<Pixels> {
+    let margin = crate::ui::scale::rem_pixels(rems(1.0));
+    let width = (bounds.size.width - margin * 2.0)
+        .max(px(1.0))
+        .min(crate::ui::scale::rem_pixels(rems(64.0)));
+    let height = crate::ui::scale::rem_pixels(rems(3.5625));
+    Bounds::new(bounds.origin + point(
+        (bounds.size.width - width) / 2.0,
+        (bounds.size.height - height - margin).max(px(0.0)),
+    ), size(width, height))
 }
 
 pub(super) struct ControlsWindow {

@@ -769,7 +769,11 @@ mod linux_impl;
 #[cfg(not(target_os = "windows"))]
 mod linux_gio;
 #[cfg(not(target_os = "windows"))]
+mod linux_gstreamer;
+#[cfg(not(target_os = "windows"))]
 mod linux_library;
+#[cfg(not(target_os = "windows"))]
+mod linux_media;
 #[cfg(not(target_os = "windows"))]
 mod linux_pdf;
 #[cfg(not(target_os = "windows"))]

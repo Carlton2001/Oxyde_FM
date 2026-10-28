@@ -180,8 +180,8 @@ BGRA (512 × 512 maximum), sans redécoder l’image. Les images intégrées de 
 de 16 Mio et les images dépassant 64 Mio de pixels source sont ignorées.
 Les réponses obsolètes sont écartées par génération et les textures libérées
 au changement de contenu. Aucun fichier ni URL de pochette externe n’est chargé.
-Linux lit les métadonnées en arrière-plan sans confinement ; la lecture audio
-native y reste indisponible.
+Linux lit les métadonnées en arrière-plan sans confinement ; la lecture passe par
+GStreamer ([aperçus Linux](linux-previews.md)).
 
 Sous Windows, audio et vidéo utilisent les codecs système via IMFMediaEngine (mode HWND) dans le
 mode `viewer-media` du self-worker. Un même lecteur natif synchronise image et
@@ -243,9 +243,8 @@ ce heartbeat ne prouve pas la progression d’un codec. Les commandes JSON sont
 bornées à 512 octets et les réponses à des états d’un octet. Changement de fichier,
 fermeture et dernier propriétaire annulent le lecteur, retirent sa surface et
 récoltent son processus. Les anciens aperçus ne peuvent publier dans un nouveau
-Viewer. Linux conserve un message d’aperçu indisponible pour audio/vidéo ; ce
-lecteur natif n’y est pas implémenté. Les vidéos muettes de survol passent par
-GStreamer ([aperçus Linux](linux-previews.md)).
+Viewer. Sous Linux, GStreamer joue le son dans un worker et GPUI peint les images
+qu'il envoie ; voir les [aperçus Linux](linux-previews.md).
 
 Le double clic dans un aperçu image ou vidéo bascule le plein écran ; Échap
 le quitte. Au survol du média, un bouton `maximize-2` apparaît dans son coin

@@ -1,8 +1,8 @@
 //! Fit the video and controls using this frame's bounds, without a second render.
 use super::Viewer;
-use crate::ui::{i18n::{I18nContext, Message}, theme::ThemeContext};
+use crate::ui::{elements::motion, i18n::{I18nContext, Message}, theme::ThemeContext};
 use gpui::{prelude::*, *};
-use std::sync::atomic::Ordering;
+use std::sync::{atomic::Ordering, Arc};
 
 pub(super) struct VideoLayout {
     viewer: WeakEntity<Viewer>,
@@ -10,10 +10,15 @@ pub(super) struct VideoLayout {
     ratio: f32,
     placeholder: Option<AnyElement>,
     fullscreen: bool,
+    /// Fullscreen bar painted over the frames rather than in a popup (Linux).
+    floating_bar: bool,
+    /// Painted by GPUI where no native surface shows the video (Linux).
+    frame: Option<Arc<RenderImage>>,
 }
 
 impl Viewer {
     pub(super) fn render_video(&self, window: &Window, cx: &mut Context<Self>) -> VideoLayout {
+        let floating_bar = window.is_fullscreen() && !cfg!(target_os = "windows");
         let dimensions = self
             .media
             .as_ref()
@@ -21,9 +26,20 @@ impl Viewer {
             .unwrap_or_default();
         let (width, height) = ((dimensions >> 32) as u32, dimensions as u32);
         VideoLayout {
+            frame: self.media.as_ref().and_then(|media| media.frame.lock().ok()?.clone()),
             fullscreen: window.is_fullscreen(),
+            floating_bar: floating_bar && self.fullscreen_controls_visible(),
             viewer: cx.entity().downgrade(),
-            bar: self.render_media_bar(cx).into_any_element(),
+            bar: if floating_bar {
+                let visible = self.fullscreen_controls_visible();
+                self.render_fullscreen_bar(cx)
+                    .with_spring("fullscreen-controls-presence", motion::presence(visible).from(0.0), |bar, progress| {
+                        bar.opacity(progress).relative().top(rems((1.0 - progress) * 0.375))
+                    })
+                    .into_any_element()
+            } else {
+                self.render_media_bar(cx).into_any_element()
+            },
             ratio: if width > 0 && height > 0 {
                 width as f32 / height as f32
             } else {
@@ -88,6 +104,11 @@ impl Element for VideoLayout {
         let bar_height = if self.fullscreen { px(0.0) } else { crate::ui::scale::rem_pixels(rems(2.5625)) };
         let video = fitted_video(bounds, self.ratio, bar_height);
         let Bounds { origin, size: Size { width, height } } = video;
+        if self.floating_bar {
+            let bar = super::fullscreen_controls::fullscreen_bar_bounds(bounds);
+            self.bar.layout_as_root(size(AvailableSpace::Definite(bar.size.width), AvailableSpace::Definite(bar.size.height)), window, cx);
+            self.bar.prepaint_at(bar.origin, window, cx);
+        }
         if !self.fullscreen { self.bar.layout_as_root(
             size(
                 AvailableSpace::Definite(width),
@@ -121,8 +142,11 @@ impl Element for VideoLayout {
                 this.place_media(*video, window, cx);
                 if self.fullscreen { this.place_fullscreen_controls(bounds, window, cx); }
             });
+        if let Some(frame) = self.frame.take().filter(|_| self.placeholder.is_none()) {
+            let _ = window.paint_image(*video, *video, Corners::default(), frame, 0, false);
+        }
         if let Some(placeholder) = &mut self.placeholder { placeholder.paint(window, cx); }
-        if !self.fullscreen { self.bar.paint(window, cx); }
+        if !self.fullscreen || self.floating_bar { self.bar.paint(window, cx); }
     }
 }
 

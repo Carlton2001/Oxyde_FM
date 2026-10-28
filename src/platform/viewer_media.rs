@@ -55,6 +55,10 @@ pub struct ViewerMediaControl {
     pub position_ms: AtomicU64,
     pub duration_ms: AtomicU64,
     pub video_dimensions: AtomicU64,
+    /// Where no native surface shows the video (Linux), its latest frame in premultiplied
+    /// BGRA, which the UI takes and paints itself once notified.
+    pub frame: Mutex<Option<image::RgbaImage>>,
+    pub frame_ready: tokio::sync::Notify,
     supervisor: Mutex<Option<std::thread::Thread>>,
 }
 

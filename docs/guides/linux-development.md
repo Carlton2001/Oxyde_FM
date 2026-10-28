@@ -150,7 +150,7 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
   vérification visuelle en attente. « Plus d'options » (menu Shell) est masqué hors Windows.
 
 **Avancé et distribution (jalons 6–7)**
-- T09, PDF et vidéo de survol implémentés : [poppler et GStreamer](../architecture/linux-previews.md)
-  dans un worker, vérification visuelle en attente ; reste le lecteur intégré.
+- T09 : [poppler et GStreamer](../architecture/linux-previews.md) dans un worker ; PDF
+  et survol vidéo vérifiés, lecteur du Viewer en attente de vérification visuelle.
   M09/R5 : workers confinés Linux.
 - T14 : CI Linux distincte ; paquets RPM puis DEB, essai Silverblue.

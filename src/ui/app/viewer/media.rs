@@ -9,6 +9,9 @@ pub(super) struct MediaSession {
     pub(super) control: Arc<ViewerMediaControl>,
     pub(super) paused: bool,
     cancellation: crate::ui::preview_jobs::Cancellation,
+    /// The video frame GPUI paints where no native surface shows it (Linux). The
+    /// session's task releases its pixels from the GPU, even after the session ends.
+    pub(super) frame: Arc<std::sync::Mutex<Option<Arc<RenderImage>>>>,
 }
 
 #[cfg(test)]
@@ -151,10 +154,12 @@ impl Viewer {
                 };
             control.position_ms.store(resume_ms, Ordering::Release);
             let cancellation = crate::ui::preview_jobs::Cancellation::default();
+            let frame = Arc::new(std::sync::Mutex::new(None));
             self.media = Some(MediaSession {
                 control: control.clone(),
                 paused: resume_paused,
                 cancellation: cancellation.clone(),
+                frame: frame.clone(),
             });
             let work_control = control.clone();
             let completion = self.jobs.register(&path);
@@ -184,9 +189,21 @@ impl Viewer {
             cx.spawn(async move |this, cx| {
                 let mut previous = (MEDIA_LOADING, u64::MAX, u64::MAX, 0);
                 while !control.is_cancelled() {
-                    cx.background_executor()
-                        .timer(std::time::Duration::from_millis(80))
-                        .await;
+                    let timer = cx.background_executor().timer(std::time::Duration::from_millis(80));
+                    let frame_ready = control.frame_ready.notified();
+                    futures::future::select(std::pin::pin!(timer), std::pin::pin!(frame_ready)).await;
+                    let pixels = control.frame.lock().ok().and_then(|mut pixels| pixels.take());
+                    if let Some(pixels) = pixels {
+                        let image = Arc::new(RenderImage::new(vec![image::Frame::new(pixels)]));
+                        let retired = frame.lock().ok().and_then(|mut shown| shown.replace(image));
+                        if let Some(retired) = retired {
+                            cx.update(|cx| cx.drop_image(retired, None));
+                        }
+                        if this.update(cx, |_, cx| cx.notify()).is_err() {
+                            control.cancel();
+                            break;
+                        }
+                    }
                     let status = control.status();
                     // The progress bar moves in quarter seconds.
                     let current = (status, control.position_ms() / 250, control.duration_ms(), control.video_dimensions.load(Ordering::Acquire));
@@ -200,6 +217,10 @@ impl Viewer {
                     if status == MEDIA_FAILED {
                         break;
                     }
+                }
+                let retired = frame.lock().ok().and_then(|mut shown| shown.take());
+                if let Some(retired) = retired {
+                    cx.update(|cx| cx.drop_image(retired, None));
                 }
             })
             .detach();
