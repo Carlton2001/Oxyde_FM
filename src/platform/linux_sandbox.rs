@@ -1,8 +1,8 @@
 //! Confines the self-workers as GNOME confines its thumbnailers and glycin its image
 //! loaders: bubblewrap gives each an empty root with the system read-only, no network,
 //! no other process, and a seccomp filter. The document arrives as an open descriptor
-//! mounted alone. Without a usable bubblewrap, as glycin, workers run unconfined and
-//! the log says so.
+//! mounted alone. Without a usable bubblewrap, Landlock and the same filter confine them
+//! as far as they can, and the log says so.
 use std::ffi::OsString;
 use std::fs::File;
 use std::io;
@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 
+mod landlock;
 mod seccomp;
 
 const BWRAP: &str = "bwrap";
@@ -60,16 +61,7 @@ pub(super) struct Launch {
 
 pub(super) fn command(executable: &Path, profile: Profile, source: Option<(&Path, File)>) -> io::Result<Launch> {
     if !available() {
-        let mut command = Command::new(executable);
-        command.env("MALLOC_ARENA_MAX", "2");
-        if profile.reads_media() || profile == Profile::Registry {
-            if let Some(registry) = registry() {
-                command.env("GST_REGISTRY", registry.join("registry.bin"));
-                command.env("GST_REGISTRY_UPDATE", if profile == Profile::Registry { "yes" } else { "no" });
-            }
-        }
-        let path = source.map(|(path, _)| path.as_os_str().to_owned());
-        return Ok(Launch { command, source: path, _descriptors: Vec::new() });
+        return without_bubblewrap(executable, profile, source);
     }
     let mut arguments = Arguments::default();
     arguments.base();
@@ -84,7 +76,7 @@ pub(super) fn command(executable: &Path, profile: Profile, source: Option<(&Path
     }
     match profile {
         Profile::Codec => {}
-        Profile::Document => arguments.fonts(),
+        Profile::Document => arguments.reach(Reach::fonts()),
         Profile::Video | Profile::Player | Profile::Registry => {
             if let Some(registry) = registry() {
                 arguments.bind(if profile == Profile::Registry { "--bind" } else { "--ro-bind" }, &registry);
@@ -92,7 +84,7 @@ pub(super) fn command(executable: &Path, profile: Profile, source: Option<(&Path
                 arguments.add(["--setenv", "GST_REGISTRY_UPDATE", if profile == Profile::Registry { "yes" } else { "no" }]);
             }
             if profile == Profile::Player {
-                arguments.sound();
+                arguments.reach(Reach::sound());
             }
         }
     }
@@ -122,6 +114,64 @@ pub(super) fn command(executable: &Path, profile: Profile, source: Option<(&Path
         });
     }
     Ok(Launch { command, source, _descriptors: descriptors })
+}
+
+/// As close to the sandbox above as Landlock allows: the same files and environment.
+fn without_bubblewrap(executable: &Path, profile: Profile, source: Option<(&Path, File)>) -> io::Result<Launch> {
+    let mut command = Command::new(executable);
+    command.env_clear().env("MALLOC_ARENA_MAX", "2");
+    if let Some(home) = dirs::home_dir() {
+        command.env("HOME", home);
+    }
+    let mut descriptors = Vec::new();
+    let ruleset = landlock::Ruleset::new();
+    let allow = |path: &Path, rights| match &ruleset {
+        Some(ruleset) => ruleset.allow(path, rights),
+        None => Ok(()),
+    };
+    for name in ["/usr", "/bin", "/sbin", "/lib", "/lib32", "/lib64", "/libx32"] {
+        allow(Path::new(name), landlock::RUN)?;
+    }
+    allow(executable, landlock::RUN)?;
+    allow(Path::new("/etc/ld.so.cache"), landlock::READ)?;
+    for name in ["/dev/null", "/dev/zero", "/dev/full", "/dev/random", "/dev/urandom"] {
+        allow(Path::new(name), landlock::DEVICE)?;
+    }
+    let extra = match profile {
+        Profile::Codec => Reach::default(),
+        Profile::Document => Reach::fonts(),
+        Profile::Video | Profile::Registry => Reach::default(),
+        Profile::Player => Reach::sound(),
+    };
+    for path in &extra.read {
+        allow(path, landlock::READ)?;
+    }
+    for (name, value) in extra.environment {
+        command.env(name, value);
+    }
+    if profile.reads_media() || profile == Profile::Registry {
+        if let Some(registry) = registry() {
+            allow(&registry, if profile == Profile::Registry { landlock::CHANGE } else { landlock::READ })?;
+            command.env("GST_REGISTRY", registry.join("registry.bin"));
+            command.env("GST_REGISTRY_UPDATE", if profile == Profile::Registry { "yes" } else { "no" });
+        }
+    }
+    let path = source.map(|(path, file)| {
+        if let Some(ruleset) = &ruleset {
+            ruleset.allow_file(&file, landlock::READ)?;
+        }
+        io::Result::Ok(path.as_os_str().to_owned())
+    }).transpose()?;
+    // Only the player has a sound server to reach, by a path Landlock does not cover.
+    let filter = if profile == Profile::Player { seccomp::filter() } else { seccomp::filter_without_sockets() };
+    let raw_ruleset = ruleset.map(|ruleset| {
+        let descriptor = ruleset.into_descriptor();
+        let raw = descriptor.as_raw_fd();
+        descriptors.push(descriptor);
+        raw
+    });
+    landlock::confine(&mut command, raw_ruleset, filter);
+    Ok(Launch { command, source: path, _descriptors: descriptors })
 }
 
 /// Formats without a signature are recognized by their extension; the rest of the
@@ -182,34 +232,54 @@ impl Arguments {
         self.bind_try(Path::new("/etc/ld.so.cache"));
     }
 
-    fn fonts(&mut self) {
-        self.bind_try(Path::new("/etc/fonts"));
-        let home = dirs::home_dir();
+    fn reach(&mut self, reach: Reach) {
+        for path in &reach.read {
+            self.bind_try(path);
+        }
+        for (name, value) in reach.environment {
+            self.setenv(name, value);
+        }
+    }
+}
+
+/// Files a profile reads beyond the system, and the variables that lead libraries to them.
+#[derive(Default)]
+struct Reach {
+    read: Vec<PathBuf>,
+    environment: Vec<(&'static str, PathBuf)>,
+}
+
+impl Reach {
+    fn fonts() -> Self {
+        let mut reach = Self { read: vec!["/etc/fonts".into()], ..Self::default() };
         for (variable, root, folder) in [
             ("XDG_DATA_HOME", dirs::data_dir(), "fonts"),
             ("XDG_CONFIG_HOME", dirs::config_dir(), "fontconfig"),
             ("XDG_CACHE_HOME", dirs::cache_dir(), "fontconfig"),
         ] {
             if let Some(root) = root {
-                self.bind_try(&root.join(folder));
-                self.setenv(variable, root);
+                reach.read.push(root.join(folder));
+                reach.environment.push((variable, root));
             }
         }
-        if let Some(home) = home {
-            self.bind_try(&home.join(".fonts"));
+        if let Some(home) = dirs::home_dir() {
+            reach.read.push(home.join(".fonts"));
         }
+        reach
     }
 
     /// PulseAudio's protocol, which PipeWire serves, then PipeWire's own.
-    fn sound(&mut self) {
-        for path in ["/etc/pipewire", "/etc/pulse", "/etc/machine-id"] {
-            self.bind_try(Path::new(path));
-        }
+    fn sound() -> Self {
+        let mut reach = Self {
+            read: ["/etc/pipewire", "/etc/pulse", "/etc/machine-id"].map(PathBuf::from).to_vec(),
+            ..Self::default()
+        };
         if let Some(runtime) = dirs::runtime_dir() {
-            self.bind_try(&runtime.join("pulse/native"));
-            self.bind_try(&runtime.join("pipewire-0"));
-            self.setenv("XDG_RUNTIME_DIR", runtime);
+            reach.read.push(runtime.join("pulse/native"));
+            reach.read.push(runtime.join("pipewire-0"));
+            reach.environment.push(("XDG_RUNTIME_DIR", runtime));
         }
+        reach
     }
 }
 
@@ -227,7 +297,7 @@ fn available() -> bool {
             Ok(output) => String::from_utf8_lossy(&output.stderr).trim().to_owned(),
             Err(error) => error.to_string(),
         };
-        log::warn!("Preview workers run without a sandbox: bubblewrap: {refusal}");
+        log::warn!("Preview workers run under Landlock alone: bubblewrap: {refusal}");
         false
     })
 }

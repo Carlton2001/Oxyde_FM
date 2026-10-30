@@ -79,7 +79,15 @@ GNOME confine ainsi ses miniaturiseurs, et glycin ses chargeurs d'images.
   ni toucher au registre des autres programmes. Les greffons de l'utilisateur
   (`~/.local/share/gstreamer-1.0`) ne sont pas chargés.
 - Sans bubblewrap utilisable (absent, ou espaces de noms utilisateur interdits), le
-  worker est lancé directement, comme le fait glycin. Le journal le signale une fois.
+  journal le signale une fois et le worker se confine lui-même avant de démarrer
+  (`linux_sandbox/landlock.rs`). Landlock limite les fichiers aux mêmes accès que
+  bubblewrap, sans `/proc` ni `/tmp`, et, depuis Linux 6.12, les signaux et sockets
+  abstraites à ses propres processus. Le filtre seccomp s'y ajoute, et refuse toute socket
+  sauf au lecteur du Viewer. Variables d'environnement effacées, comme avec bubblewrap.
+  Reste moins strict : le lecteur peut joindre toute socket locale par son chemin, dont
+  le bus de session, et avant Linux 6.12 un worker peut signaler les autres processus de
+  l'utilisateur. Sans Landlock, seul le filtre reste. Essayé avec
+  `user.max_user_namespaces=0` : archives, PDF, images, Office, audio, vidéo et lecteur.
   Ubuntu interdit ces espaces de noms sans profil AppArmor : [le DEB en installe
   un](../guides/linux-distribution.md#ubuntu-et-apparmor).
   Sans libseccomp, le confinement reste, sans filtre d'appels système.

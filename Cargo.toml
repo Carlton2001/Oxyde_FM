@@ -95,6 +95,7 @@ base64 = "0.22"
 # Already locked through GPUI's Linux backend: UDisks2 over D-Bus, free space by statvfs,
 # mount notifications by poll, GIO loaded at run time for GVfs network locations.
 [target.'cfg(not(target_os = "windows"))'.dependencies]
+libc = "0.2"
 libloading = "0.8"
 rustix = { version = "1.1", default-features = false, features = ["event", "fs", "pipe", "process", "std"] }
 zbus = { version = "5.19", default-features = false, features = ["async-io", "blocking-api"] }

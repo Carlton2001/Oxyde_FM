@@ -73,3 +73,54 @@ fn a_codec_worker_sees_no_font_and_no_file_of_the_user() {
     let output = run(Profile::Codec, None, &script);
     assert_eq!(String::from_utf8_lossy(&output.stdout), "done\n", "{output:?}");
 }
+
+/// Runs a shell script as a worker runs where bubblewrap cannot, given `source` open.
+fn run_without_bubblewrap(profile: Profile, source: Option<&Path>, script: &str) -> std::process::Output {
+    let source = source.map(|path| (path, File::open(path).unwrap()));
+    let mut launch = without_bubblewrap(Path::new("/usr/bin/sh"), profile, source).unwrap();
+    launch.command.arg("-c").arg(script).arg("sandbox");
+    if let Some(source) = &launch.source {
+        launch.command.arg(source);
+    }
+    launch.command.stdin(Stdio::null()).output().unwrap()
+}
+
+#[test]
+fn without_bubblewrap_a_worker_still_reads_its_document_and_nothing_else() {
+    if landlock::Ruleset::new().is_none() {
+        eprintln!("skipped: Landlock is unavailable");
+        return;
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let document = directory.path().join("report.pdf");
+    std::fs::write(&document, b"only this").unwrap();
+    let secret = directory.path().join("secret.txt");
+    std::fs::write(&secret, b"private").unwrap();
+    let written = directory.path().join("written");
+    let script = format!(
+        "cat \"$1\"; echo; cat '{0}' 2>/dev/null && echo read; ls '{1}' 2>/dev/null && echo listed; \
+         (: > '{2}') 2>/dev/null && echo created; (: > \"$1\") 2>/dev/null && echo truncated; \
+         cat /proc/self/status 2>/dev/null && echo proc; \
+         echo end > /dev/null && echo device",
+        secret.display(), directory.path().display(), written.display());
+    let output = run_without_bubblewrap(Profile::Codec, Some(&document), &script);
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "only this\ndevice\n", "{output:?}");
+    assert!(!written.exists());
+    assert_eq!(std::fs::read(&document).unwrap(), b"only this");
+}
+
+#[test]
+fn without_bubblewrap_a_codec_opens_no_socket_at_all() {
+    if seccomp::filter_without_sockets().is_none() || !Path::new("/usr/bin/python3").exists() {
+        eprintln!("skipped: libseccomp or Python is missing");
+        return;
+    }
+    let script = "python3 -I -c '
+import errno, socket
+for family in (socket.AF_UNIX, socket.AF_INET):
+    try: socket.socket(family); print(\"socket\", family)
+    except OSError as error: assert error.errno == errno.EAFNOSUPPORT, error
+print(\"refused\")'";
+    let output = run_without_bubblewrap(Profile::Codec, None, script);
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "refused\n", "{output:?}");
+}

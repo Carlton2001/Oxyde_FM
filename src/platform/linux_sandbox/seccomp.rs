@@ -54,7 +54,15 @@ fn errno(code: u32) -> u32 {
 /// The compiled filter, or None, logged once, where libseccomp is missing.
 pub(super) fn filter() -> Option<&'static [u8]> {
     static FILTER: OnceLock<Option<Vec<u8>>> = OnceLock::new();
-    FILTER.get_or_init(|| compile().inspect_err(|error| log::warn!("Preview workers run without a system call filter: {error}")).ok())
+    FILTER.get_or_init(|| compile(true).inspect_err(|error| log::warn!("Preview workers run without a system call filter: {error}")).ok())
+        .as_deref()
+}
+
+/// The same filter refusing every socket, for workers that bubblewrap cannot cut off from the
+/// user's local sockets and that have none to reach.
+pub(super) fn filter_without_sockets() -> Option<&'static [u8]> {
+    static FILTER: OnceLock<Option<Vec<u8>>> = OnceLock::new();
+    FILTER.get_or_init(|| compile(false).inspect_err(|error| log::warn!("Preview workers run without a system call filter: {error}")).ok())
         .as_deref()
 }
 
@@ -66,14 +74,14 @@ pub(super) fn descriptor(filter: &[u8]) -> io::Result<OwnedFd> {
     Ok(reader)
 }
 
-fn compile() -> io::Result<Vec<u8>> {
+fn compile(local_sockets: bool) -> io::Result<Vec<u8>> {
     let library = Seccomp::load().map_err(io::Error::other)?;
     // SAFETY: a fresh context, released below.
     let context = unsafe { (library.seccomp_init)(ALLOW) };
     if context.is_null() {
         return Err(io::Error::other("libseccomp could not start a filter"));
     }
-    let result = rules(&library, context).and_then(|()| {
+    let result = rules(&library, context, local_sockets).and_then(|()| {
         let (reader, writer) = rustix::pipe::pipe_with(rustix::pipe::PipeFlags::CLOEXEC)?;
         // SAFETY: a valid context and a descriptor open for writing.
         let exported = unsafe { (library.seccomp_export_bpf)(context, writer.as_raw_fd()) };
@@ -90,7 +98,7 @@ fn compile() -> io::Result<Vec<u8>> {
     result
 }
 
-fn rules(library: &Seccomp, context: *mut c_void) -> io::Result<()> {
+fn rules(library: &Seccomp, context: *mut c_void, local_sockets: bool) -> io::Result<()> {
     let add = |name: &str, action: u32, comparisons: &[Comparison]| -> io::Result<()> {
         let symbol = CString::new(name).expect("no NUL in system call names");
         // SAFETY: a NUL-terminated name.
@@ -111,7 +119,11 @@ fn rules(library: &Seccomp, context: *mut c_void) -> io::Result<()> {
     for name in UNKNOWN {
         add(name, errno(ENOSYS), &[])?;
     }
-    add("socket", errno(EAFNOSUPPORT), &[Comparison { argument: 0, operation: NOT_EQUAL, first: AF_UNIX, second: 0 }])?;
+    if local_sockets {
+        add("socket", errno(EAFNOSUPPORT), &[Comparison { argument: 0, operation: NOT_EQUAL, first: AF_UNIX, second: 0 }])?;
+    } else {
+        add("socket", errno(EAFNOSUPPORT), &[])?;
+    }
     for request in TERMINAL_INJECTION {
         add("ioctl", errno(EPERM), &[Comparison { argument: 1, operation: MASKED_EQUAL, first: 0xffff_ffff, second: request }])?;
     }
