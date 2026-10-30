@@ -25,6 +25,7 @@ pub(super) fn render_grid_file_list(
     handle: Entity<OxydeApp>,
     cx: &mut Context<OxydeApp>,
 ) -> impl IntoElement {
+    let status_corner = view.pane_corner(&pane_id);
     let pane = view.state.layout.find_pane(&pane_id).expect("pane exists");
     let tab = pane.active_tab();
     let search_results = tab.quick_search.is_some();
@@ -427,6 +428,7 @@ pub(super) fn render_grid_file_list(
         .on_scroll_wheel(|_, window, cx| crate::ui::components::tooltip::hover::dismiss(window, cx))
         .child(crate::ui::components::tooltip::hover::container(handle.clone(), pane_id.clone(), px(0.0), px(status_bar_height()), cx))
         .overflow_hidden()
+        .rounded_br(status_corner)
         .bg(if active {
             theme.active_background
         } else {
@@ -480,6 +482,7 @@ pub(super) fn render_grid_file_list(
                 .pr(rems(0.5))
                 .py(rems(0.25))
                 .bg(theme.header)
+                .rounded_br(status_corner)
                 .border_t(rems(0.0625))
                 .border_color(theme.border)
                 .text_size(rems(0.75))

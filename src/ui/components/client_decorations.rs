@@ -37,7 +37,7 @@ impl<T: InteractiveElement> ClientDecorationsExt for T {}
 
 /// Wrap a window root. On Linux with client decorations, a transparent margin carries the
 /// shadow and the resize zones; tiled, maximized and fullscreen sides have none.
-pub(crate) fn frame(content: impl IntoElement, border: Hsla, window: &mut Window) -> AnyElement {
+pub(crate) fn frame(content: impl IntoElement + Styled, border: Hsla, window: &mut Window) -> AnyElement {
     #[cfg(target_os = "linux")]
     {
         let Decorations::Client { tiling } = window.window_decorations() else {
@@ -46,6 +46,7 @@ pub(crate) fn frame(content: impl IntoElement, border: Hsla, window: &mut Window
         window.set_client_inset(MARGIN);
         let margin = margin(tiling);
         let side = |tiled: bool| if tiled { px(0.0) } else { px(1.0) };
+        let corners = inner_corners(window);
         div()
             .size_full()
             .pt(margin.top)
@@ -72,7 +73,7 @@ pub(crate) fn frame(content: impl IntoElement, border: Hsla, window: &mut Window
                     })
             })
             .child(
-                div()
+                round(div(), corners, ALL)
                     .relative()
                     .size_full()
                     .when(!tiling.is_tiled(), |window_area| window_area.shadow(vec![BoxShadow {
@@ -82,9 +83,9 @@ pub(crate) fn frame(content: impl IntoElement, border: Hsla, window: &mut Window
                         spread_radius: px(0.0),
                         inset: false,
                     }]))
-                    .child(content)
+                    .child(round(content, corners, ALL))
                     // Drawn over the content so the border takes no layout space.
-                    .child(div().absolute().inset_0().border_color(border)
+                    .child(round(div(), corners, ALL).absolute().inset_0().border_color(border)
                         .border_t(side(tiling.top))
                         .border_r(side(tiling.right))
                         .border_b(side(tiling.bottom))
@@ -98,6 +99,36 @@ pub(crate) fn frame(content: impl IntoElement, border: Hsla, window: &mut Window
         content.into_any_element()
     }
 }
+
+/// Radii for backgrounds reaching a window corner. GPUI clips to rectangles only, so each must
+/// round itself; they lie under the border, hence the outline's own radius. None on Windows,
+/// which rounds natively, or where a corner meets a screen edge.
+pub(crate) fn inner_corners(window: &Window) -> Corners<Pixels> {
+    #[cfg(target_os = "linux")]
+    if let Decorations::Client { tiling } = window.window_decorations() {
+        if !window.is_fullscreen() && !window.is_maximized() {
+            return rounded_corners(tiling, CORNER_RADIUS);
+        }
+    }
+    let _ = window;
+    Corners::default()
+}
+
+/// Applies the `corners` radii selected by `mask` to `element`.
+pub(crate) fn round<E: Styled>(mut element: E, corners: Corners<Pixels>, mask: Corners<bool>) -> E {
+    let pick = |radius: Pixels, keep: bool| keep.then_some(radius.into());
+    let style = &mut element.style().corner_radii;
+    style.top_left = pick(corners.top_left, mask.top_left).or(style.top_left);
+    style.top_right = pick(corners.top_right, mask.top_right).or(style.top_right);
+    style.bottom_right = pick(corners.bottom_right, mask.bottom_right).or(style.bottom_right);
+    style.bottom_left = pick(corners.bottom_left, mask.bottom_left).or(style.bottom_left);
+    element
+}
+
+/// Corners of an edge, for `round`.
+#[cfg(target_os = "linux")]
+const ALL: Corners<bool> = Corners { top_left: true, top_right: true, bottom_right: true, bottom_left: true };
+pub(crate) const TOP: Corners<bool> = Corners { top_left: true, top_right: true, bottom_right: false, bottom_left: false };
 
 /// Window area showing content: the viewport less the Linux shadow margin.
 pub(crate) fn content_bounds(window: &Window) -> Bounds<Pixels> {
@@ -128,6 +159,22 @@ thread_local! {
 /// Transparent margin holding the shadow and the resize zones.
 #[cfg(target_os = "linux")]
 const MARGIN: Pixels = px(10.0);
+
+/// Radius of the window outline, as in Soliton.
+#[cfg(target_os = "linux")]
+const CORNER_RADIUS: Pixels = px(10.0);
+
+/// A corner is rounded only when both of its sides float free.
+#[cfg(target_os = "linux")]
+fn rounded_corners(tiling: Tiling, radius: Pixels) -> Corners<Pixels> {
+    let corner = |a: bool, b: bool| if a || b { px(0.0) } else { radius };
+    Corners {
+        top_left: corner(tiling.top, tiling.left),
+        top_right: corner(tiling.top, tiling.right),
+        bottom_right: corner(tiling.bottom, tiling.right),
+        bottom_left: corner(tiling.bottom, tiling.left),
+    }
+}
 
 #[cfg(target_os = "linux")]
 fn margin(tiling: Tiling) -> Edges<Pixels> {

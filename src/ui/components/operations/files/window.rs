@@ -205,7 +205,7 @@ impl Render for FilesWindow {
             .child(tool_window::header_with_actions(
                 "icons/list.svg",
                 title,
-                window.is_maximized(),
+                window,
                 true,
                 cx,
                 header_actions,

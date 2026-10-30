@@ -3,7 +3,29 @@ use super::ThemeContext;
 use super::{InteractiveElement, IntoElement, ParentElement, Styled};
 use gpui::*;
 
+/// Whether a pane is the last of every split holding it, down to the root.
+fn ends_layout(node: &crate::ui::workspace::LayoutNode, pane_id: &str) -> Option<bool> {
+    match node {
+        crate::ui::workspace::LayoutNode::Pane(pane) => (pane.id == pane_id).then_some(true),
+        crate::ui::workspace::LayoutNode::Split { children, .. } => {
+            let last = children.len().saturating_sub(1);
+            children.iter().enumerate().find_map(|(index, child)| {
+                ends_layout(child, pane_id).map(|ends| ends && index == last)
+            })
+        }
+    }
+}
+
 impl OxydeApp {
+    /// Radius of a pane's bottom right corner: the sidebar keeps it away from the left one.
+    pub(crate) fn pane_corner(&self, pane_id: &str) -> Pixels {
+        if ends_layout(&self.state.layout, pane_id).unwrap_or(false) {
+            self.window_corners.bottom_right
+        } else {
+            px(0.0)
+        }
+    }
+
     pub(crate) fn render_layout_node(
         &self,
         node: &crate::ui::workspace::LayoutNode,
@@ -132,3 +154,7 @@ impl OxydeApp {
     }
 
 }
+
+#[cfg(test)]
+#[path = "tests/tree.rs"]
+mod tests;

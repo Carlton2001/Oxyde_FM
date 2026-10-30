@@ -165,7 +165,7 @@ impl Render for ViewerWindow {
                 "icons/eye.svg",
                 title,
                 file.map(|(_, path)| path.into()),
-                window.is_maximized(),
+                window,
                 true,
                 cx,
                 Some(options.into_any_element()),

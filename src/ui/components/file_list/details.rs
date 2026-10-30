@@ -84,6 +84,7 @@ pub(super) fn render_details_file_list(
     let total_w = columns.total() + if trash_panel { logical(active_tab.deleted_col_width) } else { 0.0 };
 
     let is_active_pane = view.state.active_pane_id == pane_id;
+    let status_corner = view.pane_corner(&pane_id);
     let is_dragging_v = matches!(view.drag_target, Some(DragTarget::FileListV { ref pane_id, .. }) if pane_id == &p_id_cap);
     let show_tooltips = view.context_menus.is_empty();
     let use_system_icons = cfg!(target_os = "windows") && view.use_system_icons();
@@ -139,6 +140,7 @@ pub(super) fn render_details_file_list(
         .min_h_0()
         .flex()
         .flex_col()
+        .rounded_br(status_corner)
         .bg(if is_active_pane { theme.active_background } else { theme.background })
         .overflow_hidden()
         .relative()
@@ -561,6 +563,7 @@ pub(super) fn render_details_file_list(
             .pr(rems(0.5))
             .py(rems(0.25))
             .bg(theme.header)
+            .rounded_br(status_corner)
             .border_t(rems(0.0625))
             .border_color(theme.border)
             .text_size(rems(0.75))

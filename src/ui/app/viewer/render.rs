@@ -66,6 +66,21 @@ pub(super) fn bar_button(
         })
 }
 
+impl Viewer {
+    /// Radii of the bottom left and right corners, wherever the surface is drawn.
+    fn bottom_corners(&self, window: &Window, cx: &App) -> (Pixels, Pixels) {
+        if window.window_handle().downcast::<super::window::ViewerWindow>().is_some() {
+            let corners = crate::ui::components::client_decorations::inner_corners(window);
+            return (corners.bottom_left, corners.bottom_right);
+        }
+        let corner = self.owner.upgrade().map_or(px(0.0), |owner| {
+            let app = owner.read(cx);
+            app.state.viewer_pane_id(&self.tab_id).map_or(px(0.0), |pane| app.pane_corner(&pane))
+        });
+        (px(0.0), corner)
+    }
+}
+
 impl Render for Viewer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // A shared Viewer may be drawn by both windows. Only the secondary window
@@ -76,7 +91,7 @@ impl Render for Viewer {
                 .downcast::<super::window::ViewerWindow>()
                 .is_none()
         {
-            return self.render_detached(cx).into_any_element();
+            return self.render_detached(window, cx).into_any_element();
         }
         if self.fullscreen_pending && self.detached {
             self.fullscreen_pending = false;
@@ -102,8 +117,11 @@ impl Render for Viewer {
         let overlay = self.render_overlay(window, failed, cx);
         let current = self.file.as_ref();
         let title = current.map(|file| file.name.clone()).unwrap_or_default();
+        let (corner_left, corner_right) = self.bottom_corners(window, cx);
         let surface = div()
             .id("viewer-surface")
+            .rounded_bl(corner_left)
+            .rounded_br(corner_right)
             .size_full()
             .relative()
             .min_w_0()
@@ -247,9 +265,11 @@ impl Viewer {
             })
     }
 
-    fn render_detached(&self, cx: &mut Context<Self>) -> Div {
+    fn render_detached(&self, window: &Window, cx: &mut Context<Self>) -> Div {
         let theme = *cx.theme();
+        let (_, corner) = self.bottom_corners(window, cx);
         div()
+            .rounded_br(corner)
             .size_full()
             .flex()
             .flex_col()

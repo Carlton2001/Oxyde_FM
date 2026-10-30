@@ -244,6 +244,8 @@ pub struct OxydeApp {
     pub grab_offset: f32,
     pub sidebar_width: f32,
     pub(crate) sidebar_collapsed: bool,
+    /// Radii of the main window's corners, for what reaches them.
+    pub(crate) window_corners: Corners<Pixels>,
     pub sidebar_content_width: f32,
     pub sidebar_selected_path: Option<String>,
     pub(crate) sidebar_follow_path: Option<String>,
@@ -435,6 +437,7 @@ impl OxydeApp {
             operations_breath: Default::default(),
             grab_offset: 0.0,
             sidebar_width,
+            window_corners: Corners::default(),
             sidebar_collapsed: config
                 .workspace_state
                 .as_ref()

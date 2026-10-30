@@ -15,6 +15,7 @@ impl Render for OxydeApp {
         self.sync_viewers(cx);
         self.prepare_created_item_rename(_window, cx);
 
+        self.window_corners = crate::ui::components::client_decorations::inner_corners(_window);
         let size = crate::ui::components::client_decorations::content_bounds(_window).size;
         if self.network_force_focus_pending {
             self.network_force_focus_pending = false;
@@ -235,7 +236,7 @@ impl Render for OxydeApp {
             .child({
                 // ── Custom title bar ──────────────────────────────────────
                 use crate::ui::components::title_bar::render_title_bar;
-                render_title_bar(self, handle.clone(), _window.is_maximized(), cx)
+                render_title_bar(self, handle.clone(), _window, cx)
             })
             .child({
                 // ── Horizontal content area (sidebar + panes) ─────────────

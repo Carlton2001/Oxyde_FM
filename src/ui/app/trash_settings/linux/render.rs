@@ -66,7 +66,7 @@ pub(crate) fn render(
                 .body_background(theme.active_background)
                 .header(crate::ui::components::tool_window::header(
                     "icons/trash-2.svg", cx.i18n().text(Message::TrashProperties),
-                    window.is_maximized(), false, cx,
+                    window, false, cx,
                     move |window, cx| {
                         title_close.update(cx, |app, cx| app.close_trash_settings(window, cx));
                     },

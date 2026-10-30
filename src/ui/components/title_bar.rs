@@ -15,7 +15,7 @@ pub fn titlebar_h() -> f32 {
 pub fn render_title_bar(
     view: &OxydeApp,
     handle: Entity<OxydeApp>,
-    is_maximized: bool,
+    window: &Window,
     cx: &mut Context<OxydeApp>,
 ) -> impl IntoElement {
     let theme = *cx.theme();
@@ -112,6 +112,7 @@ pub fn render_title_bar(
         .items_center()
         .gap_2()
         .rounded_none()
+        .rounded_tl(crate::ui::components::client_decorations::inner_corners(window).top_left)
         .flex_none()
         .hover(move |s| s.bg(btn_hover_bg))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
@@ -156,7 +157,9 @@ pub fn render_title_bar(
         });
 
     // ── Assemble ─────────────────────────────────────────────────────────────
-    div()
+    let corners = crate::ui::components::client_decorations::inner_corners(window);
+    let is_maximized = window.is_maximized();
+    crate::ui::components::client_decorations::round(div(), corners, crate::ui::components::client_decorations::TOP)
         .id("title-bar")
         .w_full()
         .h(px(titlebar_h()))
@@ -174,7 +177,7 @@ pub fn render_title_bar(
         .child(tools)
         .child(crate::ui::components::operations::render_operations_footer(view, handle.clone(), cx))
         .child(div().w(rems(0.5)).h_full().flex_none())
-        .child(render_window_controls(is_maximized, cx, move |window, cx| {
+        .child(render_window_controls(is_maximized, corners.top_right, cx, move |window, cx| {
             close_main_window(&handle, "title bar close button", window, cx);
         }))
 }
@@ -195,15 +198,17 @@ pub(crate) fn close_main_window(handle: &Entity<OxydeApp>, reason: &'static str,
 /// independently of the Lucide assets and their global stroke setting.
 pub fn render_window_controls(
     is_maximized: bool,
+    corner: Pixels,
     cx: &App,
     on_close: impl Fn(&mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
-    render_window_controls_with_options(is_maximized, true, cx, on_close)
+    render_window_controls_with_options(is_maximized, true, corner, cx, on_close)
 }
 
 pub(crate) fn render_window_controls_with_options(
     is_maximized: bool,
     allow_resize: bool,
+    corner: Pixels,
     cx: &App,
     on_close: impl Fn(&mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
@@ -260,6 +265,7 @@ pub(crate) fn render_window_controls_with_options(
         .justify_center()
         .flex_none()
         .window_control_area(WindowControlArea::Close)
+        .rounded_tr(corner)
         .hover(|s| s.bg(theme.danger_hover))
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             on_close(window, cx);

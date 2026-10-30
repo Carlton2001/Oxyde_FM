@@ -193,7 +193,7 @@ pub(crate) fn render(
                 .child(crate::ui::components::tool_window::header(
                     "icons/settings-2.svg",
                     cx.i18n().text(Message::Properties),
-                    window.is_maximized(),
+                    window,
                     false,
                     cx,
                     move |window, cx| {

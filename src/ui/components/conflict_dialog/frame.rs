@@ -39,7 +39,7 @@ pub(super) fn render_frame(
     let cancel = handle.clone();
     window.set_window_title(&title);
     let header = crate::ui::components::tool_window::header(
-        "icons/copy-x.svg", title.clone().into(), window.is_maximized(), advanced, cx,
+        "icons/copy-x.svg", title.clone().into(), window, advanced, cx,
         move |window, cx| {
             cancel.update(cx, |app, cx| app.cancel_pending_file_operation(cx));
             restore_focus(&cancel, window, cx);

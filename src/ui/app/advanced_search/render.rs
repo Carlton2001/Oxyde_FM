@@ -141,7 +141,7 @@ impl AdvancedSearchWindow {
             .child(crate::ui::components::tool_window::header(
                 "icons/search.svg",
                 cx.i18n().text(Message::ToolSearch),
-                window.is_maximized(),
+                window,
                 false,
                 cx,
                 |window, cx| { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() },

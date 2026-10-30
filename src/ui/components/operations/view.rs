@@ -92,7 +92,7 @@ impl Render for OperationsPanelView {
             .child(super::super::tool_window::header_with_actions(
                 "icons/download.svg",
                 title,
-                window.is_maximized(),
+                window,
                 true,
                 cx,
                 super::title_actions::panel(app.clone(), cx),

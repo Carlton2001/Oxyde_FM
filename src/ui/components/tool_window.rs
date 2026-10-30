@@ -45,8 +45,10 @@ pub(crate) fn fit_content_height(height: Pixels, window: &mut Window, cx: &App) 
 pub(crate) fn fit_content_height_at_width(height: Pixels, width: Pixels, window: &mut Window, cx: &App) {
     let target = height.ceil().min(content_height_limit(window, cx));
     let shown = super::client_decorations::content_bounds(window).size;
-    if ((shown.height - target).abs() > px(1.0)
-        || (shown.width - width).abs() > px(1.0)) && target > px(0.0) {
+    // Linux sizes are whole pixels, and a pixel of content past the frame would cover its corners.
+    let tolerance = if cfg!(target_os = "linux") { px(0.5) } else { px(1.0) };
+    if ((shown.height - target).abs() > tolerance
+        || (shown.width - width).abs() > tolerance) && target > px(0.0) {
         let outer = super::client_decorations::window_size_for(size(width, target), window);
         window.on_next_frame(move |window, _| {
             window.resize(outer);
@@ -112,12 +114,12 @@ pub(crate) fn install_icon(path: &'static str, window: &mut Window) {
 pub(crate) fn header(
     icon: impl Into<SharedString>,
     title: SharedString,
-    maximized: bool,
+    window: &Window,
     allow_resize: bool,
     cx: &App,
     on_close: impl Fn(&mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
-    header_frame(icon.into(), title, maximized, allow_resize, cx, None, None, on_close)
+    header_frame(icon.into(), title, window, allow_resize, cx, None, None, on_close)
 }
 
 /// A header whose title reveals its full form, such as a path, in a fixed tooltip.
@@ -125,31 +127,31 @@ pub(crate) fn header_with_title_tooltip(
     icon: impl Into<SharedString>,
     title: SharedString,
     tooltip: Option<SharedString>,
-    maximized: bool,
+    window: &Window,
     allow_resize: bool,
     cx: &App,
     actions: Option<AnyElement>,
     on_close: impl Fn(&mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
-    header_frame(icon.into(), title, maximized, allow_resize, cx, actions, tooltip, on_close)
+    header_frame(icon.into(), title, window, allow_resize, cx, actions, tooltip, on_close)
 }
 
 pub(crate) fn header_with_actions(
     icon: &'static str,
     title: SharedString,
-    maximized: bool,
+    window: &Window,
     allow_resize: bool,
     cx: &App,
     actions: impl IntoElement,
     on_close: impl Fn(&mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
-    header_frame(icon.into(), title, maximized, allow_resize, cx, Some(actions.into_any_element()), None, on_close)
+    header_frame(icon.into(), title, window, allow_resize, cx, Some(actions.into_any_element()), None, on_close)
 }
 
 fn header_frame(
     icon: SharedString,
     title: SharedString,
-    maximized: bool,
+    window: &Window,
     allow_resize: bool,
     cx: &App,
     actions: Option<AnyElement>,
@@ -157,7 +159,8 @@ fn header_frame(
     on_close: impl Fn(&mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
     let theme = *cx.theme();
-    div()
+    let corners = super::client_decorations::inner_corners(window);
+    super::client_decorations::round(div(), corners, super::client_decorations::TOP)
         .h(rems(2.25))
         .w_full()
         .flex_none()
@@ -192,8 +195,9 @@ fn header_frame(
         )
         .when_some(actions, |header, actions| header.child(actions))
         .child(super::title_bar::render_window_controls_with_options(
-            maximized,
+            window.is_maximized(),
             allow_resize,
+            corners.top_right,
             cx,
             on_close,
         ))

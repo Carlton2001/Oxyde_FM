@@ -113,6 +113,7 @@ pub(super) fn render_sidebar_tree(
         .w_full()
         .h_full()
         .bg(theme.sidebar)
+        .rounded_bl(view.window_corners.bottom_left)
         .on_scroll_wheel(_cx.listener(|_, _, window, cx| {
             crate::ui::components::tooltip::hover::dismiss(window, cx);
             cx.notify();

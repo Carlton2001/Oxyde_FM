@@ -19,6 +19,7 @@ pub(super) fn render_sidebar_rail(
         .flex()
         .flex_col()
         .bg(theme.sidebar)
+        .rounded_bl(view.window_corners.bottom_left)
         .child(sidebar_toolbar(view, handle.clone(), false, cx));
     let h = handle.clone();
     rail = rail.child(

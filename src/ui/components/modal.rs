@@ -210,7 +210,7 @@ impl RenderOnce for Modal {
                 // Same title bar as Properties and the other secondary windows.
                 window.set_window_title(title.as_ref());
                 super::tool_window::header(
-                    self.title_icon.unwrap_or_default(), title, false, false, cx,
+                    self.title_icon.unwrap_or_default(), title, window, false, cx,
                     move |window, cx| if let Some(close) = &on_close { close(window, cx) },
                 ).into_any_element()
             });
@@ -219,7 +219,9 @@ impl RenderOnce for Modal {
                 div().id("modal-body").px(self.body_padding.0).py(self.body_padding.1)
                     .flex().flex_col().gap(self.body_gap)
                     .when(fill_window, |body| body.flex_1()).child(self.body), false, window, cx);
+            let corners = super::client_decorations::inner_corners(window);
             return div().id(self.id).relative().w_full().max_h(height_limit)
+                .rounded_bl(corners.bottom_left).rounded_br(corners.bottom_right)
                 .when(fill_window, |frame| frame.h_full())
                 .flex().flex_col().bg(self.body_background.unwrap_or(theme.active_background))
                 .text_color(theme.text).text_size(rems(0.8125)).line_height(relative(1.25))
@@ -231,9 +233,15 @@ impl RenderOnce for Modal {
                         .when(self.wrap_actions, |actions| actions.flex_wrap())
                         .gap(rems(0.5)).children(self.actions)))
                 .child(canvas(|bounds, _, _| bounds, move |_, bounds, window, cx| {
+                    // The laid-out width only follows the window: chasing it, snapped to device
+                    // pixels, would widen the window frame after frame at fractional scales.
                     if !fill_window {
-                        crate::ui::components::tool_window::fit_content_height_at_width(
-                            bounds.size.height, content_width.unwrap_or(bounds.size.width), window, cx);
+                        match content_width {
+                            Some(width) => crate::ui::components::tool_window::fit_content_height_at_width(
+                                bounds.size.height, width, window, cx),
+                            None => crate::ui::components::tool_window::fit_content_height(
+                                bounds.size.height, window, cx),
+                        }
                     }
                 }).absolute().size_full()).into_any_element();
         }

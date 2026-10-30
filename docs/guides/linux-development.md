@@ -87,6 +87,10 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
   l'héritent pas. Mesuré sur Intel + RTX 4070 : la NVIDIA reste `suspended` pendant et après
   l'exécution ; avec un choix explicite, elle passe `active`. Reste : écran externe branché
   sur la NVIDIA, Oxyde déjà lancé.
+- Coins arrondis : `client_decorations` arrondit de 10 px, comme Soliton, les coins flottants
+  des fenêtres à décorations client, et aucun coin touchant un bord d'écran. GPUI ne découpe
+  qu'en rectangles : un fond atteignant un coin s'arrondit lui-même avec `inner_corners`
+  (barres de titre, barre latérale, barre d'état et Visionneuse du dernier panneau).
 - Échelles : vérifiées sous Mutter sans écran à 100, 125, 133, 200 et 250 %, en changement à
   chaud et sur deux écrans mixtes (125/200 %, 100/200 %), fenêtre déplacée de l'un à l'autre :
   rendu net quelle que soit la position ou la taille, menus, infobulles et aperçus au bon
