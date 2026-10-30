@@ -135,9 +135,11 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
 **Intégration (jalon 5)**
 - M08, fait : [presse-papiers](../architecture/clipboard.md) partagé avec Nautilus.
 - T11, fait : [surveillance](../architecture/watchers.md) par inotify hors partages réseau.
-- Glisser vers d'autres applications. Volumes
-  faits (T02, T03) : inventaire UDisks2, notifications, démontage et éjection, volumes non
-  montés, disques physiques et SSD ; voir le [pilote volumes](../architecture/volumes.md).
+- Fait sous Wayland : [glisser vers d'autres applications](../architecture/windows.md#glisser-déposer-de-fichiers).
+  Vérifié sous KWin imbriqué vers Nautilus ; reste un essai sous GNOME, sur une vraie session.
+  Impossible en X11, GPUI n'y offrant pas de fichiers.
+- Volumes faits (T02, T03) : inventaire UDisks2, notifications, démontage et éjection,
+  volumes non montés, disques physiques et SSD ; voir le [pilote volumes](../architecture/volumes.md).
 - T12, fait : [accès rapide](../architecture/quick-access.md) partagé avec Nautilus,
   erreurs de `xdg-open` signalées, Propriétés d'Oxyde seules.
 - T13, fait : aucune mise à jour dans l'application, laissée au gestionnaire de paquets

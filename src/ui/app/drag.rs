@@ -6,6 +6,7 @@ use gpui::*;
 #[cfg(target_os = "windows")]
 mod popup;
 pub(super) mod external;
+pub(crate) mod outgoing;
 #[cfg(target_os = "windows")]
 pub(super) mod native;
 #[cfg(not(target_os = "windows"))]

@@ -241,6 +241,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                 }
             },
         )
+        .external_drag_payload(crate::ui::app::outgoing_drag(h.clone()))
         .child(
             div()
                 .relative()

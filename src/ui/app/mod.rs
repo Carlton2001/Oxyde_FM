@@ -33,6 +33,7 @@ mod rename;
 mod context_menus;
 mod drag;
 pub(crate) use drag::external::FileDropTargetExt;
+pub(crate) use drag::outgoing::resolver as outgoing_drag;
 #[cfg(target_os = "windows")]
 pub(crate) use drag::native::close as close_file_drag;
 mod dialog_windows;

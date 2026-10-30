@@ -449,6 +449,7 @@ pub(super) fn render_sidebar_rows(
                             }
                         }
                     )
+                    .external_drag_payload(crate::ui::app::outgoing_drag(h.clone()))
                     // Drag target
                     .external_file_drop(h.clone(), path.clone())
                     .drag_over::<FileDragData>({

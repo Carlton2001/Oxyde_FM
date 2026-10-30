@@ -217,6 +217,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                     cx.new(|cx| FileDragPreview::new(paths, cursor_offset, is_dir, app, window, cx))
                 }
             })
+            .external_drag_payload(crate::ui::app::outgoing_drag(h.clone()))
             .when(can_drop, |row| {
                 let h_drop = h.clone();
                 let target_path = path.clone();

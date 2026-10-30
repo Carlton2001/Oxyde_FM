@@ -69,6 +69,15 @@ lancée par message après libération des emprunts GPUI. Le drag interne est al
 retiré ; un retour dans Oxyde passe par le même dépôt externe que les autres
 programmes. Les membres virtuels d'archives ne sont pas exportés sans préparation.
 
+Sous Linux, en Wayland, GPUI confie le geste au compositeur quand le pointeur quitte
+la fenêtre (`app/drag/outgoing.rs`). Il offre les chemins en `text/uri-list` ; le
+récepteur copie ou déplace lui-même, comme depuis Nautilus, et Oxyde voit le résultat
+par sa surveillance de dossiers. Le compositeur n'affiche alors aucun ghost, GPUI ne
+lui en fournissant pas. Un retour dans Oxyde reprend le glisser interne, donc son
+déplacement. Sélection refusée en entier s'il s'y trouve un membre d'archive, un nom
+non UTF-8, ou depuis la corbeille : le geste reste alors interne. GPUI n'offre pas de
+fichiers en X11, où il reste toujours interne.
+
 `Platform::install_file_drop_target` remplace le récepteur GPUI Windows afin de
 transmettre les modificateurs, les effets autorisés et le refus des zones sans
 cible. Les dossiers, listes (détails/grille), entrées physiques de la barre
