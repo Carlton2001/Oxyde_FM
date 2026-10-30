@@ -80,7 +80,9 @@ fn undo_keeps_a_link_replaced_since_the_copy() {
         FileOperationManager::execute_operation(history.clone(), op.clone()).await;
         assert_eq!(op.lock().unwrap().status, OpStatus::Completed);
         assert_link(&link, "data.txt");
-        std::fs::remove_file(&link).unwrap();
+        // Kept aside: ext4 would give a removed link's number to its replacement, in the
+        // same clock tick, and no identity can tell them apart.
+        std::fs::rename(&link, root.path().join("aside")).unwrap();
         symlink("data.txt", &link).unwrap();
         assert!(crate::commands::ops::undo_last_action(&history).await.is_err());
         assert_link(&link, "data.txt");
