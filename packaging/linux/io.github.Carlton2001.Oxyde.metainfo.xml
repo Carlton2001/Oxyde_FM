@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.Carlton2001.Oxyde</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
+  <name>Oxyde</name>
+  <summary>Modern and fast file manager</summary>
+  <summary xml:lang="fr">Gestionnaire de fichiers moderne et rapide</summary>
+  <summary xml:lang="de">Moderner und schneller Dateimanager</summary>
+  <summary xml:lang="es">Gestor de archivos moderno y rápido</summary>
+  <summary xml:lang="it">Gestore di file moderno e veloce</summary>
+  <developer id="io.github.carlton2001">
+    <name>Carlton2001</name>
+  </developer>
+  <description>
+    <p>Oxyde is a native file manager with resizable panes, tabs, integrated previews, advanced search, and archive browsing and editing.</p>
+    <p xml:lang="fr">Oxyde est un gestionnaire de fichiers natif avec panneaux redimensionnables, onglets, aperçus intégrés, recherche avancée, navigation et modification d'archives.</p>
+    <p xml:lang="de">Oxyde ist ein nativer Dateimanager mit anpassbaren Bereichen, Tabs, integrierter Vorschau, erweiterter Suche sowie dem Durchsuchen und Bearbeiten von Archiven.</p>
+    <p xml:lang="es">Oxyde es un gestor de archivos nativo con paneles redimensionables, pestañas, vistas previas integradas, búsqueda avanzada y exploración y edición de archivos comprimidos.</p>
+    <p xml:lang="it">Oxyde è un gestore di file nativo con pannelli ridimensionabili, schede, anteprime integrate, ricerca avanzata, esplorazione e modifica degli archivi.</p>
+  </description>
+  <launchable type="desktop-id">io.github.Carlton2001.Oxyde.desktop</launchable>
+  <url type="homepage">https://github.com/Carlton2001/Oxyde_FM</url>
+  <url type="bugtracker">https://github.com/Carlton2001/Oxyde_FM/issues</url>
+  <categories>
+    <category>Utility</category>
+    <category>FileManager</category>
+  </categories>
+  <provides>
+    <binary>oxyde</binary>
+    <mediatype>inode/directory</mediatype>
+  </provides>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="@VERSION@" date="@DATE@"/>
+  </releases>
+</component>

@@ -8,8 +8,8 @@
 Ce qui fait reconnaître Oxyde par GNOME et les autres bureaux freedesktop (point T15 de
 l'audit) : identifiant d'application, entrée de bureau et icône. L'ouverture d'un dossier
 passé en argument, la déclaration `inode/directory` (« Ouvrir avec ») et les métadonnées
-AppStream attendent le paquet (T14). Windows garde son identité (`com.oxyde.desktop`,
-icône `.ico` du binaire).
+AppStream sont venues avec [les paquets](../guides/linux-distribution.md) (T14). Windows
+garde son identité (`com.oxyde.desktop`, icône `.ico` du binaire).
 
 ## Constat Linux
 
@@ -26,8 +26,8 @@ icône `.ico` du binaire).
   l'entrée de bureau, de l'icône et `StartupWMClass` pour X11. Il ne change plus une fois
   publié.
 - Entrée de bureau modelée sur celle de Nautilus (`Utility;Core;FileManager;`), nom et
-  description traduits dans les cinq langues. `Exec` sans argument tant qu'Oxyde n'ouvre
-  pas les chemins reçus.
+  description traduits dans les cinq langues. `Exec=oxyde %U` : Oxyde ouvre les
+  emplacements reçus.
 - Icône : le logo SVG d'Oxyde (`assets/icons/logo_oxyde.svg`), celui dont dérive l'icône
   Windows, en taille libre dans `hicolor/scalable/apps`.
 - Le script `scripts/install-linux-desktop.sh` installe ou retire l'entrée et l'icône
@@ -58,6 +58,6 @@ fenêtre, qui portent toutes l'identifiant ; Windows l'ignore.
 - Le lanceur de développement doit garder le profil isolé : l'entrée installée par le
   script le fixe par variables d'environnement dans `Exec`.
 
-**Reporté au paquet (T14).** Ouvrir un dossier reçu en argument, puis déclarer
+**Fait avec le paquet (T14).** Ouvrir un dossier reçu en argument, déclarer
 `inode/directory` pour « Ouvrir avec » ; métadonnées AppStream ; icônes PNG pour les
-bureaux sans SVG.
+bureaux sans SVG. Voir la [distribution Linux](../guides/linux-distribution.md).

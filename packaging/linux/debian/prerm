@@ -1,0 +1,5 @@
+#!/bin/sh
+set -e
+if [ "$1" = remove ] && command -v apparmor_parser >/dev/null && aa-enabled --quiet 2>/dev/null; then
+    apparmor_parser -R -T -W /etc/apparmor.d/io.github.Carlton2001.Oxyde || true
+fi

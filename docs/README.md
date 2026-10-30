@@ -10,6 +10,7 @@ Oxyde utilise Rust, GPUI et Tokio. Choisir une référence selon le travail à f
 | Consulter les premiers essais graphiques et la corbeille Linux | [Bilan du 26 octobre](reports/2026-10-26-linux-ui-trash.md) |
 | Évaluer l'ampleur du portage Linux | [Audit de portabilité, 26 octobre 2026](reports/2026-10-26-linux-portability-audit.md) |
 | Construire une version installable ou portable | [Distribution Windows](guides/distribution.md) |
+| Construire les paquets RPM et DEB, CI Linux | [Distribution Linux](guides/linux-distribution.md) |
 | Comprendre les temps de distribution Windows | [Référence GitHub](reports/2026-10-22-windows-distribution.md), [tests locaux](reports/2026-10-22-distribution-local-tests.md), [mesures v2.0.1 et clé de cache](reports/2026-10-23-distribution-cache.md) |
 | Comprendre les temps de la CI native et de l’audit Windows | [Mesures et validations](reports/2026-10-22-windows-ci.md) |
 | Mettre à jour les avis de licences tiers | [Licences des dépendances](../licenses/dependencies/README.md) |

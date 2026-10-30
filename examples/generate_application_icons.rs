@@ -43,6 +43,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         )?);
     }
     IcoEncoder::new(File::create(&destination)?).encode_images(&frames)?;
+    // Linux packages, for desktops that do not draw the SVG.
+    for dimension in [16, 24, 32, 48, 64, 128, 256, 512] {
+        let folder = root.join(format!("packaging/linux/icons/{dimension}x{dimension}"));
+        fs::create_dir_all(&folder)?;
+        rasterize(&renderer, &svg, dimension)?.save(folder.join("io.github.Carlton2001.Oxyde.png"))?;
+    }
     println!(
         "Generated {} and {}",
         icons.join("logo.png").display(),

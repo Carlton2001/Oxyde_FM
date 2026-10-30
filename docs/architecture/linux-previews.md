@@ -34,8 +34,8 @@ décodage reste ainsi hors du processus de l'interface.
   n'est pas visible non plus, car le bac à sable a son propre espace de processus.
 
 Trois exécutables : `oxyde` pour les aperçus, `oxyde-archive-list-worker` et
-`oxyde-archive-io-worker` pour les archives, sans GPUI. Les paquets doivent les
-installer tous, et un échec de lancement ne déclenche jamais de décodage local.
+`oxyde-archive-io-worker` pour les archives, sans GPUI. [Les paquets](../guides/linux-distribution.md)
+les installent tous, et un échec de lancement ne déclenche jamais de décodage local.
 
 ## Confinement (bubblewrap)
 
@@ -80,6 +80,8 @@ GNOME confine ainsi ses miniaturiseurs, et glycin ses chargeurs d'images.
   (`~/.local/share/gstreamer-1.0`) ne sont pas chargés.
 - Sans bubblewrap utilisable (absent, ou espaces de noms utilisateur interdits), le
   worker est lancé directement, comme le fait glycin. Le journal le signale une fois.
+  Ubuntu interdit ces espaces de noms sans profil AppArmor : [le DEB en installe
+  un](../guides/linux-distribution.md#ubuntu-et-apparmor).
   Sans libseccomp, le confinement reste, sans filtre d'appels système.
 - Coût : 40 ms pour une miniature PDF, 80 ms jusqu'à la première image d'une vidéo
   1080p.

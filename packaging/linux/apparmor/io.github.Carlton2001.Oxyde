@@ -1,0 +1,12 @@
+# Oxyde confines its decoders with bubblewrap, which needs a user namespace. Ubuntu
+# grants one only to a program whose profile says so, as its own profile does for
+# Nautilus: this one allows that and restricts nothing else.
+abi <abi/4.0>,
+
+include <tunables/global>
+
+profile io.github.Carlton2001.Oxyde /usr/bin/oxyde flags=(unconfined) {
+  userns,
+
+  include if exists <local/io.github.Carlton2001.Oxyde>
+}

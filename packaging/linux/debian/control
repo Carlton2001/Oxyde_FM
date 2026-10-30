@@ -1,0 +1,13 @@
+Package: oxyde
+Version: @VERSION@
+Architecture: amd64
+Maintainer: Carlton2001 <Carlton2001@users.noreply.github.com>
+Installed-Size: @SIZE@
+Depends: @DEPENDS@, bubblewrap, libseccomp2, libglib2.0-0t64 | libglib2.0-0, libglib2.0-bin, libvulkan1, xdg-utils
+Recommends: gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gvfs, gvfs-backends, gvfs-fuse, libgstreamer-plugins-base1.0-0, libpoppler-glib8t64 | libpoppler-glib8, mesa-vulkan-drivers, udisks2
+Section: utils
+Priority: optional
+Homepage: https://github.com/Carlton2001/Oxyde_FM
+Description: Modern and fast file manager
+ Oxyde is a native file manager with resizable panes, tabs, integrated
+ previews, advanced search, and archive browsing and editing.

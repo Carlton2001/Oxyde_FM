@@ -60,7 +60,7 @@ fi
 mkdir -p "$(dirname "$entry")" "$(dirname "$icon")"
 cp "$root/assets/icons/logo_oxyde.svg" "$icon"
 # The desktop entry quotes arguments with double quotes only.
-sed "s|^Exec=.*|Exec=${command//\'/\"}|" "$root/packaging/linux/$app_id.desktop" > "$entry"
+sed "s|^Exec=.*|Exec=${command//\'/\"} %U|" "$root/packaging/linux/$app_id.desktop" > "$entry"
 desktop-file-validate "$entry" | sed '/: hint: /d'
 refresh
 printf 'Installed %s: %s\n' "$app_id" "$entry"

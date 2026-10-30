@@ -1,2 +1,6 @@
 # Bash scripts must remain runnable from WSL after a Windows checkout.
 /scripts/*.sh text eol=lf
+/scripts/*.py text eol=lf
+# Packaging files are read on Linux only.
+/packaging/linux/** text eol=lf
+/packaging/linux/**/*.png binary
