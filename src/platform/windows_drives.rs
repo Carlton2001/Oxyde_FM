@@ -1,3 +1,4 @@
+use super::VolumeError;
 use crate::models::DriveInfo;
 
 fn mounted_drive_label(volume_label: String, remote_path: Option<&str>) -> String {
@@ -133,7 +134,7 @@ pub fn watch_drive_changes(
 }
 
 /// Resolve the mounted volume to its physical disk, then ask PnP for safe removal.
-pub fn eject_drive(path: &str) -> Result<(), String> {
+pub fn eject_drive(path: &str) -> Result<(), VolumeError> {
     use windows::core::PCWSTR;
     use windows::Win32::Devices::DeviceAndDriverInstallation::*;
     use windows::Win32::Foundation::CloseHandle;
@@ -151,7 +152,7 @@ pub fn eject_drive(path: &str) -> Result<(), String> {
         || bytes[1] != b':'
         || (bytes.len() == 3 && !matches!(bytes[2], b'\\' | b'/'))
     {
-        return Err("Invalid drive root".into());
+        return Err(VolumeError::Other("Invalid drive root".into()));
     }
     unsafe fn disk_number(path: PCWSTR) -> Result<STORAGE_DEVICE_NUMBER, String> {
         let handle = unsafe {
@@ -190,14 +191,14 @@ pub fn eject_drive(path: &str) -> Result<(), String> {
         .chain(std::iter::once(0))
         .collect();
     unsafe {
-        let target = disk_number(PCWSTR(volume.as_ptr()))?;
+        let target = disk_number(PCWSTR(volume.as_ptr())).map_err(VolumeError::Other)?;
         let devices = SetupDiGetClassDevsW(
             Some(&GUID_DEVINTERFACE_DISK),
             PCWSTR::null(),
             None,
             DIGCF_PRESENT | DIGCF_DEVICEINTERFACE,
         )
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| VolumeError::Other(error.to_string()))?;
         // Always destroy the device list, including on early errors in the closure.
         let result = (|| {
             let mut index = 0;
@@ -269,34 +270,40 @@ pub fn eject_drive(path: &str) -> Result<(), String> {
                     let mut length = std::mem::size_of_val(&capabilities) as u32;
                     if CM_Get_DevNode_Registry_PropertyW(node, CM_DRP_CAPABILITIES, None,
                         Some(std::ptr::addr_of_mut!(capabilities).cast()), &mut length, 0) != CR_SUCCESS {
-                        return Err("Cannot query device removal capabilities".into());
+                        return Err(VolumeError::Other("Cannot query device removal capabilities".into()));
                     }
                     if capabilities & CM_DEVCAP_REMOVABLE.0 != 0 {
                         break;
                     }
                     let mut parent = 0;
                     if CM_Get_Parent(&mut parent, node, 0) != CR_SUCCESS {
-                        return Err("No removable device found for this drive".into());
+                        return Err(VolumeError::Other("No removable device found for this drive".into()));
                     }
                     node = parent;
                 }
                 let mut veto = PNP_VETO_TYPE::default();
                 let mut name = [0u16; 260];
+                let started = std::time::Instant::now();
                 let result = CM_Request_Device_EjectW(node, Some(&mut veto), Some(&mut name), 0);
                 log::debug!("USB ejection: disk {}, node {}, result {}, veto {}", target.DeviceNumber, node, result.0, veto.0);
-                return if result == CR_SUCCESS {
-                    Ok(())
-                } else {
-                    let end = name.iter().position(|c| *c == 0).unwrap_or(name.len());
-                    Err(format!(
-                        "Windows PnP: code {}, veto {} ({})",
-                        result.0,
-                        veto.0,
-                        String::from_utf16_lossy(&name[..end])
-                    ))
-                };
+                if result == CR_SUCCESS {
+                    return Ok(());
+                }
+                if result == CR_REMOVE_VETOED {
+                    let holders = super::windows_eject_holders::holders(node, started);
+                    if !holders.is_empty() {
+                        return Err(VolumeError::Busy(holders));
+                    }
+                }
+                let end = name.iter().position(|c| *c == 0).unwrap_or(name.len());
+                return Err(VolumeError::Other(format!(
+                    "Windows PnP: code {}, veto {} ({})",
+                    result.0,
+                    veto.0,
+                    String::from_utf16_lossy(&name[..end])
+                )));
             }
-            Err("Cannot identify the physical device for this drive".into())
+            Err(VolumeError::Other("Cannot identify the physical device for this drive".into()))
         })();
         let _ = SetupDiDestroyDeviceInfoList(devices);
         result
@@ -325,7 +332,7 @@ mod eject_tests {
             "C:x",
             "é:",
         ] {
-            assert_eq!(super::eject_drive(path), Err("Invalid drive root".into()));
+            assert_eq!(super::eject_drive(path), Err(super::VolumeError::Other("Invalid drive root".into())));
         }
     }
 }

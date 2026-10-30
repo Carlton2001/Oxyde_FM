@@ -803,6 +803,8 @@ mod windows_fixed_dialog;
 #[cfg(target_os = "windows")]
 mod windows_drives;
 #[cfg(target_os = "windows")]
+mod windows_eject_holders;
+#[cfg(target_os = "windows")]
 mod windows_volumes;
 #[cfg(target_os = "windows")]
 mod windows_impl;

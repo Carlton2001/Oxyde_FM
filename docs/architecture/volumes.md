@@ -119,10 +119,15 @@ pub trait Volumes: Send + Sync {
 ## Windows
 
 `WindowsVolumes` dans `windows_drives.rs` reçoit les délégations aujourd'hui dans
-`windows_impl.rs`, sans changer de logique ; `eject` enveloppe son erreur dans
-`VolumeError::Other`. Les appels communs
+`windows_impl.rs`, sans changer de logique. Les appels communs
 (`drive_watchers`, `network`, `disk_images`, `trash_settings`, `commands/system`, `utils`,
 `file_ops/copy`) passent de `platform().list_drives(…)` à `platform().volumes().list(…)`.
+
+Sur un veto d'éjection, `windows_eject_holders.rs` lit l'événement 225 de
+`Microsoft-Windows-Kernel-PnP` dans le journal System, seul endroit où Windows nomme les
+processus, y compris ceux des autres sessions, et renvoie `Busy(applications)`. Il retient
+le nœud éjecté et l'heure de la demande, et ne garde `System` que s'il est seul. Sans
+événement lisible, l'erreur reste `Other` avec le code PnP.
 
 ## Interface utilisateur
 

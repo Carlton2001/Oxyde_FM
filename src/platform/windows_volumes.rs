@@ -19,7 +19,7 @@ impl Volumes for WindowsVolumes {
     }
 
     fn eject(&self, path: &str) -> Result<(), VolumeError> {
-        super::windows_drives::eject_drive(path).map_err(VolumeError::Other)
+        super::windows_drives::eject_drive(path)
     }
 
     fn physical_disk_id(&self, path: &std::path::Path) -> u64 {
