@@ -152,7 +152,8 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
 **Avancé et distribution (jalons 6–7)**
 - T09 : [poppler et GStreamer](../architecture/linux-previews.md) dans un worker ; PDF,
   survol vidéo et lecteur du Viewer vérifiés.
-  M09/R5 : ces workers sont confinés par bubblewrap et seccomp. Reste à déplacer dans
-  des workers confinés les décodeurs qui tournent encore dans Oxyde (archives,
-  images, Office, pochettes audio).
-- T14 : CI Linux distincte ; paquets RPM puis DEB, essai Silverblue.
+  M09/R5 : tous les décodeurs tournent dans des workers confinés par bubblewrap et
+  seccomp, archives comprises ; vérification visuelle en attente.
+- T14 : CI Linux distincte ; paquets RPM puis DEB, essai Silverblue. Les paquets
+  installent `oxyde`, `oxyde-archive-list-worker` et `oxyde-archive-io-worker`, et le
+  RPM requiert `bubblewrap`.

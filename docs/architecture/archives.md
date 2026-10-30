@@ -15,7 +15,7 @@ Les workers Decode/Encode, listing/index sont en LPAC sans capacité. Le parent 
 
 Le transport Decode/Encode réveille le superviseur sur réception ou fin d’écriture, avec files de capacité un et un crédit par trame lue. Les helpers peuvent bloquer sur les pipes ; le superviseur garde ses contrôles de pause, annulation et délai. Son attente inactive demande au maximum 5 ms avant revérification, sans garantie absolue sur l’ordonnancement ni les callbacks natifs. Une trame partielle ne bloque pas cette surveillance. Les helpers ne sont jamais joints sans borne à la fermeture.
 
-Les variantes locales sous `cfg(any(not(target_os = "windows"), test))` servent Linux et les tests unitaires. Ceux-ci ne prouvent pas le parcours Windows de production (`cfg(all(target_os = "windows", not(test)))`). `tests/archive_io_pipeline.rs` lie la bibliothèque sans `cfg(test)` et exerce les véritables workers Windows.
+Les variantes locales sous `cfg(test)` ne servent que les tests unitaires, qui ne prouvent pas le parcours de production (`cfg(not(test))`). `tests/archive_io_pipeline.rs` et `tests/linux_archive_workers.rs` lient la bibliothèque sans `cfg(test)` et exercent les véritables workers de Windows et de Linux.
 
 ## Formats et mutations
 
@@ -60,6 +60,6 @@ Un déplacement retire uniquement les sources effectivement copiées ; les confl
 - Le cache Windows récupérable utilise des preuves persistantes authentifiées ; clé perdue/corrompue et états incomplets restent protégés.
 - Le cache Linux n'évince qu'avec un bail d'écriture sur chaque fichier, preuve qu'aucun lecteur ne le tient ouvert : voir [cache Linux](linux-open-cache.md).
 - La fidélité indépendante des contenus/métadonnées n’est établie que pour le périmètre TAR non compressé de R9. Les autres formats et résultats de workers n’ont pas cette garantie générale.
-- Linux garde les codecs locaux ; le confinement Windows et ses validations ne s’y appliquent pas.
+- Linux exécute les mêmes codecs et le même protocole dans des [workers confinés par bubblewrap](linux-previews.md#archives) ; le confinement Windows et ses validations ne s’y appliquent pas.
 
 Lire les [limites R1–R9](../security/status.md) avant d’étendre une garantie. Les [bilans historiques](../reports/2026-10-13-security.md) donnent les révisions et preuves ; ils ne valent pas une nouvelle validation.

@@ -899,6 +899,10 @@ mod windows_trash_clipboard;
 #[cfg(target_os = "windows")]
 mod windows_source_selection;
 #[cfg(target_os = "linux")]
+mod linux_archive_io;
+#[cfg(target_os = "linux")]
+mod linux_archive_list;
+#[cfg(target_os = "linux")]
 mod linux_preview;
 #[cfg(target_os = "linux")]
 mod linux_source_selection;

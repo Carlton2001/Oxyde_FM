@@ -6,8 +6,9 @@ use std::{
     fs::File,
     io,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
 };
+#[cfg(target_os = "windows")]
+use std::sync::{Arc, Mutex};
 
 struct Owned {
     path: PathBuf,
@@ -25,6 +26,7 @@ pub(crate) struct OwnedTree {
     name_bytes: usize,
     cleanup: bool,
     remove_root: bool,
+    #[cfg(target_os = "windows")]
     recovery: Option<Arc<Mutex<super::archive_open_cache::recovery::Journal>>>,
 }
 
@@ -76,6 +78,7 @@ impl OwnedTree {
             name_bytes: 0,
             cleanup: true,
             remove_root,
+            #[cfg(target_os = "windows")]
             recovery: None,
         })
     }
@@ -160,6 +163,7 @@ impl OwnedTree {
         self.name_bytes = self.name_bytes.saturating_add(path.as_os_str().len());
         self.check_journal_path(path)?;
         self.check_journal_budget()?;
+        #[cfg(target_os = "windows")]
         if let Some(journal) = &self.recovery {
             journal
                 .lock()
@@ -234,6 +238,7 @@ impl OwnedTree {
             .saturating_add(path.as_os_str().len());
         self.check_journal_path(&path)?;
         self.check_journal_budget()?;
+        #[cfg(target_os = "windows")]
         if let Some(journal) = &self.recovery {
             journal
                 .lock()
@@ -242,6 +247,7 @@ impl OwnedTree {
         }
         Ok(())
     }
+    #[cfg(target_os = "windows")]
     pub fn adopt_created_directory(&mut self, path: &Path, file: &File) -> io::Result<()> {
         let path = self.resolved(path)?;
         let parent = self.parent(&path)?.try_clone()?;
@@ -301,6 +307,7 @@ impl OwnedTree {
         }
         Ok(())
     }
+    #[cfg(target_os = "windows")]
     pub fn identities(&self) -> HashMap<PathBuf, FileIdentity> {
         self.files
             .values()
@@ -308,9 +315,11 @@ impl OwnedTree {
             .map(|entry| (entry.path.clone(), entry.identity))
             .collect()
     }
+    #[cfg(target_os = "windows")]
     pub(super) fn recovery_root(&self) -> &File {
         &self.root.tracking
     }
+    #[cfg(target_os = "windows")]
     pub(super) fn recovery_records(&self) -> impl Iterator<Item = (&Path, &File, bool)> {
         self.directories
             .values()
@@ -321,6 +330,7 @@ impl OwnedTree {
                     .map(|entry| (entry.path.as_path(), &entry.tracking, false)),
             )
     }
+    #[cfg(target_os = "windows")]
     pub(super) fn attach_recovery(
         &mut self,
         journal: Arc<Mutex<super::archive_open_cache::recovery::Journal>>,
@@ -329,38 +339,42 @@ impl OwnedTree {
     }
     pub(super) fn before_cache_write(
         &self,
-        path: &Path,
-        file: &File,
-        data: &[u8],
+        _path: &Path,
+        _file: &File,
+        _data: &[u8],
     ) -> io::Result<()> {
+        #[cfg(target_os = "windows")]
         if let Some(journal) = &self.recovery {
             journal
                 .lock()
                 .map_err(|_| io::Error::other("Cache proof poisoned"))?
-                .before_write(path, file, data)?;
+                .before_write(_path, _file, _data)?;
         }
         Ok(())
     }
-    pub(super) fn complete_cache_write(&self, path: &Path, file: &File) -> io::Result<()> {
+    pub(super) fn complete_cache_write(&self, _path: &Path, _file: &File) -> io::Result<()> {
+        #[cfg(target_os = "windows")]
         if let Some(journal) = &self.recovery {
             journal
                 .lock()
                 .map_err(|_| io::Error::other("Cache proof poisoned"))?
-                .complete(path, file)?;
+                .complete(_path, _file)?;
         }
         Ok(())
     }
     #[cfg(not(test))]
-    pub(super) fn cache_write_observed(&self, path: &Path) -> io::Result<()> {
+    pub(super) fn cache_write_observed(&self, _path: &Path) -> io::Result<()> {
+        #[cfg(target_os = "windows")]
         if self.recovery.is_some() {
             crate::utils::archive_mutation_test::checkpoint(
                 crate::utils::archive_mutation_test::Stage::CacheWritten,
-                path,
+                _path,
                 self.path(),
             )?;
         }
         Ok(())
     }
+    #[cfg(target_os = "windows")]
     pub fn verify_owned(&self, path: &Path, file: &File) -> io::Result<()> {
         let expected = if path == self.path() {
             Some(self.root.identity)
@@ -375,6 +389,7 @@ impl OwnedTree {
         }
         Ok(())
     }
+    #[cfg(target_os = "windows")]
     pub fn forget_removed(&mut self, path: &Path, identity: FileIdentity) -> io::Result<()> {
         let selected = self
             .files
@@ -389,15 +404,18 @@ impl OwnedTree {
         self.directories.remove(path);
         Ok(())
     }
+    #[cfg(target_os = "windows")]
     pub fn root_identity(&self) -> FileIdentity {
         self.root.identity
     }
+    #[cfg(target_os = "windows")]
     pub fn create_directory(&mut self, path: &Path) -> io::Result<()> {
         let path = self.resolved(path)?;
         let parent = self.parent(&path)?.try_clone()?;
         let file = platform().create_journal_directory(&parent, &path, false)?;
         self.adopt_created_directory(&path, &file)
     }
+    #[cfg(target_os = "windows")]
     pub fn validate_rename(
         &self,
         source: &Path,
@@ -435,6 +453,7 @@ impl OwnedTree {
         self.check_journal_path(&destination)?;
         Ok(())
     }
+    #[cfg(target_os = "windows")]
     pub fn remove_selected(
         &mut self,
         path: &Path,

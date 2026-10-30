@@ -20,7 +20,7 @@ pub mod audio_handle_worker;
 mod archive_iso_open;
 mod archive_metadata;
 mod archive_seven_open;
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 mod archive_tar_open;
 pub mod duplicates;
 pub mod io;

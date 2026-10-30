@@ -124,16 +124,12 @@ pub(super) fn command(executable: &Path, profile: Profile, source: Option<(&Path
     Ok(Launch { command, source, _descriptors: descriptors })
 }
 
-/// Formats without a signature are recognized by their extension, compound for
-/// compressed tar archives; the rest of the user's file name stays outside.
+/// Formats without a signature are recognized by their extension; the rest of the
+/// user's file name stays outside.
 fn inside_name(path: &Path) -> OsString {
-    let usable = |extension: &&str| extension.len() <= 10 && extension.bytes().all(|byte| byte.is_ascii_alphanumeric());
     let mut inside = OsString::from(SOURCE);
-    if let Some(extension) = path.extension().and_then(|extension| extension.to_str()).filter(usable) {
-        let stem = Path::new(path.file_stem().unwrap_or_default());
-        if stem.extension().is_some_and(|inner| inner.eq_ignore_ascii_case("tar")) {
-            inside.push(".tar");
-        }
+    if let Some(extension) = path.extension().and_then(|extension| extension.to_str())
+        .filter(|extension| extension.len() <= 10 && extension.bytes().all(|byte| byte.is_ascii_alphanumeric())) {
         inside.push(".");
         inside.push(extension);
     }

@@ -26,7 +26,7 @@ pub fn with_hook_for_tests<T>(
     let _reset = Reset(HOOK.with(|current| current.replace(Some(Box::new(hook)))));
     run()
 }
-#[cfg(all(target_os = "windows", not(test)))]
+#[cfg(not(test))]
 pub(crate) fn checkpoint(stage: Stage, first: &Path, second: &Path) -> io::Result<()> {
     HOOK.with(|hook| match hook.borrow_mut().as_mut() {
         Some(hook) => hook(stage, first, second),

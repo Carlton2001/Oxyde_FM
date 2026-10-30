@@ -1,21 +1,21 @@
 use super::{FileOpType, FileOperation, FileOperationManager, OpStatus};
-#[cfg(all(target_os = "windows", not(test)))]
+#[cfg(not(test))]
 use crate::utils::archive_limits::ArchiveBudget;
 use crate::utils::archive_limits::ArchiveLimits;
 use std::collections::HashMap;
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 struct ArchiveReader {
     _parents: crate::systems::path_parents::HeldParents,
     input: std::fs::File,
     operation: Arc<Mutex<FileOperation>>,
 }
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 impl Read for ArchiveReader {
     fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
         FileOperationManager::archive_checkpoint(&self.operation).map_err(std::io::Error::other)?;
@@ -88,13 +88,13 @@ impl FileOperationManager {
                 .resolved_path(&requested)
                 .map_err(|error| error.to_string())?,
         );
-        #[cfg(all(target_os = "windows", not(test)))]
+        #[cfg(not(test))]
         let budget = ArchiveBudget::new(_limits.unwrap_or(if retained.is_some() { ArchiveLimits::WORKSPACE } else { ArchiveLimits::EXTRACTION }));
-        #[cfg(all(target_os = "windows", not(test)))]
+        #[cfg(not(test))]
         let mut entries = crate::systems::compression_sources::plan_controlled(&sources, &mut || Self::archive_checkpoint(op).map_err(std::io::Error::other), Some(&budget)).map_err(|e| crate::systems::archive_encode::source_failure(e).to_string())?;
-        #[cfg(all(target_os = "windows", not(test)))]
+        #[cfg(not(test))]
         if let Some((source, destination)) = _rename { crate::systems::compression_sources::remap(&mut entries, source, destination, budget.limits()).map_err(|e| e.to_string())?; }
-        #[cfg(any(not(target_os = "windows"), test))]
+        #[cfg(test)]
         let entries = crate::systems::compression_sources::plan(&sources, &mut || {
             Self::archive_checkpoint(op).map_err(std::io::Error::other)
         })
@@ -118,12 +118,12 @@ impl FileOperationManager {
         let mut output = crate::systems::compression_output::Output::new(&destination_parents)
             .map_err(|error| error.to_string())?;
         let encoding_started = std::time::Instant::now();
-        #[cfg(all(target_os = "windows", not(test)))]
+        #[cfg(not(test))]
         {
             { let mut op = op.lock().unwrap(); op.processed_files = 0; op.processed_bytes = 0; op.speed_sample_at = Some(std::time::Instant::now()); op.speed_sample_bytes = 0; op.bytes_per_second = 0; }
             crate::systems::archive_encode::run(&requested, &entries, retained, _expected, &mut output.file, &budget, op).map_err(|e| e.to_string())?;
         }
-        #[cfg(any(not(target_os = "windows"), test))]
+        #[cfg(test)]
         {
         let file = output.file.try_clone().map_err(|error| error.to_string())?;
         let format = requested
@@ -288,7 +288,7 @@ impl FileOperationManager {
         Ok(())
     }
 
-    #[cfg(any(not(target_os = "windows"), test))]
+    #[cfg(test)]
     fn append_tar_entries<W: Write>(
         op: &Arc<Mutex<FileOperation>>,
         entries: Vec<crate::systems::compression_sources::Entry>,
@@ -327,7 +327,7 @@ impl FileOperationManager {
         writer.finish().map_err(|e| e.to_string())
     }
 
-    #[cfg(any(not(target_os = "windows"), test))]
+    #[cfg(test)]
     fn write_tar_entries<W: Write>(
         op: &Arc<Mutex<FileOperation>>,
         entries: Vec<crate::systems::compression_sources::Entry>,

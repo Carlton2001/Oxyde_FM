@@ -1,10 +1,10 @@
 use super::{FileOperation, FileOperationManager, OpStatus};
 use crate::platform::platform;
 use crate::utils::archive_limits::{ArchiveBudget, ArchiveLimits};
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 use std::io::{Read, Write};
 use std::path::PathBuf;
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
@@ -48,7 +48,7 @@ impl FileOperationManager {
         // pause/resume and the complete traversal. No later reopen by pathname.
         let file = platform().open_archive_source(&source, false).map_err(|error| error.to_string())?;
         before_extract().map_err(|error| error.to_string())?;
-        #[cfg(all(target_os = "windows", not(test)))]
+        #[cfg(not(test))]
         {
             let target_parents = crate::systems::path_parents::HeldParents::new(&requested).map_err(|e| e.to_string())?;
             let mut target = Self::unique_archive_path(&target_parents.resolved_path(&requested).map_err(|e| e.to_string())?);
@@ -68,7 +68,7 @@ impl FileOperationManager {
             tree.keep();
             Ok(())
         }
-        #[cfg(any(not(target_os = "windows"), test))]
+        #[cfg(test)]
         {
         let mut target = Self::unique_archive_path(&requested);
         loop {

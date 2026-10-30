@@ -15,6 +15,8 @@ pub fn run_if_requested() -> bool {
         if gate != [0xA7] {
             return Err(std::io::Error::other("Invalid archive start gate"));
         }
+        #[cfg(not(target_os = "windows"))]
+        crate::platform::platform().initialize_preview_worker()?;
         let archive = arguments
             .next()
             .and_then(|value| value.into_string().ok())

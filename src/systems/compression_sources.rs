@@ -3,7 +3,7 @@ use super::{
     path_parents::HeldParents,
     source_selection::{SelectedEntry, SourceWalk},
 };
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 use std::fs::Metadata;
 use std::{
     fs::File,
@@ -26,7 +26,7 @@ impl Entry {
     }
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", not(test)))]
 pub(super) fn remap(
     entries: &mut [Entry],
     source: &Path,
@@ -63,7 +63,7 @@ pub(super) fn remap(
     }
     Ok(())
 }
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 pub(super) fn plan(
     sources: &[PathBuf],
     checkpoint: &mut dyn FnMut() -> io::Result<()>,
@@ -149,7 +149,7 @@ pub(super) fn plan_controlled(
     Ok(entries)
 }
 /// Match the dependency's from_path timestamps without resolving a pathname again.
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 pub(super) fn seven_entry(name: String, metadata: &Metadata) -> sevenz_rust2::ArchiveEntry {
     let mut entry = if metadata.is_dir() {
         sevenz_rust2::ArchiveEntry::new_directory(&name)

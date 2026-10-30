@@ -73,7 +73,7 @@ Limites : source encodée 128 Mio, 10 000 entrées, 1 Mio de noms cumulés, 16 M
 partie XML et 64 Mio de XML cumulés, 8 Mio de texte en réponse, job de 512 Mio et
 délai de 15 secondes incluant l’attente d’admission. Le parent ne décompresse pas
 le document et valide une réponse texte bornée avant d’utiliser le moteur de
-recherche en flux. Linux utilise l’extracteur local borné, sans garantie LPAC.
+recherche en flux. Linux utilise le même extracteur dans un [worker confiné](linux-previews.md#images-office-et-audio), sans garantie LPAC.
 
 Le corps Word, les parties des diapositives et les cellules des feuilles sont
 parcourus sans limite arbitraire aux trois premières diapositives ou aux 64 premières

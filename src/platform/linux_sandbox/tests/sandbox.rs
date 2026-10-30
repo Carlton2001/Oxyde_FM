@@ -61,3 +61,15 @@ fn only_the_player_reaches_the_sound_server() {
     assert_eq!(run(Profile::Player, None, &script).stdout, b"sound\n");
     assert_eq!(run(Profile::Video, None, &script).stdout, b"");
 }
+
+#[test]
+fn a_codec_worker_sees_no_font_and_no_file_of_the_user() {
+    if !available() {
+        eprintln!("skipped: bubblewrap is unusable here");
+        return;
+    }
+    let home = dirs::home_dir().unwrap();
+    let script = format!("ls -A /oxyde 2>/dev/null; test -e '{}' && echo home; test -e /etc/fonts && echo fonts; echo done", home.display());
+    let output = run(Profile::Codec, None, &script);
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "done\n", "{output:?}");
+}

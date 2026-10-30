@@ -4,17 +4,17 @@ use crate::platform::platform;
 use crate::systems::path_parents::HeldParents;
 use crate::utils::archive_limits::{ArchiveBudget, ArchiveLimits};
 use crate::utils::archive_security::relative_archive_path;
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 use crate::utils::{archive_limits::BudgetReader, archive_security::ExtractionRoot};
 use sevenz_rust2::{Archive, ArchiveEntry, Password};
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 use sevenz_rust2::{ArchiveReader, BlockDecoder};
 use std::fs::File;
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 use std::fs;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 use std::path::PathBuf;
 
 #[cfg(test)]
@@ -49,7 +49,7 @@ pub(super) struct CheckedSource<'a> {
     checkpoint: &'a dyn Fn() -> io::Result<()>,
 }
 
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 pub(super) fn checked_reader<'a>(
     file: File,
     budget: &'a ArchiveBudget,
@@ -155,7 +155,7 @@ impl Seek for CheckedSource<'_> {
     }
 }
 
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 fn selection(
     archive: &Archive,
     requested: &Path,
@@ -180,7 +180,7 @@ fn selection(
     selected.ok_or_else(|| invalid("Archive file not found").into())
 }
 
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 fn set_times(output: &File, entry: &ArchiveEntry) -> io::Result<()> {
     let mut times = fs::FileTimes::new();
     if entry.has_last_modified_date {
@@ -192,7 +192,7 @@ fn set_times(output: &File, entry: &ArchiveEntry) -> io::Result<()> {
     output.set_times(times)
 }
 
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 pub(crate) fn extract_seven_file_for_open(
     archive: &Path,
     internal: &str,
@@ -202,7 +202,7 @@ pub(crate) fn extract_seven_file_for_open(
     extract_with_checkpoint(archive, internal, target, limits, &|| Ok(()))
 }
 
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 fn extract_with_checkpoint(
     archive: &Path,
     internal: &str,

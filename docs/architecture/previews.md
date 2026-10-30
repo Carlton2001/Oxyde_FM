@@ -180,7 +180,7 @@ BGRA (512 × 512 maximum), sans redécoder l’image. Les images intégrées de 
 de 16 Mio et les images dépassant 64 Mio de pixels source sont ignorées.
 Les réponses obsolètes sont écartées par génération et les textures libérées
 au changement de contenu. Aucun fichier ni URL de pochette externe n’est chargé.
-Linux lit les métadonnées en arrière-plan sans confinement ; la lecture passe par
+Linux lit les métadonnées dans un worker confiné, à la demande ; la lecture passe par
 GStreamer ([aperçus Linux](linux-previews.md)).
 
 Sous Windows, audio et vidéo utilisent les codecs système via IMFMediaEngine (mode HWND) dans le

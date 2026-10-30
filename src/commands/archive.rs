@@ -1,33 +1,33 @@
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 pub(crate) use super::archive_iso_open::extract_iso_file_for_open;
 use super::archive_iso_open::list_iso;
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 use super::archive_iso_open::extract_iso;
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 pub(crate) use super::archive_seven_open::extract_seven_file_for_open;
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 pub(crate) use super::archive_tar_open::extract_tar_file_for_open;
 use crate::models::{CommandError, FileEntry};
 use crate::platform::platform;
 pub use crate::utils::archive::{is_archive, split_virtual_path, ArchiveFormat};
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 use crate::utils::archive_limits::{ArchiveBudget, ArchiveLimits};
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 use crate::utils::archive_limits::BudgetReader;
 use crate::utils::archive_security::relative_archive_path;
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 use crate::utils::archive_security::ExtractionRoot;
 use crate::utils::path_security::validate_path;
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 use {bzip2::read::BzDecoder, flate2::read::GzDecoder, log::info};
 use std::collections::HashSet;
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 use {tar::Archive as TarArchive, xz2::read::XzDecoder, zstd::stream::read::Decoder as ZstdDecoder};
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 use zip::ZipArchive;
 
 pub fn create_archive_directory_with_quality(
@@ -52,7 +52,7 @@ pub fn with_archive_cache_base_for_tests<T>(base: &Path, run: impl FnOnce() -> T
 }
 
 /// ZIP supports random access: validate the index, then decode only the requested file.
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 pub(crate) fn extract_zip_file_for_open(
     archive_path: &Path,
     internal: &str,
@@ -62,7 +62,7 @@ pub(crate) fn extract_zip_file_for_open(
     extract_zip_file_with_checkpoint(archive_path, internal, target, limits, &|| Ok(()))
 }
 
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 fn extract_zip_file_with_checkpoint(
     archive_path: &Path,
     internal: &str,
@@ -324,7 +324,7 @@ pub(crate) fn extract_archive_with_limits(
 }
 
 /// Decode the opened source itself, without resolving its pathname again.
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 pub(crate) fn extract_open_archive_with_budget(
     path: &Path,
     file: File,
@@ -467,7 +467,7 @@ pub(crate) fn extract_open_archive_with_budget(
     Ok(())
 }
 
-#[cfg(any(not(target_os = "windows"), test))]
+#[cfg(test)]
 fn decompress_seven_zip_with_checkpoint(
     file: File,
     root: &ExtractionRoot,

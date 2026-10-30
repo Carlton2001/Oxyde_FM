@@ -2,6 +2,7 @@ use std::fs::Metadata;
 
 pub mod archive;
 pub mod archive_listing_protocol;
+pub(crate) mod archive_io_failure;
 pub mod archive_io_protocol;
 #[doc(hidden)]
 pub mod archive_mutation_test;
@@ -147,5 +148,5 @@ mod tests {
 pub mod image_preview_decode;
 pub mod office_preview;
 pub mod office_document;
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", not(test)))]
 pub(crate) mod tar_fidelity;

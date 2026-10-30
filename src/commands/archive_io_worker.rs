@@ -132,6 +132,8 @@ pub fn run_if_requested() -> bool {
         if gate != [0xA7] {
             return Err(invalid());
         }
+        #[cfg(not(target_os = "windows"))]
+        crate::platform::platform().initialize_preview_worker()?;
         let session = arguments
             .next()
             .and_then(|arg| arg.into_string().ok())

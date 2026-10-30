@@ -1,10 +1,10 @@
 pub(crate) mod archive_workspace;
 pub(crate) mod archive_recovery;
-#[cfg(all(target_os = "windows", not(test)))]
+#[cfg(not(test))]
 pub(crate) mod archive_io;
-#[cfg(all(target_os = "windows", not(test)))]
+#[cfg(not(test))]
 mod archive_encode;
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", not(test)))]
 pub(crate) mod archive_owned_tree;
 mod archive_move_sources;
 pub mod file_ops;

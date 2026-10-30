@@ -66,7 +66,7 @@ impl ArchiveBudget {
         result?;
         self.check_time()
     }
-    #[cfg(all(target_os = "windows", not(test)))]
+    #[cfg(not(test))]
     pub(crate) fn remaining(&self) -> io::Result<Duration> {
         self.check_time()?;
         Ok(self.limits.max_duration.saturating_sub(
@@ -75,7 +75,7 @@ impl ArchiveBudget {
                 .saturating_sub(self.checkpoint_time.get()),
         ))
     }
-    #[cfg(all(target_os = "windows", not(test)))]
+    #[cfg(not(test))]
     pub(crate) fn exclude_wait(&self, wait: Duration) {
         self.checkpoint_time
             .set(self.checkpoint_time.get().saturating_add(wait));

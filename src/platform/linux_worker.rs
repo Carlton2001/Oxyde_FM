@@ -95,9 +95,44 @@ impl Worker {
             }
             match self.output.read(&mut chunk)? {
                 0 => return Ok(bytes),
-                read if bytes.len() + read > limit => return Err(io::Error::other("Preview worker reply exceeds its limit")),
+                read if bytes.len() + read > limit => return Err(io::Error::new(io::ErrorKind::FileTooLarge, "Preview worker reply exceeds its limit")),
                 read => bytes.extend_from_slice(&chunk[..read]),
             }
+        }
+    }
+
+    /// For a conversation in both directions, where writes must not block the parent.
+    pub(super) fn prepare_duplex(&mut self, pipe_bytes: usize) -> io::Result<()> {
+        use rustix::pipe::fcntl_setpipe_size;
+        // Refused beyond the system's limit: only slower, then.
+        let _ = fcntl_setpipe_size(&self.input, pipe_bytes);
+        let _ = fcntl_setpipe_size(&self.output, pipe_bytes);
+        rustix::fs::fcntl_setfl(&self.input, rustix::fs::OFlags::NONBLOCK)?;
+        Ok(())
+    }
+
+    pub(super) fn read_available(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        self.output.read(buffer)
+    }
+
+    pub(super) fn write_available(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.input.write(bytes)
+    }
+
+    pub(super) fn writable(&self, timeout: Duration) -> io::Result<bool> {
+        poll_one(&self.input, rustix::event::PollFlags::OUT, timeout)
+    }
+
+    /// The worker's exit status, once it has ended by itself before `limit`.
+    pub(super) fn wait_exit(&mut self, limit: Instant) -> io::Result<std::process::ExitStatus> {
+        loop {
+            if let Some(status) = self.child.try_wait()? {
+                return Ok(status);
+            }
+            if Instant::now() >= limit {
+                return Err(io::Error::new(io::ErrorKind::TimedOut, "Worker did not exit"));
+            }
+            std::thread::sleep(Duration::from_millis(2));
         }
     }
 
@@ -119,14 +154,18 @@ impl Worker {
 
     /// Output to read, or closed (the read tells which), within `timeout`.
     pub(super) fn readable(&self, timeout: Duration) -> io::Result<bool> {
-        use rustix::event::{poll, PollFd, PollFlags, Timespec};
-        let timeout = Timespec { tv_sec: timeout.as_secs() as i64, tv_nsec: timeout.subsec_nanos().into() };
-        let mut descriptors = [PollFd::new(&self.output, PollFlags::IN)];
-        match poll(&mut descriptors, Some(&timeout)) {
-            Ok(ready) => Ok(ready > 0),
-            Err(rustix::io::Errno::INTR) => Ok(false),
-            Err(error) => Err(error.into()),
-        }
+        poll_one(&self.output, rustix::event::PollFlags::IN, timeout)
+    }
+}
+
+fn poll_one(descriptor: &impl std::os::fd::AsFd, flags: rustix::event::PollFlags, timeout: Duration) -> io::Result<bool> {
+    use rustix::event::{poll, PollFd, Timespec};
+    let timeout = Timespec { tv_sec: timeout.as_secs() as i64, tv_nsec: timeout.subsec_nanos().into() };
+    let mut descriptors = [PollFd::new(descriptor, flags)];
+    match poll(&mut descriptors, Some(&timeout)) {
+        Ok(ready) => Ok(ready > 0),
+        Err(rustix::io::Errno::INTR) => Ok(false),
+        Err(error) => Err(error.into()),
     }
 }
 

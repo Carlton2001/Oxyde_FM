@@ -13,16 +13,16 @@ impl Platform for LinuxPlatform {
         super::linux_file_names::rules(directory)
     }
     fn retained_file_path(&self, _file: &std::fs::File, fallback: &std::path::Path) -> std::io::Result<std::path::PathBuf> { Ok(fallback.to_path_buf()) }
-    fn run_archive_io_worker(&self, _operation: crate::utils::archive_io_protocol::Operation,
-        _controls: &dyn Fn() -> std::io::Result<crate::utils::archive_io_protocol::Control>,
-        _handler: &mut dyn FnMut(crate::utils::archive_io_protocol::Frame) -> std::io::Result<crate::utils::archive_io_protocol::Frame>) -> std::io::Result<std::time::Duration> {
-        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Archive process isolation is unavailable on this platform"))
+    fn run_archive_io_worker(&self, operation: crate::utils::archive_io_protocol::Operation,
+        controls: &dyn Fn() -> std::io::Result<crate::utils::archive_io_protocol::Control>,
+        handler: &mut dyn FnMut(crate::utils::archive_io_protocol::Frame) -> std::io::Result<crate::utils::archive_io_protocol::Frame>) -> std::io::Result<std::time::Duration> {
+        super::linux_archive_io::run(operation, controls, handler)
     }
     fn index_archive_contents(&self, path: &std::path::Path, checkpoint: &dyn Fn() -> std::io::Result<()>) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError> {
-        crate::commands::archive::index_archive_contents_local(path, checkpoint)
+        super::linux_archive_list::index(path, checkpoint)
     }
     fn list_archive_directory(&self, path: &std::path::Path, internal: &str) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError> {
-        crate::commands::archive::list_archive_contents_local(path.to_string_lossy().into_owned(), internal.into())
+        super::linux_archive_list::list(path, internal)
     }
     fn open_archive_source(&self, path: &std::path::Path, _allow_changes: bool) -> std::io::Result<std::fs::File> {
         let file = std::fs::File::open(path)?;

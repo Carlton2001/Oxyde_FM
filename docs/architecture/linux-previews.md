@@ -1,7 +1,8 @@
-# Aperçus PDF et vidéo sous Linux
+# Aperçus et décodeurs sous Linux
 
-**Statut : PDF, survol vidéo et lecteur du Viewer vérifiés ; workers confinés par
-bubblewrap, vérification visuelle en attente** (T09 et premier volet de M09 de
+**Statut : PDF, survol vidéo et lecteur du Viewer vérifiés ; tous les décodeurs
+confinés par bubblewrap (tests et mesures faits, vérification visuelle des images,
+Office, pochettes et archives en attente)** (T09 et M09 de
 l'[audit de portabilité](../reports/2026-10-26-linux-portability-audit.md)).
 Windows ne change pas.
 
@@ -33,6 +34,10 @@ décodage reste ainsi hors du processus de l'interface.
   suit le fil qui a lancé le worker, et un pool peut retirer ce fil. Le parent réel
   n'est pas visible non plus, car le bac à sable a son propre espace de processus.
 
+Trois exécutables : `oxyde` pour les aperçus, `oxyde-archive-list-worker` et
+`oxyde-archive-io-worker` pour les archives, sans GPUI. Les paquets doivent les
+installer tous, et un échec de lancement ne déclenche jamais de décodage local.
+
 ## Confinement (bubblewrap)
 
 GNOME confine ainsi ses miniaturiseurs, et glycin ses chargeurs d'images.
@@ -48,7 +53,9 @@ GNOME confine ainsi ses miniaturiseurs, et glycin ses chargeurs d'images.
   sert aux formats sans signature. Le worker ne voit aucun autre fichier de
   l'utilisateur. Variables d'environnement effacées, puis fixées une à une.
 - Selon le mode :
-  - PDF : `/etc/fonts`, polices, configuration et cache fontconfig de l'utilisateur,
+  - Codecs purs (archives, Office, tags et pochettes audio, miniatures raster) : rien
+    de plus.
+  - PDF et images, dont les SVG utilisent les polices : `/etc/fonts`, polices, configuration et cache fontconfig de l'utilisateur,
     en lecture seule.
   - Survol vidéo : le registre GStreamer d'Oxyde, en lecture seule.
   - Lecteur du Viewer : le registre, plus les sockets PulseAudio
@@ -77,6 +84,43 @@ GNOME confine ainsi ses miniaturiseurs, et glycin ses chargeurs d'images.
   Sans libseccomp, le confinement reste, sans filtre d'appels système.
 - Coût : 40 ms pour une miniature PDF, 80 ms jusqu'à la première image d'une vidéo
   1080p.
+
+## Images, Office et audio
+
+`platform/linux_preview.rs` : le parent lance un worker par demande et valide sa
+réponse ; le worker lit le document monté et ne renvoie que des pixels ou du texte
+bornés. Aucune session réutilisable : un décodeur compromis ne voit jamais le
+document suivant, au prix d'un lancement par image.
+
+- Modes : `image`, `image-thumbnail`, `image-viewer` (`ui/image_preview.rs`, polices
+  chargées seulement pour un SVG), `thumbnail`, `office`, `office-text`,
+  `office-document`, `office-search`, `audio-metadata` (JSON), `audio-cover`,
+  `audio-cover-thumbnail`.
+- Plafonds : 512 Mio et 15 s ; 1 Gio et 30 s pour une image du Viewer ; 256 Mio pour
+  une pochette. Réponses bornées comme sous Windows (32 Mio, 256 Mio pour le Viewer,
+  8 Mio pour la recherche Office). L'annulation d'une recherche tue le worker.
+- Un tube nommé ou un dossier est refusé sans être ouvert en attente.
+
+## Archives
+
+- Navigation et index de recherche (`platform/linux_archive_list.rs`) : le worker
+  ne voit que l'archive ; le parent reconstruit chaque chemin virtuel à partir de
+  métadonnées validées. 512 Mio, 120 s, 32 Mio de réponse.
+- Extraction, création, reconstruction et ouverture d'un fichier
+  (`platform/linux_archive_io.rs`) : le protocole de Windows. Le worker ne voit aucun
+  fichier ; il demande chaque bloc à lire et confie chaque bloc à écrire. Le parent
+  garde sources et destinations (`OwnedTree`), contrôle noms, types et tailles, et
+  retire ce qu'il a créé en cas d'échec. 1 Gio, 2 Gio pour créer un 7z.
+- Superviseur : une conversation à tour de rôle, sur des tubes de 1 Mio. Écritures non
+  bloquantes et attentes de 20 ms : annulation et délai restent actifs quoi que fasse
+  le worker. Seule une pause confirmée suspend le délai.
+- Écarts avec Windows : pas de `fsync` par fichier extrait, comme Nautilus (2000 petits
+  fichiers : 5 s de plus sur Btrfs) ; Turbo augmente le parallélisme, sans changer la
+  priorité ; modification d'archive par reconstruction locale, sans la publication de
+  groupe (R8).
+- Mesures, 1 Gio plus 2000 petits fichiers, Btrfs puis NTFS (ntfs-3g), créer / extraire :
+  TAR 2,0 s / 2,1 s puis 6,4 s / 5,1 s ; ZIP 23 s / 7,1 s puis 25 s / 9,6 s ; TAR.ZST 0,6 s /
+  1,4 s puis 1,0 s / 4,1 s, données très répétitives.
 
 ## PDF (poppler)
 
@@ -176,15 +220,15 @@ directement du worker vers la sortie par défaut du bureau (PipeWire).
   la capture : c'est le même accès qu'une application Flatpak autorisée à utiliser
   PulseAudio. Sans bubblewrap utilisable, les workers ont les droits de
   l'utilisateur.
-- Les autres décodeurs (archives, images, Office, pochettes audio) tournent encore
-  dans Oxyde : c'est le reste de M09.
 - Sans bac à sable, le mode vidéo exige un chemin UTF-8, comme sous Windows.
 - Les images du lecteur traversent un tube puis une texture GPU neuve par image :
   environ 110 Mio/s en 720p à 30 images par seconde.
 
 ## Tests
 
-`cargo test --offline --lib -- linux_sandbox linux_pdf linux_video linux_media`.
+`cargo test --offline --lib -- linux_sandbox linux_pdf linux_video linux_media linux_preview linux_archive`
+et `cargo test --offline --test linux_archive_workers`, seul à exercer le parcours de
+production des archives : les tests unitaires compilent les codecs locaux.
 Bac à sable : le worker lit son document et ne voit pas un fichier voisin ; sockets
 réseau, `unshare` et `ptrace` refusés ; seul le lecteur atteint le serveur de son.
 Décodage : rendu, rotation, pages hors

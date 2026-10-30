@@ -268,6 +268,9 @@ pub(crate) fn decode(
                         times = times.set_accessed(time.system()?);
                     }
                     file.set_times(times)?;
+                    // Linux file managers leave extraction to the page cache: flushing
+                    // each file costs seconds per thousand on Btrfs.
+                    #[cfg(target_os = "windows")]
                     file.sync_all()?;
                     target.check_at(
                         target

@@ -36,7 +36,6 @@ pub fn with_worker_executable_for_tests<T>(path: &std::path::Path, run: impl FnO
     run()
 }
 
-#[cfg(target_os = "windows")]
 #[doc(hidden)]
 pub fn worker_executable() -> std::io::Result<std::path::PathBuf> {
     TEST_EXECUTABLE
@@ -44,7 +43,7 @@ pub fn worker_executable() -> std::io::Result<std::path::PathBuf> {
         .map_or_else(
             || {
                 Ok(std::env::current_exe()?
-                    .with_file_name("oxyde-archive-io-worker.exe"))
+                    .with_file_name(if cfg!(target_os = "windows") { "oxyde-archive-io-worker.exe" } else { "oxyde-archive-io-worker" }))
             },
             Ok,
         )
