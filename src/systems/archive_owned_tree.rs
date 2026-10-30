@@ -542,6 +542,12 @@ impl OwnedTree {
     pub fn release(&mut self) {
         self.tree.take();
     }
+    /// The tree stays for a private owner, which removes it itself; nothing is published.
+    #[cfg(not(target_os = "windows"))]
+    pub fn hand_over(&mut self) {
+        self.cleanup = false;
+        self.release();
+    }
     pub fn keep(&mut self) {
         super::archive_recovery::published(self.path());
         self.cleanup = false;

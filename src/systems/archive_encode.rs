@@ -63,8 +63,11 @@ pub(super) fn run(
     let raw = entries.iter().try_fold(0u64, |total, entry| {
         total.checked_add(entry.source.size()).ok_or_else(invalid)
     })?;
+    // Deflate without a stored fallback grows incompressible data by up to one bit per
+    // byte (5 % measured on executables): the bound follows the size, not a fixed margin.
     let output_limit = raw
-        .checked_add(64 * 1024 * 1024)
+        .checked_add(raw / 8)
+        .and_then(|n| n.checked_add(64 * 1024 * 1024))
         .and_then(|n| n.checked_add((entries.len() as u64).checked_mul(4096)?))
         .ok_or_else(invalid)?;
     let mut limits = limits(budget.limits());

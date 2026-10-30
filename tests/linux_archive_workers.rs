@@ -217,3 +217,22 @@ fn throughput() {
         }
     });
 }
+
+/// Executables grow by 5 % under Deflate: a fixed margin refused 1 GiB of them.
+#[test]
+#[ignore = "needs OXYDE_ARCHIVE_LARGE_FILE, about 1 GiB of data that Deflate expands"]
+fn a_large_file_that_deflate_expands_joins_a_zip() {
+    let Some(large) = std::env::var_os("OXYDE_ARCHIVE_LARGE_FILE") else { return };
+    confined(|| {
+        let temp = tempfile::tempdir_in(Path::new(&large).parent().unwrap()).unwrap();
+        let archive = temp.path().join("a.zip");
+        match std::env::var_os("OXYDE_ARCHIVE_TARGET") {
+            Some(target) => { fs::copy(target, &archive).unwrap(); }
+            None => zip(&archive, "petit.txt", b"safe", false),
+        }
+        let op = operation(FileOpType::Copy);
+        op.lock().unwrap().compression_quality = "fast".into();
+        FileOperationManager::perform_copy(&op, vec![large.into()], Some(archive.clone()), false, None).unwrap();
+        println!("{} MiB", fs::metadata(&archive).unwrap().len() >> 20);
+    });
+}

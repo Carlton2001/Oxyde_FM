@@ -193,7 +193,7 @@ impl ArchiveWorkspace {
         {
             let mut owner = super::archive_owned_tree::OwnedTree::new(directory.path(), false).map_err(|e| e.to_string())?;
             super::archive_io::decode(&archive, source.try_clone().map_err(|e| e.to_string())?, &mut owner, None, &budget, _op).map_err(|e| e.to_string())?;
-            owner.keep();
+            owner.hand_over();
         }
         // Never follow archive-provided links when copying or rebuilding a workspace.
         for entry in walkdir::WalkDir::new(directory.path()).follow_links(false) {
@@ -482,7 +482,7 @@ fn external_file_inner(path: &Path) -> Result<PathBuf, crate::models::CommandErr
     let result = {
         let mut owner = super::archive_owned_tree::OwnedTree::new(cache.payload(), false)?;
         let destination = prepare_selection_owned(archive, &internal, &mut owner, ArchiveLimits::OPEN_FILE).map_err(crate::models::CommandError::ArchiveError)?;
-        owner.keep();
+        owner.hand_over();
         cache.finish(destination)
     };
     #[cfg(test)]
