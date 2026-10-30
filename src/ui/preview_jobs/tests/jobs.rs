@@ -5,6 +5,9 @@ use std::sync::{mpsc, Condvar, Mutex};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
+/// Bounds what must happen, never how fast: a loaded machine may take long to schedule a thread.
+const PATIENCE: Duration = Duration::from_secs(60);
+
 /// Tests that occupy every slot of the global still queue run one at a time.
 static SATURATING: Mutex<()> = Mutex::new(());
 
@@ -18,7 +21,7 @@ fn preview_jobs_viewer_and_hover_bypass_a_saturated_grid_queue() {
         (load_viewer(|| Ok::<_, String>(42)), load_hover(|| Ok::<_, String>(7)))
     };
     let (metadata, hover) = runtime.block_on(async {
-        tokio::time::timeout(Duration::from_secs(2), futures::future::join(metadata, hover)).await.unwrap()
+        tokio::time::timeout(PATIENCE, futures::future::join(metadata, hover)).await.unwrap()
     });
     assert_eq!(metadata.unwrap(), 42);
     assert_eq!(hover.unwrap(), 7);
@@ -62,7 +65,7 @@ fn preview_jobs_icons_bypass_saturated_previews_and_keep_their_own_limit() {
         jobs.push(job);
     }
     for _ in 0..MAX_ICON_JOBS {
-        received.recv_timeout(Duration::from_secs(2)).unwrap();
+        received.recv_timeout(PATIENCE).unwrap();
     }
     assert_eq!(active.load(Ordering::SeqCst), MAX_ICON_JOBS);
     assert!(matches!(
@@ -79,7 +82,7 @@ fn preview_jobs_icons_bypass_saturated_previews_and_keep_their_own_limit() {
     assert_eq!(
         runtime
             .block_on(async {
-                tokio::time::timeout(Duration::from_secs(2), still)
+                tokio::time::timeout(PATIENCE, still)
                     .await
                     .unwrap()
             })
@@ -89,7 +92,7 @@ fn preview_jobs_icons_bypass_saturated_previews_and_keep_their_own_limit() {
 
     blocker.release();
     let outputs = runtime.block_on(async {
-        tokio::time::timeout(Duration::from_secs(2), futures::future::join_all(jobs))
+        tokio::time::timeout(PATIENCE, futures::future::join_all(jobs))
             .await
             .unwrap()
     });
@@ -169,7 +172,7 @@ fn preview_jobs_bound_twelve_requests_and_leave_async_worker_available() {
         futures.push(future);
     }
     for _ in 0..MAX_STILL_JOBS {
-        received.recv_timeout(Duration::from_secs(2)).unwrap();
+        received.recv_timeout(PATIENCE).unwrap();
     }
     assert_eq!(active.load(Ordering::SeqCst), MAX_STILL_JOBS);
     assert!(matches!(
@@ -182,10 +185,10 @@ fn preview_jobs_bound_twelve_requests_and_leave_async_worker_available() {
     runtime.spawn(async move {
         heartbeat.send(()).unwrap();
     });
-    beat.recv_timeout(Duration::from_secs(2)).unwrap();
+    beat.recv_timeout(PATIENCE).unwrap();
     blocker.release();
     let outputs = runtime.block_on(async {
-        tokio::time::timeout(Duration::from_secs(2), futures::future::join_all(futures))
+        tokio::time::timeout(PATIENCE, futures::future::join_all(futures))
             .await
             .unwrap()
     });
@@ -240,14 +243,14 @@ fn preview_jobs_cancel_waiting_video_closes_channel_without_free_slot() {
     assert!(poll_once(waiting.as_mut()).is_pending());
     cancellation.cancel();
     let result = runtime.block_on(async {
-        tokio::time::timeout(Duration::from_secs(2), waiting)
+        tokio::time::timeout(PATIENCE, waiting)
             .await
             .unwrap()
     });
     assert_eq!(result.unwrap(), None);
     assert!(!called.load(Ordering::SeqCst));
     assert!(matches!(
-        receiver.recv_timeout(Duration::from_secs(2)),
+        receiver.recv_timeout(PATIENCE),
         Err(mpsc::RecvTimeoutError::Disconnected)
     ));
     assert!(queue.slots.clone().try_acquire_owned().is_err());
@@ -285,13 +288,13 @@ fn preview_jobs_dropped_active_caller_keeps_slot_until_work_returns() {
         Ok::<_, String>(())
     }));
     assert!(poll_once(active.as_mut()).is_pending());
-    received.recv_timeout(Duration::from_secs(2)).unwrap();
+    received.recv_timeout(PATIENCE).unwrap();
     drop(active);
     assert!(queue.slots.clone().try_acquire_owned().is_err());
     blocker.release();
     let result = runtime.block_on(async {
         tokio::time::timeout(
-            Duration::from_secs(2),
+            PATIENCE,
             queue.run(runtime.handle().clone(), None, || Ok::<_, String>(9)),
         )
         .await
@@ -385,7 +388,7 @@ fn preview_jobs_cancel_after_admission_before_blocking_worker_starts() {
         started.send(()).unwrap();
         work_blocker.wait();
     });
-    received.recv_timeout(Duration::from_secs(2)).unwrap();
+    received.recv_timeout(PATIENCE).unwrap();
     let cancellation = Cancellation::default();
     let called = Arc::new(AtomicBool::new(false));
     let worker_called = called.clone();
@@ -428,11 +431,11 @@ fn preview_jobs_active_video_does_not_occupy_still_admission() {
     };
     let mut video = Box::pin(video);
     assert!(poll_once(video.as_mut()).is_pending());
-    received.recv_timeout(Duration::from_secs(2)).unwrap();
+    received.recv_timeout(PATIENCE).unwrap();
     assert_eq!(
         runtime
             .block_on(async {
-                tokio::time::timeout(Duration::from_secs(2), still)
+                tokio::time::timeout(PATIENCE, still)
                     .await
                     .unwrap()
             })
