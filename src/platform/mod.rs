@@ -752,6 +752,8 @@ mod linux_impl;
 #[cfg(not(target_os = "windows"))]
 mod linux_gpu;
 #[cfg(not(target_os = "windows"))]
+mod linux_settings;
+#[cfg(not(target_os = "windows"))]
 mod linux_startup;
 #[cfg(not(target_os = "windows"))]
 mod linux_gio;

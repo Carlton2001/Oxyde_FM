@@ -755,7 +755,12 @@ impl Platform for LinuxPlatform {
 
     /// Linux desktops share no properties dialog; Oxyde's own Properties window serves
     /// them, and the interface offers no system button. `gio open` used to open the item.
-    fn show_properties_dialog(&self, _path: &str) {}
+    /// The network neighbourhood has no such window: its properties are the system's.
+    fn show_properties_dialog(&self, path: &str) {
+        if path == "__network_vincinity__" {
+            super::linux_settings::open_network_settings();
+        }
+    }
 
     fn install_pointer_capture(&self, _window: raw_window_handle::RawWindowHandle) -> Result<(), String> {
         // X11/Wayland already provide a button grab through GPUI.

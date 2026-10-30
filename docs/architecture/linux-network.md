@@ -94,3 +94,7 @@ propriétés ne connaissent pas les URI.
   ```
 - `dbus-monitor --session "type='signal',interface='org.gtk.vfs.MountTracker'"` montre
   `Mounted` et `Unmounted` pour `gio mount`, donc pour Nautilus.
+
+## Propriétés du réseau
+
+L’entrée Propriétés de « Réseau » ouvre les réglages du bureau, comme `ms-settings:network` sous Windows : `gnome-control-center network`, `systemsettings kcm_networkmanagement` ou `cinnamon-settings network` selon `XDG_CURRENT_DESKTOP`, sinon `nm-connection-editor` (`platform/linux_settings.rs`). Vérifié sous GNOME uniquement. Le Wi-Fi a sa propre page dans GNOME, voisine de celle-ci.
