@@ -123,6 +123,17 @@ pub async fn purge_recycle_bin(paths: Vec<String>) -> Result<(), CommandError> {
 pub struct TrashRestoreReport {
     pub restored: Vec<String>,
     pub failures: Vec<(String, String)>,
+    /// Content and original folder of the items a rename cannot bring back, for a move.
+    pub on_other_volumes: Vec<(String, String)>,
+}
+
+/// Whether the item's content and its original folder lie on different file systems.
+fn on_other_volume(item: &trash::TrashItem) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let device = |path: &std::path::Path| std::fs::symlink_metadata(path).ok().map(|metadata| metadata.dev());
+    platform().trash_content_path(item).and_then(|content| device(&content))
+        .zip(device(&item.original_parent))
+        .is_some_and(|(content, parent)| content != parent)
 }
 
 /// Restore each item independently; failures leave the item and its record in the trash.
@@ -136,6 +147,12 @@ pub async fn restore_items_report(paths: Vec<String>) -> Result<TrashRestoreRepo
     };
     for item in selected {
         let original = encode(&item.original_path());
+        if on_other_volume(&item) {
+            if let Some(content) = platform().trash_content_path(&item) {
+                report.on_other_volumes.push((encode(&content), encode(&item.original_parent)));
+                continue;
+            }
+        }
         match platform().restore_trash_items(vec![item]) {
             Ok(()) => report.restored.push(original),
             Err(error) => {
@@ -153,6 +170,13 @@ pub async fn restore_items(paths: Vec<String>) -> Result<Vec<String>, CommandErr
     let report = restore_items_report(paths).await?;
     if let Some((_, error)) = report.failures.into_iter().next() {
         return Err(CommandError::TrashError(error));
+    }
+    // Undo has no operation to show a transfer's progress: the trash view offers it.
+    if let Some((_, parent)) = report.on_other_volumes.into_iter().next() {
+        return Err(CommandError::TrashError(TrashRestoreFailure {
+            issue: TrashRestoreIssue::Unavailable, path: parent,
+            detail: "The trash and the original folder are on different file systems".into(),
+        }.to_string()));
     }
     Ok(report.restored)
 }

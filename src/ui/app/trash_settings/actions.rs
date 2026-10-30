@@ -15,12 +15,21 @@ impl OxydeApp {
         cx.notify();
         cx.spawn(async move |this, cx| {
             let runtime = tokio::runtime::Handle::current();
-            let result = tokio::task::spawn_blocking(move || runtime.block_on(async move {
+            #[cfg_attr(target_os = "windows", allow(unused_mut))]
+            let mut result = tokio::task::spawn_blocking(move || runtime.block_on(async move {
                 if restore { oxyde_lib::commands::ops::restore_items_report(paths).await.map(Some) }
                 else { oxyde_lib::commands::ops::purge_recycle_bin(paths).await.map(|_| None) }
             })).await;
+            #[cfg(not(target_os = "windows"))]
+            let on_other_volumes = match &mut result {
+                Ok(Ok(Some(report))) => std::mem::take(&mut report.on_other_volumes),
+                _ => Vec::new(),
+            };
+            #[cfg(target_os = "windows")]
+            let on_other_volumes: Vec<(String, String)> = Vec::new();
             let _ = this.update(cx, |this, cx| {
                 this.trash_busy = false;
+                let count = count - on_other_volumes.len();
                 let error = match result {
                     Ok(Ok(Some(report))) if !report.failures.is_empty() => {
                         let mut args = crate::ui::i18n::FluentArgs::new();
@@ -34,8 +43,16 @@ impl OxydeApp {
                     Err(error) => Some(error.to_string()),
                 };
                 if let Some(error) = error { this.toast(ToastKind::Error, Message::ToastFailed, error, 0, cx); }
-                else { this.toast(ToastKind::Success, if restore { Message::ToastRestored } else { Message::ToastPurged }, String::new(), count, cx); }
+                else if count > 0 { this.toast(ToastKind::Success, if restore { Message::ToastRestored } else { Message::ToastPurged }, String::new(), count, cx); }
                 this.refresh_all_tabs(cx);
+                // A rename cannot bring these back: a move does, with its progress and conflicts.
+                let mut by_folder = std::collections::BTreeMap::<String, Vec<String>>::new();
+                for (content, folder) in on_other_volumes {
+                    by_folder.entry(folder).or_default().push(content);
+                }
+                for (folder, contents) in by_folder {
+                    this.execute_file_move(contents, folder, cx);
+                }
                 cx.notify();
             });
         }).detach();

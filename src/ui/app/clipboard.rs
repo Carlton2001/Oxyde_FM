@@ -52,7 +52,7 @@ impl OxydeApp {
     pub fn execute_coller(&mut self, cx: &mut Context<Self>) {
         let Some(pane) = self.state.find_pane(&self.state.active_pane_id) else { return; };
         let target_dir = pane.active_tab().path.clone();
-        if target_dir.starts_with("search://") { return; }
+        if target_dir.starts_with("search://") || target_dir == "trash://" { return; }
         #[cfg(target_os = "windows")]
         let text = None;
         #[cfg(not(target_os = "windows"))]

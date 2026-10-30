@@ -520,13 +520,11 @@ impl Platform for LinuxPlatform {
     fn trash_original_path(&self, _id: &std::path::Path) -> Option<std::path::PathBuf> { None }
 
     fn trash_transfer_entries(&self, paths: &[std::path::PathBuf]) -> Result<Vec<super::TrashTransferEntry>, String> {
-        // Moving content alone would orphan its record; items leave the trash by restoration.
-        if paths.iter().any(|path| super::linux_trash::inside_trash(path)) {
-            return Err("Items in the trash must be restored before being copied or moved".into());
-        }
-        Ok(Vec::new())
+        super::linux_trash::transfer::entries(paths)
     }
-    fn detach_trash_metadata(&self, _entry: &super::TrashTransferEntry) -> Result<Option<super::DetachedTrashMetadata>, String> { Ok(None) }
+    fn detach_trash_metadata(&self, entry: &super::TrashTransferEntry) -> Result<Option<super::DetachedTrashMetadata>, String> {
+        super::linux_trash::transfer::detach(entry)
+    }
 
     fn peek_status(&self) -> Result<super::PeekStatus, String> { Ok(super::PeekStatus::default()) }
     fn open_peek(&self, _path: &str) -> Result<(), String> { Err("Peek is only available on Windows".into()) }
@@ -773,7 +771,7 @@ impl Platform for LinuxPlatform {
     }
 
     fn set_application_icon(&self, _window: raw_window_handle::RawWindowHandle, _icon_bytes: &[u8]) {
-        // TODO
+        // Desktops take the icon from the entry named by the window's app id.
     }
 
     fn configure_hover_window(&self, _window: raw_window_handle::RawWindowHandle, _owner: raw_window_handle::RawWindowHandle) -> Result<(), String> {

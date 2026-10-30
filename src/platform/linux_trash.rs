@@ -2,6 +2,8 @@
 //! holds the content, `$trash/info/<name>.trashinfo` its record and listing identity.
 //! Restoration never overwrites nor recreates a missing original folder. Automatic cleanup
 //! belongs to the desktop: GNOME housekeeping settings or KDE trash limits.
+pub(super) mod transfer;
+
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
@@ -86,7 +88,10 @@ fn rename_no_replace(from: &Path, to: &Path) -> std::io::Result<()> {
 
 /// Keep the Trash specification 1.0 directory size cache, read by KDE, in step.
 fn forget_directory_size(item: &trash::TrashItem) {
-    let info = Path::new(&item.id);
+    forget_directory_size_of(Path::new(&item.id));
+}
+
+fn forget_directory_size_of(info: &Path) {
     let (Some(root), Some(name)) = (trash_root(info), info.file_stem()) else { return };
     let cache = root.join("directorysizes");
     let result = match std::fs::read(&cache) {

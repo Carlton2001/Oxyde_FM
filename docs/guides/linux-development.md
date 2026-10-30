@@ -113,11 +113,18 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
   Mutter sans écran.
 
 **Corbeille**
-- KDE : essai réel des limites `ktrashrc`. KDE ne les applique qu'aux suppressions faites
-  par KIO ; Oxyde ne les fait pas encore respecter quand il met à la corbeille.
-- Restauration entre systèmes de fichiers (`EXDEV`) refusée : à traiter si une corbeille
-  domicile reçoit des éléments d'un autre volume.
-- Copier/couper/glisser depuis la corbeille désactivés : contrat de transfert à définir.
+- KDE : les limites `ktrashrc` restent à la charge de KDE, comme le nettoyage à celle de
+  GNOME. Oxyde les règle sans jamais supprimer de lui-même : ce qu'il met à la corbeille
+  entre dans le décompte de KDE à son prochain passage. Non essayé en vraie session Plasma.
+- Fait : couper, coller et glisser entre panneaux depuis la corbeille, par le crochet
+  `trash_transfer_entries` commun à Windows (`linux_trash/transfer.rs`). Le moteur rend son
+  nom d'origine à l'élément, gère conflits et progression ; l'enregistrement `.trashinfo`
+  n'est écarté qu'une fois l'élément parti, dans `$trash/.oxyde-trash-*.tmp`, et Annuler
+  le rend. Les autres applications ne reçoivent pas ces éléments : elles sépareraient le
+  contenu de son enregistrement. Ce que contient un dossier à la corbeille reste refusé.
+- Fait : restaurer vers un autre système de fichiers passe par un déplacement, avec
+  progression et conflits, au lieu d'un refus. Annuler une suppression, sans opération à
+  montrer, le refuse encore.
 
 **Opérations sur les fichiers (jalon 4, avant tout usage réel)**
 - M07, corrigé : un dépôt entrant est toujours une copie, puisque GPUI ne négocie que
@@ -125,10 +132,9 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
   volumes se distinguent par le point de montage le plus profond (`/proc/self/mountinfo`,
   relu en arrière-plan), comparé sans résoudre les liens symboliques. Essayé sous GNOME :
   Nautilus vers Oxyde, glisser interne vers `/tmp`, puis vers une clé USB en lecture seule
-  (copie proposée, refus propre). Reste : une clé inscriptible.
-- Six tests (`file_ops::item_outcomes`, `operations::files::icons`) exigent un dossier
-  `./target` : ils échouent quand `CARGO_TARGET_DIR` pointe ailleurs. Les tests
-  `preview_jobs` à délai de 2 s échouent par intermittence quand toute la suite tourne.
+  (copie proposée, refus propre), et vers une clé inscriptible (copie, source conservée).
+- Les tests de workers lancent les exécutables de `target` : après modification,
+  `cargo build --offline --bins` avant `cargo test`, sinon ils échouent sur l'ancienne version.
 - M05, fait : [noms non UTF-8](../architecture/non-utf8-names.md) distincts de leurs
   sosies, marqués comme dans Nautilus, renommables ; les autres opérations les refusent.
 - M03/M06, faits pour la copie : [copies](../architecture/copies.md) depuis la source
@@ -152,7 +158,7 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
 - M08, fait : [presse-papiers](../architecture/clipboard.md) partagé avec Nautilus.
 - T11, fait : [surveillance](../architecture/watchers.md) par inotify hors partages réseau.
 - Fait sous Wayland : [glisser vers d'autres applications](../architecture/windows.md#glisser-déposer-de-fichiers).
-  Vérifié sous KWin imbriqué vers Nautilus ; reste un essai sous GNOME, sur une vraie session.
+  Vérifié sous KWin imbriqué vers Nautilus et, par l'utilisateur, sous GNOME.
   Impossible en X11, GPUI n'y offrant pas de fichiers.
 - Volumes faits (T02, T03) : inventaire UDisks2, notifications, démontage et éjection,
   volumes non montés, disques physiques et SSD ; voir le [pilote volumes](../architecture/volumes.md).
@@ -169,8 +175,8 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
   un espace de noms utilisateur : `unshare --map-auto --map-root-user <binaire de test>
   linux_permissions`.
 - T10, implémenté : [réseau](../architecture/linux-network.md) par GVfs comme Nautilus,
-  partages montés au chemin FUSE, identifiants demandés, liste `network:///` ;
-  vérification visuelle en attente. « Plus d'options » (menu Shell) est masqué hors Windows.
+  partages montés au chemin FUSE, identifiants demandés, liste `network:///`,
+  vérifié dans l'interface. « Plus d'options » (menu Shell) est masqué hors Windows.
 
 **Avancé et distribution (jalons 6–7)**
 - T09 : [poppler et GStreamer](../architecture/linux-previews.md) dans un worker ; PDF,

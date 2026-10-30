@@ -236,8 +236,6 @@ pub fn render_top_bar(
             let mut actions = div().flex().items_center().gap_1().ml_1().flex_shrink_0();
             let permanent_delete = view.shift_delete || view.pane_delete_is_permanent(&pane_id);
             let mut has_previous = false;
-            // Freedesktop items leave the trash only by restoration, keeping content and record together.
-            let trash_cut = cfg!(target_os = "windows") && is_trash_path;
             for (visible, id, icon, label, tip, action) in [
                 (parent_path.is_some(), "up-btn", "icons/arrow-up.svg", Message::Up, "Alt+↑".into(), 0u8),
                 (ordinary, "new-folder-btn", "icons/folder-plus.svg", Message::NewFolder, "Ctrl+Shift+N".into(), 11),
@@ -245,7 +243,7 @@ pub fn render_top_bar(
                     if undo_blocked_by_overwrite { _cx.i18n().text(Message::UndoOverwriteUnavailable).to_string() }
                     else { undo_tooltip.clone().unwrap_or_default() }, 1),
                 (!is_trash_path && can_redo, "redo-btn", "icons/redo-2.svg", Message::Redo, redo_tooltip.clone().unwrap_or_default(), 2),
-                (selected && (ordinary || trash_cut) && !view.trash_busy, "cut-btn", "icons/scissors.svg", Message::Cut, "Ctrl+X".into(), 3),
+                (selected && (ordinary || is_trash_path) && !view.trash_busy, "cut-btn", "icons/scissors.svg", Message::Cut, "Ctrl+X".into(), 3),
                 (selected && !is_trash_path && !is_network_neighborhood, "copy-btn", "icons/copy.svg", Message::Copy, "Ctrl+C".into(), 4),
                 (ordinary && view.clipboard_has_files, "paste-btn", "icons/clipboard-paste.svg", Message::Paste, "Ctrl+V".into(), 5),
                 (selected && !is_trash_path && !is_network_neighborhood && active_tab.archive_root.is_none(),

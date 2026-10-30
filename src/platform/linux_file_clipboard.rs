@@ -64,7 +64,9 @@ pub struct LinuxFileClipboard;
 impl FileClipboard for LinuxFileClipboard {
     fn set_files(&self, paths: Vec<String>, cut: bool) -> Result<bool, String> {
         hold(Vec::new(), false, None);
-        let server = wayland::offer(&paths, cut);
+        // Another file manager would take a trashed item's content without its record.
+        let trashed = paths.iter().any(|path| super::linux_trash::inside_trash(std::path::Path::new(path)));
+        let server = if trashed { None } else { wayland::offer(&paths, cut) };
         let text = server.is_none();
         hold(paths, cut, server);
         Ok(text)

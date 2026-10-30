@@ -24,7 +24,7 @@ fn offered_paths(paths: &[String]) -> Option<Vec<PathBuf>> {
 pub(crate) fn resolver(app: Entity<OxydeApp>)
     -> impl Fn(&FileDragData, &mut Window, &mut App) -> Option<ExternalDragPayload> + 'static {
     move |data, _, cx| {
-        // Transfers from the trash stay refused: they would split a file from its record.
+        // Other applications would take a trashed item's content without its record.
         let from_trash = app.read(cx).state.find_pane(&data.source_pane_id)
             .is_some_and(|pane| pane.active_tab().path == "trash://");
         if from_trash {
