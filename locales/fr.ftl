@@ -76,6 +76,7 @@ tooltip-deleted = Supprimé le : { $value }
 ## Main interface and commands
 menu-open = Ouvrir
 menu-open-new-tab = Ouvrir dans un nouvel onglet
+menu-open-terminal = Ouvrir dans la console
 menu-pin-quick-access = Épingler à l’accès rapide
 menu-unpin-quick-access = Désépingler de l’accès rapide
 menu-cut = Couper

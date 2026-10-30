@@ -672,6 +672,7 @@ pub fn render_top_bar(
                                         });
                                     }
                                     items.push(item);
+                                    let items = crate::ui::components::with_terminal_action(items, h.clone(), &path, cx.i18n());
                                     h.update(cx, |this, cx| {
                                         this.context_menus.clear();
                                         this.context_menus.push(crate::ui::app::ContextMenuInstance {

@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 
 fn context_shortcut(label: &str, i18n: &I18n, shift: bool) -> Option<&'static str> {
-    [(Message::Open, "Enter"), (Message::Cut, "Ctrl+X"),
+    [(Message::Open, "Enter"), (Message::OpenTerminal, "Ctrl+."), (Message::Cut, "Ctrl+X"),
         (Message::Rename, "F2"), (Message::Delete, "Del"),
         (Message::Properties, "Alt+Enter"), (Message::Paste, "Ctrl+V"),
         (Message::NewFolder, "Ctrl+Shift+N"), (Message::Copy, "Ctrl+C"), (Message::CopyName, "Ctrl+Alt+C"),

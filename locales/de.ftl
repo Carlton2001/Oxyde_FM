@@ -116,6 +116,7 @@ tooltip-deleted = Gelöscht: { $value }
 menu-open = Öffnen
 
 menu-open-new-tab = In neuem Tab öffnen
+menu-open-terminal = In Konsole öffnen
 
 menu-pin-quick-access = An Schnellzugriff anheften
 

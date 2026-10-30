@@ -37,6 +37,33 @@ impl OxydeApp {
         }).detach();
     }
 
+    pub(crate) fn open_terminal(&mut self, path: String, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let result = tokio::task::spawn_blocking(move || oxyde_lib::platform::platform().open_terminal(&path)).await;
+            let error = match result {
+                Ok(Ok(())) => return,
+                Ok(Err(error)) => error,
+                Err(error) => error.to_string(),
+            };
+            let _ = this.update(cx, |this, cx| {
+                this.toast(ToastKind::Error, Message::OpenItemFailed, error, 0, cx);
+                cx.notify();
+            });
+        }).detach();
+    }
+
+    /// The folder selected alone, or else the folder on display.
+    pub(super) fn open_terminal_for_selection(&mut self, cx: &mut Context<Self>) {
+        let Some(pane) = self.state.find_pane(&self.state.active_pane_id) else { return };
+        let tab = pane.active_tab();
+        let selected = (tab.selected_paths.len() == 1 && tab.path != "trash://").then(|| tab.files.iter()
+            .find(|file| file.is_dir && tab.selected_paths.contains(&file.path))).flatten();
+        let path = selected.map_or(&tab.path, |file| &file.path).clone();
+        if oxyde_lib::platform::platform().offers_terminal() && crate::ui::components::is_terminal_folder(&path) {
+            self.open_terminal(path, cx);
+        }
+    }
+
     pub(crate) fn open_file_item(
         &mut self,
         pane_id: &str,

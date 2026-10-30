@@ -34,7 +34,7 @@ impl OxydeApp {
             ("up" | "down" | "left" | "right" | "delete" | "tab", false, false, _)
             | ("enter" | "f2" | "backspace" | "f5", false, false, false)
             | ("enter" | "up", false, true, false)
-            | ("c" | "z" | "n" | "tab" | "pageup" | "pagedown" | "+" | "=" | "add", true, false, _)
+            | ("c" | "z" | "n" | "tab" | "pageup" | "pagedown" | "+" | "=" | "add" | ".", true, false, _)
             | ("a" | "x" | "v" | "y" | "r" | "f" | "-" | "subtract" | "0", true, false, false)
             | ("a", true, false, true)
             | ("c", true, true, false)
@@ -80,6 +80,8 @@ impl OxydeApp {
             ("up", false, true, false) => {
                 if let Some(parent) = parent { self.navigate_to(&pane_id, parent, cx); }
             }
+            // AZERTY layouts type the full stop with Shift.
+            (".", true, false, _) => self.open_terminal_for_selection(cx),
             ("f", true, false, false) => self.open_quick_search(&pane_id, window, cx),
             ("n", true, false, false) => self.add_panel_right(cx),
             ("n", true, false, true) => self.create_new_folder(&pane_id, cx),

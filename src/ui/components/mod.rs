@@ -32,7 +32,7 @@ use gpui::*;
 pub(crate) fn context_menu_sections(items: Vec<dropdown::DropdownItem>, i18n: &I18n) -> Vec<dropdown::DropdownItem> {
     use dropdown::IconName;
     const GROUPS: &[&[Message]] = &[
-        &[Message::OpenFileLocation, Message::Open, Message::OpenNewTab],
+        &[Message::OpenFileLocation, Message::Open, Message::OpenNewTab, Message::OpenTerminal],
         &[Message::ExpandAll, Message::CollapseAll],
         &[Message::MapNetworkDrive, Message::DisconnectNetworkDrive, Message::DisconnectThisNetworkDrive],
         &[Message::MountDiskImage, Message::UnmountDiskImage, Message::PinQuickAccess,
@@ -83,6 +83,34 @@ fn without_unavailable_shell_menu(items: Vec<dropdown::DropdownItem>, i18n: &I18
         let label = i18n.text(Message::MoreOptions);
         items.into_iter().filter(|item| item.label != label.as_ref()).collect()
     }
+}
+
+/// Only a real folder can be a terminal's working directory: not the trash, a search,
+/// the network neighbourhood, a remote URI nor the inside of an archive.
+pub(crate) fn is_terminal_folder(path: &str) -> bool {
+    std::path::Path::new(path).is_absolute()
+        && oxyde_lib::utils::archive::split_virtual_path(path).is_none()
+}
+
+/// Adds Open in Console after the opening actions, where the system offers it.
+pub(crate) fn with_terminal_action(
+    items: Vec<dropdown::DropdownItem>,
+    h: Entity<crate::ui::app::OxydeApp>,
+    path: &str,
+    i18n: &I18n,
+) -> Vec<dropdown::DropdownItem> {
+    if !oxyde_lib::platform::platform().offers_terminal() || !is_terminal_folder(path) {
+        return items;
+    }
+    let path = path.to_string();
+    let action = dropdown::DropdownItem::new(i18n.text(Message::OpenTerminal).to_string(), move |_, cx| {
+        h.update(cx, |this, cx| {
+            this.context_menus.clear();
+            this.open_terminal(path.clone(), cx);
+            cx.notify();
+        });
+    }).icon(dropdown::IconName::Terminal);
+    network::insert_after_open(items, vec![action], i18n)
 }
 
 /// Attach sorting controls to context menus in grid view.
@@ -764,6 +792,11 @@ pub fn oxyde_context_menu_items(
         actions,
         i18n,
     );
+    // A terminal has one working directory: like Nautilus, no entry for a multiple selection.
+    let in_trash = view.state.find_pane(&view.state.active_pane_id).is_some_and(|pane| pane.active_tab().path == "trash://");
+    if is_dir && !in_trash && view.context_action_paths(&path).len() == 1 {
+        items = with_terminal_action(items, h.clone(), &path, i18n);
+    }
     if !path.starts_with("trash:") {
         history_actions::insert_menu_items(&mut items, i18n, h, view);
     }
@@ -791,6 +824,7 @@ pub fn pane_context_menu_items(i18n: &I18n, h: Entity<crate::ui::app::OxydeApp>,
         items.extend(network::network_actions(i18n, h.clone(), &drive.path, true));
     }
     items.extend(pane_context_menu_items_raw(i18n, h.clone(), pane_id));
+    let mut items = with_terminal_action(items, h.clone(), path, i18n);
     history_actions::insert_menu_items(&mut items, i18n, h, view);
     if path.starts_with("search://") {
         items.retain(|item| ![Message::NewFolder, Message::Paste, Message::Properties, Message::MoreOptions]

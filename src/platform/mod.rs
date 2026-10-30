@@ -625,6 +625,11 @@ pub trait Platform: Send + Sync {
 
     /// Ouvre un fichier ou dossier avec l'application par défaut de l'OS.
     fn open_item(&self, path: &str) -> Result<(), String>;
+    /// Whether this system offers to open a folder in a terminal.
+    fn offers_terminal(&self) -> bool { false }
+    fn open_terminal(&self, _path: &str) -> Result<(), String> {
+        Err("Opening a terminal is not available on this system".into())
+    }
 
     fn quick_access(&self) -> &dyn QuickAccess;
     /// Best-effort native name of a virtual Shell item; ordinary properties keep their fallback.
@@ -753,6 +758,8 @@ mod linux_impl;
 mod linux_gpu;
 #[cfg(not(target_os = "windows"))]
 mod linux_settings;
+#[cfg(not(target_os = "windows"))]
+mod linux_terminal;
 #[cfg(not(target_os = "windows"))]
 mod linux_startup;
 #[cfg(not(target_os = "windows"))]

@@ -751,6 +751,11 @@ impl Platform for LinuxPlatform {
         }
     }
 
+    fn offers_terminal(&self) -> bool { true }
+    fn open_terminal(&self, path: &str) -> Result<(), String> {
+        super::linux_terminal::open(std::path::Path::new(path))
+    }
+
     /// Linux desktops share no properties dialog; Oxyde's own Properties window serves
     /// them, and the interface offers no system button. `gio open` used to open the item.
     /// The network neighbourhood has no such window: its properties are the system's.

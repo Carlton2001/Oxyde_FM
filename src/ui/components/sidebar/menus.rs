@@ -347,24 +347,28 @@ fn sidebar_tree_actions(
 
 pub(super) fn pinned_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
     let actions = super::super::network::network_actions(i18n, h.clone(), &path, false);
-    let items = super::super::network::insert_after_open(pinned_context_menu_raw(i18n, h, path), actions, i18n);
+    let items = super::super::network::insert_after_open(pinned_context_menu_raw(i18n, h.clone(), path.clone()), actions, i18n);
+    let items = super::super::with_terminal_action(items, h, &path, i18n);
     super::super::context_menu_sections(items, i18n)
 }
 
 pub(super) fn location_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
     let actions = super::super::network::network_actions(i18n, h.clone(), &path, false);
-    let items = super::super::network::insert_after_open(location_context_menu_raw(i18n, h, path), actions, i18n);
+    let items = super::super::network::insert_after_open(location_context_menu_raw(i18n, h.clone(), path.clone()), actions, i18n);
+    let items = super::super::with_terminal_action(items, h, &path, i18n);
     super::super::context_menu_sections(items, i18n)
 }
 
 pub(super) fn drive_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String, releases: DriveActions, is_remote: bool) -> Vec<DropdownItem> {
     let actions = super::super::network::network_actions(i18n, h.clone(), &path, is_remote);
-    let items = super::super::network::insert_after_open(drive_context_menu_raw(i18n, h, path, releases), actions, i18n);
+    let items = super::super::network::insert_after_open(drive_context_menu_raw(i18n, h.clone(), path.clone(), releases), actions, i18n);
+    let items = super::super::with_terminal_action(items, h, &path, i18n);
     super::super::context_menu_sections(items, i18n)
 }
 
 pub(super) fn directory_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
     let actions = super::super::network::network_actions(i18n, h.clone(), &path, false);
-    let items = super::super::network::insert_after_open(directory_context_menu_raw(i18n, h, path), actions, i18n);
+    let items = super::super::network::insert_after_open(directory_context_menu_raw(i18n, h.clone(), path.clone()), actions, i18n);
+    let items = super::super::with_terminal_action(items, h, &path, i18n);
     super::super::context_menu_sections(items, i18n)
 }

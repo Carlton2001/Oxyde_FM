@@ -70,6 +70,7 @@ tooltip-deleted = Deleted: { $value }
 ## Main interface and commands
 menu-open = Open
 menu-open-new-tab = Open in new tab
+menu-open-terminal = Open in Console
 menu-pin-quick-access = Pin to Quick Access
 menu-unpin-quick-access = Unpin from Quick Access
 menu-cut = Cut
