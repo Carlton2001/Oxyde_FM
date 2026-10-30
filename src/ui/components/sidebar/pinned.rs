@@ -6,7 +6,6 @@ use gpui::prelude::*;
 use gpui::*;
 
 pub(crate) fn render_pinned_menu(view: &OxydeApp, handle: Entity<OxydeApp>, window: &mut Window, cx: &mut Context<OxydeApp>) -> AnyElement {
-    #[cfg(target_os = "windows")]
     if crate::ui::components::popup::supported(window, cx) {
         let origin = view.context_anchor_points.get("sidebar-pinned").copied().unwrap_or_default();
         // Include the rail's trailing padding so the menu starts outside

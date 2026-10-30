@@ -37,8 +37,6 @@ pub(super) fn render(
     window: &mut Window,
     cx: &mut Context<OxydeApp>,
 ) -> AnyElement {
-    #[cfg(not(target_os = "windows"))]
-    let _ = window;
     let theme = *cx.theme();
     let bounds = Rc::new(Cell::new(None));
     let paint_bounds = bounds.clone();
@@ -120,7 +118,6 @@ pub(super) fn render(
     let mut result = div().child(row);
     if view.settings_open && view.settings_picker == Some(SettingsPicker::Compression) {
         if let Some(bounds) = view.archive_format_bounds {
-            #[cfg(target_os = "windows")]
             if popup::supported(window, cx) {
                 popup::show(
                     "default-archive-formats",

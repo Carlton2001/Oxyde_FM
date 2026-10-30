@@ -3,7 +3,6 @@ use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::scale::{logical, rem_pixels};
 use gpui::prelude::*;
 use gpui::*;
-#[cfg(target_os = "windows")]
 mod popup;
 pub(super) mod external;
 pub(crate) mod outgoing;

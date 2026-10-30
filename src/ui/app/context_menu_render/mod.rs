@@ -16,7 +16,6 @@ impl OxydeApp {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Div {
-        #[cfg(target_os = "windows")]
         if crate::ui::components::popup::supported(_window, cx) {
             for (index, instance) in self.context_menus.iter().enumerate() {
                 let parent = window_handle;

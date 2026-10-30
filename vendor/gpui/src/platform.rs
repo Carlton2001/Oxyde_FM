@@ -1018,6 +1018,12 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     fn reposition_popup(&self, _anchor_rect: Bounds<Pixels>, _size: Size<Pixels>) -> bool {
         false
     }
+
+    /// Oxyde: where the compositor put this popup, relative to its parent's window coordinates.
+    /// The cell follows each of its answers.
+    fn popup_offset(&self) -> Option<std::rc::Rc<std::cell::Cell<Point<Pixels>>>> {
+        None
+    }
     fn window_decorations(&self) -> Decorations {
         Decorations::Server
     }

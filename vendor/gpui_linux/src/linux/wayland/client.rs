@@ -2311,6 +2311,20 @@ impl Dispatch<wl_pointer::WlPointer, ()> for WaylandClientStatePtr {
                 if state.mouse_focused_window.is_none() {
                     return;
                 }
+                // Oxyde: a grab keeps this client's own surfaces clickable, without dismissing
+                // the popup as a click elsewhere does. Close it once its owner has seen the
+                // click, which may be the one that toggles it.
+                let target = state.mouse_focused_window.clone();
+                let outside: Vec<_> = state
+                    .windows
+                    .values()
+                    .filter(|window| {
+                        button_state == wl_pointer::ButtonState::Pressed
+                            && window.has_popup_grab()
+                            && !target.as_ref().is_some_and(|target| target.is_within(window))
+                    })
+                    .cloned()
+                    .collect();
                 match button_state {
                     wl_pointer::ButtonState::Pressed => {
                         if let Some(window) = state.keyboard_focused_window.clone() {
@@ -2363,6 +2377,9 @@ impl Dispatch<wl_pointer::WlPointer, ()> for WaylandClientStatePtr {
                             });
                             drop(state);
                             window.handle_input(input);
+                            for window in outside {
+                                window.close();
+                            }
                         }
                     }
                     wl_pointer::ButtonState::Released => {

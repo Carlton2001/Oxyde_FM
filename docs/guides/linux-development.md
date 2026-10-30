@@ -95,8 +95,9 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
   Reste : une vraie session Plasma, ombres et fenêtres secondaires.
 - Infobulles : sous X11, leur bornage utilise encore la taille de fenêtre et peut mordre de
   quelques pixels sur la marge d'ombre (`tooltip/position.rs`). Sous Wayland, [elles sortent
-  de la fenêtre](../architecture/windows.md#infobulles-sous-wayland) ; vérifiées sous KWin
-  imbriqué et Mutter sans écran. Menus encore à porter.
+  de la fenêtre](../architecture/windows.md#infobulles-sous-wayland), comme les
+  [menus](../architecture/windows.md#menus-sous-wayland) ; vérifiés sous KWin imbriqué et
+  Mutter sans écran.
 
 **Corbeille**
 - KDE : essai réel des limites `ktrashrc`. KDE ne les applique qu'aux suppressions faites

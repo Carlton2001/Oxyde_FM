@@ -357,8 +357,7 @@ pub(crate) fn render_network_dialog(
                 ),
         );
         if dialog.letter_open {
-            let native = { #[cfg(target_os = "windows")] { crate::ui::components::popup::supported(window, cx) } #[cfg(not(target_os = "windows"))] { false } };
-            #[cfg(target_os = "windows")]
+            let native = crate::ui::components::popup::supported(window, cx);
             if native {
                 let bounds = dialog.letter_bounds.unwrap_or_default();
                 crate::ui::components::popup::show("network-letters", crate::ui::components::popup::PopupAnchor::element(bounds), handle.clone(), window, cx,

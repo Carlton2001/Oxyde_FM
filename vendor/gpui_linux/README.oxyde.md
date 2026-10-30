@@ -20,6 +20,11 @@ Local source changes, all marked `Oxyde:`:
   A resized popup holds its frames until the compositor's answer, and its bare commits until
   the new frame is on the surface: `wp_viewport`'s destination changes at the configure, so a
   commit in between would stretch the old buffer to the new size.
+- `Window::popup_offset` (all three files): where the compositor put a popup, for converting
+  its coordinates to its parent's.
+- `gpui_linux/src/linux/wayland/client.rs`: a press closes the grabbing popups that do not
+  contain its target, after the press is delivered. A grab leaves the client's own surfaces
+  clickable without dismissing the popup.
 
 Reason: GPUI repositions a popup only when it resizes, so a tooltip could not follow the
 pointer. Windows and X11 reject anchored popups and are unchanged. When updating GPUI,

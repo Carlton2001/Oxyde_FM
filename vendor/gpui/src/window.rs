@@ -2388,6 +2388,12 @@ impl Window {
         self.platform_window.reposition_popup(anchor_rect, size)
     }
 
+    /// Oxyde: where the compositor put this popup, relative to its parent's window coordinates.
+    /// The cell follows each of its answers.
+    pub fn popup_offset(&self) -> Option<std::rc::Rc<std::cell::Cell<Point<Pixels>>>> {
+        self.platform_window.popup_offset()
+    }
+
     /// Linux (wayland) only: Set the window's input region, the area that receives pointer
     /// and touch input. Events outside it pass through to whatever is below the window.
     ///

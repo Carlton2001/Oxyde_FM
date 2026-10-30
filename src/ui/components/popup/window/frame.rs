@@ -53,13 +53,24 @@ impl Element for FramedContent {
     ) {
         self.content
             .prepaint_at(point(self.inset, self.inset), window, cx);
+        // Before this frame is presented, which would otherwise cut the content. Only the visible
+        // frame takes the pointer, not the shadow margins over the window beneath.
+        #[cfg(not(target_os = "windows"))]
+        if self.root.read(cx).measured != Some(*measured) {
+            self.root.update(cx, |root, _| root.measured = Some(*measured));
+            let inner = Bounds::new(point(self.inset, self.inset), size(measured.width - self.inset * 2.0, measured.height - self.inset * 2.0));
+            window.set_input_region(Some(&[inner]));
+            let root = self.root.clone();
+            root.update(cx, |root, cx| position(root, window, cx));
+        }
+        #[cfg(target_os = "windows")]
         if self.root.read(cx).measured != Some(*measured) {
             let root = self.root.clone();
             let measured = *measured;
             let handle = Window::window_handle(window);
             cx.defer(move |cx| {
                 root.update(cx, |root, _| root.measured = Some(measured));
-                let _ = handle.update(cx, |_, window, cx| position(root.read(cx), window));
+                let _ = handle.update(cx, |_, window, cx| root.update(cx, |root, cx| position(root, window, cx)));
             });
         }
     }

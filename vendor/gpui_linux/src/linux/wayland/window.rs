@@ -134,6 +134,7 @@ pub struct WaylandWindowState {
     // the old buffer stretched to the viewport's new destination.
     popup_frame_owed: bool,
     popup_commit_withheld: bool,
+    popup_offset: Rc<Cell<Point<Pixels>>>,
     presentation: PresentationState,
     pending_frame_callback: Option<wl_callback::WlCallback>,
     in_progress_configure: Option<InProgressConfigure>,
@@ -651,6 +652,7 @@ impl WaylandWindowState {
             popup_resize_requested: false,
             popup_frame_owed: false,
             popup_commit_withheld: false,
+            popup_offset: Rc::default(),
             presentation: PresentationState::Unpresented,
             pending_frame_callback: None,
             in_progress_window_controls: None,
@@ -932,6 +934,26 @@ impl WaylandWindowStatePtr {
 
     pub fn ptr_eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.state, &other.state)
+    }
+
+    // Oxyde: see the pointer's button handling.
+    pub fn has_popup_grab(&self) -> bool {
+        matches!(
+            &self.state.borrow().surface_state,
+            WaylandSurfaceState::Popup(popup) if popup.options.grab
+        )
+    }
+
+    // Oxyde: whether this window is `ancestor` or one of its popups.
+    pub fn is_within(&self, ancestor: &Self) -> bool {
+        let mut window = Some(self.clone());
+        while let Some(current) = window {
+            if current.ptr_eq(ancestor) {
+                return true;
+            }
+            window = current.state.borrow().parent.clone();
+        }
+        false
     }
 
     pub fn add_child(&self, child: ObjectId, blocking: bool) {
@@ -1397,7 +1419,13 @@ impl WaylandWindowStatePtr {
         match event {
             // Only the size is needed, the position is the compositor's. The following
             // xdg_surface.configure applies the change.
-            xdg_popup::Event::Configure { width, height, .. } => {
+            xdg_popup::Event::Configure { x, y, width, height } => {
+                // Oxyde: relative to the parent's window geometry, which excludes its margins.
+                {
+                    let state = self.state.borrow();
+                    let margin = state.parent.as_ref().map(|parent| parent.window_geometry().origin);
+                    state.popup_offset.set(Point::new(px(x as f32), px(y as f32)) + margin.unwrap_or_default());
+                }
                 let size = if width <= 0 || height <= 0 {
                     None
                 } else {
@@ -2136,6 +2164,11 @@ impl PlatformWindow for WaylandWindow {
             .reposition_popup(&state.globals, size, parent_geometry);
         state.popup_resize_requested = resized && repositioned;
         true
+    }
+
+    fn popup_offset(&self) -> Option<Rc<Cell<Point<Pixels>>>> {
+        let state = self.borrow();
+        matches!(state.surface_state, WaylandSurfaceState::Popup(_)).then(|| state.popup_offset.clone())
     }
 
     fn set_input_region(&self, region: Option<&[Bounds<Pixels>]>) {

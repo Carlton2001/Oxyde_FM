@@ -387,7 +387,6 @@ impl Render for AdvancedSearchWindow {
                     continue;
                 };
                 let close = handle.clone();
-                #[cfg(target_os = "windows")]
                 if crate::ui::components::popup::supported(window, cx) {
                     let scroll = menu.scroll_handle.clone();
                     crate::ui::components::popup::text_menu(

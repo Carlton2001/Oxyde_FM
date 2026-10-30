@@ -1,7 +1,6 @@
 use crate::ui::elements::button::{button_style, ButtonVariant};
 mod breadcrumb_fades;
 mod breadcrumb_glide;
-#[cfg(target_os = "windows")]
 mod breadcrumb_menu;
 use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::scale::{logical};
@@ -398,7 +397,6 @@ pub fn render_top_bar(
                                    .relative()
                                    .flex_none()
                                    .child({
-                                       #[cfg(target_os = "windows")]
                                        {
                                            let pane = p_id.clone(); let path = parent_path_cap.clone();
                                            let test_pane = pane.clone(); let test_path = path.clone();
@@ -407,8 +405,6 @@ pub fn render_top_bar(
                                                move |view, window, cx| breadcrumb_menu::render(view, cx.entity(), &pane, &path, index, window, cx),
                                                |view, _, cx| { view.breadcrumb_menu = None; cx.notify(); }).into_any_element()
                                        }
-                                       #[cfg(not(target_os = "windows"))]
-                                       div().into_any_element()
                                    })                                   .child(
                                        div()
                                            .id(SharedString::from(format!("chevron-btn-{}-{}", p_id, index)))
@@ -463,7 +459,6 @@ pub fn render_top_bar(
                                        let breadcrumb_menu = view.breadcrumb_menu.clone();
                                        div()
                                             .when_some(breadcrumb_menu, |this: Div, (m_pane_id, menu_path, _, dirs): (String, String, usize, Vec<FileEntry>)| {
-                                                #[cfg(target_os = "windows")]
                                                 if crate::ui::components::popup::supported_source(&handle, _cx) { return this; }
                                                 {
                                                 if m_pane_id == p_id && menu_path == parent_path_cap {

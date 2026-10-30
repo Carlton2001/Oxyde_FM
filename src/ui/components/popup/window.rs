@@ -14,6 +14,7 @@ struct Spec {
     key: Key,
     parent: AnyWindowHandle,
     raw_owner: RawWindowHandle,
+    #[cfg(target_os = "windows")]
     raw_parent: RawWindowHandle,
     restore_parent: AnyWindowHandle,
     anchor: PopupAnchor,
@@ -37,16 +38,71 @@ struct Surfaces {
     raw_windows: HashMap<WindowId, RawWindowHandle>,
     rows: HashMap<WindowId, HashMap<usize, Bounds<Pixels>>>,
     previous_rows: HashMap<WindowId, HashMap<usize, Bounds<Pixels>>>,
+    #[cfg(not(target_os = "windows"))]
+    origins: HashMap<WindowId, Rc<std::cell::Cell<Point<Pixels>>>>,
+    #[cfg(not(target_os = "windows"))]
+    dismissals: HashMap<WindowId, (Alive, Rc<dyn Fn(&mut App)>)>,
 }
 impl Global for Surfaces {}
 
+/// The compositor places these surfaces and reports where, relative to their parent.
+#[cfg(not(target_os = "windows"))]
+fn owner_origin(state: &Surfaces, mut id: WindowId) -> Point<Pixels> {
+    let mut origin = Point::default();
+    while let Some(offset) = state.origins.get(&id) {
+        origin = origin + offset.get();
+        let Some(parent) = state.logical_owners.get(&id) else { break };
+        id = parent.window_id();
+    }
+    origin
+}
+
+/// Only the topmost menu may take a compositor grab, and asking otherwise is a fatal protocol
+/// error: close the menus that the new one does not descend from.
+#[cfg(not(target_os = "windows"))]
+fn close_unrelated(parent: AnyWindowHandle, cx: &mut App) {
+    let state = cx.default_global::<Surfaces>();
+    let mut ancestors = vec![parent.window_id()];
+    while let Some(next) = state.logical_owners.get(ancestors.last().unwrap()) {
+        ancestors.push(next.window_id());
+    }
+    let keys: Vec<_> = state.windows.iter()
+        .filter(|(_, handle)| !ancestors.contains(&handle.window_id()))
+        .map(|(key, _)| key.clone())
+        .collect();
+    for key in keys {
+        let Some(&handle) = cx.default_global::<Surfaces>().windows.get(&key) else { continue };
+        let Ok(spec) = handle.read(cx).map(|root| root.spec.clone()) else { continue };
+        if !spec.interactive {
+            continue;
+        }
+        cx.default_global::<Surfaces>().windows.remove(&key);
+        let _ = handle.update(cx, |_, window, cx| {
+            close_for(window, cx);
+            crate::ui::components::tooltip::hover::close_for(window, cx);
+            window.remove_window();
+        });
+        if (spec.alive)(cx) {
+            (spec.close)(cx);
+        }
+    }
+}
+
 pub(crate) fn supported(window: &Window, cx: &App) -> bool {
+    #[cfg(not(target_os = "windows"))]
+    if !super::available() {
+        return false;
+    }
     let parent = owner(window, cx).unwrap_or(Window::window_handle(window));
     !cx.try_global::<Surfaces>()
         .is_some_and(|state| state.failed.contains_key(&parent.window_id()))
 }
 
 pub(crate) fn supported_source<T: 'static>(source: &Entity<T>, cx: &App) -> bool {
+    #[cfg(not(target_os = "windows"))]
+    if !super::available() {
+        return false;
+    }
     !cx.try_global::<Surfaces>()
         .is_some_and(|state| state.failed.values().any(|id| *id == source.entity_id()))
 }
@@ -102,33 +158,47 @@ pub(crate) fn row_bounds(
     let state = cx.try_global::<Surfaces>()?;
     let id = state.windows.get(&(parent.window_id(), key))?.window_id();
     let bounds = *state.rows.get(&id)?.get(&index)?;
+    #[cfg(not(target_os = "windows"))]
+    return Some(bounds + owner_origin(state, id));
+    #[cfg(target_os = "windows")]
     let raw = *state.raw_windows.get(&id)?;
+    #[cfg(target_os = "windows")]
     let coordinate_owner = state.owners.get(&id)?.1;
+    #[cfg(target_os = "windows")]
     let platform = oxyde_lib::platform::platform();
-    let (x, y) = platform
-        .popup_point_to_owner(
-            raw,
-            coordinate_owner,
-            (bounds.left().as_f32(), bounds.top().as_f32()),
-        )
-        .ok()?;
-    let (right, bottom) = platform
-        .popup_point_to_owner(
-            raw,
-            coordinate_owner,
-            (bounds.right().as_f32(), bounds.bottom().as_f32()),
-        )
-        .ok()?;
-    Some(Bounds::new(
-        point(px(x), px(y)),
-        size(px(right - x), px(bottom - y)),
-    ))
+    #[cfg(target_os = "windows")]
+    {
+        let (x, y) = platform
+            .popup_point_to_owner(
+                raw,
+                coordinate_owner,
+                (bounds.left().as_f32(), bounds.top().as_f32()),
+            )
+            .ok()?;
+        let (right, bottom) = platform
+            .popup_point_to_owner(
+                raw,
+                coordinate_owner,
+                (bounds.right().as_f32(), bounds.bottom().as_f32()),
+            )
+            .ok()?;
+        Some(Bounds::new(
+            point(px(x), px(y)),
+            size(px(right - x), px(bottom - y)),
+        ))
+    }
 }
 
 struct MenuWindow {
     spec: Spec,
     measured: Option<Size<Pixels>>,
     focus: FocusHandle,
+    // The first frame is empty: Wayland has no hidden surface, and this one needs a buffer
+    // before it can take the size of its content.
+    #[cfg(not(target_os = "windows"))]
+    ready: bool,
+    #[cfg(not(target_os = "windows"))]
+    placed: std::cell::Cell<Option<(Bounds<Pixels>, Size<Pixels>)>>,
     _observer: Subscription,
     _watcher: Task<()>,
 }
@@ -139,6 +209,12 @@ pub(crate) fn owner(window: &Window, cx: &App) -> Option<AnyWindowHandle> {
         .get(&Window::window_handle(window).window_id())
         .map(|entry| entry.0)
 }
+#[cfg(not(target_os = "windows"))]
+pub(crate) fn owner_point(window: &Window, cx: &App, position: Point<Pixels>) -> Point<Pixels> {
+    let id = Window::window_handle(window).window_id();
+    cx.try_global::<Surfaces>().map_or(position, |state| position + owner_origin(state, id))
+}
+#[cfg(target_os = "windows")]
 pub(crate) fn owner_point(window: &Window, cx: &App, position: Point<Pixels>) -> Point<Pixels> {
     let Some((_, parent)) = cx
         .try_global::<Surfaces>()
@@ -188,11 +264,22 @@ pub(crate) fn close_for(window: &mut Window, cx: &mut App) {
     }
 }
 
+#[cfg(target_os = "windows")]
+fn family_active(spec: &Spec, _: &mut App) -> bool {
+    oxyde_lib::platform::platform().popup_family_active(spec.raw_owner)
+}
+/// A grab ends with the compositor's dismissal, which covers leaving the application. Its menu
+/// holds the keyboard, so the owner reads as inactive meanwhile.
+#[cfg(not(target_os = "windows"))]
+fn family_active(spec: &Spec, cx: &mut App) -> bool {
+    spec.interactive || spec.parent.update(cx, |_, window, _| window.is_window_active()).unwrap_or(false)
+}
+
 fn restore(spec: &Spec, cx: &mut App) {
     if !spec.interactive {
         return;
     }
-    if !oxyde_lib::platform::platform().popup_family_active(spec.raw_owner) {
+    if !family_active(spec, cx) {
         return;
     }
     let focus = spec.restore.clone();
@@ -270,6 +357,7 @@ fn show_inner<T: 'static>(
     let weak = source.downgrade();
     let make = weak.clone();
     let dismiss = weak.clone();
+    #[cfg(target_os = "windows")]
     let raw_parent = anchor
         .parent
         .and_then(|handle| {
@@ -296,6 +384,7 @@ fn show_inner<T: 'static>(
         key: key.clone(),
         parent: parent_handle,
         raw_owner,
+        #[cfg(target_os = "windows")]
         raw_parent,
         restore_parent,
         anchor,
@@ -316,6 +405,19 @@ fn show_inner<T: 'static>(
             });
         }),
     };
+    // The side of a surface is set at opening: replace one that must change it.
+    #[cfg(not(target_os = "windows"))]
+    if let Some(handle) = cx.default_global::<Surfaces>().windows.get(&key).copied() {
+        let keeps = |anchor: &PopupAnchor| spec.anchor.parent.is_some() && !spec.anchor.beside && anchor.beside;
+        if handle.read(cx).is_ok_and(|root| !keeps(&root.spec.anchor) && !super::wayland::same_placement(&root.spec.anchor, &spec.anchor, spec.rem * 2.0)) {
+            cx.default_global::<Surfaces>().windows.remove(&key);
+            let _ = handle.update(cx, |_, window, cx| {
+                close_for(window, cx);
+                crate::ui::components::tooltip::hover::close_for(window, cx);
+                window.remove_window();
+            });
+        }
+    }
     if let Some(handle) = cx.default_global::<Surfaces>().windows.get(&key).copied() {
         cx.defer(move |cx| {
             let _ = handle.update(cx, |root, window, cx| {
@@ -326,11 +428,16 @@ fn show_inner<T: 'static>(
                 }
                 root.spec = spec;
                 root.spec.restore = restore;
+                #[cfg(not(target_os = "windows"))]
+                cx.default_global::<Surfaces>().dismissals.insert(
+                    Window::window_handle(window).window_id(),
+                    (root.spec.alive.clone(), root.spec.close.clone()),
+                );
                 if window.rem_size() != root.spec.rem {
                     window.set_rem_size(root.spec.rem);
                 }
                 cx.notify();
-                position(root, window);
+                position(root, window, cx);
             });
         });
         return;
@@ -346,6 +453,19 @@ fn show_inner<T: 'static>(
     if cx.default_global::<Surfaces>().cleanup.is_none() {
         let cleanup = cx.on_window_closed(|cx, id| {
             super::keyboard::remove(id, cx);
+            // Closed by the compositor rather than by Oxyde: a click in another application.
+            #[cfg(not(target_os = "windows"))]
+            {
+                let state = cx.default_global::<Surfaces>();
+                state.origins.remove(&id);
+                let dismissal = state.dismissals.remove(&id)
+                    .filter(|_| state.windows.values().any(|handle| handle.window_id() == id));
+                if let Some((alive, close)) = dismissal {
+                    if alive(cx) {
+                        cx.defer(move |cx| close(cx));
+                    }
+                }
+            }
             let state = cx.default_global::<Surfaces>();
             state.failed.remove(&id);
             state.owners.remove(&id);
@@ -379,29 +499,43 @@ fn show_inner<T: 'static>(
             return;
         }
 
+        #[cfg(not(target_os = "windows"))]
+        if spec.interactive {
+            close_unrelated(spec.restore_parent, cx);
+        }
         let root_spec = spec.clone();
         let source_id = source.entity_id();
+        #[cfg(target_os = "windows")]
         let Ok(origin) = spec
             .parent
             .update(cx, |_, window, _| window.bounds().origin)
         else {
             return;
         };
+        #[cfg(target_os = "windows")]
+        let (kind, show, bounds) = (WindowKind::PopUp, false, Bounds::new(origin, size(px(640.0), px(640.0))));
+        #[cfg(not(target_os = "windows"))]
+        let (kind, show, bounds) = {
+            let anchor_bounds = spec.anchor.bounds - owner_origin(cx.default_global::<Surfaces>(), spec.restore_parent.window_id());
+            let inset = spec.rem * 2.0;
+            let options = super::wayland::options(spec.restore_parent, &spec.anchor, anchor_bounds, inset, spec.interactive);
+            // As wide as its margins, to touch its anchor at any window edge: Mutter dismisses a
+            // popup that does not touch its parent.
+            let side = inset * 2.0 + px(1.0);
+            (WindowKind::AnchoredPopup(options), true, Bounds::new(Point::default(), size(side, side)))
+        };
         let result = cx.open_window(
             WindowOptions {
                 app_id: Some(crate::ui::APP_ID.into()),
-                kind: WindowKind::PopUp,
+                kind,
                 titlebar: None,
-                show: false,
+                show,
                 focus: false,
                 window_background: WindowBackgroundAppearance::Transparent,
                 is_resizable: false,
                 is_minimizable: false,
                 is_movable: false,
-                window_bounds: Some(WindowBounds::Windowed(Bounds::new(
-                    origin,
-                    size(px(640.0), px(640.0)),
-                ))),
+                window_bounds: Some(WindowBounds::Windowed(bounds)),
                 ..Default::default()
             },
             move |window, cx| {
@@ -420,6 +554,15 @@ fn show_inner<T: 'static>(
                         .insert(Window::window_handle(window).window_id(), raw.as_raw());
                 }
                 let window_handle = Window::window_handle(window);
+                #[cfg(not(target_os = "windows"))]
+                {
+                    window.set_input_region(Some(&[]));
+                    let state = cx.default_global::<Surfaces>();
+                    if let Some(offset) = window.popup_offset() {
+                        state.origins.insert(window_handle.window_id(), offset);
+                    }
+                    state.dismissals.insert(window_handle.window_id(), (root_spec.alive.clone(), root_spec.close.clone()));
+                }
                 let root = cx.new(|cx: &mut Context<MenuWindow>| {
                     let observer = cx.observe(&source, |_, _, cx| cx.notify());
                     let watcher = cx.spawn(async move |this, cx| loop {
@@ -428,9 +571,7 @@ fn show_inner<T: 'static>(
                             .await;
                         let alive = this
                             .update(cx, |root, cx| {
-                                if !oxyde_lib::platform::platform()
-                                    .popup_family_active(root.spec.raw_owner)
-                                {
+                                if !family_active(&root.spec, cx) {
                                     let close = root.spec.close.clone();
                                     cx.defer(move |cx| close(cx));
                                 }
@@ -451,6 +592,10 @@ fn show_inner<T: 'static>(
                         spec: root_spec,
                         measured: None,
                         focus: cx.focus_handle(),
+                        #[cfg(not(target_os = "windows"))]
+                        ready: false,
+                        #[cfg(not(target_os = "windows"))]
+                        placed: std::cell::Cell::new(None),
                         _observer: observer,
                         _watcher: watcher,
                     }
@@ -474,6 +619,7 @@ fn show_inner<T: 'static>(
         );
         match result {
             Ok(handle) => {
+                #[cfg(target_os = "windows")]
                 let configured = handle.update(cx, |_, window, _| {
                     HasWindowHandle::window_handle(window)
                         .map_err(|error| error.to_string())
@@ -486,6 +632,7 @@ fn show_inner<T: 'static>(
                             )
                         })
                 });
+                #[cfg(target_os = "windows")]
                 if !matches!(configured, Ok(Ok(()))) {
                     log::warn!("Cannot configure native menu window");
                     let _ = handle.update(cx, |_, window, _| window.remove_window());
@@ -522,7 +669,20 @@ fn show_inner<T: 'static>(
     });
 }
 
-fn position(root: &MenuWindow, window: &Window) {
+#[cfg(not(target_os = "windows"))]
+fn position(root: &MenuWindow, window: &Window, cx: &mut App) {
+    let Some(measured) = root.measured else { return };
+    let measured = size(measured.width.ceil(), measured.height.ceil());
+    let state = cx.default_global::<Surfaces>();
+    let bounds = root.spec.anchor.bounds - owner_origin(state, root.spec.restore_parent.window_id());
+    let rect = super::wayland::rect(&root.spec.anchor, bounds, root.spec.rem * 2.0);
+    if root.placed.get() != Some((rect, measured)) && window.reposition_popup(rect, measured) {
+        root.placed.set(Some((rect, measured)));
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn position(root: &MenuWindow, window: &Window, _: &mut App) {
     if let Ok(raw) = HasWindowHandle::window_handle(window) {
         let b = root.spec.anchor.bounds;
         let platform = oxyde_lib::platform::platform();
@@ -557,6 +717,17 @@ impl Render for MenuWindow {
         if !(self.spec.alive)(cx) {
             let handle = Window::window_handle(window);
             cx.defer(move |cx| retire_if_closed(handle, cx));
+            return div().into_any_element();
+        }
+        #[cfg(not(target_os = "windows"))]
+        if !self.ready {
+            let root = cx.entity();
+            window.on_next_frame(move |_, cx| {
+                root.update(cx, |root, cx| {
+                    root.ready = true;
+                    cx.notify();
+                });
+            });
             return div().into_any_element();
         }
         super::keyboard::begin(window, cx);

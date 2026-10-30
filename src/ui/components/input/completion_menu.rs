@@ -104,7 +104,6 @@ pub(super) fn render(
     menu.into_any_element()
 }
 
-#[cfg(target_os = "windows")]
 pub(super) fn surface(source: Entity<TextInput>) -> impl IntoElement {
     canvas(
         move |bounds, window, cx| {

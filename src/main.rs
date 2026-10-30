@@ -170,7 +170,6 @@ fn main() {
                         #[cfg(target_os = "windows")]
                         crate::ui::app::close_file_drag(cx);
                         crate::ui::components::tooltip::hover::close_native_windows(cx);
-                        #[cfg(target_os = "windows")]
                         crate::ui::components::popup::close_all(cx);
                         crate::ui::app::duplicates::close_duplicate_windows(cx);
                         crate::ui::components::operations::close_operations_windows(cx);

@@ -1,6 +1,6 @@
 # Menus, infobulles et fenêtres secondaires
 
-Sous Windows, les menus et infobulles utilisent des fenêtres GPUI possédées ; un échec natif doit réactiver le rendu intégré sans perdre l’état métier. Sous Wayland, les infobulles et aperçus de survol sont aussi des fenêtres séparées, mais ancrées (voir [Infobulles et géométrie](#infobulles-et-géométrie)). Les menus Linux et les infobulles en X11, qui refuse ces fenêtres, restent dans le rendu intégré.
+Sous Windows, les menus et infobulles utilisent des fenêtres GPUI possédées ; un échec natif doit réactiver le rendu intégré sans perdre l’état métier. Sous Wayland, ce sont aussi des fenêtres séparées, mais ancrées (voir [Infobulles sous Wayland](#infobulles-sous-wayland) et [Menus sous Wayland](#menus-sous-wayland)). X11 refuse ces fenêtres : menus et infobulles y restent dans le rendu intégré.
 
 ## Choisir le point d’entrée
 
@@ -24,6 +24,17 @@ Un identifiant réutilise la fenêtre existante ; une demande en attente est rem
 - Ne jamais appeler `Window::dispatch_event` dans le constructeur d’`App::open_window` : la racine n’est pas installée. Initialiser les modificateurs après retour via le handle non typé.
 
 Les appels Win32 passent par `Platform`. Placement et activation susceptibles de rappeler GPUI sont différés et regroupés, jamais synchrones pendant un rendu ou `Window::update`. Créer près du propriétaire pour conserver un DPI initial cohérent.
+
+### Menus sous Wayland
+
+`popup/wayland.rs` traduit les règles de placement ci-dessus en `xdg_positioner` ; le compositeur retourne ou glisse le menu, et sa réponse donne sa position, d'où `owner_point` et `row_bounds` (`Window::popup_offset`, ajouté à la copie de GPUI). Mutter et KWin retournent l'ancre et la gravité, pas le décalage : `flip_axis` obtient donc les deux côtés du rectangle d'ancrage, pour garder le même écart une fois retourné. Ce rectangle doit rester dans la fenêtre parente : à moins d'une marge de son bord, l'écart d'un menu retourné grandit d'au plus cette marge. Un côté d'ouverture ne change pas sur une surface ouverte : elle est remplacée. La première image est vide, car une surface doit avoir un tampon avant de prendre la taille de son contenu ; seul le cadre visible reçoit le pointeur, pas les marges d'ombre.
+
+Le menu interactif prend un grab `xdg_popup`, qui lui donne le clavier sans hook : le compositeur le ferme d'un clic hors de l'application ou au changement d'application, et Oxyde en est averti par la fermeture de la fenêtre. Ces deux règles diffèrent de Win32 :
+
+- Un grab laisse cliquables les surfaces de l'application sans fermer le menu : la copie de GPUI ferme les menus hors de la cible une fois l'appui transmis, car cet appui peut être celui du bouton qui les bascule.
+- Seul le dernier menu peut prendre un grab, sous peine d'erreur de protocole fatale : ouvrir un menu ferme ceux dont il ne descend pas.
+
+`show_passive` n'a pas de grab : le clavier reste au champ.
 
 ## Invites modales fixes
 

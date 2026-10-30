@@ -166,8 +166,8 @@ pub(super) fn sync(parent: &mut Window, cx: &mut App) {
         // The compositor may dismiss this surface, and one anchored differently cannot be
         // moved to its new anchor: open another.
         if let Some(view) = &view {
-            let wanted = fixed_bounds(view, cx).is_some();
-            if handle.read(cx).ok().map(|root| root.placement.fixed) != Some(wanted) {
+            let wanted = super::anchored::shape(fixed_bounds(view, cx), rem * 2.0);
+            if handle.read(cx).ok().map(|root| root.placement.shape) != Some(wanted) {
                 hide(id, cx);
                 present(view, parent, cx);
                 return;
@@ -443,7 +443,7 @@ pub(super) fn present(view: &AnyView, parent: &mut Window, cx: &mut App) -> bool
                             #[cfg(target_os = "windows")]
                             scale,
                             #[cfg(not(target_os = "windows"))]
-                            placement: super::anchored::Placement::new(fixed.is_some(), pointer),
+                            placement: super::anchored::Placement::new(super::anchored::shape(fixed, rem * 2.0), pointer, rem * 2.0),
                         })
                     },
                 )

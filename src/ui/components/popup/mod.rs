@@ -2,16 +2,15 @@
 use gpui::*;
 pub(crate) mod keyboard;
 
-#[cfg(target_os = "windows")]
 mod window;
-#[cfg(target_os = "windows")]
 pub(crate) use window::{close_all, show, show_passive, supported, supported_source};
-#[cfg(target_os = "windows")]
 mod dropdown;
-#[cfg(target_os = "windows")]
 pub(crate) use dropdown::text_menu;
+#[cfg(not(target_os = "windows"))]
+mod wayland;
+#[cfg(not(target_os = "windows"))]
+pub(crate) use wayland::{available, flip_axis, positioner, slide_axis};
 
-#[cfg(target_os = "windows")]
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct PopupAnchor {
     pub bounds: Bounds<Pixels>,
@@ -20,7 +19,6 @@ pub(crate) struct PopupAnchor {
     pub above: bool,
     pub parent: Option<AnyWindowHandle>,
 }
-#[cfg(target_os = "windows")]
 impl PopupAnchor {
     pub(crate) fn point(position: Point<Pixels>, open_left: bool) -> Self {
         Self {
@@ -68,7 +66,6 @@ pub(crate) fn owner_bounds(window: &Window, cx: &App, bounds: Bounds<Pixels>) ->
     );
     Bounds::new(origin, size(end.x - origin.x, end.y - origin.y))
 }
-#[cfg(target_os = "windows")]
 pub(crate) fn body_bounds(window: &Window, cx: &App) -> Bounds<Pixels> {
     let inset = window.rem_size() * 2.0;
     owner_bounds(
@@ -84,7 +81,6 @@ pub(crate) fn body_bounds(window: &Window, cx: &App) -> Bounds<Pixels> {
     )
 }
 
-#[cfg(target_os = "windows")]
 pub(crate) fn surface(
     parent: AnyWindowHandle,
     id: impl Into<SharedString>,
@@ -92,7 +88,6 @@ pub(crate) fn surface(
 ) -> Option<AnyWindowHandle> {
     window::surface(parent, id.into(), cx)
 }
-#[cfg(target_os = "windows")]
 pub(crate) fn row_bounds(
     parent: AnyWindowHandle,
     id: impl Into<SharedString>,
@@ -102,13 +97,9 @@ pub(crate) fn row_bounds(
     window::row_bounds(parent, id.into(), index, cx)
 }
 pub(crate) fn record_row(window: &Window, cx: &mut App, index: usize, bounds: Bounds<Pixels>) {
-    #[cfg(target_os = "windows")]
     window::record_row(window, cx, index, bounds);
-    #[cfg(not(target_os = "windows"))]
-    let _ = (window, cx, index, bounds);
 }
 
-#[cfg(target_os = "windows")]
 pub(crate) fn anchored_surface<T: 'static>(
     id: impl Into<SharedString>,
     source: Entity<T>,
@@ -147,27 +138,11 @@ pub(crate) fn anchored_surface<T: 'static>(
 }
 
 pub(crate) fn is_menu(window: &Window, cx: &App) -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        window::owner(window, cx).is_some()
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = (window, cx);
-        false
-    }
+    window::owner(window, cx).is_some()
 }
 
 pub(crate) fn owner_point(window: &Window, cx: &App, position: Point<Pixels>) -> Point<Pixels> {
-    #[cfg(target_os = "windows")]
-    {
-        window::owner_point(window, cx, position)
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = (window, cx);
-        position
-    }
+    window::owner_point(window, cx, position)
 }
 
 pub(crate) fn with_owner(
@@ -175,7 +150,6 @@ pub(crate) fn with_owner(
     cx: &mut App,
     callback: impl FnOnce(&mut Window, &mut App),
 ) {
-    #[cfg(target_os = "windows")]
     if let Some(parent) = window::owner(window, cx) {
         let _ = parent.update(cx, |_, window, cx| callback(window, cx));
         return;
@@ -193,7 +167,7 @@ pub(crate) fn available_size(window: &Window, cx: &App) -> Size<Pixels> {
                     .ok()
             })
             .map(|(width, height)| size(px(width), px(height)))
-            .unwrap_or(window.viewport_size());
+            .unwrap_or_else(|| fallback_area(window, cx));
         let margin = window.rem_size() * 4.0;
         size(
             (area.width - margin).max(px(1.0)),
@@ -204,9 +178,19 @@ pub(crate) fn available_size(window: &Window, cx: &App) -> Size<Pixels> {
     }
 }
 
+#[cfg(target_os = "windows")]
+fn fallback_area(window: &Window, _: &App) -> Size<Pixels> {
+    window.viewport_size()
+}
+// A surface here is only as large as its content, which must not limit itself. It learns its
+// display after its first frames.
+#[cfg(not(target_os = "windows"))]
+fn fallback_area(window: &Window, cx: &App) -> Size<Pixels> {
+    window.display(cx).map(|display| display.bounds().size)
+        .or_else(|| cx.displays().iter().map(|display| display.bounds().size).max_by_key(|area| area.height))
+        .unwrap_or(window.viewport_size())
+}
+
 pub(crate) fn close_for(window: &mut Window, cx: &mut App) {
-    #[cfg(target_os = "windows")]
     window::close_for(window, cx);
-    #[cfg(not(target_os = "windows"))]
-    let _ = (window, cx);
 }

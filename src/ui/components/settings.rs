@@ -28,7 +28,6 @@ pub(crate) enum SettingsPicker {
 }
 
 pub fn render_settings_panel(view: &OxydeApp, handle: Entity<OxydeApp>, window: &mut Window, cx: &mut Context<OxydeApp>) -> AnyElement {
-    #[cfg(target_os = "windows")]
     if crate::ui::components::popup::supported(window, cx) {
         let bounds = view.settings_button_bounds.unwrap_or(Bounds::new(point(px(0.0), px(0.0)), size(px(0.0), px(44.0))));
         crate::ui::components::popup::show("settings-panel", crate::ui::components::popup::PopupAnchor::element(bounds), handle.clone(), window, cx,
@@ -47,11 +46,8 @@ fn render_settings_surface(
     _only_picker: Option<SettingsPicker>,
 ) -> AnyElement {
     // Only render this control in its actual owner, never in the parent menu.
-    #[cfg(target_os = "windows")]
     let render_compression = _only_picker == Some(SettingsPicker::Compression)
         || !crate::ui::components::popup::supported(window, cx);
-    #[cfg(not(target_os = "windows"))]
-    let render_compression = true;
     let compression = if render_compression {
         compression_table(view, handle.clone(), window, cx)
     } else { Vec::new() };
@@ -251,7 +247,6 @@ fn render_settings_surface(
         .child(super::scroll_area::scroll_area("settings-panel-scroll-state",
             div().max_h((available_height - window.rem_size()).max(px(1.0))),
             div().id("settings-panel-scroll").child(body), true, window, cx));
-    #[cfg(target_os = "windows")]
     if _only_picker.is_none() && crate::ui::components::popup::is_menu(window, cx) {
         if let (Some(kind), Some(bounds)) = (view.settings_picker.filter(|kind| *kind != SettingsPicker::About), view.settings_submenu_bounds) {
             let open_left = false;
@@ -315,7 +310,6 @@ fn render_settings_surface(
                 div().id("settings-submenu-scroll").child(section(title, theme)).children(choices),
                 false, window, cx));
 
-        #[cfg(target_os = "windows")]
         if _only_picker.is_some() { return submenu.into_any_element(); }
         let open_left = bounds.right() + submenu_width + margin > crate::ui::components::popup::available_size(window, cx).width
             && bounds.left() - submenu_width >= margin;

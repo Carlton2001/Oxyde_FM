@@ -1,29 +1,23 @@
 //! Keyboard actions belong to the displayed rows, never to copied business state.
 use gpui::{prelude::*, *};
-#[cfg(target_os = "windows")]
 use std::collections::HashMap;
 use std::rc::Rc;
 
 pub(crate) type Action = Rc<dyn Fn(&mut Window, &mut App)>;
-#[cfg(target_os = "windows")]
 struct Row {
     action: Action,
     submenu: Option<Action>,
     scroll: Option<(ScrollHandle, usize)>,
 }
-#[cfg(target_os = "windows")]
 #[derive(Default)]
 struct Navigation {
     selected: Option<usize>,
     rows: Vec<Row>,
 }
-#[cfg(target_os = "windows")]
 #[derive(Default)]
 struct Navigations(HashMap<WindowId, Navigation>);
-#[cfg(target_os = "windows")]
 impl Global for Navigations {}
 
-#[cfg(target_os = "windows")]
 pub(super) fn begin(window: &Window, cx: &mut App) {
     cx.default_global::<Navigations>()
         .0
@@ -32,12 +26,10 @@ pub(super) fn begin(window: &Window, cx: &mut App) {
         .rows
         .clear();
 }
-#[cfg(target_os = "windows")]
 pub(super) fn remove(id: WindowId, cx: &mut App) {
     cx.default_global::<Navigations>().0.remove(&id);
 }
 
-#[cfg(target_os = "windows")]
 pub(super) fn pointer(window: &mut Window, cx: &mut App) {
     if cx
         .default_global::<Navigations>()
@@ -49,7 +41,6 @@ pub(super) fn pointer(window: &mut Window, cx: &mut App) {
     }
 }
 
-#[cfg(target_os = "windows")]
 pub(super) fn key(key: &str, window: &mut Window, cx: &mut App) -> bool {
     let nav = cx
         .default_global::<Navigations>()
@@ -86,7 +77,6 @@ pub(super) fn key(key: &str, window: &mut Window, cx: &mut App) -> bool {
     true
 }
 
-#[cfg(any(target_os = "windows", test))]
 fn selection(current: Option<usize>, count: usize, key: &str) -> Option<usize> {
     if count == 0 {
         return None;
@@ -123,7 +113,6 @@ pub(crate) fn item(
         scroll,
     }
 }
-#[cfg(target_os = "windows")]
 impl RenderOnce for KeyboardItem {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         if !super::is_menu(window, cx) {
@@ -149,17 +138,3 @@ impl RenderOnce for KeyboardItem {
 #[cfg(test)]
 #[path = "tests/keyboard.rs"]
 mod tests;
-
-#[cfg(not(target_os = "windows"))]
-impl RenderOnce for KeyboardItem {
-    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
-        let Self {
-            row,
-            action,
-            submenu,
-            scroll,
-        } = self;
-        drop((action, submenu, scroll));
-        row
-    }
-}

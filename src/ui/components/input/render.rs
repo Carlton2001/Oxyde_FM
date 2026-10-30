@@ -46,7 +46,6 @@ impl Render for TextInput {
             .when(self.path_submit, |s| s.pr(rems(0.0625)))
             .w_full()
             .when(is_focused && !self.completions.is_empty(), |input| {
-                #[cfg(target_os = "windows")]
                 if crate::ui::components::popup::supported(window, cx) {
                     return input.child(completion_menu::surface(cx.entity()));
                 }
