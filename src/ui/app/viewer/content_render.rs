@@ -79,10 +79,15 @@ fn block(block: &Block, cx: &App) -> AnyElement {
 
 impl Viewer {
     pub(super) fn render_unavailable_file(&self, cx: &mut Context<Self>) -> AnyElement {
+        self.unavailable_file_notice(cx).size_full().into_any_element()
+    }
+
+    /// Sized by its parent: the whole Viewer, or the player bar's place under an audio card.
+    pub(super) fn unavailable_file_notice(&self, cx: &mut Context<Self>) -> Div {
         let owner = self.owner.clone();
         let file = self.file.clone();
         let source_tab = self.source.tab.clone();
-        div().size_full().flex().flex_col().items_center().justify_center()
+        div().flex().flex_col().items_center().justify_center()
             .gap(rems(1.0)).p(rems(1.0))
             .text_color(cx.theme().text_muted)
             .child(cx.i18n().text(Message::ViewerFileUnavailable))
@@ -101,7 +106,7 @@ impl Viewer {
                             }
                         });
                     })
-            )).into_any_element()
+            ))
     }
 
     pub(super) fn render_content(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {

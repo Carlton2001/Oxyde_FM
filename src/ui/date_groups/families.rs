@@ -57,7 +57,8 @@ impl FileFamily {
             "mp4" | "mkv" | "avi" | "mov" | "webm" | "wmv" | "m4v" | "mpg" | "mpeg" | "m2ts"
             | "flv" | "3gp" => Self::Video,
             "mp3" | "flac" | "wav" | "ogg" | "opus" | "m4a" | "aac" | "wma" | "aiff" | "alac"
-            | "mid" | "midi" => Self::Audio,
+            | "mid" | "midi" | "aif" | "aifc" | "oga" | "m4b" | "mp2" | "ac3" | "ape" | "wv"
+            | "tta" | "mka" | "spx" | "au" => Self::Audio,
             _ if crate::ui::file_types::is_script_file(&file.name) => Self::Scripts,
             _ if crate::ui::file_types::is_code_file(&file.name) => Self::Code,
             _ => match file.native_kind {

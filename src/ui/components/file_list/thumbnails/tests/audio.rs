@@ -3,7 +3,7 @@ use oxyde_lib::models::{file_entry::NativeFileKind, FileEntry};
 
 #[test]
 fn grid_admits_audio_by_extension_or_native_kind_and_hover_recognizes_audio() {
-    for name in ["song.mp3", "song.FLAC", "song.m4a", "song.ogg"] {
+    for name in ["song.mp3", "song.FLAC", "song.m4a", "song.ogg", "song.aiff", "song.AIF", "song.opus"] {
         let file = FileEntry { name: name.into(), ..Default::default() };
         assert!(supports_thumbnail(&file), "{name}");
         assert!(Source::for_file(&file).audio);

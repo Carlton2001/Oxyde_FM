@@ -198,7 +198,7 @@ impl Render for Viewer {
                                     .when(self.audio, |content| {
                                         content.child(self.render_audio(window, cx))
                                     })
-                                    .when(failed, |content| {
+                                    .when(failed && !self.audio, |content| {
                                         content.child(self.render_unavailable_file(cx))
                                     })
                                     .child(

@@ -138,7 +138,8 @@ pub static PREVIEWABLE_OFFICE_EXTENSIONS: Lazy<HashSet<&'static str>> =
 
 pub static AUDIO_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     [
-        "mp3", "wav", "ogg", "flac", "aac", "m4a", "wma", "mid", "midi",
+        "mp3", "wav", "ogg", "flac", "aac", "m4a", "wma", "mid", "midi", "aiff", "aif", "aifc",
+        "opus", "oga", "m4b", "mp2", "ac3", "ape", "wv", "tta", "mka", "spx", "au",
     ]
     .into()
 });

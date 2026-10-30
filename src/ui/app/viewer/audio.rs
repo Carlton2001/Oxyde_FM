@@ -132,6 +132,10 @@ impl Viewer {
                     .child(audio_cell(Message::AudioTrack, track, true, cx))
                     .child(audio_cell(Message::AudioYear, year.to_owned(), false, cx)),
             );
+        let failed = self
+            .media
+            .as_ref()
+            .is_some_and(|media| media.control.status() == oxyde_lib::platform::MEDIA_FAILED);
         let mut player = div()
             .w_full()
             .max_w(rems(32.0))
@@ -142,7 +146,8 @@ impl Viewer {
             .my_auto()
             .mx_auto()
             .child(card)
-            .when(self.native_media, |player| {
+            .when(failed, |player| player.child(self.unavailable_file_notice(cx).w_full()))
+            .when(self.native_media && !failed, |player| {
                 player.child(
                     div()
                         .w_full()

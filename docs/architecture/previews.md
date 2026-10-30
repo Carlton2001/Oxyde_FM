@@ -171,7 +171,9 @@ n’empêche pas la lecture. Une carte centrée regroupe la pochette et le titre
 puis trois colonnes Album / Piste / Année. La barre de lecture et
 de progression suit immédiatement la carte, à la même largeur. Seuls le titre,
 la piste, l’album et l’année sont affichés ; l’ensemble défile si la hauteur
-disponible est insuffisante. Les valeurs sont limitées à 4096
+disponible est insuffisante. Si le lecteur échoue, par exemple sans codec système
+pour ce format, un message et le bouton d’ouverture remplacent la barre sous la
+carte. Les valeurs sont limitées à 4096
 caractères, 256 champs et 256 Kio de texte.
 Sous Windows, l’extraction et le décodage passent par `oxyde-image-worker`
 en LPAC avec le seul handle source hérité, 512 Mio et 15 secondes. La réponse
