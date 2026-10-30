@@ -93,8 +93,10 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
   (`ui::window_decorations`). Double barre reproduite puis disparue sous KWin 6 en X11 et
   Wayland imbriqués ; déplacement, redimensionnement et maximisation vérifiés sous KWin X11.
   Reste : une vraie session Plasma, ombres et fenêtres secondaires.
-- Infobulles : leur bornage utilise encore la taille de fenêtre et peut mordre de
-  quelques pixels sur la marge d'ombre (`tooltip/position.rs`).
+- Infobulles : sous X11, leur bornage utilise encore la taille de fenêtre et peut mordre de
+  quelques pixels sur la marge d'ombre (`tooltip/position.rs`). Sous Wayland, [elles sortent
+  de la fenêtre](../architecture/windows.md#infobulles-sous-wayland) ; vérifiées sous KWin
+  imbriqué et Mutter sans écran. Menus encore à porter.
 
 **Corbeille**
 - KDE : essai réel des limites `ktrashrc`. KDE ne les applique qu'aux suppressions faites

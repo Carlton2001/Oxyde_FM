@@ -22,6 +22,9 @@ opt-level = 2
 # Provenance and the small native patch: vendor/gpui_windows/README.oxyde.md.
 [patch."https://github.com/zed-industries/zed"]
 gpui_windows = { path = "vendor/gpui_windows" }
+# Same pin, with popups that can move: vendor/gpui_linux/README.oxyde.md.
+gpui = { path = "vendor/gpui" }
+gpui_linux = { path = "vendor/gpui_linux" }
 
 [lints.clippy]
 # Readonly is only cleared on Windows and in tests, where it removes

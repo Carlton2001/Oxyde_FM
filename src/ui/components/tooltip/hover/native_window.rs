@@ -31,6 +31,8 @@ fn set_native(view: &AnyView, native: bool, cx: &mut App) {
 
 pub(in crate::ui::components::tooltip) fn proxy(view: AnyView, parent: AnyWindowHandle, cx: &mut App) -> AnyView {
     let id = parent.window_id();
+    #[cfg(not(target_os = "windows"))]
+    if !super::anchored::available() { return view; }
     if cx.default_global::<NativeWindows>().failed.contains(&id) { return view; }
     let lease = view.entity_id();
     cx.new(|cx| {
@@ -67,7 +69,15 @@ impl Render for TooltipProxy {
 pub(super) struct NativeTooltip {
     view: Option<AnyView>,
     measured: Option<Size<Pixels>>,
+    #[cfg(target_os = "windows")]
     scale: f32,
+    #[cfg(not(target_os = "windows"))]
+    placement: super::anchored::Placement,
+}
+
+#[cfg(not(target_os = "windows"))]
+fn fixed_bounds(view: &AnyView, cx: &App) -> Option<Bounds<Pixels>> {
+    view.clone().downcast::<Tooltip>().ok()?.read(cx).fixed_bounds.as_ref().map(|bounds| bounds.get())
 }
 
 fn visible_size(measured: Option<Size<Pixels>>, rem: Pixels) -> Size<Pixels> {
@@ -97,7 +107,16 @@ pub(super) fn close_windows(cx: &mut App) {
     }
 }
 
-fn place(root: &NativeTooltip, window: &Window, cx: &App) {
+#[cfg(not(target_os = "windows"))]
+fn place(root: &NativeTooltip, window: &mut Window, cx: &App) {
+    if let Some(view) = &root.view {
+        let measured = visible_size(root.measured, window.rem_size());
+        root.placement.apply(fixed_bounds(view, cx), measured, window);
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn place(root: &NativeTooltip, window: &mut Window, cx: &App) {
     if let Ok(raw) = HasWindowHandle::window_handle(window) {
         let anchor = root.view.as_ref().and_then(|view| view.clone().downcast::<Tooltip>().ok())
             .and_then(|view| view.read(cx).fixed_bounds.clone());
@@ -142,7 +161,24 @@ pub(super) fn sync(parent: &mut Window, cx: &mut App) {
     let ordinary = cx.default_global::<NativeWindows>().ordinary.get(&id).cloned();
     let view = if parent.is_window_active() && parent.is_window_hovered() { ordinary.or(view) } else { None };
     let rem = parent.rem_size();
+    #[cfg(not(target_os = "windows"))]
+    {
+        // The compositor may dismiss this surface, and one anchored differently cannot be
+        // moved to its new anchor: open another.
+        if let Some(view) = &view {
+            let wanted = fixed_bounds(view, cx).is_some();
+            if handle.read(cx).ok().map(|root| root.placement.fixed) != Some(wanted) {
+                hide(id, cx);
+                present(view, parent, cx);
+                return;
+            }
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    let pointer = parent.mouse_position();
     let clear_frames = handle.update(cx, |root, window, cx| {
+        #[cfg(not(target_os = "windows"))]
+        root.placement.pointer.set(pointer);
         let mut cleared = false;
         if root.view.as_ref().map(|view| view.entity_id()) != view.as_ref().map(|view| view.entity_id()) {
             if let Some(old) = root.view.take() {
@@ -213,6 +249,44 @@ fn pointer_left(view: &AnyView, parent: &Window, cx: &App) -> bool {
         || (live.y - known.y).abs() > tolerance
 }
 
+/// Between two items of a session. Wayland has no hidden popup, and opening one costs
+/// several frames, so the surface stays open and empty until the session ends.
+pub(super) fn blank(id: WindowId, cx: &mut App) {
+    #[cfg(target_os = "windows")]
+    hide(id, cx);
+    #[cfg(not(target_os = "windows"))]
+    {
+        let handle = cx.default_global::<NativeWindows>().windows.get(&id).map(|entry| entry.0);
+        if let Some(handle) = handle {
+            let cleared = handle.update(cx, |root, _, cx| {
+                let view = root.view.take();
+                if let Some(view) = &view {
+                    set_native(view, false, cx);
+                    cx.notify();
+                }
+                view.is_some()
+            }).unwrap_or(false);
+            if cleared { clear_hidden_frames(handle, cx); }
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub(super) fn hide(id: WindowId, cx: &mut App) {
+    let state = cx.default_global::<NativeWindows>();
+    state.pending.remove(&id);
+    if let Some((handle, task)) = state.windows.remove(&id) {
+        drop(task);
+        let _ = handle.update(cx, |root, window, cx| {
+            if let Some(view) = root.view.take() {
+                set_native(&view, false, cx);
+            }
+            window.remove_window();
+        });
+    }
+}
+
+#[cfg(target_os = "windows")]
 pub(super) fn hide(id: WindowId, cx: &mut App) {
     let handle = cx
         .default_global::<NativeWindows>()
@@ -279,8 +353,20 @@ fn dismiss_invalid_session(parent: &mut Window, cx: &mut App) {
     }
 }
 
-pub(super) fn present(_view: &AnyView, parent: &mut Window, cx: &mut App) -> bool {
-    
+pub(super) fn present(view: &AnyView, parent: &mut Window, cx: &mut App) -> bool {
+    #[cfg(target_os = "windows")]
+    let _ = view;
+    #[cfg(not(target_os = "windows"))]
+    if !super::anchored::available() {
+        return false;
+    }
+    // Opening means a new surface here, not showing a hidden one.
+    #[cfg(not(target_os = "windows"))]
+    if !parent.is_window_active() || !parent.is_window_hovered() {
+        return !cx.default_global::<NativeWindows>().failed.contains(&Window::window_handle(parent).window_id());
+    }
+    #[cfg(not(target_os = "windows"))]
+    let (fixed, pointer) = (fixed_bounds(view, cx), parent.mouse_position());
     let id = Window::window_handle(parent).window_id();
     let state = cx.default_global::<NativeWindows>();
     if state.failed.contains(&id) {
@@ -308,9 +394,11 @@ pub(super) fn present(_view: &AnyView, parent: &mut Window, cx: &mut App) -> boo
         });
         cx.default_global::<NativeWindows>().cleanup = Some(cleanup);
     }
+    #[cfg(target_os = "windows")]
     let owner = parent.window_handle().ok().map(|handle| handle.as_raw());
     let parent_handle = Window::window_handle(parent);
     let rem = parent.rem_size();
+    #[cfg(target_os = "windows")]
     let scale = parent.scale_factor();
     cx.defer(move |cx| {
         if !cx.default_global::<NativeWindows>().pending.contains(&id) { return; }
@@ -318,46 +406,61 @@ pub(super) fn present(_view: &AnyView, parent: &mut Window, cx: &mut App) -> boo
             parent_handle
                 .update(cx, |_, _, _| ())
                 .map_err(|error| error.to_string())?;
+            #[cfg(target_os = "windows")]
             let origin = parent_handle.update(cx, |_, parent, _| parent.bounds().origin).map_err(|error| error.to_string())?;
+            #[cfg(target_os = "windows")]
             let owner = owner.ok_or_else(|| "Missing hover owner".to_string())?;
+            #[cfg(target_os = "windows")]
+            let (kind, bounds) = (WindowKind::PopUp, Bounds::new(origin, size(px(424.0), px(544.0))));
+            #[cfg(not(target_os = "windows"))]
+            let (kind, bounds) = (
+                WindowKind::AnchoredPopup(super::anchored::options(parent_handle, fixed, pointer, rem * 2.0)),
+                Bounds::new(Point::default(), visible_size(None, rem)),
+            );
             let handle = cx
                 .open_window(
                     WindowOptions {
                         app_id: Some(crate::ui::APP_ID.into()),
-                        kind: WindowKind::PopUp,
+                        kind,
                         titlebar: None,
                         focus: false,
-                        show: false,
+                        show: cfg!(not(target_os = "windows")),
                         window_background: WindowBackgroundAppearance::Transparent,
                         is_resizable: false,
                         is_minimizable: false,
                         is_movable: false,
-                        window_bounds: Some(WindowBounds::Windowed(Bounds::new(
-                            origin,
-                            size(px(424.0), px(544.0)),
-                        ))),
+                        window_bounds: Some(WindowBounds::Windowed(bounds)),
                         ..Default::default()
                     },
                     |window, cx| {
                         window.set_rem_size(rem);
+                        // Clicks and the pointer go through to the window beneath.
+                        #[cfg(not(target_os = "windows"))]
+                        window.set_input_region(Some(&[]));
                         cx.new(|_| NativeTooltip {
                             view: None,
                             measured: None,
+                            #[cfg(target_os = "windows")]
                             scale,
+                            #[cfg(not(target_os = "windows"))]
+                            placement: super::anchored::Placement::new(fixed.is_some(), pointer),
                         })
                     },
                 )
                 .map_err(|error| error.to_string())?;
-            let configured = handle
-                .update(cx, |_, window, _| {
-                    let raw = HasWindowHandle::window_handle(window)
-                        .map_err(|error| error.to_string())?;
-                    oxyde_lib::platform::platform().configure_hover_window(raw.as_raw(), owner)
-                })
-                .map_err(|error| error.to_string())?;
-            if let Err(error) = configured {
-                let _ = handle.update(cx, |_, window, _| window.remove_window());
-                return Err(error);
+            #[cfg(target_os = "windows")]
+            {
+                let configured = handle
+                    .update(cx, |_, window, _| {
+                        let raw = HasWindowHandle::window_handle(window)
+                            .map_err(|error| error.to_string())?;
+                        oxyde_lib::platform::platform().configure_hover_window(raw.as_raw(), owner)
+                    })
+                    .map_err(|error| error.to_string())?;
+                if let Err(error) = configured {
+                    let _ = handle.update(cx, |_, window, _| window.remove_window());
+                    return Err(error);
+                }
             }
             Ok(handle)
         })();
@@ -465,6 +568,15 @@ impl Element for MeasuredContent {
     ) {
         self.content
             .prepaint_at(point(self.inset, self.inset), window, cx);
+        // Before this frame is presented, which would otherwise cut the new content at the
+        // size of the previous one.
+        #[cfg(not(target_os = "windows"))]
+        {
+            let root = self.owner.read(cx);
+            if let Some(view) = root.view.as_ref().filter(|_| measured.width > px(0.0) && measured.height > px(0.0)) {
+                root.placement.apply(fixed_bounds(view, cx), *measured, window);
+            }
+        }
         if measured.width > px(0.0)
             && measured.height > px(0.0)
             && self.owner.read(cx).measured != Some(*measured)
@@ -499,6 +611,6 @@ impl Element for MeasuredContent {
 #[path = "../tests/native_dimensions.rs"]
 mod tests;
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "windows"))]
 #[path = "../tests/native_lifetimes.rs"]
 mod lifetime_tests;

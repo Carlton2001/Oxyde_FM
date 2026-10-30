@@ -1,6 +1,6 @@
 # Menus, infobulles et fenêtres secondaires
 
-Sous Windows, les menus et infobulles utilisent des fenêtres GPUI possédées. Linux conserve le rendu intégré ; un échec natif Windows doit réactiver ce repli sans perdre l’état métier.
+Sous Windows, les menus et infobulles utilisent des fenêtres GPUI possédées ; un échec natif doit réactiver le rendu intégré sans perdre l’état métier. Sous Wayland, les infobulles et aperçus de survol sont aussi des fenêtres séparées, mais ancrées (voir [Infobulles et géométrie](#infobulles-et-géométrie)). Les menus Linux et les infobulles en X11, qui refuse ces fenêtres, restent dans le rendu intégré.
 
 ## Choisir le point d’entrée
 
@@ -46,6 +46,14 @@ Les infobulles natives sont des `PopUp` transparentes, passives, sans activation
 Le cadre visible suit le pointeur à 12 pixels logiques sur X/Y, avec retournement et bornage sur la zone de travail. Les placements fixes gardent les bounds de l’élément. Une marge transparente d’ombre n’ajoute pas de décalage visible.
 
 `ui/window_geometry.rs` mémorise la position restaurable et l’état maximisé ; `app/tool_geometry.rs` gère les familles secondaires via `AppConfig::tool_window_placements`. Conserver les positions négatives, ignorer la minimisation et borner une géométrie invalide aux écrans disponibles. Les écritures sont différées de 350 ms ; la fermeture force la dernière sauvegarde. Réinitialiser les préférences conserve ces positions.
+
+### Infobulles sous Wayland
+
+Une application n'y place pas ses fenêtres : `hover/anchored.rs` ouvre un `AnchoredPopup` (`xdg_popup`), une surface sans entrée dont le compositeur garde le cadre à l'écran. Il n'existe pas de popup masqué : la surface reste ouverte et vide entre deux éléments d'une session, et se ferme à sa fin, car en ouvrir une autre coûte plusieurs images. Un compositeur affiche chaque image : la bulle ne se vide qu'après 80 ms sans élément survolé, sinon elle clignoterait à chaque espace entre deux fichiers. Son ombre est plus marquée que sous Windows, pour se détacher des fenêtres du bureau. La copie de GPUI ([README](../../vendor/gpui_linux/README.oxyde.md)) ajoute `Window::reposition_popup`, qui déplace la surface sans la redessiner : avec un redessin, Mutter 50 la limitait à 20 images par seconde.
+
+Quand la taille change, entre deux types de fichiers par exemple, l'image reste celle de l'élément précédent jusqu'à la réponse du compositeur, puis la suivante arrive d'un bloc à la bonne taille. Le contenu mesuré demande cette taille avant sa présentation (`MeasuredContent::prepaint`) ; GPUI ne dessine pas tant que la réponse manque et ne valide aucun déplacement seul tant que l'image n'est pas sur la surface : le compositeur étirerait sinon l'ancienne au nouveau format (`wp_viewport`).
+
+Mutter ferme un popup qui ne touche plus sa fenêtre parente. Les marges d'ombre le gardent en contact, quel que soit le bord où se trouve le pointeur. Il peut aussi le fermer de lui-même : `native_window::sync` en ouvre alors un autre au mouvement suivant.
 
 Les essais utiles et leurs limites figurent dans le [guide visuel](../guides/visual-checks.md) ; les résultats datés dans le [bilan des fenêtres](../reports/2026-10-15-windows.md).
 

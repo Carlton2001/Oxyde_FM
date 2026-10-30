@@ -1,14 +1,12 @@
 //! A window-local tooltip session shared inside each hover region.
 mod scope;
 mod handover;
-#[cfg(target_os = "windows")]
 pub(super) mod native_window;
+#[cfg(not(target_os = "windows"))]
+mod anchored;
 
 pub(crate) fn close_native_windows(cx: &mut App) {
-    #[cfg(target_os = "windows")]
     native_window::close_windows(cx);
-    #[cfg(not(target_os = "windows"))]
-    let _ = cx;
 }
 use crate::ui::app::OxydeApp;
 use gpui::*;
@@ -18,6 +16,10 @@ use std::{collections::HashMap, rc::Rc, time::Duration};
 
 const SHOW_DELAY: Duration = Duration::from_millis(750);
 const BRIDGE_DELAY: Duration = Duration::from_millis(300);
+/// A compositor shows every frame of a window, so hiding at once would blink each time the
+/// pointer crosses the gap between two items. A Windows surface hides without a frame.
+#[cfg(not(target_os = "windows"))]
+const GAP_DELAY: Duration = Duration::from_millis(80);
 type Builder = Rc<dyn Fn(&mut Window, &mut App) -> AnyView>;
 
 #[derive(Default)]
@@ -100,13 +102,11 @@ fn initialize(cx: &mut App) {
 
 pub(crate) fn close_for(window: &mut Window, cx: &mut App) {
     dismiss(window, cx);
-    #[cfg(target_os = "windows")]
     native_window::close_for(window.window_handle().window_id(), cx);
 }
 
 pub(crate) fn dismiss(window: &mut Window, cx: &mut App) {
     let id = window.window_handle().window_id();
-    #[cfg(target_os = "windows")]
     native_window::hide(id, cx);
     if let Some(session) = cx.default_global::<Sessions>().windows.get_mut(&id) {
         session.clear();
@@ -128,8 +128,7 @@ fn hide_gap(revision: u64, window: &mut Window, cx: &mut App) {
         .and_then(|session| session.tooltip.take())
         .is_some();
     if hidden {
-        #[cfg(target_os = "windows")]
-        native_window::hide(id, cx);
+        native_window::blank(id, cx);
         window.refresh();
     }
 }
@@ -151,7 +150,6 @@ fn expire_bridge(revision: u64, window: &mut Window, cx: &mut App) {
 fn publish_tooltip(view: AnyView, window: &mut Window, cx: &mut App) {
     let id = window.window_handle().window_id();
     cx.default_global::<Sessions>().windows.get_mut(&id).unwrap().tooltip = Some(view);
-    #[cfg(target_os = "windows")]
     native_window::sync(window, cx);
     window.refresh();
 }
@@ -256,8 +254,16 @@ fn hover(
         let revision = session.timing.revision;
         // Let all hover listeners handle this movement first: a direct switch
         // to another item must not briefly hide the shared surface.
+        #[cfg(target_os = "windows")]
         window.defer(cx, move |window, cx| hide_gap(revision, window, cx));
         let task = window.spawn(cx, async move |cx| {
+            #[cfg(not(target_os = "windows"))]
+            {
+                cx.background_executor().timer(GAP_DELAY).await;
+                let _ = cx.update(|window, cx| hide_gap(revision, window, cx));
+                cx.background_executor().timer(BRIDGE_DELAY - GAP_DELAY).await;
+            }
+            #[cfg(target_os = "windows")]
             cx.background_executor().timer(BRIDGE_DELAY).await;
             let _ = cx.update(|window, cx| {
                 expire_bridge(revision, window, cx);
@@ -357,7 +363,6 @@ pub(crate) fn region_container(
 ) -> impl IntoElement {
     initialize(cx);
     let owner = owner.downgrade();
-    #[cfg(target_os = "windows")]
     let follow_region = region.clone();
     canvas(
         move |bounds, window, cx| {
@@ -392,7 +397,6 @@ pub(crate) fn region_container(
             }
             let session = cx.default_global::<Sessions>().windows.get(&id).unwrap();
             if let Some(view) = session.tooltip.clone() {
-                #[cfg(target_os = "windows")]
                 if native_window::present(&view, window, cx) {
                     return;
                 }
@@ -427,17 +431,12 @@ pub(crate) fn region_container(
             }
         },
         move |bounds, _, window, _| {
-            #[cfg(target_os = "windows")]
-            {
-                let region = follow_region.clone();
-                window.on_mouse_event(move |_: &MouseMoveEvent, phase, window, cx| {
-                    if phase == DispatchPhase::Bubble {
-                        native_window::follow_pointer(&region, bounds, window, cx);
-                    }
-                });
-            }
-            #[cfg(not(target_os = "windows"))]
-            let _ = (bounds, window);
+            let region = follow_region.clone();
+            window.on_mouse_event(move |_: &MouseMoveEvent, phase, window, cx| {
+                if phase == DispatchPhase::Bubble {
+                    native_window::follow_pointer(&region, bounds, window, cx);
+                }
+            });
         },
     )
     .absolute()

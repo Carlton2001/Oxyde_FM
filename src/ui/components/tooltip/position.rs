@@ -126,7 +126,6 @@ impl Element for CursorTooltip {
         window: &mut Window,
         cx: &mut App,
     ) {
-        #[cfg(target_os = "windows")]
         if super::hover::native_window::is_surface(window, cx) {
             // The native frame already positions this element inside its
             // shadow inset. Preserve that origin for simple and fixed tips.
@@ -157,7 +156,6 @@ impl Element for CursorTooltip {
         cx: &mut App,
     ) {
         self.content.paint(window, cx);
-        #[cfg(target_os = "windows")]
         if super::hover::native_window::is_surface(window, cx) { return; }
         if self.fixed_bounds.is_none() {
             follow_pointer(window);
