@@ -68,6 +68,7 @@ use wayland_protocols::{
 };
 use wayland_protocols::{
     wp::fractional_scale::v1::client::{wp_fractional_scale_manager_v1, wp_fractional_scale_v1},
+    xdg::xdg_output::zv1::client::{zxdg_output_manager_v1, zxdg_output_v1},
     xdg::dialog::v1::client::xdg_dialog_v1::XdgDialogV1,
 };
 use wayland_protocols_plasma::blur::client::{org_kde_kwin_blur, org_kde_kwin_blur_manager};
@@ -219,6 +220,7 @@ pub struct Globals {
     pub viewporter: Option<wp_viewporter::WpViewporter>,
     pub fractional_scale_manager:
         Option<wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1>,
+    pub xdg_output_manager: Option<zxdg_output_manager_v1::ZxdgOutputManagerV1>,
     pub decoration_manager: Option<zxdg_decoration_manager_v1::ZxdgDecorationManagerV1>,
     pub layer_shell: Option<zwlr_layer_shell_v1::ZwlrLayerShellV1>,
     pub blur_manager: Option<org_kde_kwin_blur_manager::OrgKdeKwinBlurManager>,
@@ -265,6 +267,7 @@ impl Globals {
             wm_base: globals.bind(&qh, 1..=6, ()).unwrap(),
             viewporter: globals.bind(&qh, 1..=1, ()).ok(),
             fractional_scale_manager: globals.bind(&qh, 1..=1, ()).ok(),
+            xdg_output_manager: globals.bind(&qh, 1..=3, ()).ok(),
             decoration_manager: globals.bind(&qh, 1..=1, ()).ok(),
             layer_shell: globals.bind(&qh, 1..=5, ()).ok(),
             blur_manager: globals.bind(&qh, 1..=1, ()).ok(),
@@ -275,6 +278,14 @@ impl Globals {
             executor,
             qh,
             frame_ping,
+        }
+    }
+
+    // Oxyde: an output's mode divided by its integer scale is not its size in logical pixels
+    // at a fractional scale, where wl_output reports the next integer.
+    fn track_logical_output(&self, output: &wl_output::WlOutput) {
+        if let Some(manager) = &self.xdg_output_manager {
+            manager.get_xdg_output(output, &self.qh, output.id());
         }
     }
 }
@@ -336,6 +347,8 @@ pub(crate) struct WaylandClientState {
     outputs: HashMap<ObjectId, Output>,
     in_progress_outputs: HashMap<ObjectId, InProgressOutput>,
     wl_outputs: HashMap<ObjectId, wl_output::WlOutput>,
+    // Oxyde: positions and sizes from xdg-output, when the compositor offers it.
+    logical_outputs: HashMap<ObjectId, Bounds<Pixels>>,
     keyboard_layout: LinuxKeyboardLayout,
     keymap_state: Option<xkb::State>,
     compose_state: Option<xkb::compose::State>,
@@ -524,6 +537,16 @@ impl WaylandClientState {
 /// window to GPUI.
 #[derive(Clone)]
 pub struct WaylandClientStatePtr(Weak<RefCell<WaylandClientState>>);
+
+impl WaylandClientState {
+    fn output_bounds(&self, id: &ObjectId, output: &Output) -> Bounds<Pixels> {
+        self.logical_outputs
+            .get(id)
+            .copied()
+            .filter(|bounds| bounds.size.width > px(0.) && bounds.size.height > px(0.))
+            .unwrap_or_else(|| output.bounds.to_pixels(output.scale as f32))
+    }
+}
 
 impl WaylandClientStatePtr {
     pub fn get_client(&self) -> Rc<RefCell<WaylandClientState>> {
@@ -838,7 +861,7 @@ impl WaylandClient {
         let startup_activation_token = take_startup_activation_token_from_environment();
         let conn = Connection::connect_to_env().unwrap();
 
-        let (globals, event_queue) = registry_queue_init::<WaylandClientStatePtr>(&conn).unwrap();
+        let (globals, mut event_queue) = registry_queue_init::<WaylandClientStatePtr>(&conn).unwrap();
         let qh = event_queue.handle();
 
         let mut seat: Option<wl_seat::WlSeat> = None;
@@ -928,6 +951,9 @@ impl WaylandClient {
             seat.clone(),
             frame_ping,
         );
+        for output in wl_outputs.values() {
+            globals.track_logical_output(output);
+        }
 
         let data_device = globals
             .data_device_manager
@@ -1005,6 +1031,7 @@ impl WaylandClient {
             outputs: HashMap::default(),
             in_progress_outputs,
             wl_outputs,
+            logical_outputs: HashMap::default(),
             windows: HashMap::default(),
             common,
             keyboard_layout: LinuxKeyboardLayout::new(UNKNOWN_KEYBOARD_LAYOUT_NAME),
@@ -1061,6 +1088,12 @@ impl WaylandClient {
             ime_enabled: None,
         }));
 
+        // Oxyde: the application sizes its first window from the displays, which this
+        // backend otherwise learns only once the loop runs.
+        event_queue
+            .roundtrip(&mut WaylandClientStatePtr(Rc::downgrade(&state)))
+            .log_err();
+
         WaylandSource::new(conn, event_queue)
             .insert(handle)
             .unwrap();
@@ -1075,23 +1108,23 @@ impl LinuxClient for WaylandClient {
     }
 
     fn displays(&self) -> Vec<Rc<dyn PlatformDisplay>> {
-        self.0
-            .borrow()
+        let state = self.0.borrow();
+        state
             .outputs
             .iter()
             .map(|(id, output)| {
                 Rc::new(WaylandDisplay {
                     id: id.clone(),
                     name: output.name.clone(),
-                    bounds: output.bounds.to_pixels(output.scale as f32),
+                    bounds: state.output_bounds(id, output),
                 }) as Rc<dyn PlatformDisplay>
             })
             .collect()
     }
 
     fn display(&self, id: DisplayId) -> Option<Rc<dyn PlatformDisplay>> {
-        self.0
-            .borrow()
+        let state = self.0.borrow();
+        state
             .outputs
             .iter()
             .find_map(|(object_id, output)| {
@@ -1099,7 +1132,7 @@ impl LinuxClient for WaylandClient {
                     Rc::new(WaylandDisplay {
                         id: object_id.clone(),
                         name: output.name.clone(),
-                        bounds: output.bounds.to_pixels(output.scale as f32),
+                        bounds: state.output_bounds(object_id, output),
                     }) as Rc<dyn PlatformDisplay>
                 })
             })
@@ -1495,6 +1528,7 @@ impl Dispatch<wl_registry::WlRegistry, GlobalListContents> for WaylandClientStat
                     state
                         .in_progress_outputs
                         .insert(output.id(), InProgressOutput::default());
+                    state.globals.track_logical_output(&output);
                     state.wl_outputs.insert(output.id(), output);
                 }
                 _ => {}
@@ -1519,6 +1553,7 @@ delegate_noop!(WaylandClientStatePtr: ignore wl_shm_pool::WlShmPool);
 delegate_noop!(WaylandClientStatePtr: ignore wl_buffer::WlBuffer);
 delegate_noop!(WaylandClientStatePtr: ignore wl_region::WlRegion);
 delegate_noop!(WaylandClientStatePtr: ignore wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1);
+delegate_noop!(WaylandClientStatePtr: ignore zxdg_output_manager_v1::ZxdgOutputManagerV1);
 delegate_noop!(WaylandClientStatePtr: ignore zxdg_decoration_manager_v1::ZxdgDecorationManagerV1);
 delegate_noop!(WaylandClientStatePtr: ignore zwlr_layer_shell_v1::ZwlrLayerShellV1);
 delegate_noop!(WaylandClientStatePtr: ignore xdg_positioner::XdgPositioner);
@@ -1617,6 +1652,30 @@ impl Dispatch<wl_output::WlOutput, ()> for WaylandClientStatePtr {
                     state.outputs.insert(output.id(), complete);
                 }
                 state.in_progress_outputs.remove(&output.id());
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Dispatch<zxdg_output_v1::ZxdgOutputV1, ObjectId> for WaylandClientStatePtr {
+    fn event(
+        this: &mut Self,
+        _: &zxdg_output_v1::ZxdgOutputV1,
+        event: zxdg_output_v1::Event,
+        output: &ObjectId,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        let client = this.get_client();
+        let mut state = client.borrow_mut();
+        let bounds = state.logical_outputs.entry(output.clone()).or_default();
+        match event {
+            zxdg_output_v1::Event::LogicalPosition { x, y } => {
+                bounds.origin = point(px(x as f32), px(y as f32));
+            }
+            zxdg_output_v1::Event::LogicalSize { width, height } => {
+                bounds.size = size(px(width as f32), px(height as f32));
             }
             _ => {}
         }

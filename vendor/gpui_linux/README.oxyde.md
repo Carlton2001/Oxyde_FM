@@ -25,6 +25,10 @@ Local source changes, all marked `Oxyde:`:
 - `gpui_linux/src/linux/wayland/client.rs`: a press closes the grabbing popups that do not
   contain its target, after the press is delivered. A grab leaves the client's own surfaces
   clickable without dismissing the popup.
+- `gpui_linux/src/linux/wayland/client.rs`: displays report their logical bounds from
+  xdg-output. Upstream divides the mode by `wl_output.scale`, the next integer at a fractional
+  scale: 2560x1600 at 125 % reported 1280x800 instead of 2048x1280. A roundtrip at startup
+  makes them known before the first window opens.
 
 Reason: GPUI repositions a popup only when it resizes, so a tooltip could not follow the
 pointer. Windows and X11 reject anchored popups and are unchanged. When updating GPUI,

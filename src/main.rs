@@ -130,9 +130,12 @@ fn main() {
             let mut screens = Vec::new();
             if let Some(primary) = cx.primary_display() { screens.push(primary.visible_bounds()); }
             screens.extend(cx.displays().into_iter().map(|display| display.visible_bounds()));
+            let screens = crate::ui::window_geometry::restorable_screens(screens);
             // Keep the title bar, navigation bar, sidebar and one usable file column visible.
             let rem = crate::ui::scale::normalized_reference(config.ui_rem_size) as f32;
             let min_size = size(px(rem * 45.0), px(rem * 30.0));
+            #[cfg(not(target_os = "windows"))]
+            let min_size = crate::ui::window_geometry::fitting_min_size(min_size, &screens, px(rem * 3.0));
             let window_bounds = crate::ui::window_geometry::restore(config.window_placement, &screens, min_size);
             let app = cx.new(|cx| OxydeApp::new(config, config_path, load_failed, cx));
             let operations_panel = cx.new(|cx| {

@@ -31,6 +31,36 @@ fn valid(placement: &WindowPlacement) -> bool {
         && placement.y.abs() < 100000.0
 }
 
+/// A compositor hides where it puts a window, so only the largest display can bound its size.
+#[cfg(not(target_os = "windows"))]
+pub(crate) fn restorable_screens(mut screens: Vec<Bounds<Pixels>>) -> Vec<Bounds<Pixels>> {
+    if crate::ui::components::popup::available() {
+        screens.sort_by(|a, b| area(*b).total_cmp(&area(*a)));
+        screens.truncate(1);
+    }
+    screens
+}
+
+#[cfg(target_os = "windows")]
+pub(crate) fn restorable_screens(screens: Vec<Bounds<Pixels>>) -> Vec<Bounds<Pixels>> {
+    screens
+}
+
+#[cfg(not(target_os = "windows"))]
+fn area(bounds: Bounds<Pixels>) -> f32 {
+    bounds.size.width.as_f32() * bounds.size.height.as_f32()
+}
+
+/// A high display scale can leave less room than the usual minimum, which the compositor would
+/// honour by pushing the window's controls off screen. `reserved` is left for its panels.
+#[cfg(not(target_os = "windows"))]
+pub(crate) fn fitting_min_size(min: Size<Pixels>, screens: &[Bounds<Pixels>], reserved: Pixels) -> Size<Pixels> {
+    let Some(screen) = screens.iter().max_by(|a, b| area(**a).total_cmp(&area(**b))) else {
+        return min;
+    };
+    size(min.width.min(screen.size.width), min.height.min(screen.size.height - reserved))
+}
+
 /// `min` matches the window's minimum size, so a smaller saved size cannot
 /// reopen below it; the screen still bounds both.
 pub(crate) fn restore(
@@ -81,6 +111,10 @@ fn intersection(a: Bounds<Pixels>, b: Bounds<Pixels>) -> f32 {
         (a.origin.y + a.size.height).min(b.origin.y + b.size.height) - a.origin.y.max(b.origin.y);
     width.as_f32().max(0.0) * height.as_f32().max(0.0)
 }
+
+#[cfg(all(test, not(target_os = "windows")))]
+#[path = "tests/window_geometry.rs"]
+mod fit_tests;
 
 #[cfg(test)]
 mod tests {

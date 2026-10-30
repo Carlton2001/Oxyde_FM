@@ -41,6 +41,7 @@ fn restore_with(key: &str, fallback: Bounds<Pixels>, sized: bool, cx: &App) -> W
         .iter()
         .map(|display| display.visible_bounds())
         .collect::<Vec<_>>();
+    let screens = crate::ui::window_geometry::restorable_screens(screens);
     crate::ui::window_geometry::restore(Some(saved), &screens, Size::default())
 }
 

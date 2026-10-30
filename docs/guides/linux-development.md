@@ -87,7 +87,16 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
   l'héritent pas. Mesuré sur Intel + RTX 4070 : la NVIDIA reste `suspended` pendant et après
   l'exécution ; avec un choix explicite, elle passe `active`. Reste : écran externe branché
   sur la NVIDIA, Oxyde déjà lancé.
-- Échelles 100/125/150/200 %, écrans mixtes, déplacement d'une fenêtre entre écrans.
+- Échelles : vérifiées sous Mutter sans écran à 100, 125, 133, 200 et 250 %, en changement à
+  chaud et sur deux écrans mixtes (125/200 %, 100/200 %), fenêtre déplacée de l'un à l'autre :
+  rendu net quelle que soit la position ou la taille, menus, infobulles et aperçus au bon
+  endroit. Les écrans annoncent leur taille logique par xdg-output : `wl_output` donne
+  l'échelle entière supérieure, soit 1280x800 au lieu de 2048x1280 pour 2560x1600 à 125 %,
+  ce qui bornait à tort les menus et les fenêtres d'outils. Le compositeur cachant la position
+  des fenêtres, seul le plus grand écran borne une taille restaurée. La taille minimale cède
+  sur un écran logique trop petit, sans quoi le compositeur sort les boutons de l'écran.
+  Reste : un vrai écran externe. KWin imbriqué ignore l'échelle fractionnaire (`--scale`
+  n'annonce pas de `preferred_scale`) ; X11 vérifié avec `GPUI_X11_SCALE_FACTOR=1.5`.
 - Session X11/Xwayland séparément de Wayland.
 - **KDE Plasma** : les fenêtres à barre de titre demandent `WindowDecorations::Client`
   (`ui::window_decorations`). Double barre reproduite puis disparue sous KWin 6 en X11 et
