@@ -16,10 +16,7 @@ fn one_path_that_cannot_be_offered_refuses_the_whole_drag() {
     assert_eq!(offered(&["/a/b.txt", "smb://server/share"]), None);
     assert_eq!(offered(&["/a/b.txt", "relative.txt"]), None);
     assert_eq!(offered(&["/a/b.txt", ""]), None);
-    #[cfg(unix)]
-    {
-        use std::os::unix::ffi::OsStrExt;
-        let encoded = oxyde_lib::utils::path_text::encode(Path::new(std::ffi::OsStr::from_bytes(b"/a/\xe9")));
-        assert_eq!(offered(&[&encoded]), None);
-    }
+    use std::os::unix::ffi::OsStrExt;
+    let encoded = oxyde_lib::utils::path_text::encode(Path::new(std::ffi::OsStr::from_bytes(b"/a/\xe9")));
+    assert_eq!(offered(&[&encoded]), None);
 }

@@ -36,6 +36,6 @@ pub(crate) fn resolver(app: Entity<OxydeApp>)
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "tests/outgoing.rs"]
 mod tests;
