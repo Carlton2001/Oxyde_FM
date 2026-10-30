@@ -81,11 +81,18 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
 
 **Vérifications sur machine physique (jalon 2)**
 - GPU Intel puis NVIDIA : backend Vulkan obtenu (la VM utilisait GL/llvmpipe), ombres, redimensionnement.
+  Fait sur portable hybride pour le réveil : au lancement, les pilotes Vulkan des cartes sans
+  écran connecté sont exclus (`VK_LOADER_DRIVERS_DISABLE`, `platform/linux_gpu.rs`), sauf si
+  l'utilisateur ou le bureau choisit déjà un GPU, et les applications ouvertes par Oxyde ne
+  l'héritent pas. Mesuré sur Intel + RTX 4070 : la NVIDIA reste `suspended` pendant et après
+  l'exécution ; avec un choix explicite, elle passe `active`. Reste : écran externe branché
+  sur la NVIDIA, Oxyde déjà lancé.
 - Échelles 100/125/150/200 %, écrans mixtes, déplacement d'une fenêtre entre écrans.
 - Session X11/Xwayland séparément de Wayland.
-- **KDE Plasma** : KWin accepte les décorations serveur, que GPUI demande par défaut ;
-  risque de double barre de titre. Demander `WindowDecorations::Client` sous Linux à
-  chaque `open_window` (comme Soliton), puis vérifier ombre et redimensionnement.
+- **KDE Plasma** : les fenêtres à barre de titre demandent `WindowDecorations::Client`
+  (`ui::window_decorations`). Double barre reproduite puis disparue sous KWin 6 en X11 et
+  Wayland imbriqués ; déplacement, redimensionnement et maximisation vérifiés sous KWin X11.
+  Reste : une vraie session Plasma, ombres et fenêtres secondaires.
 - Infobulles : leur bornage utilise encore la taille de fenêtre et peut mordre de
   quelques pixels sur la marge d'ombre (`tooltip/position.rs`).
 

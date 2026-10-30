@@ -328,6 +328,7 @@ pub(super) fn open(owner: Entity<OxydeApp>, operation_id: String, cx: &mut App) 
         if let Err(error) = cx.open_window(
             WindowOptions {
                 app_id: Some(crate::ui::APP_ID.into()),
+                window_decorations: crate::ui::window_decorations(),
                 window_bounds: Some(crate::ui::app::tool_geometry::restore("icons/list.svg", Bounds::new(
                     point(px(200.0), px(160.0)),
                     size(px(680.0), px(520.0)),

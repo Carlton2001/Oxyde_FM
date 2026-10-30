@@ -70,6 +70,7 @@ fn main() {
     #[cfg(target_os = "windows")]
     if oxyde_lib::commands::archive_worker::run_if_requested() { return; }
     if crate::ui::preview_worker::run_if_requested() { return; }
+    let idle_gpus = oxyde_lib::platform::platform().prefer_display_gpu();
     if let Err(error) = oxyde_lib::app_paths::initialize() {
         let platform = oxyde_lib::platform::platform();
         let locale = platform.regional_locale().unwrap_or_default();
@@ -78,6 +79,9 @@ fn main() {
         return;
     }
     initialize_logging();
+    if let Some(drivers) = idle_gpus {
+        log::info!("Vulkan drivers of GPUs without a screen disabled: {drivers}");
+    }
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -147,6 +151,7 @@ fn main() {
             cx.open_window(
                 WindowOptions {
                     app_id: Some(crate::ui::APP_ID.into()),
+                    window_decorations: crate::ui::window_decorations(),
                     window_bounds: Some(window_bounds),
                     window_min_size: Some(min_size),
                     titlebar: Some(TitlebarOptions {

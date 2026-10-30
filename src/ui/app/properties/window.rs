@@ -68,6 +68,7 @@ impl OxydeApp {
             let result = cx.open_window(
                 WindowOptions {
                     app_id: Some(crate::ui::APP_ID.into()),
+                    window_decorations: crate::ui::window_decorations(),
                     window_bounds: Some(crate::ui::app::tool_geometry::restore("icons/settings-2.svg", Bounds::new(
                         origin,
                         size(px(480.0), px(600.0)),

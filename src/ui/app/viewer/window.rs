@@ -48,6 +48,7 @@ impl Viewer {
             let result = cx.open_window(
                 WindowOptions {
                     app_id: Some(crate::ui::APP_ID.into()),
+                    window_decorations: crate::ui::window_decorations(),
                     window_bounds: Some(super::super::tool_geometry::restore_sized(
                         "icons/eye.svg",
                         bounds,

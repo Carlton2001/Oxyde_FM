@@ -174,6 +174,7 @@ impl OxydeApp {
                 // The native lock owns placement; start centered to avoid a jump.
                 WindowOptions {
                     app_id: Some(crate::ui::APP_ID.into()),
+                    window_decorations: crate::ui::window_decorations(),
                     window_bounds: Some(WindowBounds::Windowed(Bounds::new(
                         owner_bounds.center() - point(fixed_size.width / 2.0, fixed_size.height / 2.0),
                         fixed_size,
@@ -192,6 +193,7 @@ impl OxydeApp {
             } else {
                 WindowOptions {
                     app_id: Some(crate::ui::APP_ID.into()),
+                    window_decorations: crate::ui::window_decorations(),
                     window_bounds: Some(crate::ui::app::tool_geometry::restore(kind.icon(), Bounds::new(
                         origin,
                         size(

@@ -697,6 +697,10 @@ impl Platform for LinuxPlatform {
         &super::linux_file_clipboard::LinuxFileClipboard
     }
 
+    fn prefer_display_gpu(&self) -> Option<String> {
+        super::linux_gpu::prefer_display_gpu()
+    }
+
     fn startup_locations(&self) -> Vec<String> {
         let current = std::env::current_dir().unwrap_or_default();
         super::linux_startup::locations(std::env::args_os().skip(1), &current)
@@ -718,7 +722,9 @@ impl Platform for LinuxPlatform {
     /// desktop it may run the application itself, which is then reaped in the background.
     fn open_item(&self, path: &str) -> Result<(), String> {
         use std::process::Stdio;
-        let mut child = std::process::Command::new("xdg-open")
+        let mut command = std::process::Command::new("xdg-open");
+        super::linux_gpu::leave_out_of(&mut command);
+        let mut child = command
             .arg(path)
             .stdin(Stdio::null())
             .stdout(Stdio::null())

@@ -25,3 +25,9 @@ pub(crate) mod window_geometry;
 /// Wayland `app_id` and X11 class of every Oxyde window: GNOME finds the desktop
 /// entry and icon of that name to group the windows and show them in the dash.
 pub const APP_ID: &str = "io.github.Carlton2001.Oxyde";
+
+/// Every titled Oxyde window draws its own frame: asked for server decorations, KDE would
+/// add a title bar above Oxyde's. Compositors without client decorations still give theirs.
+pub fn window_decorations() -> Option<gpui::WindowDecorations> {
+    cfg!(target_os = "linux").then_some(gpui::WindowDecorations::Client)
+}

@@ -176,6 +176,9 @@ pub trait Platform: Send + Sync {
     fn onedrive_installed(&self) -> bool { false }
     fn onedrive_folders(&self) -> Vec<crate::models::QuickAccessItem> { Vec::new() }
     fn show_startup_error(&self, _title: &str, message: &str) { eprintln!("{message}"); }
+    /// Keeps GPUs without a screen asleep; returns what it disabled. Changes the process
+    /// environment: call it while the process has a single thread.
+    fn prefer_display_gpu(&self) -> Option<String> { None }
     /// Locations the desktop asked this launch to open, instead of the saved tabs.
     fn startup_locations(&self) -> Vec<String> { Vec::new() }
     /// Whether Oxyde installs its own releases; Linux packages update through the system.
@@ -746,6 +749,8 @@ mod hardware;
 pub mod icons;
 #[cfg(not(target_os = "windows"))]
 mod linux_impl;
+#[cfg(not(target_os = "windows"))]
+mod linux_gpu;
 #[cfg(not(target_os = "windows"))]
 mod linux_startup;
 #[cfg(not(target_os = "windows"))]
