@@ -462,17 +462,18 @@ fn network_tooltip_lines(file: &oxyde_lib::models::FileEntry, i18n: &crate::ui::
         }).collect()
 }
 
-// Keep tooltip shadows softer without changing shadows on menus or dialogs. Hover surfaces
-// float over other windows on a Linux desktop, whose own shadows are much darker.
+// Keep tooltip shadows softer without changing shadows on menus or dialogs.
 #[cfg(target_os = "windows")]
-const TOOLTIP_SHADOW_OPACITY: f32 = 0.5;
-#[cfg(not(target_os = "windows"))]
-const TOOLTIP_SHADOW_OPACITY: f32 = 3.0;
-
 pub(super) fn tooltip_shadow() -> Vec<BoxShadow> {
     let mut shadows = crate::ui::style::rem_shadow(true);
     for shadow in &mut shadows {
-        shadow.color = shadow.color.opacity(TOOLTIP_SHADOW_OPACITY);
+        shadow.color = shadow.color.opacity(0.5);
     }
     shadows
+}
+
+// Hover surfaces float over other windows on a Linux desktop: same shadow as the menus.
+#[cfg(not(target_os = "windows"))]
+pub(super) fn tooltip_shadow() -> Vec<BoxShadow> {
+    crate::ui::style::rem_shadow(true)
 }
