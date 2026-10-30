@@ -1,8 +1,7 @@
 # Aperçus et décodeurs sous Linux
 
-**Statut : PDF, survol vidéo et lecteur du Viewer vérifiés ; tous les décodeurs
-confinés par bubblewrap (tests et mesures faits, vérification visuelle des images,
-Office, pochettes et archives en attente)** (T09 et M09 de
+**Statut : tous les décodeurs confinés par bubblewrap, vérifiés dans l'interface
+(PDF, vidéo, lecteur, images, Office, pochettes et archives)** (T09 et M09 de
 l'[audit de portabilité](../reports/2026-10-26-linux-portability-audit.md)).
 Windows ne change pas.
 
