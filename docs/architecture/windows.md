@@ -44,6 +44,8 @@ Le menu interactif prend un grab `xdg_popup`, qui lui donne le clavier sans hook
 
 Les invites sont de vraies fenêtres possédées, au gabarit des Propriétés (`tool_window::header`, pied commun, largeur fixe, hauteur ajustée au contenu). `Platform::configure_fixed_dialog` désactive le propriétaire tant qu’elles sont visibles et verrouille leur position au centre de celui-ci, bornée à sa zone de travail ; ni déplacement, ni redimensionnement, ni réduction. `follow_fixed_dialog_owner` les recentre quand la fenêtre principale bouge. Le propriétaire est réactivé avant le masquage pour que Windows lui rende l’activation. La fermeture par la barre de titre ou Alt+F4 passe par `request_fixed_close`, qui respecte les opérations occupées ; à la libération, le focus du propriétaire revient à `focus_handle` s’il pointait encore vers l’invite. Linux ouvre la même fenêtre sans verrouillage.
 
+Sous Linux, `WindowKind::Dialog` obtient le même blocage : le protocole `xdg_dialog_v1` marque l’invite modale, et GPUI ignore l’entrée de la fenêtre parente tant que l’invite existe, y compris où le compositeur ne connaît pas ce protocole. Mutter l’attache au parent, la centre et la déplace avec lui ; sans cela, l’invite reste déplaçable.
+
 ## Focus et fermeture
 
 Enregistrer les actions via `popup::keyboard::item`, avec le même callback que le clic, en excluant les lignes désactivées. Préserver flèches, début/fin, Entrée/Espace, Tab/Maj+Tab et Échap ; les éditeurs gardent leurs handlers. Les raccourcis métier sont routés vers la source.

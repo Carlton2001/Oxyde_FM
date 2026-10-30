@@ -185,9 +185,9 @@ impl OxydeApp {
                         appears_transparent: true,
                         ..Default::default()
                     }),
-                    // Wayland and X11 parent the dialog at creation, above its owner.
+                    // As on Windows, the owner takes no input while the prompt is open.
                     #[cfg(target_os = "linux")]
-                    kind: WindowKind::Floating,
+                    kind: WindowKind::Dialog,
                     ..Default::default()
                 }
             } else {
@@ -422,7 +422,10 @@ impl Render for DialogWindow {
             (window.viewport_size().width - width).abs() <= px(1.0)) {
             self.restoring_simple_width = None;
         }
-        let simple_width = self.restoring_simple_width;
+        // The restored size is the window's; the dialog measures its content, inside the margin.
+        let margin = window.viewport_size().width
+            - crate::ui::components::client_decorations::content_bounds(window).size.width;
+        let simple_width = self.restoring_simple_width.map(|width| width - margin);
         if kind.is_fixed() && window.focused(cx).is_none() {
             let focus = kind.initial_focus(owner.read(cx), cx).unwrap_or_else(|| self.focus.clone());
             window.focus(&focus, cx);
