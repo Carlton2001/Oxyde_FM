@@ -1,0 +1,18 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Oxyde
+Upstream-Contact: https://github.com/Carlton2001/Oxyde_FM/issues
+Source: https://github.com/Carlton2001/Oxyde_FM
+Comment: The executables also contain the Rust crates listed with their licenses
+ and copyright notices in /usr/share/doc/oxyde/THIRD-PARTY-NOTICES.md, the Inter
+ and JetBrains Mono fonts (OFL-1.1), Lucide icons (ISC) and Syntect grammars.
+ Their license texts are in the same folder.
+
+Files: *
+Copyright: 2026 Carlton2001
+License: GPL-3.0-only
+ This program is free software: you can redistribute it and/or modify it under
+ the terms of the GNU General Public License as published by the Free Software
+ Foundation, version 3.
+ .
+ On Debian systems, the complete text of the GNU General Public License
+ version 3 can be found in /usr/share/common-licenses/GPL-3.

@@ -1,10 +1,10 @@
 Package: oxyde
 Version: @VERSION@
 Architecture: amd64
-Maintainer: Carlton2001 <Carlton2001@users.noreply.github.com>
+Maintainer: @MAINTAINER@
 Installed-Size: @SIZE@
-Depends: @DEPENDS@, bubblewrap, libseccomp2, libglib2.0-0t64 | libglib2.0-0, libglib2.0-bin, libvulkan1, xdg-utils
-Recommends: gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gvfs, gvfs-backends, gvfs-fuse, libgstreamer-plugins-base1.0-0, libpoppler-glib8t64 | libpoppler-glib8, mesa-vulkan-drivers, udisks2
+Depends: @DEPENDS@, bubblewrap, fonts-dejavu-core | fonts-noto-core | fonts-cantarell, hicolor-icon-theme, libfontconfig1, libglib2.0-0t64 | libglib2.0-0, libglib2.0-bin, libseccomp2, libvulkan1, libwayland-client0, mesa-vulkan-drivers, xdg-utils
+Recommends: gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gvfs, gvfs-backends, gvfs-fuse, libgstreamer-plugins-base1.0-0, libpoppler-glib8t64 | libpoppler-glib8, udisks2
 Section: utils
 Priority: optional
 Homepage: https://github.com/Carlton2001/Oxyde_FM

@@ -73,9 +73,7 @@ ressources depuis la racine de chaque crate, comme sous Windows.
 Les tests restent à lancer sous Windows : `./scripts/test-windows.ps1 -Offline`
 ([procédure](development.md#vérifier-un-changement)), ou sans redémarrer par le
 déclenchement manuel du workflow `tests.yml` sur la branche poussée (`workflow_dispatch`,
-sans PR ni fusion). Suite Windows réussie jusqu'à `b84e5c3` ; `check-windows.sh` réussi
-sur `7480eb6`. **Suite à relancer :** M07 (`drag.rs`, `drag/external.rs`,
-`drive_watchers.rs`) et l'extraction du trait `Volumes` touchent du code commun.
+sans PR ni fusion). Suite Windows réussie sur GitHub jusqu'à `7583b40`, `tests/archive_io_pipeline.rs` compris.
 
 ## Reste à faire
 
@@ -155,5 +153,4 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
   M09/R5 : tous les décodeurs tournent dans des workers confinés par bubblewrap et
   seccomp, archives comprises ; vérifiés dans l'interface.
 - T14, fait : [paquets RPM et DEB et CI Linux](linux-distribution.md), ouverture des
-  dossiers reçus et profil AppArmor pour Ubuntu ; RPM vérifié dans l'interface, CI à
-  exécuter au premier push.
+  dossiers reçus et profil AppArmor pour Ubuntu ; RPM vérifié dans l'interface, CI réussie.

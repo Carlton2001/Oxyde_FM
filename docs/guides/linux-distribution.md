@@ -1,21 +1,22 @@
 # Distribuer Oxyde sous Linux
 
-**Statut : paquets RPM et DEB construits et essayés, RPM vérifié dans l'interface (T14 de
-l'[audit](../reports/2026-10-26-linux-portability-audit.md)) ; CI écrite, à exécuter au
-premier push.** La distribution Windows est décrite dans
+**Statut : paquets RPM et DEB construits et essayés, RPM vérifié dans l'interface, CI
+réussie sur GitHub (T14 de l'[audit](../reports/2026-10-26-linux-portability-audit.md)).** La distribution Windows est décrite dans
 [son propre guide](distribution.md) et ne change pas.
 
 ## Construire
 
 ```bash
 bash scripts/build-linux-packages.sh --rpm   # sur Fedora
-bash scripts/build-linux-packages.sh --deb   # sur Ubuntu ou Debian
+bash scripts/build-linux-packages.sh --deb   # partout : podman hors d'Ubuntu 24.04
 ```
 
-Les fichiers arrivent dans `target/linux-packages/output`. Outre les dépendances de
-[développement](linux-development.md#installer-sur-fedora-workstation), il faut
-`desktop-file-utils`, `appstream`, `python3` et `cargo-about` 0.9.2, plus `rpm-build` sur
-Fedora ou `dpkg-dev` sur Debian. `--skip-build` reprend les exécutables release existants.
+Les fichiers et leur SHA-256 arrivent dans `target/linux-packages/output`. Outre les
+dépendances de [développement](linux-development.md#installer-sur-fedora-workstation), il
+faut sur Fedora `rpm-build`, `desktop-file-utils`, `appstream`, `python3` et `cargo-about`
+0.9.2. Le DEB se construit dans l'image de `packaging/linux/debian/Containerfile`, avec son
+propre dossier `target/ubuntu-24.04`, et `lintian` arrête la construction sur une erreur ;
+`rpmlint` n'est qu'informatif. `--skip-build` reprend les exécutables release existants.
 `--offline` garde les avis de la construction précédente : `cargo-about` lit les crates
 de toutes les cibles, y compris macOS, qu'un cache Linux ne contient pas.
 
@@ -35,24 +36,28 @@ pour l'instant. Le workflow `release.yml` ne publie pas ces paquets : il apparti
   `cargo run --offline --locked --example generate_application_icons`.
 - Licence et avis tiers, régénérés à chaque construction par
   `scripts/linux-third-party-notices.py`, l'équivalent de
-  `update-third-party-licenses.ps1`. Le fichier conservé dans Git reste celui de Windows.
+  `update-third-party-licenses.ps1` ; le fichier conservé dans Git reste celui de Windows.
+  Le champ `License` du RPM est calculé par `scripts/rpm-license.py` depuis les crates liées
+  sous Linux et les ressources embarquées.
+- `StartupNotify=false` : GPUI ne consomme pas le jeton de démarrage, et GNOME garderait
+  le curseur occupé jusqu'à son délai.
 
 Aucun script RPM : les déclencheurs des paquets de Fedora rafraîchissent les caches de
 bureau et d'icônes, y compris sur Silverblue où seul `/usr` est livré.
 
 ## Dépendances
 
-GIO, libseccomp, Vulkan, poppler et GStreamer sont chargés à l'exécution, donc invisibles
-pour les outils de paquets, qui ne trouvent que `libxcb`, `libxkbcommon` et la libc. Ils
-sont déclarés à la main :
+GIO, libseccomp, Vulkan, Wayland, Fontconfig, poppler et GStreamer sont chargés à
+l'exécution, donc invisibles pour les outils de paquets, qui ne trouvent que `libxcb`,
+`libxkbcommon` et la libc. Ils sont déclarés à la main :
 
 | Rôle | Fedora | Debian/Ubuntu | Niveau |
 | --- | --- | --- | --- |
 | Confinement des décodeurs | `bubblewrap`, `libseccomp` | `bubblewrap`, `libseccomp2` | requis |
-| GIO et réglages de la corbeille | `glib2` | `libglib2.0-0t64`, `libglib2.0-bin` | requis |
-| Rendu | `vulkan-loader` | `libvulkan1` | requis |
+| GIO et réglages de la corbeille | `libgio-2.0.so.0` (`glib2`) | `libglib2.0-0t64`, `libglib2.0-bin` | requis |
+| Rendu | `vulkan-loader`, `mesa-vulkan-drivers` (lavapipe en repli) | `libvulkan1`, `mesa-vulkan-drivers` | requis |
+| Fenêtres et polices | `libwayland-client`, `libfontconfig`, `default-fonts-core-sans` | `libwayland-client0`, `libfontconfig1`, une police système | requis |
 | Ouverture dans une autre application | `xdg-utils` | `xdg-utils` | requis |
-| Pilote Vulkan | `mesa-vulkan-drivers` | `mesa-vulkan-drivers` | recommandé |
 | PDF | `poppler-glib` | `libpoppler-glib8t64` | recommandé |
 | Vidéo et audio | `gstreamer1-plugins-base`, `-good` | `gstreamer1.0-plugins-base`, `-good`, `libgstreamer-plugins-base1.0-0` | recommandé |
 | Réseau | `gvfs`, `gvfs-fuse`, `gvfs-smb` | `gvfs`, `gvfs-fuse`, `gvfs-backends` | recommandé |
@@ -90,7 +95,8 @@ dossier sans le sélectionner ; un nom non UTF-8 est ignoré.
 
 ## Intégration continue
 
-`.github/workflows/linux.yml`, sur `linux-foundation` et ses PR :
+`.github/workflows/linux.yml`, sur `linux-foundation` et ses PR (premier passage réussi sur
+`7583b40`, 33 minutes) :
 
 - **tests** sur `ubuntu-24.04` : compilation sans avertissement, suite complète, puis
   `preview_jobs` à part, dont les délais de 2 s échouent quand toute la suite charge la
@@ -108,8 +114,7 @@ branche par défaut : tant que la branche n'est pas fusionnée, seuls le push et
   à essayer l'icône et le nom dans les Activités, « Ouvrir avec » depuis Nautilus, une
   archive, un PDF et le retour des onglets enregistrés.
 - CI : `actionlint` sans remarque ; job **tests** rejoué à la main sur une machine virtuelle
-  Ubuntu 24.04 (ext4), réussi, confinement compris. Le workflow lui-même n'a pas tourné sur
-  GitHub.
+  Ubuntu 24.04 (ext4), réussi, confinement compris, puis workflow réussi sur GitHub.
 - RPM : installé dans un conteneur Fedora 44 avec ses dépendances, lancé sous Xvfb sur une
   URI `file://` accentuée, archive ouverte par les workers de `/usr/bin` ; couche
   `rpm-ostree` sur l'image Silverblue 44 acceptée, `bootc container lint` passé. Le
@@ -117,3 +122,6 @@ branche par défaut : tant que la branche n'est pas fusionnée, seuls le push et
 - DEB : construit dans un conteneur Ubuntu 24.04, mêmes essais dans la machine virtuelle
   ci-dessus, puis retrait, réinstallation et purge. Installé aussi avec ses dépendances dans
   des conteneurs Debian 13 et Ubuntu 26.04, bibliothèques chargées à l'exécution présentes.
+- Dépendances requises seules (`--no-install-recommends`, `install_weak_deps=False`) :
+  installation, lancement sous Xvfb et archive ouverts sur Fedora 44 et Ubuntu 24.04.
+  `lintian` et `rpmlint` sans erreur ; restent les pages de manuel absentes.

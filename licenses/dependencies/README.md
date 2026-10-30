@@ -23,3 +23,5 @@ Le même fichier regroupe aussi les fichiers NOTICE, COPYRIGHT et AUTHORS fourni
 GPUI et GPUI Platform déclarent Apache-2.0 ; leurs licences figurent dans le rapport unique avec les autres crates de la révision Zed épinglée.
 
 `LUCIDE-LICENSE.txt` conserve la notice officielle ISC et MIT/Feather ; sa source est enregistrée dans `LUCIDE-SOURCE.txt`. Les révisions originales des SVG du projet n'ont pas été enregistrées.
+
+`Inter-LICENSE.txt` et `JetBrainsMono-LICENSE.txt` conservent la licence SIL Open Font 1.1 des polices embarquées dans l'exécutable, qui impose de la livrer avec elles.
