@@ -1,16 +1,10 @@
 # Développer la version Linux
 
-Le port Linux est en cours sur la branche `linux-foundation`. **Windows reste la
-plateforme de référence et ne doit pas être altéré** : un changement Linux passe par
-le trait `Platform` ou un module `cfg(not(target_os = "windows"))`. Un fichier commun
-touché impose de vérifier Windows (voir [Préserver Windows](#préserver-windows)).
+Le port Linux est expérimental et vit dans `main`, avec les versions Windows publiées.
+**Windows reste la plateforme de référence et ne doit pas être altéré** : un changement
+Linux passe par le trait `Platform` ou un module `cfg(not(target_os = "windows"))`. Un
+fichier commun touché impose de vérifier Windows (voir [Préserver Windows](#préserver-windows)).
 
-**La branche n'est pas fusionnée dans `main`**, qui porte les versions Windows publiées :
-le port Linux doit pouvoir être abandonné sans rien défaire. La synchronisation va dans
-un seul sens, `main` vers `linux-foundation`, à chaque version Windows, suivie de
-`check-windows.sh`. Hors du pilote [volumes](../architecture/volumes.md), éviter de
-restructurer du code Windows sur la branche : chaque déplacement devient un conflit
-potentiel à la synchronisation suivante.
 État vérifié et preuves : [bilan du 26 octobre](../reports/2026-10-26-linux-ui-trash.md).
 
 ## Installer sur Fedora Workstation
@@ -72,8 +66,8 @@ ressources depuis la racine de chaque crate, comme sous Windows.
 
 Les tests restent à lancer sous Windows : `./scripts/test-windows.ps1 -Offline`
 ([procédure](development.md#vérifier-un-changement)), ou sans redémarrer par le
-déclenchement manuel du workflow `tests.yml` sur la branche poussée (`workflow_dispatch`,
-sans PR ni fusion). Suite Windows réussie sur GitHub jusqu'à `7583b40`, `tests/archive_io_pipeline.rs` compris.
+déclenchement manuel du workflow `tests.yml` sur une branche poussée (`workflow_dispatch`,
+sans PR). Suite Windows réussie sur GitHub jusqu'à `7583b40`, `tests/archive_io_pipeline.rs` compris.
 
 ## Reste à faire
 

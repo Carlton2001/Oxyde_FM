@@ -149,7 +149,7 @@ pub trait Volumes: Send + Sync {
 
 Chaque étape passe `check-linux.sh`, `check-windows.sh` et ses tests ; les étapes 1 et 4,
 qui touchent Windows, passent aussi la suite Windows, sous Windows ou par déclenchement
-manuel de `tests.yml` sur la branche (elle n'est pas fusionnée dans `main`).
+manuel de `tests.yml` sur la branche.
 
 1. **Extraire le trait**, déplacements seuls, Linux inchangé. *Fait* : 7 fichiers communs,
    uniquement les appels ; suite Windows encore à passer.

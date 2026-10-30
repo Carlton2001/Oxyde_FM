@@ -2,7 +2,7 @@ name: Linux
 
 on:
   push:
-    branches: [linux-foundation]
+    branches: [main, linux-foundation]
     paths: &paths
       - '**.rs'
       - Cargo.toml
@@ -18,7 +18,7 @@ on:
       - scripts/third-party-notices.hbs
       - .github/workflows/linux.yml
   pull_request:
-    branches: [linux-foundation]
+    branches: [main, linux-foundation]
     paths: *paths
   workflow_dispatch:
 

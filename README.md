@@ -6,7 +6,7 @@
 
 Oxyde is a native file manager built in **Rust**, with a **GPUI** interface and **Tokio** for background work. It combines flexible multipane browsing, integrated previews, advanced search, and file operations in a customizable desktop workspace.
 
-Windows is the current distribution target. Linux platform code is also present, but the Linux build and runtime are not currently validated, and some native integrations are Windows-only.
+Windows is the current distribution target. Linux support is experimental: RPM and DEB packages can be built from source and pass CI, but no Linux package is published yet, hardware and desktop coverage is incomplete, and some native integrations are Windows-only.
 
 ## From Tauri to GPUI
 

@@ -23,8 +23,8 @@ de toutes les cibles, y compris macOS, qu'un cache Linux ne contient pas.
 Un paquet ne s'installe que sur un système au moins aussi récent que celui qui l'a
 construit (glibc) : le RPM vise Fedora 44 et suivantes, le DEB Ubuntu 24.04 et suivantes,
 Debian 13 et suivantes. Pas d'autre architecture que x86-64, ni de signature ou de dépôt
-pour l'instant. Le workflow `release.yml` ne publie pas ces paquets : il appartient à
-`main`, où la branche Linux n'est pas fusionnée.
+pour l'instant. Le workflow `release.yml` ne publie pas ces paquets : une version reste
+Windows seulement.
 
 ## Contenu des paquets
 
@@ -95,7 +95,7 @@ dossier sans le sélectionner ; un nom non UTF-8 est ignoré.
 
 ## Intégration continue
 
-`.github/workflows/linux.yml`, sur `linux-foundation` et ses PR (premier passage réussi sur
+`.github/workflows/linux.yml`, sur `main`, `linux-foundation` et leurs PR (premier passage réussi sur
 `7583b40`, 33 minutes) :
 
 - **tests** sur `ubuntu-24.04` : compilation sans avertissement, suite complète, puis
@@ -105,8 +105,7 @@ dossier sans le sélectionner ; un nom non UTF-8 est ignoré.
   installation avec les dépendances, artefact téléchargeable.
 
 Rust est fixé à 1.99.1 et `cargo-about` vérifié par empreinte. Les workflows Windows ne
-changent pas. GitHub n'exécute le déclenchement manuel que pour un workflow présent sur la
-branche par défaut : tant que la branche n'est pas fusionnée, seuls le push et la PR le lancent.
+changent pas.
 
 ## Essais du 30 octobre 2026
 
