@@ -38,7 +38,9 @@ impl OxydeApp {
             | ("a" | "x" | "v" | "y" | "r" | "f" | "-" | "subtract" | "0", true, false, false)
             | ("a", true, false, true)
             | ("c", true, true, false)
-            | ("s", false, true, true));
+            | ("s", false, true, true)
+            | ("menu", false, false, _)
+            | ("f10", false, false, true));
         if !recognized { return false; }
         if !self.context_menus.is_empty() {
             self.context_menus.clear();
@@ -51,6 +53,7 @@ impl OxydeApp {
             .filter(|p| !p.as_os_str().is_empty()).map(|p| p.to_string_lossy().into_owned());
         match (key.key.as_str(), m.control, m.alt, m.shift) {
             ("up" | "down" | "left" | "right", false, false, shift) => self.move_file_selection(key.key.as_str(), shift, cx),
+            ("menu" | "f10", false, false, _) => self.open_keyboard_context_menu(cx),
             ("a", true, false, false) => self.execute_tout_selectionner(cx),
             ("a", true, false, true) => self.deselect_all(&pane_id, cx),
             ("c", true, false, false) => self.execute_copier(cx),

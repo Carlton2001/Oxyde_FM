@@ -20,6 +20,7 @@ mod grouping;
 mod group_selection;
 pub(crate) use group_selection::GroupSelection;
 mod keyboard;
+mod keyboard_menu;
 mod toasts;
 mod updates;
 pub(crate) use updates::UpdateStatus;

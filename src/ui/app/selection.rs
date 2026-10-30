@@ -284,7 +284,7 @@ fn rectangle_selection(
 }
 
 /// Scrolls the least distance that shows the row holding `index`.
-fn scroll_row_into_view(tab: &crate::ui::workspace::TabState, rows: &[crate::ui::date_groups::DisplayRow], index: usize) {
+pub(super) fn scroll_row_into_view(tab: &crate::ui::workspace::TabState, rows: &[crate::ui::date_groups::DisplayRow], index: usize) {
     use crate::ui::date_groups::DisplayRow;
     let grid = tab.view_mode == ViewMode::Grid;
     let mut top = 0.0;
