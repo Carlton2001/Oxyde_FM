@@ -55,8 +55,8 @@ pub fn details_horizontal_padding() -> f32 {
     rem_pixels(DETAILS_HORIZONTAL_PADDING).as_f32()
 }
 
-pub fn menu_list_max_height(viewport: f32, header: bool, bottom_padding: f32, maximum: f32) -> f32 {
-    let chrome = logical(if header { 42.0 } else { 6.0 }) + logical(bottom_padding);
+pub fn menu_list_max_height(viewport: f32, header: bool, maximum: f32) -> f32 {
+    let chrome = logical(if header { 42.0 } else { 6.0 }) + logical(4.0);
     maximum.min((viewport - chrome - logical(16.0)).max(logical(26.0)))
 }
 

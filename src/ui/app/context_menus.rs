@@ -39,12 +39,12 @@ pub(super) fn context_menu_height(menu: &ContextMenuInstance, viewport_height: P
         ContextMenuContent::NameFilter { .. } => (0, crate::ui::style::row_height() + logical(8.0), logical(480.0)),
     };
     let header = matches!(&menu.content, ContextMenuContent::Items(_, Some(_)));
-    let max_height = crate::ui::style::menu_list_max_height(viewport_height.as_f32(), header, menu.bottom_padding, max_height);
+    let max_height = crate::ui::style::menu_list_max_height(viewport_height.as_f32(), header, max_height);
     let separator_height = match &menu.content {
         ContextMenuContent::Items(items, _) => items.iter().filter(|item| matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count() as f32 * logical(9.0),
         _ => 0.0,
     };
-    px((item_count as f32 * logical(26.0) + separator_height).min(max_height) + header_height + logical(menu.bottom_padding))
+    px((item_count as f32 * logical(26.0) + separator_height).min(max_height) + header_height + logical(4.0))
 }
 
 pub(super) fn context_menu_visible_top(
@@ -194,7 +194,6 @@ impl OxydeApp {
             },
             scroll_handle: UniformListScrollHandle::new(),
             width: px(0.0),
-            bottom_padding: 0.0,
             open_left,
             hovered_item: None,
             native_request_id: Some(request_id),
@@ -431,7 +430,6 @@ impl OxydeApp {
             content: ContextMenuContent::Items(items, None),
             scroll_handle: UniformListScrollHandle::new(),
             width: px(0.0),
-            bottom_padding: 0.0,
             open_left: false,
             hovered_item: None,
             native_request_id: None, open_up: false,

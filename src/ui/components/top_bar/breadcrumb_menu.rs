@@ -55,7 +55,6 @@ pub(super) fn render(
         items,
         reserve_icon_space: true,
         is_context_menu: false,
-        bottom_padding: 0.0,
         scroll_handle: view.breadcrumb_scroll.clone(),
         width: None,
         max_height: logical(360.0),

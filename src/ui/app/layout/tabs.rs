@@ -223,7 +223,6 @@ impl OxydeApp {
                             ),
                             scroll_handle: gpui::UniformListScrollHandle::new(),
                             width: px(0.0),
-                            bottom_padding: 3.0,
                             open_left: false,
                             hovered_item: None,
                             native_request_id: None, open_up: false,

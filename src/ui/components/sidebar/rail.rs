@@ -193,7 +193,6 @@ pub(super) fn render_sidebar_rail(
                         content: ContextMenuContent::Items(items, None),
                         scroll_handle: UniformListScrollHandle::new(),
                         width: px(0.0),
-                        bottom_padding: 0.0,
                         open_left: false,
                         hovered_item: None,
                         native_request_id: None, open_up: false,

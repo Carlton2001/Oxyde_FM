@@ -38,6 +38,16 @@ pub fn logical(value: f32) -> f32 {
     rem_pixels(gpui::rems(value / BASE_REM_SIZE as f32)).as_f32()
 }
 
+/// A design length GPUI will lay out unchanged. GPUI rounds each authored length to device
+/// pixels, so a total computed from unrounded rows can differ from the rows it must contain.
+pub fn device_snapped(value: f32, scale_factor: f32) -> f32 {
+    (value * scale_factor - 0.5).ceil().max(0.0) / scale_factor
+}
+
+#[cfg(test)]
+#[path = "scale/tests/device_pixels.rs"]
+mod device_pixel_tests;
+
 #[cfg(test)]
 mod tests {
     use super::*;

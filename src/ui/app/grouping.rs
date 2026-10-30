@@ -72,7 +72,6 @@ fn grouping_menu(
         content: ContextMenuContent::Items(items, None),
         scroll_handle: UniformListScrollHandle::new(),
         width: px(0.0),
-        bottom_padding: 0.0,
         open_left,
         hovered_item: None,
         native_request_id: None,

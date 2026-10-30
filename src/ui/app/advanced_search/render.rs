@@ -420,7 +420,6 @@ impl Render for AdvancedSearchWindow {
                             items: items.clone(),
                             reserve_icon_space: true,
                             is_context_menu: true,
-                            bottom_padding: 4.0,
                             scroll_handle: menu.scroll_handle.clone(),
                             h_app: handle.clone(),
                             on_drag: std::rc::Rc::new(|_, _, _, _, _| {}),

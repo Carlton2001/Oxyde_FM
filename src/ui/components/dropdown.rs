@@ -192,7 +192,6 @@ pub struct GenericDropdown<T: crate::ui::components::scrollbar::ScrollbarState +
     /// Keep labels aligned when some rows have no icon.
     pub reserve_icon_space: bool,
     pub is_context_menu: bool,
-    pub bottom_padding: f32,
     pub scroll_handle: UniformListScrollHandle,
     pub h_app: Entity<T>,
     pub on_drag: Rc<dyn Fn(&mut T, String, f32, f32, &mut App)>,
@@ -296,7 +295,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
         let is_dragging = self.is_dragging;
         let on_drag = self.on_drag.clone();
 
-        let item_h: f32 = logical(26.0);
+        let item_h: f32 = crate::ui::scale::device_snapped(logical(26.0), window.scale_factor());
         // Draw separators between action rows rather than reserving a full row.
         let mut separator_before = Vec::new();
         let mut original_indices = Vec::new();
@@ -314,8 +313,8 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
         }
         self.items = visible_items;
         let item_count = self.items.len();
-        let maximum = crate::ui::style::menu_list_max_height(crate::ui::components::popup::available_size(window, cx).height.as_f32(), self.header.is_some(), self.bottom_padding, self.max_height);
-        let separator_height = logical(9.0);
+        let maximum = crate::ui::style::menu_list_max_height(crate::ui::components::popup::available_size(window, cx).height.as_f32(), self.header.is_some(), self.max_height);
+        let separator_height = crate::ui::scale::device_snapped(logical(9.0), window.scale_factor());
         let separator_count = separator_before.iter().filter(|value| **value).count();
         let viewport_h = (item_count as f32 * item_h + separator_count as f32 * separator_height).min(maximum);
         let content_h = item_count as f32 * item_h + separator_count as f32 * separator_height;
@@ -336,7 +335,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
             .id(self.id)
             .flex_col()
             .pt(rems(0.25))
-            .pb(rems(self.bottom_padding / 16.0))
+            .pb(rems(0.25))
             .pl(rems(0.25))
             .pr(px(right_padding))
             .w(px(outer_width))

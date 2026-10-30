@@ -1,4 +1,4 @@
-use crate::ui::app::{ContextMenuHeader, ContextMenuInstance, DragTarget, OxydeApp};
+use crate::ui::app::{ContextMenuHeader, DragTarget, OxydeApp};
 use crate::ui::app::context_menus::{context_menu_contains_point, context_menu_height, context_menu_visible_top};
 use crate::ui::components::dropdown::{DropdownItem, GenericDropdown};
 use crate::ui::i18n::{I18nContext, Message};
@@ -13,7 +13,6 @@ impl OxydeApp {
         &self,
         items: &Vec<DropdownItem>,
         header_type: &Option<ContextMenuHeader>,
-        instance: &ContextMenuInstance,
         m_idx: usize,
         h: Entity<Self>,
         pos: Point<Pixels>,
@@ -235,7 +234,6 @@ impl OxydeApp {
             items: dropdown_items,
             reserve_icon_space: true,
             is_context_menu: true,
-            bottom_padding: instance.bottom_padding,
             scroll_handle,
             width: None,
             max_height: logical(480.0),

@@ -12,7 +12,6 @@ impl OxydeApp {
         path: &Vec<String>,
         is_background: &bool,
         items: &Vec<oxyde_lib::models::WinMenuItem>,
-        instance: &ContextMenuInstance,
         m_idx: usize,
         h: Entity<Self>,
         scroll_handle: UniformListScrollHandle,
@@ -110,7 +109,6 @@ impl OxydeApp {
             items: dropdown_items,
             reserve_icon_space: m_idx == 1,
             is_context_menu: true,
-            bottom_padding: instance.bottom_padding,
             scroll_handle,
             width: None,
             max_height: native_menu_max_height(px(win_h)),
@@ -252,7 +250,6 @@ impl OxydeApp {
                                                                 },
                                                                 scroll_handle: UniformListScrollHandle::new(),
                         width: px(0.0),
-                        bottom_padding: 0.0,
                     });
                                                             cx.notify();
                                                         }

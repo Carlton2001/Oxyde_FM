@@ -182,7 +182,6 @@ pub fn with_grid_sort(
                     content: ContextMenuContent::Items(choices.clone(), None),
                     scroll_handle: UniformListScrollHandle::new(),
                     width: px(0.0),
-                    bottom_padding: 0.0,
                     open_left,
                     hovered_item: None,
                     native_request_id: None, open_up: false,
@@ -448,7 +447,7 @@ fn oxyde_context_menu_items_raw(
             native_bounds: None,
                         position, content: ContextMenuContent::Items(choices, None),
                         scroll_handle: UniformListScrollHandle::new(), width: px(0.0),
-                        bottom_padding: 0.0, open_left, hovered_item: None, native_request_id: None, open_up: false,
+                        open_left, hovered_item: None, native_request_id: None, open_up: false,
                     });
                     cx.notify();
                 });

@@ -170,7 +170,6 @@ pub struct ContextMenuInstance {
     pub content: ContextMenuContent,
     pub scroll_handle: UniformListScrollHandle,
     pub width: Pixels,
-    pub bottom_padding: f32,
     /// If true, the menu opens to the LEFT of its anchor (use Anchor::TopRight).
     pub open_left: bool,
     /// Opens above `position` instead of below it.

@@ -37,7 +37,6 @@ pub(crate) fn text_menu<T: 'static, S: ScrollbarState + 'static>(
                 items: items.clone(),
                 reserve_icon_space: true,
                 is_context_menu: true,
-                bottom_padding: 4.0,
                 scroll_handle: scroll.clone(),
                 h_app: scroll_owner.clone(),
                 on_drag: Rc::new(|_, _, _, _, _| {}),

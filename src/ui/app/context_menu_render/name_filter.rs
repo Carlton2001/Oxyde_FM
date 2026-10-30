@@ -1,4 +1,4 @@
-use crate::ui::app::{ContextMenuInstance, DragTarget, OxydeApp};
+use crate::ui::app::{DragTarget, OxydeApp};
 use crate::ui::app::context_menus::context_menu_contains_point;
 use crate::ui::components::dropdown::GenericDropdown;
 use crate::ui::components::input::TextInput;
@@ -10,7 +10,6 @@ impl OxydeApp {
     pub(super) fn render_name_filter_menu(
         &self,
         input: &Entity<TextInput>,
-        instance: &ContextMenuInstance,
         m_idx: usize,
         h: Entity<Self>,
         scroll_handle: UniformListScrollHandle,
@@ -29,7 +28,6 @@ impl OxydeApp {
         items: vec![],
         reserve_icon_space: true,
         is_context_menu: true,
-        bottom_padding: instance.bottom_padding,
         scroll_handle,
         width: Some(input_width),
         max_height: logical(480.0),
