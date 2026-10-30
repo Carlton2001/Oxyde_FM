@@ -1,6 +1,6 @@
 # Distribuer Oxyde sous Linux
 
-**Statut : paquets RPM et DEB construits et essayés (T14 de
+**Statut : paquets RPM et DEB construits et essayés, RPM vérifié dans l'interface (T14 de
 l'[audit](../reports/2026-10-26-linux-portability-audit.md)) ; CI écrite, à exécuter au
 premier push.** La distribution Windows est décrite dans
 [son propre guide](distribution.md) et ne change pas.
@@ -104,6 +104,9 @@ branche par défaut : tant que la branche n'est pas fusionnée, seuls le push et
 
 ## Essais du 30 octobre 2026
 
+- Interface : RPM installé sur Fedora 44 et jugé bon par l'utilisateur, avec comme points
+  à essayer l'icône et le nom dans les Activités, « Ouvrir avec » depuis Nautilus, une
+  archive, un PDF et le retour des onglets enregistrés.
 - CI : `actionlint` sans remarque ; job **tests** rejoué à la main sur une machine virtuelle
   Ubuntu 24.04 (ext4), réussi, confinement compris. Le workflow lui-même n'a pas tourné sur
   GitHub.

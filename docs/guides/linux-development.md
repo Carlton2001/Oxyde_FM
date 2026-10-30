@@ -155,4 +155,5 @@ Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portabili
   M09/R5 : tous les décodeurs tournent dans des workers confinés par bubblewrap et
   seccomp, archives comprises ; vérifiés dans l'interface.
 - T14, fait : [paquets RPM et DEB et CI Linux](linux-distribution.md), ouverture des
-  dossiers reçus et profil AppArmor pour Ubuntu ; CI à exécuter au premier push.
+  dossiers reçus et profil AppArmor pour Ubuntu ; RPM vérifié dans l'interface, CI à
+  exécuter au premier push.
