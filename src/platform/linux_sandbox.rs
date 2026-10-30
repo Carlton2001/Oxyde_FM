@@ -21,7 +21,9 @@ const SOURCE: &str = "/oxyde/source";
 /// What a worker may reach beyond the system's read-only files.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Profile {
-    /// PDF: the user's fonts and their caches.
+    /// Pure codecs: archives, Office, audio tags, raster thumbnails.
+    Codec,
+    /// PDF and images, whose SVGs need them: the user's fonts and their caches.
     Document,
     /// Hover videos: Oxyde's GStreamer registry, read-only.
     Video,
@@ -37,7 +39,8 @@ impl Profile {
             "video" => Self::Video,
             "viewer-media" => Self::Player,
             "media-registry" => Self::Registry,
-            _ => Self::Document,
+            mode if mode.starts_with("pdf") || mode.starts_with("image") => Self::Document,
+            _ => Self::Codec,
         }
     }
 
@@ -59,7 +62,7 @@ pub(super) fn command(executable: &Path, profile: Profile, source: Option<(&Path
     if !available() {
         let mut command = Command::new(executable);
         command.env("MALLOC_ARENA_MAX", "2");
-        if profile != Profile::Document {
+        if profile.reads_media() || profile == Profile::Registry {
             if let Some(registry) = registry() {
                 command.env("GST_REGISTRY", registry.join("registry.bin"));
                 command.env("GST_REGISTRY_UPDATE", if profile == Profile::Registry { "yes" } else { "no" });
@@ -80,6 +83,7 @@ pub(super) fn command(executable: &Path, profile: Profile, source: Option<(&Path
         arguments.bind("--ro-bind", executable);
     }
     match profile {
+        Profile::Codec => {}
         Profile::Document => arguments.fonts(),
         Profile::Video | Profile::Player | Profile::Registry => {
             if let Some(registry) = registry() {
@@ -99,13 +103,7 @@ pub(super) fn command(executable: &Path, profile: Profile, source: Option<(&Path
         descriptors.push(descriptor);
     }
     let source = source.map(|(path, file)| {
-        let mut inside = OsString::from(SOURCE);
-        // Formats without a signature are recognized by their extension.
-        if let Some(extension) = path.extension().and_then(|extension| extension.to_str())
-            .filter(|extension| extension.len() <= 10 && extension.bytes().all(|byte| byte.is_ascii_alphanumeric())) {
-            inside.push(".");
-            inside.push(extension);
-        }
+        let inside = inside_name(path);
         arguments.add([OsString::from("--ro-bind-fd"), file.as_raw_fd().to_string().into(), inside.clone()]);
         descriptors.push(file.into());
         inside
@@ -124,6 +122,22 @@ pub(super) fn command(executable: &Path, profile: Profile, source: Option<(&Path
         });
     }
     Ok(Launch { command, source, _descriptors: descriptors })
+}
+
+/// Formats without a signature are recognized by their extension, compound for
+/// compressed tar archives; the rest of the user's file name stays outside.
+fn inside_name(path: &Path) -> OsString {
+    let usable = |extension: &&str| extension.len() <= 10 && extension.bytes().all(|byte| byte.is_ascii_alphanumeric());
+    let mut inside = OsString::from(SOURCE);
+    if let Some(extension) = path.extension().and_then(|extension| extension.to_str()).filter(usable) {
+        let stem = Path::new(path.file_stem().unwrap_or_default());
+        if stem.extension().is_some_and(|inner| inner.eq_ignore_ascii_case("tar")) {
+            inside.push(".tar");
+        }
+        inside.push(".");
+        inside.push(extension);
+    }
+    inside
 }
 
 /// Oxyde's own GStreamer registry: a scan costs seconds, and a worker must not be able

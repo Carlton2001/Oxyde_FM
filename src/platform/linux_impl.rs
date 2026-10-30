@@ -557,7 +557,15 @@ impl Platform for LinuxPlatform {
     }
 
     fn decode_preview_worker(&self, mode: &str, path: &std::path::Path) -> crate::utils::preview_protocol::Reply {
-        super::linux_pdf::decode(mode, path)
+        super::linux_preview::reply(mode, path)
+    }
+
+    fn run_preview_worker(&self, mode: &str, path: &std::path::Path) -> std::io::Result<Vec<u8>> {
+        super::linux_preview::run(mode, path)
+    }
+
+    fn office_search_text(&self, path: &std::path::Path, checkpoint: &dyn Fn() -> std::io::Result<()>) -> std::io::Result<String> {
+        super::linux_preview::office_search(path, checkpoint)
     }
 
     fn pdf_thumbnail(&self, path: String) -> Result<image::RgbaImage, crate::models::CommandError> {

@@ -186,14 +186,14 @@ pub fn get_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
     #[cfg(target_os = "windows")]
     return isolated_thumbnail("cached-thumbnail", &path);
     #[cfg(not(target_os = "windows"))]
-    cached_thumbnail(path, "image", get_thumbnail_uncached)
+    cached_thumbnail(path, "image", |path| isolated_thumbnail("thumbnail", &path))
 }
 
 pub fn get_office_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError> {
     #[cfg(target_os = "windows")]
     return isolated_thumbnail("cached-office", &path);
     #[cfg(not(target_os = "windows"))]
-    cached_thumbnail(path, "office", get_office_thumbnail_uncached)
+    cached_thumbnail(path, "office", |path| isolated_thumbnail("office", &path))
 }
 
 #[cfg(target_os = "windows")]
@@ -217,13 +217,13 @@ fn get_thumbnail_uncached(path: String) -> Result<RgbaImage, CommandError> {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn get_thumbnail_uncached(path: String) -> Result<RgbaImage, CommandError> {
+pub(super) fn get_thumbnail_uncached(path: String) -> Result<RgbaImage, CommandError> {
     load_source_thumbnail(Path::new(&path))
         .map(|image| image.thumbnail(THUMB_SIZE, THUMB_SIZE).to_rgba8())
 }
 
 #[cfg(not(target_os = "windows"))]
-fn get_office_thumbnail_uncached(path: String) -> Result<RgbaImage, CommandError> {
+pub(super) fn get_office_thumbnail_uncached(path: String) -> Result<RgbaImage, CommandError> {
     let file = fs::File::open(path).map_err(|error| CommandError::IoError(error.to_string()))?;
     let mut archive =
         zip::ZipArchive::new(file).map_err(|error| CommandError::Other(error.to_string()))?;
@@ -699,43 +699,29 @@ fn shell_thumbnail_raw(path: &str) -> Result<RgbaImage, CommandError> {
     }
 }
 
-fn get_office_text_preview_local(path: String) -> Result<String, CommandError> {
+pub(super) fn get_office_text_preview_local(path: String) -> Result<String, CommandError> {
     let source = Path::new(&path);
     let file = fs::File::open(source).map_err(|error| CommandError::IoError(error.to_string()))?;
     crate::utils::office_preview::text(file, source.extension().and_then(|ext| ext.to_str()).unwrap_or(""))
 }
 
 pub fn get_office_text_preview(path: String) -> Result<String, CommandError> {
-    #[cfg(target_os = "windows")]
-    {
-        let bytes = super::platform().run_preview_worker("office-text", Path::new(&path))?;
-        match crate::utils::preview_protocol::decode(&bytes)? {
-            crate::utils::preview_protocol::Reply::Text(text) => Ok(text),
-            crate::utils::preview_protocol::Reply::Error { detail, .. } => {
-                Err(CommandError::Other(detail))
-            }
-            _ => Err(CommandError::Other(
-                "Unexpected Office preview reply".into(),
-            )),
+    let bytes = super::platform().run_preview_worker("office-text", Path::new(&path))?;
+    match crate::utils::preview_protocol::decode(&bytes)? {
+        crate::utils::preview_protocol::Reply::Text(text) => Ok(text),
+        crate::utils::preview_protocol::Reply::Error { detail, .. } => {
+            Err(CommandError::Other(detail))
         }
+        _ => Err(CommandError::Other(
+            "Unexpected Office preview reply".into(),
+        )),
     }
-    #[cfg(not(target_os = "windows"))]
-    get_office_text_preview_local(path)
 }
 
 /// Structured, complete document text for the Viewer.
 pub fn get_office_document(path: String) -> Result<String, CommandError> {
-    #[cfg(target_os = "windows")]
-    {
-        let bytes = super::platform().run_preview_worker("office-document", Path::new(&path))?;
-        isolated_text(&bytes)
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let source = Path::new(&path);
-        let file = fs::File::open(source)?;
-        crate::utils::office_preview::document(file, source.extension().and_then(|ext| ext.to_str()).unwrap_or(""))
-    }
+    let bytes = super::platform().run_preview_worker("office-document", Path::new(&path))?;
+    isolated_text(&bytes)
 }
 
 /// `width height` lines (only their ratio is used), one per page.
@@ -755,7 +741,6 @@ pub(super) fn parse_pdf_sizes(text: &str) -> Result<Vec<(f32, f32)>, CommandErro
     Ok(sizes)
 }
 
-#[cfg(target_os = "windows")]
 fn isolated_text(bytes: &[u8]) -> Result<String, CommandError> {
     match crate::utils::preview_protocol::decode(bytes)? {
         crate::utils::preview_protocol::Reply::Text(text) => Ok(text),
@@ -764,7 +749,6 @@ fn isolated_text(bytes: &[u8]) -> Result<String, CommandError> {
     }
 }
 
-#[cfg(target_os = "windows")]
 fn isolated_thumbnail(mode: &str, path: &str) -> Result<RgbaImage, CommandError> {
     let bytes = super::platform().run_preview_worker(mode, Path::new(path))?;
     match crate::utils::preview_protocol::decode(&bytes)? {

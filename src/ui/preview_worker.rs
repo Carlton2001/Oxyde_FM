@@ -76,7 +76,6 @@ pub(crate) fn run_if_requested() -> bool {
             }
             return Ok(());
         }
-        // Linux decodes images in Oxyde itself until its workers are confined.
         #[cfg(target_os = "windows")]
         if mode == "image" {
             let reply = match super::image_preview::load_path_local(
@@ -116,6 +115,18 @@ pub(crate) fn run_if_requested() -> bool {
                 },
             };
             return preview_protocol::encode(reply, &mut std::io::stdout().lock());
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            if mode == "audio-metadata" {
+                let metadata = oxyde_lib::utils::audio_metadata::read(std::fs::File::open(path)?)?;
+                let mut output = std::io::stdout().lock();
+                serde_json::to_writer(&mut output, &metadata).map_err(std::io::Error::other)?;
+                return output.flush();
+            }
+            if let Some(reply) = super::image_preview::worker_reply(&mode, path) {
+                return preview_protocol::encode(reply, &mut std::io::stdout().lock());
+            }
         }
         let reply = oxyde_lib::platform::local_preview_worker_reply(&mode, path);
         preview_protocol::encode(reply, &mut std::io::stdout().lock())

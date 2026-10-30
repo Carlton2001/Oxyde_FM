@@ -1,14 +1,17 @@
 //! Self-workers for native decoders, as Nautilus runs its thumbnailers apart: a
 //! hostile file only reaches a confined process, bounded in private memory and in time.
 use super::linux_sandbox::{self, Profile};
+use std::ffi::OsStr;
 use std::io::{self, Read, Write};
+use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::Path;
-use std::process::{Child, ChildStdin, ChildStdout, Stdio};
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::time::{Duration, Instant};
 
 /// The Windows parent sends it once the job is attached; the worker waits for it.
 const START_GATE: u8 = 0xA7;
+const CHECKPOINT_INTERVAL: Duration = Duration::from_millis(50);
 
 pub(super) struct Worker {
     child: Child,
@@ -24,15 +27,23 @@ impl Worker {
         if profile.reads_media() {
             refresh_media_registry(executable);
         }
-        let source = path.map(|path| std::fs::File::open(path).map(|file| (path, file))).transpose()?;
+        Self::launch(executable, profile, path, memory_bytes, |command, source| {
+            command.arg("--oxyde-preview-worker-v1").arg(mode);
+            if let Some(source) = source {
+                command.arg(source);
+            }
+        })
+    }
+
+    /// Any confined worker: `arguments` receive the document's path as it sees it.
+    pub(super) fn launch(executable: &Path, profile: Profile, path: Option<&Path>, memory_bytes: u64,
+        arguments: impl FnOnce(&mut Command, Option<&OsStr>)) -> io::Result<Self> {
+        let source = path.map(|path| open_document(path).map(|file| (path, file))).transpose()?;
         // glibc reserves 64 MiB per thread arena, which decoders with many threads would
         // spend on reservations rather than pixels: the launch limits arenas to two.
         let mut launch = linux_sandbox::command(executable, profile, source)?;
         let command = &mut launch.command;
-        command.arg("--oxyde-preview-worker-v1").arg(mode);
-        if let Some(source) = &launch.source {
-            command.arg(source);
-        }
+        arguments(command, launch.source.as_deref());
         command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
         // SAFETY: a single raw system call between fork and exec.
         unsafe {
@@ -71,10 +82,17 @@ impl Worker {
 
     /// The whole output of a one-request worker, refused beyond `limit` bytes.
     pub(super) fn read_to_end(&mut self, limit: usize, deadline: Instant) -> io::Result<Vec<u8>> {
+        self.read_to_end_checked(limit, deadline, &|| Ok(()))
+    }
+
+    /// As `read_to_end`, and `checkpoint` can stop the wait for a cancelled request.
+    pub(super) fn read_to_end_checked(&mut self, limit: usize, deadline: Instant, checkpoint: &dyn Fn() -> io::Result<()>) -> io::Result<Vec<u8>> {
         let mut bytes = Vec::new();
         let mut chunk = [0; 64 * 1024];
         loop {
-            self.wait_readable(deadline)?;
+            while !self.readable(CHECKPOINT_INTERVAL.min(remaining(deadline)?))? {
+                checkpoint()?;
+            }
             match self.output.read(&mut chunk)? {
                 0 => return Ok(bytes),
                 read if bytes.len() + read > limit => return Err(io::Error::other("Preview worker reply exceeds its limit")),
@@ -95,15 +113,8 @@ impl Worker {
     }
 
     fn wait_readable(&self, deadline: Instant) -> io::Result<()> {
-        loop {
-            let remaining = deadline.saturating_duration_since(Instant::now());
-            if remaining.is_zero() {
-                return Err(io::Error::new(io::ErrorKind::TimedOut, "Preview worker exceeded its deadline"));
-            }
-            if self.readable(remaining)? {
-                return Ok(());
-            }
-        }
+        while !self.readable(remaining(deadline)?)? {}
+        Ok(())
     }
 
     /// Output to read, or closed (the read tells which), within `timeout`.
@@ -124,6 +135,25 @@ impl Drop for Worker {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
+}
+
+fn remaining(deadline: Instant) -> io::Result<Duration> {
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if remaining.is_zero() {
+        return Err(io::Error::new(io::ErrorKind::TimedOut, "Preview worker exceeded its deadline"));
+    }
+    Ok(remaining)
+}
+
+/// The document as one descriptor. A named pipe would block its opening, and only
+/// regular files are documents.
+fn open_document(path: &Path) -> io::Result<std::fs::File> {
+    let file = std::fs::OpenOptions::new().read(true)
+        .custom_flags(rustix::fs::OFlags::NONBLOCK.bits() as i32).open(path)?;
+    if !file.metadata()?.is_file() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Preview source is not a regular file"));
+    }
+    Ok(file)
 }
 
 /// GStreamer scans every plugin when its registry is missing or outdated, which costs
