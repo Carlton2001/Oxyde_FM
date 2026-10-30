@@ -107,6 +107,23 @@ impl WorkspaceState {
         normalize(&mut self.layout);
     }
 
+    /// One pane with a tab per location, the first one active.
+    pub fn show_only(&mut self, locations: &[String]) {
+        let Some((first, others)) = locations.split_first() else { return };
+        let id = format!("tab-{}", self.next_tab_id);
+        self.next_tab_id = self.next_tab_id.wrapping_add(1);
+        let pane = PaneState::new(TabState::new(id, first.clone()));
+        let pane_id = pane.id.clone();
+        self.active_pane_id = pane_id.clone();
+        self.layout = LayoutNode::Pane(Box::new(pane));
+        for location in others {
+            self.add_tab(&pane_id, location.clone(), true);
+        }
+        if let Some(pane) = self.find_pane_mut(&pane_id) {
+            pane.active_tab_index = 0;
+        }
+    }
+
     pub fn add_tab(&mut self, pane_id: &str, path: String, activate: bool) {
         if path == super::viewer::VIEWER_PATH { self.add_viewer(); return; }
         if self.find_pane(pane_id).is_some_and(|pane| pane.active_tab().is_viewer()) { return; }
@@ -416,3 +433,7 @@ impl WorkspaceState {
     }
 
 }
+
+#[cfg(test)]
+#[path = "tests/operations.rs"]
+mod tests;

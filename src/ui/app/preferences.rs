@@ -205,8 +205,16 @@ impl OxydeApp {
         self.save_preferences(cx);
         cx.refresh_windows();
     }
+    /// A folder given by the desktop opens alone, as in a new Nautilus window.
+    pub(crate) fn show_only_locations(&mut self, locations: &[String]) {
+        if locations.is_empty() {
+            return;
+        }
+        self.state.show_only(locations);
+        self.keeps_saved_workspace = true;
+    }
     pub(crate) fn save_workspace(&mut self, cx: &mut Context<Self>) {
-        if self.preferences_load_failed {
+        if self.preferences_load_failed || self.keeps_saved_workspace {
             return;
         }
         let mut snapshot = self.state.saved_snapshot(self.sidebar_width);

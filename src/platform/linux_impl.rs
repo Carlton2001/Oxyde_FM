@@ -697,6 +697,11 @@ impl Platform for LinuxPlatform {
         &super::linux_file_clipboard::LinuxFileClipboard
     }
 
+    fn startup_locations(&self) -> Vec<String> {
+        let current = std::env::current_dir().unwrap_or_default();
+        super::linux_startup::locations(std::env::args_os().skip(1), &current)
+    }
+
     fn regional_locale(&self) -> Option<String> {
         ["LC_ALL", "LC_TIME", "LANG"].into_iter().filter_map(|key| std::env::var(key).ok()).find(|value| !value.is_empty())
     }

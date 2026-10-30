@@ -104,6 +104,7 @@ fn main() {
     // The shared native folder icons are ready before any file list is painted.
     // No file operation blocks navigation: the first window does not exist yet.
     let folder_icons = crate::ui::components::icons::prepare_system_folder_icons(config.use_system_icons);
+    let startup_locations = oxyde_lib::platform::platform().startup_locations();
     let asset_source = crate::ui::assets::EmbeddedAssetSource::new();
     gpui_platform::application()
         .with_assets(asset_source)
@@ -136,6 +137,7 @@ fn main() {
             app.update(cx, |this, cx| {
                 this.handle = Some(app.clone());
                 this.operations_panel_view = Some(operations_panel);
+                this.show_only_locations(&startup_locations);
                 if initialize_date_format && !load_failed { this.save_preferences(cx); }
                 this.start_watcher_task(cx);
                 this.reconcile_watchers(cx);

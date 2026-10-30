@@ -369,6 +369,8 @@ pub struct OxydeApp {
     config: oxyde_lib::models::AppConfig,
     config_path: Option<std::path::PathBuf>,
     preferences_load_failed: bool,
+    /// Opened on given locations: the saved tabs stay as they are for the next launch.
+    keeps_saved_workspace: bool,
     preferences_save_generation: u64,
     preferences_save_task: Option<Task<()>>,
 }
@@ -568,6 +570,7 @@ impl OxydeApp {
             config,
             config_path,
             preferences_load_failed: load_failed,
+            keeps_saved_workspace: false,
             preferences_save_generation: 0,
             preferences_save_task: None,
         }
