@@ -92,7 +92,7 @@ fn legacy_records_without_receipts_do_not_invent_successes() {
 #[test]
 fn real_copy_records_files_directories_and_conflict_skips() {
     use std::sync::{Arc, Mutex};
-    let temp = tempfile::tempdir_in(std::env::current_dir().unwrap().join("target")).unwrap();
+    let temp = tempfile::tempdir().unwrap();
     let source = temp.path().join("source");
     let target = temp.path().join("target");
     std::fs::create_dir(&source).unwrap();
@@ -128,7 +128,7 @@ fn real_copy_records_files_directories_and_conflict_skips() {
 #[test]
 fn real_move_records_directory_completion_after_removal() {
     use std::sync::{Arc, Mutex};
-    let temp = tempfile::tempdir_in(std::env::current_dir().unwrap().join("target")).unwrap();
+    let temp = tempfile::tempdir().unwrap();
     let source = temp.path().join("folder");
     let target = temp.path().join("target");
     std::fs::create_dir(&source).unwrap();

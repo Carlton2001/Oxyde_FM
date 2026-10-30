@@ -41,7 +41,7 @@ mod speed_history_tests;
 
 #[test]
 fn cancelled_second_file_is_interrupted_after_staging_cleanup_not_partial() {
-    let temp = tempfile::tempdir_in(std::env::current_dir().unwrap().join("target")).unwrap();
+    let temp = tempfile::tempdir().unwrap();
     let source = temp.path().join("source");
     let target = temp.path().join("target");
     std::fs::create_dir(&source).unwrap();
