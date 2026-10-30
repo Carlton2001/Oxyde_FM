@@ -907,6 +907,21 @@ impl WaylandWindowStatePtr {
         self.state.borrow().surface.clone()
     }
 
+    /// Oxyde: the window a popup belongs to, or this window if it is not a popup.
+    pub fn popup_root(&self) -> Self {
+        let mut window = self.clone();
+        loop {
+            let parent = match window.state.borrow().surface_state {
+                WaylandSurfaceState::Popup(_) => window.state.borrow().parent.clone(),
+                _ => None,
+            };
+            match parent {
+                Some(parent) => window = parent,
+                None => return window,
+            }
+        }
+    }
+
     pub fn toplevel(&self) -> Option<xdg_toplevel::XdgToplevel> {
         self.state.borrow().surface_state.toplevel().cloned()
     }

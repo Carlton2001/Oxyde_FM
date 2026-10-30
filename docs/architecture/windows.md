@@ -25,6 +25,10 @@ Un identifiant réutilise la fenêtre existante ; une demande en attente est rem
 
 Les appels Win32 passent par `Platform`. Placement et activation susceptibles de rappeler GPUI sont différés et regroupés, jamais synchrones pendant un rendu ou `Window::update`. Créer près du propriétaire pour conserver un DPI initial cohérent.
 
+### Fenêtres possédées
+
+Sous Windows, Propriétés et les dialogues (`set_window_owner`) restent au-dessus de la fenêtre principale, sans entrée dans la barre des tâches ; Recherche avancée, Doublons, Opérations, leur liste de fichiers et le Viewer détaché sont indépendants. Linux suit le même partage : `WindowKind::Floating` pose le parent via `xdg_toplevel.set_parent`. Wayland ne peut pas retirer une fenêtre de la barre des tâches : cela reste au choix du bureau. Une fenêtre ouverte depuis un menu prend pour parent la fenêtre du menu, le popup gardant le clavier jusqu'à sa fermeture.
+
 ### Menus sous Wayland
 
 `popup/wayland.rs` traduit les règles de placement ci-dessus en `xdg_positioner` ; le compositeur retourne ou glisse le menu, et sa réponse donne sa position, d'où `owner_point` et `row_bounds` (`Window::popup_offset`, ajouté à la copie de GPUI). Mutter et KWin retournent l'ancre et la gravité, pas le décalage : `flip_axis` obtient donc les deux côtés du rectangle d'ancrage, pour garder le même écart une fois retourné. Ce rectangle doit rester dans la fenêtre parente : à moins d'une marge de son bord, l'écart d'un menu retourné grandit d'au plus cette marge. Un côté d'ouverture ne change pas sur une surface ouverte : elle est remplacée. La première image est vide, car une surface doit avoir un tampon avant de prendre la taille de son contenu ; seul le cadre visible reçoit le pointeur, pas les marges d'ombre.

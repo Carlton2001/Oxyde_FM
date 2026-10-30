@@ -1189,7 +1189,15 @@ impl LinuxClient for WaylandClient {
                 });
                 (Some(parent), popup_grab.flatten())
             }
-            _ => (state.keyboard_focused_window.clone(), None),
+            // Oxyde: a menu keeps the keyboard until it closes, and a popup cannot parent a
+            // toplevel: the window it opens would otherwise lose its parent.
+            _ => (
+                state
+                    .keyboard_focused_window
+                    .as_ref()
+                    .map(|window| window.popup_root()),
+                None,
+            ),
         };
 
         let target_output = params.display_id.and_then(|display_id| {
