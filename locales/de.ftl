@@ -278,6 +278,7 @@ sidebar-drives = Laufwerke
 sidebar-locations = ORTE
 
 sidebar-network = Netzwerk
+sidebar-linux = Linux
 
 sidebar-trash = Papierkorb
 sidebar-home = Persönlicher Ordner

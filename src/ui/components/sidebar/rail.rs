@@ -85,6 +85,12 @@ pub(super) fn render_sidebar_rail(
                 Some(drive.path.chars().next().unwrap_or('/').to_string()),
             ),
             SidebarItem::OneDrive { item } => (item.path.clone(), item.name.clone(), Some("icons/cloudy.svg"), None),
+            SidebarItem::Linux { .. } => (
+                oxyde_lib::platform::WSL_ROOT.to_string(),
+                cx.i18n().text(Message::SidebarLinux).to_string(),
+                Some("icons/box.svg"),
+                None,
+            ),
             SidebarItem::Pinned { item }
                 if item.path == "__network_vincinity__" || item.path == "trash://" || item.name.is_empty() =>
             {
@@ -171,6 +177,7 @@ pub(super) fn render_sidebar_rail(
                         oxyde_lib::platform::platform().volumes().actions(drive),
                         drive.drive_type == "remote",
                     ),
+                    SidebarItem::Linux { .. } => super::menus::linux_context_menu(cx.i18n(), menu.clone()),
                     _ => super::menus::location_context_menu(
                         cx.i18n(),
                         menu.clone(),

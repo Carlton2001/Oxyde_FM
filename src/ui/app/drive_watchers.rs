@@ -437,6 +437,8 @@ impl OxydeApp {
         self.watcher_pending_listings.retain(|id| tab_ids.contains(id));
         needed.extend(self.state.expanded_paths.iter().cloned());
         needed.extend(self.state.drives.iter().map(|drive| drive.path.clone()));
+        // Not a directory: only its distributions can be watched.
+        needed.remove(oxyde_lib::platform::WSL_ROOT);
         let wanted: HashMap<_, _> = needed
             .into_iter()
             .map(|path| {

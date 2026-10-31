@@ -208,7 +208,13 @@ fn drive_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String, action
 }
 
 fn directory_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
-    let mut items = vec![
+    let mut items = open_items(i18n, h.clone(), path.clone());
+    items.extend(sidebar_tree_actions(i18n, h, path, true));
+    items
+}
+
+fn open_items(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {
+    vec![
         DropdownItem {
             label: i18n.text(Message::Open).to_string(),
             icon: Some(IconName::ExternalLink),
@@ -249,9 +255,7 @@ fn directory_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) ->
             }),
             on_hover: None,
         },
-    ];
-    items.extend(sidebar_tree_actions(i18n, h, path, true));
-    items
+    ]
 }
 
 fn sidebar_tree_actions(
@@ -364,6 +368,11 @@ pub(super) fn drive_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String,
     let items = super::super::network::insert_after_open(drive_context_menu_raw(i18n, h.clone(), path.clone(), releases), actions, i18n);
     let items = super::super::with_terminal_action(items, h, &path, i18n);
     super::super::context_menu_sections(items, i18n)
+}
+
+/// The parent of the distributions is no folder: it has no properties or shell menu.
+pub(super) fn linux_context_menu(i18n: &I18n, h: Entity<OxydeApp>) -> Vec<DropdownItem> {
+    super::super::context_menu_sections(open_items(i18n, h, oxyde_lib::platform::WSL_ROOT.to_string()), i18n)
 }
 
 pub(super) fn directory_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownItem> {

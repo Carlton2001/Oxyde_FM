@@ -278,6 +278,7 @@ sidebar-drives = Unidades
 sidebar-locations = UBICACIONES
 
 sidebar-network = Red
+sidebar-linux = Linux
 
 sidebar-trash = Papelera
 sidebar-home = Carpeta personal

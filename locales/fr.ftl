@@ -162,6 +162,7 @@ sidebar-quick-access = Accès rapide
 sidebar-drives = LECTEURS
 sidebar-locations = EMPLACEMENTS
 sidebar-network = Réseau
+sidebar-linux = Linux
 sidebar-trash = Corbeille
 sidebar-home = Dossier personnel
 size-tiny = Minuscule (< 10 Ko)

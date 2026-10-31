@@ -278,6 +278,7 @@ sidebar-drives = Unità
 sidebar-locations = POSIZIONI
 
 sidebar-network = Rete
+sidebar-linux = Linux
 
 sidebar-trash = Cestino
 sidebar-home = Cartella home

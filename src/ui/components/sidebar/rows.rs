@@ -321,6 +321,10 @@ pub(super) fn render_sidebar_rows(
                 super::volume_row::render(item, volume, row_w, show_tooltips, mounting, h, theme, cx)
             }
 
+            SidebarItem::Linux { is_expanded } => {
+                super::linux_row::render(*is_expanded, row_w, show_tooltips, sel.as_deref(), h, theme, cx)
+            }
+
             // ── Directory item ─────────────────────────────
             SidebarItem::Directory { node, depth, is_expanded } => {
                 let path       = node.path.clone();

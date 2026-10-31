@@ -100,13 +100,20 @@ impl OxydeApp {
         let request = self.quick_access_request;
         cx.spawn(async move |this, cx| {
             let result =
-                tokio::task::spawn_blocking(|| (oxyde_lib::commands::system::get_quick_access_items(), oxyde_lib::platform::platform().onedrive_folders(), oxyde_lib::platform::platform().onedrive_installed()))
+                tokio::task::spawn_blocking(|| (oxyde_lib::commands::system::get_quick_access_items(), oxyde_lib::platform::platform().onedrive_folders(), oxyde_lib::platform::platform().onedrive_installed(), oxyde_lib::platform::platform().wsl_distributions()))
                     .await;
             let _ = this.update(cx, |this, cx| {
                 if this.quick_access_request != request {
                     return;
                 }
-                let result = result.map(|(items, roots, installed)| {
+                let result = result.map(|(items, roots, installed, distributions)| {
+                    let wsl_root = oxyde_lib::platform::WSL_ROOT;
+                    let known = this.state.sidebar_nodes.get(wsl_root).map(Vec::as_slice).unwrap_or_default();
+                    if !known.iter().map(|node| &node.path).eq(distributions.iter().map(|node| &node.path)) {
+                        this.state.sidebar_nodes.insert(wsl_root.to_string(), distributions);
+                        this.state.refresh_sidebar();
+                        cx.notify();
+                    }
                     if this.onedrive_installed != installed {
                         this.onedrive_installed = installed;
                         cx.notify();

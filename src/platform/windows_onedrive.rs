@@ -5,11 +5,11 @@ use windows::Win32::System::Registry::{
     HKEY, HKEY_CURRENT_USER, KEY_READ, REG_SZ, REG_VALUE_TYPE,
 };
 
-struct Key(HKEY);
+pub(super) struct Key(pub(super) HKEY);
 impl Drop for Key {
     fn drop(&mut self) { unsafe { let _ = RegCloseKey(self.0); } }
 }
-fn open(parent: HKEY, name: &str) -> Option<Key> {
+pub(super) fn open(parent: HKEY, name: &str) -> Option<Key> {
     let wide: Vec<u16> = name.encode_utf16().chain(Some(0)).collect();
     let mut key = HKEY::default();
     unsafe {
@@ -17,7 +17,22 @@ fn open(parent: HKEY, name: &str) -> Option<Key> {
             .then_some(Key(key))
     }
 }
-fn string(key: HKEY, name: PCWSTR) -> Option<String> {
+pub(super) fn subkey_names(key: HKEY) -> Vec<String> {
+    let mut names = Vec::new();
+    for index in 0..128 {
+        let mut name = [0u16; 256];
+        let mut len = name.len() as u32;
+        unsafe {
+            if RegEnumKeyExW(key, index, Some(windows::core::PWSTR(name.as_mut_ptr())),
+                &mut len, None, None, None, None).0 != 0 {
+                break;
+            }
+        }
+        if let Ok(name) = String::from_utf16(&name[..len as usize]) { names.push(name); }
+    }
+    names
+}
+pub(super) fn string(key: HKEY, name: PCWSTR) -> Option<String> {
     let mut data = [0u16; 32768];
     let mut bytes = (data.len() * 2) as u32;
     let mut kind = REG_VALUE_TYPE::default();
@@ -43,16 +58,7 @@ pub(super) fn folders() -> Vec<QuickAccessItem> {
         return Vec::new();
     };
     let mut roots = Vec::new();
-    for index in 0..128 {
-        let mut name = [0u16; 256];
-        let mut len = name.len() as u32;
-        unsafe {
-            if RegEnumKeyExW(accounts.0, index, Some(windows::core::PWSTR(name.as_mut_ptr())),
-                &mut len, None, None, None, None).0 != 0 {
-                break;
-            }
-        }
-        let Ok(name) = String::from_utf16(&name[..len as usize]) else { continue };
+    for name in subkey_names(accounts.0) {
         let Some(account) = open(accounts.0, &name) else { continue };
         let Some(path) = string(account.0, w!("UserFolder")) else { continue };
         if !std::path::Path::new(&path).is_absolute() || !std::path::Path::new(&path).is_dir() {

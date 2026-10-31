@@ -57,6 +57,9 @@ pub(super) fn render_sidebar_tree(
             SidebarItem::Pinned { item } | SidebarItem::OneDrive { item } => {
                 measure(pinned_display_name(item, _cx.i18n()).to_string()) + logical(60.0)
             }
+            SidebarItem::Linux { .. } => {
+                measure(_cx.i18n().text(crate::ui::i18n::Message::SidebarLinux).to_string()) + logical(60.0)
+            }
             SidebarItem::Drive { drive, .. } => {
                 measure(crate::ui::format::drive_name(drive, _cx.i18n())) + logical(60.0)
             }

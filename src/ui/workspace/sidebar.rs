@@ -39,6 +39,14 @@ impl WorkspaceState {
         }
 
         new_items.push(SidebarItem::Header(Message::SidebarLocations));
+        let wsl_root = oxyde_lib::platform::WSL_ROOT;
+        if self.sidebar_nodes.get(wsl_root).is_some_and(|nodes| !nodes.is_empty()) {
+            let is_expanded = self.expanded_paths.contains(wsl_root);
+            new_items.push(SidebarItem::Linux { is_expanded });
+            if is_expanded {
+                self.populate_subdir(wsl_root, 1, &mut new_items);
+            }
+        }
         new_items.push(SidebarItem::Pinned {
             item: QuickAccessItem {
                 name: "Réseau".to_string(),
@@ -100,3 +108,7 @@ impl WorkspaceState {
 #[cfg(test)]
 #[path = "tests/onedrive.rs"]
 mod onedrive_tests;
+
+#[cfg(test)]
+#[path = "tests/linux.rs"]
+mod linux_tests;

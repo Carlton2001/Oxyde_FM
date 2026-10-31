@@ -122,6 +122,8 @@ impl OxydeApp {
                 cx.i18n().text(Message::SidebarNetwork).to_string()
             } else if tab_data.path == "trash://" {
                 cx.i18n().text(Message::SidebarTrash).to_string()
+            } else if tab_data.path == oxyde_lib::platform::WSL_ROOT {
+                cx.i18n().text(Message::SidebarLinux).to_string()
             } else if let Some(name) = drive_name {
                 name
             } else if is_root {
@@ -153,6 +155,7 @@ impl OxydeApp {
                 "viewer://" => TabIcon::Svg("icons/eye.svg"),
                 "__network_vincinity__" => TabIcon::Svg("icons/globe.svg"),
                 "trash://" => TabIcon::Svg("icons/trash-sidebar.svg"),
+                oxyde_lib::platform::WSL_ROOT => TabIcon::Svg("icons/box.svg"),
                 _ => {
                     if let Some(drive) = self.state.drives.iter().find(|drive| {
                         crate::ui::components::sidebar::sidebar_paths_equal(&drive.path, &tab_data.path)

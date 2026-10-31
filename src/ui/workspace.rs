@@ -105,6 +105,8 @@ pub enum SortDirection {
 #[derive(Clone, Debug)]
 pub enum SidebarItem {
     OneDrive { item: QuickAccessItem },
+    /// Parent of the WSL distributions, whose rows are ordinary directories.
+    Linux { is_expanded: bool },
     Header(Message),
     Pinned {
         item: QuickAccessItem,

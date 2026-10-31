@@ -48,7 +48,8 @@ fn special_directory(path: &str) -> bool {
     if path.ends_with(':') || path.starts_with("::{") || path.starts_with('?') {
         return true;
     }
-    if path.starts_with("\\\\") && path[2..].split('\\').count() <= 2 {
+    // Asking the Shell for a distribution's icon would start it.
+    if path.starts_with("\\\\") && path[2..].split('\\').count() <= 2 && !super::is_wsl_path(path) {
         return true;
     }
     let lower = path.to_lowercase();

@@ -156,6 +156,7 @@ sidebar-quick-access = Quick access
 sidebar-drives = DRIVES
 sidebar-locations = LOCATIONS
 sidebar-network = Network
+sidebar-linux = Linux
 sidebar-trash = Trash
 sidebar-home = Home
 size-tiny = Tiny (< 10 KB)

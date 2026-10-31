@@ -143,6 +143,12 @@ le nœud éjecté et l'heure de la demande, et ne garde `System` que s'il est se
   lecteurs, après les montés, icône et libellé atténués, infobulle « format · taille ».
   Clic gauche : montage en arrière-plan (`mount_volume`), puis navigation vers le chemin
   obtenu. Curseur inchangé, pas de menu contextuel, absents du rail replié.
+- Distributions WSL (Windows) : rangée « Linux » (`SidebarItem::Linux`, icône `box`) au-dessus
+  de Réseau, absente sans distribution. `wsl_distributions` lit le registre
+  `Lxss` : atteindre `\\wsl.localhost\<nom>` démarre la distribution, donc ni liste ni
+  icône ne touchent ce partage avant une action de l'utilisateur. `\\wsl.localhost` n'est
+  pas énumérable : `list_network_shares` répond depuis le registre et il n'est pas
+  surveillé. « Tout développer » n'entre pas dans `/proc`, `/sys`, `/dev`, `/run`, `/mnt`.
 - Menu : « Démonter » (icône `eject`) si `actions.unmount`, « Éjecter » (`unplug`) si
   `actions.eject`. `release_drive` remplace `eject_usb_drive` pour les deux : les
   surveillances sont relâchées avant l'appel, sinon Linux répond `Busy` ; une

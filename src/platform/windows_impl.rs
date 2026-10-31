@@ -67,6 +67,7 @@ impl Platform for WindowsPlatform {
     }
     fn onedrive_installed(&self) -> bool { super::windows_onedrive::installed() }
     fn onedrive_folders(&self) -> Vec<crate::models::QuickAccessItem> { super::windows_onedrive::folders() }
+    fn wsl_distributions(&self) -> Vec<crate::models::SidebarNode> { super::windows_wsl::distributions() }
     fn updates_itself(&self) -> bool { true }
     fn download(&self, url: &str, limit: usize) -> std::io::Result<Vec<u8>> { super::windows_download::download(url, limit) }
     fn office_search_text(&self, path: &std::path::Path, checkpoint: &dyn Fn() -> std::io::Result<()>) -> std::io::Result<String> {
@@ -399,6 +400,9 @@ impl Platform for WindowsPlatform {
         &super::windows_volumes::WindowsVolumes
     }
     fn list_network_shares(&self, server: &str) -> Result<Vec<crate::models::FileEntry>, String> {
+        if server.eq_ignore_ascii_case(super::WSL_ROOT) {
+            return Ok(super::windows_wsl::entries());
+        }
         super::network::list_network_entries(Some(server.to_string())).map_err(|error| error.to_string())
     }
     fn map_network_drive(&self, letter: String, path: String, reconnect: bool, username: Option<String>, password: Option<String>) -> Result<(), String> {
@@ -1221,6 +1225,13 @@ fn bulk_expand_excluded(
     if matches!(name.as_str(), "$recycle.bin" | "system volume information") {
         return true;
     }
+    // Kernel pseudo-files, and the Windows drives under /mnt.
+    if super::is_wsl_path(path)
+        && path[super::WSL_ROOT.len()..].split('\\').filter(|part| !part.is_empty()).count() == 2
+        && matches!(name.as_str(), "proc" | "sys" | "dev" | "run" | "mnt")
+    {
+        return true;
+    }
 
     // Avoid recursively opening OS-managed branches on the Windows system drive.
     let Some(system_drive_root) = system_drive_root else {
@@ -1245,6 +1256,14 @@ fn bulk_expand_excluded(
 #[cfg(test)]
 mod bulk_expand_tests {
     use super::bulk_expand_excluded;
+
+    #[test]
+    fn bulk_expansion_stays_out_of_wsl_pseudo_file_systems() {
+        assert!(bulk_expand_excluded(r"\\wsl.localhost\Ubuntu\proc", "proc", None));
+        assert!(bulk_expand_excluded(r"\\WSL.localhost\Ubuntu\mnt", "mnt", None));
+        assert!(!bulk_expand_excluded(r"\\wsl.localhost\Ubuntu\home\mnt", "mnt", None));
+        assert!(!bulk_expand_excluded(r"\\server\share\proc", "proc", None));
+    }
     use std::path::Path;
     #[test]
     fn protected_branches_are_limited_to_the_system_drive() {

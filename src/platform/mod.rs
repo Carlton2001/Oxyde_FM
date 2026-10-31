@@ -123,6 +123,14 @@ impl ShellDeleteOutcome {
     }
 }
 
+/// Parent of the WSL distributions, which Explorer calls "Linux".
+pub const WSL_ROOT: &str = r"\\wsl.localhost";
+
+pub fn is_wsl_path(path: &str) -> bool {
+    path.get(..WSL_ROOT.len()).is_some_and(|root| root.eq_ignore_ascii_case(WSL_ROOT))
+        && path[WSL_ROOT.len()..].chars().next().is_none_or(|next| next == '\\')
+}
+
 /// Abstraction des opérations spécifiques à l'OS.
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
@@ -175,6 +183,8 @@ pub trait Platform: Send + Sync {
     /// Available OneDrive sync roots configured for the current user.
     fn onedrive_installed(&self) -> bool { false }
     fn onedrive_folders(&self) -> Vec<crate::models::QuickAccessItem> { Vec::new() }
+    /// Registered WSL distributions, read without starting any of them. Blocking.
+    fn wsl_distributions(&self) -> Vec<crate::models::SidebarNode> { Vec::new() }
     fn show_startup_error(&self, _title: &str, message: &str) { eprintln!("{message}"); }
     /// Keeps GPUs without a screen asleep; returns what it disabled. Changes the process
     /// environment: call it while the process has a single thread.
@@ -982,6 +992,8 @@ mod windows_icon_source;
 
 #[cfg(target_os = "windows")]
 mod windows_onedrive;
+#[cfg(target_os = "windows")]
+mod windows_wsl;
 #[cfg(target_os = "windows")]
 mod windows_download;
 #[cfg(target_os = "windows")]

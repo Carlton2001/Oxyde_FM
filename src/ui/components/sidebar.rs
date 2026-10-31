@@ -1,3 +1,4 @@
+mod linux_row;
 mod menus;
 mod pinned;
 mod rail;
