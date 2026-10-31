@@ -1,236 +1,67 @@
 # Volumes
 
-**Statut : pilote terminé** (étapes 1 à 7, bilan ci-dessous) ; suite Windows passée. Ce document est le contrat du domaine.
-
-Le pilote sort les volumes du trait `Platform` dans un trait de domaine et livre, sous
-Linux, l'équivalent de Nautilus : partitions montées et non montées, montage au clic,
-démontage et éjection avec authentification, rafraîchissement par signaux. Il mesure le
-coût d'une migration progressive de `Platform` par domaine avant de l'appliquer ailleurs. **Windows garde un comportement identique** : son code est
-déplacé, pas réécrit.
-
-## Périmètre
-
-| Dans le pilote | Hors pilote |
-| --- | --- |
-| `list_drives`, `list_drive_roots`, `mount_points`, `watch_drive_changes`, `eject_drive`, `is_ssd`, `physical_disk_id` | Lecteurs réseau (`map_network_drive`, `is_network_path`…) : futur domaine Réseau |
-| `mounted_disk_images`, `mount_disk_image`, `unmount_disk_image` (déplacés ; Linux refuse toujours) | `install_disk_image_autoplay_handler` : intégration de fenêtre, reste dans `Platform` |
-| Nouveau : volumes non montés, monter, démonter | Politique de corbeille par lecteur (`trash_settings`) : inchangée |
+Volumes live in a domain trait rather than `Platform`, and on Linux match Nautilus: mounted and unmounted partitions, mount on click, unmount and eject with authentication, refresh by signals. Network drives (`map_network_drive`, `is_network_path`…), `install_disk_image_autoplay_handler` (window integration, stays in `Platform`) and per-drive trash policy are separate.
 
 ## Interface
 
-`Platform` expose `fn volumes(&self) -> &dyn Volumes`, défini dans `src/platform/volumes.rs`,
-implémenté par `windows_volumes.rs` et `linux_volumes.rs`. Interface visée (les méthodes
-nouvelles arrivent aux étapes 4 et 5) :
+`Platform` exposes `fn volumes(&self) -> &dyn Volumes`, defined in `src/platform/volumes.rs`, implemented by `windows_volumes.rs` and `linux_volumes.rs`:
 
 ```rust
 pub trait Volumes: Send + Sync {
-    fn list(&self, skip_hardware_info: bool) -> Vec<DriveInfo>; // ex-list_drives
-    fn roots(&self) -> Vec<DriveInfo> { self.list(true) }       // ex-list_drive_roots
+    fn list(&self, skip_hardware_info: bool) -> Vec<DriveInfo>;
+    fn roots(&self) -> Vec<DriveInfo> { self.list(true) }
     fn mount_points(&self) -> Vec<String> { Vec::new() }
-    fn watch(&self, revision: Arc<AtomicU64>) -> Result<Option<Box<dyn Send>>, String>; // ex-watch_drive_changes
+    fn watch(&self, revision: Arc<AtomicU64>) -> Result<Option<Box<dyn Send>>, String>;
     fn unmounted(&self) -> Vec<UnmountedVolume> { Vec::new() }
-    fn actions(&self, drive: &DriveInfo) -> DriveActions;         // pur, sans appel système
-    fn mount(&self, id: &str) -> Result<String, VolumeError>;     // chemin monté
+    fn actions(&self, drive: &DriveInfo) -> DriveActions;         // pure, no system call
+    fn mount(&self, id: &str) -> Result<String, VolumeError>;     // mounted path
     fn unmount(&self, path: &str) -> Result<(), VolumeError>;
-    fn eject(&self, path: &str) -> Result<(), VolumeError>;       // ex-eject_drive
+    fn eject(&self, path: &str) -> Result<(), VolumeError>;
     fn is_ssd(&self, path: &Path) -> bool;
     fn physical_disk_id(&self, path: &Path) -> u64;
-    // + les trois méthodes d'images disque, inchangées
+    // + the three disk image methods
 }
 ```
 
-- `DriveInfo` reste identifié par son chemin. `file_system` donne le format affiché dans les
-  Propriétés (NTFS, FAT32, exFAT, ext4…) : `GetVolumeInformationW` sous Windows, `IdType`
-  et `IdVersion` d'UDisks2 sous Linux, rien pour un montage FUSE.
-- `actions(drive) -> DriveActions { unmount, eject }` décide du menu à partir du lecteur
-  listé, sans champ de plus dans `DriveInfo` : l'implémentation par défaut, celle de
-  Windows, donne `eject = is_usb()` et `unmount = false`, soit le menu actuel, y compris
-  quand le type USB n'arrive qu'avec les détails matériels. Linux suit la barre latérale
-  GTK : un lecteur amovible ou optique s'éjecte, un autre volume se démonte ; ni `/`, ni
-  les montages réseau, ni le repli sans UDisks2 n'offrent d'action.
-- `UnmountedVolume { id, label, size, removable, file_system }` forme une liste séparée dans
-  l'état (`unmounted_volumes`) ; Windows la renvoie vide. Sous Linux, `id` est l'objet bloc
-  UDisks2 ; `mount` refuse tout autre chemin D-Bus.
-- `VolumeError` distingue `Cancelled` (authentification annulée : aucun message), `NotAuthorized`,
-  `Busy(applications)` (fichiers ouverts), `WindowsHibernated` et `Other(detail)`.
+- `DriveInfo` is identified by its path. `file_system` gives the format shown in Properties (NTFS, FAT32, exFAT, ext4…): `GetVolumeInformationW` on Windows, UDisks2 `IdType` and `IdVersion` on Linux, nothing for a FUSE mount.
+- `actions(drive) -> DriveActions { unmount, eject }` decides the menu from the listed drive. The default, Windows's, gives `eject = is_usb()` and `unmount = false`. Linux follows the GTK sidebar: a removable or optical drive ejects, another volume unmounts; neither `/`, network mounts nor the fallback without UDisks2 offer an action.
+- `UnmountedVolume { id, label, size, removable, file_system }` is a separate list in state (`unmounted_volumes`); Windows returns it empty. On Linux `id` is the UDisks2 block object; `mount` refuses any other D-Bus path.
+- `VolumeError` distinguishes `Cancelled` (authentication canceled: no message), `NotAuthorized`, `Busy(applications)` (open files), `WindowsHibernated` and `Other(detail)`.
 
-## Linux : `src/platform/linux_volumes/`
+Default trait methods let Linux add capabilities with no Windows code.
 
-- `udisks.rs` : client `zbus::blocking` vers `org.freedesktop.UDisks2` (`GetManagedObjects`).
-  `zbus` 5.19 et `rustix` 1.1 sont déjà verrouillés par GPUI : leur déclaration Linux
-  ajoute deux arêtes à `Cargo.lock`, aucun crate ; `blocking-api` active l'API bloquante.
-- `inventory.rs` : fonction pure objets UDisks2 → `DriveInfo`, testée sur fixtures, comme
-  GVfs : `HintIgnore` masque EFI, récupération et swap ; un volume monté n'apparaît que
-  sous `/run/media/$USER/`, `/media/` ou le dossier personnel, sans composant caché, et `/`
-  reste en tête (« Root »), suivi des disques internes, puis amovibles, puis optiques,
-  chacun par nom (tri naturel) ; les volumes non montés suivent le même ordre, internes
-  d'abord. `/boot` disparaît donc. `HintSystem` ne sert pas : UDisks2 le
-  pose sur tout disque interne, `Data` compris. Optique → `cdrom`, amovible ou USB →
-  `removable`. Capacité par `rustix::fs::statvfs` en mode détaillé, sauf montages réseau.
-  `media_type` reste vide : le renseigner basculerait la surveillance du sondage vers
-  inotify (T11).
-- `actions.rs` : `Filesystem.Unmount` avec des options vides, donc
-  `auth.no_user_interaction = false` : polkit fait afficher son dialogue par GNOME s'il le
-  faut, et l'appel bloque le fil de fond jusqu'à la réponse. Éjection = démontage de toutes
-  les partitions montées du disque puis `Drive.Eject` pour un support optique,
-  `Drive.PowerOff` sinon quand le disque le permet (retrait sûr, comme sous Windows),
-  `Drive.Eject` à défaut. Les erreurs UDisks2 `NotAuthorizedDismissed` → `Cancelled`,
-  `NotAuthorized*` → `NotAuthorized`, `DeviceBusy` → `Busy`. `Mount` arrive à l'étape 5.
-- `holders.rs` : sur `Busy`, comme le dialogue « Volume occupé » de GNOME, parcourt `/proc`
-  (dossier courant, racine, exécutable, descripteurs, projections) et nomme les processus
-  de l'utilisateur qui gardent le volume ouvert ; le message ajoute « Ouvert dans :
-  nautilus. ». Nautilus n'est prévenu que des démontages lancés par GNOME : sinon, il
-  garde ses dossiers ouverts.
-- `watch.rs` : un fil attend par `poll` le drapeau `POLLPRI` que le noyau lève sur
-  `/proc/self/mountinfo` à chaque montage ou démontage de l'espace de noms, qu'il vienne
-  d'UDisks2, de `mount` ou d'un client réseau ; chaque changement incrémente la révision.
-  La liste se rafraîchit aussitôt, le sondage passe de 2 s à 30 s et ne reste qu'en repli.
-  Fermer le tube du garde termine le fil. Fonctionne aussi sans UDisks2.
-- `signals.rs` : `InterfacesAdded`/`InterfacesRemoved` d'UDisks2, et ses
-  `PropertiesChanged` sur `Filesystem` ou `Block` (points de montage, libellés), incrémentent
-  la même révision : les volumes branchés sans être montés, que la table des montages
-  ignore, et l'état qu'UDisks2 enregistre après le noyau. Progression des tâches et
-  mesures SMART sont ignorées.
-  Le fil a sa propre connexion ; un itérateur bloquant ne se réveille pas, il s'arrête donc
-  au signal suivant la libération du garde.
-- `inventory::unmounted` : systèmes de fichiers (`IdUsage = filesystem`) sans point de
-  montage, comme le moniteur de volumes GVfs : `HintIgnore` les masque, un disque entier
-  partitionné cède la place à ses partitions, une entrée `/etc/fstab` hors des lieux de
-  l'utilisateur reste masquée sauf `x-gvfs-show` (`x-gvfs-hide` masque toujours). Libellé
-  vide sans étiquette de système de fichiers. `Filesystem.Mount` sans
-  option renvoie le point de montage ; ntfs-3g signale un Windows en veille prolongée ou
-  arrêté en démarrage rapide (`WindowsHibernated`).
-- `disks.rs` : disque physique d'un chemin, pour le rythme des copies, recherches et
-  doublons. Le montage le plus profond qui contient le chemin donne sa source `/dev/…` ;
-  `/sys/dev/block/MAJ:MIN` mène à la partition, son parent au disque, et un volume device
-  mapper (LUKS, LVM) à son premier périphérique sous-jacent. Identifiant
-  `(majeur << 20 | mineur) + 1` du disque, `queue/rotational = 0` pour un SSD, hachage de
-  l'hôte avec le bit de poids fort pour un partage réseau, 0 si inconnu (tmpfs, overlay).
-  Les appelants interrogent chaque fichier : réponse gardée 10 s par système de fichiers
-  (`st_dev`, que le noyau réattribue après un remontage). La copie mémorise ses requêtes
-  par `st_dev` hors Windows, où tout chemin commence par `/`. Les clés USB se déclarent
-  rotatives : elles restent sur la voie prudente.
-- `fallback.rs` : sans UDisks2 (WSL, conteneur), tous les montages non virtuels de
-  `mountinfo` (`mounts.rs`, échappements décodés), sans montage ni éjection ; avec UDisks2,
-  il n'ajoute que les montages réseau.
-- Partages GVfs : voir [Réseau Linux](linux-network.md) ; listés avec Démonter, signalés
-  par le suivi de montages GVfs.
+## Linux: `src/platform/linux_volumes/`
+
+- `udisks.rs`: `zbus::blocking` client to `org.freedesktop.UDisks2` (`GetManagedObjects`). `zbus` and `rustix` are already locked by GPUI.
+- `inventory.rs`: pure function from UDisks2 objects to `DriveInfo`, tested on fixtures, like GVfs. `HintIgnore` hides EFI, recovery and swap. A mounted volume appears only under `/run/media/$USER/`, `/media/` or the home folder, with no hidden component. `/` comes first ("Root"), then internal disks, removable, optical, each by name (natural sort); unmounted volumes follow the same order. `HintSystem` is not used: UDisks2 sets it on every internal disk, `Data` included. Optical → `cdrom`, removable or USB → `removable`. Capacity through `rustix::fs::statvfs` in detailed mode, except network mounts. `media_type` stays empty.
+- `inventory::unmounted`: filesystems (`IdUsage = filesystem`) with no mount point, like GVfs's volume monitor. `HintIgnore` hides them, a whole partitioned disk gives way to its partitions, an `/etc/fstab` entry outside user locations stays hidden except with `x-gvfs-show` (`x-gvfs-hide` always hides). `Filesystem.Mount` with no option returns the mount point; ntfs-3g reports a hibernated or fast-started Windows (`WindowsHibernated`).
+- `actions.rs`: `Filesystem.Unmount` with empty options, so `auth.no_user_interaction = false`: polkit has GNOME show its dialog if needed, and the call blocks the background thread until answered. Eject unmounts all the disk's mounted partitions, then `Drive.Eject` for optical media, otherwise `Drive.PowerOff` when possible (safe removal, as on Windows), else `Drive.Eject`. UDisks2 errors map `NotAuthorizedDismissed` → `Cancelled`, `NotAuthorized*` → `NotAuthorized`, `DeviceBusy` → `Busy`.
+- `holders.rs`: on `Busy`, like GNOME's "Volume busy" dialog, walks `/proc` (working directory, root, executable, descriptors, mappings) and names the user's processes holding the volume; the message adds "Open in: nautilus." Nautilus is only told of unmounts started by GNOME; otherwise it keeps its folders open.
+- `watch.rs`: a thread `poll`s the `POLLPRI` flag the kernel raises on `/proc/self/mountinfo` at each mount or unmount in the namespace, from UDisks2, `mount` or a network client, bumping the revision. The list refreshes at once; polling goes from 2 s to 30 s as a fallback only. Closing the guard's pipe ends the thread. Works without UDisks2.
+- `signals.rs`: UDisks2 `InterfacesAdded`/`InterfacesRemoved` and `PropertiesChanged` on `Filesystem` or `Block` bump the same revision, covering volumes plugged in but unmounted, and state UDisks2 records after the kernel. Job progress and SMART measures are ignored. The thread has its own connection; a blocking iterator does not wake, so it stops at the signal after the guard is released.
+- `disks.rs`: physical disk of a path, for the pace of copies, searches and duplicates. The deepest mount containing the path gives its `/dev/…` source; `/sys/dev/block/MAJ:MIN` leads to the partition, its parent to the disk, and a device mapper volume (LUKS, LVM) to its first underlying device. Id `(major << 20 | minor) + 1`, `queue/rotational = 0` for SSD, host hash with the top bit for a network share, 0 if unknown (tmpfs, overlay). Answers are kept 10 s per filesystem (`st_dev`). USB sticks declare themselves rotational, so they stay on the cautious path.
+- `fallback.rs`: without UDisks2 (WSL, container), all non-virtual `mountinfo` mounts (`mounts.rs`, escapes decoded), with no mount or eject; with UDisks2 it only adds network mounts.
+- GVfs shares: see [Linux network](linux-network.md).
 
 ## Windows
 
-`WindowsVolumes` dans `windows_drives.rs` reçoit les délégations aujourd'hui dans
-`windows_impl.rs`, sans changer de logique. Les appels communs
-(`drive_watchers`, `network`, `disk_images`, `trash_settings`, `commands/system`, `utils`,
-`file_ops/copy`) passent de `platform().list_drives(…)` à `platform().volumes().list(…)`.
+`WindowsVolumes` in `windows_drives.rs` delegates to the existing code. On an ejection veto, `windows_eject_holders.rs` reads event 225 of `Microsoft-Windows-Kernel-PnP` in the System log, the only place Windows names processes, those of other sessions included, and returns `Busy(applications)`. It keeps the ejected node and request time, and retains `System` only if alone. With no readable event, the error stays `Other` with the PnP code.
 
-Sur un veto d'éjection, `windows_eject_holders.rs` lit l'événement 225 de
-`Microsoft-Windows-Kernel-PnP` dans le journal System, seul endroit où Windows nomme les
-processus, y compris ceux des autres sessions, et renvoie `Busy(applications)`. Il retient
-le nœud éjecté et l'heure de la demande, et ne garde `System` que s'il est seul. Sans
-événement lisible, l'erreur reste `Other` avec le code PnP.
+## Interface
 
-## Interface utilisateur
+- Linux names a drive by its label alone ("Root", "Data"), like Nautilus and Dolphin, in the sidebar, tabs, properties and trash list (`format::drive_name`); the tooltip and Properties' Location give the mount point. Without a label, a volume is called "487 GB Volume" from its partition size (`DriveInfo::volume_bytes`, key `unlabeled-volume`), rather than the UUID naming its mount folder; named volumes come first. Windows keeps "Name (C:)".
+- "System properties" exists only on Windows.
+- Unmounted volumes (`SidebarItem::Volume`, `sidebar/volume_row.rs`) sit in the drives section after mounted ones, with dimmed icon and label and a "format · size" tooltip. Left click mounts in the background (`mount_volume`), then navigates to the path. Cursor unchanged, no context menu, absent from the collapsed rail.
+- WSL distributions (Windows): a "Linux" row (`SidebarItem::Linux`, `box` icon) above Network, absent with no distribution. `wsl_distributions` reads the `Lxss` registry: reaching `\\wsl.localhost\<name>` starts the distribution, so neither list nor icon touch that share before a user action. `\\wsl.localhost` cannot be enumerated: `list_network_shares` answers from the registry and it is not watched. "Expand all" does not enter `/proc`, `/sys`, `/dev`, `/run`, `/mnt`.
+- Menu: "Unmount" (`eject` icon) if `actions.unmount`, "Eject" (`unplug`) if `actions.eject`. `release_drive` handles both: watches are released before the call, otherwise Linux answers `Busy`; a canceled authentication shows nothing.
+- Keys `drive-unmount`, `drive-unmount-failed`, `drive-holders`, `drive-mount-failed` and `drive-mount-hibernated` in all five catalogs.
 
-- Linux nomme un lecteur par son seul libellé (« Root », « Data »), comme Nautilus et
-  Dolphin, dans la barre latérale, les onglets, les propriétés et la liste de la
-  corbeille (`format::drive_name`) ; l'infobulle et la ligne « Emplacement » des propriétés
-  donnent le point de montage. Sans étiquette, le volume, monté ou non, s'appelle
-  « Volume de 487 Go » d'après la taille de sa partition (`DriveInfo::volume_bytes`, clé
-  `unlabeled-volume`), comme Nautilus, plutôt que par l'UUID qui nomme son dossier de
-  montage ; les volumes nommés passent avant. Windows garde « Nom (C:) ».
-- « Propriétés système » n'existe que sous Windows : Linux n'a pas de dialogue équivalent.
-- Volumes non montés (`SidebarItem::Volume`, `sidebar/volume_row.rs`) dans la section des
-  lecteurs, après les montés, icône et libellé atténués, infobulle « format · taille ».
-  Clic gauche : montage en arrière-plan (`mount_volume`), puis navigation vers le chemin
-  obtenu. Curseur inchangé, pas de menu contextuel, absents du rail replié.
-- Distributions WSL (Windows) : rangée « Linux » (`SidebarItem::Linux`, icône `box`) au-dessus
-  de Réseau, absente sans distribution. `wsl_distributions` lit le registre
-  `Lxss` : atteindre `\\wsl.localhost\<nom>` démarre la distribution, donc ni liste ni
-  icône ne touchent ce partage avant une action de l'utilisateur. `\\wsl.localhost` n'est
-  pas énumérable : `list_network_shares` répond depuis le registre et il n'est pas
-  surveillé. « Tout développer » n'entre pas dans `/proc`, `/sys`, `/dev`, `/run`, `/mnt`.
-- Menu : « Démonter » (icône `eject`) si `actions.unmount`, « Éjecter » (`unplug`) si
-  `actions.eject`. `release_drive` remplace `eject_usb_drive` pour les deux : les
-  surveillances sont relâchées avant l'appel, sinon Linux répond `Busy` ; une
-  authentification annulée n'affiche rien.
-- Clés `drive-unmount`, `drive-unmount-failed`, `drive-holders`, `drive-mount-failed` et
-  `drive-mount-hibernated` dans les cinq catalogues.
+## Decisions
 
-## Étapes
+- Partitions shown: those Nautilus shows, per UDisks2 hints, including Windows partitions not marked `HintSystem`.
+- `/` is named "Root", as in Dolphin. Linux conventions take priority over Windows ones.
 
-Chaque étape passe `check-linux.sh`, `check-windows.sh` et ses tests ; les étapes 1 et 4,
-qui touchent Windows, passent aussi la suite Windows, sous Windows ou par déclenchement
-manuel de `tests.yml` sur la branche.
+## Pitfalls
 
-1. **Extraire le trait**, déplacements seuls, Linux inchangé. *Fait* : 7 fichiers communs,
-   uniquement les appels ; suite Windows encore à passer.
-2. **Inventaire UDisks2** et repli. *Fait* : aucun fichier commun touché ; Root, `Data` et
-   la clé avec leurs capacités, `/boot` et `/boot/efi` masqués.
-3. **Notifications** à la place du sondage. *Fait* par la table des montages : elle couvre
-   tout ce que la liste affiche ; les signaux UDisks2 rejoignent l'étape 5, la seule à
-   montrer des volumes non montés.
-4. **Démonter et éjecter** avec authentification. *Fait* : fichiers communs touchés
-   `volumes.rs`, `windows_volumes.rs` (type d'erreur), `drive_watchers.rs`, le menu des
-   lecteurs et les catalogues ; suite Windows à passer.
-5. **Volumes non montés** et montage au clic, avec les signaux UDisks2. *Fait* : fichiers
-   communs touchés `volumes.rs` (types), l'état et la barre latérale (`workspace`,
-   `sidebar`), `drive_watchers.rs` et les catalogues ; Windows n'en liste aucun.
-6. *Facultatif* : `is_ssd` (`/sys/block/*/queue/rotational`) et `physical_disk_id` Linux,
-   utilisés par le parallélisme des copies. *Fait* : `disks.rs` (ci-dessous) ; fichiers
-   communs touchés `hardware.rs` (requêtes réservées à Windows) et `file_ops/copy.rs`.
-7. **Bilan** : fichiers communs touchés par étape, décision sur le domaine suivant. *Fait*,
-   voir [Bilan du pilote](#bilan-du-pilote).
-
-**Critère d'arrêt :** si l'étape 1 déborde des appels listés, ou si les étapes 2 à 5 doivent
-retoucher du code commun au-delà de l'interface utilisateur prévue, le pilote s'arrête et
-la suite du portage reste dans la structure actuelle.
-
-## Bilan du pilote
-
-**Résultat.** Les volumes Linux passent d'une lecture brute de `/proc/mounts` au niveau de
-Nautilus : inventaire UDisks2, rafraîchissement immédiat, démontage et éjection avec
-polkit, applications qui bloquent un volume, volumes non montés et montage au clic, noms
-et ordre des gestionnaires Linux, disques physiques et SSD. Le code Linux tient dans
-`linux_volumes/` : environ 1 000 lignes de production et 380 de tests, sans toucher à la
-logique Windows.
-
-**Fichiers communs touchés** (hors `linux_volumes/`, `windows_volumes.rs`, catalogues et
-documentation) :
-
-| Étape | Fichiers communs | Nature |
-| --- | --- | --- |
-| 1. Trait | `platform/mod.rs`, `volumes.rs`, `windows_impl.rs`, `linux_impl.rs`, `commands/system.rs`, `file_ops/copy.rs`, `disk_images.rs`, `drive_watchers.rs`, `network.rs`, `trash_settings/settings.rs`, `utils/mod.rs` | appels seuls, comme prévu |
-| 2. Inventaire | `file_entry.rs` (`file_system`), `windows_drives.rs`, deux tests | champ demandé, affiché sur les deux plateformes |
-| 2 bis. Affichage | `format.rs`, `properties/`, `trash_settings/render.rs`, `tooltip/presentation.rs`, `i18n.rs` | interface |
-| 3. Notifications | `Cargo.toml` | options de `rustix`, aucun crate |
-| 4. Démonter, éjecter | `volumes.rs`, `drive_watchers.rs`, menu des lecteurs, `components/mod.rs`, `i18n.rs` | interface prévue |
-| 5. Non montés | `volumes.rs`, `file_entry.rs` (`volume_bytes`), `windows_drives.rs`, `workspace`, `sidebar/`, `drive_watchers.rs`, onglets, doublons, `i18n.rs` | interface prévue et noms demandés |
-| 6. Disques | `hardware.rs`, `file_ops/copy.rs` | une clé de mémorisation par plateforme |
-
-**Critère d'arrêt.** Non atteint : l'étape 1 est restée aux appels listés ; les étapes
-suivantes n'ont touché le code commun que pour l'interface prévue et deux champs de
-`DriveInfo` demandés pour l'affichage. Côté Windows, seuls changent la ligne « Système de
-fichiers » des Propriétés et le type d'erreur interne de l'éjection.
-
-**Leçons.**
-- Un trait de domaine avec des méthodes par défaut (`mount_points`, `watch`, `actions`,
-  `unmounted`, `mount`, `unmount`) laisse Linux ajouter des capacités sans code Windows.
-- Un dossier par domaine et par plateforme garde les modules sous 300 lignes et testables
-  sur fixtures, sans D-Bus ni sysfs réels.
-- `check-windows.sh` à chaque étape a suffi à garder la compilation Windows ; la suite de
-  tests Windows reste la seule vérification manquante.
-- Pièges rencontrés : une ligne GPUI ne peut pas lire l'application pendant son rendu
-  (l'état passe par la présentation) ; Nautilus garde ses dossiers ouverts quand un autre
-  programme démonte.
-
-**Décision proposée.** Poursuivre l'option B domaine par domaine, quand une fonction Linux
-en a besoin, sur le même modèle : plan court, trait extrait sans changement, puis
-implémentation Linux par étapes testées à la main. Candidats, par utilité immédiate :
-presse-papiers de fichiers (M08, trois méthodes, Ctrl+C/X/V en échec aujourd'hui), accès
-rapide et favoris (T12), corbeille. Le choix revient à l'utilisateur.
-
-## Décisions
-
-- Partitions affichées : celles que montre Nautilus, selon les indications UDisks2, y compris
-  pour les partitions Windows non marquées `HintSystem`.
-- `/` garde le nom « Root », comme dans Dolphin. Les usages Linux priment sur ceux de Windows.
+- A GPUI row cannot read the application during its render: state goes through the presentation.
+- Nautilus keeps its folders open when another program unmounts.

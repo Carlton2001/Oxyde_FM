@@ -1,59 +1,59 @@
-# Opérations de fichiers et historique
+# File operations and history
 
-`FileOperationManager` exécute en arrière-plan ; `OxydeApp` possède l’état d’interface. `components/operations/` sépare notifications, fenêtres, cartes, indicateurs et graphe.
+`FileOperationManager` runs in the background; `OxydeApp` owns interface state. `components/operations/` separates notifications, windows, cards, indicators and graph.
 
-## Présentation et persistance
+## Presentation and persistence
 
-Chaque opération active occupe une notification compacte de progression. Sa fin retire cette ligne et affiche le résultat habituel. Un clic ouvre ou réactive le gestionnaire unique et redimensionnable ; il ne s’ouvre pas automatiquement. Fermer ou masquer le gestionnaire conserve opérations et historique ; la fermeture principale retire ses fenêtres.
+Each active operation has a compact progress notification. Its end removes the line and shows the usual result. A click opens or reactivates the single resizable manager, which never opens automatically. Closing or hiding the manager keeps operations and history; closing the main window removes its windows.
 
-Les opérations actives restent dépliées ; les états finaux sont repliés par défaut. Les détails montrent au plus cinq racines sélectionnées. « Éléments concernés » ouvre une liste virtualisée par opération, avec filtre du chemin complet préparé en arrière-plan et rejet des résultats obsolètes. Les icônes réutilisent `render_file_icon`.
+Active operations stay expanded; final states collapse by default. Details show at most five selected roots. "Affected items" opens a virtualized list per operation, with a full-path filter prepared in the background and stale results rejected. Icons reuse `render_file_icon`.
 
-Le graphe s’affiche uniquement pendant les opérations actives ayant des mesures de débit. Il disparaît dans les états finaux ; la durée et le débit moyen restent visibles dans les détails. Les résumés de la fenêtre principale passent par `operation_counts()`, `list_active_progress()` et `operation_state()` ; ne pas cloner toutes les sources et tous les bilans pour un compteur ou un simple survol.
+The graph shows only during active operations with throughput measures. In final states, duration and average throughput stay in the details. Main window summaries go through `operation_counts()`, `list_active_progress()` and `operation_state()`; do not clone every source and result for a counter or hover.
 
-La liste des opérations reste uniquement en mémoire pendant la session. Aucun historique d’opérations n’est écrit ni restauré au démarrage ; les anciens fichiers `operation_history.json` sont ignorés.
+The operation list stays in memory for the session only. No operation history is written or restored at startup; old `operation_history.json` files are ignored.
 
-## Bilans individuels
+## Per-item results
 
-| État | Signification |
+| State | Meaning |
 | --- | --- |
-| Traité | Résultat conservé confirmé |
-| Non traité / ignoré | Aucun traitement, ou décision d’ignorer |
-| Interrompu | Commencé, sans effet conservé confirmé |
-| Partiellement traité | Effets conservés confirmés : fichier publié ou dossier créé |
-| Inconnu | Preuves insuffisantes, ancien bilan ou parcours virtuel non couvert |
+| Processed | Confirmed kept result |
+| Not processed / skipped | No processing, or a decision to skip |
+| Interrupted | Started, with no confirmed kept effect |
+| Partially processed | Confirmed kept effects: published file or created folder |
+| Unknown | Insufficient proof, old result or uncovered virtual path |
 
-Les reçus réels priment sur la progression. Les transferts suivent les descendants et la suppression de la racine déplacée ; les suppressions suivent la confirmation effective. Les anciens bilans Partiel non discriminants sont chargés comme inconnus, avec versionnement JSON. Une erreur finale ne supprime pas les reçus confirmés.
+Real receipts take priority over progress. Transfers track descendants and removal of the moved root; deletions track actual confirmation. Old non-discriminating Partial results load as unknown, with JSON versioning. A final error does not remove confirmed receipts.
 
-## Contrat Turbo
+## Turbo contract
 
-La préférence fixe le mode initial des six types d’opérations ; le bouton agit sur une seule opération. Elle pilote également les calculs de tailles de dossiers, y compris ceux déjà en cours et ceux des Propriétés ; les boutons des opérations restent indépendants de ces calculs. Turbo ne pilote ni navigation, ni recherche, ni aperçus. Sans Turbo, les threads de travail passent en mode d’arrière-plan Windows.
+The preference sets the initial mode of the six operation types; the button acts on one operation. It also drives folder size calculations, including those in progress and in Properties; operation buttons stay independent of these. Turbo drives neither navigation, search nor previews. Without Turbo, worker threads go to Windows background mode.
 
-Les priorités passent toutes par `apply_thread_priority` / `follow_turbo_priority` (`src/platform/thread_priority.rs`). Chaque transition est absolue — y compris le retour à `THREAD_PRIORITY_NORMAL` — et un état déjà appliqué n’est pas renvoyé au système. `RestoreNormalPriority` rend les threads réutilisés à la priorité normale ; un échec natif inattendu est journalisé. Linux n’applique aucune priorité : baisser celle d’un thread est irréversible sans privilège, et les disques NVMe sans ordonnanceur ignorent celle des entrées-sorties. Sous Linux, Turbo n’agit que par la concurrence.
+All priorities go through `apply_thread_priority` / `follow_turbo_priority` (`src/platform/thread_priority.rs`). Each transition is absolute, including the return to `THREAD_PRIORITY_NORMAL`, and an already applied state is not resent. `RestoreNormalPriority` returns reused threads to normal; an unexpected native failure is logged. Linux applies no priority: lowering a thread's is irreversible without privilege, and NVMe disks without a scheduler ignore I/O priority. On Linux, Turbo acts only through concurrency.
 
-| Opération | Priorité Turbo | Concurrence Turbo | Moment d’application |
+| Operation | Turbo priority | Turbo concurrency | When applied |
 | --- | --- | --- | --- |
-| Copie, déplacement entre volumes | Normale | SSD (sources et destination) : jusqu’à 4 fichiers dès 2 fichiers. Disque rotatif, réseau ou inconnu : jusqu’à 4 seulement si au moins 8 fichiers de moins de 32 Mio en moyenne | Priorité : entre fichiers et pendant la copie. Concurrence : aux frontières de fichiers. |
-| Renommage sur le même volume | Normale | Aucune | Au démarrage de l’opération |
-| Suppression définitive | Haute, dès le démarrage | Jusqu’à 4 éléments sélectionnés ; dans un dossier sélectionné seul, ses sous-dossiers de premier niveau sur jusqu’à 4 workers. Linux : un seul worker sur Btrfs, plus lent en parallèle ([mesures](linux-access.md#bilan)) | Priorité : entre éléments et pendant le parcours. Workers : fixés au démarrage de chaque élément. |
-| Corbeille | Normale | Aucune | Avant chaque lot et aux points de contrôle du Shell, dossiers compris |
-| Compression | Priorité du processus worker | ZIP, 7z, TAR.ZST : [limites](archives.md#compression-et-turbo-sous-windows) | Aux frontières de fichiers ou de blocs ; TAR.ZST au démarrage du flux |
-| Extraction | Priorité du processus worker | Aucune ; le décodage reste monothread | Aux points de contrôle |
-| Tailles des dossiers | Normale | Deux parcours globaux ; sur SSD, jusqu’à 2 workers par parcours sans Turbo et jusqu’à 8 avec Turbo, selon les processeurs logiques disponibles. HDD, réseau ou inconnu : 1 worker par parcours dans les deux modes | Priorité : pendant le parcours. Budget de workers : au démarrage de chaque parcours. |
+| Copy, cross-volume move | Normal | SSD (sources and destination): up to 4 files from 2 files. Rotating disk, network or unknown: up to 4 only with at least 8 files averaging under 32 MiB | Priority: between files and during copy. Concurrency: at file boundaries. |
+| Same-volume rename | Normal | None | At operation start |
+| Permanent deletion | High, from start | Up to 4 selected items; in a single selected folder, its first-level subfolders on up to 4 workers. Linux: one worker on Btrfs, slower in parallel ([details](linux-access.md#turbo-and-parallelism)) | Priority: between items and during traversal. Workers: fixed at each item's start. |
+| Trash | Normal | None | Before each batch and at Shell checkpoints, folders included |
+| Compression | Worker process priority | ZIP, 7z, TAR.ZST: [limits](archives.md#compression-and-turbo-on-windows) | At file or block boundaries; TAR.ZST at stream start |
+| Extraction | Worker process priority | None; decoding stays single-threaded | At checkpoints |
+| Folder sizes | Normal | Two global traversals; on SSD, up to 2 workers per traversal without Turbo and up to 8 with it, by available logical processors. HDD, network or unknown: 1 worker per traversal in both modes | Priority: during traversal. Worker budget: at each traversal's start. |
 
-Le type de stockage vient de `Platform::is_ssd` (pénalité de recherche), interrogé une fois par lecteur ; les chemins `\\?\` sont normalisés. Chaque copie relit sa sortie pour la vérifier : sous Windows, cette lecture attend l’analyse de Defender (15 à 25 ms par fichier mesurés), latence que plusieurs workers recouvrent.
+Storage type comes from `Platform::is_ssd` (seek penalty), queried once per drive; `\\?\` paths are normalized. Each copy rereads its output to verify it: on Windows, this read waits for Defender's scan (15–25 ms per file measured), a latency several workers overlap.
 
-Limites structurelles : le Shell traite la Corbeille de façon séquentielle, TAR n’a rien à compresser, un renommage ne transfère pas de données et un fichier ZIP reste un flux DEFLATE unique. Limites d’implémentation actuelles :
+Structural limits: the Shell handles the Trash sequentially, TAR has nothing to compress, a rename transfers no data and a ZIP file stays one DEFLATE stream. Current implementation limits:
 
-- Suppression d’un dossier en Turbo : le thread appelant énumère le dossier sélectionné et ouvre chaque enfant ; les sous-dossiers de premier niveau, déjà retenus, sont confiés à une file bornée et supprimés en entier par un worker. Le dossier sélectionné est supprimé en dernier. Le point de contrôle de `Platform::remove_operation_tree` est `Fn + Sync` : pause, annulation et priorité s’appliquent dans chaque worker ; un échec arrête les autres à leur prochain point de contrôle. Les fichiers directement dans le dossier sélectionné restent supprimés un à un (déléguer chaque fichier s’est révélé plus lent).
-- Le décodage 7z multithread de lzma-rust2 bufferise des segments LZMA2 entiers sans borne : il reste désactivé.
-- L’extraction ZIP en parallèle demanderait plusieurs flux simultanés dans le protocole du worker.
+- Deleting a folder in Turbo: the calling thread enumerates the selected folder and opens each child; held first-level subfolders go to a bounded queue and are deleted whole by a worker. The selected folder goes last. The `Platform::remove_operation_tree` checkpoint is `Fn + Sync`: pause, cancel and priority apply in each worker, and a failure stops the others at their next checkpoint. Files directly in the selected folder stay deleted one by one (delegating each proved slower).
+- lzma-rust2's multithreaded 7z decoding buffers whole LZMA2 segments without a bound: it stays disabled.
+- Parallel ZIP extraction would need several simultaneous streams in the worker protocol.
 
-## Conflits et intégrité
+## Conflicts and integrity
 
-Le plan réserve toutes les destinations avant le premier effet, y compris entre racines distinctes. L’autorisation de remplacer une destination existante ne permet pas d’écraser une autre source du même lot. Un déplacement sur soi est ignoré ; une copie sur soi choisit un nom libre traduit et le backend garde la publication exclusive.
+The plan reserves all destinations before the first effect, also across roots. Permission to replace an existing destination does not allow overwriting another source of the same batch. A move onto itself is skipped; a copy onto itself picks a free translated name and the backend keeps exclusive publication.
 
-Le dialogue conserve les métadonnées source/cible et les décisions par chemin. Le mode avancé hérite des décisions des dossiers, avec priorité aux exceptions explicites. Au premier choix individuel, les indécis reçoivent le choix contraire ; ce défaut automatique est identifiable et ne se réapplique pas ensuite. Aucun transfert avec conflit ne démarre avant validation complète. Échap annule l’opération en attente.
+The dialog keeps source/target metadata and per-path decisions. Advanced mode inherits folder decisions, with explicit exceptions first. At the first individual choice, undecided items receive the opposite choice; this automatic default is identifiable and does not reapply. No conflicting transfer starts before full validation. Esc cancels the pending operation.
 
-Copier/couper depuis la Corbeille conserve les chemins physiques comme identité et résout les noms via `Platform`. Restaurer reste un parcours distinct. La restauration directe traite les éléments indépendants sans écrasement ni création automatique du parent absent ; ses échecs n’empêchent pas les suivants. La suppression Shell garde ses limites de course par chemin : [sécurité R2](../security/status.md).
+Copy/cut from the Trash keeps physical paths as identity and resolves names through `Platform`. Restore stays a separate path. Direct restore handles independent items without overwriting or creating a missing parent; its failures do not stop the next ones. Shell deletion keeps its path race limits: [security R2](../security/status.md).
 
-Pour mesurer les opérations : [copie](../diagnostics/copy.md) et [suppression](../diagnostics/delete.md). Pour les transferts virtuels : [archives](archives.md).
+To measure operations: [copy](../diagnostics/copy.md), [deletion](../diagnostics/delete.md). For virtual transfers: [archives](archives.md).

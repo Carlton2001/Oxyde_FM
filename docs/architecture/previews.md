@@ -1,430 +1,151 @@
-# Aperçus, miniatures et icônes
+# Previews, thumbnails and icons
 
-Les aperçus de survol restent en mémoire ; les miniatures de grille ont un cache disque distinct. Le chargement, la validation des fichiers et le décodage restent sur les workers.
+Hover previews stay in memory; grid thumbnails have a separate disk cache. Loading, file validation and decoding stay on workers. Linux specifics: [Linux previews](linux-previews.md).
 
-La [recherche Office](search.md#recherche-de-contenu-office) utilise son propre
-mode LPAC d’`oxyde-image-worker`, une admission distincte et une réponse texte
-bornée à 8 Mio. Elle ne réutilise pas les sorties tronquées des aperçus de survol.
+[Office search](search.md#office-content-search) uses its own LPAC mode of `oxyde-image-worker`, a separate admission and a text response bounded to 8 MiB. It does not reuse hover previews' truncated output.
 
-Le démarrage d’un ghost de fichiers ferme immédiatement l’aperçu de survol,
-y compris sa préparation en attente. Les survols restent désactivés pendant
-le glisser-déposer, même lorsqu’aucune cible de dépôt n’est acceptée.
+Starting a file ghost immediately closes the hover preview, pending preparation included. Hovers stay disabled during drag and drop, even when no drop target accepts.
 
-## Survol et présentation
+## Hover and presentation
 
-`components/tooltip/hover.rs` partage une session par fenêtre, panneau et onglet/dossier. Délai initial : 750 ms ; tolérance entre éléments : 300 ms. Sortie, clic, défilement, navigation ou menu ferment la session. Timers annulables et révisions écartent les résultats obsolètes.
+`components/tooltip/hover.rs` shares a session per window, panel and tab/folder. Initial delay: 750 ms; tolerance between items: 300 ms. Leaving, clicking, scrolling, navigating or a menu closes the session. Cancelable timers and revisions discard stale results.
 
-Sans élément survolé, la bulle se masque immédiatement et libère son aperçu.
-La tolérance de 300 ms conserve seulement la session : un nouvel élément de la
-même région évite le délai initial. Un passage direct entre deux éléments garde
-la bulle affichée, sans fermeture intermédiaire.
+With no hovered item, the bubble hides immediately and frees its preview. The 300 ms tolerance only keeps the session: a new item in the same region skips the initial delay. Moving directly between two items keeps the bubble shown.
 
-Au premier survol, la vue et son aperçu sont préparés pendant les 750 ms, sans affichage anticipé. La tâche annulable possède cette vue jusqu’à publication ; quitter l’élément la libère. Les 750 ms sont un minimum : si l’aperçu est encore en cours, la publication attend son contenu (première frame comprise pour une vidéo) ou son erreur définitive. Texte et aperçu apparaissent ensemble, sans étape « Chargement de l’aperçu… ». Ce délai supplémentaire ne concerne pas les remplacements dans une session déjà visible.
+On first hover, the view and its preview are prepared during the 750 ms, with nothing shown early. The cancelable task owns this view until publication; leaving the item frees it. 750 ms is a minimum: if the preview is still running, publication waits for its content (first frame for a video) or definitive error. Text and preview appear together, with no "Loading preview…" step. This extra wait does not apply to replacements in a session already visible.
 
-Un remplacement avec nouvelle génération affiche immédiatement les nouvelles métadonnées et l’ancien aperçu en niveaux de gris à 15 % d’opacité, lorsqu’une image précédente est disponible. L’opacité et les niveaux de gris sont appliqués d’un coup au rendu GPU, sans animation, conversion CPU ni copie des pixels. Les dimensions de cet aperçu temporaire sont conservées pendant l’attente. L’aperçu définitif le remplace après 150 ms de survol stable ; un résultat prêt dans le cache est publié immédiatement après validation de la source. Si des pixels sont déjà présents en RAM, la bulle précédente reste nette pendant cette validation asynchrone afin d’éviter un flash d’atténuation. Cette indication de présence ne lit pas le fichier, ne bloque pas sur le verrou du cache et ne permet jamais de publier des pixels non validés. Si aucune image précédente n’est disponible, la bulle précédente reste visible jusqu’au remplacement. Les vidéos et infobulles sans aperçu changent immédiatement. Une transition atténuée attend le contenu ou l’erreur définitive, sans message de chargement superposé. Hors transition atténuée, « Chargement de l’aperçu… » n’apparaît qu’après une seconde.
+A replacement with a new generation immediately shows the new metadata and the old preview in grayscale at 15% opacity, when a previous image exists. Opacity and grayscale apply at once at GPU rendering, with no animation, CPU conversion or pixel copy. This temporary preview's dimensions are kept during the wait. The final preview replaces it after 150 ms of stable hover; a result ready in cache publishes immediately after source validation. If pixels are already in RAM, the previous bubble stays sharp during this asynchronous validation to avoid a dimming flash. This presence hint does not read the file, block on the cache lock or ever allow publishing unvalidated pixels. With no previous image, the previous bubble stays until replaced. Videos and tooltips without preview change immediately. A dimmed transition waits for content or definitive error, with no overlaid loading message. Outside dimmed transitions, "Loading preview…" appears only after a second.
 
-Les dimensions logiques suivent le zoom : hauteur maximale 12,5 rem pour images/vidéos, 18,75 rem pour PDF, largeur maximale 50 rem. Conserver les proportions et ne pas agrandir les petites sources. L’aperçu prêt fixe la largeur ; le nom y revient à la ligne.
+Logical dimensions follow zoom: max height 12.5 rem for images/videos, 18.75 rem for PDF, max width 50 rem. Keep proportions and do not enlarge small sources. A ready preview sets the width; the name wraps within it.
 
-Le repli intégré ancre le bloc nom/métadonnées au curseur (0,75 rem de décalage, marge de bord 3,125 rem ajustable). L’aperçu apparaît au-dessus sans déplacer ce repère ni réserver de place vide. `tooltip/position.rs` et `placement.rs` portent ces calculs. Les infobulles fixes conservent leur ancre ; transport natif : [fenêtres](windows.md).
+The integrated fallback anchors the name/metadata block at the cursor (0.75 rem offset, adjustable 3.125 rem edge margin). The preview appears above without moving this mark or reserving empty room. `tooltip/position.rs` and `placement.rs` carry these calculations. Fixed tooltips keep their anchor; native transport: [windows](windows.md).
 
 ## Viewer
 
-Le bouton œil de la barre de titre ouvre ou ferme l’unique onglet `viewer://`,
-seul dans son panneau ; son infobulle suit cet état. Les dépôts sur les barres d’onglets refusent toute fusion dans les deux
-sens ; les zones de division déplacent le Viewer avec son propre panneau.
-La session restaure cet onglet sans lancer de listing ni de surveillance sur
-son emplacement interne.
+### Tab and selection
 
-`app/viewer` suit la sélection du dernier onglet explorateur actif et affiche un
-seul fichier : celui du curseur clavier (ou de l’ancre) s’il est sélectionné,
-sinon le premier de la sélection dans l’ordre de la liste. Sur une image ou une
-vidéo, les flèches latérales (ou ← / →) passent au média précédent ou suivant
-du même type dans la liste du panneau source, qui le sélectionne seul et le
-fait défiler en vue ; le Viewer suit alors cette sélection. Sans sélection,
-l’aperçu et le lecteur sont libérés. La préparation des grandes listes se fait
-en arrière-plan ; une révision de source écarte les résultats obsolètes.
+The title bar's eye button opens or closes the single `viewer://` tab, alone in its panel; its tooltip follows this state. Drops on tab bars refuse any merge both ways; split zones move the Viewer with its own panel. The session restores this tab without listing or watching its internal location.
 
-Avant une suppression, `viewer/deletion` bloque la réouverture des chemins
-concernés jusqu’à la fin de l’opération. Le Viewer libère son contenu et attend
-les chargements et rendus déjà engagés avant de confier la suppression au moteur
-d’opérations. La session PDF ferme explicitement son document en arrière-plan,
-même si des références de rendu subsistent. Le worker libère le document avant
-d’acquitter la fermeture, puis quitte ; un délai borné conserve l’arrêt forcé
-comme repli. Les rendus encore actifs gardent leur acquittement jusqu’à la
-libération de leur référence native.
-Une erreur ou une annulation autorise de nouveau l’affichage du fichier conservé.
+`app/viewer` follows the selection of the last active explorer tab and shows one file: the keyboard cursor's (or anchor's) if selected, otherwise the first of the selection in list order. On an image or video, side arrows (or ← / →) go to the previous or next media of the same type in the source panel's list, which selects it alone and scrolls it into view; the Viewer then follows. With no selection, preview and player are freed. Large lists are prepared in the background; a source revision discards stale results.
 
-Le Viewer ouvre le fichier complet (`app/viewer/content`) : image en pleine
-résolution par une session LPAC propre au Viewer (`image_session`, type 2 :
-job de 1 Gio, 30 s, côté jusqu’à 16384 px et 256 Mio de pixels, hors budget
-des infobulles ; démarrée à la création du Viewer, réutilisée environ 35 ms par
-image, libérée dès que le Viewer affiche autre chose ou se ferme), affichée sans agrandissement ; toutes les pages PDF (`viewer/pdf` : une session `pdf-session` du
-self-worker garde le document ouvert, job de 1 Gio et 15 s par page ; seules
-les pages proches de la vue sont rendues, les demandes sorties de la vue sont
-abandonnées, six pages décodées au plus) ; texte entier jusqu’à 512 Mio, chargé
-en mémoire (`viewer/text` : retour à la ligne aux espaces, calculé en arrière-plan
-pour la largeur en colonnes de JetBrains Mono, caractères larges comptés double,
-tabulation de quatre colonnes ; les continuations reprennent l’indentation
-initiale, plafonnée à la moitié de la largeur disponible dans les panneaux étroits.
-Chaque rangée garde sa plage d’octets et sa ligne
-logique ; numéros à gauche, sans répétition sur les lignes repliées. Syntect
-détecte le langage par nom ou extension, puis par première ligne (shebang ou
-mode line) seulement si aucun type n’a été trouvé ; pas de détection générale
-sur le corps du texte. Les `.txt` restent du texte brut. L’analyse est hors UI ;
-ses catégories utilisent les couleurs sémantiques du thème. Coloration limitée
-aux syntaxes réellement embarquées ; XAML utilise la grammaire XML (coloration
-lexicale, sans interprétation WPF). `ui/file_types.rs` centralise les extensions,
-suffixes composés et noms de fichiers Code pour les familles, icônes et aperçus.
-Son inventaire inclut les formats Oxyde existants et ceux du pack Syntect 5.3,
-sans charger les grammaires sur le chemin de rendu des listes. Les familles
-spécialisées conservent leur priorité, notamment SVG en Images et MD en Documents.
-Un fichier classé Code n’a donc pas nécessairement une grammaire embarquée.
-SCSS et PowerShell ont des grammaires supplémentaires épinglées dans
-`vendor/syntaxes/README.md`, avec Sass comme dépendance de SCSS. Les notices MIT
-sont conservées et distribuées dans `licenses/syntaxes/`. Syntect `yaml-load`
-lit uniquement les grammaires embarquées, une fois hors UI. PowerShell couvre
-`.ps1`, `.psm1` et `.psd1`, dans la famille Scripts avec Shell/Batch. Les variables
-utilisent la couleur sémantique accent, y compris dans les blocs Markdown.
-Coloration limitée
-aux fichiers de 2 Mio, 200 000 plages ; arrêt avant une ligne de plus de 16 Kio
-ou entre deux lignes après 200 ms d’analyse, suite en texte brut. Ce délai
-est coopératif et ne borne pas une analyse de ligne en cours ni l’initialisation
-des syntaxes) ; documents Word/ODF
-Office Open XML et OpenDocument complets (`office-document` dans le worker
-Office : Word/Writer, chaque feuille Excel/Calc, chaque diapositive
-PowerPoint/Impress ; lignes `balise<TAB>texte`). Les valeurs de tableur sont
-affichées telles que stockées, sans formats ni formules. Les longs contenus sont
-virtualisés par `list` avec l’ascenseur partagé ; documents et cadres de
-pages PDF sont mesurés d’emblée (seules les pages proches de la vue sont
-décodées), donc l’ascenseur garde sa taille. Les formats binaires anciens
-(doc, xls, ppt) gardent l’aperçu existant. Le texte utilise le fond `sidebar`
-comme ses aperçus ; les autres contenus reprennent celui des panneaux actifs.
-Ces parcours sont propres au Viewer : les aperçus des infobulles gardent
-leurs modes et limites.
-Les images utilisent tout le cadre sans marge. Les listes texte/code, PDF et
-Office/ODF ont 1 rem de marge intérieure en haut et en bas, intégrée au
-défilement ; les espacements internes entre pages et blocs sont conservés.
-La plage de l’ascenseur inclut ces deux marges lorsque le contenu défile ;
-le maximum exposé par GPUI pour les blocs seuls les exclut.
-Markdown (`md`, `markdown`, `mdown`, `mkd`, `mkdn`) utilise `pulldown-cmark`
-avec rendu GPUI natif : titres, styles inline, listes, citations, tableaux et
-blocs de code colorés par Syntect. Le rendu est activé par défaut. La toolbar
-propose une bascule Rendu / Code pour Markdown et un bouton « Coloration
-syntaxique » activable/désactivable pour les autres fichiers texte ayant
-effectivement des plages colorées, avec les boutons
-standards à icône et libellé ; ces deux choix
-indépendants sont enregistrés dans `AppConfig`, avec défauts compatibles avec
-les anciennes configurations. Le Markdown source reste sans coloration ; les
-blocs de code du Markdown rendu sont toujours colorés selon leur langage,
-indépendamment du choix des autres fichiers texte. Les images relatives au document sont décodées à la demande
-par le parcours d’aperçu isolé et son budget mémoire, avec 32 demandes maximum
-par document. Images absentes ou non locales : texte alternatif. Aucune URL
-distante ou chemin absolu/UNC d’image n’est chargé. Les liens sont présentés
-comme du texte coloré ; le HTML brut est affiché littéralement.
-La source est lue hors UI, jusqu’à 512 Mio comme le lecteur texte, avec
-avertissement au-delà. Après cette lecture, une seule analyse Markdown continue
-publie le premier bloc immédiatement, puis des lots de 32 blocs au plus via
-une file bornée. Le Viewer ajoute ces blocs sans réinitialiser le défilement ;
-chaque lot est mesuré intégralement avant son affichage, y compris hors écran,
-pour donner à l’ascenseur toute la hauteur disponible sans parcourir les blocs
-intermédiaires. L’arrivée des lots étend encore la plage pendant l’analyse.
-Le rendu reste virtualisé ; la mesure ne déclenche pas de décodage d’image,
-réservé aux blocs peints. Les images arrivées invalident la mesure de leur bloc
-en conservant l’ancre de défilement. Les limites de 100 000 événements et 20 000 blocs
-sont supprimées. Les longs blocs sont découpés en portions de 16 Kio maximum,
-aux frontières UTF-8, sans perte de texte ni des styles inline. Les clôtures de
-code, listes et références gardent leur contexte entre les lots ; la coloration
-du code conserve son budget existant. La source et les blocs préparés restent
-en mémoire : le plafond de source ne constitue pas une borne du RSS global.
-Changer de fichier ou de mode interrompt la lecture entre morceaux de 64 Kio,
-puis l’analyse entre événements et portions ; un appel du parseur ou de Syntect
-en cours n’est pas préempté. Changer de mode invalide les tâches précédentes et
-libère leurs textures ; les images décodées après un changement ne sont pas publiées.
-La barre d’outils en haut du Viewer, à la hauteur de la barre de navigation
-de l’explorateur et avec ses métriques (boutons de 1,5 rem, icônes de 1 rem,
-espacement de 0,25 rem, marges 0,5 / 0,25 rem), contient le nom du fichier,
-les options d’affichage et le bouton de détachement. Le Viewer n’a pas de barre de statut.
-Le panneau intégré affiche le nom seul ; la fenêtre secondaire affiche le chemin
-complet, avec une infobulle permettant de le lire s’il est tronqué. Le chargement
-du Viewer utilise « Chargement du fichier… », distinct de celui des aperçus.
-Le contenu occupe l’espace restant et l’ascenseur touche le bord droit. Le panneau du Viewer
-ne devient jamais le panneau actif : ses commandes
-internes agissent sur lui et le panneau explorateur garde sélection, clavier
-et barre d’outils. Seule la fenêtre détachée reçoit le focus clavier.
-Les dossiers, entrées d’archives virtuelles et types non pris en charge restent
-sans aperçu.
+Before a deletion, `viewer/deletion` blocks reopening the concerned paths until the operation ends. The Viewer frees its content and waits for committed loads and renders before handing the deletion to the operation engine. The PDF session explicitly closes its document in the background, even if render references remain. The worker frees the document before acknowledging the close, then exits; a bounded wait keeps forced stop as a fallback. Active renders keep their acknowledgment until their native reference is freed. An error or cancel allows showing the kept file again.
 
-Le bouton supérieur droit ouvre une fenêtre secondaire redimensionnable,
-possédée par la fenêtre principale ; sa position, sa taille et son état
-maximisé sont mémorisés. L’onglet et son panneau conservent leur place ;
-un bouton dans le panneau permet de retrouver la fenêtre secondaire. Seule cette
-fenêtre rend l’aperçu et le lecteur pendant le détachement. Le suivi de sélection
-reste actif. Fermer la fenêtre secondaire libère sa session et restaure l’aperçu
-dans le panneau conservé. Fermer la fenêtre principale ferme également les
-Viewers détachés.
+The panel never becomes the active panel: its internal commands act on it, and the explorer panel keeps selection, keyboard and toolbar. Only the detached window takes keyboard focus. Folders, virtual archive entries and unsupported types have no preview. Unviewable files get a Viewer-specific message and an Open button, through the existing Open action in the source panel.
 
-Le Viewer audio affiche les tags textuels reconnus par Lofty (titre, artiste,
-album, date, genre, piste/disque, commentaires, paroles et autres champs
-reconnus) et la pochette intégrée, avec priorité à la couverture avant. Sans
-pochette décodable, l’icône musicale reste visible ; une erreur de métadonnées
-n’empêche pas la lecture. Une carte centrée regroupe la pochette et le titre,
-puis trois colonnes Album / Piste / Année. La barre de lecture et
-de progression suit immédiatement la carte, à la même largeur. Seuls le titre,
-la piste, l’album et l’année sont affichés ; l’ensemble défile si la hauteur
-disponible est insuffisante. Si le lecteur échoue, par exemple sans codec système
-pour ce format, un message et le bouton d’ouverture remplacent la barre sous la
-carte. Les valeurs sont limitées à 4096
-caractères, 256 champs et 256 Kio de texte.
-Sous Windows, l’extraction et le décodage passent par `oxyde-image-worker`
-en LPAC avec le seul handle source hérité, 512 Mio et 15 secondes. La réponse
-JSON est bornée à 8 Mio ; le parent valide dimensions et longueur des pixels
-BGRA (512 × 512 maximum), sans redécoder l’image. Les images intégrées de plus
-de 16 Mio et les images dépassant 64 Mio de pixels source sont ignorées.
-Les réponses obsolètes sont écartées par génération et les textures libérées
-au changement de contenu. Aucun fichier ni URL de pochette externe n’est chargé.
-Linux lit les métadonnées dans un worker confiné, à la demande ; la lecture passe par
-GStreamer ([aperçus Linux](linux-previews.md)).
+### Content types
 
-Sous Windows, audio et vidéo utilisent les codecs système via IMFMediaEngine (mode HWND) dans le
-mode `viewer-media` du self-worker. Un même lecteur natif synchronise image et
-son et reçoit play/pause (ou Espace). La toolbar propose « Lecture automatique »,
-activée par défaut et persistée dans `AppConfig`. Désactivée, les nouveaux médias
-s’ouvrent en pause ; une lecture en cours et une reprise après détachement gardent
-leur état. Ouvrir le fichier à l’extérieur d’Oxyde met son lecteur en pause,
-sans changer sa position, y compris dans le Viewer détaché ou pendant son
-chargement. Les commandes natives « Ouvrir avec » et de lecture suivent la même
-règle lorsqu’elles sont identifiées par leur verbe Shell. Le sous-menu « Ouvrir
-avec » sans verbe Shell est reconnu par son libellé système dans les cinq langues
-prises en charge ; ses applications héritent de cette action. La reprise dans Oxyde
-reste manuelle. Le worker
-renvoie des rapports de 25 octets (état, position, durée en ms et dimensions vidéo) ; la barre de
-lecture permet de cliquer ou glisser pour se déplacer (`seek_id`/`seek_ms`).
-L’ouverture des paramètres masque seulement la surface vidéo native ; la lecture
-audio/vidéo conserve son état, y compris une pause demandée par l’utilisateur.
-Un cadre noir aux dimensions calculées de la vidéo indique que l’affichage est
-en pause pendant ce masquage. Les fichiers non affichables ont un message propre
-à la visionneuse et un bouton Ouvrir, via l’action Ouvrir existante dans le panneau
-source : navigation interne pour les dossiers et archives, ouverture associée
-pour les autres fichiers.
-La vidéo et sa barre de lecture forment un bloc centré : la barre suit immédiatement
-le bas de l’image, dans le panneau comme dans la fenêtre secondaire. Les dimensions
-natives remontent du worker ; le bloc adapte ses proportions à l’espace disponible
-dans la frame courante, sans attendre un second rendu.
-En plein écran, la vidéo utilise le plus grand rectangle qui conserve ses
-proportions dans l’écran, sans réserver de hauteur aux commandes. Une barre
-flottante est superposée en bas, dans une fenêtre GPUI transparente possédée et
-sans activation, au-dessus de la surface native du worker, sans topmost global.
-Les mouvements de souris sur la vidéo sont transmis au propriétaire ; la barre
-apparaît puis se masque après deux secondes d’inactivité, sauf pendant son survol
-ou une recherche dans la progression. Le fondu et le glissement de six pixels
-utilisent les ressorts courts communs (entrée environ 110 ms, sortie 85 ms).
-La sortie du plein écran, le changement de fichier et la fermeture retirent la
-fenêtre de commandes et son timer ; le focus clavier reste dans le Viewer.
-Les changements de géométrie
-réveillent le superviseur puis le lecteur natif ; les attentes périodiques restent
-présentes pour les rapports, la visibilité et les déplacements de la fenêtre.
-Le détachement ou le retour au panneau reprend à la même position et dans le
-même état ; listes et pages gardent leur défilement. La fin de lecture
-reste arrêtée jusqu’à une action Lire. Le worker possède une surface vidéo
-native passive, possédée par la fenêtre du Viewer et sans statut topmost global.
-Elle reste activée pour recevoir la souris, sans prendre l’activation ni le
-focus (`WS_EX_NOACTIVATE`, `MA_NOACTIVATE`). Les pressions et relâchements du
-bouton gauche sont postés à son propriétaire GPUI après conversion en coordonnées
-client physiques ; GPUI compte les clics pour le plein écran. Les clics droits
-et le menu contextuel sont absorbés par la surface, sans action native.
-Elle suit en pixels physiques le rectangle mesuré et borné du contenu, y compris
-lors des déplacements de sa fenêtre. Ce transport évite que la composition GPUI,
-placée au-dessus des HWND enfants, masque la vidéo. L’audio
-seul n’affiche pas cette surface. Une lecture ne passe pas dans le parent en cas
-d’échec. Ce parcours est distinct des vidéos muettes de survol et n’occupe pas
-leurs admissions : deux sessions Viewer au plus, puis attente annulable.
+The Viewer opens the full file (`app/viewer/content`):
 
-Le job natif reste hors LPAC, avec un plafond de 1 Gio et l’admission agrégée
-existante. Le démarrage et l’absence de heartbeat IPC sont bornés à 15 secondes ;
-ce heartbeat ne prouve pas la progression d’un codec. Les commandes JSON sont
-bornées à 512 octets et les réponses à des états d’un octet. Changement de fichier,
-fermeture et dernier propriétaire annulent le lecteur, retirent sa surface et
-récoltent son processus. Les anciens aperçus ne peuvent publier dans un nouveau
-Viewer. Sous Linux, GStreamer joue le son dans un worker et GPUI peint les images
-qu'il envoie ; voir les [aperçus Linux](linux-previews.md).
+- **Image**: full resolution through an LPAC session specific to the Viewer (`image_session`, type 2: 1 GiB job, 30 s, side up to 16384 px and 256 MiB of pixels, outside the tooltip budget; started when the Viewer is created, reused at about 35 ms per image, freed as soon as the Viewer shows something else or closes). Shown without enlarging.
+- **PDF**: all pages (`viewer/pdf`: a self-worker `pdf-session` keeps the document open, 1 GiB job and 15 s per page). Only pages near the view are rendered, requests out of view are dropped, six decoded pages at most. Page frames are measured up front, so the scrollbar keeps its size.
+- **Text**: whole, up to 512 MiB, loaded in memory (`viewer/text`). Wraps at spaces, computed in the background for the column width of JetBrains Mono, wide characters counting double, four-column tabs. Continuations take the initial indent, capped at half the available width in narrow panels. Each row keeps its byte range and logical line; numbers on the left, not repeated on wrapped lines.
+- **Syntax**: Syntect detects the language by name or extension, then by first line (shebang or mode line) only if no type was found, with no general detection on the body. `.txt` stays plain. Analysis is off the UI thread; its categories use the theme's semantic colors. Coloring is limited to embedded syntaxes; XAML uses the XML grammar (lexical, no WPF interpretation). `ui/file_types.rs` centralizes extensions, compound suffixes and Code file names for families, icons and previews, including Oxyde formats and Syntect 5.3's pack, without loading grammars on the list render path. Specialized families take priority (SVG in Images, MD in Documents), so a Code file does not necessarily have an embedded grammar. SCSS and PowerShell have extra grammars pinned in `vendor/syntaxes/README.md`, with Sass as a SCSS dependency; MIT notices ship in `licenses/syntaxes/`. Syntect `yaml-load` reads only embedded grammars, once, off the UI thread. PowerShell covers `.ps1`, `.psm1`, `.psd1`, in the Scripts family with Shell/Batch. Variables use the semantic accent color, also in Markdown blocks. Coloring limits: files up to 2 MiB, 200,000 ranges; stops before a line over 16 KiB or between lines after 200 ms of analysis, continuing as plain text. This delay is cooperative and bounds neither a running line analysis nor syntax initialization.
+- **Office**: complete Office Open XML and OpenDocument (`office-document` in the Office worker: Word/Writer, each Excel/Calc sheet, each PowerPoint/Impress slide; `tag<TAB>text` lines). Sheet values show as stored, without formats or formulas. Old binary formats (doc, xls, ppt) keep the existing preview.
+- Long contents are virtualized by `list` with the shared scrollbar. Text uses the `sidebar` background like its previews; other contents take active panels' background. Images use the whole frame with no margin. Text/code, PDF and Office/ODF lists have 1 rem top and bottom padding, part of the scroll; the scrollbar's range includes these margins when content scrolls, whereas GPUI's exposed maximum for blocks alone excludes them.
 
-Le double clic dans un aperçu image ou vidéo bascule le plein écran ; Échap
-le quitte. Au survol du média, un bouton `maximize-2` apparaît dans son coin
-supérieur droit, remplacé par `minimize-2` (sortie) en plein écran ; le fond du
-plein écran est toujours noir ; près des bords gauche et droit de la
-zone de contenu, les flèches précédent / suivant apparaissent s’il existe un
-média voisin du même type, dans le panneau, la fenêtre secondaire et le plein
-écran. Ils utilisent le fondu du bouton de retour en haut (`motion::presence`).
-`app/viewer/media_overlay` les dessine dans le Viewer pour les images ; pour la
-vidéo, placée au-dessus de la composition GPUI, ce sont des popups GPUI
-transparentes possédées et sans activation, comme la barre plein écran, créées
-au premier survol, conservées d’un fichier à l’autre (un pointeur immobile sur
-une flèche permet d’enchaîner les sauts) et retirées au changement de fenêtre.
-Comme la barre plein écran, elles sont possédées par la surface vidéo visible
-(retrouvée par sa classe `OxydeMediaSurface`) : Windows les garde au-dessus
-d’elle quel que soit le réordonnancement. GPUI crée ses PopUp en topmost ; ce
-statut leur est retiré, si bien qu’elles restent visibles même quand Oxyde n’est
-pas au premier plan, sans recouvrir les autres applications. Une HWND masquée ne
-reçoit pas de `WM_PAINT` et c’est leur rendu qui les place : une commande à
-afficher dont la popup est masquée (fin de fondu, changement de surface) est
-donc redessinée de force, comme la barre plein écran. Avant la destruction de la surface
-(fin de session, fermeture de fenêtre ou sortie du plein écran temporaire), elles
-reviennent à la fenêtre GPUI. La classe de la surface déclare le curseur flèche,
-qui remplace celui d’un séparateur survolé juste avant.
-En plein écran, le bouton de sortie apparaît au moindre mouvement et s’efface
-après deux secondes d’immobilité, sauf sous le pointeur. Un clic n’importe où
-dans la bande latérale d’une flèche saute au média voisin, comme dans les
-visionneuses de photothèques ; ces clics ne basculent jamais le plein écran. Le survol transmis par la surface ne signale pas la sortie
-de la fenêtre : la position réelle du pointeur est relue toutes les 100 ms, et
-les commandes restent visibles tant qu’il demeure dans leur zone. Le survol d’une
-popup ne sert qu’à relancer ce suivi : son événement de sortie peut manquer, et
-chaque commande se trouve dans sa propre zone.
-Les infobulles et aperçus de survol réutilisés passent au sommet de leur
-famille de fenêtres possédées à chaque apparition, au-dessus de cette surface. Depuis le panneau intégré, une fenêtre temporaire accueille le
-plein écran et restitue le contenu au panneau à sa fermeture. Une fenêtre
-secondaire existante conserve son rôle à la sortie du plein écran.
-La molette sur les pixels d’une image zoome autour du pointeur (de 1 à 32 fois
-la taille ajustée) ; revenir à 1 réinitialise le déplacement. Après agrandissement,
-maintenir le bouton gauche déplace l’image. Le changement de fichier réinitialise
-ce cadrage. Sous Windows, les curseurs natifs utilisent les SVG Lucide officiels `search.svg`
-et `hand-grab.svg` : loupe brièvement pendant le zoom, main pendant le glissement. Ctrl+molette conserve le zoom de l’interface.
+These paths are specific to the Viewer: tooltip previews keep their modes and limits.
 
-## Caches et durée de vie
+### Markdown
 
-Les grammaires de coloration sont chargées à la première demande d'analyse,
-hors UI ; ouvrir le Viewer sur des images ne les précharge pas. Les mesures
-opt-in des pixels et des caches sont décrites dans le [diagnostic mémoire](../diagnostics/memory.md).
+`md`, `markdown`, `mdown`, `mkd`, `mkdn` use `pulldown-cmark` with native GPUI rendering: headings, inline styles, lists, quotes, tables and code blocks colored by Syntect. Rendering is on by default. The toolbar offers a Rendered/Code toggle for Markdown and a "Syntax highlighting" button for other text files with actual colored ranges; both independent choices persist in `AppConfig`. Markdown source stays uncolored; code blocks in rendered Markdown are always colored by language.
 
-Les caches de survol gardent uniquement les pixels réduits, jamais les octets
-du fichier ni le raster source : 4 Mio au plus pour une image fixe à 1024 × 1024,
-32 Mio de frames pour une animation. Le décodage peut temporairement charger la
-source entière dans le worker (64 Mio encodés, 128 Mio de pixels source pour
-les images). Ce pic et les allocations du décodeur sont distincts du cache.
-Les buffers RGBA sont déplacés vers la conversion BGRA sans copie supplémentaire.
+Images relative to the document decode on demand through the isolated preview path and its memory budget, with at most 32 requests per document. Missing or non-local images show alt text. No remote URL or absolute/UNC image path is loaded. Links show as colored text; raw HTML shows literally.
 
-`tooltip/pixels` suit l'image affichée par chaque entité d'aperçu. Un remplacement
-(y compris une frame vidéo), une erreur ou la libération du dernier affichage
-retire les anciennes textures de l'atlas par une action différée ; les pixels
-partagés avec un autre aperçu visible et les caches CPU restent disponibles.
-Masquer la fenêtre native vide aussi ses deux frames GPUI, sans attendre le
-prochain survol : une HWND masquée ne reçoit pas de `WM_PAINT` et pourrait
-sinon garder ses anciennes entités, pixels et propriétaire d'annulation vidéo.
-Le contrôle périodique ferme aussi la session de survol devenue invalide,
-même si aucun événement de sortie du pointeur n'a été reçu.
-Voir l'[audit mémoire des infobulles](../reports/2026-10-22-tooltip-memory.md).
+The source is read off the UI thread, up to 512 MiB, with a warning beyond. Then a single continuous Markdown analysis publishes the first block immediately, then batches of at most 32 blocks through a bounded queue. The Viewer appends them without resetting scroll; each batch is measured whole before showing, offscreen included, to give the scrollbar its full height without walking intermediate blocks. Rendering stays virtualized; measuring triggers no image decoding, which is reserved for painted blocks. Arriving images invalidate their block's measure while keeping the scroll anchor. Long blocks split into portions of at most 16 KiB, at UTF-8 boundaries, losing neither text nor inline styles. Code fences, lists and references keep their context across batches. Source and prepared blocks stay in memory: the source cap does not bound global RSS. Changing file or mode interrupts reading between 64 KiB chunks, then analysis between events and portions; a running parser or Syntect call is not preempted. Changing mode invalidates earlier tasks and frees their textures; images decoded after a change are not published.
 
-Le remplacement ou la fermeture du contenu du Viewer retire ses images de
-l'atlas GPUI par une action différée. Pendant une interaction, GPUI retire
-temporairement la fenêtre courante de sa liste : un `drop_image(image, None)`
-immédiat peut donc manquer cette fenêtre. L'action différée attend son retour
-dans la liste et couvre aussi les fenêtres détachées. Ce nettoyage ne garantit
-pas une baisse immédiate des Private Bytes : les frames, l'allocateur et le
-pilote graphique peuvent conserver des ressources.
+### Toolbar and detaching
 
-Le même retrait différé s'applique aux pages PDF évincées pendant le défilement,
-sans attendre la fermeture du document. Les demandes en attente d'une page
-évincée ou d'un PDF fermé sont annulées avant leur décodage ; un rendu natif
-déjà commencé peut terminer. Chaque réponse doit toujours posséder sa demande :
-une ancienne requête annulée ne retire pas la nouvelle requête du même numéro
-de page. Les pages PDF et images Markdown sont suivies par le diagnostic dès
-le décodage, puis à leur publication et à leur retrait.
+The toolbar at the top, at the explorer's navigation bar height and with its metrics (1.5 rem buttons, 1 rem icons, 0.25 rem spacing, 0.5/0.25 rem margins), holds the file name, display options and the detach button. The Viewer has no status bar. The integrated panel shows the name alone; the secondary window shows the full path, with a tooltip if truncated. Loading says "Loading file…", distinct from previews. Content fills the remaining room and the scrollbar touches the right edge.
 
-| Usage | Limite et politique |
+The top right button opens a resizable secondary window owned by the main one; its position, size and maximized state are remembered. The tab and its panel keep their place, with a button in the panel to find the secondary window. Only this window renders preview and player while detached. Selection tracking stays active. Closing the secondary window frees its session and restores the preview in the kept panel. Closing the main window also closes detached Viewers. Detaching or returning resumes at the same position and state; lists and pages keep their scroll.
+
+### Audio
+
+The Viewer shows text tags recognized by Lofty and the embedded cover, front cover first. With no decodable cover, the music icon stays; a metadata error does not prevent playback. A centered card groups cover and title, then three columns Album / Track / Year. The playback and progress bar follow the card at the same width. Only title, track, album and year show; it all scrolls if height runs short. If the player fails, for example with no system codec, a message and the open button replace the bar. Values are limited to 4096 characters, 256 fields and 256 KiB of text.
+
+On Windows, extraction and decoding go through `oxyde-image-worker` in LPAC with only the source handle inherited, 512 MiB and 15 s. The JSON response is bounded to 8 MiB; the parent validates BGRA dimensions and pixel length (512 × 512 at most) without redecoding. Embedded images over 16 MiB and those over 64 MiB of source pixels are skipped. Stale responses are discarded by generation and textures freed on content change. No external cover file or URL is loaded.
+
+### Windows media player
+
+Audio and video use system codecs via IMFMediaEngine (HWND mode) in the self-worker's `viewer-media` mode. One native player syncs image and sound and receives play/pause (or Space). The toolbar offers "Autoplay", on by default and persisted in `AppConfig`. Off, new media open paused; running playback and resume after detaching keep their state.
+
+Opening the file outside Oxyde pauses its player without changing position, also in the detached Viewer or during loading. Native "Open with" and playback commands follow the same rule when identified by their Shell verb; the "Open with" submenu without a verb is recognized by its system label in all five languages. Resuming in Oxyde stays manual.
+
+The worker sends 25-byte reports (state, position, duration in ms and video dimensions); the bar allows clicking or dragging to seek (`seek_id`/`seek_ms`). Opening settings only hides the native video surface; playback keeps its state, and a black frame at the video's computed dimensions shows the display is paused. End of playback stays stopped until a Play action.
+
+Video and its bar form a centered block: the bar follows the image's bottom, in the panel and the secondary window. Native dimensions come from the worker; the block adapts proportions to available room in the current frame.
+
+The worker owns a passive native video surface, owned by the Viewer window, with no global topmost. It stays enabled to receive the mouse, without taking activation or focus (`WS_EX_NOACTIVATE`, `MA_NOACTIVATE`). Left presses and releases are posted to its GPUI owner in physical client coordinates; GPUI counts clicks for fullscreen. Right clicks and the context menu are absorbed, with no native action. It follows the measured, bounded content rectangle in physical pixels, also when its window moves. This keeps GPUI's composition, above child HWNDs, from hiding the video. Audio alone shows no surface. Geometry changes wake the supervisor then the native player; periodic waits remain for reports, visibility and window moves. Playback never falls back to the parent on failure. This path is separate from muted hover videos and uses none of their admissions: two Viewer sessions at most, then a cancelable wait.
+
+The native job stays outside LPAC, with a 1 GiB cap and the existing aggregate admission. Startup and missing IPC heartbeat are bounded to 15 s; this heartbeat does not prove codec progress. JSON commands are bounded to 512 bytes and responses to one-byte states. File change, closing and last owner cancel the player, remove its surface and reap its process. Old previews cannot publish in a new Viewer.
+
+### Fullscreen and overlays
+
+Double-clicking an image or video preview toggles fullscreen; Esc leaves. Hovering the media shows a `maximize-2` button at its top right, replaced by `minimize-2` in fullscreen, whose background is always black. Near the content's left and right edges, previous/next arrows appear if a neighboring media of the same type exists, in panel, secondary window and fullscreen. They use the back-to-top button's fade (`motion::presence`).
+
+`app/viewer/media_overlay` draws them in the Viewer for images. For video, placed above GPUI's composition, they are transparent owned GPUI popups with no activation, like the fullscreen bar, created at first hover, kept across files (a still pointer on an arrow can chain jumps) and removed on window change. Like the bar, they are owned by the visible video surface (found by its class `OxydeMediaSurface`), so Windows keeps them above it whatever the reordering. GPUI creates its PopUps topmost; this status is removed, so they stay visible even when Oxyde is not in front, without covering other applications. A hidden HWND receives no `WM_PAINT` and their rendering places them, so a command to show whose popup is hidden is forcibly redrawn. Before the surface is destroyed they return to the GPUI window. The surface's class declares the arrow cursor, which replaces a splitter's hovered just before.
+
+In fullscreen, video uses the largest rectangle keeping proportions on screen, reserving no height for controls. A floating bar overlays the bottom, in a transparent owned GPUI window with no activation, above the worker's native surface, with no global topmost. Mouse moves on the video go to the owner; the bar appears then hides after two seconds of inactivity, except during its hover or a progress seek. Fade and six-pixel slide use the shared short springs (entry about 110 ms, exit 85 ms). Leaving fullscreen, changing file and closing remove the controls window and its timer; keyboard focus stays in the Viewer.
+
+The exit button appears at the slightest move and fades after two seconds still, except under the pointer. A click anywhere in an arrow's side band jumps to the neighboring media, like photo library viewers; these clicks never toggle fullscreen. Hover forwarded by the surface does not signal leaving the window: the real pointer position is reread every 100 ms, and controls stay visible while it remains in their zone. A popup's hover only restarts this tracking, since its leave event may be missing.
+
+Reused tooltips and hover previews go to the top of their owned window family at each appearance, above this surface. From the integrated panel, a temporary window hosts fullscreen and returns content to the panel on close. An existing secondary window keeps its role on leaving fullscreen.
+
+The wheel on an image's pixels zooms around the pointer (1 to 32 times the fitted size); returning to 1 resets panning. Once enlarged, holding the left button pans. Changing file resets this framing. On Windows, native cursors use the official Lucide `search.svg` and `hand-grab.svg`: a magnifier briefly during zoom, a hand during drag. Ctrl+wheel keeps interface zoom.
+
+## Caches and lifetime
+
+Coloring grammars load at the first analysis request, off the UI thread; opening the Viewer on images does not preload them. Opt-in pixel and cache measures: [memory diagnostics](../diagnostics/memory.md).
+
+Hover caches keep only reduced pixels, never file bytes or the source raster: 4 MiB at most for a still image at 1024 × 1024, 32 MiB of frames for an animation. Decoding may temporarily load the whole source in the worker (64 MiB encoded, 128 MiB of source pixels for images); this peak and decoder allocations are separate from the cache. RGBA buffers move to BGRA conversion with no extra copy.
+
+`tooltip/pixels` tracks the image each preview entity shows. A replacement (video frames included), an error or freeing the last display removes old textures from the atlas through a deferred action; pixels shared with another visible preview and CPU caches stay available. Hiding the native window also empties its two GPUI frames without waiting for the next hover: a hidden HWND gets no `WM_PAINT` and could keep old entities, pixels and video cancel owner. The periodic check also closes a hover session gone invalid, even with no pointer leave event.
+
+Replacing or closing Viewer content removes its images from the GPUI atlas through a deferred action. During an interaction GPUI temporarily removes the current window from its list, so an immediate `drop_image(image, None)` may miss it. The deferred action waits for its return and also covers detached windows. This does not guarantee an immediate drop in Private Bytes: frames, allocator and graphics driver may keep resources.
+
+The same deferred removal applies to PDF pages evicted during scrolling. Pending requests for an evicted page or closed PDF are canceled before decoding; a native render already started may finish. Each response must still own its request: an old canceled request does not remove a new one for the same page number.
+
+| Use | Limit and policy |
 | --- | --- |
-| Pixels images | LRU RAM : 32 entrées / 64 Mio ; toutes les frames comptent |
-| Pixels PDF | LRU RAM distinct : 32 entrées / 64 Mio |
-| Décodage de survol | Enveloppe fixe 1024 px ; Gaussian pour grandes images, sans JPEG intermédiaire ; PDF natif 1024 px |
-| Miniature de grille | Une frame, 128 px, Triangle ; réutilisation opportuniste des pixels RAM, sans charger un aperçu en cas d’absence |
-| Miniature persistée | JPEG qualité 75 si opaque, PNG si alpha ; 24 Kio maximum par fichier |
-| Stockage Windows | `oxyde/thumbnails` sous le cache utilisateur, ou cache portable ; quota 256 Mio / 4096 entrées |
+| Image pixels | RAM LRU: 32 entries / 64 MiB; all frames count |
+| PDF pixels | Separate RAM LRU: 32 entries / 64 MiB |
+| Hover decoding | Fixed 1024 px envelope; Gaussian for large images, no intermediate JPEG; native PDF at 1024 px |
+| Grid thumbnail | One frame, 128 px, Triangle; opportunistic reuse of RAM pixels, no preview loaded on miss |
+| Persisted thumbnail | JPEG quality 75 if opaque, PNG if alpha; 24 KiB per file at most |
+| Windows storage | `oxyde/thumbnails` under the user cache, or portable cache; quota 256 MiB / 4096 entries |
 
-Le survol ne lit ni n’écrit le cache disque. Une miniature ne remplit pas le cache des aperçus. Les sorties trop lourdes restent affichables sans persistance ; les petites images ne sont pas agrandies. Les anciens caches d’aperçus sont ignorés jusqu’à l’action Effacer le cache.
+Hover neither reads nor writes the disk cache. A thumbnail does not fill the preview cache. Outputs too heavy stay displayable without persisting; small images are not enlarged. Old preview caches are ignored until the Clear cache action.
 
-Les fichiers audio de la grille utilisent leur pochette intégrée (priorité à
-la couverture avant), extraite par le même parcours `Platform::audio_metadata`
-que le Viewer. Les pixels validés sont réduits à 128 px avec Triangle puis
-conservés dans le cache de miniatures, sous une clé audio distincte. Sans
-pochette ou en cas de format non pris en charge, la carte garde son icône.
-La reconnaissance utilise l’extension ou le type audio natif. Les fichiers
-audio reconnus par extension affichent aussi leur pochette au survol, sans
-lecture ni écriture du cache disque. Chargement, contrôles de révision et persistance
-restent en arrière-plan, avec les mêmes leases que les autres cartes.
+Keys use path, type, size and date; workers check the source before reuse and around decoding. Errors are not cached. Clearing the cache invalidates running generations. The size/date signature is no proof of identity or content.
 
-Les pochettes disposent de deux quotas RAM indépendants : 256 miniatures de grille
-à 128 px (16 Mio au plus) et 32 aperçus de survol à 512 px (32 Mio au plus).
-Les lectures du cache disque alimentent aussi ce cache RAM ; revenir sur une
-carte évite de relire et redécoder la miniature. Les révisions des fichiers sont
-vérifiées avant réutilisation ; changement de fichier et effacement du cache
-invalident les entrées concernées.
-Le survol audio utilise la même transition que les images : un indice RAM sans
-I/O évite d’atténuer l’ancienne pochette pendant la validation ; seul un succès
-de cache validé par le worker permet de publier sans le délai de remplacement.
-Une empreinte BLAKE3 des dimensions et pixels
-permet de partager les images identiques entre morceaux, et les miniatures
-identiques entre cartes. Ce partage ne repose pas sur le nom d’album. Sur
-disque, une référence de 40 octets par révision de morceau pointe vers une
-miniature commune nommée par son empreinte, vérifiée à la lecture. Références
-et miniatures restent dans le quota existant ; la suppression d’une miniature
-commune entraîne un cache manquant, régénéré au prochain chargement. Les
-fichiers sources conservent leurs contrôles de révision indépendants.
+`ui/preview_disk` and grid assets tie each thumbnail to the listed revision (`FileStamp`). Cards share a lease; leaving the viewport, changing card/view or closing frees it. The last owner removes the asset and its pixels from the GPUI atlas through `App::drop_image`. Frame references may survive temporarily: this contract does not bound global RSS/GPU. No metadata call in rendering.
 
-Les pochettes de survol et de grille utilisent une session LPAC audio dédiée
-et réutilisable de `oxyde-image-worker`, distincte des sessions images et de
-l’extraction complète du Viewer. Les requêtes transmettent seulement le handle
-source et la résolution attendue ; les réponses contiennent les pixels BGRA
-binaires, sans tags ni JSON. La grille est réduite directement à 128 px dans
-le worker, le survol à 512 px. Le job audio est plafonné à 256 Mio, avec 15 s
-par requête, 15 s d’inactivité et recyclage après 32 requêtes ou 60 s. Un fichier
-valide sans pochette ne provoque pas de redémarrage ; erreur de parse/décodage,
-crash ou délai retirent la session, sans repli local. Le worker garde uniquement
-la dernière pochette décodée, par empreinte des octets intégrés et résolution
-(1 Mio au plus). Une grande source audio peut être parcourue par seek ; elle
-n’est pas chargée intégralement pour produire une pochette.
-Le survol audio et les tags du Viewer ont chacun une admission dédiée d’une
-requête, afin de ne pas attendre toute la file des miniatures. Ces admissions
-s’appliquent désormais à l’ensemble du survol et aux chargements initiaux du
-Viewer (images, texte, Markdown, Office et ouverture PDF). Les images relatives
-du Markdown conservent leur admission d’arrière-plan. Les tags du
-Viewer conservent leur worker ponctuel et leur réponse complète, mais ne
-prennent plus le verrou global des aperçus fixes. Les budgets agrégés restent
-communs : cette séparation ne garantit pas une disponibilité immédiate sous
-pression mémoire ou lorsque toutes les places de processus sont occupées.
+### Audio covers
 
-Sous Linux, poppler rend ces pages dans un worker d'Oxyde, aux mêmes tailles ; voir
-les [aperçus Linux](linux-previews.md). La suite décrit Windows.
+Audio files in the grid use their embedded cover (front first), extracted through the same `Platform::audio_metadata` path as the Viewer. Validated pixels are reduced to 128 px with Triangle then kept in the thumbnail cache under a separate audio key. With no cover or an unsupported format, the card keeps its icon. Recognition uses the extension or native audio type. Files recognized by extension also show their cover on hover, with no disk cache access.
 
-Les miniatures PDF de la grille et les aperçus PDF partagent une session native
-dédiée de `oxyde.exe` (`pdf-previews`), distincte de celle du Viewer et des
-icônes Shell. Un document est ouvert, rendu puis libéré à chaque requête ; le
-processus est réutilisé. Le rendu natif est directement limité à 128 px pour
-la grille et 1024 px pour le survol, sans rendu intermédiaire à 1024 px pour
-les miniatures. Le transport partage le protocole borné des sessions natives
-à chemins : une commande, une longueur et un chemin UTF-8 ; réponses identifiées
-et bornées, un seul cadre BGRA à la résolution attendue. Le parent retient la
-source en lecture pendant la requête. Plafonds : 512 Mio, 15 s par requête,
-15 s d’inactivité, 32 requêtes, 60 s de durée de session et 4095 octets cumulés
-de commandes. Les chemins dépassant ce transport gardent un worker ponctuel,
-avec la même résolution de sortie. Erreur, crash ou délai retirent le processus,
-sans décodage PDF dans le parent. Cette session reste hors LPAC et peut conserver
-de l’état du moteur PDF entre documents ; elle ne garantit pas l’isolation par
-document. Les sessions images, audio et PDF n’attendent plus le verrou des
-traitements ponctuels Office. Les requêtes déjà engagées dans une même session
-restent séquentielles ; elles ne sont pas préemptées par une demande de survol.
+Covers have two independent RAM quotas: 256 grid thumbnails at 128 px (16 MiB at most) and 32 hover previews at 512 px (32 MiB at most). Disk cache reads also feed this RAM cache. File revisions are checked before reuse; file change and clearing the cache invalidate entries. Audio hover uses the images' transition: a RAM hint with no I/O avoids dimming the old cover during validation, and only a cache hit validated by the worker publishes without the replacement delay.
 
-Les clés utilisent chemin, type, taille et date ; les workers vérifient la source avant réutilisation et autour du décodage. Pas de cache des erreurs. Effacer le cache invalide les générations en cours. La signature taille/date n’est pas une preuve d’identité ou de contenu.
+A BLAKE3 hash of dimensions and pixels shares identical images across tracks and identical thumbnails across cards, not relying on album name. On disk, a 40-byte reference per track revision points to a shared thumbnail named by its hash, checked on read. References and thumbnails stay in the existing quota; removing a shared thumbnail means a cache miss, regenerated at next load.
 
-`ui/preview_disk` et les assets de grille lient chaque miniature à la révision listée (`FileStamp`). Les cartes partagent une lease ; sortie du viewport, changement de carte/vue ou fermeture libèrent celle-ci. Le dernier propriétaire retire l’asset et ses pixels de l’atlas GPUI par `App::drop_image`. Les références de frames peuvent survivre temporairement : ce contrat ne borne pas le RSS/GPU global. Aucun appel de métadonnées dans le rendu.
+Hover and grid covers use a dedicated, reusable LPAC audio session of `oxyde-image-worker`, separate from image sessions and the Viewer's full extraction. Requests pass only the source handle and expected resolution; responses hold binary BGRA pixels, with no tags or JSON. The grid reduces directly to 128 px in the worker, hover to 512 px. The job is capped at 256 MiB, with 15 s per request, 15 s idle and recycling after 32 requests or 60 s. A valid file without a cover causes no restart; a parse/decode error, crash or timeout retires the session, with no local fallback. The worker keeps only the last decoded cover, by hash of the embedded bytes and resolution (1 MiB at most). A large audio source may be walked by seek rather than fully loaded.
 
-## Sessions Windows
+Audio hover and Viewer tags each have a dedicated single-request admission, so they do not wait for the whole thumbnail queue. These admissions also apply to all hover and to the Viewer's initial loads (images, text, Markdown, Office and PDF opening). Markdown's relative images keep their background admission. Viewer tags keep their one-shot worker and full response, but do not take the global fixed-preview lock. Aggregate budgets stay shared: this split does not guarantee immediate availability under memory pressure or when all process slots are taken.
 
-- Images/SVG : `windows_preview_worker/image_session.rs`, worker LPAC séquentiel à la demande. Arrêt après 15 s d’inactivité, recyclage après 32 demandes ou 60 s ; délai actif 15 s, mémoire 512 Mio et admission commune conservés.
-- Le parent retient la source et duplique seulement son handle en lecture. Commandes et réponses sont bornées, identifiées et validées ; erreur/crash/délai retirent la session, sans repli local ni nouvelle tentative automatique du fichier fautif.
-- La réutilisation conserve potentiellement l’état d’un décodeur compromis entre images d’une session. Le recyclage réduit cette fenêtre sans rétablir l’isolation par document.
-- Icônes Shell : `icon_session.rs`, session native distincte hors LPAC, mémoire 256 Mio, arrêt après 15 s d’inactivité, 64 demandes ou budget cumulé de requêtes épuisé. Réponse bornée à 1 Mio et 256 × 256 ; chemins trop longs via worker ponctuel.
-- Les icônes disposent de deux places de chargement distinctes des quatre places des aperçus fixes. La session Shell reste séquentielle ; les accès au cache ne dépendent plus de la file des aperçus. Le parent et le worker conservent chacun un cache de pixels borné à 32 Mio / 1000 entrées. Le PNG sert uniquement à la persistance : une lecture disque décode une seule fois, une extraction native transmet directement ses pixels après validation des dimensions.
-- Le worker d'icônes ne persiste plus le PNG. Le parent met les pixels validés en RAM et les propose à `windows_icon_persistence` : un seul thread, au plus 32 demandes / 4 Mio de pixels en attente, plus l'image active (256 Kio maximum). L'admission n'attend aucune écriture ; saturation ou échec de publication laisse l'icône disponible sans garantie de persistance. L'encodage PNG, les handles contrôlés, le quota, la synchronisation et le renommage restent hors du chemin de disponibilité des pixels. Les accès en cache RAM/disque ne sont pas republiés.
-- Effacer le cache suspend les admissions, invalide les révisions et retire les demandes en attente. Le nettoyage en arrière-plan attend la publication déjà engagée puis garde la suspension pendant la suppression des fichiers. Une réponse commencée avant le vidage ne peut remplir à nouveau le cache RAM ni programmer une ancienne écriture. À la sortie, les demandes en attente sont abandonnées ; la publication active dispose d'au plus deux secondes avant la sortie native finale. Un arrêt immédiat peut donc perdre les dernières icônes persistées, qui sont régénérables.
-- Les icônes ordinaires partagent leur source par extension/taille ; dossiers génériques également. Exécutables, raccourcis, lecteurs et chemins spéciaux gardent leurs exceptions. Les personnalisations arbitraires `desktop.ini` ne sont pas détectées par cette heuristique.
-- PDF, vidéo et texte Office gardent leurs parcours distincts. La vidéo utilise une file bornée, l’annulation du dernier propriétaire et l’horloge PTS ; seuls les flux terminés normalement après une image bouclent.
+### PDF
 
-La [fermeture](../diagnostics/shutdown.md) arrête les superviseurs image, icônes et aperçus PDF avant la sortie native finale. Les [limites de sécurité](../security/status.md) restent applicables. Les tests de propriété des pixels ne mesurent pas une session GPUI réelle ; Linux et le DPI exact du décodage ne sont pas validés par ces contrats.
+Grid PDF thumbnails and PDF previews share a dedicated native session of `oxyde.exe` (`pdf-previews`), separate from the Viewer's and Shell icons'. A document is opened, rendered then freed per request; the process is reused. Native rendering is limited directly to 128 px for the grid and 1024 px for hover. The transport shares the bounded protocol of native path sessions: a command, a length and a UTF-8 path; responses identified and bounded, one BGRA frame at the expected resolution. The parent holds the source for reading during the request. Caps: 512 MiB, 15 s per request, 15 s idle, 32 requests, 60 s of session and 4095 cumulative command bytes. Paths exceeding this transport keep a one-shot worker at the same output resolution. Error, crash or timeout retires the process, with no PDF decoding in the parent. This session stays outside LPAC and may keep PDF engine state between documents: no per-document isolation. Image, audio and PDF sessions no longer wait for the Office one-shot lock. Requests already committed in a session stay sequential and are not preempted by a hover request.
+
+## Windows sessions
+
+- Images/SVG: `windows_preview_worker/image_session.rs`, sequential LPAC worker on demand. Stops after 15 s idle, recycled after 32 requests or 60 s; active timeout 15 s, 512 MiB memory, shared admission.
+- The parent holds the source and duplicates only its read handle. Commands and responses are bounded, identified and validated; error/crash/timeout retires the session, with no local fallback or automatic retry of the faulty file.
+- Reuse potentially keeps a compromised decoder's state between a session's images. Recycling narrows this window without restoring per-document isolation.
+- Shell icons: `icon_session.rs`, separate native session outside LPAC, 256 MiB memory, stops after 15 s idle, 64 requests or an exhausted cumulative request budget. Response bounded to 1 MiB and 256 × 256; paths too long go through a one-shot worker.
+- Icons have two loading slots, separate from the four fixed-preview slots. The Shell session stays sequential; cache access does not depend on the preview queue. Parent and worker each keep a pixel cache bounded to 32 MiB / 1000 entries. PNG serves persistence only: a disk read decodes once, a native extraction passes its pixels directly after dimension validation.
+- The icon worker does not persist PNG. The parent puts validated pixels in RAM and offers them to `windows_icon_persistence`: one thread, at most 32 requests / 4 MiB of pixels pending, plus the active image (256 KiB at most). Admission waits for no write; saturation or a publication failure leaves the icon available with no persistence guarantee. PNG encoding, controlled handles, quota, sync and rename stay off the pixel availability path. RAM/disk cache hits are not republished.
+- Clearing the cache suspends admissions, invalidates revisions and removes pending requests. Background cleanup waits for a committed publication and keeps the suspension while deleting files. A response started before clearing cannot refill the RAM cache or schedule an old write. On exit, pending requests are dropped; the active publication has at most two seconds before the final native exit, so an immediate stop may lose the last persisted icons, which are regenerable.
+- Ordinary icons share their source by extension/size; generic folders too. Executables, shortcuts, drives and special paths keep their exceptions. Arbitrary `desktop.ini` customizations are not detected by this heuristic.
+- PDF, video and Office text keep separate paths. Video uses a bounded queue, last-owner cancel and the PTS clock; only streams ending normally after a frame loop.
+
+[Shutdown](../diagnostics/shutdown.md) stops the image, icon and PDF preview supervisors before the final native exit. The [security limits](../security/status.md) apply. Pixel ownership tests do not measure a real GPUI session.

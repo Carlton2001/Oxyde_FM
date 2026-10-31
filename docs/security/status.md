@@ -1,49 +1,40 @@
-# Sécurité : protections et limites
+# Security: protections and limits
 
-Cette référence synthétise les protections livrées et les points encore ouverts. Elle ne constitue pas une nouvelle expertise ni une certification. Les preuves datées sont dans le [bilan du 13 octobre 2026](../reports/2026-10-13-security.md).
+This summarizes shipped protections and open points. It is neither an expert assessment nor a certification.
 
-## Modèle de confiance Windows
+## Windows trust model
 
-Le parent est de confiance ; un worker peut être compromis par un codec. Noyau, lancement et runtime font partie de la base de confiance ; administrateur hostile et parent compromis sont hors contrat.
+The parent is trusted; a worker may be compromised by a codec. Kernel, launch and runtime are part of the trust base; a hostile administrator or compromised parent is out of contract.
 
-Decode/Encode d’archives, listing/index, images/SVG, texte Office et tags/pochettes audio utilisent des workers LPAC sans capacité, sans repli local permissif. Le parent garde les sources, les contrôles et les écritures. Le lancement suspendu attache les jobs avant reprise ; seuls les handles IPC et sources explicitement autorisés sont transmis.
+Archive Decode/Encode, listing/index, images/SVG, Office text and audio tags/covers use capability-less LPAC workers, with no permissive local fallback. The parent keeps sources, checks and writes. Suspended launch attaches jobs before resuming; only explicitly allowed IPC and source handles are passed.
 
-Cela inclut la recherche de contenu Office : décompression et extraction restent
-dans un worker dédié, avec plafond cumulé de XML et de réponse ; une limite ou
-une panne est signalée comme contenu non vérifié. Le parent reçoit uniquement le
-texte borné. Contrat et formats : [recherche Office](../architecture/search.md#recherche-de-contenu-office).
+This includes Office content search: decompression and extraction stay in a dedicated worker, with a cumulative XML and response cap; a limit or failure is reported as unverified content. The parent receives only bounded text. Details: [Office search](../architecture/search.md#office-content-search).
 
-Les exceptions ACL ont été retenues par l’utilisateur : un accès explicite au SID exact du worker ou à `ALL RESTRICTED APPLICATION PACKAGES` peut rester possible. Le confinement n’est pas indépendant des ACL.
+ACL exceptions were accepted by the user: explicit access to the worker's exact SID or to `ALL RESTRICTED APPLICATION PACKAGES` may remain possible. Confinement is not independent of ACLs.
 
-Les miniatures et aperçus PDF réutilisent une session native hors LPAC, séparée
-du Viewer et des icônes. Le parent retient la source pendant chaque rendu et
-valide les réponses bornées. Le recyclage après 32 requêtes/60 s réduit la
-durée de rétention du moteur, sans rétablir une isolation par document ni
-retirer ses droits ordinaires.
+PDF thumbnails and previews reuse a native session outside LPAC, separate from the Viewer and icons. The parent holds the source during each render and validates bounded responses. Recycling after 32 requests/60 s shortens engine retention, without restoring per-document isolation or removing its ordinary rights.
 
-PDF, vidéo, lecteur audio/vidéo du Viewer et services natifs Shell/miniatures/icônes restent hors LPAC. Leurs jobs et délais ne retirent pas les permissions ordinaires. Le Viewer utilise les codecs système dans un self-worker distinct, sans décodage multimédia dans le parent ; son heartbeat surveille la réponse IPC, pas la progression du codec. Les sessions réutilisables d’images et de pochettes audio peuvent conserver l’état d’un décodeur compromis entre demandes ; leurs sessions sont distinctes : [aperçus](../architecture/previews.md).
+PDF, video, the Viewer's audio/video player and native Shell/thumbnail/icon services stay outside LPAC. Their jobs and timeouts do not remove ordinary permissions. The Viewer uses system codecs in a separate self-worker, with no media decoding in the parent; its heartbeat watches the IPC response, not codec progress. Reusable image and audio cover sessions may keep a compromised decoder's state between requests; their sessions are distinct: [previews](../architecture/previews.md).
 
-## Suivi R1–R9
+## Tracking R1–R9
 
-| ID | Protection livrée | Limite conservée |
+| ID | Shipped protection | Remaining limit |
 | --- | --- | --- |
-| R1 — permissions | LPAC pour les codecs purs, runtime privé, héritage explicite, contrôles natifs | Services natifs restants hors LPAC ; réseau de production et héritage universel non prouvés. Les permissions COM/registre étudiées en tests ne sont pas activées. |
-| R2 — suppressions | Reçus de descendants, effets partiels, restauration et reprise après conflit | Corbeille Windows conservée par choix utilisateur ; course par chemin, absence d’atomicité sur l’objet initial et fournisseurs non validés. |
-| R3 — ressources | Job agrégé 2,5 Gio / 4 processus / CPU 70 %, admission commune, pixels retenus 256 Mio / 256 images, surveillance de pression | Aucun plafond instantané universel du parent, RSS/GPU global, COM externe ou disque physique. Le cache inconnu après crash n’est pas inclus automatiquement. |
-| R4 — identité/provenance | Rejet d’identité nulle/objet étranger, handles retenus, contrôle BLAKE3 et `Zone.Identifier` | Matrice native locale C: NTFS fixe ; autres volumes, cloud/SMB, tous les ADS et snapshots immuables non prouvés. Un autre lien physique peut être renommé. |
-| R5 — Linux | [Tous les décodeurs en workers](../architecture/linux-previews.md) confinés par bubblewrap et seccomp, parent propriétaire des fichiers ; [check et build Fedora 44 WSL vérifiés](../reports/2026-10-26-linux-foundation.md) ; [corbeille freedesktop sans écrasement, transferts vers un dossier par le moteur commun](../reports/2026-10-26-linux-ui-trash.md) | [Confinement](../architecture/linux-previews.md#confinement-bubblewrap) moins strict que LPAC, et réduit à Landlock et seccomp si bubblewrap est inutilisable ; pas de publication de groupe d'archives ; opérations de fichiers testées sur tmpfs, Btrfs, ext4, exFAT et NTFS, sans nom figé : Linux garantit seulement de n'agir que sur l'objet vérifié ([contrat](../architecture/linux-held-effects.md)) ; intégrations Linux non validées, interface essayée seulement en VM GNOME. Les tests ciblés et le build WSL ne prouvent pas les garanties Windows sous Linux. |
-| R6 — annulation | `Platform::watch_broker_io`, tentative `CancelSynchronousIo`, scopes de préparation et courtier | Interruption coopérative : un pilote peut refuser. Aucun thread parent n’est tué, aucune garde n’est abandonnée pendant une I/O. |
-| R7 — récupération | Cache Windows v2, propriétaire v4, journal authentifié DPAPI/MAC, reprise après crash ; cache Linux v1 dans le dossier de l'utilisateur, éviction sous bail d'écriture ([contrat](../architecture/linux-open-cache.md)) | Cache v1/préparations v3 sans preuve conservés, hors quota du nouveau stockage. Clé perdue, objets étrangers/modifiés et preuves insuffisantes interdisent adoption/purge globale. |
-| R8 — groupes d’archives | Préparation de toutes les archives, originaux retenus puis restauration du groupe sur échec | Pas de visibilité atomique ni transaction durable multi-fichiers après crash ; backups non restaurables conservés et signalés. |
-| R9 — fidélité | Vérification indépendante du contenu/inventaire/métadonnées définies pour TAR non compressé | Autres formats, listing/index et pixels/textes sans référence indépendante générale. Fonctions conservées ; aucune acceptation de ce risque ni clôture déduite de l’absence de réponse utilisateur. |
+| R1 permissions | LPAC for pure codecs, private runtime, explicit inheritance, native checks | Native services outside LPAC; production network and universal inheritance unproven. COM/registry permissions studied in tests are not enabled. |
+| R2 deletions | Descendant receipts, partial effects, restoration and resume after conflict | Windows Trash kept by user choice; path races, no atomicity on the initial object, providers not validated. |
+| R3 resources | Aggregate job 2.5 GiB / 4 processes / CPU 70%, shared admission, retained pixels 256 MiB / 256 images, pressure monitoring | No universal instantaneous cap on the parent, global RSS/GPU, external COM or physical disk. Cache unknown after a crash is not automatically included. |
+| R4 identity/provenance | Rejection of null identity/foreign object, held handles, BLAKE3 check and `Zone.Identifier` | Native matrix on local fixed C: NTFS; other volumes, cloud/SMB, all ADS and immutable snapshots unproven. Another hard link can be renamed. |
+| R5 Linux | [All decoders in workers](../architecture/linux-previews.md) confined by bubblewrap and seccomp, parent owns files; freedesktop trash without overwrite, transfers through the shared engine | [Confinement](../architecture/linux-previews.md#confinement-bubblewrap) less strict than LPAC, reduced to Landlock and seccomp if bubblewrap is unusable; no archive group publication; file operations do not freeze names, Linux only guarantees acting on the verified object ([contract](../architecture/linux-held-effects.md)). Windows guarantees do not carry over. |
+| R6 cancellation | `Platform::watch_broker_io`, `CancelSynchronousIo` attempt, preparation and broker scopes | Cooperative: a driver may refuse. No parent thread is killed and no guard abandoned during I/O. |
+| R7 recovery | Windows cache v2, owner v4, DPAPI/MAC authenticated journal, crash recovery; Linux cache v1 in the user's folder, eviction under a write lease ([contract](../architecture/linux-open-cache.md)) | v1 cache/v3 preparations without proof kept, outside the new storage quota. Lost key, foreign/modified objects and insufficient proof forbid adoption/global purge. |
+| R8 archive groups | All archives prepared, originals held then group restored on failure | No atomic visibility or durable multi-file transaction after a crash; unrestorable backups kept and reported. |
+| R9 fidelity | Independent check of content/inventory/defined metadata for uncompressed TAR | Other formats, listing/index and pixels/text have no general independent reference. Features kept; this risk is neither accepted nor closed by a user's silence. |
 
-## Où intervenir
+## Where to work
 
-- Confinement/lancement : `platform/windows_worker_sandbox.rs`, `windows_process_launch.rs` et `src/bin/`.
-- Budgets/pression : `platform/windows_worker_budget.rs`, `windows_resource_pressure.rs`, `ui/preview_budget.rs`.
-- Suppressions : `platform/windows_shell_delete*`, `systems/file_ops/delete.rs` et `execution.rs`.
-- Archives/récupération : `systems/archive_io.rs`, `archive_encode.rs`, `archive_workspace/native_commit.rs`, `archive_open_cache/recovery.rs` et `utils/tar_fidelity.rs`.
+- Confinement/launch: `platform/windows_worker_sandbox.rs`, `windows_process_launch.rs`, `src/bin/`.
+- Budgets/pressure: `platform/windows_worker_budget.rs`, `windows_resource_pressure.rs`, `ui/preview_budget.rs`.
+- Deletions: `platform/windows_shell_delete*`, `systems/file_ops/delete.rs`, `execution.rs`.
+- Archives/recovery: `systems/archive_io.rs`, `archive_encode.rs`, `archive_workspace/native_commit.rs`, `archive_open_cache/recovery.rs`, `utils/tar_fidelity.rs`.
 
-Avant de reprendre un point, rechercher ses fonctions dans les sous-modules, choisir son ID et définir les preuves attendues. Une refactorisation ou un essai visuel ne clôture pas une limite de sécurité. Ne pas transformer une reprise ciblée en nouveau chantier général.
-
-Conserver la [décision de dépendances](dependencies.md) et le [contrat de fermeture](../diagnostics/shutdown.md). Toute nouvelle validation doit préciser révision, cible et périmètre ; les anciennes bornes restent historiques.
+Before resuming a point, pick its ID and define the expected proof. A refactor or visual check does not close a security limit. Any new validation states revision, target and scope. See also the [dependency decision](dependencies.md) and [shutdown contract](../diagnostics/shutdown.md).

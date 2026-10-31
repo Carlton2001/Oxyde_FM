@@ -1,122 +1,87 @@
-# Menus, infobulles et fenêtres secondaires
+# Menus, tooltips and secondary windows
 
-Sous Windows, les menus et infobulles utilisent des fenêtres GPUI possédées ; un échec natif doit réactiver le rendu intégré sans perdre l’état métier. Sous Wayland, ce sont aussi des fenêtres séparées, mais ancrées (voir [Infobulles sous Wayland](#infobulles-sous-wayland) et [Menus sous Wayland](#menus-sous-wayland)). X11 refuse ces fenêtres : menus et infobulles y restent dans le rendu intégré.
+On Windows, menus and tooltips use owned GPUI windows; a native failure must reactivate integrated rendering without losing business state. On Wayland they are also separate windows, but anchored (see [tooltips](#tooltips-on-wayland) and [menus](#menus-on-wayland)). X11 refuses these windows: menus and tooltips stay in integrated rendering there.
 
-## Choisir le point d’entrée
+## Choosing the entry point
 
-| Surface | API / règle |
+| Surface | API / rule |
 | --- | --- |
-| Infobulle ordinaire | `NativeTooltipExt::native_tooltip` ; aucun `.tooltip(...)` direct dans les vues |
-| Survol de fichiers ou d’arbre | Sessions de `components::tooltip::hover` ; [aperçus](previews.md) |
-| Menu interactif | `components::popup` avec factory, condition de validité et callback de fermeture |
-| Suggestions de chemin | `popup::show_passive` ; focus et clavier restent dans le champ |
-| Fenêtre secondaire | `components::tool_window` ; état métier dans la vue appelante |
-| Invite modale (renommage, compression, lecteur réseau, confirmations, avis d’échec) | `DialogKind` fixe de `app/dialog_windows` ; `Modal::standalone`, jamais de surcouche dans la fenêtre principale |
+| Ordinary tooltip | `NativeTooltipExt::native_tooltip`; no direct `.tooltip(...)` in views |
+| File or tree hover | `components::tooltip::hover` sessions; [previews](previews.md) |
+| Interactive menu | `components::popup` with factory, validity condition and close callback |
+| Path suggestions | `popup::show_passive`; focus and keyboard stay in the field |
+| Secondary window | `components::tool_window`; business state in the calling view |
+| Modal prompt (rename, compression, network drive, confirmations, failure notices) | Fixed `DialogKind` from `app/dialog_windows`; `Modal::standalone`, never an overlay in the main window |
 
-Un identifiant réutilise la fenêtre existante ; une demande en attente est remplacée par la plus récente. La factory reconstruit l’état actuel, sans copie métier figée. À la fermeture, lire la spec actuelle plutôt qu’un callback capturé à la première ouverture.
+An identifier reuses the existing window; a pending request is replaced by the latest. The factory rebuilds current state, with no frozen business copy. On close, read the current spec rather than a callback captured at first opening.
 
-## Placement et événements
+## Placement and events
 
-- `PopupAnchor::point` fixe une position locale, `element` ancre sous un contrôle et `beside` place un menu latéral. Mesurer les bounds au rendu ; les menus ne suivent pas le curseur après ouverture.
-- Les sous-menus utilisent les bounds réelles des lignes après défilement, sans l’ombre, et touchent leur ancre. Leur propriétaire logique est le menu parent.
-- Router les actions métier avec `popup::with_owner`. Convertir coordonnées et rectangles par `owner_point`/`owner_bounds`, DPI compris. Les scrollbars gardent leur propriétaire et des identifiants distincts par fenêtre.
-- Ne pas retransmettre le pointeur par `Window::dispatch_event` à la source : son hit testing ferait réagir les éléments sous le menu. Appeler uniquement les gestionnaires de glissement nécessaires après conversion ; la capture termine un glissement hors surface.
-- Ne jamais appeler `Window::dispatch_event` dans le constructeur d’`App::open_window` : la racine n’est pas installée. Initialiser les modificateurs après retour via le handle non typé.
+- `PopupAnchor::point` sets a local position, `element` anchors under a control and `beside` places a side menu. Measure bounds at render; menus do not follow the cursor after opening.
+- Submenus use the real bounds of rows after scrolling, without the shadow, and touch their anchor. Their logical owner is the parent menu.
+- Route business actions with `popup::with_owner`. Convert coordinates and rectangles with `owner_point`/`owner_bounds`, DPI included. Scrollbars keep their owner and distinct identifiers per window.
+- Do not forward the pointer by `Window::dispatch_event` to the source: its hit testing would make elements under the menu react. Call only the needed drag handlers after conversion; capture ends a drag outside the surface.
+- Never call `Window::dispatch_event` in `App::open_window`'s constructor: the root is not installed. Initialize modifiers after return through the untyped handle.
 
-Les appels Win32 passent par `Platform`. Placement et activation susceptibles de rappeler GPUI sont différés et regroupés, jamais synchrones pendant un rendu ou `Window::update`. Créer près du propriétaire pour conserver un DPI initial cohérent.
+Win32 calls go through `Platform`. Placement and activation that may call back into GPUI are deferred and grouped, never synchronous during a render or `Window::update`. Create near the owner to keep a consistent initial DPI.
 
-### Fenêtres possédées
+### Owned windows
 
-Sous Windows, Propriétés et les dialogues (`set_window_owner`) restent au-dessus de la fenêtre principale, sans entrée dans la barre des tâches ; Recherche avancée, Doublons, Opérations, leur liste de fichiers et le Viewer détaché sont indépendants. Linux suit le même partage : `WindowKind::Floating` pose le parent via `xdg_toplevel.set_parent`. Wayland ne peut pas retirer une fenêtre de la barre des tâches : cela reste au choix du bureau. Une fenêtre ouverte depuis un menu prend pour parent la fenêtre du menu, le popup gardant le clavier jusqu'à sa fermeture.
+On Windows, Properties and dialogs (`set_window_owner`) stay above the main window, with no taskbar entry; Advanced Search, Duplicates, Operations, their file list and the detached Viewer are independent. Linux follows the same split: `WindowKind::Floating` sets the parent via `xdg_toplevel.set_parent`. Wayland cannot remove a window from the taskbar: that stays the desktop's choice. A window opened from a menu takes the menu's window as parent, the popup keeping the keyboard until it closes.
 
-### Menus sous Wayland
+### Menus on Wayland
 
-`popup/wayland.rs` traduit les règles de placement ci-dessus en `xdg_positioner` ; le compositeur retourne ou glisse le menu, et sa réponse donne sa position, d'où `owner_point` et `row_bounds` (`Window::popup_offset`, ajouté à la copie de GPUI). Mutter et KWin retournent l'ancre et la gravité, pas le décalage : `flip_axis` obtient donc les deux côtés du rectangle d'ancrage, pour garder le même écart une fois retourné. Ce rectangle doit rester dans la fenêtre parente : à moins d'une marge de son bord, l'écart d'un menu retourné grandit d'au plus cette marge. Un côté d'ouverture ne change pas sur une surface ouverte : elle est remplacée. La première image est vide, car une surface doit avoir un tampon avant de prendre la taille de son contenu ; seul le cadre visible reçoit le pointeur, pas les marges d'ombre.
+`popup/wayland.rs` translates the placement rules above into `xdg_positioner`; the compositor flips or slides the menu, and its answer gives its position, hence `owner_point` and `row_bounds` (`Window::popup_offset`, added to the GPUI copy). Mutter and KWin flip anchor and gravity, not the offset, so `flip_axis` gets both sides of the anchor rectangle to keep the same gap once flipped. This rectangle must stay in the parent window: within a margin of its edge, a flipped menu's gap grows by at most that margin. An opening side does not change on an open surface: it is replaced. The first image is empty, since a surface needs a buffer before taking its content's size; only the visible frame receives the pointer, not shadow margins.
 
-Le menu interactif prend un grab `xdg_popup`, qui lui donne le clavier sans hook : le compositeur le ferme d'un clic hors de l'application ou au changement d'application, et Oxyde en est averti par la fermeture de la fenêtre. Ces deux règles diffèrent de Win32 :
+The interactive menu takes an `xdg_popup` grab, which gives it the keyboard with no hook: the compositor closes it on a click outside the application or an application change, and Oxyde learns of this from the window closing. Two rules differ from Win32:
 
-- Un grab laisse cliquables les surfaces de l'application sans fermer le menu : la copie de GPUI ferme les menus hors de la cible une fois l'appui transmis, car cet appui peut être celui du bouton qui les bascule.
-- Seul le dernier menu peut prendre un grab, sous peine d'erreur de protocole fatale : ouvrir un menu ferme ceux dont il ne descend pas.
+- A grab leaves the application's surfaces clickable without closing the menu: the GPUI copy closes menus outside the target once the press is delivered, since that press may be the button toggling them.
+- Only the last menu may take a grab, on pain of a fatal protocol error: opening a menu closes those it does not descend from.
 
-`show_passive` n'a pas de grab : le clavier reste au champ.
+`show_passive` has no grab: the keyboard stays with the field.
 
-## Invites modales fixes
+## Fixed modal prompts
 
-Les invites sont de vraies fenêtres possédées, au gabarit des Propriétés (`tool_window::header`, pied commun, largeur fixe, hauteur ajustée au contenu). `Platform::configure_fixed_dialog` désactive le propriétaire tant qu’elles sont visibles et verrouille leur position au centre de celui-ci, bornée à sa zone de travail ; ni déplacement, ni redimensionnement, ni réduction. `follow_fixed_dialog_owner` les recentre quand la fenêtre principale bouge. Le propriétaire est réactivé avant le masquage pour que Windows lui rende l’activation. La fermeture par la barre de titre ou Alt+F4 passe par `request_fixed_close`, qui respecte les opérations occupées ; à la libération, le focus du propriétaire revient à `focus_handle` s’il pointait encore vers l’invite. Linux ouvre la même fenêtre sans verrouillage.
+Prompts are real owned windows, in the Properties template (`tool_window::header`, shared footer, fixed width, height fitted to content). `Platform::configure_fixed_dialog` disables the owner while they are visible and locks their position at its center, bounded to its work area, with no moving, resizing or minimizing. `follow_fixed_dialog_owner` recenters them when the main window moves. The owner is reenabled before hiding so Windows gives it back activation. Closing by title bar or Alt+F4 goes through `request_fixed_close`, which respects busy operations; on release, the owner's focus returns to `focus_handle` if it still pointed at the prompt.
 
-Sous Linux, `WindowKind::Dialog` obtient le même blocage : le protocole `xdg_dialog_v1` marque l’invite modale, et GPUI ignore l’entrée de la fenêtre parente tant que l’invite existe, y compris où le compositeur ne connaît pas ce protocole. Mutter l’attache au parent, la centre et la déplace avec lui ; sans cela, l’invite reste déplaçable.
+On Linux, `WindowKind::Dialog` gets the same blocking: the `xdg_dialog_v1` protocol marks the prompt modal, and GPUI ignores the parent window's input while the prompt exists, also where the compositor does not know this protocol. Mutter attaches it to the parent, centers it and moves it along; otherwise the prompt stays movable.
 
-## Focus et fermeture
+## Focus and closing
 
-Enregistrer les actions via `popup::keyboard::item`, avec le même callback que le clic, en excluant les lignes désactivées. Préserver flèches, début/fin, Entrée/Espace, Tab/Maj+Tab et Échap ; les éditeurs gardent leurs handlers. Les raccourcis métier sont routés vers la source.
+Register actions through `popup::keyboard::item`, with the same callback as the click, excluding disabled rows. Keep arrows, home/end, Enter/Space, Tab/Shift+Tab and Esc; editors keep their handlers. Business shortcuts route to the source.
 
-Toutes les surfaces `popup` conservent l’activation Windows et le focus natif dans leur formulaire propriétaire, sans variation d’ombre lors de l’ouverture. Les menus interactifs gardent leur focus logique GPUI ; un hook `WH_GETMESSAGE` limité au thread UI redirige les messages clavier vers le dernier menu interactif visible du formulaire, avant la traduction des accélérateurs GPUI. Cela couvre les sélecteurs, menus contextuels, paramètres, sous-menus et champs éditables. La fermeture d’un sous-menu rend le clavier au menu précédent ; la fermeture du dernier rend le clavier au formulaire et libère le hook. `show_passive` réserve le clavier au champ source pour les suggestions de chemin. La fermeture ne demande aucune activation native.
+All `popup` surfaces keep Windows activation and native focus in their owning form, with no shadow change on opening. Interactive menus keep their logical GPUI focus; a `WH_GETMESSAGE` hook limited to the UI thread redirects keyboard messages to the form's last visible interactive menu, before GPUI accelerators translate. This covers selectors, context menus, settings, submenus and editable fields. Closing a submenu returns the keyboard to the previous menu; closing the last returns it to the form and frees the hook. `show_passive` reserves the keyboard for the source field. Closing asks for no native activation.
 
-Restituer le focus au propriétaire logique seulement si la famille reste active. Préserver le nouveau focus posé par une action. Un clic propriétaire ferme les descendants avant son action ; changer d’application ferme les menus sans réactiver Oxyde.
+Return focus to the logical owner only if the family stays active. Keep new focus set by an action. An owner click closes descendants before its action; changing application closes menus without reactivating Oxyde.
 
-Avant de détruire un propriétaire, fermer ses descendants avec `tool_window::close_transients` ; respecter d’abord un éventuel refus de fermeture d’un dialogue occupé. `on_window_closed` reste un filet de sécurité. Les suggestions s’annulent quand leur propriétaire devient inactif.
+Before destroying an owner, close its descendants with `tool_window::close_transients`, first respecting any refusal from a busy dialog. `on_window_closed` stays a safety net. Suggestions cancel when their owner becomes inactive.
 
-## Infobulles et géométrie
+## Tooltips and geometry
 
-Les infobulles natives sont des `PopUp` transparentes, passives, sans activation ni barre des tâches ; les clics les traversent. Une seule ombre GPUI, sans décoration DWM ni cadre non client, sans statut globalement topmost. Préserver l’origine de prépaint fournie par la marge d’ombre.
+Native tooltips are transparent, passive `PopUp` windows, with no activation or taskbar entry; clicks pass through. One GPUI shadow, with no DWM decoration, non-client frame or global topmost. Keep the prepaint origin given by the shadow margin.
 
-Le cadre visible suit le pointeur à 12 pixels logiques sur X/Y, avec retournement et bornage sur la zone de travail. Les placements fixes gardent les bounds de l’élément. Une marge transparente d’ombre n’ajoute pas de décalage visible.
+The visible frame follows the pointer at 12 logical pixels on X/Y, flipped and bounded to the work area. Fixed placements keep the element's bounds. A transparent shadow margin adds no visible offset.
 
-`ui/window_geometry.rs` mémorise la position restaurable et l’état maximisé ; `app/tool_geometry.rs` gère les familles secondaires via `AppConfig::tool_window_placements`. Conserver les positions négatives, ignorer la minimisation et borner une géométrie invalide aux écrans disponibles. Les écritures sont différées de 350 ms ; la fermeture force la dernière sauvegarde. Réinitialiser les préférences conserve ces positions.
+`ui/window_geometry.rs` remembers the restorable position and maximized state; `app/tool_geometry.rs` manages secondary families via `AppConfig::tool_window_placements`. Keep negative positions, ignore minimization and bound invalid geometry to available screens. Writes defer by 350 ms; closing forces the last save. Resetting preferences keeps these positions.
 
-### Infobulles sous Wayland
+### Tooltips on Wayland
 
-Une application n'y place pas ses fenêtres : `hover/anchored.rs` ouvre un `AnchoredPopup` (`xdg_popup`), une surface sans entrée dont le compositeur garde le cadre à l'écran. Il n'existe pas de popup masqué : la surface reste ouverte et vide entre deux éléments d'une session, et se ferme à sa fin, car en ouvrir une autre coûte plusieurs images. Un compositeur affiche chaque image : la bulle ne se vide qu'après 80 ms sans élément survolé, sinon elle clignoterait à chaque espace entre deux fichiers. Son ombre est celle des menus, plus marquée que sous Windows, pour se détacher des fenêtres du bureau. La copie de GPUI ([README](../../vendor/gpui_linux/README.oxyde.md)) ajoute `Window::reposition_popup`, qui déplace la surface sans la redessiner : avec un redessin, Mutter 50 la limitait à 20 images par seconde.
+An application does not place its windows there: `hover/anchored.rs` opens an `AnchoredPopup` (`xdg_popup`), an input-less surface whose frame the compositor keeps on screen. No hidden popup exists: the surface stays open and empty between items of a session and closes at its end, since opening another costs several frames. A compositor shows each frame, so the bubble empties only after 80 ms with no hovered item, otherwise it would flicker at each gap between files. Its shadow is the menus', stronger than on Windows, to stand out from desktop windows. The GPUI copy ([README](../../vendor/gpui_linux/README.oxyde.md)) adds `Window::reposition_popup`, which moves the surface without redrawing: with a redraw, Mutter 50 limited it to 20 frames per second.
 
-Quand la taille change, entre deux types de fichiers par exemple, l'image reste celle de l'élément précédent jusqu'à la réponse du compositeur, puis la suivante arrive d'un bloc à la bonne taille. Le contenu mesuré demande cette taille avant sa présentation (`MeasuredContent::prepaint`) ; GPUI ne dessine pas tant que la réponse manque et ne valide aucun déplacement seul tant que l'image n'est pas sur la surface : le compositeur étirerait sinon l'ancienne au nouveau format (`wp_viewport`).
+When the size changes, between two file types for example, the image stays the previous item's until the compositor answers, then the next arrives at once at the right size. Measured content asks for this size before presenting (`MeasuredContent::prepaint`); GPUI does not draw while the answer is missing and validates no bare move until the image is on the surface, as the compositor would otherwise stretch the old one to the new format (`wp_viewport`).
 
-Mutter ferme un popup qui ne touche plus sa fenêtre parente. Les marges d'ombre le gardent en contact, quel que soit le bord où se trouve le pointeur. Il peut aussi le fermer de lui-même : `native_window::sync` en ouvre alors un autre au mouvement suivant.
+Mutter closes a popup no longer touching its parent window. Shadow margins keep it in contact, whichever edge the pointer is on. It may also close it on its own: `native_window::sync` then opens another at the next movement.
 
-Les essais utiles et leurs limites figurent dans le [guide visuel](../guides/visual-checks.md) ; les résultats datés dans le [bilan des fenêtres](../reports/2026-10-15-windows.md).
+## File drag and drop
 
-## Glisser-déposer de fichiers
+On Windows, the ghost uses an owned GPUI window, click-through, with no activation or taskbar entry. It follows the pointer and its work area, also outside the owner. It becomes temporarily topmost during the OLE session, then is destroyed on drop, cancel or owner close. Native placements are deferred and grouped through `Platform`. The cursor stays unchanged; the ghost shows the negotiated action or refusal. Release or cancel hides the ghost from `QueryContinueDrag`, before calling the foreign `Drop`, which may take a while. This hiding invalidates pending placements and late measures, and no placement message can reopen the surface. Session end separately keeps the transfer acknowledgment.
 
-Sous Windows, le ghost utilise une fenêtre GPUI possédée, transparente aux clics,
-sans activation et sans barre des tâches. Il suit le pointeur et sa zone de
-travail, y compris hors du propriétaire. Il devient temporairement topmost pendant
-la session OLE, puis est détruit au dépôt, à l'annulation ou à la fermeture du
-propriétaire. Les placements natifs sont différés et regroupés via `Platform`.
-Le curseur reste inchangé ; le ghost indique l'action négociée ou le refus.
-Le relâchement ou l'annulation masque le ghost dès `QueryContinueDrag`, avant
-l'appel au `Drop` étranger, qui peut durer. Ce masquage invalide les placements
-en attente et les mesures tardives ; aucun message de placement ne peut rouvrir
-la surface. La fin de session conserve séparément l'acquittement du transfert.
+Internal interactions stay in GPUI. On leaving the window, passing over an overlaid foreign window or changing application, real paths verified beforehand in the background go to an OLE session, started by message after GPUI borrows are released. The internal drag is then removed; returning to Oxyde goes through the same external drop as other programs. Virtual archive members are not exported without preparation.
 
-Les interactions internes restent GPUI. À la sortie de la fenêtre, lors du passage
-sur une fenêtre étrangère superposée ou d'un changement d'application, les chemins
-réels préalablement vérifiés en arrière-plan sont confiés à une session OLE,
-lancée par message après libération des emprunts GPUI. Le drag interne est alors
-retiré ; un retour dans Oxyde passe par le même dépôt externe que les autres
-programmes. Les membres virtuels d'archives ne sont pas exportés sans préparation.
+On Linux, in Wayland, GPUI hands the gesture to the compositor when the pointer leaves the window (`app/drag/outgoing.rs`). It offers paths as `text/uri-list`; the receiver copies or moves itself, as from Nautilus, and Oxyde sees the result through folder watching. The compositor shows no ghost, as GPUI provides none. Returning to Oxyde resumes the internal drag, hence its move. A selection is refused whole if it holds an archive member, a non-UTF-8 name, or comes from the trash: the gesture then stays internal. GPUI offers no files on X11, where it always stays internal.
 
-Sous Linux, en Wayland, GPUI confie le geste au compositeur quand le pointeur quitte
-la fenêtre (`app/drag/outgoing.rs`). Il offre les chemins en `text/uri-list` ; le
-récepteur copie ou déplace lui-même, comme depuis Nautilus, et Oxyde voit le résultat
-par sa surveillance de dossiers. Le compositeur n'affiche alors aucun ghost, GPUI ne
-lui en fournissant pas. Un retour dans Oxyde reprend le glisser interne, donc son
-déplacement. Sélection refusée en entier s'il s'y trouve un membre d'archive, un nom
-non UTF-8, ou depuis la corbeille : le geste reste alors interne. GPUI n'offre pas de
-fichiers en X11, où il reste toujours interne.
+`Platform::install_file_drop_target` replaces GPUI's Windows receiver to pass on modifiers, allowed effects and refusal of target-less areas. Folders, lists (details/grid), physical sidebar entries and tabs share the targets in `app/drag/external.rs`. Operations and conflicts stay in the usual asynchronous paths. A drop on the tabs' free space opens folders after background verification.
 
-`Platform::install_file_drop_target` remplace le récepteur GPUI Windows afin de
-transmettre les modificateurs, les effets autorisés et le refus des zones sans
-cible. Les dossiers, listes (détails/grille), entrées physiques de la barre
-latérale et onglets partagent les cibles d'`app/drag/external.rs`. Les opérations
-et conflits restent dans les parcours asynchrones habituels. Le dépôt sur l'espace
-libre des onglets ouvre les dossiers après vérification en arrière-plan.
+Oxyde performs incoming moves itself. The receiver signals an optimized move (`Performed DropEffect = NONE`, return `NONE`) so the foreign source does not delete files a second time. For an outgoing drag, only explicit confirmation of a non-optimized move asks the operation engine to remove sources. The session carries the whole selection in a single `CF_HDROP` object, without changing the clipboard. Virtual items another application provides only as streams are not accepted.
 
-Oxyde effectue lui-même les déplacements entrants. Le récepteur signale un
-déplacement optimisé (`Performed DropEffect = NONE`, retour `NONE`) pour que la
-source étrangère ne supprime pas les fichiers une seconde fois. Pour un départ,
-seule la confirmation explicite d'un déplacement non optimisé demande le retrait
-des sources par le moteur d'opérations. La session transporte toute la sélection
-dans un unique objet `CF_HDROP`, sans modifier le presse-papiers. Les éléments
-virtuels fournis uniquement en flux par une autre application ne sont pas acceptés.
-
-Linux conserve les événements entrants GPUI et les cibles communes. La session
-sortante OLE et la fenêtre indépendante sont spécifiques à Windows.
+Linux keeps GPUI's incoming events and the shared targets. The outgoing OLE session and independent window are Windows-specific.

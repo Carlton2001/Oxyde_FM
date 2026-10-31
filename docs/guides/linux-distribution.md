@@ -1,126 +1,62 @@
-# Distribuer Oxyde sous Linux
+# Distributing Oxyde on Linux
 
-**Statut : paquets RPM et DEB construits et essayés, RPM vérifié dans l'interface, CI
-réussie sur GitHub (T14 de l'[audit](../reports/2026-10-26-linux-portability-audit.md)).** La distribution Windows est décrite dans
-[son propre guide](distribution.md) et ne change pas.
+RPM and DEB packages are built and tested in CI. The Windows side has [its own guide](distribution.md). Packaging sources: [`packaging/`](../../packaging/README.md).
 
-## Construire
+## Build
 
 ```bash
-bash scripts/build-linux-packages.sh --rpm   # sur Fedora
-bash scripts/build-linux-packages.sh --deb   # partout : podman hors d'Ubuntu 24.04
+bash scripts/build-linux-packages.sh --rpm   # on Fedora
+bash scripts/build-linux-packages.sh --deb   # anywhere: podman outside Ubuntu 24.04
 ```
 
-Les fichiers et leur SHA-256 arrivent dans `target/linux-packages/output`. Outre les
-dépendances de [développement](linux-development.md#installer-sur-fedora-workstation), il
-faut sur Fedora `rpm-build`, `desktop-file-utils`, `appstream`, `python3` et `cargo-about`
-0.9.2. Le DEB se construit dans l'image de `packaging/linux/debian/Containerfile`, avec son
-propre dossier `target/ubuntu-24.04`, et `lintian` arrête la construction sur une erreur ;
-`rpmlint` n'est qu'informatif. `--skip-build` reprend les exécutables release existants.
-`--offline` garde les avis de la construction précédente : `cargo-about` lit les crates
-de toutes les cibles, y compris macOS, qu'un cache Linux ne contient pas.
+Files and their SHA-256 land in `target/linux-packages/output`. Beyond the [development dependencies](linux-development.md#setup-on-fedora-workstation), Fedora needs `rpm-build`, `desktop-file-utils`, `appstream`, `python3` and `cargo-about` 0.9.2. The DEB builds in the image from `packaging/linux/debian/Containerfile`, with its own `target/ubuntu-24.04` folder; `lintian` stops the build on an error, `rpmlint` is informational. `--skip-build` reuses existing release executables. `--offline` keeps the previous build's notices: `cargo-about` reads crates for every target, macOS included, which a Linux cache does not hold.
 
-Un paquet ne s'installe que sur un système au moins aussi récent que celui qui l'a
-construit (glibc) : le RPM vise Fedora 44 et suivantes, le DEB Ubuntu 24.04 et suivantes,
-Debian 13 et suivantes. Pas d'autre architecture que x86-64, ni de signature ou de dépôt
-pour l'instant. Le workflow `release.yml` ne publie pas ces paquets : une version reste
-Windows seulement.
+A package installs only on a system at least as recent as the one that built it (glibc): Fedora 44+ for the RPM, Ubuntu 24.04+ and Debian 13+ for the DEB. x86-64 only, with no signature or repository for now. `release.yml` does not publish these packages: a release remains Windows only.
 
-## Contenu des paquets
+## Package contents
 
-- `/usr/bin` : `oxyde`, `oxyde-archive-list-worker`, `oxyde-archive-io-worker`, côte à côte
-  parce qu'Oxyde les cherche à côté de son exécutable. `oxyde-image-worker` est vide sous
-  Linux et n'est pas livré.
-- Entrée de bureau, icônes hicolor (SVG et PNG de 16 à 512), métadonnées AppStream. Les
-  PNG sont conservés dans Git et régénérés avec les autres déclinaisons du logo :
-  `cargo run --offline --locked --example generate_application_icons`.
-- Licence et avis tiers, régénérés à chaque construction par
-  `scripts/linux-third-party-notices.py`, l'équivalent de
-  `update-third-party-licenses.ps1` ; le fichier conservé dans Git reste celui de Windows.
-  Le champ `License` du RPM est calculé par `scripts/rpm-license.py` depuis les crates liées
-  sous Linux et les ressources embarquées.
-- `StartupNotify=false` : GPUI ne consomme pas le jeton de démarrage, et GNOME garderait
-  le curseur occupé jusqu'à son délai.
+- `/usr/bin`: `oxyde`, `oxyde-archive-list-worker`, `oxyde-archive-io-worker`, side by side because Oxyde looks for them next to its executable. `oxyde-image-worker` is empty on Linux and not shipped.
+- Desktop entry, hicolor icons (SVG and PNG 16–512), AppStream metadata. PNGs are kept in Git and regenerated with the other logo variants: `cargo run --offline --locked --example generate_application_icons`.
+- License and third-party notices, regenerated at each build by `scripts/linux-third-party-notices.py`, the counterpart of `update-third-party-licenses.ps1`; the file in Git stays the Windows one. The RPM `License` field is computed by `scripts/rpm-license.py` from crates linked on Linux and embedded resources.
+- `StartupNotify=false`: GPUI does not consume the startup token, and GNOME would keep the busy cursor until its timeout.
 
-Aucun script RPM : les déclencheurs des paquets de Fedora rafraîchissent les caches de
-bureau et d'icônes, y compris sur Silverblue où seul `/usr` est livré.
+No RPM scriptlets: Fedora's package triggers refresh the desktop and icon caches, including on Silverblue where only `/usr` is delivered.
 
-## Dépendances
+## Dependencies
 
-GIO, libseccomp, Vulkan, Wayland, Fontconfig, poppler et GStreamer sont chargés à
-l'exécution, donc invisibles pour les outils de paquets, qui ne trouvent que `libxcb`,
-`libxkbcommon` et la libc. Ils sont déclarés à la main :
+GIO, libseccomp, Vulkan, Wayland, Fontconfig, poppler and GStreamer load at runtime, so packaging tools only find `libxcb`, `libxkbcommon` and libc. The rest is declared by hand:
 
-| Rôle | Fedora | Debian/Ubuntu | Niveau |
+| Role | Fedora | Debian/Ubuntu | Level |
 | --- | --- | --- | --- |
-| Confinement des décodeurs | `bubblewrap`, `libseccomp` | `bubblewrap`, `libseccomp2` | requis |
-| GIO et réglages de la corbeille | `libgio-2.0.so.0` (`glib2`) | `libglib2.0-0t64`, `libglib2.0-bin` | requis |
-| Rendu | `vulkan-loader`, `mesa-vulkan-drivers` (lavapipe en repli) | `libvulkan1`, `mesa-vulkan-drivers` | requis |
-| Fenêtres et polices | `libwayland-client`, `libfontconfig`, `default-fonts-core-sans` | `libwayland-client0`, `libfontconfig1`, une police système | requis |
-| Ouverture dans une autre application | `xdg-utils` | `xdg-utils` | requis |
-| PDF | `poppler-glib` | `libpoppler-glib8t64` | recommandé |
-| Vidéo et audio | `gstreamer1-plugins-base`, `-good` | `gstreamer1.0-plugins-base`, `-good`, `libgstreamer-plugins-base1.0-0` | recommandé |
-| Réseau | `gvfs`, `gvfs-fuse`, `gvfs-smb` | `gvfs`, `gvfs-fuse`, `gvfs-backends` | recommandé |
-| Volumes | `udisks2` | `udisks2` | recommandé |
+| Decoder confinement | `bubblewrap`, `libseccomp` | `bubblewrap`, `libseccomp2` | required |
+| GIO and trash settings | `libgio-2.0.so.0` (`glib2`) | `libglib2.0-0t64`, `libglib2.0-bin` | required |
+| Rendering | `vulkan-loader`, `mesa-vulkan-drivers` (lavapipe fallback) | `libvulkan1`, `mesa-vulkan-drivers` | required |
+| Windows and fonts | `libwayland-client`, `libfontconfig`, `default-fonts-core-sans` | `libwayland-client0`, `libfontconfig1`, a system font | required |
+| Opening in another application | `xdg-utils` | `xdg-utils` | required |
+| PDF | `poppler-glib` | `libpoppler-glib8t64` | recommended |
+| Video and audio | `gstreamer1-plugins-base`, `-good` | `gstreamer1.0-plugins-base`, `-good`, `libgstreamer-plugins-base1.0-0` | recommended |
+| Network | `gvfs`, `gvfs-fuse`, `gvfs-smb` | `gvfs`, `gvfs-fuse`, `gvfs-backends` | recommended |
+| Volumes | `udisks2` | `udisks2` | recommended |
 
-Le confinement est requis parce qu'Oxyde décode sans lui, avec un simple avertissement au
-journal. Les recommandés n'ôtent chacun que leur fonction.
+Confinement is required because Oxyde otherwise decodes without it, with only a log warning. Each recommended item removes only its own feature.
 
-## Ubuntu et AppArmor
+## Ubuntu and AppArmor
 
-Ubuntu 23.10 et suivantes refusent les espaces de noms utilisateur aux programmes sans
-profil AppArmor qui les autorise : bubblewrap échoue et les décodeurs tourneraient sans
-confinement. Comme Ubuntu le fait pour Nautilus, le DEB installe
-`/etc/apparmor.d/io.github.Carlton2001.Oxyde`, un profil `unconfined` rattaché à
-`/usr/bin/oxyde` qui ajoute seulement `userns`. Il ne vaut que pour ce chemin : un Oxyde
-lancé d'ailleurs reste sans confinement sous Ubuntu.
+Ubuntu 23.10+ denies user namespaces to programs without an AppArmor profile allowing them: bubblewrap fails and decoders would run unconfined. As Ubuntu does for Nautilus, the DEB installs `/etc/apparmor.d/io.github.Carlton2001.Oxyde`, an `unconfined` profile attached to `/usr/bin/oxyde` that only adds `userns`. It applies to that path only: an Oxyde run from elsewhere stays unconfined on Ubuntu. The profile is unloaded on removal and the file deleted on purge. A system without the restriction (Debian) does not need it.
 
-Essai sur une machine virtuelle Ubuntu 24.04 (restriction active, 118 profils) : avec le
-profil, aucun avertissement et l'archive s'ouvre ; profil retiré, `bwrap: loopback: Failed
-RTM_NEWADDR` et « Preview workers run without a sandbox ». Le profil est retiré du noyau à
-la désinstallation et le fichier à la purge. Un système sans restriction (Debian) n'en a
-pas besoin et n'est pas gêné.
+Without the profile the log shows `bwrap: loopback: Failed RTM_NEWADDR` and "Preview workers run without a sandbox".
 
-## Ouvrir un dossier
+## Opening a folder
 
-`Exec=oxyde %U` et `MimeType=inode/directory` placent Oxyde dans « Ouvrir avec » sans le
-rendre gestionnaire par défaut, qui reste celui que le bureau désigne (Nautilus sous
-GNOME). Comme une nouvelle fenêtre de Nautilus, le lancement n'affiche que
-les emplacements reçus, un onglet par emplacement, et ne touche pas aux onglets enregistrés
-pour le lancement suivant ; le code est dans `platform/linux_startup.rs`.
+`Exec=oxyde %U` and `MimeType=inode/directory` put Oxyde in "Open With" without making it the default handler. Like a new Nautilus window, launching shows only the received locations, one tab each, and leaves saved tabs for the next launch (`platform/linux_startup.rs`).
 
-Limites : un lancement est un nouveau processus, sans instance unique, et son enregistrement
-des préférences réécrit la session qu'il a lue au démarrage ; un fichier reçu ouvre son
-dossier sans le sélectionner ; un nom non UTF-8 est ignoré.
+Limits: each launch is a new process, with no single instance, and its preference save rewrites the session it read at startup; a received file opens its folder without selecting it; a non-UTF-8 name is ignored.
 
-## Intégration continue
+## Continuous integration
 
-`.github/workflows/linux.yml`, sur `main`, `linux-foundation` et leurs PR (premier passage réussi sur
-`7583b40`, 33 minutes) :
+`.github/workflows/linux.yml`, on `main` and its PRs:
 
-- **tests** sur `ubuntu-24.04` : compilation sans avertissement, suite complète, puis
-  `preview_jobs` à part, dont les délais de 2 s échouent quand toute la suite charge la
-  machine. La restriction AppArmor est levée pour que les tests de confinement s'exécutent.
-- **rpm**, dans un conteneur `fedora:44`, et **deb**, sur `ubuntu-24.04` : construction,
-  installation avec les dépendances, artefact téléchargeable.
+- **tests** on `ubuntu-24.04`: warning-free compile, full suite, then `preview_jobs` separately, whose 2 s timeouts fail when the whole suite loads the machine. The AppArmor restriction is lifted so confinement tests run.
+- **rpm** in a `fedora:44` container and **deb** on `ubuntu-24.04`: build, install with dependencies, downloadable artifact.
 
-Rust est fixé à 1.99.1 et `cargo-about` vérifié par empreinte. Les workflows Windows ne
-changent pas.
-
-## Essais du 30 octobre 2026
-
-- Interface : RPM installé sur Fedora 44 et jugé bon par l'utilisateur, avec comme points
-  à essayer l'icône et le nom dans les Activités, « Ouvrir avec » depuis Nautilus, une
-  archive, un PDF et le retour des onglets enregistrés.
-- CI : `actionlint` sans remarque ; job **tests** rejoué à la main sur une machine virtuelle
-  Ubuntu 24.04 (ext4), réussi, confinement compris, puis workflow réussi sur GitHub.
-- RPM : installé dans un conteneur Fedora 44 avec ses dépendances, lancé sous Xvfb sur une
-  URI `file://` accentuée, archive ouverte par les workers de `/usr/bin` ; couche
-  `rpm-ostree` sur l'image Silverblue 44 acceptée, `bootc container lint` passé. Le
-  conteneur interdit bubblewrap, et Silverblue n'a pas été démarré.
-- DEB : construit dans un conteneur Ubuntu 24.04, mêmes essais dans la machine virtuelle
-  ci-dessus, puis retrait, réinstallation et purge. Installé aussi avec ses dépendances dans
-  des conteneurs Debian 13 et Ubuntu 26.04, bibliothèques chargées à l'exécution présentes.
-- Dépendances requises seules (`--no-install-recommends`, `install_weak_deps=False`) :
-  installation, lancement sous Xvfb et archive ouverts sur Fedora 44 et Ubuntu 24.04.
-  `lintian` et `rpmlint` sans erreur ; restent les pages de manuel absentes.
+Rust is pinned to 1.99.1 and `cargo-about` verified by hash. Containers forbid bubblewrap, so they do not exercise confinement.

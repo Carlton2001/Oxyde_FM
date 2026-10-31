@@ -1,3 +1,3 @@
-# Distribution Windows
+# Windows installer
 
-La procédure de construction, d’installation et d’utilisation portable se trouve dans le [guide de distribution](../docs/guides/distribution.md).
+Inno Setup script for the Windows installer. Building, installing and portable use are covered in the [distribution guide](../docs/guides/distribution.md).

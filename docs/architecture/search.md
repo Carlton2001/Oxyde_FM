@@ -1,88 +1,63 @@
-# Navigation, tri et recherche
+# Navigation, sorting and search
 
-Chaque onglet possède ses critères, résultats et annulation. Les workers préparent les données ; la publication vérifie l’identité de l’onglet et la révision de la demande. Une ancienne réponse ne doit jamais remplacer une navigation plus récente.
+Each tab owns its criteria, results and cancellation. Workers prepare data; publication checks the tab's identity and the request's revision. An old response must never replace a more recent navigation.
 
-Les résultats de doublons utilisent une liste virtualisée commune aux en-têtes
-de groupes et aux fichiers. Filtre, tailles minimales/maximales et plages de lignes
-sont préparés en arrière-plan ; replier un groupe invalide la préparation précédente.
-Le rendu ne parcourt que les lignes demandées par le viewport, même pour un groupe
-de 100 000 fichiers. Une taille commune est affichée si tous les membres ont la
-même taille ; sinon, le groupe affiche leur plage de tailles.
+Duplicate results use a virtualized list shared by group headers and files. Filter, min/max sizes and row ranges are prepared in the background; collapsing a group invalidates the previous preparation. Rendering walks only the rows the viewport asks for, even for a group of 100,000 files. A common size shows if all members share it; otherwise the group shows its size range.
 
-## Listing et filtres
+## Listing and filters
 
-Les dossiers restent en tête en ordre ascendant comme descendant. L’UI trie les noms en ordre naturel, en minuscules Unicode et sans retrait d’accents : `fichier2` précède `fichier10`. Les suites de chiffres ASCII sont comparées sans limite de taille ; à valeur égale, le moins de zéros initiaux précède (`2`, `02`, `002`). Les extensions restent lexicographiques, avec les noms en départage naturel pour toutes les colonnes et des égalités stables. Le tri naturel public du backend garde ses autres consommateurs.
+Folders stay first in ascending and descending order. The UI sorts names in natural order, in Unicode lowercase without stripping accents: `file2` comes before `file10`. ASCII digit runs compare with no size limit; at equal value, fewer leading zeros come first (`2`, `02`, `002`). Extensions stay lexicographic, with names as natural tiebreak for all columns and stable ties. The backend's public natural sort keeps its other consumers.
 
-Nom et emplacement utilisent une sous-chaîne insensible à la casse mais sensible aux accents. Préparer la requête une fois par parcours. La visibilité des fichiers cachés/système doit rester cohérente entre listing et recherche.
+Name and location use a case-insensitive, accent-sensitive substring. Prepare the query once per traversal. Hidden/system visibility must stay consistent between listing and search.
 
-Le regroupement par date appartient à l’onglet et est persisté ; son repli reste temporaire. Les six périodes calendaires sont communes aux filtres et groupes. Le changement de jour/fuseau invalide les caches en arrière-plan, y compris pour les onglets inactifs, sans relire les fichiers. Les groupes utilisent la même géométrie pour rendu et sélection.
+Date grouping belongs to the tab and is persisted; collapsing stays temporary. The six calendar periods are shared by filters and groups. A day/timezone change invalidates caches in the background, inactive tabs included, without rereading files. Groups use the same geometry for rendering and selection.
 
-## Tailles des dossiers
+## Folder sizes
 
-Le calcul fournit une taille indicative des éléments accessibles, adaptée à un explorateur de fichiers. L’exhaustivité d’un outil spécialisé d’analyse disque n’est pas un objectif : des éléments illisibles peuvent être omis sans demander de droits supplémentaires ni afficher un statut d’incomplétude dédié. Les watchers et recalculs différés améliorent l’actualisation, sans garantir une mesure exhaustive ni un instantané. Cette limite est acceptée dans le [suivi A04 de l’audit](../reports/2026-10-25-code-audit.md#a04--taille-des-éléments-accessibles--limite-acceptée).
+The calculation gives an indicative size of accessible items, suited to a file explorer. A disk analyzer's exhaustiveness is not a goal: unreadable items may be omitted without asking for more rights or showing an incompleteness status. Watchers and deferred recalculation improve freshness, with no guarantee of exhaustive measure or snapshot. This limit is an accepted product decision.
 
-Le bouton de la barre de statut active le calcul pour le chemin de l’onglet jusqu’à sa prochaine navigation. Un rafraîchissement conserve les tailles non invalidées et ne relance que les dossiers signalés, non mesurés ou dont une mesure invalidée a échoué. Un parcours déjà en cours ou prêt à publier n’est pas dupliqué s’il n’a reçu aucun nouveau changement. Le listing actualisé ajoute les nouveaux dossiers à mesurer. La surveillance devient récursive pendant ce mode ; un changement profond ne recalcule que le sous-dossier immédiat concerné. Les liens symboliques et jonctions sont exclus du calcul, les vues virtuelles et archives de ce mode.
+The status bar button turns the calculation on for the tab's path until its next navigation. A refresh keeps non-invalidated sizes and only restarts folders flagged, unmeasured, or whose invalidated measure failed. A traversal already running or ready to publish is not duplicated if no new change arrived. The refreshed listing adds new folders to measure. Watching becomes recursive during this mode; a deep change recalculates only the immediate subfolder concerned. Symbolic links and junctions are excluded from the calculation, virtual views and archives from this mode.
 
-Les événements sont regroupés par racine et enfant, avec repli sur une invalidation complète en cas de débordement ou de perte d’événements. Le refresh prend aussi en compte les événements déjà reçus avant le traitement périodique de 500 ms, sans les réappliquer deux fois ni perdre les demandes de listing ou les changements des autres onglets sur la même racine. Conserver une taille sans nouveau parcours nécessite un watcher natif récursif sans erreur ; en son absence, pendant une installation, après une erreur ou avec du polling, un refresh réinvalide toutes les tailles par précaution.
+Events are grouped by root and child, falling back to full invalidation on overflow or lost events. Refresh also accounts for events received before the 500 ms periodic processing, without reapplying them twice or losing listing requests or other tabs' changes on the same root. Keeping a size without a new traversal requires an error-free native recursive watcher; without one, during installation, after an error or with polling, a refresh reinvalidates all sizes as a precaution.
 
-La surveillance reste active pendant le premier passage pour mémoriser les changements. La file conserve au plus une demande en attente par dossier ; une modification pendant son parcours ou avant publication conserve la mesure affichée et ajoute un seul nouveau passage. Une valeur à actualiser change seulement de couleur (`accent` du thème actif), sans préfixe ni changement de police ou de largeur. En grille, le libellé de type du dossier utilise la même couleur. Les trois phrases explicatives figurent sur trois lignes dans un cadre de l’infobulle normale du fichier : bordure et texte accent, fond accent légèrement teinté. Le calcul de largeur inclut les marges et la bordure du cadre. Aucune infobulle n’est imbriquée sur la taille ou le libellé. La session de survol commune reste seule responsable de l’affichage et de la fermeture. La couleur normale revient après publication d’un parcours sans nouveau changement.
+Watching stays active during the first pass to remember changes. The queue keeps at most one pending request per folder; a change during its traversal or before publication keeps the shown measure and adds one new pass. A value to refresh only changes color (the active theme's `accent`), with no prefix or font/width change. In the grid, the folder's type label uses the same color. The three explanatory sentences appear on three lines in a frame inside the file's normal tooltip: accent border and text, slightly tinted accent background. Width calculation includes the frame's margins and border. No tooltip nests on the size or label. The shared hover session alone handles showing and closing. Normal color returns after a traversal publishes with no new change.
 
-L’activation explicite demande l’installation du watcher récursif avant de démarrer les premières mesures, puis démarre sans temporisation fixe. Un échec d’installation journalisé laisse le calcul initial démarrer. L’installation ne réinvalide pas les demandes initiales encore intactes ; un remplacement de watcher conserve une vérification prudente pour les mesures déjà commencées ou disponibles. La mise en file initiale seule ne marque pas une taille provisoire. L’infobulle indique une actualisation en cours ou en attente, qui peut aussi venir d’une vérification prudente, sans affirmer qu’un changement a été observé.
+Explicit activation asks for the recursive watcher before starting first measures, then starts with no fixed delay. A logged installation failure lets the initial calculation start. Installation does not reinvalidate intact initial requests; replacing a watcher keeps a cautious check for measures already started or available. Initial queuing alone does not mark a size provisional. The tooltip says a refresh is running or pending, which may also come from a cautious check, without claiming a change was seen.
 
-Les événements de surveillance sont regroupés sur 500 ms. Les dossiers sans première mesure passent avant les recalculs éligibles du même onglet. Après une mesure, un recalcul automatique attend au moins cinq secondes après la fin du parcours et cinq secondes sans nouvel événement. L’activité continue reporte donc les recalculs, en conservant la dernière valeur affichée : les grandes arborescences actives ne sont plus reparcourues en boucle. La première mesure reste publiable même sous des écritures continues. Actualiser ou recliquer sur le bouton des tailles force les demandes nécessaires sans attendre l’accalmie, en conservant les tailles à jour ; les événements suivants ne repoussent pas cette demande explicite et ne transforment pas les passages suivants en recalculs forcés.
+Watch events group over 500 ms. Folders with no first measure go before eligible recalculations of the same tab. After a measure, an automatic recalculation waits at least five seconds after the traversal ends and five seconds with no new event. Continuous activity thus defers recalculation, keeping the last shown value: large active trees are no longer rescanned in a loop. The first measure stays publishable even under continuous writes. Refreshing or re-clicking the sizes button forces the needed requests without waiting, keeping up-to-date sizes; later events neither push back this explicit request nor turn later passes into forced recalculations.
 
-Un résultat achevé attend sa publication avant qu’un autre parcours du même dossier puisse commencer. L’ordonnanceur reste actif pendant ces attentes, sans occuper de place physique, et remplit deux places sans attendre les dossiers plus lents ni la préparation de leur affichage ; le moteur conserve sa limite globale de deux parcours physiques, y compris après annulation. Les changements survenus pendant un listing demandent un seul listing supplémentaire. La surveillance native reste événementielle. Les supports utilisant le polling conservent deux secondes pour les listings non récursifs ; leurs instantanés récursifs sont espacés de trente secondes, car chacun parcourt le sous-arbre. Leur instantané initial et leurs parcours périodiques gardent un coût disque et une détection profonde moins immédiate.
+A finished result awaits publication before another traversal of the same folder can start. The scheduler stays active during these waits, holding no physical slot, and fills two slots without waiting for slower folders or display preparation; the engine keeps its global limit of two physical traversals, even after cancel. Changes during a listing ask for one extra listing. Native watching stays event-driven. Polling media keep two seconds for non-recursive listings; their recursive snapshots are thirty seconds apart, since each walks the subtree. Their initial snapshot and periodic traversals cost disk time and detect deep changes less immediately.
 
-La préférence Turbo générale s’applique aussi aux Propriétés. La priorité Windows suit le mode pendant le parcours ; le budget est choisi au prochain parcours sans redémarrer les travaux en cours. Chaque parcours SSD utilise jusqu’à 2 workers sans Turbo et jusqu’à 8 avec Turbo, avec un plafond adapté aux processeurs logiques ; HDD, réseau ou stockage inconnu restent à 1 worker par parcours. Les pools sont réutilisés, indépendants entre les deux parcours, et leurs threads reviennent à la priorité normale en fin de travail. Les compteurs sont agrégés par répertoire avant fusion. Les résultats attendent dans une file distincte et sont publiés par lots de 128 au plus, avec 50 ms de regroupement avant chaque lot ; leurs révisions sont revérifiées avant publication. Une préparation devenue obsolète est retentée sur le sous-ensemble encore valide, sans bloquer sur un dossier modifié. Les exclusions `System Volume Information` et `Microsoft\Windows\Containers` restent actives dans les deux modes, sur des composants de chemin complets sans distinction de casse. Mesures et portée des tests : [bilan du 25 octobre](../reports/2026-10-25-folder-sizes-turbo.md).
+The general Turbo preference also applies to Properties. Windows priority follows the mode during traversal; the budget is chosen at the next traversal without restarting running work. Each SSD traversal uses up to 2 workers without Turbo and up to 8 with it, capped by logical processors; HDD, network or unknown storage stay at 1 worker per traversal. Pools are reused, independent between both traversals, and their threads return to normal priority at the end. Counters aggregate per directory before merging. Results wait in a separate queue and publish in batches of at most 128, with 50 ms grouping before each batch; their revisions are rechecked before publication. A preparation gone stale is retried on the still-valid subset, without blocking on a changed folder. Exclusions `System Volume Information` and `Microsoft\Windows\Containers` stay active in both modes, on full path components, case-insensitively.
 
-Chaque résultat vérifie l’identité de l’onglet, le chemin, la génération du mode et la révision du dossier avant publication. Tri, filtres et résumés des colonnes sont préparés en arrière-plan. Une navigation annule le parcours et vide la file, y compris vers une recherche ou après retrait du disque. Les erreurs de surveillance sont journalisées ; un rafraîchissement manuel permet toujours de relancer le calcul. Le résultat reste une mesure du parcours, sans garantie d’instantané face aux écritures concurrentes.
+Each result checks tab identity, path, mode generation and folder revision before publication. Sorting, filters and column summaries are prepared in the background. Navigation cancels the traversal and empties the queue, also toward a search or after a disk is removed. Watch errors are logged; a manual refresh can always restart the calculation. The result stays a measure of the traversal, with no snapshot guarantee against concurrent writes.
 
-## Parcours de recherche
+## Search paths
 
-| Parcours | Contrat |
+| Path | Contract |
 | --- | --- |
-| Complétion du chemin | Jusqu’à douze dossiers, lecture différée de 150 ms ; Haut/Bas, Tab et clic gardent l’édition active ; pas de complétion virtuelle |
-| Recherche rapide | Noms récursifs, insensible à la casse, motifs `*`/`?`, départ après 350 ms ou Entrée ; ni contenu ni archives |
-| Recherche avancée | Critères conservés dans sa fenêtre ; lancement dans le panneau d’origine, sans fermer le formulaire |
-| Recherche dans les archives | Noms/métadonnées via worker dédié ; critères non pris en charge signalés, sans publier des correspondances trompeuses |
-| Doublons | Nom, taille et contenu combinables ; comparer le contenu impose une même taille ; racines recouvrantes dédupliquées ; dossiers `$Recycle.Bin` exclus sans distinction de casse, y compris les racines situées dans une corbeille |
+| Path completion | Up to twelve folders, read deferred by 150 ms; Up/Down, Tab and click keep editing active; no virtual completion |
+| Quick search | Recursive names, case-insensitive, `*`/`?` patterns, starts after 350 ms or Enter; neither content nor archives |
+| Advanced search | Criteria kept in its window; runs in the originating panel without closing the form |
+| Archive search | Names/metadata via a dedicated worker; unsupported criteria flagged, without publishing misleading matches |
+| Duplicates | Name, size and content combinable; comparing content requires equal size; overlapping roots deduplicated; `$Recycle.Bin` folders excluded case-insensitively, roots inside a trash included |
 
-Les résultats arrivent par lots bornés ; Arrêter conserve ceux déjà reçus. La vue virtuelle ne propose ni création de dossier ni collage. Ouvrir l’emplacement sélectionne et révèle le fichier dans son dossier.
+Results arrive in bounded batches; Stop keeps those received. The virtual view offers neither folder creation nor paste. Open location selects and reveals the file in its folder.
 
-## Contenu texte : mémoire bornée
+## Text content: bounded memory
 
-`commands/search/content.rs` conserve les lignes courtes jusqu’à 64 Kio, puis utilise un automate Thompson incrémental. Les frontières de blocs ne doivent modifier ni ancres, ni Unicode, ni correspondance : pas de troncature ou de chevauchement fixe approximatif.
+`commands/search/content.rs` keeps short lines up to 64 KiB, then uses an incremental Thompson automaton. Block boundaries must change neither anchors, Unicode nor matching: no truncation or approximate fixed overlap.
 
-Valider toute la ligne avant de publier une correspondance ; erreur UTF-8/I/O ou annulation l’invalident. La mémoire de l’automate dépend du motif. La normalisation des séquences combinatoires exceptionnelles peut utiliser un temporaire privé : la borne RAM n’est pas un quota disque.
+Validate the whole line before publishing a match; a UTF-8/I/O error or cancel invalidates it. The automaton's memory depends on the pattern. Normalizing exceptional combining sequences may use a private temporary: the RAM bound is not a disk quota.
 
-Cette borne concerne le texte brut ; le parcours Office est décrit ci-dessous.
-La recherche de contenu dans les archives reste indisponible. Aucun de ces parcours
-ne garantit un plafond RSS global ni un instantané face aux modifications concurrentes.
-Preuves du texte brut : [bilan A09](../reports/2026-10-17-code-review.md).
+This bound concerns plain text. Content search inside archives stays unavailable. None of these paths guarantees a global RSS cap or a snapshot against concurrent changes.
 
-## Recherche de contenu Office
+## Office content search
 
-`Platform::office_search_text` produit du texte entier dans son périmètre ou une
-erreur explicite. Sous Windows, un mode dédié d’`oxyde-image-worker` reçoit seulement
-le handle source en lecture et son extension. Il est lancé en LPAC sans capacité,
-avec le superviseur et l’admission agrégée existants, sans repli local si le worker
-est absent, en erreur ou hors délai. Son admission est distincte des aperçus Office ;
-l’annulation est contrôlée pendant l’attente et la supervision.
+`Platform::office_search_text` produces whole text within its scope or an explicit error. On Windows, a dedicated mode of `oxyde-image-worker` receives only the read source handle and its extension. It runs in capability-less LPAC, with the existing supervisor and aggregate admission, and no local fallback if the worker is missing, failing or late. Its admission is separate from Office previews; cancel is checked during waiting and supervision.
 
-Limites : source encodée 128 Mio, 10 000 entrées, 1 Mio de noms cumulés, 16 Mio par
-partie XML et 64 Mio de XML cumulés, 8 Mio de texte en réponse, job de 512 Mio et
-délai de 15 secondes incluant l’attente d’admission. Le parent ne décompresse pas
-le document et valide une réponse texte bornée avant d’utiliser le moteur de
-recherche en flux. Linux utilise le même extracteur dans un [worker confiné](linux-previews.md#images-office-et-audio), sans garantie LPAC.
+Limits: encoded source 128 MiB, 10,000 entries, 1 MiB of cumulative names, 16 MiB per XML part and 64 MiB of cumulative XML, 8 MiB of response text, 512 MiB job and a 15 s timeout including admission waiting. The parent does not decompress the document and validates a bounded text response before using the streaming search engine. Linux uses the same extractor in a [confined worker](linux-previews.md#images-office-and-audio), without LPAC guarantees.
 
-Le corps Word, les parties des diapositives et les cellules des feuilles sont
-parcourus sans limite arbitraire aux trois premières diapositives ou aux 64 premières
-colonnes. Les cellules inline et les références de chaînes partagées sont prises
-en charge ; les entités XML partagent leur décodage avec le Viewer. La recherche
-ne calcule pas les formules ou les formats de nombres et ignore les notes de
-présentation OpenDocument, comme le texte principal du Viewer.
+The Word body, slide parts and sheet cells are walked with no arbitrary limit to the first three slides or 64 columns. Inline cells and shared string references are supported; XML entities share their decoding with the Viewer. Search computes neither formulas nor number formats and ignores OpenDocument presentation notes, like the Viewer's main text.
 
-Une limite de décompression ou de sortie, un document illisible ou un échec du
-worker produit `ContentSkipped` : le bandeau indique dans les cinq langues que
-certains contenus n’ont pas été vérifiés et donne le premier chemin concerné.
-Aucune troncature Office n’est présentée comme une recherche complète réussie.
+A decompression or output limit, an unreadable document or a worker failure produces `ContentSkipped`: the banner says in all five languages that some content was not verified and gives the first path concerned. No Office truncation is presented as a successful full search.

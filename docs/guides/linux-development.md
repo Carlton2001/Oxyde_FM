@@ -1,15 +1,10 @@
-# Développer la version Linux
+# Developing the Linux version
 
-Le port Linux est expérimental et vit dans `main`, avec les versions Windows publiées.
-**Windows reste la plateforme de référence et ne doit pas être altéré** : un changement
-Linux passe par le trait `Platform` ou un module `cfg(not(target_os = "windows"))`. Un
-fichier commun touché impose de vérifier Windows (voir [Préserver Windows](#préserver-windows)).
+The Linux port is experimental and lives in `main` alongside the published Windows versions. **Windows remains the reference platform and must not be altered**: a Linux change goes through the `Platform` trait or a `cfg(not(target_os = "windows"))` module. Touching a shared file requires checking Windows (see below).
 
-État vérifié et preuves : [bilan du 26 octobre](../reports/2026-10-26-linux-ui-trash.md).
+## Setup on Fedora Workstation
 
-## Installer sur Fedora Workstation
-
-Rust Linux récent (validé avec Rust 1.99.1, Fedora 44), puis :
+Recent Linux Rust (validated with Rust 1.99.1, Fedora 44), then:
 
 ```bash
 sudo dnf install gcc gcc-c++ make pkgconf-pkg-config \
@@ -17,20 +12,17 @@ sudo dnf install gcc gcc-c++ make pkgconf-pkg-config \
   libxkbcommon-x11-devel libxcb-devel wayland-devel vulkan-loader
 ```
 
-Sur machine physique, vérifier le pilote Vulkan : `mesa-vulkan-drivers` pour Intel/AMD,
-pilote NVIDIA propriétaire (RPM Fusion `akmod-nvidia`) pour NVIDIA. Le pin GPUI et
-`Cargo.lock` sont communs à Windows : ne pas les mettre à jour pour un problème de SDK.
+On physical machines check the Vulkan driver: `mesa-vulkan-drivers` for Intel/AMD, the proprietary driver (RPM Fusion `akmod-nvidia`) for NVIDIA. The GPUI pin and `Cargo.lock` are shared with Windows: do not update them to fix an SDK problem.
 
-## Vérifier et lancer
+## Check and run
 
 ```bash
-bash scripts/check-linux.sh            # cargo check --locked --all-targets, sans avertissement
+bash scripts/check-linux.sh            # cargo check --locked --all-targets, warning-free
 export CARGO_TARGET_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/oxyde-gpui/target"
 cargo build --locked --bin oxyde
 ```
 
-Lancer sur un **profil isolé** tant que les opérations de fichiers ne sont pas sûres
-(jalon 4) : configuration, cache, corbeille et temporaires restent dans un dossier jetable.
+Run on an **isolated profile** when testing file operations, so configuration, cache, trash and temporary files stay in a disposable folder:
 
 ```bash
 P=~/oxyde-test; mkdir -p $P/{config,cache,data,tmp}
@@ -38,144 +30,47 @@ XDG_CONFIG_HOME=$P/config XDG_CACHE_HOME=$P/cache XDG_DATA_HOME=$P/data TMPDIR=$
   RUST_LOG=info "$CARGO_TARGET_DIR/debug/oxyde"
 ```
 
-Le journal est écrit dans `$P/config/Oxyde/oxyde.log` (adaptateur GPU choisi, décorations).
-Une corbeille isolée ne reçoit que les suppressions faites sur le même système de
-fichiers que `$P`. **Les réglages GNOME de la corbeille (`gsettings`) restent globaux.**
-Ne lancer aucune écriture (suppression, déplacement, collage, glisser) sur des données réelles.
+The log goes to `$P/config/Oxyde/oxyde.log` (chosen GPU adapter, decorations). An isolated trash only receives deletions on the same filesystem as `$P`, and **GNOME trash settings (`gsettings`) stay global**. Do not run writes on real data.
 
-Les trois workers auxiliaires sont des `main` vides sous Linux. Les rendus PDF et vidéo
-passent par un worker d'Oxyde lui-même, confiné par bubblewrap et seccomp ; voir les
-[aperçus Linux](../architecture/linux-previews.md#confinement-bubblewrap). Après modification, reconstruire avec
-`cargo build --offline --bins`.
-WSL reste utilisable pour `check-linux.sh` ; il ne valide ni GPU, ni bureau, ni volumes.
+`bash scripts/install-linux-desktop.sh --exec <binary> --profile ~/oxyde-test` installs the desktop entry and icon for the user: see [desktop identity](../architecture/desktop-identity.md).
 
-## Préserver Windows
+`oxyde-image-worker` is an empty `main` on Linux; previews run in a worker of Oxyde itself, confined by bubblewrap and seccomp ([Linux previews](../architecture/linux-previews.md)). Worker tests launch the executables in `target`: after a change, run `cargo build --offline --bins` before `cargo test`. WSL works for `check-linux.sh` but validates neither GPU, desktop nor volumes.
 
-Après tout changement de fichier commun, vérifier depuis Linux que Windows compile :
+Root permission tests run in a user namespace: `unshare --map-auto --map-root-user <test binary> linux_permissions`.
+
+## Preserving Windows
+
+After any shared-file change, check from Linux that Windows compiles:
 
 ```bash
-bash scripts/check-windows.sh          # cargo xwin check, cible MSVC, toutes les cibles
+bash scripts/check-windows.sh          # cargo xwin check, MSVC target, all targets
 ```
 
-Il détecte `cfg` mal placés et imports cassés, sans lier ni exécuter. Installation unique :
-`sudo dnf install llvm lld clang`, `rustup target add x86_64-pc-windows-msvc`,
-`cargo install --locked cargo-xwin`, puis un premier lancement avec `XWIN_ACCEPT_LICENSE=1`,
-qui accepte la licence Microsoft du CRT et du SDK et les télécharge (1,2 Go dans
-`~/.cache/cargo-xwin`). `scripts/llvm-rc-crate-root.sh` fait chercher à `llvm-rc` les
-ressources depuis la racine de chaque crate, comme sous Windows.
+It catches misplaced `cfg` and broken imports, without linking or running. One-time setup: `sudo dnf install llvm lld clang`, `rustup target add x86_64-pc-windows-msvc`, `cargo install --locked cargo-xwin`, then a first run with `XWIN_ACCEPT_LICENSE=1`, which accepts Microsoft's CRT and SDK license and downloads them (1.2 GB in `~/.cache/cargo-xwin`). `scripts/llvm-rc-crate-root.sh` makes `llvm-rc` look for resources from each crate root, as on Windows.
 
-Les tests restent à lancer sous Windows : `./scripts/test-windows.ps1 -Offline`
-([procédure](development.md#vérifier-un-changement)), ou sans redémarrer par le
-déclenchement manuel du workflow `tests.yml` sur une branche poussée (`workflow_dispatch`,
-sans PR). Suite Windows réussie sur GitHub jusqu'à `7583b40`, `tests/archive_io_pipeline.rs` compris.
+Tests still run on Windows: `./scripts/test-windows.ps1 -Offline`, or without rebooting by manually dispatching `tests.yml` on a pushed branch.
 
-## Reste à faire
+## Desktop behavior worth knowing
 
-Identifiants M/T : [audit de portabilité](../reports/2026-10-26-linux-portability-audit.md).
+- Hybrid GPU: at startup, Vulkan drivers of cards with no connected screen are excluded (`VK_LOADER_DRIVERS_DISABLE`, `platform/linux_gpu.rs`), unless the user or desktop already chose a GPU, and applications opened by Oxyde do not inherit this. It keeps a discrete GPU suspended.
+- Rounded corners: `client_decorations` rounds floating corners of client-decorated windows by 10 px, and no corner touching a screen edge. GPUI only clips to rectangles, so a background reaching a corner rounds itself with `inner_corners`.
+- Scales: screens report logical size through xdg-output, because `wl_output` gives the next whole scale (1280x800 instead of 2048x1280 for 2560x1600 at 125%). The compositor hides window positions, so only the largest screen bounds a restored size. The minimum size yields on a logical screen too small for it.
+- KDE: titled windows request `WindowDecorations::Client` (`ui::window_decorations`).
+- Drag and drop: an incoming drop is always a copy, since GPUI only negotiates Copy on Wayland and X11; Ctrl and Shift stay with the source. Volumes are told apart by the deepest mount point (`/proc/self/mountinfo`, reread in the background), without resolving symlinks.
+- Trash: `trash_transfer_entries` (`linux_trash/transfer.rs`) handles cut, paste and drag out of the trash. The `.trashinfo` record is set aside in `$trash/.oxyde-trash-*.tmp` only once the item has left, and Undo restores it. Other applications do not receive these items, as they would split content from its record. Contents of a trashed folder stay refused. Restoring to another filesystem goes through a move. KDE's `ktrashrc` limits and GNOME's cleanup stay theirs; Oxyde sets them and never purges on its own.
 
-**Vérifications sur machine physique (jalon 2)**
-- GPU Intel puis NVIDIA : backend Vulkan obtenu (la VM utilisait GL/llvmpipe), ombres, redimensionnement.
-  Fait sur portable hybride pour le réveil : au lancement, les pilotes Vulkan des cartes sans
-  écran connecté sont exclus (`VK_LOADER_DRIVERS_DISABLE`, `platform/linux_gpu.rs`), sauf si
-  l'utilisateur ou le bureau choisit déjà un GPU, et les applications ouvertes par Oxyde ne
-  l'héritent pas. Mesuré sur Intel + RTX 4070 : la NVIDIA reste `suspended` pendant et après
-  l'exécution ; avec un choix explicite, elle passe `active`. Reste : écran externe branché
-  sur la NVIDIA, Oxyde déjà lancé.
-- Coins arrondis : `client_decorations` arrondit de 10 px, comme Soliton, les coins flottants
-  des fenêtres à décorations client, et aucun coin touchant un bord d'écran. GPUI ne découpe
-  qu'en rectangles : un fond atteignant un coin s'arrondit lui-même avec `inner_corners`
-  (barres de titre, barre latérale, barre d'état et Visionneuse du dernier panneau).
-- Échelles : vérifiées sous Mutter sans écran à 100, 125, 133, 200 et 250 %, en changement à
-  chaud et sur deux écrans mixtes (125/200 %, 100/200 %), fenêtre déplacée de l'un à l'autre :
-  rendu net quelle que soit la position ou la taille, menus, infobulles et aperçus au bon
-  endroit. Les écrans annoncent leur taille logique par xdg-output : `wl_output` donne
-  l'échelle entière supérieure, soit 1280x800 au lieu de 2048x1280 pour 2560x1600 à 125 %,
-  ce qui bornait à tort les menus et les fenêtres d'outils. Le compositeur cachant la position
-  des fenêtres, seul le plus grand écran borne une taille restaurée. La taille minimale cède
-  sur un écran logique trop petit, sans quoi le compositeur sort les boutons de l'écran.
-  Reste : un vrai écran externe. KWin imbriqué ignore l'échelle fractionnaire (`--scale`
-  n'annonce pas de `preferred_scale`) ; X11 vérifié avec `GPUI_X11_SCALE_FACTOR=1.5`.
-- Session X11/Xwayland séparément de Wayland.
-- **KDE Plasma** : les fenêtres à barre de titre demandent `WindowDecorations::Client`
-  (`ui::window_decorations`). Double barre reproduite puis disparue sous KWin 6 en X11 et
-  Wayland imbriqués ; déplacement, redimensionnement et maximisation vérifiés sous KWin X11.
-  Reste : une vraie session Plasma, ombres et fenêtres secondaires.
-- Infobulles : sous X11, leur bornage utilise encore la taille de fenêtre et peut mordre de
-  quelques pixels sur la marge d'ombre (`tooltip/position.rs`). Sous Wayland, [elles sortent
-  de la fenêtre](../architecture/windows.md#infobulles-sous-wayland), comme les
-  [menus](../architecture/windows.md#menus-sous-wayland) ; vérifiés sous KWin imbriqué et
-  Mutter sans écran.
+## Remaining work
 
-**Corbeille**
-- KDE : les limites `ktrashrc` restent à la charge de KDE, comme le nettoyage à celle de
-  GNOME. Oxyde les règle sans jamais supprimer de lui-même : ce qu'il met à la corbeille
-  entre dans le décompte de KDE à son prochain passage. Non essayé en vraie session Plasma.
-- Fait : couper, coller et glisser entre panneaux depuis la corbeille, par le crochet
-  `trash_transfer_entries` commun à Windows (`linux_trash/transfer.rs`). Le moteur rend son
-  nom d'origine à l'élément, gère conflits et progression ; l'enregistrement `.trashinfo`
-  n'est écarté qu'une fois l'élément parti, dans `$trash/.oxyde-trash-*.tmp`, et Annuler
-  le rend. Les autres applications ne reçoivent pas ces éléments : elles sépareraient le
-  contenu de son enregistrement. Ce que contient un dossier à la corbeille reste refusé.
-- Fait : restaurer vers un autre système de fichiers passe par un déplacement, avec
-  progression et conflits, au lieu d'un refus. Annuler une suppression, sans opération à
-  montrer, le refuse encore.
+Not yet verified:
 
-**Opérations sur les fichiers (jalon 4, avant tout usage réel)**
-- M07, corrigé : un dépôt entrant est toujours une copie, puisque GPUI ne négocie que
-  Copy en Wayland et X11 ; Ctrl et Maj restent à la source, qui garde le clavier. Les
-  volumes se distinguent par le point de montage le plus profond (`/proc/self/mountinfo`,
-  relu en arrière-plan), comparé sans résoudre les liens symboliques. Essayé sous GNOME :
-  Nautilus vers Oxyde, glisser interne vers `/tmp`, puis vers une clé USB en lecture seule
-  (copie proposée, refus propre), et vers une clé inscriptible (copie, source conservée).
-- Les tests de workers lancent les exécutables de `target` : après modification,
-  `cargo build --offline --bins` avant `cargo test`, sinon ils échouent sur l'ancienne version.
-- M05, fait : [noms non UTF-8](../architecture/non-utf8-names.md) distincts de leurs
-  sosies, marqués comme dans Nautilus, renommables ; les autres opérations les refusent.
-- M03/M06, faits pour la copie : [copies](../architecture/copies.md) depuis la source
-  vérifiée, par le noyau, avec modes, dates, `user.*` et ACL ; un dossier déplacé sur son
-  disque est renommé entier et renommer fonctionne sur ntfs-3g : voir
-  [déplacements](../architecture/moves.md).
-- T04, fait : l'identité n'exige plus de date de naissance hors Windows.
-- T05, fait : [liens symboliques](../architecture/links.md), sauf dans les archives.
-- T08, fait : [noms et chemins Linux](../architecture/linux-names.md), `\` caractère de
-  nom et casse par dossier (FAT, exFAT, SMB, `casefold`).
-- T06, fait : [accès sans lecture et suppression](../architecture/linux-access.md),
-  déplacer sans lire, dossiers traversables, pause et annulation à chaque élément ;
-  Turbo supprime en parallèle, sauf sur Btrfs.
-- T07, fait : [cache des fichiers ouverts depuis une archive](../architecture/linux-open-cache.md),
-  éviction sous bail d'écriture, dossier de l'utilisateur.
-- M03/M04, faits : [effets par dossiers tenus](../architecture/linux-held-effects.md),
-  renommage et suppression de l'objet vérifié où qu'il soit, sans jamais toucher un
-  remplaçant ; publication exclusive, y compris sur ntfs-3g.
+- Vulkan on a physical Intel then NVIDIA GPU: backend obtained, shadows, resizing. External screen plugged into the NVIDIA card with Oxyde already running.
+- A real external screen with mixed scales. Nested KWin ignores fractional scale.
+- An X11/Xwayland session separately from Wayland.
+- A real KDE Plasma session: shadows, secondary windows, trash limits.
 
-**Intégration (jalon 5)**
-- M08, fait : [presse-papiers](../architecture/clipboard.md) partagé avec Nautilus.
-- T11, fait : [surveillance](../architecture/watchers.md) par inotify hors partages réseau.
-- Fait sous Wayland : [glisser vers d'autres applications](../architecture/windows.md#glisser-déposer-de-fichiers).
-  Vérifié sous KWin imbriqué vers Nautilus et, par l'utilisateur, sous GNOME.
-  Impossible en X11, GPUI n'y offrant pas de fichiers.
-- Volumes faits (T02, T03) : inventaire UDisks2, notifications, démontage et éjection,
-  volumes non montés, disques physiques et SSD ; voir le [pilote volumes](../architecture/volumes.md).
-- T12, fait : [accès rapide](../architecture/quick-access.md) partagé avec Nautilus,
-  erreurs de `xdg-open` signalées, Propriétés d'Oxyde seules.
-- T13, fait : aucune mise à jour dans l'application, laissée au gestionnaire de paquets
-  comme pour Nautilus ; voir la [distribution](distribution.md#mises-à-jour-dans-lapplication).
-- T15, fait : [identité de bureau](../architecture/desktop-identity.md) ;
-  `bash scripts/install-linux-desktop.sh --exec <binaire> --profile ~/oxyde-test`
-  installe l'entrée et l'icône pour l'utilisateur.
-- Fait : [Propriétés Linux](../architecture/linux-properties.md) comme Nautilus, avec
-  les onglets Droits d’accès (groupe, niveaux, exécution, sélection,
-  propriétaire pour root) et Contenu (éléments contenus), et le type MIME selon GIO. Les tests de root se lancent dans
-  un espace de noms utilisateur : `unshare --map-auto --map-root-user <binaire de test>
-  linux_permissions`.
-- T10, implémenté : [réseau](../architecture/linux-network.md) par GVfs comme Nautilus,
-  partages montés au chemin FUSE, identifiants demandés, liste `network:///`,
-  vérifié dans l'interface. « Plus d'options » (menu Shell) est masqué hors Windows.
+Known gaps:
 
-**Avancé et distribution (jalons 6–7)**
-- T09 : [poppler et GStreamer](../architecture/linux-previews.md) dans un worker ; PDF,
-  survol vidéo et lecteur du Viewer vérifiés.
-  M09/R5 : tous les décodeurs tournent dans des workers confinés par bubblewrap et
-  seccomp, archives comprises ; vérifiés dans l'interface.
-- T14, fait : [paquets RPM et DEB et CI Linux](linux-distribution.md), ouverture des
-  dossiers reçus et profil AppArmor pour Ubuntu ; RPM vérifié dans l'interface, CI réussie.
+- X11 tooltips are still bounded by the window size and can bite a few pixels into the shadow margin (`tooltip/position.rs`).
+- Undoing a deletion across filesystems, with no operation to show, is still refused.
+- Dragging files to other applications is impossible on X11: GPUI does not offer files there.
+- "More options" (Shell menu) is hidden outside Windows.

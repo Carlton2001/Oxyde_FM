@@ -1,248 +1,80 @@
-# Aperçus et décodeurs sous Linux
+# Linux previews and decoders
 
-**Statut : tous les décodeurs confinés par bubblewrap, vérifiés dans l'interface
-(PDF, vidéo, lecteur, images, Office, pochettes et archives)** (T09 et M09 de
-l'[audit de portabilité](../reports/2026-10-26-linux-portability-audit.md)).
-Windows ne change pas.
+Windows is unchanged.
 
-## Principe : comme Nautilus
+## Principle: like Nautilus
 
-Nautilus délègue les miniatures à des programmes externes : `papers-thumbnailer`
-(poppler) pour les PDF, `gst-video-thumbnailer` (GStreamer) pour les vidéos. Il les
-lance hors de son processus, si bien qu'un fichier piégé ne peut faire tomber que le
-miniaturiseur. Oxyde utilise les mêmes bibliothèques dans un worker, c'est-à-dire
-son propre binaire lancé en sous-processus (`--oxyde-preview-worker-v1`). Le
-décodage reste ainsi hors du processus de l'interface.
+Nautilus delegates thumbnails to external programs: `papers-thumbnailer` (poppler) for PDFs, `gst-video-thumbnailer` (GStreamer) for videos. A booby-trapped file can only bring down the thumbnailer. Oxyde uses the same libraries in a worker, its own binary run as a subprocess (`--oxyde-preview-worker-v1`), so decoding stays out of the interface process.
 
 ## Worker
 
-- `platform/linux_library.rs` : macro `library!` commune à GIO, poppler et GStreamer,
-  qui charge une bibliothèque système à la première utilisation par `libloading`.
-  Sans elle, seule sa fonction manque ; aucun paquet `-devel` n'est nécessaire à la
-  compilation.
-- `platform/linux_worker.rs` : lancement du worker avec entrée et sortie en tubes,
-  octet de démarrage `0xA7` comme sous Windows, lecture bornée dans le temps par
-  `poll`, arrêt forcé (`SIGKILL`) et récolte à la libération.
-- Mémoire : la mémoire privée du worker est plafonnée par `RLIMIT_DATA`, qui joue le
-  rôle de la limite de mémoire engagée du job Windows. L'espace d'adressage
-  (`RLIMIT_AS`) compterait le code mappé : le binaire de debug pèse 1 Gio.
-  `MALLOC_ARENA_MAX=2` évite que glibc réserve 64 Mio par fil de décodage.
-- Mort avec le parent : Oxyde garde l'autre bout de l'entrée standard du worker
-  jusqu'à le libérer. Un fil du worker attend la fermeture de ce tube (`poll` sans
-  lire les données) et se tue alors. `PR_SET_PDEATHSIG` ne convient pas : le signal
-  suit le fil qui a lancé le worker, et un pool peut retirer ce fil. Le parent réel
-  n'est pas visible non plus, car le bac à sable a son propre espace de processus.
+- `platform/linux_library.rs`: `library!` macro shared by GIO, poppler and GStreamer, loading a system library on first use through `libloading`. Without it only its feature is missing; no `-devel` package is needed to compile.
+- `platform/linux_worker.rs`: launches the worker with piped input and output, start byte `0xA7` as on Windows, time-bounded reads through `poll`, forced stop (`SIGKILL`) and reaping on release.
+- Memory: the worker's private memory is capped by `RLIMIT_DATA`, playing the role of the Windows job's commit limit. Address space (`RLIMIT_AS`) would count mapped code: the debug binary weighs 1 GiB. `MALLOC_ARENA_MAX=2` stops glibc reserving 64 MiB per decoding thread.
+- Dying with the parent: Oxyde holds the other end of the worker's stdin until it releases it. A worker thread waits for this pipe to close (`poll` without reading) and then kills itself. `PR_SET_PDEATHSIG` does not fit: the signal follows the thread that launched the worker, and a pool may retire it. The real parent is not visible either, since the sandbox has its own process namespace.
 
-Trois exécutables : `oxyde` pour les aperçus, `oxyde-archive-list-worker` et
-`oxyde-archive-io-worker` pour les archives, sans GPUI. [Les paquets](../guides/linux-distribution.md)
-les installent tous, et un échec de lancement ne déclenche jamais de décodage local.
+Three executables: `oxyde` for previews, `oxyde-archive-list-worker` and `oxyde-archive-io-worker` for archives, without GPUI. [The packages](../guides/linux-distribution.md) install them all, and a launch failure never triggers local decoding.
 
 ## Confinement (bubblewrap)
 
-GNOME confine ainsi ses miniaturiseurs, et glycin ses chargeurs d'images.
-`platform/linux_sandbox.rs` lance chaque worker par `bwrap` :
+GNOME confines its thumbnailers this way, and glycin its image loaders. `platform/linux_sandbox.rs` launches each worker through `bwrap`:
 
-- Espaces de noms : utilisateur (sans espace imbriqué, `--disable-userns`), processus,
-  réseau, IPC, nom d'hôte et cgroup. Nouvelle session : pas d'injection dans le
-  terminal.
-- Fichiers : racine vide, `/usr` en lecture seule et ses liens (`/lib64`…),
-  `/etc/ld.so.cache`, `/proc` et `/dev` minimaux, `/tmp` vide. Le binaire d'Oxyde est
-  monté seul s'il est hors de `/usr`. Le document est ouvert par Oxyde et monté seul
-  par son descripteur (`--ro-bind-fd`) à `/oxyde/source.<extension>`. L'extension
-  sert aux formats sans signature. Le worker ne voit aucun autre fichier de
-  l'utilisateur. Variables d'environnement effacées, puis fixées une à une.
-- Selon le mode :
-  - Codecs purs (archives, Office, tags et pochettes audio, miniatures raster) : rien
-    de plus.
-  - PDF et images, dont les SVG utilisent les polices : `/etc/fonts`, polices, configuration et cache fontconfig de l'utilisateur,
-    en lecture seule.
-  - Survol vidéo : le registre GStreamer d'Oxyde, en lecture seule.
-  - Lecteur du Viewer : le registre, plus les sockets PulseAudio
-    (`$XDG_RUNTIME_DIR/pulse/native`, servie par PipeWire) et PipeWire, avec
-    `/etc/pulse`, `/etc/pipewire` et `/etc/machine-id`. Aucun accès au GPU : le
-    décodage est logiciel.
-- Filtre seccomp (`linux_sandbox/seccomp.rs`), compilé par libseccomp, chargée à
-  l'exécution, puis installé par bubblewrap. Comme Flatpak, c'est une liste de refus,
-  qui renvoie `EPERM` : administration du noyau, mémoire d'autres processus
-  (`ptrace`, `process_vm_*`), montages et espaces de noms, `bpf`, `io_uring`,
-  `userfaultfd`, `perf_event_open`, clés, `TIOCSTI`/`TIOCLINUX`, changement de
-  `personality`. Toute socket autre que locale (`AF_UNIX`) renvoie `EAFNOSUPPORT`.
-  Les appels d'une autre architecture tuent le worker. glycin préfère une liste
-  d'autorisations ; elle casserait au gré des versions de GStreamer, de ses greffons
-  et de glibc.
-- Registre GStreamer : un balayage complet des greffons coûte 2,5 s. Oxyde garde son
-  propre registre dans `<cache>/Oxyde/gstreamer-1.0/registry.bin`. Avant le premier
-  worker multimédia de la session, un worker `media-registry` le met à jour : il
-  n'ouvre aucun document et seul ce dossier lui est accessible en écriture. Les
-  autres workers le lisent sans pouvoir le modifier (`GST_REGISTRY_UPDATE=no`). Un
-  worker compromis ne peut donc ni changer les greffons que chargent les suivants,
-  ni toucher au registre des autres programmes. Les greffons de l'utilisateur
-  (`~/.local/share/gstreamer-1.0`) ne sont pas chargés.
-- Sans bubblewrap utilisable (absent, ou espaces de noms utilisateur interdits), le
-  journal le signale une fois et le worker se confine lui-même avant de démarrer
-  (`linux_sandbox/landlock.rs`). Landlock limite les fichiers aux mêmes accès que
-  bubblewrap, sans `/proc` ni `/tmp`, et, depuis Linux 6.12, les signaux et sockets
-  abstraites à ses propres processus. Le filtre seccomp s'y ajoute, et refuse toute socket
-  sauf au lecteur du Viewer. Variables d'environnement effacées, comme avec bubblewrap.
-  Reste moins strict : le lecteur peut joindre toute socket locale par son chemin, dont
-  le bus de session, et avant Linux 6.12 un worker peut signaler les autres processus de
-  l'utilisateur. Sans Landlock, seul le filtre reste. Essayé avec
-  `user.max_user_namespaces=0` : archives, PDF, images, Office, audio, vidéo et lecteur.
-  Ubuntu interdit ces espaces de noms sans profil AppArmor : [le DEB en installe
-  un](../guides/linux-distribution.md#ubuntu-et-apparmor).
-  Sans libseccomp, le confinement reste, sans filtre d'appels système.
-- Coût : 40 ms pour une miniature PDF, 80 ms jusqu'à la première image d'une vidéo
-  1080p.
+- Namespaces: user (no nested namespace, `--disable-userns`), process, network, IPC, hostname and cgroup. New session: no terminal injection.
+- Files: empty root, read-only `/usr` and its links (`/lib64`…), `/etc/ld.so.cache`, minimal `/proc` and `/dev`, empty `/tmp`. Oxyde's binary is mounted alone if outside `/usr`. The document is opened by Oxyde and mounted alone through its descriptor (`--ro-bind-fd`) at `/oxyde/source.<extension>`; the extension serves formats without a signature. The worker sees no other user file. Environment variables are cleared, then set one by one.
+- By mode:
+  - Pure codecs (archives, Office, audio tags and covers, raster thumbnails): nothing more.
+  - PDF and images, whose SVGs use fonts: `/etc/fonts`, fonts, and the user's fontconfig configuration and cache, read-only.
+  - Video hover: Oxyde's GStreamer registry, read-only.
+  - Viewer player: the registry, plus PulseAudio sockets (`$XDG_RUNTIME_DIR/pulse/native`, served by PipeWire) and PipeWire, with `/etc/pulse`, `/etc/pipewire` and `/etc/machine-id`. No GPU access: decoding is software.
+- Seccomp filter (`linux_sandbox/seccomp.rs`), compiled by libseccomp loaded at runtime, then installed by bubblewrap. Like Flatpak, a denylist returning `EPERM`: kernel administration, other processes' memory (`ptrace`, `process_vm_*`), mounts and namespaces, `bpf`, `io_uring`, `userfaultfd`, `perf_event_open`, keys, `TIOCSTI`/`TIOCLINUX`, `personality` changes. Any non-local socket (not `AF_UNIX`) returns `EAFNOSUPPORT`. Calls from another architecture kill the worker. glycin prefers an allowlist; it would break with GStreamer, plugin and glibc versions.
+- GStreamer registry: a full plugin scan costs 2.5 s. Oxyde keeps its own registry in `<cache>/Oxyde/gstreamer-1.0/registry.bin`. Before the session's first media worker, a `media-registry` worker updates it: it opens no document and only this folder is writable for it. Other workers read it without being able to change it (`GST_REGISTRY_UPDATE=no`). A compromised worker can thus neither change the plugins later ones load nor touch other programs' registry. User plugins (`~/.local/share/gstreamer-1.0`) are not loaded.
+- Without usable bubblewrap (missing, or user namespaces forbidden), the log says so once and the worker confines itself before starting (`linux_sandbox/landlock.rs`). Landlock limits files to the same accesses as bubblewrap, without `/proc` or `/tmp`, and since Linux 6.12 signals and abstract sockets to its own processes. The seccomp filter adds to this, refusing any socket except for the Viewer player. Environment is cleared as with bubblewrap. Still less strict: the player can reach any local socket by path, the session bus included, and before Linux 6.12 a worker can signal the user's other processes. Without Landlock only the filter remains; without libseccomp, confinement remains with no syscall filter. To try: `user.max_user_namespaces=0`. Ubuntu forbids these namespaces without an AppArmor profile: [the DEB installs one](../guides/linux-distribution.md#ubuntu-and-apparmor).
+- Cost: 40 ms for a PDF thumbnail, 80 ms to the first frame of a 1080p video.
 
-## Images, Office et audio
+## Images, Office and audio
 
-`platform/linux_preview.rs` : le parent lance un worker par demande et valide sa
-réponse ; le worker lit le document monté et ne renvoie que des pixels ou du texte
-bornés. Aucune session réutilisable : un décodeur compromis ne voit jamais le
-document suivant, au prix d'un lancement par image.
+`platform/linux_preview.rs`: the parent launches one worker per request and validates its response; the worker reads the mounted document and returns only bounded pixels or text. No reusable session: a compromised decoder never sees the next document, at the cost of one launch per image.
 
-- Modes : `image`, `image-thumbnail`, `image-viewer` (`ui/image_preview.rs`, polices
-  chargées seulement pour un SVG), `thumbnail`, `office`, `office-text`,
-  `office-document`, `office-search`, `audio-metadata` (JSON), `audio-cover`,
-  `audio-cover-thumbnail`.
-- Plafonds : 512 Mio et 15 s ; 1 Gio et 30 s pour une image du Viewer ; 256 Mio pour
-  une pochette. Réponses bornées comme sous Windows (32 Mio, 256 Mio pour le Viewer,
-  8 Mio pour la recherche Office). L'annulation d'une recherche tue le worker.
-- Un tube nommé ou un dossier est refusé sans être ouvert en attente.
+- Modes: `image`, `image-thumbnail`, `image-viewer` (`ui/image_preview.rs`, fonts loaded only for SVG), `thumbnail`, `office`, `office-text`, `office-document`, `office-search`, `audio-metadata` (JSON), `audio-cover`, `audio-cover-thumbnail`.
+- Caps: 512 MiB and 15 s; 1 GiB and 30 s for a Viewer image; 256 MiB for a cover. Responses bounded as on Windows (32 MiB, 256 MiB for the Viewer, 8 MiB for Office search). Canceling a search kills the worker.
+- A named pipe or folder is refused without blocking on open.
 
 ## Archives
 
-- Navigation et index de recherche (`platform/linux_archive_list.rs`) : le worker
-  ne voit que l'archive ; le parent reconstruit chaque chemin virtuel à partir de
-  métadonnées validées. 512 Mio, 120 s, 32 Mio de réponse.
-- Extraction, création, reconstruction et ouverture d'un fichier
-  (`platform/linux_archive_io.rs`) : le protocole de Windows. Le worker ne voit aucun
-  fichier ; il demande chaque bloc à lire et confie chaque bloc à écrire. Le parent
-  garde sources et destinations (`OwnedTree`), contrôle noms, types et tailles, et
-  retire ce qu'il a créé en cas d'échec. 1 Gio, 2 Gio pour créer un 7z.
-- Superviseur : une conversation à tour de rôle, sur des tubes de 1 Mio. Écritures non
-  bloquantes et attentes de 20 ms : annulation et délai restent actifs quoi que fasse
-  le worker. Seule une pause confirmée suspend le délai.
-- Écarts avec Windows : pas de `fsync` par fichier extrait, comme Nautilus (2000 petits
-  fichiers : 5 s de plus sur Btrfs) ; Turbo augmente le parallélisme, sans changer la
-  priorité ; modification d'archive par reconstruction locale, sans la publication de
-  groupe (R8).
-- Mesures, 1 Gio plus 2000 petits fichiers, Btrfs puis NTFS (ntfs-3g), créer / extraire :
-  TAR 2,0 s / 2,1 s puis 6,4 s / 5,1 s ; ZIP 23 s / 7,1 s puis 25 s / 9,6 s ; TAR.ZST 0,6 s /
-  1,4 s puis 1,0 s / 4,1 s, données très répétitives.
+- Navigation and search index (`platform/linux_archive_list.rs`): the worker sees only the archive; the parent rebuilds each virtual path from validated metadata. 512 MiB, 120 s, 32 MiB response.
+- Extraction, creation, rebuild and opening a file (`platform/linux_archive_io.rs`): the Windows protocol. The worker sees no file; it requests each block to read and hands over each block to write. The parent keeps sources and destinations (`OwnedTree`), checks names, types and sizes, and removes what it created on failure. 1 GiB, 2 GiB to create a 7z.
+- Supervisor: a turn-based conversation over 1 MiB pipes. Non-blocking writes and 20 ms waits keep cancel and timeout active whatever the worker does. Only a confirmed pause suspends the timeout.
+- Differences from Windows: no per-file `fsync` on extraction, like Nautilus (2000 small files: 5 s more on Btrfs); Turbo raises parallelism without changing priority; archive modification by local rebuild, without group publication (R8).
 
 ## PDF (poppler)
 
-- `platform/linux_pdf.rs` (côté worker) : `poppler_document_new_from_fd`, puis rendu
-  cairo sur fond blanc en ARGB32 prémultiplié, c'est-à-dire BGRA en mémoire, le format
-  que l'interface envoie au GPU. La taille de page de poppler tient compte de la
-  rotation. Les côtés sont les mêmes que sous Windows : 128 px pour la grille, 1024 px
-  pour le survol, 2048 px pour le Viewer. Au plus 100 000 pages listées.
-- `platform/linux_pdf/session.rs` (côté parent) : un worker par miniature (`pdf-grid`,
-  `pdf`). Pour le Viewer, un worker par document (`pdf-session`) garde le document
-  ouvert et rend une page par requête. Le protocole est celui de Windows : tailles des
-  pages, puis une trame par page, et `u32::MAX` pour fermer, avec un accusé de
-  fermeture.
-- Plafonds : 1 Gio et 15 s par réponse ; la fermeture attend 2 s. Délai, plantage ou
-  flux illisible retirent le worker. Une erreur de page garde la session ouverte.
-- Une miniature coûte un lancement de processus, environ 50 à 90 ms en debug. Une
-  session réutilisable comme `pdf-previews` sous Windows n'est pas implémentée. Les
-  documents protégés par mot de passe affichent l'erreur de poppler.
+- `platform/linux_pdf.rs` (worker side): `poppler_document_new_from_fd`, then cairo rendering on white in premultiplied ARGB32, which is BGRA in memory, the format the interface sends to the GPU. Poppler's page size accounts for rotation. Sides match Windows: 128 px for the grid, 1024 px for hover, 2048 px for the Viewer. At most 100,000 pages listed.
+- `platform/linux_pdf/session.rs` (parent side): one worker per thumbnail (`pdf-grid`, `pdf`). For the Viewer, one worker per document (`pdf-session`) keeps it open and renders a page per request. The protocol is Windows's: page sizes, then one frame per page, and `u32::MAX` to close, with a close acknowledgment.
+- Caps: 1 GiB and 15 s per response; closing waits 2 s. Timeout, crash or unreadable stream retires the worker. A page error keeps the session open.
+- A thumbnail costs one process launch, about 50–90 ms in debug. A reusable session like Windows's `pdf-previews` is not implemented. Password-protected documents show poppler's error.
 
-## Vidéo au survol (GStreamer)
+## Video on hover (GStreamer)
 
-- `platform/linux_video.rs` (côté worker) : `playbin3 flags=video`, qui ne
-  sélectionne que le flux vidéo : ni piste audio ni sous-titres décodés ou mis en
-  file. `playbin` gardait l'audio ignoré en file : 770 Mio contre 205 Mio pour une
-  vidéo HEVC 4K. Le puits est un `appsink` sans horloge précédé de
-  `videoconvert ! videoscale`, avec des caps BGRA, pixels carrés et 640 px au plus par
-  côté. `videoscale` garde les proportions et n'agrandit pas les petites vidéos.
-  Chaque image part avec son horodatage, que l'interface utilise pour cadencer. En
-  fin de flux, une pause de 200 ms puis un redémarrage depuis READY font boucler la
-  vidéo, comme la réouverture sous Windows. La fin de flux et le choix des flux sont
-  lus sur le bus par type exact : les types étendus de GStreamer partagent des bits
-  avec EOS et ERROR. Un fichier sans flux vidéo est refusé dès que `playbin3` a
-  choisi ses flux. Un flux qui se termine sans image est une erreur.
-- `platform/linux_video/stream.rs` (côté parent) : un seul worker vidéo à la fois.
-  Les paquets ont le format de Windows (longueur, secondes, nanosecondes, trame) et
-  sont vérifiés : 2 Mio et 640 × 640 au plus. L'annulation est vérifiée toutes les
-  50 ms ; sans image pendant 15 s, l'aperçu est « expiré ».
-- Mesures : première image en 60 ms pour un H.264 1080p (74 Mio), en 150 ms pour un
-  HEVC 4K avec libde265 (215 Mio), décodé à environ 29 images par seconde.
-- Codecs : ceux de GStreamer installés. Fedora ne fournit pas de décodeur HEVC
-  logiciel libre : sans codecs RPM Fusion, une vidéo H.265 (iPhone, 4K) affiche
-  « Aperçu indisponible », comme Totem et le miniaturiseur de Nautilus. Oxyde ne
-  propose pas d'installer de codec.
+- `platform/linux_video.rs` (worker side): `playbin3 flags=video`, which selects only the video stream, with no audio track or subtitles decoded or queued. `playbin` kept ignored audio queued: 770 MiB against 205 MiB for a 4K HEVC video. The sink is a clockless `appsink` after `videoconvert ! videoscale`, with BGRA caps, square pixels and 640 px per side at most. `videoscale` keeps proportions and does not enlarge small videos. Each frame carries its timestamp, which the interface uses for pacing. At end of stream, a 200 ms pause then a restart from READY loops the video, like reopening on Windows. End of stream and stream selection are read from the bus by exact type: GStreamer's extended types share bits with EOS and ERROR. A file with no video stream is refused once `playbin3` has chosen its streams. A stream ending without a frame is an error.
+- `platform/linux_video/stream.rs` (parent side): one video worker at a time. Packets have Windows's format (length, seconds, nanoseconds, frame) and are checked: 2 MiB and 640 × 640 at most. Cancel is checked every 50 ms; with no frame for 15 s, the preview has expired.
+- Codecs: GStreamer's installed ones. Fedora has no free software HEVC decoder: without RPM Fusion codecs, an H.265 video (iPhone, 4K) shows "Preview unavailable", like Totem and Nautilus's thumbnailer. Oxyde does not offer to install a codec.
 
-## Lecteur audio et vidéo du Viewer
+## Viewer audio and video player
 
-Sous Windows, le worker affiche la vidéo dans une surface native placée au-dessus de
-la fenêtre. Wayland ne permet pas à GPUI d'insérer une surface étrangère : sous
-Linux, le worker envoie les images et GPUI les peint lui-même. Le son sort
-directement du worker vers la sortie par défaut du bureau (PipeWire).
+On Windows the worker shows video in a native surface above the window. Wayland does not let GPUI insert a foreign surface: on Linux the worker sends frames and GPUI paints them. Sound goes straight from the worker to the desktop's default output (PipeWire).
 
-- `platform/linux_gstreamer.rs` : `Player` commun au survol et au lecteur
-  (`playbin3`, puits `appsink` nommé `frames`, filtre de caps `size` facultatif, bus
-  lu par type exact, position, durée, recherche à l'image clé la plus proche).
-- `platform/linux_media/worker.rs` (mode `viewer-media`) : `playbin3` avec image et
-  son, sans sous-titres. Avec `native-video`, `playbin3` laisse l'image décodée
-  intacte jusqu'à la sortie d'Oxyde, qui convertit et met à l'échelle en une seule
-  passe (`videoconvertscale`) et lit la taille source sur son entrée. Les rapports
-  donnent cette taille source, non celle de l'image réduite : l'arrondi de l'image
-  réduite changeait le ratio, donc le cadre calculé par l'interface, donc la taille
-  demandée, et la vidéo et sa barre tremblaient. Le puits suit l'horloge audio et jette une image plutôt que
-  de retarder le son si Oxyde prend du retard (`max-buffers=1 drop=true`). Les images
-  sont mises à l'échelle à la taille affichée en pixels physiques (3840 px au plus,
-  sans agrandissement), renégociée 150 ms après la fin d'un redimensionnement. En
-  pause, l'image de pré-roulement n'est envoyée qu'une fois ; une image est identifiée
-  par son tampon et son horodatage, car les pools réutilisent les tampons. Rapports
-  toutes les 100 ms au format de Windows (25 octets), suivis de la dernière recherche
-  appliquée. La fin de lecture reste arrêtée ; une recherche en repart.
-- `platform/linux_media.rs` (côté parent) : commandes de 21 octets (pause, recherche,
-  taille), envoyées à chaque changement et relevées toutes les 20 ms. Les images sont
-  vérifiées (3840 × 3840 au plus, longueur exacte) puis déposées dans
-  `ViewerMediaControl::frame`, avec un `Notify`. Une position antérieure à la
-  dernière recherche n'est pas publiée, pour que la barre ne recule pas. Sans
-  rapport pendant 15 s, la session échoue.
-- Interface : la tâche de la session attend une image ou 80 ms, crée la
-  `RenderImage`, et libère la précédente du GPU (`drop_image`), y compris après la
-  fin de la session. `VideoLayout` peint l'image dans le cadre de la vidéo. En
-  plein écran, la barre flottante est peinte dans la fenêtre du Viewer, par-dessus
-  l'image, au lieu d'une fenêtre séparée que Wayland ne sait pas placer. Elle
-  disparaît sans fondu de sortie. Les boutons superposés à la vidéo sont aussi
-  peints dans la fenêtre, comme pour les images. Leur visibilité suit les
-  événements de souris de GPUI : la position globale du pointeur, que Windows
-  interroge toutes les 100 ms, n'existe pas sous Wayland.
-- Plafonds : 1 Gio de mémoire privée pour le worker. Sans autre réglage, les
-  décodeurs logiciels lancent un fil par cœur, et chaque fil garde des images : sur
-  32 cœurs, 760 Mio pour une vidéo HEVC 4K, puis des allocations refusées, d'où des
-  images corrompues, puis l'échec de la lecture. `Player` règle donc à 4 les fils
-  (`max-threads`, `n-threads`) de chaque élément que `playbin3` ajoute
-  (`element-setup`), survol compris. Cette vidéo se lit alors à 30 images par
-  seconde avec 490 à 560 Mio, y compris à 3840 × 2160. Le décodeur seul atteint 85
-  images par seconde.
+- `platform/linux_gstreamer.rs`: `Player` shared by hover and player (`playbin3`, `appsink` named `frames`, optional `size` caps filter, bus read by exact type, position, duration, seek to nearest keyframe).
+- `platform/linux_media/worker.rs` (`viewer-media` mode): `playbin3` with image and sound, no subtitles. With `native-video`, `playbin3` leaves the decoded image intact until Oxyde's output, which converts and scales in one pass (`videoconvertscale`) and reads the source size on its input. Reports give this source size, not the scaled image's: rounding of the scaled image changed the ratio, hence the frame the interface computed, hence the requested size, and the video and its bar trembled. The sink follows the audio clock and drops a frame rather than delay sound if Oxyde falls behind (`max-buffers=1 drop=true`). Frames are scaled to the displayed size in physical pixels (3840 px at most, no enlarging), renegotiated 150 ms after a resize ends. In pause, the preroll image is sent once; an image is identified by buffer and timestamp, since pools reuse buffers. Reports every 100 ms in Windows's format (25 bytes), followed by the last applied seek. End of playback stays stopped; a seek restarts from there.
+- `platform/linux_media.rs` (parent side): 21-byte commands (pause, seek, size), sent on each change and picked up every 20 ms. Frames are checked (3840 × 3840 at most, exact length) then placed in `ViewerMediaControl::frame`, with a `Notify`. A position before the last seek is not published, so the bar does not go back. With no report for 15 s, the session fails.
+- Interface: the session task waits for a frame or 80 ms, creates the `RenderImage`, and frees the previous from the GPU (`drop_image`), also after the session ends. `VideoLayout` paints the image in the video frame. In fullscreen the floating bar is painted in the Viewer window, over the image, rather than a separate window Wayland cannot place; it disappears without a fade-out. Buttons overlaid on the video are also painted in the window, as for images. Their visibility follows GPUI mouse events: the global pointer position Windows polls every 100 ms does not exist on Wayland.
+- Caps: 1 GiB of private memory for the worker. By default software decoders start one thread per core, each holding frames: on 32 cores, 760 MiB for a 4K HEVC video, then refused allocations, corrupted frames and a failed playback. `Player` therefore sets threads to 4 (`max-threads`, `n-threads`) on each element `playbin3` adds (`element-setup`), hover included.
 
-## Limites
+## Limits
 
-- Le confinement n'est pas celui du LPAC Windows. Le noyau reste exposé aux appels
-  système autorisés. Le lecteur du Viewer parle au serveur de son, qui accepte aussi
-  la capture : c'est le même accès qu'une application Flatpak autorisée à utiliser
-  PulseAudio. Sans bubblewrap utilisable, les workers ont les droits de
-  l'utilisateur.
-- Sans bac à sable, le mode vidéo exige un chemin UTF-8, comme sous Windows.
-- Les images du lecteur traversent un tube puis une texture GPU neuve par image :
-  environ 110 Mio/s en 720p à 30 images par seconde.
+- Confinement is not Windows LPAC. The kernel stays exposed to allowed syscalls. The Viewer player talks to the sound server, which also accepts capture: the same access as a Flatpak application allowed to use PulseAudio. With no usable sandbox at all, workers have the user's rights.
+- Without a sandbox, video mode requires a UTF-8 path, as on Windows.
+- Player frames cross a pipe then a new GPU texture per frame: about 110 MiB/s at 720p 30 fps.
 
 ## Tests
 
-`cargo test --offline --lib -- linux_sandbox linux_pdf linux_video linux_media linux_preview linux_archive`
-et `cargo test --offline --test linux_archive_workers`, seul à exercer le parcours de
-production des archives : les tests unitaires compilent les codecs locaux.
-Bac à sable : le worker lit son document et ne voit pas un fichier voisin ; sockets
-réseau, `unshare` et `ptrace` refusés ; seul le lecteur atteint le serveur de son.
-Décodage : rendu, rotation, pages hors
-document, fichiers endommagés, échelle et forme des vidéos, boucle, annulation ; lecture à la
-taille du Viewer, pause, recherche, fin, son seul. Les
-vidéos sont encodées par `gst-launch-1.0` pendant le test (ignoré sans encodeur).
-Les tests côté parent lancent le vrai worker et exigent d'abord
-`cargo build --offline --bins`.
+`cargo test --offline --lib -- linux_sandbox linux_pdf linux_video linux_media linux_preview linux_archive` and `cargo test --offline --test linux_archive_workers`, the only one exercising the production archive path: unit tests compile the local codecs. Videos are encoded by `gst-launch-1.0` during the test (skipped without an encoder). Parent-side tests launch the real worker and first require `cargo build --offline --bins`.

@@ -1,84 +1,21 @@
-# Effets par dossiers tenus sous Linux
+# Effects through held directories on Linux
 
-**Statut : domaine terminé** (quatorzième domaine de l'option B, M03 et M04 de l'[audit de
-portabilité](../reports/2026-10-26-linux-portability-audit.md), après le [cache
-Linux](linux-open-cache.md)). Bilan ci-dessous. Ce document est le contrat du domaine.
+Shared code prepares each file operation by holding its parent directories and verified objects (`HeldParents`, selection, staging), then asks `Platform` to act relative to them. This covers copying, moving, publishing, cleaning up and undoing. A folder renamed or replaced between check and effect receives nothing, and a substituted file is neither renamed nor deleted. Code: `linux_held.rs`, behind the existing `Platform` methods. Windows acts through its handles.
 
-## Périmètre
+## Rules
 
-Le code commun prépare chaque opération de fichiers en tenant ses dossiers parents et
-les objets vérifiés (`HeldParents`, sélection, mise en attente), puis demande à
-`Platform` d'agir relativement à eux. Windows agit par ces handles ; Linux les recevait
-et agissait par chemin. Copier, déplacer, publier, nettoyer et annuler sont concernés.
-Windows ne change pas.
+- **Relative to held directories**: every named effect goes through the held directory and the last component (`openat`, `mkdirat`, `renameat2`, `unlinkat`), without following a link at the last component.
+- **Held object, wherever it is**: renaming or deleting a verified object acts on it at its current location, read from the kernel (`/proc/self/fd`), then checks its identity (`dev`, `ino`) in that folder.
+- **Deletion without substitution**: Linux cannot delete "this name if it designates this object". The entry is first renamed aside in its folder, its identity checked, then deleted; another object is put back intact.
+- **Checked rename**: identity checked before, then on arrival; an object that arrived in the original's place during that brief interval is put back under its original name and the operation fails.
+- **Exclusive publication**: relative `RENAME_NOREPLACE`; on FUSE (ntfs-3g), which refuses it, a hard link then checked removal of the old name; without hard links, checking that the name is free then renaming, the only remaining window. Tested on vfat, exFAT, NTFS, tmpfs and ext4 `casefold` (`OXYDE_TEST_PUBLISH`).
+- None of these rules is a transaction: they guarantee Oxyde acts only on objects it verified, not that names stay frozen.
 
-## Constat Linux
+## Remaining gaps
 
-- Créer, ouvrir et suivre un dossier ou un fichier, créer la sortie privée d'une copie,
-  sa mise en attente et un dossier de journal : par chemin, le dossier tenu étant
-  ignoré. Si un dossier est renommé ou remplacé entre la vérification et l'effet,
-  l'effet a lieu dans le remplaçant.
-- Renommer un fichier vérifié (déplacement, publication d'une copie) : par chemin
-  (`rename`, ou `renameat2` depuis le dossier courant), sans contrôler que le nom
-  désigne encore l'objet vérifié.
-- Supprimer un fichier vérifié (source d'un déplacement entre disques après contrôle
-  de son empreinte, sortie privée, sauvegarde) : par chemin. Un fichier substitué entre
-  le contrôle et la suppression serait supprimé à sa place.
-- Deux tests d'Annuler échouent pour cette raison : un dossier remplacé pendant
-  l'annulation reçoit les fichiers remis en place, au lieu du dossier d'origine.
+- On exFAT, a deletion checks the entry then deletes it directly: the kernel gives a folder a new creation date as soon as an entry is renamed in it, which would invalidate its history proof. A substitution remains possible in this very short interval.
+- Without `RENAME_NOREPLACE` or hard links, publication checks the name then renames.
 
-## Règles
+## Pitfall
 
-- **Relatif aux dossiers tenus** : tout effet nommé passe par le dossier tenu et le
-  dernier composant (`openat`, `mkdirat`, `renameat2`, `unlinkat`), sans suivre de lien
-  au dernier composant.
-- **Objet tenu, où qu'il soit** : renommer ou supprimer un objet vérifié agit sur lui à
-  son emplacement actuel, lu par le noyau (`/proc/self/fd`), puis contrôle son
-  identité (`dev`, `ino`) dans ce dossier.
-- **Suppression sans substitution** : Linux ne sait pas supprimer « ce nom s'il désigne
-  cet objet ». L'entrée est d'abord renommée à part dans son dossier, son identité
-  contrôlée, puis supprimée ; un autre objet est remis à sa place, intact.
-- **Renommage contrôlé** : identité contrôlée avant, puis à l'arrivée ; un objet arrivé
-  à la place de l'original pendant ce court intervalle est remis à son nom d'origine
-  et l'opération échoue.
-- **Publication exclusive** : `RENAME_NOREPLACE` relatif ; sur FUSE (ntfs-3g), qui le
-  refuse, lien physique puis suppression contrôlée de l'ancien nom ; sans lien
-  physique, vérification que le nom est libre puis renommage, la seule fenêtre restante.
-- Aucune de ces règles n'est une transaction : elles garantissent qu'Oxyde n'agit que
-  sur les objets qu'il a vérifiés, pas que les noms restent figés.
-
-## Étapes
-
-1. **Primitives relatives** (`linux_held.rs`) derrière les méthodes `Platform`
-   existantes, sans changer leurs signatures.
-2. **Renommage et suppression par objet tenu.**
-3. **Tests** : dossier renommé ou remplacé avant l'effet, fichier substitué, liens,
-   puis tmpfs, Btrfs, vfat, exFAT et NTFS ; les deux tests d'Annuler.
-4. **Bilan.**
-
-## Bilan
-
-**Résultat.** Sous Linux, les opérations agissent dans les dossiers tenus et sur les
-objets vérifiés, où qu'ils soient : un dossier renommé ou remplacé entre la
-vérification et l'effet ne reçoit rien, un fichier substitué n'est ni renommé ni
-supprimé, et la publication d'une copie ne remplace jamais un nom pris, y compris sur
-ntfs-3g. Les deux tests d'Annuler qui échouaient passent.
-
-Vérifié par la suite complète sur Btrfs et tmpfs (lib 550, bins 456, sans échec), et sur
-des images exFAT et NTFS : les échecs nouveaux par rapport à avant passent tous isolés
-(tests sensibles à la charge), sauf le refus de lien sur exFAT, qui n'a pas de liens
-symboliques. La publication exclusive est testée sur vfat, exFAT, NTFS, tmpfs et ext4
-`casefold` (`OXYDE_TEST_PUBLISH`).
-
-**Écarts restant.**
-- Sur exFAT, une suppression contrôle l'entrée puis la supprime directement : le noyau
-  donne une nouvelle date de création à un dossier dès qu'une entrée y est renommée, ce
-  qui invaliderait sa preuve d'historique. Une substitution reste possible dans cet
-  intervalle très court.
-- Sans `RENAME_NOREPLACE` ni lien physique, la publication vérifie le nom puis renomme.
-
-**Leçons.**
-- ntfs-3g ne décrit plus un descripteur `O_PATH` dont le nom a disparu (`ENOENT`) :
-  l'identité est alors lue dans `/proc/self/fdinfo` (inode) et `mountinfo` (périphérique).
-- Copie : quand le seul worker actif échouait en mode normal, les workers inactifs
-  attendaient indéfiniment (code commun). Tout échec de worker arrête maintenant le lot.
+ntfs-3g no longer describes an `O_PATH` descriptor whose name has gone (`ENOENT`): identity is then read from `/proc/self/fdinfo` (inode) and `mountinfo` (device).

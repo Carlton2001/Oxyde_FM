@@ -1,40 +1,40 @@
-# Diagnostiquer suppressions et Corbeille
+# Diagnosing deletion and the Trash
 
-Sous Windows, les fichiers ordinaires à identité capturée passent en lots Shell de 256 au maximum ; dossiers et objets spéciaux gardent leur suivi individuel. Les lots sont séparés selon la politique de corbeille du volume. Chaque élément conserve contrôles et reçu, même si le lot finit en erreur ou sur annulation.
+On Windows, ordinary files with a captured identity go through Shell batches of at most 256; folders and special objects keep individual tracking. Batches are split by the volume's trash policy. Each item keeps its checks and receipt, even if the batch ends in error or cancellation.
 
-La progression est publiée au retour d’un lot. Pause et annulation sont vérifiées avant les lots et dans les callbacks ; un appel Windows déjà bloqué reste dépendant du système. Les priorités suivent le turbo. Aucune attente artificielle par élément n’est ajoutée.
+Progress is published when a batch returns. Pause and cancel are checked before batches and in callbacks; a Windows call already blocked stays system-dependent. Priorities follow Turbo. No artificial per-item wait is added.
 
-L’exemple `delete_tree_benchmark [PARENT]` chronomètre la suppression définitive d’un dossier généré (plat, imbriqué, gros fichiers), sans et avec Turbo.
+The `delete_tree_benchmark [PARENT]` example times permanent deletion of a generated folder (flat, nested, large files), without and with Turbo.
 
-## Où chercher dans `oxyde.log`
+## Where to look in `oxyde.log`
 
-| Cible / événement | Usage |
+| Target / event | Use |
 | --- | --- |
-| `oxyde_lib::delete_timing` | Début/fin, sélection, plan et exécution des lots |
-| `operation_cancel_requested` / `operation_cancel_accepted` | Délai d’obtention des verrous ; comparer ensuite à la fin de l’opération |
-| `trash_native_batch` | `setup_s`, `native_s`, `proof_s`, `remaining_s`, `wall_s` et résultats |
-| `oxyde_lib::trash_restore` | Énumération, noms, progression, erreurs et bilan de restauration |
-| `oxyde_lib::trash_purge` | Distingue vidage `empty_native` et suppression `selected`, puis préparation et appel Shell |
+| `oxyde_lib::delete_timing` | Start/end, selection, plan and batch execution |
+| `operation_cancel_requested` / `operation_cancel_accepted` | Time to obtain locks; then compare with the end of the operation |
+| `trash_native_batch` | `setup_s`, `native_s`, `proof_s`, `remaining_s`, `wall_s` and results |
+| `oxyde_lib::trash_restore` | Enumeration, names, progress, errors and restore result |
+| `oxyde_lib::trash_purge` | Separates `empty_native` emptying and `selected` deletion, then preparation and Shell call |
 
-`proof_s` est inclus dans `native_s` : ne pas les additionner. `wall_s` commence dans le thread natif et exclut sa création et l’enregistrement ultérieur des reçus. Ces durées ne mesurent pas l’attente préalable dans la boucle UI.
+`proof_s` is inside `native_s`: do not add them. `wall_s` starts in the native thread and excludes its creation and later receipt recording. These durations do not measure prior waiting in the UI loop.
 
-## Comparer les tailles de lots
+## Comparing batch sizes
 
-Sur des copies de fixtures, fermer Oxyde entre les lancements et recréer le même jeu avant chaque suppression :
+On fixture copies, close Oxyde between runs and recreate the same set before each deletion:
 
 ```powershell
 $env:OXYDE_TRASH_BATCH_SIZE = "64"
 cargo run --offline
-# Fermer Oxyde et recréer les fixtures avant le second essai.
+# Close Oxyde and recreate fixtures before the second trial.
 $env:OXYDE_TRASH_BATCH_SIZE = "256"
 cargo run --offline
 Remove-Item Env:OXYDE_TRASH_BATCH_SIZE -ErrorAction SilentlyContinue
 ```
 
-Construire auparavant les [binaires et workers](../guides/development.md). Seules 64 et 256 sont acceptées ; une valeur invalide est journalisée et utilise 256. La valeur est lue au début de chaque opération, sans modifier les préférences persistantes. Les anciens chronométrages locaux restent dans l’[historique](../reports/README.md), sans garantie de débit sur d’autres supports.
+Build the [binaries and workers](../guides/development.md) first. Only 64 and 256 are accepted; an invalid value is logged and uses 256. The value is read at the start of each operation, without changing persistent preferences.
 
-## Fluidité et effets partiels
+## Smoothness and partial effects
 
-Commencer avec environ 500 petits fichiers. Pour un ralentissement au repos, conserver l’historique existant et survoler avec le gestionnaire fermé : pas besoin de recréer un gros transfert. Les résumés UI et la persistance doivent éviter de recopier périodiquement toutes les sélections ; voir [opérations](../architecture/operations.md).
+Start with about 500 small files. For an idle slowdown, keep the existing history and hover with the manager closed: no need to recreate a large transfer. UI summaries and persistence should avoid periodically recopying every selection: see [operations](../architecture/operations.md).
 
-Une restauration directe traite les éléments indépendamment, sans écraser ni créer le dossier parent absent. Une erreur n’arrête pas les suivants ; le bilan contient réussites, échecs et premier chemin fautif. Le journal d’Undo garde son propre protocole de preuves. Les tests ne doivent pas vider la Corbeille réelle de l’utilisateur.
+Direct restore handles items independently, without overwriting or creating a missing parent folder. An error does not stop the next ones; the result holds successes, failures and the first failing path. The Undo journal keeps its own proof protocol. Tests must not empty the user's real Trash.

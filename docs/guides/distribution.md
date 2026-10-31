@@ -1,259 +1,107 @@
-# Distribuer Oxyde sous Windows
+# Distributing Oxyde on Windows
 
-Pour construire et lancer en développement : [guide de développement](development.md).
+To build and run for development: [development guide](development.md). Linux: [Linux distribution](linux-distribution.md).
 
-## Logo et icônes de l'application
+## Logo, icons and cursors
 
-Le logo source est `assets/icons/logo_oxyde.svg`. « À propos » et la barre de
-titre affichent `logo_about.png` (144 px) et `logo_title.png` (40 px), rendus
-pour les écrans 2x : GPUI réduit les images en une seule passe et crénèle une
-source trop grande. Après modification du SVG, régénérer ses déclinaisons
-avant de reconstruire l'application :
+The source logo is `assets/icons/logo_oxyde.svg`. About and the title bar show `logo_about.png` (144 px) and `logo_title.png` (40 px), rendered for 2x screens: GPUI downscales in a single pass and aliases oversized sources. After changing the SVG, regenerate before rebuilding:
 
 ```powershell
 ./scripts/distribution-icon.ps1
 ```
 
-Le script utilise le moteur SVG de GPUI et génère `assets/icons/logo.png`
-pour les icônes natives ainsi que `assets/icons/oxyde.ico` (16 à 256 pixels)
-pour l'exécutable, l'Explorateur, la barre des tâches et l'installateur.
-Ces deux fichiers générés sont conservés dans Git. Chaque taille est rendue
-depuis le SVG ; les icônes spécifiques des workers restent indépendantes.
+It uses GPUI's SVG engine to generate `assets/icons/logo.png` for native icons and `assets/icons/oxyde.ico` (16–256 px) for the executable, Explorer, taskbar and installer. Both are kept in Git. Worker icons are independent.
 
-Les curseurs du Viewer (`assets/cursors/search.cur` et `hand-grab.cur`, 32 à
-96 pixels) proviennent des SVG Lucide `search` et `hand-grab`, teintés en blanc
-sans modifier leur tracé. Ils sont conservés dans Git ; les régénérer avec
-Node.js et `sharp` (`npm install --no-save sharp`) :
+The Viewer cursors (`assets/cursors/search.cur`, `hand-grab.cur`, 32–96 px) come from the Lucide `search` and `hand-grab` SVGs, tinted white with unmodified paths, and are kept in Git. To regenerate, with Node.js and `sharp` (`npm install --no-save sharp`):
 
 ```powershell
 node scripts/generate-viewer-cursors.cjs
 ```
 
-## Construction de la distribution
+## Building
 
-Construire avec Rust MSVC x64 et les Build Tools Visual C++. Installer une fois
-le générateur de licences, depuis le binaire officiel Windows x64 :
+Use Rust MSVC x64 and the Visual C++ Build Tools. Install the license generator once, from the official Windows x64 binary:
 
 ```powershell
 ./scripts/install-cargo-about.ps1
 ```
 
-Le script installe `cargo-about` 0.9.2 dans `$CARGO_HOME/bin` (ou `~/.cargo/bin`),
-qui doit être dans le PATH. Il vérifie les SHA-256 fixés de l'archive officielle
-avant extraction et du binaire avant exécution, puis contrôle sa version. Un binaire
-déjà présent avec l'empreinte attendue est réutilisé sans accès réseau ; sinon il est
-remplacé après vérification du téléchargement. Les empreintes proviennent de la
-[release officielle](https://github.com/EmbarkStudios/cargo-about/releases/tag/0.9.2).
-La compilation locale reste possible avec
-`cargo install cargo-about --version 0.9.2 --locked --features cli`.
+This installs `cargo-about` 0.9.2 into `$CARGO_HOME/bin` (or `~/.cargo/bin`), which must be on PATH. It checks pinned SHA-256 hashes of the archive before extraction and of the binary before running it, then its version. A binary with the expected hash is reused without network access. Building locally also works: `cargo install cargo-about --version 0.9.2 --locked --features cli`.
 
-Lancer ensuite la distribution :
+Then build:
 
 ```powershell
 ./scripts/build-distribution.ps1 -PortableOnly
 ```
 
-Sans `-PortableOnly`, le script construit aussi le Setup classique avec Inno Setup 6.3+.
-`-SkipBuild` réutilise les exécutables release existants ; `-IsccPath` permet de préciser
-Inno Setup. Le runtime C est lié statiquement (`.cargo/config.toml`) : aucune DLL Microsoft
-n'est livrée, et le script refuse un exécutable qui en importerait encore une. Les SHA-256 sont fournis pour le ZIP portable.
+Without `-PortableOnly` the script also builds the installer with Inno Setup 6.3+. `-SkipBuild` reuses existing release executables; `-IsccPath` locates Inno Setup. The C runtime is statically linked (`.cargo/config.toml`): no Microsoft DLL ships, and the script refuses an executable that still imports one. Executables are not signed.
 
-## Version portable
+Each run regenerates crate licenses from `Cargo.lock` before compiling, even with `-SkipBuild`, and includes the report in both packages; a generation failure stops the build, and network access is needed for missing upstream notices. To generate them separately: [notices guide](../../licenses/dependencies/README.md). The script prints separate timings for licenses, Rust, Inno Setup and ZIP, and verifies required files in the ZIP.
 
-Extraire `target/distribution/output/Oxyde_FM-<version>-x64-portable.zip`, puis lancer
-`Oxyde_FM/Oxyde_FM.exe`. Garder les trois workers à côté de l'exécutable.
-Le ZIP ne contient aucun installateur ni lanceur intermédiaire.
-Le dossier `licenses/syntaxes` conserve les licences et notices des grammaires
-SCSS/Sass et PowerShell ; il est également déployé par le Setup classique.
-Le dossier `licenses/dependencies` contient les notices générées des crates Rust,
-les licences du checkout GPUI/Zed et la notice Lucide. Il est inclus dans les deux
-formats de distribution.
+## Portable version
 
-La présence du dossier `data` à côté de l'exécutable active automatiquement le mode portable,
-quel que soit le répertoire courant. Il est fourni dans le ZIP et contient ensuite :
+Extract `target/distribution/output/Oxyde_FM-<version>-x64-portable.zip`, then run `Oxyde_FM/Oxyde_FM.exe`. Keep the three workers next to the executable. `licenses/syntaxes` and `licenses/dependencies` hold grammar, crate, GPUI/Zed and Lucide notices, in both distribution formats.
 
-- `config.json` : préférences et état de la session (onglets, disposition, fenêtre).
-- `oxyde.log`, éventuellement `oxyde.previous.log` : diagnostics.
-- `cache/icons` et `cache/thumbnails` : caches générés et leurs fichiers de contrôle.
-- `temp` : fichiers temporaires et espaces de travail des archives/workers.
+A `data` folder next to the executable turns on portable mode, whatever the working directory. It ships in the ZIP and holds:
 
-Les variables TEMP, TMP et TMPDIR du processus sont redirigées vers `data/temp` avant le
-lancement des threads ; les enfants les héritent. La configuration installée et les données
-Tauri ne sont ni importées ni modifiées. Si `data` n'est pas utilisable, une erreur s'affiche :
-il n'y a aucun repli silencieux vers AppData. Un support accessible en écriture est nécessaire.
+- `config.json`: preferences and session state
+- `oxyde.log`, possibly `oxyde.previous.log`: diagnostics
+- `cache/icons`, `cache/thumbnails`: generated caches and their control files
+- `temp`: temporary files and archive/worker workspaces
 
-Pour déplacer l'application, déplacer tout le dossier Oxyde_FM, y compris `data`.
-Les chemins enregistrés vers les fichiers utilisateur ne sont pas réécrits lors du déplacement.
-Supprimer `data` désactive le mode portable au prochain démarrage et rétablit les emplacements
-habituels du profil utilisateur. Effacer le cache dans les paramètres conserve configuration,
-logs et session. Aucun raccourci ni entrée de désinstallation n'est créé en mode portable.
+TEMP, TMP and TMPDIR are redirected to `data/temp` before threads start, and children inherit them. Installed configuration and Tauri data are neither imported nor modified. If `data` is unusable an error is shown: there is no silent fallback to AppData, so writable media is required.
 
-Cette isolation concerne les fichiers gérés par Oxyde. Elle ne garantit pas l'absence de traces
-produites par Windows, les outils externes ou les opérations de fichiers demandées par l'utilisateur.
-Les profils AppContainer éphémères nécessaires à la protection des workers restent utilisés
-et supprimés suivant leur cycle de vie actuel. Les protections ne sont pas réduites pour le mode portable.
+To move the application, move the whole `Oxyde_FM` folder, `data` included; stored paths to user files are not rewritten. Removing `data` turns portable mode off at next start. Clearing the cache in settings keeps configuration, logs and session. No shortcut or uninstall entry is created.
 
-## Setup classique
+This isolation covers files Oxyde manages, not traces left by Windows, external tools or file operations the user requests. Ephemeral AppContainer profiles are still used and removed as usual; protections are not reduced in portable mode.
 
-`Oxyde_FM_<version>_x64-setup.exe` installe par utilisateur dans
-`%LOCALAPPDATA%\Programs\Oxyde_FM`, avec raccourci Démarrer « Oxyde », raccourci bureau
-facultatif et entrée de désinstallation distincte. Identité : `Oxyde.GPUI.Windows`.
-Le Setup ne déploie pas de dossier `data` : les chemins installés existants restent inchangés.
-La désinstallation supprime `%LOCALAPPDATA%\Oxyde` (caches) et propose, sauf en mode silencieux,
-de supprimer `%APPDATA%\Oxyde` (préférences, session, logs). Aucune association de fichiers,
-modification de PATH ou remplacement de l'Explorateur Windows n'est effectué.
+## Installer
 
-Lancé avec `/UPDATE` (par l'updater Tauri ou GPUI), le Setup saute ses pages puis relance
-Oxyde. Les options NSIS ajoutées par l'updater Tauri (`/P /R /ARGS`) sont ignorées.
+`Oxyde_FM_<version>_x64-setup.exe` installs per user into `%LOCALAPPDATA%\Programs\Oxyde_FM`, with a Start shortcut, an optional desktop shortcut and its own uninstall entry. Identity: `Oxyde.GPUI.Windows`. It deploys no `data` folder. Uninstalling removes `%LOCALAPPDATA%\Oxyde` (caches) and offers, except in silent mode, to remove `%APPDATA%\Oxyde` (preferences, session, logs). No file association, PATH change or Explorer replacement.
 
-Transition depuis l'édition Tauri : après l'installation, le Setup désinstalle toute entrée
-`Oxyde_FM` de l'éditeur `Oxyde` (MSI par machine avec élévation, ou NSIS par utilisateur),
-puis supprime `%APPDATA%\com.oxyde.desktop` et `%LOCALAPPDATA%\com.oxyde.desktop`.
-Cette section de `oxyde.iss` est temporaire.
+Run with `/UPDATE` (by the Tauri or GPUI updater), it skips its pages then restarts Oxyde. NSIS options added by the Tauri updater (`/P /R /ARGS`) are ignored.
 
-## Mises à jour dans l'application
+Transition from the Tauri edition: after installing, the Setup uninstalls any `Oxyde_FM` entry from publisher `Oxyde` (per-machine MSI with elevation, or per-user NSIS), then removes `%APPDATA%\com.oxyde.desktop` and `%LOCALAPPDATA%\com.oxyde.desktop`. This section of `oxyde.iss` is temporary.
 
-`systems/updates.rs` lit `latest.json` sur la dernière release publiée, compare la version
-à `CARGO_PKG_VERSION` et vérifie la signature minisign du Setup avec la clé publique de
-l'updater avant de l'écrire dans un dossier temporaire. Le téléchargement passe par
-`Platform::download` (WinHTTP, proxy système, HTTPS uniquement, taille bornée).
+## In-app updates
 
-Une vérification automatique a lieu 30 s après le démarrage. Chaque version n'est annoncée
-qu'une fois (`last_notified_update` dans `config.json`), jamais en mode portable.
-Paramètres › À propos permet de vérifier puis d'installer. L'installation lance le Setup avec
-`/UPDATE /WAITPID=<pid>`, puis ferme Oxyde normalement ; le Setup attend la fin du processus
-(60 s au plus), remplace les fichiers et relance Oxyde. En mode portable, le bouton ouvre la
-page des releases.
+`systems/updates.rs` reads `latest.json` from the latest published release, compares it with `CARGO_PKG_VERSION`, and verifies the Setup's minisign signature with the updater's public key before writing it to a temporary folder. The download goes through `Platform::download` (WinHTTP, system proxy, HTTPS only, bounded size).
 
-Hors Windows, `Platform::updates_itself` est faux : ni vérification ni bouton. Comme
-Nautilus, Oxyde laisse les paquets RPM, DEB ou Flatpak au gestionnaire du système.
+An automatic check runs 30 s after start. Each version is announced once (`last_notified_update` in `config.json`), never in portable mode. Settings › About checks and installs: it runs the Setup with `/UPDATE /WAITPID=<pid>` then closes Oxyde normally; the Setup waits for exit (60 s at most), replaces files and restarts Oxyde. In portable mode the button opens the releases page.
 
-## Version et tag
+Outside Windows `Platform::updates_itself` is false: no check, no button. Like Nautilus, Oxyde leaves RPM, DEB or Flatpak packages to the system's package manager.
+
+## Version and tag
 
 ```powershell
 ./scripts/bump-version.ps1 -Version <x.y.z>
 ```
 
-Depuis `main` sans modification locale, le script vérifie que la version dépasse l'actuelle
-et que le tag `v<x.y.z>` n'existe ni localement ni sur `origin`. Il met à jour `Cargo.toml`
-et `Cargo.lock`, commit `Release v<x.y.z>` et crée le tag annoté, sans pousser.
-La publication se fait ensuite à la main : `git push origin main v<x.y.z>`.
-Les tags `v1.x` existants appartiennent à l'édition Tauri : la première version GPUI
-publiée doit être supérieure à 1.2.1.
+From a clean `main`, the script checks that the version exceeds the current one and that tag `v<x.y.z>` exists neither locally nor on `origin`. It updates `Cargo.toml` and `Cargo.lock`, commits `Release v<x.y.z>` and creates the annotated tag, without pushing. Publish by hand: `git push origin main v<x.y.z>`. Existing `v1.x` tags belong to the Tauri edition.
 
-## Automatisation et validation
+## Automation
 
-Les contrôles sont définis une fois dans des workflows réutilisables : `_tests.yml`
-(suite native), `_audit.yml` (audit RustSec) et `_distribution.yml` (tests portables, Setup,
-ZIP). Ce dernier publie deux artefacts : `Oxyde_FM-portable-x64` (ZIP et SHA-256) et
-`Oxyde_FM-setup-x64` (Setup non signé). Ils sont téléchargeables 90 jours depuis la page de
-l'exécution, onglet Actions, section Artifacts.
+Checks are defined once in reusable workflows: `_tests.yml` (native suite), `_audit.yml` (RustSec audit) and `_distribution.yml` (portable tests, Setup, ZIP). The last publishes `Oxyde_FM-portable-x64` (ZIP and SHA-256) and `Oxyde_FM-setup-x64` (unsigned Setup), downloadable for 90 days from the run page.
 
-Sur `main`, `tests.yml`, `security.yml` et `distribution.yml` appellent ces contrôles selon les
-fichiers modifiés. `distribution.yml` ne se lance automatiquement que si `Cargo.toml`,
-`Cargo.lock`, `.cargo/` ou l'action de distribution changent, c'est-à-dire quand le cache des
-dépendances peut être invalidé ; il reste disponible manuellement pour obtenir des fichiers de
-test ou vérifier un changement des scripts de packaging. L'audit garde aussi son exécution
-hebdomadaire.
+On `main`, `tests.yml`, `security.yml` and `distribution.yml` call them according to changed files. `distribution.yml` runs automatically only when `Cargo.toml`, `Cargo.lock`, `.cargo/` or the distribution action change, that is when the dependency cache may be invalidated; it stays available manually. The audit also runs weekly. The commit created by `bump-version.ps1` (detected by `scripts/detect-release-commit.ps1`) triggers nothing on `main`: its tag runs every check. A manual run is never skipped.
 
-Le commit créé par `bump-version.ps1` (version changée et sujet `Release v<x.y.z>`, détecté par
-`scripts/detect-release-commit.ps1`) ne relance rien sur `main` : son tag exécute tous les
-contrôles. Un lancement manuel n'est jamais ignoré.
+The distribution workflow uses `.github/actions/setup-distribution/action.yml`: Rust **1.98.1** (pinned for this workflow only), a shared cache of compiled dependencies, and `cargo-about` **0.9.2**. Update the toolchain in that action after validating a new Rust version. The action uses a dedicated `RUSTUP_HOME` under `RUNNER_TOOL_CACHE` holding only the chosen toolchain, because `rust-cache` includes every installed toolchain in its key. When updating `cargo-about`, change the version and hashes in its install script, then the version in the shared cache key. Portable tests use `--release --target x86_64-pc-windows-msvc`, like the shipped executables, to share dependency builds.
 
-Le workflow de distribution utilise l'action locale
-`.github/actions/setup-distribution/action.yml` : Rust **1.98.1** (version fixée pour
-ce workflow uniquement), cache partagé des dépendances compilées et de `cargo-about`
-**0.9.2**. Mettre à jour la toolchain dans cette action après validation d'une nouvelle
-version de Rust. L'action utilise un `RUSTUP_HOME` dédié sous `RUNNER_TOOL_CACHE`,
-dans un chemin stable contenant la version et la cible MSVC x64. Il contient uniquement
-la toolchain choisie : `rust-cache` inclut toutes les toolchains installées dans sa clé,
-et les versions préinstallées inutilisées ne doivent pas invalider le cache. Le setup
-vérifie cette contrainte et exporte le même environnement pour la restauration,
-les tests, la construction et l'enregistrement. Le Rustup préinstallé reste intact.
-`cargo-about` est téléchargé précompilé par `scripts/install-cargo-about.ps1`
-en l'absence d'un binaire vérifié dans le cache Cargo ; aucune compilation du générateur
-n'est nécessaire. Lors d'une mise à jour, adapter version, empreintes de l'archive et du
-binaire dans ce script, puis la version dans la clé partagée du cache. Les tests portables
-utilisent `--release --target x86_64-pc-windows-msvc`,
-comme les exécutables livrés, pour partager la compilation des dépendances. La suite
-native de `tests.yml` conserve son profil et ses vérifications propres.
+The cache is saved only on the default branch; the release neither compiles nor restores a cache. A toolchain or dependency change or an eviction may force a rebuild on `main`. Distribution builds select only the application and its three workers.
 
-Le cache est enregistré uniquement sur la branche par défaut. La release ne compile plus
-et ne restaure aucun cache : les caches d'un tag ne sont pas partagés avec le tag suivant,
-ce qui faisait reconstruire les dépendances à chaque version. Un changement de toolchain,
-de dépendances ou une éviction peut imposer une reconstruction sur `main`.
-Le cache ne remplace aucun test ni la régénération des licences.
-La compilation de distribution sélectionne uniquement l'application et ses trois workers ;
-les outils internes comme `copy_benchmark` ne sont pas construits pour le paquet.
+Pushing a `v<x.y.z>` tag starts `.github/workflows/release.yml`. A single run checks the tag against `Cargo.toml`, then runs native tests, audit and distribution in parallel on the tagged commit. The `release` job needs all of them: a failure or cancellation prevents signing. It downloads the files built **by that same run**, signs the Setup with the updater's minisign key (secrets `TAURI_SIGNING_PRIVATE_KEY` and `_PASSWORD`, through the GitHub `release` environment), then generates `latest.json` with `scripts/write-update-manifest.ps1`. All three Windows manifest keys point to the Inno Setup installer. The workflow creates a draft release; publishing it by hand makes it visible to updaters. If a check fails, re-run the failed jobs from the tag's run.
 
-Le push d'un tag `v<x.y.z>` lance `.github/workflows/release.yml`. Une seule exécution vérifie
-que le tag correspond à `Cargo.toml`, puis lance en parallèle tests natifs, audit et distribution
-sur le commit du tag. Le job `release` dépend des quatre (`needs`) : un échec ou une annulation
-empêche la signature. Il télécharge les fichiers construits **par cette même exécution**, signe le
-Setup avec la clé minisign de l'updater (secrets `TAURI_SIGNING_PRIVATE_KEY` et `_PASSWORD`,
-accessibles via l'environment GitHub `release`, où des règles de protection peuvent être ajoutées),
-puis génère `latest.json` avec `scripts/write-update-manifest.ps1`. Les trois clés Windows du
-manifeste pointent vers le Setup Inno. Le workflow crée une release brouillon ; la publier à la
-main la rend visible des updaters, qui lisent `releases/latest/download/latest.json`.
-Si un contrôle échoue, relancer les jobs en échec depuis l'exécution du tag.
+Artifacts are uploaded with `actions/upload-artifact` 7.0.2, pinned to an immutable commit.
 
-Pour vérifier la détection du commit de version :
+## Tests
 
 ```powershell
 ./scripts/tests/detect-release-commit.tests.ps1
-```
-
-À chaque exécution de `build-distribution.ps1`, le script régénère les licences des crates
-depuis `Cargo.lock`, avant la compilation et l'assemblage des paquets, même avec `-SkipBuild`.
-Il inclut ensuite le rapport dans le ZIP et le Setup. Si la génération échoue, la distribution
-s'arrête. Un accès réseau est nécessaire pour récupérer les notices amont manquantes.
-Le workflow installe automatiquement le générateur. Pour lancer la génération séparément,
-suivre le [guide des notices](../../licenses/dependencies/README.md).
-Le script affiche séparément les durées des licences, de la compilation Rust, d'Inno Setup
-et de la création/vérification du ZIP, pour identifier les prochains gains possibles.
-
-Pour mesurer le cache, terminer une première exécution **Windows portable distribution**
-sur `main`, puis en lancer une deuxième sur le même commit. Relever les clés et résultats
-de restauration, le volume et la durée des transferts/restauration/enregistrement du cache,
-l'installation de `cargo-about`, la préparation/construction des tests (ligne Cargo `Finished`),
-leur exécution (`test result`), les licences, la compilation Rust, Inno Setup et le ZIP.
-Ce workflow ne mesure pas la signature. Ne pas créer de tag ou de release pour mesurer.
-Les [mesures de référence](../reports/2026-10-22-windows-distribution.md) concernent
-la release v2.0.0. Les [mesures v2.0.1 et la correction de clé](../reports/2026-10-23-distribution-cache.md)
-montrent le gain hébergé et le cache manqué par la release ; la correction d'isolation
-doit encore être vérifiée sur GitHub. La [restructuration des workflows](../reports/2026-10-25-release-reuse.md)
-supprime la seconde construction.
-La [comparaison locale des parcours Rust](../reports/2026-10-22-distribution-local-tests.md)
-utilise des sources figées et des dossiers de compilation isolés, avec caches vide,
-intégral et limité aux dépendances. Elle exclut les transferts du cache GitHub.
-
-Pour vérifier l'installateur avec une archive officielle téléchargée sans modification :
-
-```powershell
 ./scripts/tests/install-cargo-about.tests.ps1 -ArchivePath <cargo-about-0.9.2-x86_64-pc-windows-msvc.tar.gz>
-```
-
-Ces tests utilisent l'archive comme fixture locale et contrôlent installation, version,
-réutilisation sans réseau, rejet d'un hash incorrect, remplacement d'un cache corrompu
-et emplacements par défaut (`CARGO_HOME/bin` ou `USERPROFILE/.cargo/bin`). Ils couvrent
-aussi les chemins contenant des espaces, une restauration sans métadonnées Cargo,
-un téléchargement interrompu, une extraction en erreur ou altérée et le nettoyage
-des fichiers temporaires après échec, sans remplacer l'installation Cargo de l'utilisateur.
-Ils ne mesurent pas le transfert du cache GitHub.
-
-Pour vérifier le setup de la toolchain, sans modifier le Rustup du poste :
-
-```powershell
 ./scripts/tests/setup-distribution.tests.ps1
-# Ajoute une installation réelle isolée sous target/ (chemin court pour MSVC) :
-./scripts/tests/setup-distribution.tests.ps1 -RealToolchain
+./scripts/tests/setup-distribution.tests.ps1 -RealToolchain   # real isolated install under target/
 ```
 
-L'envoi des artefacts utilise `actions/upload-artifact` 7.0.2, épinglé sur un commit
-immuable et exécuté avec Node.js 24. Le ZIP portable et son SHA-256 gardent leur nom,
-leurs chemins et une compression d'envoi à zéro.
+The installer tests use an unmodified official archive as a local fixture and cover installation, reuse, hash rejection, corrupted caches, interrupted or tampered extraction and cleanup, without touching the user's Cargo install. The setup tests leave the machine's Rustup alone.
 
-Tests : `cargo test --lib app_paths::tests`. Vérifier aussi les caches et archives concernés.
-Le script vérifie les fichiers requis dans le ZIP. Tester manuellement la session, les aperçus,
-les archives et la fermeture depuis un dossier déplacé et une clé USB Windows 10/11.
-Les exécutables ne sont pas signés. La documentation historique ne valide ni une distribution Linux ni une exécution récente du workflow hébergé.
+Unit tests: `cargo test --lib app_paths::tests`. Also manually test session, previews, archives and shutdown from a moved folder and a Windows 10/11 USB stick.

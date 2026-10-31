@@ -1,48 +1,42 @@
-# Mesurer la compression des archives
+# Measuring archive compression
 
-Les logs `oxyde_lib::archive_timing` distinguent préparation du plan, encodage et publication. Le superviseur Windows ajoute démarrage du worker, temps des handlers du parent, contrôles, attentes d’événements et compteurs de trames/lectures/écritures/checkpoints. Les compteurs ne changent ni limites ni protocole.
+`oxyde_lib::archive_timing` logs separate plan preparation, encoding and publication. The Windows supervisor adds worker startup, parent handler time, checks, event waits and frame/read/write/checkpoint counters. Counters change neither limits nor protocol.
 
-La [mesure avant/après du 17 octobre](../reports/2026-10-17-archive-transport.md) documente la correction du transport partagé Decode/Encode.
+The `archive_extraction_benchmark` example measures production extraction without and with Turbo, for the four formats built from one folder; extracted content is verified untimed. `archive_worker_timing` lines separate `read_handler_s` (source reads) and `chunk_handler_s` (writing decoded data).
 
-Le [bilan Turbo](../reports/2026-10-17-archive-turbo.md) mesure les quatre formats et précise les limites du parallélisme et des réservations mémoire.
+## Reproducible comparison
 
-L’exemple `archive_extraction_benchmark` mesure l’extraction de production sans et avec Turbo, pour les quatre formats créés depuis le même dossier ; les contenus extraits sont vérifiés hors chronométrage. Les lignes `archive_worker_timing` séparent `read_handler_s` (lectures de la source) et `chunk_handler_s` (écriture des données décodées).
-
-## Comparaison reproductible
-
-Fermer Oxyde avant de reconstruire les binaires partagés :
+Close Oxyde before rebuilding shared binaries:
 
 ```powershell
 cargo build --offline --bins --example archive_compression_benchmark
 $env:RUST_LOG = "warn,oxyde_lib::archive_timing=info"
-cargo run --offline --example archive_compression_benchmark -- "C:\donnees\dossier"
+cargo run --offline --example archive_compression_benchmark -- "C:\data\folder"
 ```
 
-Un second argument choisit le format : `zip` (défaut), `7z`, `tar` ou `tar.zst`. Par exemple : `cargo run --offline --example archive_compression_benchmark -- "C:\donnees\dossier" 7z`.
+A second argument picks the format: `zip` (default), `7z`, `tar` or `tar.zst`. An optional third filters a mode, such as `production-normal-turbo`, or `turbo` for both Turbo qualities. The report shows the codec's effective level (TAR: 0).
 
-Un troisième argument facultatif filtre un mode, par exemple `production-normal-turbo`, ou `turbo` pour les deux qualités avec Turbo. Le rapport indique le niveau effectif du codec (TAR : 0, sans compression).
+With no argument the tool generates a small private set under `target/`. With a folder, it reads without writing; links and reparse points are refused. Output goes in a new `target/archive-compression-<uuid>/`.
 
-Sans argument, l’outil génère un petit jeu privé sous `target/`. Avec un dossier, il le lit sans y écrire ; liens et points de réanalyse sont refusés. Les sorties sont créées dans un nouveau `target/archive-compression-<uuid>/`.
-
-| Mode | Ce qui est mesuré |
+| Mode | What it measures |
 | --- | --- |
-| `production-fast` | Parcours Windows de production, worker isolé, niveau ZIP 1, sans Turbo |
-| `production-fast-turbo` | Même parcours et niveau 1, avec Turbo |
-| `production-normal-turbo` | Parcours de production, qualité normale conservée avec Turbo |
-| `direct-fast` | Même bibliothèque ZIP et niveau 1, écriture directe dans l’outil de mesure |
-| `direct-normal` | Même écriture directe au niveau 6 |
+| `production-fast` | Windows production path, isolated worker, ZIP level 1, no Turbo |
+| `production-fast-turbo` | Same path and level, with Turbo |
+| `production-normal-turbo` | Production path, normal quality kept, with Turbo |
+| `direct-fast` | Same ZIP library at level 1, written directly by the tool |
+| `direct-normal` | Same direct writing at level 6 |
 
-Les modes directs concernent uniquement ZIP. Les modes de production sont exécutés pour chaque format choisi ; les niveaux numériques ZIP/7z ne correspondent pas aux niveaux Zstandard.
+Direct modes apply to ZIP only. Production modes run for each chosen format; ZIP/7z numeric levels do not match Zstandard levels.
 
-Les archives sont décompressées et leur inventaire/contenu vérifiés contre les empreintes BLAKE3 des sources. Cette vérification et la préparation du manifeste sont hors chronométrage. Les archives vérifiées sont supprimées ; le rapport JSON et les fixtures générées restent disponibles.
+Archives are decompressed and their inventory/content checked against BLAKE3 hashes of the sources, untimed, then removed. The JSON report and generated fixtures stay.
 
-## Interprétation
+## Interpretation
 
-- La comparaison directe est un témoin expérimental, sans les gardes de sources, le confinement ni les échanges du parcours de production. Aucun repli direct n’est ajouté à l’application.
-- Un passage unique, avec cache réchauffé par le manifeste et ordre fixe, ne donne pas un débit garanti. Le ZIP direct n’est pas le moteur de l’Explorateur Windows.
-- `transport_wait_s` mesure le temps réellement passé à attendre les événements du transport. Il peut chevaucher le calcul du worker : ce n’est ni du temps CPU ni une mesure exacte du surcoût IPC. Les anciennes mesures de polling utilisaient `poll_sleep_s`.
-- `handler_s` couvre les callbacks du parent ; `controls_s` couvre les contrôles dans la boucle. Le reste comprend notamment encodage/décodage des trames, communication et travail du worker. Ne pas le nommer « compression pure ».
-- `write_bytes` compte les octets transmis, y compris les réécritures d’en-têtes ; il peut dépasser la taille finale. Le nombre et la taille moyenne des échanges aident à repérer une granularité trop fine.
-- Les temps de préparation/publication et les compteurs doivent être lus avant d’attribuer toute la durée au codec ou à l’isolation.
+- The direct comparison is an experimental control, without source guards, confinement or production exchanges. No direct fallback is added to the application.
+- A single run with a cache warmed by the manifest and a fixed order gives no guaranteed throughput. Direct ZIP is not Explorer's engine.
+- `transport_wait_s` is time waiting on transport events. It can overlap worker computation: it is neither CPU time nor an exact IPC overhead.
+- `handler_s` covers parent callbacks; `controls_s` covers loop checks. The rest includes frame encoding/decoding, communication and worker work. Do not call it "pure compression".
+- `write_bytes` counts transmitted bytes, header rewrites included, and can exceed the final size. Exchange count and average size help spot too-fine granularity.
+- Read preparation/publication times and counters before attributing the whole duration to the codec or isolation.
 
-Pour une mesure dans l’interface, reconstruire tous les workers avec `cargo build --offline --bins`, puis lancer `cargo run --offline`. Filtrer `archive_timing` dans `oxyde.log` ; ne pas déduire une validation visuelle du benchmark sans interface.
+To measure in the interface, rebuild workers with `cargo build --offline --bins`, run `cargo run --offline`, and filter `archive_timing` in `oxyde.log`.

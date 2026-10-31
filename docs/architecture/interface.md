@@ -1,93 +1,61 @@
-# Conventions de l’interface
+# Interface conventions
 
-L’état métier et les actions appartiennent à `src/ui/app/`. Les composants reçoivent données et callbacks ; ils ne possèdent que leur état local de focus, défilement ou expansion. `src/ui/elements/` fournit les primitives. Le [guide de développement](../guides/development.md) décrit le découpage.
+Business state and actions belong to `src/ui/app/`. Components receive data and callbacks and own only their local focus, scroll or expansion state. `src/ui/elements/` provides primitives. The [development guide](../guides/development.md) covers splitting.
 
-## Thèmes et dimensions
+## Themes and dimensions
 
-- Obtenir le thème par `cx.theme()` et utiliser les jetons d’`OxydeTheme`. Ajouter un jeton dans toutes les palettes si un rôle partagé manque ; réserver les valeurs locales aux effets propres au composant.
-- Les treize thèmes sont déclarés par `ThemeId::ALL`. Les couleurs de fichiers sont centralisées dans `components/icons/colors.rs` et appliquées par `render_file_icon`.
-- Exprimer les dimensions en `rems()`, référence initiale 16 pixels logiques. Utiliser `ui::scale::rem_pixels` pour une API en `Pixels`, `logical` pour les anciennes valeurs à l’échelle 16. Ces conversions restent sur le thread UI.
-- Les coordonnées fournies par GPUI sont déjà en pixels. Ne pas les convertir une seconde fois. Le zoom du contenu ne redimensionne pas la fenêtre native.
-- Le poids par défaut est Regular (400), depuis `ui/style.rs`. Les racines rendues séparément l’appliquent aussi. Un autre poids doit exprimer une variation intentionnelle.
+- Get the theme through `cx.theme()` and use `OxydeTheme` tokens. Add a token to every palette if a shared role is missing; keep local values for component-specific effects.
+- The thirteen themes are declared by `ThemeId::ALL`. File colors are centralized in `components/icons/colors.rs` and applied by `render_file_icon`.
+- Express dimensions in `rems()`, initial reference 16 logical pixels. Use `ui::scale::rem_pixels` for a `Pixels` API, `logical` for older values at scale 16. These conversions stay on the UI thread.
+- Coordinates from GPUI are already in pixels: do not convert twice. Content zoom does not resize the native window.
+- The default weight is Regular (400), from `ui/style.rs`. Separately rendered roots apply it too. Another weight must be an intentional variation.
 
-## Langues et formats
+## Languages and formats
 
-`cx.i18n()` résout les variantes de `Message`. Pour tout texte utilisateur, ajouter ou réutiliser une clé et ses traductions dans `locales/{fr,en,de,es,it}.ftl`, puis vérifier les catalogues et paramètres.
+`cx.i18n()` resolves `Message` variants. For any user text, add or reuse a key and its translations in `locales/{fr,en,de,es,it}.ftl`, then check catalogs and parameters.
 
-Garder les phrases entières dans Fluent, avec des paramètres numériques pour les pluriels. Les chemins et noms utilisateur restent des données littérales ; retirer les isolats bidirectionnels seulement si le résultat devient un chemin système. Les erreurs persistantes gardent leur clé afin de suivre un changement de langue. Les détails techniques restent dans les logs.
+Keep whole sentences in Fluent, with numeric parameters for plurals. Paths and user names stay literal data; strip bidirectional isolates only if the result becomes a system path. Persistent errors keep their key so they follow a language change. Technical details stay in logs.
 
-`ui/format.rs` centralise nombres, tailles et dates. La langue et le format de date persisté sont distincts de la locale régionale système. Le repli des messages est français ; un échec de formatage est journalisé.
+`ui/format.rs` centralizes numbers, sizes and dates. Language and the persisted date format are separate from the regional system locale. Messages fall back to French; a formatting failure is logged.
 
-## Réutiliser les composants
+## Reusing components
 
-Les cases à cocher utilisent `elements::checkbox::checkbox` : carré de 1 rem,
-contour de 1/16 rem et rayon de 1/4 rem. Au repos, le contour neutre mélange
-la surface et le texte secondaire ; il reste moins présent que les libellés.
-L’état coché utilise un fond et un contour accent, avec une coche centrée.
-L’état partiel garde le contour accent, mais réduit le fond accent à 20 % sur
-la surface neutre, avec un tiret de couleur texte. Les vues conservent zones de clic, focus et actions.
-Les interrupteurs et les simples marques de choix gardent leur rôle distinct.
-Les interrupteurs utilisent `elements::toggle::toggle`, y compris dans les
-réglages de la corbeille : piste neutre légèrement teintée et contour fin à
-l’arrêt, bouton plus marqué ; piste accent et bouton `text_on_accent` en marche.
-Conserver le déplacement du bouton comme indication supplémentaire de l’état.
+Checkboxes use `elements::checkbox::checkbox`: 1 rem square, 1/16 rem outline, 1/4 rem radius. At rest the neutral outline mixes surface and secondary text, staying less present than labels. Checked uses an accent background and outline with a centered check. Partial keeps the accent outline but reduces the accent background to 20% over the neutral surface, with a text-colored dash. Views keep click areas, focus and actions. Toggles and plain choice marks keep their distinct roles.
 
-| Besoin | Référence |
+Toggles use `elements::toggle::toggle`, including in trash settings: slightly tinted neutral track and thin outline when off, with a stronger knob; accent track and `text_on_accent` knob when on. Keep the knob's movement as an extra state cue.
+
+| Need | Reference |
 | --- | --- |
-| Bouton | `elements/button/style.rs` : `button_style`, `ButtonVariant` |
-| Formulaire ou modale | `components/modal.rs` : `Modal`, `form_row`, `action_button` |
-| Fenêtre secondaire et pied de page | `components/tool_window` ; [contrats des fenêtres](windows.md) |
-| Champ classique | `TextInput::new` avec `TextInputOptions::default()` |
-| Champ composé | `input::field_frame` avec `InputAppearance::Embedded` |
+| Button | `elements/button/style.rs`: `button_style`, `ButtonVariant` |
+| Form or modal | `components/modal.rs`: `Modal`, `form_row`, `action_button` |
+| Secondary window and footer | `components/tool_window`; [window contracts](windows.md) |
+| Plain field | `TextInput::new` with `TextInputOptions::default()` |
+| Composite field | `input::field_frame` with `InputAppearance::Embedded` |
 
-Les vues gardent dimensions, identifiants et callbacks. Pour un bouton désactivé, retirer ou protéger son callback : le style seul ne suffit pas. Les modales sont déplaçables par leur titre, sans fond assombri ; leur couche transparente bloque les interactions derrière elles et réserve la barre de statut.
+Views keep dimensions, identifiers and callbacks. For a disabled button, remove or guard its callback: style alone is not enough. Modals move by their title, with no dimmed background; their transparent layer blocks interaction behind them and reserves the status bar.
 
-Le champ standard fournit hauteur 2,25 rem, texte 0,8125 rem, interligne 1,25, fond `surface`, bordure `border` puis `accent` au focus, rayon `rounded_md` et marges horizontales 0,75 rem. Ne pas recréer ce cadre dans chaque formulaire. `clearable: true` active explicitement Effacer.
+The standard field provides height 2.25 rem, text 0.8125 rem, line height 1.25, `surface` background, `border` then `accent` on focus, `rounded_md` radius and 0.75 rem horizontal margins. Do not recreate this frame per form. `clearable: true` explicitly enables Clear.
 
-Un champ composé place l’éditeur dans `flex_1().min_w_0().h_full()` et les commandes dans le même cadre, sans seconde bordure. `Bare` laisse les marges au parent ; `Inline` suit la géométrie du contenu pour le renommage et le chemin. Ne pas masquer les suggestions avec `overflow_hidden` dans le repli intégré.
+A composite field places the editor in `flex_1().min_w_0().h_full()` and commands in the same frame, without a second border. `Bare` leaves margins to the parent; `Inline` follows content geometry for rename and path. Do not hide suggestions with `overflow_hidden` in the integrated fallback.
 
-## Préférences et réactivité
+## Preferences and responsiveness
 
-### Ascenseurs
+`AppConfig` holds settings; globals apply theme and language immediately. The save queue writes in the background, in order. Keep old configurations readable with defaults; do not overwrite an unreadable configuration. Reset keeps session, geometry and duplicate preferences.
 
-`components/scrollbar.rs` possède le rendu commun : fond de rail permanent
-(`scrollbar_track`), poignée, états de survol/glissement et marges aux extrémités.
-Ne pas masquer le fond au repos ni ajouter une apparence locale par liste.
-`TrackShape` adapte uniquement le contour au parent ; les menus de sélection
-fournissent leur rayon intérieur via `select_menu`. Leur rail peut être plus long
-que le viewport, sans modifier la plage de défilement du contenu. Conserver les
-propriétaires des événements, identifiants et conversions de coordonnées.
+Rendering does no I/O or heavy computation. Reuse history/operation summaries and snapshots prepared by revision. Asynchronous responses must check their owner and revision before publishing. See [operations](operations.md) and [visual checks](../guides/visual-checks.md).
 
-Pour les formulaires, modales, paramètres et notifications, `components/scroll_area.rs`
-compose ces ascenseurs avec un état local par surface et par fenêtre. La vue
-appelante conserve le cadre, les contraintes et l’identifiant du viewport.
-Les poignées réservent leur place uniquement en cas de débordement ; les deux
-axes gardent leurs coordonnées et captures dans leur fenêtre propriétaire.
+### Scrollbars
 
-Les formulaires secondaires adaptent leur disposition à la largeur disponible
-en rems : `modal::responsive_form_row` empile un libellé et sa valeur si la vue
-le demande. Les pieds de fenêtre peuvent passer sur plusieurs lignes. Le zoom
-ne doit pas déclencher un agrandissement de la largeur native pour compenser
-une mise en page trop rigide.
+`components/scrollbar.rs` owns the shared rendering: permanent track background (`scrollbar_track`), thumb, hover/drag states and end margins. Do not hide the track at rest or add a per-list look. `TrackShape` only adapts the outline to the parent; select menus provide their inner radius via `select_menu`, and their track may be longer than the viewport without changing the content's scroll range. Keep event owners, identifiers and coordinate conversions.
 
-`AppConfig` conserve les réglages ; les globals appliquent immédiatement thème et langue. La file de sauvegarde écrit en arrière-plan et dans l’ordre. Garder les anciennes configurations lisibles avec des valeurs par défaut ; ne pas écraser une configuration illisible. La réinitialisation conserve session, géométrie et préférences de doublons.
+For forms, modals, settings and notifications, `components/scroll_area.rs` composes these scrollbars with local state per surface and window. The calling view keeps the frame, constraints and viewport identifier. Thumbs reserve room only on overflow; both axes keep coordinates and captures in their owning window.
 
-Le rendu ne fait ni I/O ni calcul lourd. Réutiliser les résumés d’historique/opérations et les instantanés préparés par révision. Les réponses asynchrones doivent vérifier leur propriétaire et leur révision avant publication. Voir [opérations](operations.md) et [validation visuelle](../guides/visual-checks.md).
+Secondary forms adapt their layout to available width in rems: `modal::responsive_form_row` stacks a label and its value if the view asks. Window footers may wrap. Zoom must not grow the native width to compensate for a rigid layout.
 
 ### Animations
 
-Une animation n’est jamais sur le chemin d’une action : le clic, la navigation et
-le dépôt restent immédiats. N’animer que des éléments qui apparaissent en marge
-(fondus, glissements de quelques pixels), en 150 ms au plus, sortie plus courte
-que l’entrée, sans rebond. Ne pas animer le contenu des listes, la sélection, le
-survol des lignes, le changement d’onglet ni le redimensionnement.
+An animation is never in the way of an action: clicks, navigation and drops stay immediate. Animate only elements appearing at the margin (fades, slides of a few pixels), in 150 ms at most, with exit shorter than entry and no bounce. Do not animate list content, selection, row hover, tab changes or resizing.
 
-`elements/motion.rs` fournit des ressorts critiquement amortis (`presence`,
-`glide`, `slide`) qui se réorientent sans saut. Ne pas animer l’apparition des
-fenêtres possédées (menus, infobulles) : Windows y superpose sa propre animation d’ouverture.
-Une animation répétée doit être retirée du rendu dès qu’elle n’a plus d’objet.
+`elements/motion.rs` provides critically damped springs (`presence`, `glide`, `slide`) that redirect without a jump. Do not animate owned windows appearing (menus, tooltips): Windows overlays its own opening animation. Remove a repeating animation from rendering once it has no purpose.
 
-Une taille de dossier déjà calculée qui change signale sa mise à jour par un
-fond accent qui s’efface en 300 ms dans la cellule Taille, par exception à la
-durée des animations d’apparition. Le calcul initial et les résultats identiques restent sans
-animation ; une cellule hors écran ne rejoue pas le flash à son apparition.
+A computed folder size that changes signals the update with an accent background fading over 300 ms in the Size cell, an exception to the appearance duration. The initial calculation and identical results stay unanimated; an offscreen cell does not replay the flash when it appears.

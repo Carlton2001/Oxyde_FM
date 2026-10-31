@@ -1,27 +1,22 @@
-# Licences des dépendances
+# Dependency licenses
 
-`THIRD-PARTY-NOTICES.md` contient les textes de licence et leurs mentions de copyright, avec les crates et versions concernées. `cargo-about` utilise les sources résolues par `Cargo.lock`, y compris GPUI et GPUI Platform depuis la révision Zed épinglée. Toutes les cibles et dépendances de construction sont incluses ; cet inventaire peut donc dépasser les crates utilisées dans un binaire Windows.
+`THIRD-PARTY-NOTICES.md` holds license texts and copyright notices, with the crates and versions concerned. `cargo-about` uses the sources resolved by `Cargo.lock`, including GPUI and GPUI Platform from the pinned Zed revision. All targets and build dependencies are included, so this inventory may exceed the crates used in a Windows binary.
 
-Le script `build-distribution.ps1` régénère automatiquement ces notices à chaque distribution,
-avant compilation et assemblage du ZIP ou du Setup, même avec `-SkipBuild`.
-Installer une fois le générateur en local ; le workflow GitHub l'installe automatiquement.
-Le [guide de distribution](../../docs/guides/distribution.md) décrit l'installation du
-binaire officiel Windows avec vérification des empreintes et réutilisation du cache.
-La commande suivante permet aussi une actualisation manuelle :
+`build-distribution.ps1` regenerates these notices at each distribution, before compiling and assembling the ZIP or Setup, even with `-SkipBuild`. Install the generator once locally; the GitHub workflow installs it automatically. The [distribution guide](../../docs/guides/distribution.md) covers installing the official Windows binary. To refresh manually:
 
 ```powershell
 ./scripts/install-cargo-about.ps1
 ./scripts/update-third-party-licenses.ps1
 ```
 
-La génération accède aux dépôts amont pour retrouver les licences absentes des archives Cargo. `-Offline` est disponible lorsque les sources nécessaires sont en cache ; ce mode peut perdre les copyrights spécifiques aux licences récupérées à distance. Préférer la génération en ligne pour une livraison.
+Generation reaches upstream repositories to find licenses missing from Cargo archives. `-Offline` is available when the needed sources are cached, but can lose copyrights specific to licenses fetched remotely. Prefer online generation for a release.
 
-Le même fichier regroupe aussi les fichiers NOTICE, COPYRIGHT et AUTHORS fournis dans les sources locales des crates, dans une section complémentaire indiquant le paquet, sa version et le chemin source. Les textes sont conservés sans réécriture. Les auteurs Cargo ne sont pas considérés comme une liste de titulaires de droits. Les textes de licence identiques sont mutualisés par `cargo-about`, avec la liste des crates concernées ; les textes dont les copyrights diffèrent restent distincts.
+The same file also gathers the NOTICE, COPYRIGHT and AUTHORS files in the crates' local sources, in a supplementary section giving the package, version and source path. Texts are kept unaltered. Cargo authors are not treated as a list of rights holders. `cargo-about` merges identical license texts, with the list of crates concerned; texts whose copyrights differ stay separate.
 
-`inputs.json` enregistre les empreintes des manifests, de la configuration, du template et du rapport. Après génération, la distribution contrôle ces empreintes et s'arrête en cas d'échec. Elle copie ce dossier dans le ZIP portable et le Setup classique ; les avis de grammaires restent dans `licenses/syntaxes/`.
+`inputs.json` records the hashes of the manifests, configuration, template and report. After generation, the distribution checks these hashes and stops on failure. It copies this folder into the portable ZIP and the Setup; grammar notices stay in `licenses/syntaxes/`.
 
-GPUI et GPUI Platform déclarent Apache-2.0 ; leurs licences figurent dans le rapport unique avec les autres crates de la révision Zed épinglée.
+GPUI and GPUI Platform declare Apache-2.0; their licenses are in the single report with the other crates of the pinned Zed revision.
 
-`LUCIDE-LICENSE.txt` conserve la notice officielle ISC et MIT/Feather ; sa source est enregistrée dans `LUCIDE-SOURCE.txt`. Les révisions originales des SVG du projet n'ont pas été enregistrées.
+`LUCIDE-LICENSE.txt` keeps the official ISC and MIT/Feather notice; its source is recorded in `LUCIDE-SOURCE.txt`. The original revisions of the project's SVGs were not recorded.
 
-`Inter-LICENSE.txt` et `JetBrainsMono-LICENSE.txt` conservent la licence SIL Open Font 1.1 des polices embarquées dans l'exécutable, qui impose de la livrer avec elles.
+`Inter-LICENSE.txt` and `JetBrainsMono-LICENSE.txt` keep the SIL Open Font 1.1 license of the fonts embedded in the executable, which must ship with them.

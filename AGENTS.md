@@ -1,36 +1,36 @@
-# Oxyde — consignes pour les agents
+# Oxyde: agent instructions
 
-Explorateur de fichiers natif en Rust, GPUI et Tokio. Documentation : [index](docs/README.md).
+Native file explorer in Rust, GPUI and Tokio. Documentation: [index](docs/README.md).
 
-## Règles permanentes
+## Standing rules
 
-- Garder `cargo check` sans avertissement du projet. Utiliser `rg`, jamais `grep`.
-- Garder les calculs coûteux et les opérations de fichiers hors du thread UI.
-- Toute API système passe par le trait `Platform` (`src/platform/mod.rs`), avec implémentations et dépendances conditionnées par cible.
-- Privilégier les interactions natives et le clic gauche pour les actions principales.
-- Utiliser les SVG Lucide officiels de `lucide-icons/lucide/icons/<nom>.svg`, sans modifier leur tracé. Si la source est inaccessible, signaler le blocage.
-- Ne créer ni modifier un changement de curseur sans demande explicite de l’utilisateur. Les nouvelles interactions gardent le curseur par défaut.
-- Écrire les messages de commit en anglais. **Chaque push vers GitHub exige une demande explicite pour cette opération**, y compris branches et tags, quel que soit l’outil. Une demande de modification, commit ou fusion ne l’autorise pas ; une autorisation antérieure ne vaut pas pour le push suivant.
-- Après modification des workers ou de leur code partagé, prévenir qu’ils doivent être reconstruits. Fournir : fermer Oxyde, `cargo build --offline --bins`, puis `cargo run --offline`. `cargo run` seul ne reconstruit pas les exécutables auxiliaires.
+- Keep `cargo check` free of project warnings.
+- Keep expensive work and file operations off the UI thread.
+- System APIs go through the `Platform` trait (`src/platform/mod.rs`), with implementations and dependencies gated by target.
+- Prefer native interactions and left click for primary actions.
+- Use the official Lucide SVGs from `lucide-icons/lucide/icons/<name>.svg`, with unmodified paths. If the source is unreachable, report it.
+- Do not add or change a cursor change unless the user explicitly asks. New interactions keep the default cursor.
+- Write commit messages in English. **Every push to GitHub requires an explicit request for that push**, branches and tags included, whatever the tool. A request to change, commit or merge does not authorize it, and an earlier approval does not cover the next push.
+- After changing workers or their shared code, say they must be rebuilt: close Oxyde, `cargo build --offline --bins`, then `cargo run --offline`. `cargo run` alone does not rebuild the helper executables.
 
-## Avant de modifier
+## Read before changing
 
-| Périmètre | Référence à lire |
+| Area | Reference |
 | --- | --- |
-| Interface | [Conventions UI](docs/architecture/interface.md) |
-| Menus, infobulles, fenêtres secondaires | [Fenêtres](docs/architecture/windows.md) |
-| Aperçus, miniatures et sessions | [Aperçus](docs/architecture/previews.md) |
-| Archives, confinement et garanties | [Archives](docs/architecture/archives.md) et [limites de sécurité](docs/security/status.md) |
-| Sortie finale du processus | [Fermeture PDF/Intel](docs/diagnostics/shutdown.md) |
-| Découpage et tests | [Développement](docs/guides/development.md) |
+| Interface | [UI conventions](docs/architecture/interface.md) |
+| Menus, tooltips, secondary windows | [Windows](docs/architecture/windows.md) |
+| Previews, thumbnails, sessions | [Previews](docs/architecture/previews.md) |
+| Archives, confinement, guarantees | [Archives](docs/architecture/archives.md), [security limits](docs/security/status.md) |
+| Final process exit | [Shutdown](docs/diagnostics/shutdown.md) |
+| Module splitting and tests | [Development](docs/guides/development.md) |
 
-## Organisation du code
+## Code organization
 
-- `src/ui/app/` possède l’état métier et les actions ; `components/` compose l’interface ; `elements/` fournit les primitives.
-- Une responsabilité identifiable par module. Les façades déclarent et assemblent ; elles n’accumulent pas les parcours et rendus.
-- Viser 200–600 lignes de production ; au-delà de 800, examiner le découpage avant une extension significative et justifier le maintien. Ne pas découper artificiellement ni compter les tests comme production.
-- Extraire les sections cohérentes ; partager un composant seulement si plusieurs usages partagent présentation ou comportement. Préserver visibilité minimale, identifiants GPUI et cycles de vie. Limiter la refactorisation au changement.
-- Ranger les nouveaux tests unitaires dans le `tests/` du module, sans changer leur parent logique Rust ni élargir les visibilités. Préserver scénarios, attributs et découverte lors d’un déplacement ; détails dans le guide de développement.
-- Utiliser les couleurs sémantiques et les catalogues des cinq langues. Garder les décisions métier dans la vue appelante.
+- `src/ui/app/` owns business state and actions, `components/` composes the interface, `elements/` provides primitives. Business decisions stay in the calling view.
+- One identifiable responsibility per module. Facades declare and assemble; they do not accumulate traversals and rendering.
+- Aim for 200–600 production lines. Past 800, consider splitting before a significant extension, or justify keeping it. Do not split artificially or count tests as production.
+- Share a component only when several uses share presentation or behavior. Preserve minimal visibility, GPUI identifiers and lifecycles. Limit refactoring to the change.
+- New unit tests go in the module's `tests/` folder, without changing their Rust parent or widening visibility: see the development guide.
+- Use semantic colors and the catalogs of all five languages.
 
-Les sources de `reference_zed/` et le checkout partiel Zed `v1.21.0` dans `C:\Users\Biluf\Downloads\zed-1.21.0` servent de référence GPUI pour le rendu/style ; ne pas reprendre leurs dépendances.
+`reference_zed/` and the partial Zed `v1.21.0` checkout in `C:\Users\Biluf\Downloads\zed-1.21.0` are GPUI references for rendering and style; do not take their dependencies.

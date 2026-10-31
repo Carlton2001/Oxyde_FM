@@ -1,42 +1,40 @@
-# Mesurer une copie réelle
+# Measuring a real copy
 
-Les opérations normales écrivent dans `oxyde.log`, à côté de `config.json`. La ligne `session start` indique le chemin exact ; en mode portable, utiliser `data/oxyde.log`. Le [benchmark séparé](../guides/copy-benchmark.md) produit un CSV et ne mesure pas l’application.
+Normal operations write to `oxyde.log`, next to `config.json`. The `session start` line gives the exact path; in portable mode use `data/oxyde.log`. The separate [benchmark](../guides/copy-benchmark.md) produces a CSV and does not measure the application.
 
-Après [construction des binaires](../guides/development.md), copier un même échantillon depuis l’interface, attendre la fin et relever les lignes `copy_timing` :
+After [building](../guides/development.md), copy a sample from the interface, wait for the end and read the `copy_timing` lines:
 
 ```powershell
 Get-Content "$env:APPDATA\oxyde\oxyde.log" | Select-String 'copy_timing'
 ```
 
-L’exemple `copy_concurrency_benchmark DESTINATION...` compare la politique de production à 1, 2 et 4 workers sur des fichiers générés (gros, moyens, petits) ; `COPY_BENCH_SET` limite le jeu mesuré. Comparer plusieurs passages normal/turbo en alternant leur ordre, avec mêmes fichiers, destination et supports. Le cache Windows reste actif. Un petit lot et un lot de gros fichiers suffisent pour un premier diagnostic ; ne pas lancer systématiquement une campagne volumineuse.
+The `copy_concurrency_benchmark DESTINATION...` example compares the production policy at 1, 2 and 4 workers on generated files (large, medium, small); `COPY_BENCH_SET` limits the set. Compare several normal/Turbo runs in alternating order, with the same files, destination and media. The Windows cache stays active. A small batch and a batch of large files are enough for a first diagnosis.
 
-## Lire les phases
+## Reading phases
 
-Cible : `oxyde_lib::copy_timing`, durées en secondes avec point décimal.
+Target: `oxyde_lib::copy_timing`, durations in seconds. For the exact inventory, see `src/systems/copy_diagnostics.rs` and search `copy_timing` in `src/`.
 
-| Événement | Ce qu’il mesure |
+| Event | Measures |
 | --- | --- |
-| `copy_operation_start` / `copy_operation_end` | Opération, mode turbo, durée et bilan |
-| `copy_source_selection` | Capture des racines et contrôle des chevauchements |
-| `copy_plan_traversal` | Parcours et préparation du plan/conflits, pauses comprises |
-| `copy_file` | Parcours d’un fichier, de la copie à sa publication/nettoyage |
+| `copy_operation_start` / `copy_operation_end` | Operation, Turbo mode, duration and result |
+| `copy_source_selection` | Root capture and overlap check |
+| `copy_plan_traversal` | Traversal and plan/conflict preparation, pauses included |
+| `copy_file` | One file, from copy to publication/cleanup |
 
-Pour l’inventaire exact des événements et champs, consulter `src/systems/copy_diagnostics.rs` et rechercher `copy_timing` dans `src/`.
-
-| Champs par fichier | Interprétation |
+| Per-file fields | Meaning |
 | --- | --- |
-| `published`, `bytes` | Publication réussie et taille terminée avant hachage ; zéro possible si échec précoce |
-| `wall_s`, `pause_s`, `active_s` | Durée réelle, pauses observées et différence |
-| `native_s` | Copie Platform, vidage inclus, pauses observées exclues |
-| `flush_s`, `flush_calls` | Appels explicites de vidage ; **temps déjà inclus dans `native_s`** |
-| `hash_s` | Relecture BLAKE3 de destination, pauses observées exclues |
-| `publish_s` | Renommage final, y compris tentative en échec |
-| `parents_s`, `checks_s` | Résolution des parents et contrôles avant copie/publication |
-| `staging_create_s`, `writer_release_s`, `output_open_s` | Préparation privée, fermeture du writer et réouverture vérifiée |
-| `cleanup_s`, `remaining_s` | Destructeur du staging et reste non attribué, sans compter le vidage deux fois |
+| `published`, `bytes` | Successful publication and size completed before hashing; zero possible on early failure |
+| `wall_s`, `pause_s`, `active_s` | Real duration, observed pauses and their difference |
+| `native_s` | Platform copy, flush included, observed pauses excluded |
+| `flush_s`, `flush_calls` | Explicit flush calls; **time already in `native_s`** |
+| `hash_s` | BLAKE3 re-read of the destination, observed pauses excluded |
+| `publish_s` | Final rename, failed attempt included |
+| `parents_s`, `checks_s` | Parent resolution and checks before copy/publication |
+| `staging_create_s`, `writer_release_s`, `output_open_s` | Private preparation, closing the writer and verified reopening |
+| `cleanup_s`, `remaining_s` | Staging destructor and unattributed remainder, without counting flush twice |
 
-## Éviter les mauvaises conclusions
+## Avoiding wrong conclusions
 
-Le temps d’opération inclut planification, attente des workers et pauses entre fichiers. Les durées des workers se chevauchent : leur somme n’est pas le temps réel. Le parcours par fichier exclut certaines préparations et l’enregistrement ultérieur dans l’historique.
+Operation time includes planning, waiting for workers and pauses between files. Worker durations overlap: their sum is not real time. The per-file path excludes some preparation and later history recording.
 
-`native_s - flush_s` n’est pas un débit matériel pur. `hash_s` peut lire le cache système. Un déplacement sur le même volume peut ne produire aucune ligne de copie. Les récapitulatifs peuvent manquer après un arrêt brutal ; `published=false` indique une absence de publication. Retirer les chemins personnels des logs avant partage.
+`native_s - flush_s` is not pure hardware throughput. `hash_s` may read the system cache. A same-volume move may produce no copy line. Summaries may be missing after a hard stop; `published=false` means no publication. Remove personal paths from logs before sharing.

@@ -1,87 +1,49 @@
-# Comparaison des moteurs de copie
+# Copy engine benchmark
 
-Cet outil expérimental est indépendant des opérations normales d'Oxyde et de leur
-historique. Il teste les cinq modes sur un fichier ou un dossier existant :
+An experimental tool, independent of Oxyde's normal operations and history. It runs five modes on an existing file or folder:
 
-| CSV `mode` | Transfert | BLAKE3 |
-|---|---|---|
-| `native_blake3` | API Windows actuelle via `Platform` | Relecture de la destination |
-| `native_plain` | Même API Windows | Aucun |
-| `stream_blake3` | Boucle Rust, blocs de 1 Mio | Calcul pendant le transfert |
-| `stream_plain` | Même boucle Rust | Aucun |
-| `native_source_blake3` | API Windows, avec un lecteur source en parallèle | Empreinte de la source |
+| CSV `mode` | Transfer | BLAKE3 |
+| --- | --- | --- |
+| `native_blake3` | Current Windows API via `Platform` | Re-reads the destination |
+| `native_plain` | Same Windows API | None |
+| `stream_blake3` | Rust loop, 1 MiB blocks | Computed during transfer |
+| `stream_plain` | Same Rust loop | None |
+| `native_source_blake3` | Windows API, with a parallel source reader | Source hash |
 
-Le moteur Rust reprend le principe de l'ancien backend Tauri, sans ses pauses
-artificielles, réglages de priorité ni parallélisme. Les cinq modes traitent les
-fichiers séquentiellement avec la même priorité. Il s'agit d'un benchmark des
-données ordinaires : le moteur Rust ne reproduit pas les dates, attributs, flux
-alternatifs et toutes les garanties du moteur de production. Les liens et points
-de réanalyse sont refusés. Ce moteur n'est pas un remplacement prêt à déployer.
+All modes process files sequentially at the same priority. It benchmarks ordinary data: the Rust engine does not reproduce dates, attributes, alternate streams or the production engine's guarantees, and it is not a drop-in replacement. Links and reparse points are refused.
 
-## Utilisation sous Windows
+## Usage (Windows)
 
-Fermer Oxyde avant de compiler si ses exécutables sont utilisés.
+Close Oxyde before building if its executables are in use.
 
 ```powershell
 cargo build --offline --release --bin copy_benchmark
 .\target\release\copy_benchmark.exe --help
-.\target\release\copy_benchmark.exe "C:\donnees\gros-fichier.bin" "E:\essais" 5 > copie-gros.csv
-.\target\release\copy_benchmark.exe "C:\donnees\petits-fichiers" "E:\essais" 5 > copie-petits.csv
+.\target\release\copy_benchmark.exe "C:\data\large-file.bin" "E:\trials" 5 > copy-large.csv
+.\target\release\copy_benchmark.exe "C:\data\small-files" "E:\trials" 5 > copy-small.csv
 ```
 
-La destination doit être un dossier existant, extérieur à la source. Chaque essai
-crée un dossier temporaire distinct dans la destination et le supprime après la
-mesure. Les fichiers déjà présents ne sont pas écrasés. Prévoir assez d'espace pour
-une copie complète du jeu de données. Une interruption brutale du processus peut
-laisser un dossier `oxyde-copy-benchmark-*` à nettoyer manuellement.
+The destination must be an existing folder outside the source, with room for a full copy. Each trial creates a temporary folder there and removes it after measuring; existing files are not overwritten. A hard kill can leave an `oxyde-copy-benchmark-*` folder to clean up by hand.
 
-Effectuer d'abord un essai de correction, sur un petit échantillon :
+Run a correctness trial first, on a small sample:
 
 ```powershell
-.\target\release\copy_benchmark.exe "C:\donnees\echantillon" "E:\essais" 1 --validate
+.\target\release\copy_benchmark.exe "C:\data\sample" "E:\trials" 1 --validate
 ```
 
-`--validate` calcule une référence sur la source avant les essais et compare après
-chaque passe le contenu de la source, de la destination et l'empreinte éventuelle
-du moteur. Ces lectures sont hors chronométrage mais réchauffent le cache. Ne pas
-modifier la source pendant les essais. Sans cette option, seules les tailles sont
-contrôlées ; les modes `plain` ne calculent aucune empreinte.
+`--validate` computes a source reference before the trials and compares source, destination and any engine hash after each pass. These reads are untimed but warm the cache. Do not change the source during trials. Without this option only sizes are checked.
 
-## Lecture des résultats
+## Reading results
 
-- `total_s` : temps réel de la passe, création des sous-dossiers, préparation,
-  transfert, hachage, vidage, publication et nettoyage du staging inclus. La
-  validation indépendante et la suppression finale des copies sont exclues.
-- `transfer_s` : durée cumulée du transfert ; contient le vidage natif Windows
-  dans les modes `native`, et le calcul BLAKE3 en ligne dans `stream_blake3`.
-- `stream_flush_s` : vidage explicite `sync_all` du moteur Rust. Zéro pour le
-  moteur natif ne signifie pas absence de vidage : celui-ci est dans `transfer_s`.
-- `post_hash_s` : relecture BLAKE3 après copie, uniquement pour `native_blake3`.
-- `publish_s` : renommage des fichiers temporaires vers leur nom final.
-- `mib_s` : volume des données ordinaires divisé par le temps total.
-- `source_hash_s` : durée du calcul sur la source, uniquement pour
-  `native_source_blake3`. Cette durée chevauche la copie native : ne pas
-  l'additionner à `transfer_s`.
-- `hash_wait_s` : attente restante du lecteur source après la copie native,
-  avant la publication. Inclut le coût de jonction du thread ; peut être presque
-  nul si l'empreinte est déjà prête. Le temps total attend toujours les deux tâches.
+- `total_s`: wall time of the pass, including folder creation, preparation, transfer, hashing, flush, publication and staging cleanup. Independent validation and final removal are excluded.
+- `transfer_s`: cumulative transfer time. Includes the native flush in `native` modes and inline BLAKE3 in `stream_blake3`.
+- `stream_flush_s`: explicit `sync_all` of the Rust engine. Zero for native does not mean no flush: it is in `transfer_s`.
+- `post_hash_s`: BLAKE3 re-read after copy, `native_blake3` only.
+- `publish_s`: rename from temporary to final names.
+- `mib_s`: ordinary data volume over total time.
+- `source_hash_s`: source hashing, `native_source_blake3` only. It overlaps the native copy: do not add it to `transfer_s`.
+- `hash_wait_s`: remaining wait for the source reader after the native copy, thread join included.
 
-Le mode natif réutilise le callback de production qui vide chaque flux terminé.
-L'empreinte native et l'empreinte en ligne ne réalisent pas le même contrôle : la
-première relit la destination, la seconde représente les blocs transférés.
-Le cinquième mode utilise un lecteur indépendant sur la source et conserve le
-verrou de lecture Windows pendant le transfert, le hachage et la publication.
-Les identités des deux handles source sont comparées avant le lancement. Une
-erreur de copie ou de hachage empêche la publication ; le thread de hachage est
-rejoint avant le nettoyage, y compris en cas d'erreur de copie.
+The native hash re-reads the destination; the inline hash covers the blocks transferred; the fifth mode hashes the source with an independent reader, holding the Windows read lock through transfer, hashing and publication. A copy or hash error prevents publication. Because it reads the source twice, that mode can compete with the transfer or benefit from the cache: use `--validate` on a sample, then compare timings without it, across and within disks.
 
-Ce mode effectue deux lectures de la source : il peut concurrencer le transfert
-ou bénéficier du cache. Il ne relit pas la destination pour établir son empreinte.
-Utiliser `--validate` sur un échantillon pour contrôler indépendamment le résultat,
-puis comparer les durées sans cette option sur D: vers E: et D: vers D:.
-
-L'ordre des cinq modes tourne à chaque répétition (cinq répétitions équilibrent
-les positions). Le cache Windows n'est pas purgé. Comparer plusieurs passages,
-examiner leur dispersion et tester séparément gros fichiers, petits fichiers et
-chaque combinaison de disques. Fermer les autres tâches d'I/O. Les chiffres ne
-mesurent pas l'interface, les conflits, l'historique ou une copie concurrente.
+Mode order rotates each repetition (five repetitions balance positions). The Windows cache is not purged. Compare several runs, look at spread, test large files, small files and each disk pairing separately, and close other I/O. The figures do not measure the interface, conflicts, history or concurrent copy.

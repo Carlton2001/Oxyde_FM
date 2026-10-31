@@ -1,81 +1,34 @@
-# Vérifier l’interface dans une session réelle
+# Checking the interface in a real session
 
-Choisir les scénarios concernés par le changement, sur des fixtures privées. Noter révision, Windows/cible, thème, langue, zoom, manipulation et résultat. Une compilation ou un test Win32 ne prouve pas le rendu GPUI.
+Pick the scenarios the change affects, on private fixtures. Note revision, Windows/target, theme, language, zoom, steps and result. A compile or Win32 test does not prove GPUI rendering.
 
-## Parcours à choisir
-
-| Changement | Essais utiles |
+| Change | Useful checks |
 | --- | --- |
-| Composants / formulaires | Thèmes clairs et sombres, cinq langues dont libellés longs, zoom, petites fenêtres, Tab/Entrée/Échap, erreurs et champs désactivés |
-| Menus / fenêtres | Sous-menus après défilement, capture hors surface, champs texte/presse-papiers, clic propriétaire, Alt+Tab, fenêtre secondaire, plusieurs DPI ; rien ne réagit sous le menu |
-| Aperçus | Images transparentes/animées, PDF, vidéo ; survol rapide, retour sur cache, source modifiée, défilement, fermeture, absence de résultat obsolète |
-| Viewer | Bouton œil, sélection suivie entre panneaux, précédent/suivant, absence de fusion d’onglets dans les deux sens, déplacements par division ; statut vide ; détachement, redimensionnement, audio/vidéo et pause/reprise, changement de fichier, fin et fermeture |
-| Opérations | Progression, pause/reprise/annulation, conflits, reçus partiels, historique après relance, graphe final |
-| Archives | Navigation, extraction, création/reconstruction des quatre formats modifiables, transferts, collisions, refus lisibles et récupération |
-| Distribution | Installation propre et portable déplacé, caches/configuration, workers présents, ouverture de fichiers et fermeture |
+| Components, forms | Light and dark themes, five languages including long labels, zoom, small windows, Tab/Enter/Esc, errors and disabled fields |
+| Menus, windows | Submenus after scrolling, capture outside the surface, text fields/clipboard, owner click, Alt+Tab, secondary window, several DPIs; nothing reacts under the menu |
+| Previews | Transparent/animated images, PDF, video; fast hover, return on cache, modified source, scrolling, closing, no stale result |
+| Viewer | Eye button, selection followed across panels, previous/next, no tab merging either way, moves by split; detach, resize, audio/video and pause/resume, file change, end and close |
+| Operations | Progress, pause/resume/cancel, conflicts, partial receipts, history after restart, final graph |
+| Archives | Navigation, extraction, creating/rebuilding the four writable formats, transfers, collisions, readable refusals and recovery |
+| Distribution | Clean install and moved portable, caches/configuration, workers present, opening files and shutdown |
 
-Après [construction des binaires et workers](development.md), préparer le jeu d’archives sans lancer l’interface :
+Do not provoke failures on personal documents or empty the real Trash for a test. If a small operation ends too fast to try pause, say so rather than presenting it as tested.
 
-```powershell
-cargo run --offline --example prepare_archive_isolation_visual
-```
+## Opt-in native tests (Windows)
 
-Le générateur crée un dossier neuf dans `target/` avec sources, références, archives normales et témoins de refus. Utiliser exclusivement ces copies. Pour les mutations, vérifier les octets/noms/dossiers vides ; après déplacement, seules les sources confirmées doivent disparaître. Une archive avec chemin interdit ne doit rien publier hors destination.
-
-Pour les refus de sécurité (aperçus aux limites ou corrompus, archives hostiles, déplacements, export, corbeille, cache indisponible), générer des fixtures inertes avec Python, sans dépendance :
+These are excluded from the ordinary suite. Rebuild the binaries first and use a private `TEMP`/`TMP` under `target/`, as `test-windows.ps1` does, with ordinary Windows rights. An agent sandbox may refuse handles the file engine needs; run them outside it if so.
 
 ```powershell
-python -I scripts/prepare-security-visual-check.py
-```
-
-Le script crée `target/security-visual-check-*` sans rien écraser ni extraire. Pour le scénario « cache indisponible », construire `oxyde`, puis lancer `python -I scripts/prepare-security-visual-check.py --launch-cache-unavailable target/security-visual-check-<id>` : seul ce processus reçoit le `TEMP` privé ; le fermer après l’essai.
-
-Ne pas provoquer de panne sur les documents personnels ni vider la Corbeille réelle pour un test. Si une petite opération finit trop vite pour essayer la pause, le signaler ; ne pas la présenter comme testée.
-
-## Régression du ghost de glisser-déposer sous Windows
-
-Ce test volontairement exclu de la suite ordinaire ouvre brièvement une fenêtre GPUI sans l’activer. Il démarre un drag synthétique, puis alterne Ctrl, Shift et leur relâchement sans mouvement du pointeur. Il vérifie à la fois le mode de dépôt et le mode utilisé par le rendu du ghost, sans effectuer de transfert :
-
-```powershell
+# Drag ghost follows Ctrl/Shift without pointer movement
 cargo test --offline --locked --bin oxyde native_drag_ghost_tracks_modifiers_without_pointer_movement -- --ignored --test-threads=1
-```
-
-Il couvre le routage GPUI et les notifications du ghost ; la réception des touches physiques par Windows et l’aspect des couleurs restent à vérifier manuellement. Les gestionnaires clavier appartiennent à la racine suivie par le focus : un `canvas` enfant possède son propre nœud de dispatch et ne reçoit pas les événements destinés à cette racine.
-
-Le test vérifie aussi la présence de la fenêtre indépendante du ghost. Le parcours
-de dépôt externe dispose d'un autre test natif isolé, sur deux fichiers temporaires
-(dont un nom accentué), avec copie puis déplacement et contrôle de l'absence de
-préparation dupliquée :
-
-```powershell
+# External drop of two temporary files: copy then move, no duplicate preparation
 cargo test --offline --locked --bin oxyde native_external_multiselection_copies_then_moves_once -- --ignored --test-threads=1
 ```
 
-Utiliser un `TEMP`/`TMP` privé dans `target/`, comme le script `test-windows.ps1`,
-avec les droits Windows ordinaires. Le bac à sable de l'agent peut refuser les
-handles nécessaires au moteur de fichiers ; le même essai doit alors être
-exécuté hors de ce bac à sable, en conservant les fichiers temporaires privés.
+The ghost test covers GPUI routing and ghost notifications, not Windows delivering physical keys or how colors look. Keyboard handlers belong to the focus-tracked root: a child `canvas` has its own dispatch node and does not receive events meant for that root.
 
-Les tests unitaires `platform::windows_file_drag` exercent les objets COM sans
-déplacer le pointeur ni utiliser le presse-papiers : multisélection, propriété des
-allocations, modificateurs, refus des formats/objets remplacés et acquittement des
-déplacements optimisés. Ces tests ne remplacent pas l'essai réel entre Oxyde,
-l'Explorateur et une application tierce. Vérifier aussi Échap/clic droit, retour
-dans Oxyde après sortie, noms longs, changement d'écran/DPI et fermeture pendant
-un glissement. Utiliser exclusivement des fichiers de test pour les déplacements.
+`platform::windows_file_drag` unit tests exercise COM objects without moving the pointer or using the clipboard. They do not replace a real trial between Oxyde, Explorer and a third-party application. Also check Esc/right click, return into Oxyde after leaving, long names, screen/DPI change and closing during a drag. Use test files only for moves.
 
-## Interpréter les résultats
+`native_viewer_media_*` tests check the Windows player on a private WAV and, if `OXYDE_VIEWER_TEST_MEDIA` is set, a private audio/video file. `native_viewer_renders_tracks_selection_and_detaches` exercises GPUI rendering, selection tracking after detaching, panel retention, preview return on window close, and tab-linked closing. They prove neither audibility, perceptual sync nor the full codec/DPI/theme matrix.
 
-Les tests opt-in `native_viewer_media_*` vérifient le lecteur Windows sur un WAV
-privé et, si `OXYDE_VIEWER_TEST_MEDIA` est défini, un fichier audio/vidéo privé.
-Ils exigent la reconstruction préalable des binaires. Le test opt-in
-`native_viewer_renders_tracks_selection_and_detaches` exerce le rendu GPUI et
-le suivi de sélection après détachement, la conservation du panneau, le retour
-de l’aperçu à la fermeture de la fenêtre et la fermeture liée à l’onglet.
-Ces tests ne prouvent ni l’audibilité,
-ni la synchronisation perceptuelle, ni toute la matrice des codecs/DPI/thèmes.
-
-- Les tests automatisés couvrent mieux délais, fautes et workers hostiles ; les essais manuels couvrent présentation, focus et interactions.
-- Un retour utilisateur global ne prouve pas toutes les variantes de la matrice ; consigner sa portée réelle.
-- La validation visuelle du 10 octobre 2026 concerne `243140d`. Elle ne valide pas rétroactivement les changements ultérieurs de confinement ou de fenêtres.
-- Linux, RSS/GPU et comportements sur fournisseurs/volumes non essayés restent séparés. Voir les [limites de sécurité](../security/status.md) et les [bilans](../reports/README.md).
+Automated tests cover timeouts, faults and hostile workers better; manual checks cover presentation, focus and interaction. Overall user feedback does not prove every variant: record its actual scope.

@@ -1,65 +1,58 @@
-# Parcours des archives
+# Archive paths
 
-Sous Windows de production, les codecs sont exécutés dans des workers ; le parent possède les fichiers et décide des effets. Une panne de worker ne doit jamais déclencher de parsing local moins restrictif.
+In Windows production, codecs run in workers; the parent owns the files and decides effects. A worker failure must never trigger less restricted local parsing.
 
-## Parcours et responsabilités
+## Paths and responsibilities
 
-| Usage | Point d’entrée | Contrat |
+| Use | Entry point | Contract |
 | --- | --- | --- |
-| Navigation et index de recherche | `Platform::list_archive_directory`, worker `oxyde-archive-list-worker` | Métadonnées validées, chemins internes relatifs ; 512 Mio, 120 s, réponse 32 Mio maximum |
-| Extraction | `systems/archive_io.rs`, `archive_io::decode` | Courtier Decode ; lectures/écritures bornées et sorties possédées par le parent. ZIP lit sa source via une fenêtre de 256 Kio conservée entre les repositionnements |
-| Création et reconstruction | `systems/archive_encode.rs`, `archive_encode::run` | Même encodeur via `Platform::run_archive_io_worker` |
-| Modification d’une archive | `archive_workspace/native_commit.rs` | Préparation, contrôles de l’original, publication avec backup et récupération |
+| Navigation and search index | `Platform::list_archive_directory`, worker `oxyde-archive-list-worker` | Validated metadata, relative internal paths; 512 MiB, 120 s, 32 MiB response at most |
+| Extraction | `systems/archive_io.rs`, `archive_io::decode` | Decode broker; bounded reads/writes and parent-owned outputs. ZIP reads its source through a 256 KiB window kept across seeks |
+| Creation and rebuild | `systems/archive_encode.rs`, `archive_encode::run` | Same encoder via `Platform::run_archive_io_worker` |
+| Modifying an archive | `archive_workspace/native_commit.rs` | Preparation, checks of the original, publication with backup and recovery |
 
-Les workers Decode/Encode, listing/index sont en LPAC sans capacité. Le parent valide chemins, types, tailles et séquences ; il retient sources et sorties. Les erreurs typées sont traduites au rendu, sans exposer les codes internes.
+Decode/Encode and listing/index workers run in capability-less LPAC. The parent validates paths, types, sizes and sequences, and holds sources and outputs. Typed errors are translated at render time, without exposing internal codes.
 
-Le transport Decode/Encode réveille le superviseur sur réception ou fin d’écriture, avec files de capacité un et un crédit par trame lue. Les helpers peuvent bloquer sur les pipes ; le superviseur garde ses contrôles de pause, annulation et délai. Son attente inactive demande au maximum 5 ms avant revérification, sans garantie absolue sur l’ordonnancement ni les callbacks natifs. Une trame partielle ne bloque pas cette surveillance. Les helpers ne sont jamais joints sans borne à la fermeture.
+The Decode/Encode transport wakes the supervisor on receipt or write completion, with capacity-one queues and one credit per frame read. Helpers may block on pipes; the supervisor keeps its pause, cancel and timeout checks. Its idle wait asks for at most 5 ms before rechecking, with no absolute guarantee on scheduling or native callbacks. A partial frame does not block this monitoring. Helpers are never joined without a bound at shutdown.
 
-Les variantes locales sous `cfg(test)` ne servent que les tests unitaires, qui ne prouvent pas le parcours de production (`cfg(not(test))`). `tests/archive_io_pipeline.rs` et `tests/linux_archive_workers.rs` lient la bibliothèque sans `cfg(test)` et exercent les véritables workers de Windows et de Linux.
+Local `cfg(test)` variants only serve unit tests, which do not prove the production path (`cfg(not(test))`). `tests/archive_io_pipeline.rs` and `tests/linux_archive_workers.rs` link the library without `cfg(test)` and exercise the real Windows and Linux workers.
 
-## Formats et mutations
+## Formats and mutations
 
-ZIP, 7z, TAR et TAR.ZST sont créables et modifiables via workspace. Les autres formats navigables restent en lecture/extraction. ISO et IMG ISO9660 sont virtuels en lecture seule ; sous Windows, les images non reconnues et VHD/VHDX passent par le montage natif via `Platform`.
+ZIP, 7z, TAR and TAR.ZST can be created and modified through a workspace. Other browsable formats stay read/extract only. ISO and IMG ISO9660 are virtual and read-only; on Windows, unrecognized images and VHD/VHDX go through native mounting via `Platform`.
 
-Le montage Windows utilise directement `virtdisk.dll` (`OpenVirtualDisk`,
-`AttachVirtualDisk`, `DetachVirtualDisk`). Le suivi des images interroge les
-périphériques disque/CD-ROM avec `GetStorageDependencyInformation` et associe
-leurs lettres de lecteur par numéro et type de périphérique. Il détecte aussi
-les images montées hors d’Oxyde, sans lancer PowerShell. Ces appels restent hors
-du thread UI ; le rafraîchissement des lecteurs, le délai d’attribution des
-lettres et la protection AutoPlay conservent leur fonctionnement. Les ISO/IMG
-sont montés en lecture seule ; les montages persistent après fermeture du handle.
+Windows mounting uses `virtdisk.dll` directly (`OpenVirtualDisk`, `AttachVirtualDisk`, `DetachVirtualDisk`). Image tracking queries disk/CD-ROM devices with `GetStorageDependencyInformation` and matches drive letters by device number and type. It also detects images mounted outside Oxyde, without PowerShell. These calls stay off the UI thread. ISO/IMG mount read-only, and mounts persist after the handle closes.
 
-### Compression et Turbo sous Windows
+### Compression and Turbo on Windows
 
-Turbo conserve le niveau de qualité choisi et augmente le parallélisme, en plus de la priorité du processus. La limite CPU du job reste active ; Turbo ne promet pas une occupation de 100 % du processeur.
+Turbo keeps the chosen quality level and raises parallelism, on top of process priority. The job's CPU limit stays active: Turbo does not promise 100% CPU.
 
-La création/reconstruction 7z réserve un job de 2 Gio, y compris sans Turbo pour permettre son activation en cours de route. Les autres parcours Decode/Encode gardent 1 Gio. Le budget global reste de 2,5 Gio, avec 512 Mio réservés aux petits workers de navigation ; une autre lecture ciblée d’archive nécessitant 1 Gio peut attendre jusqu’à 30 s, puis être refusée si sa réservation reste indisponible.
+7z creation/rebuild reserves a 2 GiB job, even without Turbo so it can be turned on midway. Other Decode/Encode paths keep 1 GiB. The global budget stays 2.5 GiB, with 512 MiB reserved for small navigation workers; another targeted archive read needing 1 GiB may wait up to 30 s, then be refused if its reservation stays unavailable.
 
-| Format | Travail parallèle et limites |
+| Format | Parallel work and limits |
 | --- | --- |
-| ZIP | Jusqu’à 16 fichiers compressés simultanément selon le CPU, assemblés dans l’ordre sans recompression. Admission estimée à 768 Mio pour sources, résultats et encodeurs ; fichier de plus de 256 Mio traité en flux sur un thread. Un fichier unique n’est pas découpé en DEFLATE parallèle. |
-| 7z | LZMA2 multithread, y compris pour les gros fichiers, nombre de threads réduit selon le dictionnaire et une enveloppe estimée de 1,5 Gio pour les encodeurs. Petits fichiers regroupés en blocs solides de 128 Mio maximum, séparés par les gros fichiers. Dictionnaires rapide/normal/meilleur : 1/16/32 Mio. |
-| TAR.ZST | Jusqu’à 8 threads Zstandard, 2 au niveau meilleur, fenêtre de 8 Mio. Contrat : nombre fixé au démarrage du flux ; activer ou couper Turbo ensuite ne change que la priorité. |
-| TAR | Pas de compression : parcours et écriture séquentiels, priorité Turbo conservée. |
+| ZIP | Up to 16 files compressed at once depending on CPU, assembled in order without recompression. Admission estimated at 768 MiB for sources, results and encoders; a file over 256 MiB streams on one thread. A single file is not split into parallel DEFLATE. |
+| 7z | Multithreaded LZMA2, large files included; thread count reduced by dictionary and a 1.5 GiB encoder estimate. Small files grouped in solid blocks of 128 MiB at most, separated by large files. Fast/normal/best dictionaries: 1/16/32 MiB. |
+| TAR.ZST | Up to 8 Zstandard threads, 2 at best level, 8 MiB window. Thread count fixed at stream start; toggling Turbo later only changes priority. |
+| TAR | No compression: sequential traversal and writing, Turbo priority kept. |
 
-Depuis sevenz-rust2 0.24 (lzma-rust2 0.22), l’encodeur LZMA2 multithread garde au plus un segment par thread en attente : la mémoire ne croît plus avec la taille d’un fichier, et la limite monothread de 256 Mio ne concerne plus que ZIP. Les répertoires sont enregistrés immédiatement, même si des fichiers précédents attendent encore leur bloc solide ; l’ordre interne des entrées 7z peut donc changer. Les estimations d’admission ne remplacent pas la limite dure de mémoire du job. Le parallélisme ZIP et 7z est réévalué aux frontières des fichiers/blocs ; les tâches déjà lancées peuvent terminer leur calcul après une désactivation de Turbo ou pendant une pause, mais les effets restent bloqués par le parent.
+Since sevenz-rust2 0.24 (lzma-rust2 0.22), the multithreaded LZMA2 encoder keeps at most one pending segment per thread, so memory no longer grows with file size and the 256 MiB single-thread limit only concerns ZIP. Directories are recorded immediately, even if earlier files still await their solid block, so internal 7z entry order may change. Admission estimates do not replace the job's hard memory limit. ZIP and 7z parallelism is reassessed at file/block boundaries; running tasks may finish computing after Turbo is turned off or during a pause, but effects stay blocked by the parent.
 
-Une conversation de contrôle reste active pendant les calculs et finalisations sans I/O. Les codecs et leurs threads restent dans le worker isolé ; le protocole et la publication par le parent sont conservés. Ces changements ciblent le parcours Windows ; les encodeurs locaux Linux restent distincts et ne sont pas validés ici.
+A control conversation stays active during I/O-free computation and finalization. Codecs and their threads stay in the isolated worker; the protocol and parent publication are unchanged.
 
-Une mutation reconstruit dans le dossier de l’original. Le parent contrôle identité, taille, date, BLAKE3 et provenance avant remplacement. Une modification externe interrompt la publication. Les liens contenus dans l’archive ne sont pas suivis. Pause et annulation restent actives pendant lecture/reconstruction.
+A mutation rebuilds in the original's folder. The parent checks identity, size, date, BLAKE3 and provenance before replacing; an external change aborts publication. Links inside the archive are not followed. Pause and cancel stay active during reading and rebuilding.
 
-Pour un groupe, préparer toutes les archives puis publier en conservant les originaux jusqu’au succès complet ; restaurer le groupe sur échec. **Ce n’est ni une visibilité atomique ni une transaction durable après crash.** Conserver et signaler les backups non restaurables.
+For a group, prepare all archives then publish while keeping originals until complete success; restore the group on failure. **This is neither atomic visibility nor a durable transaction after a crash.** Keep and report unrestorable backups.
 
-Un déplacement retire uniquement les sources effectivement copiées ; les conflits ignorés restent présents. Les mutations d’archives n’ajoutent pas d’Undo/Redo de système de fichiers. Une ouverture externe utilise une copie temporaire, sans réintégration automatique des éditions.
+A move removes only sources actually copied; skipped conflicts stay. Archive mutations add no filesystem Undo/Redo. An external open uses a temporary copy, with no automatic reintegration of edits.
 
-## Garanties à préserver
+## Guarantees to preserve
 
-- Publication exclusive, contrôle des destinations et récupération des effets partiels dans le parent.
-- Pas d’adoption ni de purge d’un objet étranger ou d’un cache ancien dépourvu de preuve suffisante.
-- Le cache Windows récupérable utilise des preuves persistantes authentifiées ; clé perdue/corrompue et états incomplets restent protégés.
-- Le cache Linux n'évince qu'avec un bail d'écriture sur chaque fichier, preuve qu'aucun lecteur ne le tient ouvert : voir [cache Linux](linux-open-cache.md).
-- La fidélité indépendante des contenus/métadonnées n’est établie que pour le périmètre TAR non compressé de R9. Les autres formats et résultats de workers n’ont pas cette garantie générale.
-- Linux exécute les mêmes codecs et le même protocole dans des [workers confinés par bubblewrap](linux-previews.md#archives) ; le confinement Windows et ses validations ne s’y appliquent pas.
+- Exclusive publication, destination checks and partial-effect recovery in the parent.
+- No adoption or purge of a foreign object or old cache without sufficient proof.
+- The recoverable Windows cache uses authenticated persistent proofs; lost/corrupted keys and incomplete states stay protected.
+- The Linux cache evicts only with a write lease on each file, proof no reader holds it open: see [Linux cache](linux-open-cache.md).
+- Independent fidelity of content/metadata is only established for the uncompressed TAR scope of R9. Other formats and worker results have no such general guarantee.
+- Linux runs the same codecs and protocol in [bubblewrap-confined workers](linux-previews.md#archives); Windows confinement and its validations do not apply there.
 
-Lire les [limites R1–R9](../security/status.md) avant d’étendre une garantie. Les [bilans historiques](../reports/2026-10-13-security.md) donnent les révisions et preuves ; ils ne valent pas une nouvelle validation.
+Read the [R1–R9 limits](../security/status.md) before extending a guarantee.
