@@ -5,7 +5,7 @@ fn archive_format_defaults_and_round_trips() {
     let old: AppConfig = serde_json::from_str("{}").unwrap();
     assert_eq!(old.default_archive_format, "zip");
     assert_eq!(AppConfig::default().default_archive_format, "zip");
-    for format in ["zip", "7z", "tar", "zst"] {
+    for format in ["zip", "7z", "tar", "zst", "gz", "xz", "bz2", "lz4"] {
         let mut config = AppConfig {
             default_archive_format: format.into(),
             ..AppConfig::default()

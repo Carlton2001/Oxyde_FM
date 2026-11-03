@@ -43,7 +43,7 @@ fn listings_refuse_paths_exceeding_the_shared_depth_limit() {
     use std::io::Write;
     let dir = tempfile::tempdir().unwrap();
     let name = format!("{}file.txt", "a/".repeat(65));
-    for extension in ["zip", "7z", "tar", "zst"] {
+    for extension in ["zip", "7z", "tar", "tar.zst"] {
         let path = dir.path().join(format!("deep.{extension}"));
         match extension {
             "zip" => {
@@ -65,7 +65,7 @@ fn listings_refuse_paths_exceeding_the_shared_depth_limit() {
                 writer.finish().unwrap();
             }
             _ => {
-                let output: Box<dyn Write> = if extension == "zst" {
+                let output: Box<dyn Write> = if extension == "tar.zst" {
                     Box::new(
                         zstd::stream::write::Encoder::new(File::create(&path).unwrap(), 1)
                             .unwrap()
@@ -227,7 +227,7 @@ fn extraction_limits_apply_to_every_supported_decoder() {
         max_bytes: 2,
         ..ArchiveLimits::EXTRACTION
     };
-    for extension in ["zip", "7z", "tar", "zst", "iso"] {
+    for extension in ["zip", "7z", "tar", "tar.zst", "iso"] {
         let archive = dir.path().join(format!("bounded.{extension}"));
         if extension == "iso" {
             test_iso_image(&archive);
@@ -328,7 +328,7 @@ fn archive_outputs_and_external_copies_preserve_internet_provenance() {
     let source = dir.path().join("readme.txt");
     fs::write(&source, b"safe document").unwrap();
     let data = b"[ZoneTransfer]\r\nZoneId=3\r\n";
-    for extension in ["zip", "7z", "tar", "zst"] {
+    for extension in ["zip", "7z", "tar", "tar.zst"] {
         let archive = dir.path().join(format!("marked.{extension}"));
         FileOperationManager::perform_compress(
             &mutation_operation("fast"),

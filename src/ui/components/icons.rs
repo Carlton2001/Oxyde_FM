@@ -161,7 +161,7 @@ pub static EXECUTABLE_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
 
 pub static ARCHIVE_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     [
-        "zip", "rar", "7z", "tar", "gz", "bz2", "xz", "cab", "tgz", "zst", "tbz2", "tzst", "txz",
+        "zip", "rar", "7z", "tar", "gz", "bz2", "xz", "cab", "tgz", "zst", "tbz2", "tzst", "txz", "lz4", "tlz4", "lzma", "tlz", "tbz",
     ]
     .into()
 });

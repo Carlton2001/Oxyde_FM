@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, PartialEq)]
+pub use super::archive_codec::Codec;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArchiveFormat {
     Zip,
     SevenZip,
@@ -9,39 +11,76 @@ pub enum ArchiveFormat {
     TarXz,
     TarZst,
     TarBz2,
+    TarLz4,
+    TarLzma,
+    /// One compressed file (`notes.txt.gz`), shown as an archive holding it.
+    Stream(Codec),
     Rar,
     Iso,
 }
 
+const TAR_SUFFIXES: [(&str, ArchiveFormat); 14] = [
+    (".tar.gz", ArchiveFormat::TarGz),
+    (".tgz", ArchiveFormat::TarGz),
+    (".tar.xz", ArchiveFormat::TarXz),
+    (".txz", ArchiveFormat::TarXz),
+    (".tar.zst", ArchiveFormat::TarZst),
+    (".tzst", ArchiveFormat::TarZst),
+    (".tar.bz2", ArchiveFormat::TarBz2),
+    (".tbz2", ArchiveFormat::TarBz2),
+    (".tbz", ArchiveFormat::TarBz2),
+    (".tar.lz4", ArchiveFormat::TarLz4),
+    (".tlz4", ArchiveFormat::TarLz4),
+    (".tar.lzma", ArchiveFormat::TarLzma),
+    (".tlz", ArchiveFormat::TarLzma),
+    (".tar", ArchiveFormat::Tar),
+];
+
 impl ArchiveFormat {
     pub fn from_path(path: &Path) -> Option<Self> {
+        let name = path.file_name()?.to_str()?.to_lowercase();
+        // Compound TAR suffixes first: `.gz` alone is a single compressed file.
+        if let Some((_, format)) = TAR_SUFFIXES.iter().find(|(suffix, _)| name.ends_with(suffix)) {
+            return Some(*format);
+        }
         let ext = path.extension()?.to_str()?.to_lowercase();
         match ext.as_str() {
             "zip" => Some(ArchiveFormat::Zip),
             "7z" => Some(ArchiveFormat::SevenZip),
-            "tar" => Some(ArchiveFormat::Tar),
-            "zst" | "tzst" => Some(ArchiveFormat::TarZst),
-            "gz" | "tgz" => Some(ArchiveFormat::TarGz),
-            "xz" | "txz" => Some(ArchiveFormat::TarXz),
-            "bz2" | "tbz2" => Some(ArchiveFormat::TarBz2),
             "rar" => Some(ArchiveFormat::Rar),
             "iso" | "img" => Some(ArchiveFormat::Iso),
-            _ => {
-                let name = path.file_name()?.to_str()?.to_lowercase();
-                if name.ends_with(".tar.gz") || name.ends_with(".tgz") {
-                    Some(ArchiveFormat::TarGz)
-                } else if name.ends_with(".tar.xz") || name.ends_with(".txz") {
-                    Some(ArchiveFormat::TarXz)
-                } else if name.ends_with(".tar.zst") || name.ends_with(".tzst") {
-                    Some(ArchiveFormat::TarZst)
-                } else if name.ends_with(".tar.bz2") || name.ends_with(".tbz2") {
-                    Some(ArchiveFormat::TarBz2)
-                } else {
-                    None
-                }
-            }
+            _ => Codec::from_extension(&ext).map(ArchiveFormat::Stream),
         }
     }
+
+    /// Compression wrapping a TAR stream; `None` for plain TAR and non-TAR formats.
+    pub fn tar_codec(self) -> Option<Codec> {
+        Some(match self {
+            Self::TarGz => Codec::Gzip,
+            Self::TarXz => Codec::Xz,
+            Self::TarZst => Codec::Zstd,
+            Self::TarBz2 => Codec::Bzip2,
+            Self::TarLz4 => Codec::Lz4,
+            Self::TarLzma => Codec::Lzma,
+            _ => return None,
+        })
+    }
+
+    pub fn is_tar(self) -> bool {
+        self == Self::Tar || self.tar_codec().is_some()
+    }
+
+    /// Formats that can be created and rebuilt through a workspace.
+    pub fn writable(self) -> bool {
+        matches!(self, Self::Zip | Self::SevenZip)
+            || (self.is_tar() && self.tar_codec().is_none_or(Codec::writable))
+    }
+}
+
+/// Name of the only member of a single compressed file: its name without the suffix.
+pub fn stream_member_name(path: &Path) -> Option<String> {
+    let stem = path.file_stem()?.to_str()?;
+    (!stem.is_empty() && stem != "." && stem != "..").then(|| stem.to_owned())
 }
 
 pub fn is_archive(path: &Path) -> bool {
@@ -83,7 +122,7 @@ pub(crate) fn navigable_format(path: &Path) -> bool {
 }
 
 pub(crate) fn writable_format(path: &Path) -> bool {
-    matches!(ArchiveFormat::from_path(path), Some(ArchiveFormat::Zip | ArchiveFormat::SevenZip | ArchiveFormat::Tar | ArchiveFormat::TarZst))
+    ArchiveFormat::from_path(path).is_some_and(ArchiveFormat::writable)
 }
 
 /// Archives opened as directories by the native UI (nested archives remain files).
@@ -99,3 +138,7 @@ pub fn is_writable_archive(path: &Path) -> bool {
 #[cfg(test)]
 #[path = "archive/tests/path_resolution.rs"]
 mod path_resolution_tests;
+
+#[cfg(test)]
+#[path = "archive/tests/formats.rs"]
+mod format_tests;

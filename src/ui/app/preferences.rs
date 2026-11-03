@@ -232,6 +232,9 @@ impl OxydeApp {
         match format {
             "7z" => &self.config.seven_zip_quality,
             "zst" => &self.config.zstd_quality,
+            "gz" => &self.config.gzip_quality,
+            "xz" => &self.config.xz_quality,
+            "bz2" => &self.config.bzip2_quality,
             _ => &self.config.zip_quality,
         }
     }
@@ -244,6 +247,9 @@ impl OxydeApp {
         let field = match format {
             "7z" => &mut self.config.seven_zip_quality,
             "zst" => &mut self.config.zstd_quality,
+            "gz" => &mut self.config.gzip_quality,
+            "xz" => &mut self.config.xz_quality,
+            "bz2" => &mut self.config.bzip2_quality,
             _ => &mut self.config.zip_quality,
         };
         *field = quality.into();

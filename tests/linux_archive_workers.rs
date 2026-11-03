@@ -33,6 +33,37 @@ fn zip(path: &Path, name: &str, bytes: &[u8], unsafe_tail: bool) {
     zip.finish().unwrap();
 }
 
+fn lz4(bytes: &[u8]) -> Vec<u8> {
+    let mut encoder = lz4_flex::frame::FrameEncoder::new(Vec::new());
+    encoder.write_all(bytes).unwrap();
+    encoder.finish().unwrap()
+}
+
+fn lzma(bytes: &[u8]) -> Vec<u8> {
+    let options = xz2::stream::LzmaOptions::new_preset(1).unwrap();
+    let mut encoder = xz2::write::XzEncoder::new_stream(Vec::new(), xz2::stream::Stream::new_lzma_encoder(&options).unwrap());
+    encoder.write_all(bytes).unwrap();
+    encoder.finish().unwrap()
+}
+
+/// One compressed file per codec, holding `content`.
+fn streams(content: &[u8]) -> Vec<(&'static str, Vec<u8>)> {
+    let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    gz.write_all(content).unwrap();
+    let mut xz = xz2::write::XzEncoder::new(Vec::new(), 1);
+    xz.write_all(content).unwrap();
+    let mut bz = bzip2::write::BzEncoder::new(Vec::new(), bzip2::Compression::default());
+    bz.write_all(content).unwrap();
+    vec![
+        ("gz", gz.finish().unwrap()),
+        ("xz", xz.finish().unwrap()),
+        ("bz2", bz.finish().unwrap()),
+        ("zst", zstd::stream::encode_all(content, 1).unwrap()),
+        ("lz4", lz4(content)),
+        ("lzma", lzma(content)),
+    ]
+}
+
 fn fixtures(root: &Path) -> Vec<(PathBuf, &'static str, &'static [u8])> {
     let path = root.join("source.zip");
     zip(&path, "docs/école.txt", b"safe", false);
@@ -52,8 +83,10 @@ fn fixtures(root: &Path) -> Vec<(PathBuf, &'static str, &'static [u8])> {
     let mut bz = bzip2::write::BzEncoder::new(Vec::new(), bzip2::Compression::default());
     bz.write_all(&tar).unwrap();
     let zst = zstd::stream::encode_all(&tar[..], 1).unwrap();
+    let lz4 = lz4(&tar);
+    let lzma = lzma(&tar);
     for (extension, data) in [("tar", tar), ("tar.gz", gz.finish().unwrap()), ("tar.xz", xz.finish().unwrap()),
-        ("tar.bz2", bz.finish().unwrap()), ("tar.zst", zst)] {
+        ("tar.bz2", bz.finish().unwrap()), ("tar.zst", zst), ("tar.lz4", lz4), ("tar.lzma", lzma)] {
         let path = root.join(format!("source.{extension}"));
         fs::write(&path, data).unwrap();
         fixtures.push((path, "docs/école.txt", b"safe"));
@@ -173,7 +206,7 @@ fn every_writable_format_is_built_copied_into_and_read_back() {
         fs::create_dir(source.join("vide")).unwrap();
         let added = temp.path().join("added.txt");
         fs::write(&added, b"copied").unwrap();
-        for extension in ["zip", "7z", "tar", "tar.zst"] {
+        for extension in ["zip", "7z", "tar", "tar.zst", "tar.gz", "tar.xz", "tar.bz2", "tar.lz4"] {
             let archive = temp.path().join(format!("mutate.{extension}"));
             FileOperationManager::perform_compress(&operation(FileOpType::Compress), vec![source.clone()], Some(archive.clone())).unwrap();
             FileOperationManager::perform_copy(&operation(FileOpType::Copy), vec![added.clone()], Some(archive.clone()), false, None).unwrap();
@@ -182,6 +215,53 @@ fn every_writable_format_is_built_copied_into_and_read_back() {
             assert_eq!(fs::read(target.join("école/note.txt")).unwrap(), b"original", "{extension}");
             assert_eq!(fs::read(target.join("added.txt")).unwrap(), b"copied", "{extension}");
             assert!(target.join("école/vide").is_dir(), "{extension}");
+        }
+    });
+}
+
+#[test]
+fn a_single_compressed_file_extracts_beside_its_archive_and_opens() {
+    confined(|| {
+        let content: Vec<u8> = (0..1_500_000u32).map(|value| (value % 251) as u8).collect();
+        for (extension, data) in streams(&content) {
+            let temp = tempfile::tempdir().unwrap();
+            let source = temp.path().join(format!("notes.txt.{extension}"));
+            fs::write(&source, &data).unwrap();
+            for expected in ["notes.txt", "notes (1).txt"] {
+                let op = operation(FileOpType::Extract);
+                FileOperationManager::perform_extract(&op, vec![source.clone()], Some(temp.path().join("notes.txt"))).unwrap();
+                assert_eq!(fs::read(temp.path().join(expected)).unwrap(), content, "{extension}");
+                let op = op.lock().unwrap();
+                assert_eq!(op.destination.as_deref(), Some(temp.path().join(expected).as_path()), "{extension}");
+                assert_eq!(op.total_bytes, content.len() as u64);
+                assert_eq!(op.processed_bytes, content.len() as u64);
+            }
+            assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 3, "{extension}: private folder left behind");
+            assert_eq!(fs::read(&source).unwrap(), data);
+            let base = temp.path().join("cache");
+            fs::create_dir(&base).unwrap();
+            oxyde_lib::commands::archive::with_archive_cache_base_for_tests(&base, || {
+                let opened = oxyde_lib::commands::archive::prepare_archive_file_for_open(&source.join("notes.txt")).unwrap();
+                assert_eq!(fs::read(opened).unwrap(), content, "{extension}");
+                assert!(oxyde_lib::commands::archive::prepare_archive_file_for_open(&source.join("other.txt")).is_err());
+            });
+        }
+    });
+}
+
+#[test]
+fn a_foreign_or_truncated_compressed_file_publishes_nothing() {
+    confined(|| {
+        let content = vec![7u8; 200_000];
+        for (extension, data) in streams(&content) {
+            for bytes in [b"plain text, not compressed".to_vec(), data[..data.len() / 2].to_vec(), Vec::new()] {
+                let temp = tempfile::tempdir().unwrap();
+                let source = temp.path().join(format!("notes.txt.{extension}"));
+                fs::write(&source, &bytes).unwrap();
+                let result = FileOperationManager::perform_extract(&operation(FileOpType::Extract), vec![source.clone()], Some(temp.path().join("notes.txt")));
+                assert!(result.is_err(), "{extension} accepted {} bytes", bytes.len());
+                assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1, "{extension}");
+            }
         }
     });
 }

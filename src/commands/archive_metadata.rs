@@ -120,15 +120,7 @@ pub(super) fn indexed_file(
     budget.checkpoint(checkpoint)?;
     let format = ArchiveFormat::from_path(path)
         .filter(|format| {
-            matches!(
-                format,
-                ArchiveFormat::Zip
-                    | ArchiveFormat::Tar
-                    | ArchiveFormat::TarGz
-                    | ArchiveFormat::TarXz
-                    | ArchiveFormat::TarBz2
-                    | ArchiveFormat::TarZst
-            )
+            matches!(format, ArchiveFormat::Zip | ArchiveFormat::Stream(_)) || format.is_tar()
         })
         .ok_or_else(|| invalid("Unsupported metadata format"))?;
     let source = Source {
@@ -175,6 +167,28 @@ pub(super) fn indexed_file(
         budget.checkpoint(checkpoint)?;
         return Ok(files);
     }
+    if let ArchiveFormat::Stream(codec) = format {
+        // The member size is known only by decoding; the listing budget bounds it.
+        let modified = source
+            .file
+            .metadata()?
+            .modified()
+            .ok()
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map_or(0, |time| time.as_millis() as u64);
+        let name = crate::utils::archive::stream_member_name(path)
+            .ok_or_else(|| invalid("Invalid compressed file name"))?;
+        let mut decoder = BudgetReader {
+            reader: codec.decoder(source)?,
+            budget: &budget,
+            checkpoint,
+        };
+        let size = io::copy(&mut decoder, &mut io::sink())?;
+        let entry = member(&archive_origin, &name, false, size, modified, &budget)?
+            .ok_or_else(|| invalid("Invalid compressed file name"))?;
+        budget.checkpoint(checkpoint)?;
+        return Ok(vec![entry]);
+    }
     let files = if format == ArchiveFormat::Tar {
         let mut archive = tar::Archive::new(IndexReader(BudgetReader {
             reader: source,
@@ -183,13 +197,10 @@ pub(super) fn indexed_file(
         }));
         tar_files(&archive_origin, archive.entries_with_seek()?, &budget, checkpoint)?
     } else {
-        let decoder: Box<dyn Read + '_> = match format {
-            ArchiveFormat::TarGz => Box::new(flate2::read::GzDecoder::new(source)),
-            ArchiveFormat::TarXz => Box::new(xz2::read::XzDecoder::new(source)),
-            ArchiveFormat::TarBz2 => Box::new(bzip2::read::BzDecoder::new(source)),
-            ArchiveFormat::TarZst => Box::new(zstd::stream::read::Decoder::new(source)?),
-            _ => return Err(invalid("Unsupported metadata format")),
-        };
+        let decoder = format
+            .tar_codec()
+            .ok_or_else(|| invalid("Unsupported metadata format"))?
+            .decoder(source)?;
         let mut archive = tar::Archive::new(BudgetReader {
             reader: decoder,
             budget: &budget,
@@ -237,6 +248,10 @@ fn tar_files<R: Read>(
     }
     Ok(files)
 }
+
+#[cfg(test)]
+#[path = "archive_metadata/tests/streams.rs"]
+mod stream_tests;
 
 #[cfg(test)]
 mod tests {

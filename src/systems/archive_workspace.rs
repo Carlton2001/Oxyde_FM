@@ -96,15 +96,7 @@ pub(crate) fn virtual_destination(path: &Path) -> Option<(PathBuf, String)> {
 }
 
 pub(crate) fn writable(path: &Path) -> bool {
-    matches!(
-        ArchiveFormat::from_path(path),
-        Some(
-            ArchiveFormat::Zip
-                | ArchiveFormat::SevenZip
-                | ArchiveFormat::Tar
-                | ArchiveFormat::TarZst
-        )
-    )
+    ArchiveFormat::from_path(path).is_some_and(ArchiveFormat::writable)
 }
 
 pub(crate) struct ArchiveWorkspace {
@@ -520,16 +512,7 @@ fn prepare_selection_with_limits(
         extract_iso_file_for_open(&archive, internal, target, limits).map_err(|e| e.to_string())?
     } else if ArchiveFormat::from_path(&archive) == Some(ArchiveFormat::SevenZip) {
         extract_seven_file_for_open(&archive, internal, target, limits).map_err(|e| e.to_string())?
-    } else if matches!(
-        ArchiveFormat::from_path(&archive),
-        Some(
-            ArchiveFormat::Tar
-                | ArchiveFormat::TarGz
-                | ArchiveFormat::TarXz
-                | ArchiveFormat::TarBz2
-                | ArchiveFormat::TarZst
-        )
-    ) {
+    } else if ArchiveFormat::from_path(&archive).is_some_and(ArchiveFormat::is_tar) {
         extract_tar_file_for_open(&archive, internal, target, limits).map_err(|e| e.to_string())?
     } else {
         #[cfg(any(not(target_os = "windows"), test))]

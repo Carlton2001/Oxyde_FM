@@ -21,7 +21,7 @@ fn late_cancellation_preserves_publication_and_recovery_status() {
 #[cfg(target_os = "windows")]
 #[test]
 fn compression_refuses_source_substitution_before_encoding_for_every_format() {
-    for extension in ["zip", "7z", "tar", "zst"] {
+    for extension in ["zip", "7z", "tar", "tar.zst"] {
         let root = tempfile::tempdir().unwrap();
         let source = root.path().join("source.txt");
         let saved = root.path().join("saved.txt");
@@ -45,7 +45,7 @@ fn compression_refuses_source_substitution_before_encoding_for_every_format() {
 #[test]
 fn compression_retains_source_and_publication_parents_after_junction_retargeting() {
     use crate::platform::windows_reparse_tests::{junction, Retarget};
-    for extension in ["zip", "7z", "tar", "zst"] {
+    for extension in ["zip", "7z", "tar", "tar.zst"] {
         let root = tempfile::tempdir().unwrap();
         for folder in ["chosen", "outside-source", "output", "outside-output"] { std::fs::create_dir(root.path().join(folder)).unwrap(); }
         std::fs::write(root.path().join("chosen/source.txt"), b"selected content").unwrap();
@@ -84,7 +84,7 @@ fn compression_retains_source_and_publication_parents_after_junction_retargeting
 #[cfg(target_os = "windows")]
 #[test]
 fn compression_preserves_archive_arriving_after_planning_and_uses_current_source_metadata() {
-    for extension in ["zip", "7z", "tar", "zst"] {
+    for extension in ["zip", "7z", "tar", "tar.zst"] {
         let root = tempfile::tempdir().unwrap();
         let source = root.path().join("écriture.txt");
         let output = root.path().join("output");
@@ -110,7 +110,7 @@ fn extraction_failure_cleans_output_for_all_formats() {
     let temp = tempfile::tempdir().unwrap();
     let source = temp.path().join("file.txt");
     std::fs::write(&source, b"bounded test content").unwrap();
-    for extension in ["zip", "7z", "tar", "zst", "iso"] {
+    for extension in ["zip", "7z", "tar", "tar.zst", "iso"] {
         let archive = temp.path().join(format!("limited.{extension}"));
         if extension == "iso" {
             crate::commands::archive::test_iso_image(&archive);
@@ -155,7 +155,7 @@ fn extraction_failure_cleans_output_for_all_formats() {
 #[test]
 fn extraction_retains_source_and_provenance_through_parent_retargeting() {
     use crate::platform::windows_reparse_tests::{junction, Retarget};
-    for extension in ["zip", "7z", "tar", "zst", "iso"] {
+    for extension in ["zip", "7z", "tar", "tar.zst", "iso"] {
         let temp = tempfile::tempdir().unwrap();
         let chosen = temp.path().join("chosen");
         let outside = temp.path().join("outside");

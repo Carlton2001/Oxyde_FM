@@ -175,9 +175,14 @@ fn without_bubblewrap(executable: &Path, profile: Profile, source: Option<(&Path
 }
 
 /// Formats without a signature are recognized by their extension; the rest of the
-/// user's file name stays outside.
+/// user's file name stays outside. A compound `.tar.gz` keeps its `.tar`: alone,
+/// `.gz` names a single compressed file.
 fn inside_name(path: &Path) -> OsString {
     let mut inside = OsString::from(SOURCE);
+    if path.file_stem().and_then(|stem| Path::new(stem).extension())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("tar")) {
+        inside.push(".tar");
+    }
     if let Some(extension) = path.extension().and_then(|extension| extension.to_str())
         .filter(|extension| extension.len() <= 10 && extension.bytes().all(|byte| byte.is_ascii_alphanumeric())) {
         inside.push(".");

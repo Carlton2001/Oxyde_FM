@@ -179,18 +179,10 @@ pub(crate) fn extract_tar_file_for_open(
 }
 
 fn compressed_reader(source: File, format: &ArchiveFormat) -> io::Result<Box<dyn Read>> {
-    Ok(match format {
-        ArchiveFormat::TarGz => Box::new(flate2::read::GzDecoder::new(source)),
-        ArchiveFormat::TarXz => Box::new(xz2::read::XzDecoder::new(source)),
-        ArchiveFormat::TarBz2 => Box::new(bzip2::read::BzDecoder::new(source)),
-        ArchiveFormat::TarZst => Box::new(zstd::stream::read::Decoder::new(source)?),
-        _ => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Unsupported compressed TAR format",
-            ))
-        }
-    })
+    format
+        .tar_codec()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Unsupported compressed TAR format"))?
+        .decoder(source)
 }
 
 fn extract_with_checkpoint(
@@ -205,16 +197,7 @@ fn extract_with_checkpoint(
         return Err(archive_error("Archive item is not a file"));
     }
     let format = ArchiveFormat::from_path(archive_path)
-        .filter(|format| {
-            matches!(
-                format,
-                ArchiveFormat::Tar
-                    | ArchiveFormat::TarGz
-                    | ArchiveFormat::TarXz
-                    | ArchiveFormat::TarBz2
-                    | ArchiveFormat::TarZst
-            )
-        })
+        .filter(|format| format.is_tar())
         .ok_or_else(|| archive_error("Unsupported targeted TAR format"))?;
     let parents = HeldParents::new(archive_path)?;
     let archive_path = parents.resolved_path(archive_path)?;

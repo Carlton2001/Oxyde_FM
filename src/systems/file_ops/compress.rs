@@ -223,31 +223,38 @@ impl FileOperationManager {
                 }
                 writer.finish().map_err(|e| e.to_string())?;
             }
-            "tar" | "zst" => {
-                let quality = op.lock().unwrap().compression_quality.clone();
-                let level = match quality.as_str() {
-                    "fast" => 1,
-                    "best" => 19,
-                    _ => 3,
+            "tar" => {
+                let mut tar_bytes = tar::Builder::new(std::io::BufWriter::new(file));
+                Self::append_tar_entries(op, entries, &mut tar_bytes, retained)?;
+                tar_bytes
+                    .into_inner()
+                    .map_err(|e| e.to_string())?
+                    .flush()
+                    .map_err(|e| e.to_string())?;
+            }
+            _ if crate::utils::archive::ArchiveFormat::from_path(&requested)
+                .is_some_and(|format| format.is_tar() && format.writable()) =>
+            {
+                let level = match op.lock().unwrap().compression_quality.as_str() {
+                    "fast" => crate::utils::archive_codec::Level::Fast,
+                    "best" => crate::utils::archive_codec::Level::Best,
+                    _ => crate::utils::archive_codec::Level::Normal,
                 };
-                // Zstandard wraps the TAR stream, preserving directories and multiple selections.
-                if format == "zst" {
-                    Self::write_tar_entries(
-                        op,
-                        entries,
-                        retained,
-                        zstd::stream::write::Encoder::new(file, level)
-                            .map_err(|e| e.to_string())?,
-                    )?;
-                } else {
-                    let mut tar_bytes = tar::Builder::new(std::io::BufWriter::new(file));
-                    Self::append_tar_entries(op, entries, &mut tar_bytes, retained)?;
-                    tar_bytes
-                        .into_inner()
-                        .map_err(|e| e.to_string())?
-                        .flush()
-                        .map_err(|e| e.to_string())?;
-                }
+                // The codec wraps the TAR stream, preserving directories and multiple selections.
+                let codec = crate::utils::archive::ArchiveFormat::from_path(&requested)
+                    .and_then(crate::utils::archive::ArchiveFormat::tar_codec)
+                    .ok_or("Unsupported compression format")?;
+                let encoder = codec
+                    .encoder(std::io::BufWriter::new(file), level, 1)
+                    .map_err(|e| e.to_string())?;
+                let mut writer = tar::Builder::new(encoder);
+                Self::append_tar_entries(op, entries, &mut writer, retained)?;
+                writer
+                    .into_inner()
+                    .map_err(|e| e.to_string())?
+                    .finish()
+                    .and_then(|mut output| output.flush())
+                    .map_err(|e| e.to_string())?;
             }
             _ => return Err("Unsupported compression format".into()),
         }
@@ -325,22 +332,5 @@ impl FileOperationManager {
             op.lock().unwrap().processed_files += 1;
         }
         writer.finish().map_err(|e| e.to_string())
-    }
-
-    #[cfg(test)]
-    fn write_tar_entries<W: Write>(
-        op: &Arc<Mutex<FileOperation>>,
-        entries: Vec<crate::systems::compression_sources::Entry>,
-        retained: Option<&HashMap<PathBuf, std::fs::File>>,
-        encoder: zstd::stream::write::Encoder<'_, W>,
-    ) -> Result<(), String> {
-        let mut writer = tar::Builder::new(encoder);
-        Self::append_tar_entries(op, entries, &mut writer, retained)?;
-        writer
-            .into_inner()
-            .map_err(|e| e.to_string())?
-            .finish()
-            .map_err(|e| e.to_string())?;
-        Ok(())
     }
 }

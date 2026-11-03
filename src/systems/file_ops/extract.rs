@@ -30,6 +30,30 @@ impl FileOperationManager {
         Self::perform_extract_prepared(op, sources, destination, limits, &mut || Ok(()))
     }
 
+    /// Move the decoded member out of its private folder without replacing anything.
+    #[cfg(not(test))]
+    fn publish_stream_member(
+        tree: &mut crate::systems::archive_owned_tree::OwnedTree,
+        parents: &crate::systems::path_parents::HeldParents,
+        name: &str,
+    ) -> std::io::Result<PathBuf> {
+        let inner = tree.path().join(name);
+        let file = platform().open_file_for_move(&inner)?;
+        #[cfg(target_os = "windows")]
+        tree.verify_owned(&inner, &file)?;
+        tree.release();
+        let mut published = Self::unique_archive_path(&parents.resolved_directory().join(name));
+        loop {
+            match parents.rename(&file, &inner, &published, false) {
+                Ok(()) => return Ok(published),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    published = Self::unique_archive_path(&published);
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+
     pub(super) fn perform_extract_prepared(
         op: &Arc<Mutex<FileOperation>>,
         sources: Vec<PathBuf>,
@@ -51,9 +75,21 @@ impl FileOperationManager {
         #[cfg(not(test))]
         {
             let target_parents = crate::systems::path_parents::HeldParents::new(&requested).map_err(|e| e.to_string())?;
-            let mut target = Self::unique_archive_path(&target_parents.resolved_path(&requested).map_err(|e| e.to_string())?);
+            // A single compressed file is decoded into a hidden private folder, then
+            // its only member is published beside the archive, as file managers do.
+            let stream = match crate::utils::archive::ArchiveFormat::from_path(&source) {
+                Some(crate::utils::archive::ArchiveFormat::Stream(_)) => Some(
+                    crate::utils::archive::stream_member_name(&source).ok_or("Invalid compressed file name")?,
+                ),
+                _ => None,
+            };
+            let mut target = if stream.is_some() {
+                target_parents.resolved_directory().join(format!(".oxyde-extract-{}", uuid::Uuid::new_v4()))
+            } else {
+                Self::unique_archive_path(&target_parents.resolved_path(&requested).map_err(|e| e.to_string())?)
+            };
             let tracking = loop {
-                match platform().create_journal_directory(target_parents.directory(), &target, false) {
+                match platform().create_journal_directory(target_parents.directory(), &target, stream.is_some()) {
                     Ok(file) => break file,
                     Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => target = Self::unique_archive_path(&target),
                     Err(error) => return Err(error.to_string()),
@@ -65,6 +101,12 @@ impl FileOperationManager {
             };
             { let mut op = op.lock().unwrap(); op.destination = Some(target); op.total_files = 0; op.total_bytes = 0; op.status = OpStatus::Running; }
             crate::systems::archive_io::decode(&source, file, &mut tree, None, &budget, Some(op)).map_err(|e| e.to_string())?;
+            if let Some(name) = stream {
+                let published = Self::publish_stream_member(&mut tree, &target_parents, &name).map_err(|e| e.to_string())?;
+                op.lock().unwrap().destination = Some(published);
+                // Dropping the tree removes the now empty private folder.
+                return Ok(());
+            }
             tree.keep();
             Ok(())
         }

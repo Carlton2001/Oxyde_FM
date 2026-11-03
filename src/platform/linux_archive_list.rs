@@ -4,7 +4,7 @@ use super::linux_sandbox::Profile;
 use super::linux_worker::Worker;
 use crate::models::error::{ArchiveLimitFailure, ArchiveLimitKind, ArchiveListingFailure};
 use crate::models::{CommandError, FileEntry};
-use crate::utils::archive_listing_protocol;
+use crate::utils::{archive::ArchiveFormat, archive_listing_protocol};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, TryLockError};
@@ -45,12 +45,23 @@ pub(super) fn index(path: &Path, checkpoint: &dyn Fn() -> io::Result<()>) -> Res
 
 fn list_in(executable: &Path, path: &Path, internal: &str, deadline: Duration) -> Result<Vec<FileEntry>, CommandError> {
     let bytes = confined(executable, LIST_FLAG, Some(internal), path, deadline, &|| Ok(()))?;
-    archive_listing_protocol::decode(&bytes, path, internal)
+    archive_listing_protocol::decode(&bytes, path, internal).map(|entries| stream_member(path, entries))
+}
+
+/// The sandbox names the document `source.gz`: restore the member's real name.
+fn stream_member(path: &Path, mut entries: Vec<FileEntry>) -> Vec<FileEntry> {
+    if let (Some(ArchiveFormat::Stream(_)), Some(name), [entry]) =
+        (ArchiveFormat::from_path(path), crate::utils::archive::stream_member_name(path), entries.as_mut_slice())
+    {
+        entry.path = path.join(&name).to_string_lossy().into_owned();
+        entry.name = name;
+    }
+    entries
 }
 
 fn index_in(executable: &Path, path: &Path, deadline: Duration, checkpoint: &dyn Fn() -> io::Result<()>) -> Result<Vec<FileEntry>, CommandError> {
     let bytes = confined(executable, INDEX_FLAG, None, path, deadline, checkpoint)?;
-    archive_listing_protocol::decode_index(&bytes, path, checkpoint)
+    archive_listing_protocol::decode_index(&bytes, path, checkpoint).map(|entries| stream_member(path, entries))
 }
 
 fn confined(executable: &Path, flag: &str, internal: Option<&str>, path: &Path, deadline: Duration, checkpoint: &dyn Fn() -> io::Result<()>) -> Result<Vec<u8>, CommandError> {

@@ -48,6 +48,9 @@ pub(crate) fn format(path: &Path) -> io::Result<Format> {
         ArchiveFormat::TarXz => Format::TarXz,
         ArchiveFormat::TarBz2 => Format::TarBz2,
         ArchiveFormat::TarZst => Format::TarZst,
+        ArchiveFormat::TarLz4 => Format::TarLz4,
+        ArchiveFormat::TarLzma => Format::TarLzma,
+        ArchiveFormat::Stream(codec) => Format::Stream(codec),
         ArchiveFormat::Iso => Format::Iso,
         ArchiveFormat::Rar => {
             return Err(io::Error::new(
@@ -56,6 +59,14 @@ pub(crate) fn format(path: &Path) -> io::Result<Format> {
             ))
         }
     })
+}
+pub(crate) fn stream_name(path: &Path, format: Format) -> io::Result<Option<String>> {
+    match format {
+        Format::Stream(_) => crate::utils::archive::stream_member_name(path)
+            .map(Some)
+            .ok_or_else(invalid),
+        _ => Ok(None),
+    }
 }
 pub(crate) fn limits(value: ArchiveLimits) -> Limits {
     Limits {
@@ -130,7 +141,8 @@ pub(crate) fn decode(
     let mut state = ExtractionState::new(
         limits,
         selected,
-        selected.is_some() || matches!(format, Format::Zip | Format::SevenZip | Format::Iso),
+        selected.is_some()
+            || matches!(format, Format::Zip | Format::SevenZip | Format::Iso | Format::Stream(_)),
     )?;
     let size = source.metadata()?.len();
     let provenance_parent = super::path_parents::HeldParents::new(path)?;
@@ -143,11 +155,9 @@ pub(crate) fn decode(
         .checked_add(limits.entries.checked_mul(4096).ok_or_else(invalid)?)
         .and_then(|n| {
             n.checked_mul(
-                if selected.is_some()
-                    && matches!(
-                        format,
-                        Format::TarGz | Format::TarXz | Format::TarBz2 | Format::TarZst
-                    )
+                // Compressed selections and single streams decode twice: size, then content.
+                if (selected.is_some() && format.tar_codec().is_some())
+                    || matches!(format, Format::Stream(_))
                 {
                     2
                 } else {
@@ -160,6 +170,7 @@ pub(crate) fn decode(
         format,
         source_size: size,
         selected: selected.map(str::to_owned),
+        stream_name: stream_name(path, format)?,
         limits,
     };
     let started = std::time::Instant::now();

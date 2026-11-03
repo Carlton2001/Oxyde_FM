@@ -19,7 +19,9 @@ Local `cfg(test)` variants only serve unit tests, which do not prove the product
 
 ## Formats and mutations
 
-ZIP, 7z, TAR and TAR.ZST can be created and modified through a workspace. Other browsable formats stay read/extract only. ISO and IMG ISO9660 are virtual and read-only; on Windows, unrecognized images and VHD/VHDX go through native mounting via `Platform`.
+ZIP, 7z, TAR, TAR.ZST, TAR.GZ, TAR.XZ, TAR.BZ2 and TAR.LZ4 can be created and modified through a workspace. TAR.LZMA and the other browsable formats stay read/extract only. `ArchiveFormat::from_path` checks compound TAR suffixes (`.tar.gz`, `.tgz`, `.tlz`…) before the last extension; the codecs live in `utils/archive_codec.rs`.
+
+A single compressed file (`.gz`, `.xz`, `.bz2`, `.zst`, `.lz4`, `.lzma`) is browsed as an archive holding one member named after the file without its suffix. Its size is only known by decoding: listing decodes it under the listing budget, and the worker decodes it twice, once to declare size and hash, then to stream the content checked against that hash. The parent passes the member name in `Operation::Decode::stream_name`, because the worker never sees the path; the Linux listing sandbox names the document `source.gz`, so the parent restores the name. Extraction decodes into a hidden private folder of the destination, then renames the member beside the archive without replacing anything (`notes (1).txt` on conflict) and removes the folder. Decoders accept concatenated members, refuse an empty or foreign prefix, and cap LZMA-alone dictionaries at 1 GiB. These files are never created or modified. ISO and IMG ISO9660 are virtual and read-only; on Windows, unrecognized images and VHD/VHDX go through native mounting via `Platform`.
 
 Windows mounting uses `virtdisk.dll` directly (`OpenVirtualDisk`, `AttachVirtualDisk`, `DetachVirtualDisk`). Image tracking queries disk/CD-ROM devices with `GetStorageDependencyInformation` and matches drive letters by device number and type. It also detects images mounted outside Oxyde, without PowerShell. These calls stay off the UI thread. ISO/IMG mount read-only, and mounts persist after the handle closes.
 
@@ -34,6 +36,8 @@ Turbo keeps the chosen quality level and raises parallelism, on top of process p
 | ZIP | Up to 16 files compressed at once depending on CPU, assembled in order without recompression. Admission estimated at 768 MiB for sources, results and encoders; a file over 256 MiB streams on one thread. A single file is not split into parallel DEFLATE. |
 | 7z | Multithreaded LZMA2, large files included; thread count reduced by dictionary and a 1.5 GiB encoder estimate. Small files grouped in solid blocks of 128 MiB at most, separated by large files. Fast/normal/best dictionaries: 1/16/32 MiB. |
 | TAR.ZST | Up to 8 Zstandard threads, 2 at best level, 8 MiB window. Thread count fixed at stream start; toggling Turbo later only changes priority. |
+| TAR.XZ | Multithreaded xz (presets 1/6/8), threads reduced until the encoder estimate fits 512 MiB. Fixed at stream start like TAR.ZST. |
+| TAR.GZ, TAR.BZ2, TAR.LZ4 | Single-threaded streams (gzip/bzip2 levels 1/6/9; LZ4 has no level, 4 MiB blocks with a content checksum). Turbo keeps priority only. |
 | TAR | No compression: sequential traversal and writing, Turbo priority kept. |
 
 Since sevenz-rust2 0.24 (lzma-rust2 0.22), the multithreaded LZMA2 encoder keeps at most one pending segment per thread, so memory no longer grows with file size and the 256 MiB single-thread limit only concerns ZIP. Directories are recorded immediately, even if earlier files still await their solid block, so internal 7z entry order may change. Admission estimates do not replace the job's hard memory limit. ZIP and 7z parallelism is reassessed at file/block boundaries; running tasks may finish computing after Turbo is turned off or during a pause, but effects stay blocked by the parent.

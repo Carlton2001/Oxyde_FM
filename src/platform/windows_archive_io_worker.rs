@@ -473,6 +473,7 @@ mod tests {
             format: crate::utils::archive_io_protocol::Format::Zip,
             source_size: 0,
             selected: None,
+            stream_name: None,
             limits: crate::utils::archive_io_protocol::Limits {
                 entries: 1,
                 bytes: 1,

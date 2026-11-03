@@ -172,6 +172,23 @@ pub fn run<T: Exchange + Send + 'static>(
             })?;
         }
         Operation::Decode {
+            format: Format::Stream(codec),
+            source_size,
+            selected,
+            stream_name,
+            ..
+        } => {
+            decode_stream(
+                &connection,
+                codec,
+                source_size,
+                stream_name.as_deref().ok_or_else(invalid)?,
+                selected.as_deref(),
+                &budget,
+                &checkpoint,
+            )?;
+        }
+        Operation::Decode {
             format,
             source_size,
             selected,
@@ -255,7 +272,14 @@ fn decode<T: Exchange + 'static>(
         Format::SevenZip => {
             decode_seven(connection, size, requested.as_deref(), budget, checkpoint)?
         }
-        Format::Tar | Format::TarGz | Format::TarXz | Format::TarBz2 | Format::TarZst => {
+        Format::Stream(_) => return Err(invalid().into()),
+        Format::Tar
+        | Format::TarGz
+        | Format::TarXz
+        | Format::TarBz2
+        | Format::TarZst
+        | Format::TarLz4
+        | Format::TarLzma => {
             decode_tar(
                 connection,
                 format,
@@ -435,14 +459,11 @@ fn tar_reader<T: Exchange + 'static>(
     size: u64,
 ) -> io::Result<Box<dyn Read>> {
     let source = Reader::new(connection.clone(), 0, size);
-    Ok(match format {
-        Format::TarGz => Box::new(flate2::read::GzDecoder::new(source)),
-        Format::TarXz => Box::new(xz2::read::XzDecoder::new(source)),
-        Format::TarBz2 => Box::new(bzip2::read::BzDecoder::new(source)),
-        Format::TarZst => Box::new(zstd::stream::read::Decoder::new(source)?),
-        Format::Tar => Box::new(source),
-        _ => return Err(invalid()),
-    })
+    match format.tar_codec() {
+        Some(codec) => codec.decoder(source),
+        None if format == Format::Tar => Ok(Box::new(source)),
+        None => Err(invalid()),
+    }
 }
 fn tar_meta<R: Read>(id: u64, entry: &tar::Entry<'_, R>) -> io::Result<Entry> {
     let kind = entry.header().entry_type();
@@ -554,6 +575,66 @@ fn decode_tar<T: Exchange + 'static>(
             return Err(invalid().into());
         }
     }
+    Ok(())
+}
+
+/// One compressed file: the first pass establishes the size the manifest declares,
+/// the second streams the content, tied to the first by its hash.
+fn decode_stream<T: Exchange + 'static>(
+    connection: &Connection<T>,
+    codec: crate::utils::archive_codec::Codec,
+    size: u64,
+    name: &str,
+    requested: Option<&str>,
+    budget: &ArchiveBudget,
+    checkpoint: &dyn Fn() -> io::Result<()>,
+) -> Result<(), CommandError> {
+    if requested.is_some_and(|requested| {
+        relative_archive_path(requested).ok() != relative_archive_path(name).ok()
+    }) {
+        return Err(invalid().into());
+    }
+    let mut first = BudgetReader {
+        reader: ReportedReader {
+            reader: codec.decoder(Reader::new(connection.clone(), 0, size))?,
+            connection,
+        },
+        budget,
+        checkpoint,
+    };
+    let mut hash = blake3::Hasher::new();
+    let decoded = io::copy(&mut first, &mut hash)?;
+    let hash = hash.finalize();
+    let meta = empty_entry(0, name.to_owned(), false, decoded);
+    meta.validate()?;
+    budget.entry(&meta.name, meta.size)?;
+    notify(connection, Frame::new(Message::Entry { entry: meta.clone() }))?;
+    notify(connection, Frame::new(Message::ManifestEnd))?;
+    let second = ArchiveBudget::new(budget.limits());
+    let check = || budget.checkpoint(checkpoint);
+    let mut input = BudgetReader {
+        reader: ReportedReader {
+            reader: codec.decoder(Reader::new(connection.clone(), 0, size))?,
+            connection,
+        },
+        budget: &second,
+        checkpoint: &check,
+    };
+    notify(connection, Frame::new(Message::Begin { id: 0 }))?;
+    let mut writer = HashWriter {
+        output: ChunkWriter {
+            connection,
+            id: 0,
+            offset: 0,
+        },
+        hash: blake3::Hasher::new(),
+    };
+    if budget.copy(&mut input, &mut writer, checkpoint)? != meta.size
+        || writer.hash.finalize() != hash
+    {
+        return Err(invalid().into());
+    }
+    notify(connection, Frame::new(Message::End { id: 0 }))?;
     Ok(())
 }
 
@@ -839,6 +920,7 @@ mod tests {
                 format,
                 source_size: size,
                 selected: selected.map(str::to_owned),
+                stream_name: None,
                 limits: limits(allowance),
             },
         )
@@ -948,6 +1030,7 @@ mod tests {
                 format,
                 source_size: size,
                 selected: selected.map(str::to_owned),
+                stream_name: None,
                 limits: limits(allowance)
             }
         )

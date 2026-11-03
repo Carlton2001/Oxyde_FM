@@ -33,7 +33,7 @@ pub(super) fn compression_table(view: &OxydeApp, handle: Entity<OxydeApp>, windo
             }),
         );
     let mut rows = vec![super::default_format::render(view, handle.clone(), window, cx), header.into_any_element()];
-    for (format, label) in [("zip", "ZIP"), ("7z", "7z"), ("zst", "Zst")] {
+    for (format, label) in [("zip", "ZIP"), ("7z", "7z"), ("zst", "Zst"), ("gz", "Gz"), ("xz", "Xz"), ("bz2", "Bz2")] {
         let configured = view.compression_quality(format);
         let selected = if configured == "fast" || configured == "best" {
             configured

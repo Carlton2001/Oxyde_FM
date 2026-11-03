@@ -14,14 +14,11 @@ pub const FLAG: &str = "--oxyde-archive-handle-worker-v1";
 
 fn indexed(path: &Path, file: File) -> Result<Vec<FileEntry>, CommandError> {
     match ArchiveFormat::from_path(path) {
-        Some(
-            ArchiveFormat::Zip
-            | ArchiveFormat::Tar
-            | ArchiveFormat::TarGz
-            | ArchiveFormat::TarXz
-            | ArchiveFormat::TarZst
-            | ArchiveFormat::TarBz2,
-        ) => super::archive_metadata::indexed_file(path, file, ArchiveLimits::LISTING, &|| Ok(())),
+        Some(format)
+            if matches!(format, ArchiveFormat::Zip | ArchiveFormat::Stream(_)) || format.is_tar() =>
+        {
+            super::archive_metadata::indexed_file(path, file, ArchiveLimits::LISTING, &|| Ok(()))
+        }
         Some(ArchiveFormat::SevenZip) => {
             super::archive_seven_open::indexed_file(path, file, ArchiveLimits::LISTING, &|| Ok(()))
         }

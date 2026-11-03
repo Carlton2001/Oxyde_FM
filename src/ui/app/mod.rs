@@ -30,6 +30,7 @@ mod clipboard;
 mod file_operations;
 mod file_preparation;
 mod archives;
+pub(crate) use archives::archive_extension;
 mod rename;
 mod context_menus;
 mod drag;

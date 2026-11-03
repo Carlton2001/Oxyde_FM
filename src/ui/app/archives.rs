@@ -2,6 +2,18 @@ use super::OxydeApp;
 use gpui::*;
 
 impl OxydeApp {
+    /// Creation formats: identifier and label, in the order the interface offers them.
+    pub(crate) const ARCHIVE_FORMATS: [(&'static str, &'static str); 8] = [
+        ("zip", "Zip"),
+        ("7z", "7z"),
+        ("tar", "Tar"),
+        ("zst", "Zst"),
+        ("gz", "Gz"),
+        ("xz", "Xz"),
+        ("bz2", "Bz2"),
+        ("lz4", "Lz4"),
+    ];
+
     /// Entry origin was resolved by listing/search workers, never by UI rendering.
     pub(crate) fn file_for_action(&self, path: &str, is_dir: bool) -> oxyde_lib::models::FileEntry {
         let mut found = None;
@@ -24,6 +36,9 @@ impl OxydeApp {
             ("zip".into(), self.config.zip_quality.clone()),
             ("7z".into(), self.config.seven_zip_quality.clone()),
             ("zst".into(), self.config.zstd_quality.clone()),
+            ("gz".into(), self.config.gzip_quality.clone()),
+            ("xz".into(), self.config.xz_quality.clone()),
+            ("bz2".into(), self.config.bzip2_quality.clone()),
         ])
     }
 
@@ -46,6 +61,9 @@ impl OxydeApp {
         {
             Some("7z") => self.config.seven_zip_quality.clone(),
             Some("zst") => self.config.zstd_quality.clone(),
+            Some("gz") => self.config.gzip_quality.clone(),
+            Some("xz") => self.config.xz_quality.clone(),
+            Some("bz2") => self.config.bzip2_quality.clone(),
             _ => self.config.zip_quality.clone(),
         }
     }
@@ -63,23 +81,23 @@ impl OxydeApp {
         let Some(first) = paths.first() else {
             return;
         };
-        let format = self.default_archive_format().to_string();
-        let extension = if format == "zst" { "tar.zst" } else { &format };
-        let destination = first.with_extension(extension);
+        let extension = archive_extension(self.default_archive_format());
+        let destination = first.with_extension(&extension);
         self.begin_rename_with_extension(
             destination.to_string_lossy().into_owned(),
             false,
             false,
-            Some(extension),
+            Some(&extension),
             window,
             cx,
         );
-        self.archive_creation = Some((paths, extension.to_string()));
+        self.archive_creation = Some((paths, extension));
     }
 
     pub(crate) fn default_archive_format(&self) -> &str {
         match self.config.default_archive_format.as_str() {
-            "7z" => "7z", "tar" => "tar", "zst" => "zst", _ => "zip",
+            format @ ("7z" | "tar" | "zst" | "gz" | "xz" | "bz2" | "lz4") => format,
+            _ => "zip",
         }
     }
     pub(crate) fn set_default_archive_format(&mut self, format: &str, cx: &mut Context<Self>) {
@@ -89,9 +107,9 @@ impl OxydeApp {
     }
     pub(crate) fn select_archive_format(&mut self, format: &str, cx: &mut Context<Self>) {
         let Some((_, extension)) = self.archive_creation.as_mut() else { return; };
-        let next = if format == "zst" { "tar.zst" } else { format };
-        self.editing_text = archive_name_for_format(&self.editing_text, extension, next);
-        *extension = next.into();
+        let next = archive_extension(format);
+        self.editing_text = archive_name_for_format(&self.editing_text, extension, &next);
+        *extension = next;
         if let Some(input) = &self.editing_view {
             input.update(cx, |input, cx| input.set_content(self.editing_text.clone(), cx));
         }
@@ -163,7 +181,7 @@ fn extraction_jobs(paths: Vec<oxyde_lib::models::FileEntry>) -> Vec<(std::path::
         let source = std::path::PathBuf::from(file.path);
         let parent = source.parent()?;
         let name = source.file_name().unwrap_or_default().to_string_lossy();
-        let stem = [".tar.gz", ".tar.xz", ".tar.zst", ".tar.bz2"]
+        let stem = [".tar.gz", ".tar.xz", ".tar.zst", ".tar.bz2", ".tar.lz4", ".tar.lzma"]
             .iter()
             .find_map(|suffix| name.strip_suffix(suffix))
             .or_else(|| source.file_stem().and_then(|stem| stem.to_str()))
@@ -176,6 +194,14 @@ fn extraction_jobs(paths: Vec<oxyde_lib::models::FileEntry>) -> Vec<(std::path::
 #[cfg(test)]
 #[path = "archives/tests/extraction.rs"]
 mod extraction_tests;
+
+/// Creation format identifiers name the TAR compression: `gz` creates `.tar.gz`.
+pub(crate) fn archive_extension(format: &str) -> String {
+    match format {
+        "zip" | "7z" | "tar" => format.into(),
+        _ => format!("tar.{format}"),
+    }
+}
 
 fn archive_name_for_format(name: &str, previous: &str, next: &str) -> String {
     let suffix = format!(".{previous}");

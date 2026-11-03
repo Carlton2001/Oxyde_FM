@@ -65,6 +65,7 @@ usvg = { version = "0.46.0", default-features = false }
 xz2 = "0.1.7"
 zstd = { version = "0.14.0", features = ["zstdmt"] }
 bzip2 = "0.6.1"
+lz4_flex = "0.14.0"
 lazy_static = "1.5.0"
 log = "0.4"
 env_logger = "0.11.11"

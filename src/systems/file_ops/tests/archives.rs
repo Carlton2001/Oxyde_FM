@@ -33,7 +33,7 @@ fn copy_from_iso_preserves_image_and_extracts_selected_entry() {
 
 #[test]
 fn archive_roundtrip_tracks_progress_and_preserves_existing_destinations() {
-    for format in ["zip", "7z", "tar", "zst"] {
+    for format in ["zip", "7z", "tar", "tar.zst", "tar.gz", "tar.xz", "tar.bz2", "tar.lz4"] {
         for quality in ["fast", "normal", "best"] {
             let temp = tempfile::tempdir().unwrap();
             let source = temp.path().join("folder");

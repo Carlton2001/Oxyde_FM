@@ -7,7 +7,7 @@ use crate::ui::theme::ThemeContext;
 use gpui::{prelude::*, *};
 use std::{cell::Cell, rc::Rc};
 
-const FORMATS: [(&str, &str); 4] = [("zip", "Zip"), ("7z", "7z"), ("tar", "Tar"), ("zst", "Zst")];
+const FORMATS: [(&str, &str); 8] = OxydeApp::ARCHIVE_FORMATS;
 
 fn choices(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &App) -> AnyElement {
     let theme = *cx.theme();

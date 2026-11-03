@@ -65,7 +65,28 @@ pub enum Format {
     TarXz,
     TarBz2,
     TarZst,
+    TarLz4,
+    TarLzma,
+    Stream(super::archive_codec::Codec),
     Iso,
+}
+
+impl Format {
+    pub fn tar_codec(self) -> Option<super::archive_codec::Codec> {
+        use super::archive_codec::Codec;
+        Some(match self {
+            Self::TarGz => Codec::Gzip,
+            Self::TarXz => Codec::Xz,
+            Self::TarBz2 => Codec::Bzip2,
+            Self::TarZst => Codec::Zstd,
+            Self::TarLz4 => Codec::Lz4,
+            Self::TarLzma => Codec::Lzma,
+            _ => return None,
+        })
+    }
+    pub fn is_tar(self) -> bool {
+        self == Self::Tar || self.tar_codec().is_some()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -91,6 +112,9 @@ pub enum Operation {
         format: Format,
         source_size: u64,
         selected: Option<String>,
+        /// Member name of a single compressed file; the worker never sees the path.
+        #[serde(default)]
+        stream_name: Option<String>,
         limits: Limits,
     },
     Encode {
@@ -278,10 +302,22 @@ impl Message {
             Self::Start { operation } => {
                 let limits = match operation {
                     Operation::Decode {
-                        selected, limits, ..
+                        format,
+                        selected,
+                        stream_name,
+                        limits,
+                        ..
                     } => {
                         if let Some(name) = selected {
                             validate_name(name)?;
+                        }
+                        // A single compressed file needs its one member name, and only it.
+                        match (format, stream_name) {
+                            (Format::Stream(_), Some(name)) if !name.contains(['/', '\\']) => {
+                                validate_name(name)?
+                            }
+                            (Format::Stream(_), _) | (_, Some(_)) => return Err(invalid()),
+                            _ => {}
                         }
                         limits
                     }
@@ -292,10 +328,10 @@ impl Message {
                         limits,
                         ..
                     } => {
-                        if !matches!(
-                            format,
-                            Format::Zip | Format::SevenZip | Format::Tar | Format::TarZst
-                        ) || *entries > limits.entries
+                        let writable = matches!(format, Format::Zip | Format::SevenZip)
+                            || (format.is_tar()
+                                && format.tar_codec().is_none_or(|codec| codec.writable()));
+                        if !writable || *entries > limits.entries
                             || *output_limit == 0
                         {
                             return Err(invalid());
@@ -453,6 +489,10 @@ impl Wire {
         Ok(HEADER + metadata_len + data_len)
     }
 }
+
+#[cfg(test)]
+#[path = "archive_io_protocol/tests/streams.rs"]
+mod stream_tests;
 
 #[cfg(test)]
 mod tests {

@@ -49,6 +49,12 @@ pub struct AppConfig {
     pub seven_zip_quality: String,
     #[serde(default)]
     pub zstd_quality: String,
+    #[serde(default)]
+    pub gzip_quality: String,
+    #[serde(default)]
+    pub xz_quality: String,
+    #[serde(default)]
+    pub bzip2_quality: String,
     /// GPUI reference in logical pixels per rem.
     #[serde(default = "default_ui_rem_size")]
     pub ui_rem_size: u32,
@@ -117,6 +123,9 @@ impl Default for AppConfig {
             zip_quality: "fast".to_string(),
             seven_zip_quality: "fast".to_string(),
             zstd_quality: "fast".to_string(),
+            gzip_quality: "fast".to_string(),
+            xz_quality: "fast".to_string(),
+            bzip2_quality: "fast".to_string(),
             ui_rem_size: default_ui_rem_size(),
             search_limit: 3000,
             default_turbo_mode: true,

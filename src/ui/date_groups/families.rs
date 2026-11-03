@@ -47,7 +47,8 @@ impl FileFamily {
             "iso" | "img" | "vhd" | "vhdx" | "avhd" | "avhdx" | "vmdk" | "vdi" | "qcow"
             | "qcow2" | "dmg" | "nrg" | "sparseimage" => Self::DiskImages,
             "zip" | "7z" | "rar" | "tar" | "gz" | "bz2" | "xz" | "zst" | "tgz" | "tbz" | "tbz2"
-            | "txz" | "cab" | "lz" | "lzma" | "br" | "arj" | "ace" | "lzh" => Self::Archives,
+            | "txz" | "tzst" | "lz4" | "tlz4" | "tlz" | "cab" | "lz" | "lzma" | "br" | "arj" | "ace"
+            | "lzh" => Self::Archives,
             "exe" | "msi" | "msix" | "msixbundle" | "appx" | "appxbundle" | "com" | "scr"
             => Self::Applications,
             "pdf" | "doc" | "docx" | "odt" | "rtf" | "txt" | "xls" | "xlsx" | "ods" | "csv"

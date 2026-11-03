@@ -19,14 +19,14 @@ use crate::utils::archive_security::relative_archive_path;
 use crate::utils::archive_security::ExtractionRoot;
 use crate::utils::path_security::validate_path;
 #[cfg(test)]
-use {bzip2::read::BzDecoder, flate2::read::GzDecoder, log::info};
+use log::info;
 use std::collections::HashSet;
 #[cfg(test)]
 use std::fs::{self, File};
 use std::io;
 use std::path::{Path, PathBuf};
 #[cfg(test)]
-use {tar::Archive as TarArchive, xz2::read::XzDecoder, zstd::stream::read::Decoder as ZstdDecoder};
+use tar::Archive as TarArchive;
 #[cfg(test)]
 use zip::ZipArchive;
 
@@ -157,14 +157,11 @@ pub(crate) fn list_archive_contents_local(
 
     match format {
         ArchiveFormat::SevenZip => list_seven_zip(path, &internal_path),
-        ArchiveFormat::Zip
-        | ArchiveFormat::Tar
-        | ArchiveFormat::TarGz
-        | ArchiveFormat::TarXz
-        | ArchiveFormat::TarZst
-        | ArchiveFormat::TarBz2 => list_indexed_metadata(path, &internal_path),
+        format if format == ArchiveFormat::Zip || matches!(format, ArchiveFormat::Stream(_)) || format.is_tar() => {
+            list_indexed_metadata(path, &internal_path)
+        }
         ArchiveFormat::Iso => list_iso(path, &internal_path),
-        ArchiveFormat::Rar => Err(CommandError::ArchiveError(
+        _ => Err(CommandError::ArchiveError(
             "Rar navigation not supported yet. Please extract it first.".to_string(),
         )),
     }
@@ -188,7 +185,7 @@ pub(crate) fn index_archive_contents(path: &Path, checkpoint: &dyn Fn() -> io::R
 
 pub(crate) fn index_archive_contents_local(path: &Path, checkpoint: &dyn Fn() -> io::Result<()>) -> Result<Vec<FileEntry>, CommandError> {
     match ArchiveFormat::from_path(path) {
-        Some(ArchiveFormat::Zip | ArchiveFormat::Tar | ArchiveFormat::TarGz | ArchiveFormat::TarXz | ArchiveFormat::TarZst | ArchiveFormat::TarBz2) => super::archive_metadata::indexed_files(path, checkpoint),
+        Some(format) if format == ArchiveFormat::Zip || matches!(format, ArchiveFormat::Stream(_)) || format.is_tar() => super::archive_metadata::indexed_files(path, checkpoint),
         Some(ArchiveFormat::SevenZip) => super::archive_seven_open::indexed_files(path, checkpoint),
         Some(ArchiveFormat::Iso) => super::archive_iso_open::indexed_files(path, checkpoint),
         _ => Err(CommandError::ArchiveError("Unsupported archive search format".into())),
@@ -396,19 +393,10 @@ pub(crate) fn extract_open_archive_with_budget(
                 budget,
             )?;
         }
-        ArchiveFormat::Tar
-        | ArchiveFormat::TarGz
-        | ArchiveFormat::TarXz
-        | ArchiveFormat::TarZst
-        | ArchiveFormat::TarBz2 => {
-            let reader: Box<dyn io::Read> = match format {
-                ArchiveFormat::TarGz => Box::new(GzDecoder::new(file)),
-                ArchiveFormat::TarXz => Box::new(XzDecoder::new(file)),
-                ArchiveFormat::TarBz2 => Box::new(BzDecoder::new(file)),
-                ArchiveFormat::TarZst => Box::new(
-                    ZstdDecoder::new(file).map_err(|e| CommandError::IoError(e.to_string()))?,
-                ),
-                _ => Box::new(file),
+        format if format.is_tar() => {
+            let reader: Box<dyn io::Read> = match format.tar_codec() {
+                Some(codec) => codec.decoder(file)?,
+                None => Box::new(file),
             };
             let mut archive = TarArchive::new(BudgetReader {
                 reader,
@@ -458,7 +446,12 @@ pub(crate) fn extract_open_archive_with_budget(
                 budget,
             )?;
         }
-        ArchiveFormat::Rar => {
+        ArchiveFormat::Stream(_) => {
+            return Err(CommandError::ArchiveError(
+                "Compressed files are extracted through the broker".to_string(),
+            ));
+        }
+        _ => {
             return Err(CommandError::ArchiveError(
                 "Rar extraction requires external tools (like 7-Zip or WinRAR).".to_string(),
             ));

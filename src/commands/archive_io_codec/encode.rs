@@ -166,28 +166,26 @@ pub(super) fn encode<T: Exchange>(
             flush_solid(&mut writer, &mut solid, connection)?;
             writer.finish()?.flush()?;
         }
-        Format::Tar | Format::TarZst => {
+        Format::Tar => {
+            let mut writer = tar::Builder::new(io::BufWriter::with_capacity(MAX_BLOCK, output));
+            encode_tar(connection, entries, &mut writer, budget, checkpoint)?;
+            writer.into_inner()?.flush()?;
+        }
+        format if format.tar_codec().is_some_and(|codec| codec.writable()) => {
             let level = match quality {
-                Quality::Fast => 1,
-                Quality::Normal => 3,
-                Quality::Best => 19,
+                Quality::Fast => crate::utils::archive_codec::Level::Fast,
+                Quality::Normal => crate::utils::archive_codec::Level::Normal,
+                Quality::Best => crate::utils::archive_codec::Level::Best,
             };
-            if format == Format::TarZst {
-                let mut encoder = zstd::stream::write::Encoder::new(
-                    io::BufWriter::with_capacity(MAX_BLOCK, output),
-                    level,
-                )?;
-                let count = threads(turbo(connection)?).min(if level >= 19 { 2 } else { 8 });
-                encoder.multithread(if count > 1 { count as u32 } else { 0 })?;
-                encoder.window_log(23)?;
-                let mut writer = tar::Builder::new(encoder);
-                encode_tar(connection, entries, &mut writer, budget, checkpoint)?;
-                writer.into_inner()?.finish()?.flush()?;
-            } else {
-                let mut writer = tar::Builder::new(io::BufWriter::with_capacity(MAX_BLOCK, output));
-                encode_tar(connection, entries, &mut writer, budget, checkpoint)?;
-                writer.into_inner()?.flush()?;
-            }
+            // Thread count is fixed at stream start; later Turbo changes only priority.
+            let encoder = format.tar_codec().ok_or_else(invalid)?.encoder(
+                io::BufWriter::with_capacity(MAX_BLOCK, output),
+                level,
+                threads(turbo(connection)?),
+            )?;
+            let mut writer = tar::Builder::new(encoder);
+            encode_tar(connection, entries, &mut writer, budget, checkpoint)?;
+            writer.into_inner()?.finish()?.flush()?;
         }
         _ => return Err(invalid().into()),
     }

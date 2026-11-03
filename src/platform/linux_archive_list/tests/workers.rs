@@ -83,3 +83,18 @@ fn cancellation_interrupts_the_search_before_the_worker() {
     let error = index_in(&worker(), &path, DEADLINE, &|| Err(io::ErrorKind::Interrupted.into())).unwrap_err();
     assert!(!error.to_string().is_empty());
 }
+
+#[test]
+fn a_single_compressed_file_keeps_its_member_name_outside_the_sandbox() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("journal -- école.log.gz");
+    let mut gzip = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    gzip.write_all(b"line\n").unwrap();
+    std::fs::write(&path, gzip.finish().unwrap()).unwrap();
+    for entries in [list_in(&worker(), &path, "", DEADLINE).unwrap(), index_in(&worker(), &path, DEADLINE, &|| Ok(())).unwrap()] {
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name, "journal -- école.log");
+        assert_eq!(Path::new(&entries[0].path), path.join("journal -- école.log"));
+        assert_eq!(entries[0].size, 5);
+    }
+}
