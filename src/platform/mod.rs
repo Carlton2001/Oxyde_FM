@@ -4,7 +4,7 @@ pub use file_drag::{FileDragFeedback, FileDropEffect, FileDropPhase, NativeFileD
 mod viewer_media;
 mod memory;
 pub use memory::ProcessMemorySnapshot;
-pub use viewer_media::{decode_media_report, encode_media_report, ViewerMediaCommand, ViewerMediaControl, MEDIA_ENDED, MEDIA_FAILED, MEDIA_LOADING, MEDIA_PAUSED, MEDIA_PLAYING, MEDIA_REPORT_BYTES};
+pub use viewer_media::{decode_media_info, decode_media_report, encode_media_info, encode_media_report, MediaInfo, MEDIA_INFO, ViewerMediaCommand, ViewerMediaControl, MEDIA_ENDED, MEDIA_FAILED, MEDIA_LOADING, MEDIA_PAUSED, MEDIA_PLAYING, MEDIA_REPORT_BYTES};
 pub use file_names::FileNameRules;
 mod file_clipboard;
 mod quick_access;

@@ -7,6 +7,8 @@ use std::sync::{atomic::Ordering, Arc};
 pub(super) struct VideoLayout {
     viewer: WeakEntity<Viewer>,
     bar: AnyElement,
+    /// Technical labels under the bar, outside fullscreen.
+    labels: Option<AnyElement>,
     ratio: f32,
     placeholder: Option<AnyElement>,
     fullscreen: bool,
@@ -25,7 +27,19 @@ impl Viewer {
             .map(|media| media.control.video_dimensions.load(Ordering::Acquire))
             .unwrap_or_default();
         let (width, height) = ((dimensions >> 32) as u32, dimensions as u32);
+        let info = self.media.as_ref().and_then(|media| media.control.info());
+        let labels = (!window.is_fullscreen()).then(|| {
+            div()
+                .size_full()
+                .flex()
+                .items_center()
+                .px(rems(0.5))
+                .overflow_hidden()
+                .child(super::media_labels::row(super::media_labels::video((width, height), info, cx), cx))
+                .into_any_element()
+        });
         VideoLayout {
+            labels,
             frame: self.media.as_ref().and_then(|media| media.frame.lock().ok()?.clone()),
             fullscreen: window.is_fullscreen(),
             floating_bar: floating_bar && self.fullscreen_controls_visible(),
@@ -102,7 +116,8 @@ impl Element for VideoLayout {
         cx: &mut App,
     ) -> Bounds<Pixels> {
         let bar_height = if self.fullscreen { px(0.0) } else { crate::ui::scale::rem_pixels(rems(2.5625)) };
-        let video = fitted_video(bounds, self.ratio, bar_height);
+        let labels_height = if self.labels.is_some() { crate::ui::scale::rem_pixels(super::media_labels::ROW_HEIGHT) } else { px(0.0) };
+        let video = fitted_video(bounds, self.ratio, bar_height + labels_height);
         let Bounds { origin, size: Size { width, height } } = video;
         if self.floating_bar {
             let bar = super::fullscreen_controls::fullscreen_bar_bounds(bounds);
@@ -119,6 +134,10 @@ impl Element for VideoLayout {
         );
         self.bar
             .prepaint_at(origin + point(px(0.0), height), window, cx); }
+        if let Some(labels) = &mut self.labels {
+            labels.layout_as_root(size(AvailableSpace::Definite(bounds.size.width), AvailableSpace::Definite(labels_height)), window, cx);
+            labels.prepaint_at(point(bounds.origin.x, origin.y + height + bar_height), window, cx);
+        }
         if let Some(placeholder) = &mut self.placeholder {
             placeholder.layout_as_root(size(AvailableSpace::Definite(width), AvailableSpace::Definite(height)), window, cx);
             placeholder.prepaint_at(origin, window, cx);
@@ -147,6 +166,7 @@ impl Element for VideoLayout {
         }
         if let Some(placeholder) = &mut self.placeholder { placeholder.paint(window, cx); }
         if !self.fullscreen || self.floating_bar { self.bar.paint(window, cx); }
+        if let Some(labels) = &mut self.labels { labels.paint(window, cx); }
     }
 }
 

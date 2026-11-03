@@ -65,6 +65,8 @@ fn video_plays_at_the_viewer_size_then_pauses_seeks_and_ends() {
     assert_eq!(frame.dimensions(), (320, 180), "Scaled to the Viewer, keeping 16:9");
     wait_for(&control, "playing", |control| control.status() == MEDIA_PLAYING && control.duration_ms() == 2000);
     assert_eq!(control.video_dimensions.load(Ordering::Acquire), 1280 << 32 | 720, "The source size, not the scaled one");
+    let info = control.info().expect("stream description");
+    assert_eq!((info.video_codec_name(), info.frame_rate_milli, info.audio_codec), (Some("H.264"), 10_000, 0));
 
     control.command.lock().unwrap().paused = true;
     wait_for(&control, "paused", |control| control.status() == MEDIA_PAUSED);
@@ -86,6 +88,10 @@ fn sound_alone_plays_without_frames() {
     wait_for(&control, "paused", |control| control.status() == MEDIA_PAUSED && control.duration_ms() > 0);
     assert!(control.frame.lock().unwrap().is_none());
     assert_eq!(control.video_dimensions.load(Ordering::Acquire), 0);
+    wait_for(&control, "the stream description", |control| control.info().is_some());
+    let info = control.info().unwrap();
+    assert_eq!((info.audio_codec_name(), info.video_codec), (Some("Vorbis"), 0));
+    assert!(info.sample_rate > 0 && info.channels > 0);
     control.cancel();
     session.join().unwrap().unwrap();
 }

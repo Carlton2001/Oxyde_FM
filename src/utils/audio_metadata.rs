@@ -1,5 +1,10 @@
 //! Audio tags and bounded cover pixels. Windows calls this only in the LPAC worker.
-use lofty::{config::ParseOptions, file::TaggedFileExt, picture::PictureType, probe::Probe};
+use lofty::{
+    config::ParseOptions,
+    file::{AudioFile, FileType, TaggedFileExt},
+    picture::PictureType,
+    probe::Probe,
+};
 use serde::{Deserialize, Serialize};
 use std::{fs::File, io};
 
@@ -13,6 +18,21 @@ const COVER_SIDE: u32 = 512;
 pub struct AudioMetadata {
     pub tags: Vec<(String, String)>,
     pub cover: Option<Cover>,
+    /// Absent from replies of older workers.
+    #[serde(default)]
+    pub format: AudioFormat,
+}
+
+/// Technical description shown under the player; every field is optional.
+#[derive(Clone, Default, PartialEq, Debug, Serialize, Deserialize)]
+pub struct AudioFormat {
+    pub codec: Option<String>,
+    /// Kilobits per second.
+    pub bitrate: Option<u32>,
+    /// Hertz.
+    pub sample_rate: Option<u32>,
+    pub bit_depth: Option<u8>,
+    pub channels: Option<u8>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -42,7 +62,12 @@ impl AudioMetadata {
                 && cover.height <= COVER_SIDE
                 && cover.pixels.len() == cover.width as usize * cover.height as usize * 4
         });
-        if tags_ok && cover_ok {
+        let format_ok = self
+            .format
+            .codec
+            .as_ref()
+            .is_none_or(|codec| codec.len() <= 32);
+        if tags_ok && cover_ok && format_ok {
             Ok(())
         } else {
             Err(io::Error::other("Invalid audio metadata reply"))
@@ -53,10 +78,13 @@ impl AudioMetadata {
 pub fn read(file: File) -> io::Result<AudioMetadata> {
     let tagged = Probe::new(file)
         .guess_file_type()?
-        .options(ParseOptions::new().read_properties(false))
+        .options(ParseOptions::new().read_properties(true))
         .read()
         .map_err(io::Error::other)?;
-    let mut metadata = AudioMetadata::default();
+    let mut metadata = AudioMetadata {
+        format: format(&tagged),
+        ..Default::default()
+    };
     // Prefer the primary tag; retain additional values from other tag formats.
     let tags = tagged
         .primary_tag()
@@ -191,6 +219,35 @@ fn extract_cover(
         }
     }
     None
+}
+
+fn format(tagged: &lofty::file::TaggedFile) -> AudioFormat {
+    let codec = match tagged.file_type() {
+        FileType::Aac => "AAC",
+        FileType::Aiff => "AIFF",
+        FileType::Ape => "APE",
+        FileType::Flac => "FLAC",
+        FileType::Mpeg => "MP3",
+        FileType::Mp4 => "MP4",
+        FileType::Mpc => "Musepack",
+        FileType::Opus => "Opus",
+        FileType::Vorbis => "Vorbis",
+        FileType::Speex => "Speex",
+        FileType::Wav => "WAV",
+        FileType::WavPack => "WavPack",
+        _ => "",
+    };
+    let properties = tagged.properties();
+    AudioFormat {
+        codec: (!codec.is_empty()).then(|| codec.to_owned()),
+        bitrate: properties
+            .audio_bitrate()
+            .or_else(|| properties.overall_bitrate())
+            .filter(|rate| *rate > 0),
+        sample_rate: properties.sample_rate().filter(|rate| *rate > 0),
+        bit_depth: properties.bit_depth().filter(|depth| *depth > 0),
+        channels: properties.channels().filter(|channels| *channels > 0),
+    }
 }
 
 fn bounded(value: &str) -> String {

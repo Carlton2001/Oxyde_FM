@@ -17,9 +17,10 @@ const FULLSCREEN_IDLE: Duration = Duration::from_secs(2);
 pub(super) enum MediaKind {
     Image,
     Video,
+    Audio,
 }
 
-/// Mirrors `Viewer::load_current`: audio is never a skipping target.
+/// Mirrors `Viewer::load_current`: each kind skips only to its own kind.
 pub(super) fn media_kind(file: &FileEntry) -> Option<MediaKind> {
     use crate::ui::components::icons::{get_preview_type, PreviewType, AUDIO_EXTENSIONS, VIDEO_EXTENSIONS};
     if file.is_dir || file.archive_path.is_some() {
@@ -27,7 +28,7 @@ pub(super) fn media_kind(file: &FileEntry) -> Option<MediaKind> {
     }
     let extension = file.name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
     if AUDIO_EXTENSIONS.contains(extension.as_str()) || file.native_kind == Some(NativeFileKind::Audio) {
-        None
+        Some(MediaKind::Audio)
     } else if VIDEO_EXTENSIONS.contains(extension.as_str()) || file.native_kind == Some(NativeFileKind::Video) {
         Some(MediaKind::Video)
     } else if get_preview_type(&file.name) == PreviewType::Image {
@@ -60,6 +61,8 @@ pub(super) struct Overlay {
     area: Bounds<Pixels>,
     fullscreen: bool,
     video: bool,
+    /// Audio has no fullscreen; `media` is then its player card and bar.
+    audio: bool,
     /// Image or playable video: affordances and edge clicks apply.
     enabled: bool,
     last_motion: Option<Instant>,
@@ -93,6 +96,7 @@ impl Overlay {
         match part {
             // In fullscreen the exit button follows motion over the whole
             // screen and leaves when the pointer rests, unless it is on it.
+            Part::Fullscreen if self.audio => false,
             Part::Fullscreen if self.fullscreen => !self.resting || self.bounds(part).contains(&pointer),
             Part::Fullscreen => media.contains(&pointer),
             _ => self.zone(pointer, neighbors) == Some(part),
@@ -102,6 +106,14 @@ impl Overlay {
     /// The edge band whose click skips, as in dedicated image viewers.
     fn zone(&self, pointer: Point<Pixels>, neighbors: (bool, bool)) -> Option<Part> {
         if !self.enabled || !self.area.contains(&pointer) {
+            return None;
+        }
+        let media = self.visible_media();
+        // Video bands stop at the picture, above its play button and bar;
+        // audio bands never cover the player itself.
+        if (self.video && !(media.top()..media.bottom()).contains(&pointer.y))
+            || (self.audio && media.contains(&pointer))
+        {
             return None;
         }
         let band = (self.area.size.width / 3.0).min(rem_pixels(rems(8.0)));
@@ -325,11 +337,14 @@ impl Viewer {
         // Chips stay mounted while the next image loads, under a resting pointer.
         let image = self.file.as_ref().and_then(media_kind) == Some(MediaKind::Image)
             && !matches!(self.content, super::content::Content::Unavailable);
+        // No native surface for audio, on any platform.
+        let audio = self.audio && !self.blocked;
         // GPUI paints Linux video frames itself, so nothing covers chips drawn in the Viewer.
-        let in_window = image || (video && !cfg!(target_os = "windows"));
+        let in_window = image || audio || (video && !cfg!(target_os = "windows"));
         self.overlay.fullscreen = window.is_fullscreen();
         self.overlay.video = video;
-        self.overlay.enabled = image || video;
+        self.overlay.audio = audio;
+        self.overlay.enabled = image || video || audio;
         // A pointer kept across a skip is still followed.
         if (video || self.overlay.fullscreen) && self.overlay.pointer.is_some() && self.overlay.timer.is_none() {
             self.wake_overlay(cx);

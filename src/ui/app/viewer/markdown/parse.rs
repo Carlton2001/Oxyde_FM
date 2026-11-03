@@ -64,6 +64,10 @@ struct Builder<'a> {
     italic: usize,
     strike: usize,
     links: usize,
+    /// Open inline HTML code elements (`<code>`, `<kbd>`…).
+    code: usize,
+    /// Inside an HTML block that started with `<pre>`.
+    html_code: bool,
     lists: Vec<Option<u64>>,
     quote_depth: usize,
     language: String,
@@ -106,6 +110,17 @@ impl Builder<'_> {
         };
     }
 
+    /// A code block's closing line break is not an empty last line.
+    fn end_code(&mut self) {
+        let kept = self.text.trim_end_matches('\n').len();
+        self.text.truncate(kept);
+        self.spans.retain(|span| span.range.start < kept);
+        for span in &mut self.spans {
+            span.range.end = span.range.end.min(kept);
+        }
+        self.flush();
+    }
+
     fn append(&mut self, value: &str, code: bool) {
         let mut remaining = value;
         while !remaining.is_empty() && !self.stopped && !(self.cancelled)() {
@@ -128,7 +143,7 @@ impl Builder<'_> {
                 italic: self.italic > 0,
                 strike: self.strike > 0,
                 link: self.links > 0,
-                code,
+                code: code || self.code > 0,
                 ..Default::default()
             });
             remaining = &remaining[end..];
@@ -159,6 +174,8 @@ pub(super) fn parse_progressively(
         italic: 0,
         strike: 0,
         links: 0,
+        code: 0,
+        html_code: false,
         lists: Vec::new(),
         quote_depth: 0,
         language: String::new(),
@@ -258,10 +275,10 @@ pub(super) fn parse_progressively(
                 builder.bold = builder.bold.saturating_sub(1);
             }
             Event::End(TagEnd::TableCell) => builder.append("\t", false),
+            Event::End(TagEnd::CodeBlock) => builder.end_code(),
             Event::End(
                 TagEnd::Paragraph
                 | TagEnd::Heading(_)
-                | TagEnd::CodeBlock
                 | TagEnd::Item
                 | TagEnd::TableRow,
             ) => builder.flush(),
@@ -284,8 +301,30 @@ pub(super) fn parse_progressively(
                 builder.kind = Kind::Rule;
                 builder.flush();
             }
-            // Raw HTML is displayed literally; it is never interpreted or executed.
-            Event::Html(value) | Event::InlineHtml(value) => builder.append(&value, true),
+            // Code elements are rendered as code; other raw HTML is displayed
+            // literally. Nothing is ever interpreted or executed.
+            Event::InlineHtml(value) => match html_code_tag(&value) {
+                Some(true) => builder.code += 1,
+                Some(false) => builder.code = builder.code.saturating_sub(1),
+                None => builder.append(&value, true),
+            },
+            Event::Html(value) => {
+                if let Some(text) = html_code_block(&value, builder.html_code) {
+                    if !builder.html_code {
+                        builder.html_code = true;
+                        builder.flush();
+                        builder.kind = Kind::Code;
+                        builder.language.clear();
+                    }
+                    builder.append(&text, false);
+                } else {
+                    builder.append(&value, true);
+                }
+            }
+            Event::End(TagEnd::HtmlBlock) if builder.html_code => {
+                builder.html_code = false;
+                builder.end_code();
+            }
             _ => {}
         }
     }
@@ -293,6 +332,49 @@ pub(super) fn parse_progressively(
     if !builder.stopped && !cancelled() && !builder.blocks.is_empty() {
         (builder.publish)(builder.blocks);
     }
+}
+
+const CODE_TAGS: [&str; 5] = ["code", "kbd", "samp", "tt", "var"];
+
+/// `Some(true)` opens and `Some(false)` closes an inline code element.
+fn html_code_tag(value: &str) -> Option<bool> {
+    let inner = value.trim().strip_prefix('<')?.strip_suffix('>')?;
+    let (closing, inner) = match inner.strip_prefix('/') {
+        Some(rest) => (true, rest),
+        None => (false, inner),
+    };
+    let name = inner.split(|c: char| c.is_whitespace() || c == '/').next()?;
+    (CODE_TAGS.iter().any(|tag| name.eq_ignore_ascii_case(tag)) && !inner.ends_with('/'))
+        .then_some(!closing)
+}
+
+/// A line of an HTML block opened by `<pre>`, tags removed
+/// and the common entities decoded; `None` for any other HTML block.
+fn html_code_block(value: &str, continued: bool) -> Option<String> {
+    if !continued && !value.trim_start().to_ascii_lowercase().starts_with("<pre") {
+        return None;
+    }
+    let mut text = String::with_capacity(value.len());
+    let mut rest = value;
+    while let Some(start) = rest.find('<') {
+        text.push_str(&rest[..start]);
+        let tail = &rest[start..];
+        let end = tail.find('>').map(|end| end + 1).unwrap_or(tail.len());
+        let tag = tail[1..end.saturating_sub(1).max(1)].trim_start_matches('/');
+        let name = tag.split(|c: char| c.is_whitespace() || c == '/').next().unwrap_or("");
+        if !(name.eq_ignore_ascii_case("pre") || CODE_TAGS.iter().any(|code| name.eq_ignore_ascii_case(code))) {
+            text.push_str(&tail[..end]);
+        }
+        rest = &tail[end..];
+    }
+    text.push_str(rest);
+    Some(
+        text.replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace("&amp;", "&"),
+    )
 }
 
 #[cfg(test)]

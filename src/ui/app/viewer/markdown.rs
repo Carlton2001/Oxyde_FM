@@ -205,10 +205,7 @@ impl Viewer {
                         3 => 1.125,
                         _ => 1.0,
                     })),
-                Kind::Code => frame
-                    .font_family("JetBrains Mono")
-                    .text_size(rems(0.8125))
-                    .bg(theme.sidebar),
+                Kind::Code => frame.py(rems(0.5)),
                 Kind::Quote => frame
                     .border_l(rems(0.1875))
                     .border_color(theme.border)
@@ -251,8 +248,39 @@ impl Viewer {
                     )
                 })
                 .collect::<Vec<_>>();
+            // Inline code reads in the monospace face, like fenced blocks.
+            let mut monospace: Vec<(std::ops::Range<usize>, SharedString)> = Vec::new();
+            if !matches!(block.kind, Kind::Code) {
+                for span in block.spans.iter().filter(|span| span.code) {
+                    match monospace.last_mut() {
+                        Some((range, _)) if range.end == span.range.start => range.end = span.range.end,
+                        _ => monospace.push((span.range.clone(), "JetBrains Mono".into())),
+                    }
+                }
+            }
+            let text = StyledText::new(block.text.clone())
+                .with_highlights(highlights)
+                .with_font_family_overrides(monospace);
+            if matches!(block.kind, Kind::Code) {
+                // A fenced block reads as its own framed, monospace panel.
+                return frame
+                    .child(
+                        div()
+                            .w_full()
+                            .px(rems(0.875))
+                            .py(rems(0.625))
+                            .rounded(rems(0.375))
+                            .border(rems(0.0625))
+                            .border_color(theme.border)
+                            .bg(theme.sidebar)
+                            .font_family("JetBrains Mono")
+                            .text_size(rems(0.8125))
+                            .child(text),
+                    )
+                    .into_any_element();
+            }
             frame
-                .child(StyledText::new(block.text.clone()).with_highlights(highlights))
+                .child(text)
                 .into_any_element()
         })
         .size_full()

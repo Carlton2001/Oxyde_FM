@@ -1,6 +1,6 @@
 //! Worker side: plays the file, applies commands, reports and sends frames.
 use super::super::linux_gstreamer::{Player, PAUSED, PLAYING};
-use super::super::viewer_media::{encode_media_report, MEDIA_ENDED, MEDIA_FAILED, MEDIA_LOADING, MEDIA_PAUSED, MEDIA_PLAYING};
+use super::super::viewer_media::{encode_media_info, encode_media_report, MEDIA_ENDED, MEDIA_FAILED, MEDIA_LOADING, MEDIA_PAUSED, MEDIA_PLAYING};
 use super::{Command, FRAME, MAX_SIDE, REPORT};
 use std::ffi::{CStr, CString};
 use std::io::{self, Read, Write};
@@ -87,6 +87,9 @@ pub(in crate::platform) fn run(path: &Path) -> io::Result<()> {
         if let Some(error) = events.error {
             log::warn!("Viewer media worker: {error}");
             return report(MEDIA_FAILED, position.as_millis() as u64, 0, size, applied_seek, &mut output);
+        }
+        if let Some(info) = events.info {
+            packet(REPORT, &[&encode_media_info(&info), &applied_seek.to_le_bytes()], &mut output)?;
         }
         loaded |= events.settled;
         ended |= events.ended;

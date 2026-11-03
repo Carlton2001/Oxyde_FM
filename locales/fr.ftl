@@ -779,6 +779,10 @@ audio-no-tags = Aucun tag disponible
 audio-album = Album
 audio-track = Piste
 audio-year = Année
+audio-mono = Mono
+audio-stereo = Stéréo
+audio-channels = { $count } canaux
+video-frame-rate = { $rate } IPS
 
 
 quick-search-content-skipped =

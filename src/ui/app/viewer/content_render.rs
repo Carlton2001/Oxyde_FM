@@ -141,11 +141,36 @@ impl Viewer {
                 let highlighting = self.syntax_highlighting
                     && !self.file.as_ref().is_some_and(|file| super::markdown::is_markdown(&file.path));
                 let gutter = text.gutter_width();
-                let body = list(text.list.clone(), move |index, _, cx| {
+                let selection = text.selection.map(|selection| selection.range());
+                let advance = text.advance;
+                let rows_handle = handle.clone();
+                let body = list(text.list.clone(), move |index, window, cx| {
+                    let rem = window.rem_size();
+                    let selected = selection.as_ref().and_then(|range| rows.selected_columns(index, range));
+                    let (press, drag) = (rows_handle.clone(), rows_handle.clone());
                     div()
+                        .id(("viewer-text-row", index))
+                        .relative()
                         .w_full()
                         .h(ROW_HEIGHT)
                         .px(TEXT_PADDING)
+                        .cursor(CursorStyle::IBeam)
+                        .on_mouse_down(MouseButton::Left, move |event: &MouseDownEvent, window, cx| {
+                            let _ = press.update(cx, |this, cx| {
+                                this.text_pointer(index, event.position, true, event.modifiers.shift, window, cx)
+                            });
+                        })
+                        .on_mouse_move(move |event: &MouseMoveEvent, window, cx| {
+                            if event.pressed_button == Some(MouseButton::Left) {
+                                let _ = drag.update(cx, |this, cx| this.text_pointer(index, event.position, false, false, window, cx));
+                            }
+                        })
+                        .when_some(selected, |row, (start, end, past_end)| {
+                            // Behind the text, so syntax colors stay readable.
+                            let left = (TEXT_PADDING + gutter).to_pixels(rem) + advance * start as f32;
+                            let width = advance * (end - start) as f32 + if past_end { advance / 2.0 } else { px(0.0) };
+                            row.child(div().absolute().top_0().bottom_0().left(left).w(width).bg(theme.accent.opacity(0.35)))
+                        })
                         .flex()
                         .items_center()
                         .overflow_hidden()
@@ -179,7 +204,14 @@ impl Viewer {
                                 .child(cx.i18n().text(Message::ViewerTextTruncated)),
                         )
                     })
-                    .child(div().flex_1().min_h_0().child(body))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_h_0()
+                            .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, _| this.text_pointer_released()))
+                            .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _, _, _| this.text_pointer_released()))
+                            .child(body),
+                    )
                     .into_any_element()
             }
             Content::Document(blocks, state) => {

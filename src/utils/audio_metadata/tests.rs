@@ -45,7 +45,10 @@ fn reads_unicode_tags_and_bgra_front_cover() {
 #[test]
 fn missing_tags_and_invalid_picture_keep_metadata_readable() {
     let file = wav();
-    assert!(read(file.reopen().unwrap()).unwrap().tags.is_empty());
+    let bare = read(file.reopen().unwrap()).unwrap();
+    assert!(bare.tags.is_empty());
+    assert_eq!(bare.format.codec.as_deref(), Some("WAV"));
+    assert_eq!((bare.format.sample_rate, bare.format.bit_depth, bare.format.channels), (Some(44100), Some(16), Some(1)));
     let mut tag = Tag::new(TagType::Id3v2);
     tag.insert_text(ItemKey::AlbumTitle, "Album".into());
     tag.push_picture(
@@ -72,6 +75,7 @@ fn rejects_invalid_cover_pixels_and_excessive_tags() {
             height: 1,
             pixels: vec![0; 2052],
         }),
+        ..Default::default()
     };
     assert!(metadata.validate().is_err());
     metadata.cover = Some(Cover {

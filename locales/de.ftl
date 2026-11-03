@@ -1079,6 +1079,10 @@ audio-no-tags = Keine Tags verfügbar
 audio-album = Album
 audio-track = Titelnummer
 audio-year = Jahr
+audio-mono = Mono
+audio-stereo = Stereo
+audio-channels = { $count } Kanäle
+video-frame-rate = { $rate } fps
 
 
 quick-search-content-skipped =

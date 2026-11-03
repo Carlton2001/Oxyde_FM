@@ -2,7 +2,7 @@
 //! itself and sends video frames on its clock, which the UI paints, as Wayland gives
 //! GPUI no way to place a foreign surface. This module is the parent side.
 use super::linux_worker::Worker;
-use super::viewer_media::{decode_media_report, ViewerMediaControl, MEDIA_FAILED, MEDIA_REPORT_BYTES};
+use super::viewer_media::{decode_media_info, decode_media_report, ViewerMediaControl, MEDIA_FAILED, MEDIA_REPORT_BYTES};
 use std::io;
 use std::path::Path;
 use std::sync::atomic::Ordering;
@@ -101,6 +101,11 @@ fn receive(worker: &mut Worker, control: &ViewerMediaControl, seek_id: u32) -> i
             let mut packet = [0; MEDIA_REPORT_BYTES + 4];
             worker.read_exact(&mut packet, deadline)?;
             let report: &[u8; MEDIA_REPORT_BYTES] = packet[..MEDIA_REPORT_BYTES].try_into().unwrap();
+            if report[0] == super::viewer_media::MEDIA_INFO {
+                let info = decode_media_info(report).ok_or_else(|| io::Error::other("Invalid media info"))?;
+                control.set_info(info);
+                return Ok(());
+            }
             let (status, position, duration, [width, height]) =
                 decode_media_report(report).ok_or_else(|| io::Error::other("Invalid media report"))?;
             control.status.store(status, Ordering::Release);

@@ -22,6 +22,10 @@ pub enum Message {
     AudioNoTags,
     AudioAlbum,
     AudioTrack,
+    AudioMono,
+    AudioStereo,
+    AudioChannels,
+    VideoFrameRate,
     ViewerTitle,
     ViewerVisualPaused,
     ViewerFileUnavailable,
@@ -892,6 +896,10 @@ impl Message {
             Self::AudioNoTags => "audio-no-tags",
             Self::AudioAlbum => "audio-album",
             Self::AudioTrack => "audio-track",
+            Self::AudioMono => "audio-mono",
+            Self::AudioStereo => "audio-stereo",
+            Self::AudioChannels => "audio-channels",
+            Self::VideoFrameRate => "video-frame-rate",
             Self::ViewerTitle => "viewer-title",
             Self::ViewerVisualPaused => "viewer-visual-paused",
             Self::ViewerFileUnavailable => "viewer-file-unavailable",
@@ -1520,6 +1528,10 @@ mod tests {
                 Message::AudioNoTags,
                 Message::AudioAlbum,
                 Message::AudioTrack,
+                Message::AudioMono,
+                Message::AudioStereo,
+                Message::AudioChannels,
+                Message::VideoFrameRate,
                 Message::ViewerTitle,
                 Message::ViewerVisualPaused,
                 Message::ViewerFileUnavailable,
@@ -2231,6 +2243,7 @@ mod tests {
             args.set("locations", "C:/école/récupération");
             args.set("applications", "nautilus");
             args.set("size", "487 Go");
+            args.set("rate", "23,976");
             for message in messages {
                 let pattern = i18n
                     .active

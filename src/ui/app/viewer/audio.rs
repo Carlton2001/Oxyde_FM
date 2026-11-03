@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 pub(super) struct Audio {
     tags: Vec<(String, String)>,
+    format: oxyde_lib::utils::audio_metadata::AudioFormat,
     pub(super) cover: Option<Arc<RenderImage>>,
 }
 
@@ -34,6 +35,7 @@ impl Viewer {
             });
             Ok(Audio {
                 tags: metadata.tags,
+                format: metadata.format,
                 cover,
             })
         });
@@ -54,6 +56,7 @@ impl Viewer {
             (Some(number), Some(total)) => format!("{number} / {total}"),
             (number, _) => number.unwrap_or("—").to_owned(),
         };
+        let artist = value(&["AlbumArtist", "TrackArtist"]);
         let date = value(&["Year", "RecordingDate", "ReleaseDate"]).unwrap_or("—");
         let year = date
             .get(..4)
@@ -115,28 +118,55 @@ impl Viewer {
                             .text_size(rems(1.25))
                             .font_weight(FontWeight::SEMIBOLD)
                             .child(title.to_owned()),
-                    ),
+                    )
+                    .when_some(artist, |block, artist| {
+                        block.child(
+                            div()
+                                .w_full()
+                                .whitespace_normal()
+                                .text_color(theme.text_muted)
+                                .child(artist.to_owned()),
+                        )
+                    }),
             )
-            .child(
-                div()
+            .child({
+                let row = div()
                     .w_full()
                     .flex()
                     .border_t(rems(0.0625))
-                    .border_color(theme.border)
-                    .child(audio_cell(
+                    .border_color(theme.border);
+                // Without tags the row states it rather than three empty columns.
+                if audio.is_some_and(|audio| audio.tags.is_empty()) {
+                    row.justify_center()
+                        .px(rems(0.75))
+                        .py(rems(0.875))
+                        .text_color(theme.text_muted)
+                        .child(cx.i18n().text(Message::AudioNoTags))
+                } else {
+                    row.child(audio_cell(
                         Message::AudioAlbum,
                         value(&["AlbumTitle"]).unwrap_or("—").to_owned(),
                         true,
                         cx,
                     ))
                     .child(audio_cell(Message::AudioTrack, track, true, cx))
-                    .child(audio_cell(Message::AudioYear, year.to_owned(), false, cx)),
-            );
+                    .child(audio_cell(Message::AudioYear, year.to_owned(), false, cx))
+                }
+            });
         let failed = self
             .media
             .as_ref()
             .is_some_and(|media| media.control.status() == oxyde_lib::platform::MEDIA_FAILED);
+        let handle = cx.entity().downgrade();
+        // The player's rectangle keeps previous/next presses off its controls.
+        let measure = canvas(|_, _, _| (), move |bounds, _, _, cx| {
+            let _ = handle.update(cx, |this, cx| this.set_overlay_media(bounds, cx));
+        })
+        .absolute()
+        .inset_0();
+        let labels = audio.map(|audio| format_labels(&audio.format, cx)).unwrap_or_default();
         let mut player = div()
+            .relative()
             .w_full()
             .max_w(rems(32.0))
             .flex_none()
@@ -145,6 +175,7 @@ impl Viewer {
             .gap(rems(0.75))
             .my_auto()
             .mx_auto()
+            .child(measure)
             .child(card)
             .when(failed, |player| player.child(self.unavailable_file_notice(cx).w_full()))
             .when(self.native_media && !failed, |player| {
@@ -158,16 +189,10 @@ impl Viewer {
                         .child(self.render_media_bar(cx).border_t_0()),
                 )
             });
-        if let Some(audio) = audio {
-            if audio.tags.is_empty() {
-                player = player.child(
-                    div()
-                        .text_center()
-                        .text_color(theme.text_muted)
-                        .child(cx.i18n().text(Message::AudioNoTags)),
-                );
-            }
-        } else if matches!(self.content, Content::Loading) {
+        if !labels.is_empty() {
+            player = player.child(super::media_labels::row(labels, cx));
+        }
+        if audio.is_none() && matches!(self.content, Content::Loading) {
             player = player.child(
                 div()
                     .text_center()
@@ -202,6 +227,18 @@ impl Audio {
                 .map(|(_, value)| value.as_str())
         })
     }
+}
+
+/// Technical labels: codec, bitrate, sample rate, bit depth and channels.
+fn format_labels(format: &oxyde_lib::utils::audio_metadata::AudioFormat, cx: &App) -> Vec<SharedString> {
+    use super::media_labels::{channels, sample_rate};
+    let mut labels: Vec<SharedString> = Vec::new();
+    labels.extend(format.codec.clone().map(SharedString::from));
+    labels.extend(format.bitrate.map(|rate| format!("{rate} kb/s").into()));
+    labels.extend(format.sample_rate.map(|rate| sample_rate(rate, cx)));
+    labels.extend(format.bit_depth.map(|depth| format!("{depth} bit").into()));
+    labels.extend(format.channels.map(|count| channels(count, cx)));
+    labels
 }
 
 fn audio_cell(label: Message, value: String, separator: bool, cx: &App) -> Div {

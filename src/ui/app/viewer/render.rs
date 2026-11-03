@@ -153,6 +153,13 @@ impl Render for Viewer {
                     cx.stop_propagation();
                     return;
                 }
+                if event.keystroke.modifiers.secondary()
+                    && !event.keystroke.modifiers.alt
+                    && this.text_shortcut(event.keystroke.key.as_str(), cx)
+                {
+                    cx.stop_propagation();
+                    return;
+                }
                 if event.keystroke.modifiers.control || event.keystroke.modifiers.alt {
                     return;
                 }

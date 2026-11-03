@@ -29,6 +29,8 @@ use windows::{
     },
 };
 
+mod info;
+
 const DEADLINE: Duration = Duration::from_secs(15);
 
 pub(super) fn supervise(path: &Path, control: &ViewerMediaControl) -> io::Result<()> {
@@ -91,6 +93,12 @@ fn supervise_in(executable: &Path, path: &Path, control: &ViewerMediaControl) ->
                 let report: [u8; MEDIA_REPORT_BYTES] =
                     pending[..MEDIA_REPORT_BYTES].try_into().expect("report length");
                 pending.drain(..MEDIA_REPORT_BYTES);
+                if report[0] == super::viewer_media::MEDIA_INFO {
+                    let info = super::viewer_media::decode_media_info(&report)
+                        .ok_or_else(|| io::Error::other("Invalid media worker info"))?;
+                    control.set_info(info);
+                    continue;
+                }
                 let (status, position, duration, dimensions) = decode_media_report(&report)
                     .ok_or_else(|| io::Error::other("Invalid media worker status"))?;
                 control.status.store(status, Ordering::Release);
@@ -382,6 +390,8 @@ pub(super) fn run(path: &Path) -> io::Result<()> {
         let mut has_video = false;
         let mut checked_video = false;
         let mut applied_seek = 0;
+        // Read once the engine has opened the file, so a failed open reports first.
+        let mut info_sent = false;
         while !closed.load(Ordering::Acquire) {
             let mut message = MSG::default();
             while PeekMessageW(&mut message, None, 0, 0, PM_REMOVE).as_bool() {
@@ -490,6 +500,11 @@ pub(super) fn run(path: &Path) -> io::Result<()> {
                     player.engine.Play().map_err(native)?;
                 }
                 paused = command.paused;
+            }
+            if checked_video && !info_sent {
+                info_sent = true;
+                output.write_all(&super::viewer_media::encode_media_info(&info::read(path)))?;
+                output.flush()?;
             }
             if heartbeat.elapsed() >= Duration::from_millis(100) {
                 let (position, duration) = player.progress();

@@ -6,6 +6,7 @@
 use super::{content::Content, Viewer};
 use gpui::*;
 use std::sync::Arc;
+mod selection;
 mod syntax;
 
 pub(super) fn code_highlights(language: &str, text: &str) -> Vec<(std::ops::Range<usize>, u8)> {
@@ -38,6 +39,10 @@ pub(super) struct TextFile {
     pub(super) truncated: bool,
     pub(super) list: ListState,
     row_height: Pixels,
+    /// Width of one monospace column, measured with the wrap.
+    pub(super) advance: Pixels,
+    pub(super) selection: Option<selection::Selection>,
+    selecting: bool,
 }
 
 /// Columns a character occupies in a monospace font (wide East Asian
@@ -230,6 +235,9 @@ impl Viewer {
                     wrapping: None,
                     truncated,
                     row_height: px(0.0),
+                    advance: px(0.0),
+                    selection: None,
+                    selecting: false,
                 })
             },
             cx,
@@ -260,6 +268,7 @@ impl Viewer {
             .advance(system.resolve_font(&font), TEXT_SIZE.to_pixels(rem), 'm')
             .map(|size| size.width)
             .unwrap_or(TEXT_SIZE.to_pixels(rem) * 0.6);
+        text.advance = advance;
         let usable = width - TEXT_PADDING.to_pixels(rem) * 2.0 - text.gutter_width().to_pixels(rem);
         let columns = ((usable / advance).floor() as usize).max(1);
         if text.columns == columns || text.wrapping.as_ref().is_some_and(|(pending, _)| *pending == columns) {

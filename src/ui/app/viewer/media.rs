@@ -187,7 +187,7 @@ impl Viewer {
                 })
                 .detach();
             cx.spawn(async move |this, cx| {
-                let mut previous = (MEDIA_LOADING, u64::MAX, u64::MAX, 0);
+                let mut previous = (MEDIA_LOADING, u64::MAX, u64::MAX, 0, false);
                 while !control.is_cancelled() {
                     let timer = cx.background_executor().timer(std::time::Duration::from_millis(80));
                     let frame_ready = control.frame_ready.notified();
@@ -206,7 +206,7 @@ impl Viewer {
                     }
                     let status = control.status();
                     // The progress bar moves in quarter seconds.
-                    let current = (status, control.position_ms() / 250, control.duration_ms(), control.video_dimensions.load(Ordering::Acquire));
+                    let current = (status, control.position_ms() / 250, control.duration_ms(), control.video_dimensions.load(Ordering::Acquire), control.info().is_some());
                     if current != previous {
                         previous = current;
                         if this.update(cx, |_, cx| cx.notify()).is_err() {

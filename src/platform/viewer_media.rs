@@ -41,6 +41,72 @@ pub fn decode_media_report(report: &[u8; MEDIA_REPORT_BYTES]) -> Option<(u8, u64
     Some((status, position, duration, [u32::from_le_bytes(report[17..21].try_into().ok()?), u32::from_le_bytes(report[21..25].try_into().ok()?)]))
 }
 
+/// A report slot carrying `MediaInfo` instead of progress, sent once streams are known.
+pub const MEDIA_INFO: u8 = b'I';
+
+/// Codecs both platforms recognize; anything else stays unnamed.
+pub const VIDEO_CODECS: [&str; 12] = ["H.264", "HEVC", "VP8", "VP9", "AV1", "MPEG-4", "MPEG-2", "MPEG-1", "WMV", "ProRes", "MJPEG", "Theora"];
+pub const AUDIO_CODECS: [&str; 13] = ["AAC", "MP3", "AC-3", "E-AC-3", "Opus", "Vorbis", "FLAC", "PCM", "DTS", "WMA", "ALAC", "MP2", "TrueHD"];
+
+/// Technical description of the playing file. Codecs are 1-based indices into
+/// `VIDEO_CODECS`/`AUDIO_CODECS`, 0 when absent or unknown.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MediaInfo {
+    pub video_codec: u8,
+    pub audio_codec: u8,
+    /// Frames per thousand seconds; 0 when unknown.
+    pub frame_rate_milli: u32,
+    pub sample_rate: u32,
+    pub channels: u8,
+}
+
+impl MediaInfo {
+    pub fn video_codec_name(&self) -> Option<&'static str> {
+        VIDEO_CODECS.get(usize::from(self.video_codec).checked_sub(1)?).copied()
+    }
+    pub fn audio_codec_name(&self) -> Option<&'static str> {
+        AUDIO_CODECS.get(usize::from(self.audio_codec).checked_sub(1)?).copied()
+    }
+}
+
+pub fn video_codec_index(name: &str) -> u8 {
+    VIDEO_CODECS.iter().position(|codec| *codec == name).map_or(0, |index| index as u8 + 1)
+}
+
+pub fn audio_codec_index(name: &str) -> u8 {
+    AUDIO_CODECS.iter().position(|codec| *codec == name).map_or(0, |index| index as u8 + 1)
+}
+
+pub fn encode_media_info(info: &MediaInfo) -> [u8; MEDIA_REPORT_BYTES] {
+    let mut report = [0; MEDIA_REPORT_BYTES];
+    report[0] = MEDIA_INFO;
+    report[1] = info.video_codec;
+    report[2] = info.audio_codec;
+    report[3..7].copy_from_slice(&info.frame_rate_milli.to_le_bytes());
+    report[7..11].copy_from_slice(&info.sample_rate.to_le_bytes());
+    report[11] = info.channels;
+    report
+}
+
+/// `None` for a progress report or values out of range.
+pub fn decode_media_info(report: &[u8; MEDIA_REPORT_BYTES]) -> Option<MediaInfo> {
+    if report[0] != MEDIA_INFO {
+        return None;
+    }
+    let info = MediaInfo {
+        video_codec: report[1],
+        audio_codec: report[2],
+        frame_rate_milli: u32::from_le_bytes(report[3..7].try_into().ok()?),
+        sample_rate: u32::from_le_bytes(report[7..11].try_into().ok()?),
+        channels: report[11],
+    };
+    (usize::from(info.video_codec) <= VIDEO_CODECS.len()
+        && usize::from(info.audio_codec) <= AUDIO_CODECS.len()
+        && info.frame_rate_milli <= 1_000_000
+        && info.sample_rate <= 1_000_000)
+        .then_some(info)
+}
+
 pub const MEDIA_LOADING: u8 = 0;
 pub const MEDIA_PLAYING: u8 = b'P';
 pub const MEDIA_PAUSED: u8 = b'A';
@@ -59,6 +125,8 @@ pub struct ViewerMediaControl {
     /// BGRA, which the UI takes and paints itself once notified.
     pub frame: Mutex<Option<image::RgbaImage>>,
     pub frame_ready: tokio::sync::Notify,
+    /// Codecs and rates, once the worker has identified the streams.
+    pub info: Mutex<Option<MediaInfo>>,
     supervisor: Mutex<Option<std::thread::Thread>>,
 }
 
@@ -87,6 +155,14 @@ impl ViewerMediaControl {
     }
     pub fn position_ms(&self) -> u64 {
         self.position_ms.load(Ordering::Acquire)
+    }
+    pub fn info(&self) -> Option<MediaInfo> {
+        self.info.lock().ok().and_then(|info| *info)
+    }
+    pub(crate) fn set_info(&self, info: MediaInfo) {
+        if let Ok(mut slot) = self.info.lock() {
+            *slot = Some(info);
+        }
     }
     /// Zero until the duration is known.
     pub fn duration_ms(&self) -> u64 {

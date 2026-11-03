@@ -5,6 +5,7 @@ mod audio;
 mod content_render;
 mod media;
 mod media_bar;
+mod media_labels;
 mod media_overlay;
 mod video_layout;
 mod fullscreen_controls;

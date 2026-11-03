@@ -28,6 +28,7 @@ const MESSAGE_ERROR: u32 = 1 << 1;
 const MESSAGE_ASYNC_DONE: u32 = 1 << 21;
 const MESSAGE_STREAMS_SELECTED: u32 = (1 << 31) + 5;
 // GstStreamType, GstFormat, GstSeekFlags (flush, key unit, nearest), GstMapFlags.
+const STREAM_AUDIO: u32 = 1 << 1;
 const STREAM_VIDEO: u32 = 1 << 2;
 const TIME: i32 = 3;
 const SEEK: i32 = 1 | 4 | 32 | 64;
@@ -106,6 +107,86 @@ pub(super) struct Events {
     pub settled: bool,
     /// Once playbin3 has chosen its streams, whether one of them is a video.
     pub video: Option<bool>,
+    /// Codecs and rates of the selected streams, read from their caps.
+    pub info: Option<crate::platform::MediaInfo>,
+}
+
+/// Codec name of a compressed stream's caps, as `MediaInfo` lists it.
+pub(super) fn codec_name(media_type: &str, mpeg_version: Option<i32>, layer: Option<i32>) -> Option<&'static str> {
+    Some(match media_type {
+        "video/x-h264" => "H.264",
+        "video/x-h265" => "HEVC",
+        "video/x-vp8" => "VP8",
+        "video/x-vp9" => "VP9",
+        "video/x-av1" => "AV1",
+        "video/x-divx" | "video/x-xvid" => "MPEG-4",
+        "video/mpeg" => match mpeg_version? {
+            4 => "MPEG-4",
+            2 => "MPEG-2",
+            1 => "MPEG-1",
+            _ => return None,
+        },
+        "video/x-wmv" => "WMV",
+        "video/x-prores" => "ProRes",
+        "image/jpeg" => "MJPEG",
+        "video/x-theora" => "Theora",
+        "audio/mpeg" => match (mpeg_version?, layer) {
+            (2 | 4, _) => "AAC",
+            (1, Some(3) | None) => "MP3",
+            (1, Some(2)) => "MP2",
+            _ => return None,
+        },
+        "audio/x-ac3" => "AC-3",
+        "audio/x-eac3" => "E-AC-3",
+        "audio/x-opus" => "Opus",
+        "audio/x-vorbis" => "Vorbis",
+        "audio/x-flac" => "FLAC",
+        "audio/x-raw" => "PCM",
+        "audio/x-dts" => "DTS",
+        "audio/x-wma" => "WMA",
+        "audio/x-alac" => "ALAC",
+        "audio/x-true-hd" => "TrueHD",
+        _ => return None,
+    })
+}
+
+/// Reads one selected stream's caps into `info`.
+///
+/// # Safety
+/// `stream` is a live `GstStream`.
+unsafe fn describe_stream(gst: &Gst, stream: Object, info: &mut crate::platform::MediaInfo) {
+    use super::viewer_media::{audio_codec_index, video_codec_index};
+    // SAFETY: the caller's live stream; the caps reference is released below.
+    unsafe {
+        let kind = (gst.gst_stream_get_stream_type)(stream);
+        let caps = (gst.gst_stream_get_caps)(stream);
+        if caps.is_null() {
+            return;
+        }
+        let structure = (gst.gst_caps_get_structure)(caps, 0);
+        let name = (!structure.is_null()).then(|| (gst.gst_structure_get_name)(structure)).filter(|name| !name.is_null());
+        if let Some(name) = name {
+            let media_type = CStr::from_ptr(name).to_string_lossy();
+            let int = |field: &CStr| {
+                let mut value = 0;
+                ((gst.gst_structure_get_int)(structure, field.as_ptr(), &mut value) != 0).then_some(value)
+            };
+            let codec = codec_name(&media_type, int(c"mpegversion"), int(c"layer"));
+            if kind & STREAM_VIDEO != 0 && info.video_codec == 0 {
+                info.video_codec = codec.map_or(0, video_codec_index);
+                let (mut numerator, mut denominator) = (0, 0);
+                if (gst.gst_structure_get_fraction)(structure, c"framerate".as_ptr(), &mut numerator, &mut denominator) != 0
+                    && numerator > 0 && denominator > 0 {
+                    info.frame_rate_milli = (i64::from(numerator) * 1000 / i64::from(denominator)).clamp(0, 1_000_000) as u32;
+                }
+            } else if kind & STREAM_AUDIO != 0 && info.audio_codec == 0 {
+                info.audio_codec = codec.map_or(0, audio_codec_index);
+                info.sample_rate = int(c"rate").filter(|rate| (1..=1_000_000).contains(rate)).unwrap_or(0) as u32;
+                info.channels = int(c"channels").filter(|channels| (1..=255).contains(channels)).unwrap_or(0) as u8;
+            }
+        }
+        (gst.gst_mini_object_unref)(caps);
+    }
 }
 
 /// A decoded frame, released when dropped.
@@ -270,14 +351,19 @@ impl Player {
                     MESSAGE_EOS => events.ended = true,
                     MESSAGE_ASYNC_DONE => events.settled = true,
                     MESSAGE_STREAMS_SELECTED => {
-                        events.video = Some((0..(gst.gst_message_streams_selected_get_size)(message)).any(|index| {
+                        let mut video = false;
+                        let mut info = crate::platform::MediaInfo::default();
+                        for index in 0..(gst.gst_message_streams_selected_get_size)(message) {
                             let stream = (gst.gst_message_streams_selected_get_stream)(message, index);
-                            let video = !stream.is_null() && (gst.gst_stream_get_stream_type)(stream) & STREAM_VIDEO != 0;
-                            if !stream.is_null() {
-                                (gst.gst_object_unref)(stream);
+                            if stream.is_null() {
+                                continue;
                             }
-                            video
-                        }));
+                            video |= (gst.gst_stream_get_stream_type)(stream) & STREAM_VIDEO != 0;
+                            describe_stream(gst, stream, &mut info);
+                            (gst.gst_object_unref)(stream);
+                        }
+                        events.video = Some(video);
+                        events.info = Some(info);
                     }
                     _ => {}
                 }

@@ -1079,6 +1079,10 @@ audio-no-tags = No hay etiquetas disponibles
 audio-album = Álbum
 audio-track = Pista
 audio-year = Año
+audio-mono = Mono
+audio-stereo = Estéreo
+audio-channels = { $count } canales
+video-frame-rate = { $rate } fps
 
 
 quick-search-content-skipped =

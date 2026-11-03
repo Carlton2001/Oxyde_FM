@@ -106,7 +106,7 @@ fn progressive_batches_preserve_large_styled_blocks_and_fences() {
             .filter(|block| matches!(block.kind, Kind::Code))
             .map(|block| block.text.as_str())
             .collect::<String>(),
-        code
+        code.trim_end_matches('\n')
     );
     assert_eq!(blocks.last().unwrap().text, "Fin");
     for block in &blocks {
@@ -165,3 +165,29 @@ fn reference_links_and_ordered_lists_keep_context_across_batches() {
     assert_eq!(link.text, "link");
     assert!(link.spans.iter().any(|span| span.link));
 }
+
+#[test]
+fn html_code_elements_render_as_code() {
+    let (blocks, _) = parse(
+        "Press <kbd>Ctrl</kbd> then <code>a &lt; b</code> or <b>bold</b>.\n\n<pre><code>fn main() {\n    let x = 1 &lt; 2;\n}\n</code></pre>\n\nAfter",
+        "C:/docs/readme.md",
+    );
+    let inline = &blocks[0];
+    let code: String = inline
+        .spans
+        .iter()
+        .filter(|span| span.code)
+        .map(|span| &inline.text[span.range.clone()])
+        .collect::<Vec<_>>()
+        .concat();
+    assert!(code.contains("Ctrl"));
+    assert!(code.contains("a < b"));
+    assert!(code.contains("<b>"));
+    assert!(!inline.text.contains("<kbd>"));
+    let block = blocks.iter().find(|block| matches!(block.kind, Kind::Code)).expect("code block");
+    assert_eq!(block.text, "fn main() {\n    let x = 1 < 2;\n}");
+    assert_eq!(blocks.last().unwrap().text, "After");
+    assert_eq!(html_code_tag("<br/>"), None);
+    assert_eq!(html_code_tag("</CODE>"), Some(false));
+}
+
