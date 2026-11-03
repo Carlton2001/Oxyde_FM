@@ -15,7 +15,8 @@ pub(super) fn is_audio(file: &oxyde_lib::models::FileEntry) -> bool {
 
 pub(super) fn supports_thumbnail(file: &oxyde_lib::models::FileEntry) -> bool {
     is_audio(file) || matches!(crate::ui::components::icons::get_preview_type(&file.name),
-        crate::ui::components::icons::PreviewType::Image | crate::ui::components::icons::PreviewType::Pdf)
+        crate::ui::components::icons::PreviewType::Image | crate::ui::components::icons::PreviewType::Pdf
+            | crate::ui::components::icons::PreviewType::Video)
 }
 
 struct GridThumbnailAsset;

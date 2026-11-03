@@ -582,6 +582,16 @@ impl Platform for LinuxPlatform {
         super::linux_pdf::run_session(path)
     }
 
+    fn video_grid_thumbnail(&self, path: String) -> Result<image::RgbaImage, crate::models::CommandError> {
+        use crate::utils::preview_protocol::{self, Limits, Reply};
+        let bytes = super::linux_preview::run("video-grid", std::path::Path::new(&path))?;
+        match preview_protocol::decode_with(&bytes, Limits { pixels: 128 * 128 * 4, side: 128 })? {
+            Reply::Images { mut frames, .. } if frames.len() == 1 => Ok(frames.remove(0).into_buffer()),
+            Reply::Error { detail, .. } => Err(crate::models::CommandError::Other(detail)),
+            _ => Err(crate::models::CommandError::Other("Unexpected video thumbnail reply".into())),
+        }
+    }
+
     fn video_frames(
         &self,
         path: String,

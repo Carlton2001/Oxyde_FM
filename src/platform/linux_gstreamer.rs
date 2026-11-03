@@ -32,6 +32,8 @@ const STREAM_AUDIO: u32 = 1 << 1;
 const STREAM_VIDEO: u32 = 1 << 2;
 const TIME: i32 = 3;
 const SEEK: i32 = 1 | 4 | 32 | 64;
+/// Flush, to the key frame at or before the position.
+const SEEK_KEY_BEFORE: i32 = 1 | 4 | 32;
 const MAP_READ: u32 = 1;
 const INT: usize = 6 << 2;
 const UINT: usize = 7 << 2;
@@ -398,6 +400,14 @@ impl Player {
         // SAFETY: a live pipeline and a writable integer.
         let known = unsafe { (self.gst.gst_element_query_duration)(self.pipeline.1, TIME, &mut nanoseconds) } != 0;
         (known && nanoseconds > 0).then(|| Duration::from_nanos(nanoseconds as u64))
+    }
+
+    /// To the key frame at or before the position, as thumbnails need: an accurate
+    /// seek decoded up to four times longer on 4K HEVC drone footage.
+    pub(super) fn seek_key_before(&self, position: Duration) -> bool {
+        let nanoseconds = i64::try_from(position.as_nanos()).unwrap_or(i64::MAX);
+        // SAFETY: a live pipeline.
+        unsafe { (self.gst.gst_element_seek_simple)(self.pipeline.1, TIME, SEEK_KEY_BEFORE, nanoseconds) != 0 }
     }
 
     /// To the nearest key frame, as a progress bar drag needs.

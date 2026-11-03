@@ -224,7 +224,10 @@ fn load_grid_pixels(path: &str, audio: bool, renderer: &SvgRenderer) -> Result<R
     let pdf = Path::new(path)
         .extension()
         .is_some_and(|extension| extension.eq_ignore_ascii_case("pdf"));
-    let key = Key::new(Path::new(path), if audio { "grid-audio-cover-v2" } else if pdf { "grid-pdf" } else { "grid-image" });
+    let video = !audio && matches!(crate::ui::components::icons::get_preview_type(path),
+        crate::ui::components::icons::PreviewType::Video);
+    let kind = if audio { "grid-audio-cover-v2" } else if pdf { "grid-pdf" } else if video { "grid-video-2s" } else { "grid-image" };
+    let key = Key::new(Path::new(path), kind);
     let lease = generation_lock(key.as_ref());
     let _guard = lease.as_ref().map(|lock| lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner));
     let pixels = if let Some(cached) = key.as_ref().and_then(Key::read) {
@@ -234,6 +237,9 @@ fn load_grid_pixels(path: &str, audio: bool, renderer: &SvgRenderer) -> Result<R
         let source = if audio {
             let cover = crate::ui::audio_covers::load_thumbnail(path)?;
             first_frame(&cover).ok_or("Missing audio cover frame")?
+        } else if video {
+            // Hover keeps the first frames, not the one at two seconds.
+            oxyde_lib::platform::platform().video_grid_thumbnail(path.into()).map_err(|error| error.to_string())?
         } else if let Some(image) = crate::ui::components::tooltip::cached_media_pixels(path, pdf) {
             first_frame(&image).ok_or("Missing cached preview frame")?
         } else if pdf {

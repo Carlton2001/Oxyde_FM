@@ -30,6 +30,8 @@ fn run_in(executable: &Path, mode: &str, path: &Path) -> io::Result<Vec<u8>> {
         "image-viewer" => (VIEWER_MEMORY_BYTES, VIEWER_DEADLINE, preview_protocol::VIEWER_MAX_REPLY),
         "audio-cover" | "audio-cover-thumbnail" => (COVER_MEMORY_BYTES, DEADLINE, preview_protocol::MAX_REPLY),
         "audio-metadata" => (MEMORY_BYTES, DEADLINE, audio_metadata::MAX_REPLY),
+        // The hover decoder's ceiling: 4K HEVC references stay in the worker.
+        "video-grid" => (VIEWER_MEMORY_BYTES, DEADLINE, preview_protocol::MAX_REPLY),
         _ => (MEMORY_BYTES, DEADLINE, preview_protocol::MAX_REPLY),
     };
     let mut worker = Worker::start(executable, mode, Some(path), memory)?;
@@ -87,6 +89,7 @@ pub(super) fn reply(mode: &str, path: &Path) -> Reply {
         "office-document" => text(File::open(path).map_err(Into::into).and_then(|file| office_preview::document(file, extension))),
         "office-search" => office_search_reply(path, extension),
         "audio-cover" | "audio-cover-thumbnail" => cover_reply(path, mode == "audio-cover-thumbnail"),
+        "video-grid" => image(super::linux_video::grid_frame(path)),
         _ => super::linux_pdf::decode(mode, path),
     }
 }

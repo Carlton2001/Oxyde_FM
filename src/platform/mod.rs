@@ -568,6 +568,11 @@ pub trait Platform: Send + Sync {
         thumbnails::stream_video_frames_sync(path, on_frame, cancelled)
     }
 
+    /// The grid's video frame, at two seconds or the first of a shorter video.
+    fn video_grid_thumbnail(&self, path: String) -> Result<image::RgbaImage, crate::models::CommandError> {
+        video_thumbnail::grid_frame(path, |path, on_frame| self.video_frames(path, on_frame, Box::new(|| false)))
+    }
+
     fn office_text_preview(&self, path: String) -> Result<String, crate::models::CommandError> {
         thumbnails::get_office_text_preview(path)
     }
@@ -797,6 +802,7 @@ pub use linux_trash::{KdeLimitAction, KdeTrashLimits, TrashRetention};
 #[cfg(target_os = "windows")]
 pub mod network;
 mod thumbnails;
+mod video_thumbnail;
 #[cfg(target_os = "windows")]
 mod windows_disk_images;
 #[cfg(target_os = "windows")]

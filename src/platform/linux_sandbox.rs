@@ -37,7 +37,7 @@ pub(super) enum Profile {
 impl Profile {
     pub(super) fn of(mode: &str) -> Self {
         match mode {
-            "video" => Self::Video,
+            "video" | "video-grid" => Self::Video,
             "viewer-media" => Self::Player,
             "media-registry" => Self::Registry,
             mode if mode.starts_with("pdf") || mode.starts_with("image") => Self::Document,

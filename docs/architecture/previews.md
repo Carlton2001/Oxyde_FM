@@ -113,6 +113,7 @@ The same deferred removal applies to PDF pages evicted during scrolling. Pending
 | PDF pixels | Separate RAM LRU: 32 entries / 64 MiB |
 | Hover decoding | Fixed 1024 px envelope; Gaussian for large images, no intermediate JPEG; native PDF at 1024 px |
 | Grid thumbnail | One frame, 128 px, Triangle; opportunistic reuse of RAM pixels, no preview loaded on miss |
+| Grid video thumbnail | Linux: one-shot `video-grid` worker, paused, key frame at or before 2 s (first frame if shorter), scaled to 128 px by GStreamer. Other platforms: frame on screen at 2 s from the hover decoder. Key `grid-video-2s` |
 | Persisted thumbnail | JPEG quality 75 if opaque, PNG if alpha; 24 KiB per file at most |
 | Windows storage | `oxyde/thumbnails` under the user cache, or portable cache; quota 256 MiB / 4096 entries |
 

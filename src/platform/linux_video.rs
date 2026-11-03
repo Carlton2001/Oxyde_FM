@@ -1,6 +1,6 @@
 //! Muted hover videos through GStreamer, as Totem and the video thumbnailer Nautilus
 //! runs decode them. Decoding stays in a self-worker; `stream` is the parent side.
-use super::linux_gstreamer::{Player, PLAYING, READY};
+use super::linux_gstreamer::{Player, PAUSED, PLAYING, READY};
 use crate::models::CommandError;
 use image::RgbaImage;
 use std::ffi::CStr;
@@ -24,6 +24,47 @@ const OUTPUT: &CStr = c"videoconvert ! videoscale ! \
 /// Pause between loops, as on Windows.
 const LOOP_PAUSE: Duration = Duration::from_millis(200);
 const PULL_TIMEOUT: Duration = Duration::from_millis(100);
+
+/// Grid thumbnails: scaled by playbin's converter straight to the grid's size.
+const GRID_SIDE: u32 = 128;
+const GRID_OUTPUT: &CStr = c"videoconvert ! videoscale ! \
+    video/x-raw,format=BGRA,pixel-aspect-ratio=1/1,width=[1,128],height=[1,128] ! \
+    appsink name=frames sync=false max-buffers=1";
+const GRID_DEADLINE: Duration = Duration::from_secs(10);
+
+/// Worker side: the paused key frame at or before `video_thumbnail::AT`, or the first
+/// frame of a shorter video. Seeking rather than playing the first two seconds.
+pub(super) fn grid_frame(path: &Path) -> Result<RgbaImage, CommandError> {
+    let player = Player::open(path, PLAYER, GRID_OUTPUT, PAUSED)?;
+    let deadline = std::time::Instant::now() + GRID_DEADLINE;
+    let first = preroll(&player, deadline)?;
+    let at = super::video_thumbnail::AT;
+    if player.duration().is_some_and(|duration| duration > at) && player.seek_key_before(at) {
+        // A failed seek still leaves the first frame.
+        if let Ok(frame) = preroll(&player, deadline) {
+            return Ok(frame);
+        }
+    }
+    Ok(first)
+}
+
+fn preroll(player: &Player, deadline: std::time::Instant) -> Result<RgbaImage, CommandError> {
+    loop {
+        let events = player.events();
+        if let Some(error) = events.error {
+            return Err(CommandError::Other(error));
+        }
+        if events.video == Some(false) {
+            return Err(CommandError::Other("No video stream".into()));
+        }
+        if let Some(sample) = player.pull(PULL_TIMEOUT, true) {
+            return Ok(sample.image(GRID_SIDE)?.0);
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(CommandError::Other("Video thumbnail exceeded its deadline".into()));
+        }
+    }
+}
 
 /// Worker side: frames in a loop until `on_frame` declines one.
 pub(super) fn decode(path: &Path, on_frame: &mut dyn FnMut(RgbaImage, Duration) -> bool) -> Result<(), CommandError> {
