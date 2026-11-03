@@ -18,6 +18,11 @@ fn families_cover_case_compound_extensions_and_unknown_files() {
         ("backup.tar.xz", FileFamily::Archives),
         ("photo.HEIC", FileFamily::Images),
         ("installer.MSIX", FileFamily::Applications),
+        ("oxyde-2.0.2-1.fc44.x86_64.rpm", FileFamily::Applications),
+        ("oxyde_2.0.2-1_amd64.DEB", FileFamily::Applications),
+        ("app.flatpakref", FileFamily::Applications),
+        ("tool.snap", FileFamily::Applications),
+        ("oxyde-2.0.2-1-x86_64.pkg.tar.zst", FileFamily::Applications),
         ("report.docx", FileFamily::Documents),
         ("movie.mkv", FileFamily::Video),
         ("music.flac", FileFamily::Audio),
@@ -39,6 +44,15 @@ fn families_cover_case_compound_extensions_and_unknown_files() {
         }),
         FileFamily::Folders
     );
+}
+
+#[test]
+fn linux_packages_show_the_installer_icon() {
+    use crate::ui::components::icons::{get_icon_type, IconType};
+    for name in ["a.rpm", "a.deb", "a.AppImage", "a.flatpak", "a.snap", "a-1-x86_64.pkg.tar.zst"] {
+        assert_eq!(get_icon_type(name, false, None, false, false), IconType::Package, "{name}");
+    }
+    assert_eq!(get_icon_type("backup.tar.zst", false, None, false, false), IconType::Archive);
 }
 
 #[test]

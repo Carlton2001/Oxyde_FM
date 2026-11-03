@@ -278,6 +278,16 @@ pub(crate) fn is_script_file(name: &str) -> bool {
             .iter().any(|known| ext.eq_ignore_ascii_case(known)))
 }
 
+/// Installable application packages (Linux distributions, Flatpak, Snap, Android).
+/// Checked before archives: an Arch package ends with `.pkg.tar.zst`.
+pub(crate) fn is_package_file(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    [".pkg.tar.zst", ".pkg.tar.xz", ".pkg.tar.gz"].iter().any(|suffix| name.ends_with(suffix))
+        || std::path::Path::new(&name).extension().and_then(|ext| ext.to_str()).is_some_and(|ext| {
+            matches!(ext, "deb" | "udeb" | "rpm" | "srpm" | "apk" | "appimage" | "flatpak" | "flatpakref" | "flatpakrepo" | "snap")
+        })
+}
+
 #[cfg(test)]
 #[path = "file_types/tests/code.rs"]
 mod tests;

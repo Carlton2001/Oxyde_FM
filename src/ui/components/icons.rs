@@ -291,7 +291,7 @@ pub fn get_icon_type(
     if ext == "msix" || ext == "appx" {
         return IconType::Box;
     }
-    if EXECUTABLE_EXTENSIONS.contains(ext) {
+    if EXECUTABLE_EXTENSIONS.contains(ext) || crate::ui::file_types::is_package_file(name) {
         return IconType::Package;
     }
 

@@ -40,13 +40,16 @@ impl FileFamily {
             .extension()
             .and_then(|value| value.to_str())
             .unwrap_or("");
+        if crate::ui::file_types::is_package_file(&name) {
+            return Self::Applications;
+        }
         match extension {
             "iso" | "img" | "vhd" | "vhdx" | "avhd" | "avhdx" | "vmdk" | "vdi" | "qcow"
             | "qcow2" | "dmg" | "nrg" | "sparseimage" => Self::DiskImages,
             "zip" | "7z" | "rar" | "tar" | "gz" | "bz2" | "xz" | "zst" | "tgz" | "tbz" | "tbz2"
             | "txz" | "cab" | "lz" | "lzma" | "br" | "arj" | "ace" | "lzh" => Self::Archives,
             "exe" | "msi" | "msix" | "msixbundle" | "appx" | "appxbundle" | "com" | "scr"
-            | "appimage" | "deb" | "rpm" | "apk" => Self::Applications,
+            => Self::Applications,
             "pdf" | "doc" | "docx" | "odt" | "rtf" | "txt" | "xls" | "xlsx" | "ods" | "csv"
             | "tsv" | "ppt" | "pptx" | "odp" | "epub" | "mobi" | "pages" | "numbers" | "key"
             | "md" => Self::Documents,
