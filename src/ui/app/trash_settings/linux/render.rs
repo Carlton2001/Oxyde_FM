@@ -28,7 +28,13 @@ pub(crate) fn render(
                 return;
             }
             keyboard.update(cx, |this, cx| match event.keystroke.key.as_str() {
-                "escape" => this.close_trash_settings(window, cx),
+                "escape" => match this.trash_settings.as_mut().filter(|dialog| dialog.action_menu) {
+                    Some(dialog) => {
+                        dialog.action_menu = false;
+                        cx.notify();
+                    }
+                    None => this.close_trash_settings(window, cx),
+                },
                 "tab" => {
                     if let Some(dialog) = &this.trash_settings {
                         let controls = focus_order(dialog, cx);
@@ -267,8 +273,11 @@ fn render_body(
             body = body.child(section(cx.i18n().text(Message::TrashAutoDelete), "icons/settings-2.svg", content, theme));
         }
         TrashRetention::Kde(limits) => {
-            body = body.child(section(cx.i18n().text(Message::TrashLocations), "icons/database.svg",
-                render_locations(dialog, limits, handle, window, cx), theme));
+            // A single trash directory needs no chooser, as with GNOME.
+            if limits.len() > 1 {
+                body = body.child(section(cx.i18n().text(Message::TrashLocations), "icons/database.svg",
+                    render_locations(dialog, limits, handle, window, cx), theme));
+            }
             if let Some(selected) = limits.get(dialog.selected) {
                 let content = card(theme)
                     .child(toggle_row("trash-kde-time-limit", cx.i18n().text(Message::TrashAutoDeleteOld),
@@ -288,7 +297,7 @@ fn render_body(
                         }))
                     .child(number_row(cx.i18n().text(Message::TrashKdeSizeLimit), &dialog.percent,
                         &dialog.percent_value, selected.use_size_limit && !disabled, theme, window, cx))
-                    .when(selected.use_size_limit, |content| content.child(render_limit_action(selected.action, handle, theme, cx)))
+                    .when(selected.use_size_limit, |content| content.child(render_limit_action(dialog, selected.action, handle, theme, cx)))
                     .child(divider(theme))
                     .child(note(cx.i18n().text(Message::TrashKdeRetentionNote), theme));
                 body = body.child(section(cx.i18n().text(Message::TrashSelectedSettings), "icons/settings-2.svg", content, theme));
@@ -379,49 +388,116 @@ fn render_locations(
             div().max_h(rems(8.0)), rows, false, window, cx))
 }
 
+const LIMIT_ACTIONS: [(KdeLimitAction, Message); 3] = [
+    (KdeLimitAction::Warn, Message::TrashKdeWarn),
+    (KdeLimitAction::DeleteOldest, Message::TrashKdeDeleteOldest),
+    (KdeLimitAction::DeleteLargest, Message::TrashKdeDeleteLargest),
+];
+
+fn set_action_menu(handle: &Entity<OxydeApp>, open: impl FnOnce(bool) -> bool, cx: &mut App) {
+    handle.update(cx, |this, cx| {
+        if let Some(dialog) = this.trash_settings.as_mut() {
+            dialog.action_menu = open(dialog.action_menu) && !dialog.busy && !dialog.loading;
+        }
+        cx.notify();
+    });
+}
+
+/// KDE's action when the size limit is reached, as a drop-down list.
 fn render_limit_action(
+    dialog: &TrashSettings,
     current: KdeLimitAction,
     handle: &Entity<OxydeApp>,
     theme: crate::ui::theme::OxydeTheme,
     cx: &mut Context<OxydeApp>,
 ) -> Div {
-    let mut choices = div()
+    let label = LIMIT_ACTIONS.iter().find(|(action, _)| *action == current)
+        .map(|(_, label)| cx.i18n().text(*label)).unwrap_or_default();
+    let (measure, toggle_menu) = (handle.clone(), handle.clone());
+    let trigger = div()
+        .id("trash-kde-limit-action")
+        .relative()
+        .w_full()
+        .h(rems(2.0))
+        .px(rems(0.625))
         .flex()
-        .flex_wrap()
-        .gap(rems(0.25))
-        .p(rems(0.125))
-        .rounded_md()
+        .items_center()
+        .justify_between()
         .border(rems(0.0625))
-        .border_color(theme.border);
-    for (index, (action, label)) in [
-        (KdeLimitAction::Warn, Message::TrashKdeWarn),
-        (KdeLimitAction::DeleteOldest, Message::TrashKdeDeleteOldest),
-        (KdeLimitAction::DeleteLargest, Message::TrashKdeDeleteLargest),
-    ].into_iter().enumerate() {
-        let selected = action == current;
-        let choose = handle.clone();
-        choices = choices.child(
-            action_button(("trash-kde-limit-action", index))
-                .px(rems(0.5))
-                .py(rems(0.25))
-                .text_size(rems(0.75))
-                .rounded_sm()
-                .bg(if selected { theme.accent } else { theme.surface })
-                .text_color(if selected { theme.text_on_accent } else { theme.text_muted })
-                .child(cx.i18n().text(label))
-                .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                    choose.update(cx, |this, cx| this.edit_trash_retention(move |retention, selected| {
-                        if let TrashRetention::Kde(limits) = retention {
-                            if let Some(limits) = limits.get_mut(selected) { limits.action = action; }
-                        }
-                    }, cx));
-                }),
-        );
-    }
+        .border_color(theme.border)
+        .bg(theme.surface)
+        .rounded_sm()
+        .child(
+            canvas(|bounds, _, _| bounds, move |bounds, _, _, cx| {
+                measure.update(cx, |this, _| {
+                    if let Some(dialog) = this.trash_settings.as_mut() { dialog.action_bounds = Some(bounds); }
+                })
+            })
+            .absolute()
+            .inset_0()
+            .size_full(),
+        )
+        .child(div().flex_1().min_w_0().truncate().child(label))
+        .child(svg().path("icons/chevron-down.svg").size(rems(0.75)).flex_none().text_color(theme.text))
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+            cx.stop_propagation();
+            set_action_menu(&toggle_menu, |open| !open, cx);
+        });
     div()
         .flex()
         .flex_col()
         .gap(rems(0.5))
         .child(div().text_color(theme.text).child(cx.i18n().text(Message::TrashKdeLimitAction)))
-        .child(choices)
+        .child(trigger)
+        .when_some(dialog.action_bounds.filter(|_| dialog.action_menu), |column, bounds| {
+            column.child(limit_action_menu(current, bounds, handle, theme, cx))
+        })
+}
+
+fn limit_action_menu(
+    current: KdeLimitAction,
+    bounds: Bounds<Pixels>,
+    handle: &Entity<OxydeApp>,
+    theme: crate::ui::theme::OxydeTheme,
+    cx: &mut Context<OxydeApp>,
+) -> impl IntoElement {
+    let mut list = crate::ui::components::select_menu::surface(theme)
+        .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
+        .on_mouse_up(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+        .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
+        .w(bounds.size.width);
+    for (index, (action, label)) in LIMIT_ACTIONS.into_iter().enumerate() {
+        let (choose, key_choose) = (handle.clone(), handle.clone());
+        let pick = move |handle: &Entity<OxydeApp>, cx: &mut App| {
+            handle.update(cx, |this, cx| this.edit_trash_retention(move |retention, selected| {
+                if let TrashRetention::Kde(limits) = retention {
+                    if let Some(limits) = limits.get_mut(selected) { limits.action = action; }
+                }
+            }, cx));
+            set_action_menu(handle, |_| false, cx);
+        };
+        let key_action = std::rc::Rc::new(move |_: &mut Window, cx: &mut App| pick(&key_choose, cx));
+        list = list.child(crate::ui::components::popup::keyboard::item(
+            crate::ui::components::select_menu::row(div().id(("trash-kde-limit-choice", index)), theme, action == current)
+                .child(cx.i18n().text(label))
+                .on_click(move |_, _, cx| {
+                    cx.stop_propagation();
+                    pick(&choose, cx);
+                }),
+            key_action,
+            None,
+            None,
+        ));
+    }
+    let close = handle.clone();
+    deferred(
+        anchored()
+            .position(point(bounds.left(), bounds.bottom()))
+            .snap_to_window()
+            .child(list.on_mouse_down_out(move |event, _, cx| {
+                if !bounds.contains(&event.position) {
+                    set_action_menu(&close, |_| false, cx);
+                }
+            })),
+    )
 }

@@ -12,6 +12,9 @@ pub(crate) struct TrashSettings {
     initial: TrashRetention,
     /// KDE trash directory whose limits are shown.
     selected: usize,
+    /// Open state and trigger bounds of the KDE limit action menu.
+    action_menu: bool,
+    action_bounds: Option<Bounds<Pixels>>,
     days: Entity<TextInput>,
     percent: Entity<TextInput>,
     days_value: String,
@@ -88,6 +91,8 @@ impl OxydeApp {
             retention: TrashRetention::Unavailable,
             initial: TrashRetention::Unavailable,
             selected: 0,
+            action_menu: false,
+            action_bounds: None,
             days,
             percent,
             days_value: String::new(),
