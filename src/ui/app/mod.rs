@@ -317,6 +317,7 @@ pub struct OxydeApp {
     /// Drive-based default for the currently hovered drop target:
     /// true if source and target are on different drives → default to copy.
     pub drag_target_default_copy: bool,
+    pub(crate) drag_tab_switch: Option<(String, usize)>,
 
     pub editing_path: Option<String>,
     pub editing_text: String,
@@ -523,6 +524,7 @@ impl OxydeApp {
             file_drag_session: None,
             drag_modifier_copy: None,
             drag_target_default_copy: false,
+            drag_tab_switch: None,
             editing_path: None,
             editing_text: String::new(),
             editing_view: None,

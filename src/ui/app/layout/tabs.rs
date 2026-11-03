@@ -279,10 +279,11 @@ impl OxydeApp {
                                 let h = h.clone(); let pane_id = p_id.clone();
                                 move |event, _, cx| {
                                     h.update(cx, |app, cx| {
-                                        if app.state.find_pane(&pane_id).is_some_and(|pane| tab_drop_zone_contains_pointer(event.bounds, pane.tab_strip.scroll.bounds(), event.event.position))
-                                            && (app.state.active_pane_id != pane_id || app.state.find_pane(&pane_id).is_some_and(|pane| pane.active_tab_index != t_ix)) {
-                                                app.switch_tab(&pane_id, t_ix, cx);
-                                            }
+                                        if app.state.find_pane(&pane_id).is_some_and(|pane| tab_drop_zone_contains_pointer(event.bounds, pane.tab_strip.scroll.bounds(), event.event.position)) {
+                                            app.hover_tab_during_drag(&pane_id, t_ix, cx);
+                                        } else {
+                                            app.leave_tab_during_drag(&pane_id, t_ix);
+                                        }
                                     });
                                 }
                             })
@@ -293,9 +294,9 @@ impl OxydeApp {
                                     h.update(cx, |this, cx| {
                                         if this.state.find_pane(&pane_id).is_some_and(|pane| tab_drop_zone_contains_pointer(event.bounds, pane.tab_strip.scroll.bounds(), event.event.position)) {
                                             this.set_file_drag_new_tab(false, cx);
-                                            if this.state.active_pane_id != pane_id || this.state.find_pane(&pane_id).is_some_and(|pane| pane.active_tab_index != t_ix) {
-                                                this.switch_tab(&pane_id, t_ix, cx);
-                                            }
+                                            this.hover_tab_during_drag(&pane_id, t_ix, cx);
+                                        } else {
+                                            this.leave_tab_during_drag(&pane_id, t_ix);
                                         }
                                     });
                                 }

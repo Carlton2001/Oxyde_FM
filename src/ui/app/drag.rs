@@ -608,3 +608,42 @@ impl OxydeApp {
         }
     }
 }
+
+/// Hover time over a tab before a drag activates it.
+const DRAG_TAB_SWITCH_DELAY: std::time::Duration = std::time::Duration::from_millis(600);
+
+impl OxydeApp {
+    /// Activates the hovered tab once the drag pointer has rested on it long enough.
+    pub(crate) fn hover_tab_during_drag(&mut self, pane_id: &str, tab_ix: usize, cx: &mut Context<Self>) {
+        let already_active = self.state.active_pane_id == pane_id
+            && self.state.find_pane(pane_id).is_some_and(|pane| pane.active_tab_index == tab_ix);
+        if already_active {
+            self.drag_tab_switch = None;
+            return;
+        }
+        let target = (pane_id.to_owned(), tab_ix);
+        if self.drag_tab_switch.as_ref() == Some(&target) {
+            return;
+        }
+        self.drag_tab_switch = Some(target.clone());
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(DRAG_TAB_SWITCH_DELAY).await;
+            let _ = this.update(cx, |this, cx| {
+                if this.drag_tab_switch.as_ref() == Some(&target) {
+                    this.drag_tab_switch = None;
+                    if cx.has_active_drag() {
+                        this.switch_tab(&target.0, target.1, cx);
+                    }
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// Cancels a pending drag activation when the pointer leaves that tab.
+    pub(crate) fn leave_tab_during_drag(&mut self, pane_id: &str, tab_ix: usize) {
+        if self.drag_tab_switch.as_ref().is_some_and(|(pane, ix)| pane == pane_id && *ix == tab_ix) {
+            self.drag_tab_switch = None;
+        }
+    }
+}
