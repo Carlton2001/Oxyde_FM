@@ -10,7 +10,12 @@ use oxyde_lib::platform::MediaInfo;
 /// Height the video layout reserves for one row of labels.
 pub(super) const ROW_HEIGHT: Rems = Rems(2.0);
 
-pub(super) fn row(labels: Vec<SharedString>, cx: &App) -> Div {
+/// Fades in once `labels` holds everything known about the file; `id` names
+/// the file so each one starts hidden.
+pub(super) fn row(id: SharedString, labels: Vec<SharedString>, cx: &App) -> AnyElement {
+    if labels.is_empty() {
+        return div().into_any_element();
+    }
     let theme = *cx.theme();
     div()
         .w_full()
@@ -30,6 +35,8 @@ pub(super) fn row(labels: Vec<SharedString>, cx: &App) -> Div {
                 .text_color(theme.text_muted)
                 .child(label)
         }))
+        .with_spring(id, crate::ui::elements::motion::presence(true).from(0.0), |row, progress| row.opacity(progress))
+        .into_any_element()
 }
 
 /// `value` with at most `decimals` digits, trailing zeros removed, in the UI's notation.
@@ -74,11 +81,12 @@ pub(super) fn definition(width: u32, height: u32) -> Option<&'static str> {
 pub(super) fn video(dimensions: (u32, u32), info: Option<MediaInfo>, cx: &App) -> Vec<SharedString> {
     let mut labels: Vec<SharedString> = Vec::new();
     let (width, height) = dimensions;
-    if width > 0 && height > 0 {
+    // Nothing until the streams are described too, so the row appears whole.
+    let Some(info) = info.filter(|_| width > 0 && height > 0) else { return labels };
+    {
         labels.extend(definition(width, height).map(SharedString::from));
         labels.push(format!("{width} × {height}").into());
     }
-    let Some(info) = info else { return labels };
     labels.extend(info.video_codec_name().map(SharedString::from));
     if info.frame_rate_milli > 0 {
         let mut args = FluentArgs::new();

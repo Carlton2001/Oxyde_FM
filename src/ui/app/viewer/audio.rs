@@ -190,7 +190,11 @@ impl Viewer {
                 )
             });
         if !labels.is_empty() {
-            player = player.child(super::media_labels::row(labels, cx));
+            player = player.child(super::media_labels::row(
+                format!("viewer-audio-labels-{}", self.generation).into(),
+                labels,
+                cx,
+            ));
         }
         if audio.is_none() && matches!(self.content, Content::Loading) {
             player = player.child(

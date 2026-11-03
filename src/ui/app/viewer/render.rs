@@ -155,7 +155,8 @@ impl Render for Viewer {
                 }
                 if event.keystroke.modifiers.secondary()
                     && !event.keystroke.modifiers.alt
-                    && this.text_shortcut(event.keystroke.key.as_str(), cx)
+                    && (this.text_shortcut(event.keystroke.key.as_str(), cx)
+                        || this.markdown_shortcut(event.keystroke.key.as_str(), cx))
                 {
                     cx.stop_propagation();
                     return;

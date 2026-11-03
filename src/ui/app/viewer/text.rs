@@ -7,6 +7,7 @@ use super::{content::Content, Viewer};
 use gpui::*;
 use std::sync::Arc;
 mod selection;
+pub(super) use selection::word_at;
 mod syntax;
 
 pub(super) fn code_highlights(language: &str, text: &str) -> Vec<(std::ops::Range<usize>, u8)> {
@@ -38,11 +39,15 @@ pub(super) struct TextFile {
     wrapping: Option<(usize, Task<()>)>,
     pub(super) truncated: bool,
     pub(super) list: ListState,
-    row_height: Pixels,
+    pub(super) row_height: Pixels,
     /// Width of one monospace column, measured with the wrap.
     pub(super) advance: Pixels,
     pub(super) selection: Option<selection::Selection>,
-    selecting: bool,
+    pub(super) selecting: bool,
+    /// 1 drags by characters, 2 by words, 3 by lines.
+    granularity: usize,
+    /// The unit pressed first, which a drag always keeps selected.
+    origin: std::ops::Range<usize>,
 }
 
 /// Columns a character occupies in a monospace font (wide East Asian
@@ -238,6 +243,8 @@ impl Viewer {
                     advance: px(0.0),
                     selection: None,
                     selecting: false,
+                    granularity: 1,
+                    origin: 0..0,
                 })
             },
             cx,

@@ -2,6 +2,7 @@ mod content;
 mod deletion;
 mod image_interaction;
 mod audio;
+mod autoscroll;
 mod content_render;
 mod media;
 mod media_bar;
@@ -49,6 +50,7 @@ pub(crate) struct Viewer {
     file: Option<FileEntry>,
     /// Same-kind media around the file in the source pane, for skipping.
     neighbors: (Option<String>, Option<String>),
+    autoscroll: autoscroll::AutoScroll,
     content: content::Content,
     markdown_rendered: bool,
     syntax_highlighting: bool,
@@ -304,6 +306,7 @@ impl Viewer {
             source: Source::default(),
             file: None,
             neighbors: (None, None),
+            autoscroll: Default::default(),
             content: content::Content::None,
             markdown_rendered,
             syntax_highlighting,

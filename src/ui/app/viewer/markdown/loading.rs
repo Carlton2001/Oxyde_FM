@@ -103,6 +103,12 @@ impl Markdown {
             list: ListState::new(0, ListAlignment::Top, px(800.0)).measure_all(),
             images: HashMap::new(),
             truncated,
+            selection: None,
+            selecting: false,
+            granularity: 1,
+            copied: None,
+            hovered_table: None,
+            origin: Default::default(),
         }
     }
 

@@ -418,7 +418,9 @@ impl OxydeApp {
                                 && !tab.search_slide.hover_suppressed
                                 && this.context_menus.is_empty()
                             {
-                                this.open_quick_search(&hover_pane, window, cx);
+                                // Passing over the icon must not make its pane the
+                                // active one: the Viewer follows that pane.
+                                this.expand_quick_search(&hover_pane, false, window, cx);
                             }
                         });
                     })
@@ -618,6 +620,18 @@ impl OxydeApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.expand_quick_search(pane_id, true, window, cx);
+    }
+
+    /// Expands and focuses the field; `activate` also makes its pane the active
+    /// one, which a hover leaves to the first keystroke.
+    fn expand_quick_search(
+        &mut self,
+        pane_id: &str,
+        activate: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(pane) = self.state.find_pane(pane_id) else {
             return;
         };
@@ -627,7 +641,9 @@ impl OxydeApp {
             if let Some(tab) = self.state.find_tab_mut(&tab_id) {
                 tab.search_slide.set_expanded(true);
             }
-            self.activate_pane(pane_id, cx);
+            if activate {
+                self.activate_pane(pane_id, cx);
+            }
             window.focus(&focus, cx);
             cx.notify();
             return;
@@ -677,12 +693,24 @@ impl OxydeApp {
             tab.search_slide = Default::default();
             tab.search_slide.set_expanded(true);
         }
-        self.activate_pane(pane_id, cx);
+        if activate {
+            self.activate_pane(pane_id, cx);
+        }
         window.focus(&focus, cx);
         cx.notify();
     }
 
     fn change_search_text(&mut self, tab_id: &str, text: String, cx: &mut Context<Self>) {
+        // Typing is a deliberate use of this pane's search.
+        let mut owner = None;
+        self.state.layout.visit_panes(&mut |pane| {
+            if pane.tabs.iter().any(|tab| tab.id == tab_id) {
+                owner = Some(pane.id.clone());
+            }
+        });
+        if let Some(pane_id) = owner {
+            self.activate_pane(&pane_id, cx);
+        }
         let Some(tab) = self.state.find_tab_mut(tab_id) else {
             return;
         };

@@ -157,12 +157,12 @@ impl Viewer {
                         .cursor(CursorStyle::IBeam)
                         .on_mouse_down(MouseButton::Left, move |event: &MouseDownEvent, window, cx| {
                             let _ = press.update(cx, |this, cx| {
-                                this.text_pointer(index, event.position, true, event.modifiers.shift, window, cx)
+                                this.text_pointer(index, event.position, true, event.modifiers.shift, event.click_count, window, cx)
                             });
                         })
                         .on_mouse_move(move |event: &MouseMoveEvent, window, cx| {
                             if event.pressed_button == Some(MouseButton::Left) {
-                                let _ = drag.update(cx, |this, cx| this.text_pointer(index, event.position, false, false, window, cx));
+                                let _ = drag.update(cx, |this, cx| this.text_pointer(index, event.position, false, false, 1, window, cx));
                             }
                         })
                         .when_some(selected, |row, (start, end, past_end)| {
@@ -210,6 +210,7 @@ impl Viewer {
                             .min_h_0()
                             .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, _| this.text_pointer_released()))
                             .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _, _, _| this.text_pointer_released()))
+                            .child(self.selection_drag_listener(cx))
                             .child(body),
                     )
                     .into_any_element()

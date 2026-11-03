@@ -35,7 +35,11 @@ impl Viewer {
                 .items_center()
                 .px(rems(0.5))
                 .overflow_hidden()
-                .child(super::media_labels::row(super::media_labels::video((width, height), info, cx), cx))
+                .child(super::media_labels::row(
+                    format!("viewer-video-labels-{}", self.generation).into(),
+                    super::media_labels::video((width, height), info, cx),
+                    cx,
+                ))
                 .into_any_element()
         });
         VideoLayout {

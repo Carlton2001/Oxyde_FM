@@ -33,3 +33,14 @@ fn selected_columns_follow_tabs_and_line_ends() {
     assert_eq!(rows.selected_columns(1, &(1..start + 2)), Some((0, 1, false)));
     assert_eq!(rows.selected_columns(1, &(0..2)), None);
 }
+
+#[test]
+fn double_click_selects_the_word_under_the_pointer() {
+    use super::word_at;
+    let text = "let été_2 = x;";
+    assert_eq!(&text[word_at(text, 4)], "été_2");
+    assert_eq!(&text[word_at(text, 5)], "été_2", "inside a character");
+    assert_eq!(&text[word_at(text, 3)], "let", "just past a word");
+    assert_eq!(&text[word_at(text, text.find('=').unwrap())], "=");
+    assert_eq!(word_at(text, text.len()), text.len()..text.len());
+}
