@@ -107,6 +107,9 @@ pub struct Limits {
     pub seconds: u64,
 }
 
+/// Volumes of one RAR set, the first included.
+pub const MAX_VOLUMES: usize = 1000;
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "mode", deny_unknown_fields)]
 pub enum Operation {
@@ -120,6 +123,12 @@ pub enum Operation {
         /// For an encrypted ZIP or 7z only; never logged.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         password: Option<super::archive_password::ArchiveSecret>,
+        /// Sizes of a RAR set's later volumes, read as sources 1, 2…; the first is source 0.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        volumes: Vec<u64>,
+        /// Sends the manifest only: a RAR set is listed by the broker, which reads every volume.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        manifest_only: bool,
         limits: Limits,
     },
     Encode {
@@ -316,9 +325,18 @@ impl Message {
                         selected,
                         stream_name,
                         password,
+                        volumes,
+                        manifest_only,
                         limits,
                         ..
                     } => {
+                        if (!volumes.is_empty() || *manifest_only) && *format != Format::Rar
+                            || volumes.len() >= MAX_VOLUMES
+                            || volumes.contains(&0)
+                            || (*manifest_only && selected.is_some())
+                        {
+                            return Err(invalid());
+                        }
                         if let Some(password) = password {
                             password.validate()?;
                             if !matches!(format, Format::Zip | Format::SevenZip | Format::Rar) {

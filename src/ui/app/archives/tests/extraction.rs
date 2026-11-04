@@ -100,3 +100,20 @@ fn real_archive_named_directories_and_their_archives_keep_their_actions() {
         );
     }
 }
+
+#[test]
+fn the_volumes_of_a_rar_set_make_one_job_named_after_the_set() {
+    let jobs = extraction_jobs(vec![
+        real("folder/film.part2.rar"),
+        real("folder/film.part1.rar"),
+        real("folder/film.part3.rar"),
+        real("folder/other.rar"),
+    ]);
+    assert_eq!(
+        jobs,
+        vec![
+            (PathBuf::from("folder/film.part1.rar"), PathBuf::from("folder/film")),
+            (PathBuf::from("folder/other.rar"), PathBuf::from("folder/other")),
+        ]
+    );
+}

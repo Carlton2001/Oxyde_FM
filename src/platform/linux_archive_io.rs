@@ -32,7 +32,8 @@ fn check(controls: &dyn Fn() -> io::Result<Control>) -> io::Result<Control> {
 }
 
 fn admission(operation: &Operation, controls: &dyn Fn() -> io::Result<Control>) -> io::Result<MutexGuard<'static, ()>> {
-    let slot = if matches!(operation, Operation::Decode { selected: Some(_), .. }) { &TARGETED } else { &BULK };
+    // A selection or a set's listing has the user waiting.
+    let slot = if matches!(operation, Operation::Decode { selected: Some(_), .. } | Operation::Decode { manifest_only: true, .. }) { &TARGETED } else { &BULK };
     loop {
         if !check(controls)?.paused {
             match slot.try_lock() {

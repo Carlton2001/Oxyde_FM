@@ -42,7 +42,13 @@ pub fn verify_archive_password(path: &Path) -> Result<(), CommandError> {
     #[cfg(test)]
     { super::archive_verify::verify_file(path, std::fs::File::open(path)?) }
     #[cfg(not(test))]
-    { platform().verify_archive_password(path) }
+    {
+        // A split RAR is checked by listing it: RAR 5 refuses a wrong password there.
+        if crate::utils::archive_volumes::is_rar_volume_set(path) {
+            return crate::systems::archive_volumes::index_rar_set(path, &|| Ok(())).map(drop);
+        }
+        platform().verify_archive_password(path)
+    }
 }
 
 pub fn prepare_archive_file_for_open(path: &Path) -> Result<PathBuf, CommandError> {
@@ -147,6 +153,10 @@ pub fn list_archive_contents(
     {
         let path = validate_path(&archive_path)?;
         relative_archive_path(&internal_path)?;
+        if crate::utils::archive_volumes::is_rar_volume_set(&path) {
+            let entries = crate::systems::archive_volumes::index_rar_set(&path, &|| Ok(()))?;
+            return directory_entries(&path, &internal_path, entries);
+        }
         platform().list_archive_directory(&path, &internal_path)
     }
 }
@@ -186,7 +196,12 @@ pub(crate) fn index_archive_contents(path: &Path, checkpoint: &dyn Fn() -> io::R
     #[cfg(test)]
     { index_archive_contents_local(path, checkpoint) }
     #[cfg(not(test))]
-    { platform().index_archive_contents(path, checkpoint) }
+    {
+        if crate::utils::archive_volumes::is_rar_volume_set(path) {
+            return crate::systems::archive_volumes::index_rar_set(path, checkpoint);
+        }
+        platform().index_archive_contents(path, checkpoint)
+    }
 }
 
 pub(crate) fn index_archive_contents_local(path: &Path, checkpoint: &dyn Fn() -> io::Result<()>) -> Result<Vec<FileEntry>, CommandError> {
@@ -202,10 +217,19 @@ fn list_indexed_metadata(
     path: &Path,
     internal_prefix: &str,
 ) -> Result<Vec<FileEntry>, CommandError> {
+    directory_entries(path, internal_prefix, super::archive_metadata::indexed_files(path, &|| Ok(()))?)
+}
+
+/// The direct children of `internal_prefix` in a whole index; deeper members show as folders.
+fn directory_entries(
+    path: &Path,
+    internal_prefix: &str,
+    entries: Vec<FileEntry>,
+) -> Result<Vec<FileEntry>, CommandError> {
     let relative_prefix = relative_archive_path(internal_prefix)?;
     let mut seen = HashSet::new();
     let mut files = Vec::new();
-    for mut entry in super::archive_metadata::indexed_files(path, &|| Ok(()))? {
+    for mut entry in entries {
         let relative = Path::new(&entry.path)
             .strip_prefix(path)
             .map_err(|_| CommandError::ArchiveError("Invalid archive entry path".into()))?;

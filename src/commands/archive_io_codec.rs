@@ -196,6 +196,24 @@ pub fn run<T: Exchange + Send + 'static>(
             )?;
         }
         Operation::Decode {
+            format: Format::Rar,
+            source_size,
+            selected,
+            password,
+            volumes,
+            manifest_only,
+            ..
+        } => {
+            super::archive_rar::decode(
+                &connection,
+                &super::archive_rar::Sources { first: source_size, later: &volumes, manifest_only },
+                selected.as_deref().map(relative_archive_path).transpose()?.as_deref(),
+                password.as_ref(),
+                &budget,
+                &checkpoint,
+            )?;
+        }
+        Operation::Decode {
             format,
             source_size,
             selected,
@@ -295,7 +313,7 @@ fn decode<T: Exchange + Send + 'static>(
         Format::SevenZip => {
             decode_seven(connection, size, requested.as_deref(), password, budget, checkpoint)?
         }
-        Format::Rar => super::archive_rar::decode(connection, size, requested.as_deref(), password, budget, checkpoint)?,
+        Format::Rar => return Err(invalid().into()),
         Format::Stream(_) => return Err(invalid().into()),
         Format::Tar
         | Format::TarGz
@@ -947,7 +965,7 @@ mod tests {
                 format,
                 source_size: size,
                 selected: selected.map(str::to_owned),
-                stream_name: None,
+                stream_name: None, volumes: Vec::new(), manifest_only: false,
                 password: None,
                 limits: limits(allowance),
             },
@@ -1058,7 +1076,7 @@ mod tests {
                 format,
                 source_size: size,
                 selected: selected.map(str::to_owned),
-                stream_name: None,
+                stream_name: None, volumes: Vec::new(), manifest_only: false,
                 password: None,
                 limits: limits(allowance)
             }

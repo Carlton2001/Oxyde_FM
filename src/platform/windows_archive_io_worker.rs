@@ -68,6 +68,9 @@ fn admission(
         Operation::Decode {
             selected: Some(_),
             ..
+        } | Operation::Decode {
+            manifest_only: true,
+            ..
         }
     ) {
         &TARGETED
@@ -475,7 +478,7 @@ mod tests {
             format: crate::utils::archive_io_protocol::Format::Zip,
             source_size: 0,
             selected: None,
-            stream_name: None,
+            stream_name: None, volumes: Vec::new(), manifest_only: false,
             password: None,
             limits: crate::utils::archive_io_protocol::Limits {
                 entries: 1,

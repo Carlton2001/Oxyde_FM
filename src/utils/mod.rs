@@ -12,6 +12,7 @@ pub(crate) mod archive_limits;
 #[doc(hidden)]
 pub use archive_limits::ArchiveLimits;
 pub mod archive_password;
+pub mod archive_volumes;
 pub mod archive_security;
 pub mod archive_codec;
 pub mod disk_image;

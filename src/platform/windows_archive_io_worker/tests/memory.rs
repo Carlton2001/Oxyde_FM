@@ -32,7 +32,7 @@ fn only_seven_encoding_uses_the_larger_envelope_and_navigation_stays_reserved() 
             format,
             source_size: 1024,
             selected: None,
-            stream_name: None,
+            stream_name: None, volumes: Vec::new(), manifest_only: false,
             password: None,
             limits,
         };

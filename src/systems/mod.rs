@@ -3,6 +3,8 @@ pub(crate) mod archive_recovery;
 #[cfg(not(test))]
 pub(crate) mod archive_io;
 #[cfg(not(test))]
+pub(crate) mod archive_volumes;
+#[cfg(not(test))]
 mod archive_encode;
 #[cfg(any(target_os = "windows", not(test)))]
 pub(crate) mod archive_owned_tree;

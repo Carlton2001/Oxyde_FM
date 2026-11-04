@@ -443,3 +443,88 @@ fn rar_archives_extract_and_open_with_or_without_password() {
         }
     });
 }
+
+/// Volumes of a RAR set, written as WinRAR names them.
+fn rar_set(folder: &Path, password: Option<&str>, headers: bool) -> Vec<PathBuf> {
+    let mut builder = rars::Builder::new(rars::ArchiveVersion::Rar50)
+        .password(password.map(|value| value.as_bytes().to_vec()))
+        .header_encryption(headers)
+        .volume_size(Some(64 * 1024));
+    let mut state = 0x9E37_79B9u32;
+    let noise: Vec<u8> = (0..300_000)
+        .map(|_| {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            state as u8
+        })
+        .collect();
+    builder.add_directory(b"docs".to_vec(), None, None).unwrap();
+    builder.add_bytes(b"docs/note.txt".to_vec(), b"secret payload".to_vec(), None, None).unwrap();
+    builder.add_bytes(b"noise.bin".to_vec(), noise, None, None).unwrap();
+    builder.add_bytes(b"last.txt".to_vec(), b"tail".to_vec(), None, None).unwrap();
+    let volumes = builder.build_volumes(None).unwrap();
+    assert!(volumes.len() > 2);
+    volumes
+        .into_iter()
+        .enumerate()
+        .map(|(index, bytes)| {
+            let path = folder.join(format!("set.part{}.rar", index + 1));
+            fs::write(&path, bytes).unwrap();
+            path
+        })
+        .collect()
+}
+
+/// A split RAR is listed, extracted and opened from any of its volumes, through the broker.
+#[test]
+fn rar_volume_sets_list_extract_and_open() {
+    use oxyde_lib::models::error::ArchivePasswordFailure;
+    use oxyde_lib::utils::archive_password::{forget, remember, ArchiveSecret};
+    confined(|| {
+        for (password, headers) in [(None, false), (Some("correct horse"), false), (Some("correct horse"), true)] {
+            let temp = tempfile::tempdir().unwrap();
+            let base = temp.path().join("cache");
+            fs::create_dir(&base).unwrap();
+            let volumes = rar_set(temp.path(), password, headers);
+            let (first, second) = (&volumes[0], &volumes[1]);
+            let list = |path: &Path| {
+                oxyde_lib::commands::archive::list_archive_contents(path.to_string_lossy().into_owned(), String::new())
+            };
+            if headers {
+                assert_eq!(ArchivePasswordFailure::from_message(&list(first).unwrap_err().to_string()), Some(ArchivePasswordFailure::Required));
+                remember(first, ArchiveSecret::new("wrong".into()).unwrap());
+                let refused = oxyde_lib::commands::archive::verify_archive_password(first).unwrap_err().to_string();
+                assert_eq!(ArchivePasswordFailure::from_message(&refused), Some(ArchivePasswordFailure::Wrong));
+            }
+            if let Some(password) = password {
+                remember(first, ArchiveSecret::new(password.into()).unwrap());
+                oxyde_lib::commands::archive::verify_archive_password(first).unwrap();
+            }
+            let mut names: Vec<_> = list(first).unwrap().into_iter().map(|entry| (entry.name, entry.size)).collect();
+            names.sort();
+            assert_eq!(names, [("docs".to_owned(), 0), ("last.txt".to_owned(), 4), ("noise.bin".to_owned(), 300_000)]);
+            if !headers {
+                // Any volume opens the set.
+                assert_eq!(list(second).unwrap().len(), 3);
+            }
+            let target = temp.path().join("out");
+            FileOperationManager::perform_extract(&operation(FileOpType::Extract), vec![first.clone()], Some(target.clone())).unwrap();
+            assert_eq!(fs::read(target.join("docs/note.txt")).unwrap(), b"secret payload");
+            assert_eq!(fs::read(target.join("noise.bin")).unwrap().len(), 300_000);
+            assert_eq!(fs::read(target.join("last.txt")).unwrap(), b"tail");
+            oxyde_lib::commands::archive::with_archive_cache_base_for_tests(&base, || {
+                for (member, expected) in [("docs/note.txt", &b"secret payload"[..]), ("last.txt", &b"tail"[..])] {
+                    let cached = oxyde_lib::commands::archive::prepare_archive_file_for_open(&first.join(member)).unwrap();
+                    assert_eq!(fs::read(cached).unwrap(), expected, "{member}");
+                }
+            });
+            // A missing volume ends the set: nothing is published.
+            fs::remove_file(volumes.last().unwrap()).unwrap();
+            let cut = temp.path().join("cut");
+            assert!(FileOperationManager::perform_extract(&operation(FileOpType::Extract), vec![first.clone()], Some(cut.clone())).is_err());
+            assert!(!cut.join("last.txt").exists());
+            forget(first);
+        }
+    });
+}

@@ -8,6 +8,8 @@ fn start(format: Format, stream_name: Option<&str>) -> io::Result<()> {
             source_size: 1,
             selected: None,
             stream_name: stream_name.map(str::to_owned),
+            volumes: Vec::new(),
+            manifest_only: false,
             password: None,
             limits: Limits { entries: 1, bytes: 1, depth: 1, seconds: 1 },
         },
@@ -46,4 +48,30 @@ fn encoders_exist_for_writable_tar_codecs_only() {
     for format in [Format::TarLzma, Format::Stream(Codec::Gzip), Format::Iso] {
         assert!(encode(format).is_err(), "{format:?}");
     }
+}
+
+#[test]
+fn only_a_rar_carries_volumes_or_asks_for_its_manifest_alone() {
+    let start = |format, volumes: Vec<u64>, manifest_only, selected: Option<&str>| {
+        Frame::new(Message::Start {
+            operation: Operation::Decode {
+                format,
+                source_size: 1,
+                selected: selected.map(str::to_owned),
+                stream_name: None,
+                password: None,
+                volumes,
+                manifest_only,
+                limits: Limits { entries: 1, bytes: 1, depth: 1, seconds: 1 },
+            },
+        })
+        .validate()
+    };
+    assert!(start(Format::Rar, vec![5, 3], false, Some("a.txt")).is_ok());
+    assert!(start(Format::Rar, vec![5], true, None).is_ok());
+    assert!(start(Format::Zip, vec![5], false, None).is_err());
+    assert!(start(Format::Zip, Vec::new(), true, None).is_err());
+    assert!(start(Format::Rar, vec![0], false, None).is_err());
+    assert!(start(Format::Rar, Vec::new(), true, Some("a.txt")).is_err());
+    assert!(start(Format::Rar, vec![1; MAX_VOLUMES], false, None).is_err());
 }

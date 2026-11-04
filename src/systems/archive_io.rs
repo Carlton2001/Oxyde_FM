@@ -15,7 +15,7 @@ use crate::{
 };
 use std::{
     fs::File,
-    io::{self, Read, Seek, SeekFrom, Write},
+    io::{self, Write},
     path::Path,
     sync::{atomic::Ordering, Arc, Mutex},
 };
@@ -139,10 +139,12 @@ pub(crate) fn decode(
         selected.is_some()
             || matches!(format, Format::Zip | Format::SevenZip | Format::Iso | Format::Stream(_)),
     )?;
-    let size = source.metadata()?.len();
+    // A RAR volume brings its whole set, read as sources 0, 1, 2…
+    let mut volumes = super::archive_volumes::VolumeFiles::open(path, source)?;
+    let size = volumes.first_size();
     let provenance_parent = super::path_parents::HeldParents::new(path)?;
     let provenance =
-        platform().read_archive_output_provenance(provenance_parent.directory(), &source, path)?;
+        platform().read_archive_output_provenance(provenance_parent.directory(), volumes.first(), path)?;
     let mut output: Option<File> = None;
     let mut decoded = 0u64;
     let decoded_limit = limits
@@ -169,6 +171,8 @@ pub(crate) fn decode(
         password: matches!(format, Format::Zip | Format::SevenZip | Format::Rar)
             .then(|| crate::utils::archive_password::for_archive(path))
             .flatten(),
+        volumes: volumes.later_sizes(),
+        manifest_only: false,
         limits,
     };
     let started = std::time::Instant::now();
@@ -180,24 +184,12 @@ pub(crate) fn decode(
                 offset,
                 length,
             } => {
-                if id != 0
-                    || length == 0
-                    || length as usize > MAX_BLOCK
-                    || offset
-                        .checked_add(length as u64)
-                        .is_none_or(|end| end > size)
-                {
-                    return Err(invalid());
-                }
-                source.seek(SeekFrom::Start(offset))?;
                 crate::utils::archive_mutation_test::checkpoint(
                     crate::utils::archive_mutation_test::Stage::BrokerBeforeSourceRead,
                     path,
                     target.path(),
                 )?;
-                let mut data = vec![0; length as usize];
-                source.read_exact(&mut data)?;
-                return Ok(Frame::data(Message::Bytes { source: id, offset }, data));
+                return volumes.serve(id, offset, length);
             }
             Message::Decoded { bytes } => {
                 if bytes == 0 || bytes > MAX_BLOCK as u64 {

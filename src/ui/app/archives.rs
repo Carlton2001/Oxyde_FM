@@ -174,13 +174,20 @@ fn compression_sources(paths: impl IntoIterator<Item = oxyde_lib::models::FileEn
     sources
 }
 
+/// One job per archive; the volumes of a RAR set make one, from its first volume, into a
+/// folder named after the set.
 fn extraction_jobs(paths: Vec<oxyde_lib::models::FileEntry>) -> Vec<(std::path::PathBuf, std::path::PathBuf)> {
+    let mut seen = std::collections::HashSet::new();
     paths.into_iter().filter_map(|file| {
         if !file.is_navigable_archive() {
             return None;
         }
         let source = std::path::PathBuf::from(file.path);
         let parent = source.parent()?;
+        if let Some((first, name)) = oxyde_lib::utils::archive_volumes::rar_set_name(&source) {
+            let destination = parent.join(name);
+            return seen.insert(first.clone()).then_some((first, destination));
+        }
         let name = source.file_name().unwrap_or_default().to_string_lossy();
         let stem = [".tar.gz", ".tar.xz", ".tar.zst", ".tar.bz2", ".tar.lz4", ".tar.lzma"]
             .iter()

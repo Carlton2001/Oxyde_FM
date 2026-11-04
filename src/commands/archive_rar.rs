@@ -1,5 +1,6 @@
 //! RAR (1.3 to 7), read only, through `rars`: listing, search index, password check and
-//! decoding. Runs only in confined workers; one physical volume, links refused.
+//! decoding. Runs only in confined workers; links refused. A split archive is decoded
+//! by the broker, which reads its volumes as sources 0, 1, 2…
 use crate::models::error::ArchivePasswordFailure;
 use crate::models::{CommandError, FileEntry};
 use crate::utils::archive_io_protocol::{invalid, Entry, Frame, Message, Timestamp, MAX_BLOCK};
@@ -52,12 +53,13 @@ fn parse<R: Read + Seek + Send + 'static>(
 }
 
 /// The member's path inside the archive, with `/` separators, or a refusal.
-fn member_name(meta: &rars::ArchiveMemberMeta) -> Result<String, CommandError> {
+/// Out of a set, a member continued in another volume cannot be read.
+fn member_name(meta: &rars::ArchiveMemberMeta, set: bool) -> Result<String, CommandError> {
     if meta.is_redirection {
         return Err(CommandError::ArchiveError("Archive links and special files are not supported".into()));
     }
-    if meta.is_split_before || meta.is_split_after {
-        return Err(CommandError::ArchiveError("Multi-volume RAR archives are not supported".into()));
+    if !set && (meta.is_split_before || meta.is_split_after) {
+        return Err(CommandError::ArchiveError("Another volume of this RAR archive is missing".into()));
     }
     let relative = rars::entry_relative_path(meta.name_bytes())
         .map_err(|error| CommandError::ArchiveError(format!("Invalid RAR member name: {error}")))?;
@@ -82,7 +84,7 @@ pub(super) fn indexed_file(
     for member in archive.members() {
         budget.checkpoint(checkpoint)?;
         let meta = &member.meta;
-        let name = member_name(meta)?;
+        let name = member_name(meta, false)?;
         budget.entry(&name, 0)?;
         let relative = relative_archive_path(&name)?;
         let Some(file_name) = relative.file_name() else { continue };
@@ -214,26 +216,45 @@ fn entry(id: u64, name: String, meta: &rars::ArchiveMemberMeta) -> io::Result<En
     Ok(entry)
 }
 
+/// What the broker reads: the first volume's size, the later volumes' ones, and whether
+/// the manifest alone is asked, to list a set.
+pub(super) struct Sources<'a> {
+    pub first: u64,
+    pub later: &'a [u64],
+    pub manifest_only: bool,
+}
+
 /// The broker's decode: the whole manifest, then the selected member or all of them.
 pub(super) fn decode<T: Exchange + Send + 'static>(
     connection: &Connection<T>,
-    size: u64,
+    sources: &Sources<'_>,
     requested: Option<&Path>,
     secret: Option<&ArchiveSecret>,
     budget: &ArchiveBudget,
     checkpoint: &dyn Fn() -> io::Result<()>,
 ) -> Result<(), CommandError> {
     let limits = budget.limits();
-    let source = WindowReader::new(Reader::new(connection.clone(), 0, size), MAX_BLOCK);
-    let archive = parse(source, secret, limits)?;
+    let set = !sources.later.is_empty();
+    let mut archives = Vec::new();
+    for (id, size) in std::iter::once(sources.first).chain(sources.later.iter().copied()).enumerate() {
+        budget.checkpoint(checkpoint)?;
+        let source = WindowReader::new(Reader::new(connection.clone(), id as u64, size), MAX_BLOCK);
+        archives.push(parse(source, secret, limits)?);
+    }
+    // Continuations fold into the member they continue.
+    let members = if set {
+        rars::volume_members(&archives).map_err(|error| failure(error, secret.is_some()))?
+    } else {
+        archives[0].members().collect()
+    };
     let mut entries = Vec::new();
     let mut selected = None;
-    for (index, member) in archive.members().enumerate() {
+    for (index, member) in members.iter().enumerate() {
         budget.checkpoint(checkpoint)?;
-        let name = member_name(&member.meta)?;
+        let name = member_name(&member.meta, set)?;
         let chosen = requested.is_none_or(|requested| relative_archive_path(&name).is_ok_and(|path| path == requested));
         let meta = entry(index as u64, name, &member.meta)?;
-        budget.entry(&meta.name, if chosen { meta.size } else { 0 })?;
+        budget.entry(&meta.name, if chosen && !sources.manifest_only { meta.size } else { 0 })?;
         if requested.is_some() && chosen {
             if selected.is_some() || meta.directory {
                 return Err(invalid().into());
@@ -248,7 +269,10 @@ pub(super) fn decode<T: Exchange + Send + 'static>(
         return Err(invalid().into());
     }
     super::archive_io_codec::notify_frame(connection, Frame::new(Message::ManifestEnd))?;
-    let solid = archive.is_solid();
+    if sources.manifest_only {
+        return Ok(());
+    }
+    let solid = archives[0].is_solid();
     // The member being written; its `End` follows once `rars` has verified it.
     let open: Arc<Mutex<Option<usize>>> = Arc::default();
     let written = Arc::new(std::sync::atomic::AtomicU64::new(0));
@@ -259,47 +283,73 @@ pub(super) fn decode<T: Exchange + Send + 'static>(
         }
         super::archive_io_codec::notify_frame(connection, Frame::new(Message::End { id: index as u64 }))
     };
+    /// What happens to the member at an index, in archive order.
+    enum Step {
+        Stop,
+        Discard,
+        Skip,
+        Write(Box<dyn Write>),
+    }
     let mut current = 0usize;
-    let mut failure_in_callback: Option<io::Error> = None;
-    let result = archive.extract_with_control(options(secret, limits), |member| {
+    let mut decide = |directory: bool| -> io::Result<Step> {
         let index = current;
         current += 1;
-        let step = (|| -> io::Result<rars::ExtractionDecision> {
-            if let Some(previous) = open.lock().map_err(|_| invalid())?.take() {
-                finish(previous)?;
+        if let Some(previous) = open.lock().map_err(|_| invalid())?.take() {
+            finish(previous)?;
+        }
+        budget.checkpoint(checkpoint)?;
+        if let Some(chosen) = selected {
+            if index > chosen {
+                return Ok(Step::Stop);
             }
-            budget.checkpoint(checkpoint)?;
-            if let Some(chosen) = selected {
-                if index > chosen {
-                    return Ok(rars::ExtractionDecision::Stop);
-                }
-                if index != chosen {
-                    return Ok(if solid && !member.meta.is_directory {
-                        rars::ExtractionDecision::Extract(Box::new(io::sink()))
-                    } else {
-                        rars::ExtractionDecision::Skip
-                    });
-                }
+            if index != chosen {
+                // A solid archive, or a set, decodes what precedes the selection.
+                return Ok(if (solid || set) && !directory { Step::Discard } else { Step::Skip });
             }
-            let id = index as u64;
-            super::archive_io_codec::notify_frame(connection, Frame::new(Message::Begin { id }))?;
-            if member.meta.is_directory {
-                finish(index)?;
-                return Ok(rars::ExtractionDecision::Skip);
+        }
+        let id = index as u64;
+        super::archive_io_codec::notify_frame(connection, Frame::new(Message::Begin { id }))?;
+        if directory {
+            finish(index)?;
+            return Ok(Step::Skip);
+        }
+        *open.lock().map_err(|_| invalid())? = Some(index);
+        Ok(Step::Write(Box::new(Chunks { connection: connection.clone(), id, offset: 0, written: written.clone() })))
+    };
+    let mut failure_in_callback: Option<io::Error> = None;
+    let mut stopped = false;
+    let mut wrap = |error: io::Error| {
+        let wrapped = rars::Error::from(io::Error::new(error.kind(), error.to_string()));
+        failure_in_callback = Some(error);
+        wrapped
+    };
+    let result = if set {
+        rars::extract_volumes_to_with_options(&archives, options(secret, limits), |meta| match decide(meta.is_directory) {
+            Ok(Step::Write(writer)) => Ok(writer),
+            Ok(Step::Discard | Step::Skip) => Ok(Box::new(io::sink())),
+            // The set has no stop: an error ends the traversal, then counts as done.
+            Ok(Step::Stop) => {
+                stopped = true;
+                Err(rars::Error::from(io::Error::other("Selection complete")))
             }
-            *open.lock().map_err(|_| invalid())? = Some(index);
-            Ok(rars::ExtractionDecision::Extract(Box::new(Chunks { connection: connection.clone(), id, offset: 0, written: written.clone() })))
-        })();
-        step.map_err(|error| {
-            let wrapped = rars::Error::from(io::Error::new(error.kind(), error.to_string()));
-            failure_in_callback = Some(error);
-            wrapped
+            Err(error) => Err(wrap(error)),
         })
-    });
+    } else {
+        archives[0].extract_with_control(options(secret, limits), |member| match decide(member.meta.is_directory) {
+            Ok(Step::Write(writer)) => Ok(rars::ExtractionDecision::Extract(writer)),
+            Ok(Step::Discard) => Ok(rars::ExtractionDecision::Extract(Box::new(io::sink()))),
+            Ok(Step::Skip) => Ok(rars::ExtractionDecision::Skip),
+            Ok(Step::Stop) => Ok(rars::ExtractionDecision::Stop),
+            Err(error) => Err(wrap(error)),
+        })
+        .map(drop)
+    };
     if let Some(error) = failure_in_callback {
         return Err(error.into());
     }
-    result.map_err(|error| failure(error, secret.is_some()))?;
+    if !stopped {
+        result.map_err(|error| failure(error, secret.is_some()))?;
+    }
     if let Some(last) = open.lock().map_err(|_| invalid())?.take() {
         finish(last)?;
     }

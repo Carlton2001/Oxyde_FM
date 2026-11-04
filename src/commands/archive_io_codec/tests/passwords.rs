@@ -43,7 +43,7 @@ fn decode_with(
             format,
             source_size: size,
             selected: selected.map(str::to_owned),
-            stream_name: None,
+            stream_name: None, volumes: Vec::new(), manifest_only: false,
             password: password.map(|value| ArchiveSecret::new(value.into()).unwrap()),
             limits: limits(1024),
         },
