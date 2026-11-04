@@ -296,6 +296,7 @@ impl Viewer {
             let options = (app.config.viewer_markdown_rendered, app.config.viewer_syntax_highlighting, app.config.viewer_media_autoplay);
             this.blocked = !this.detached && (app.settings_open || app.dragging_tab.is_some());
             this.set_source(source, cx);
+            this.sync_tree_listing(cx);
             this.sync_display_options(options.0, options.1, cx);
             this.media_autoplay = options.2;
             this.update_visibility();
@@ -351,6 +352,8 @@ impl Viewer {
 
     fn set_source(&mut self, source: Source, cx: &mut Context<Self>) {
         if self.source.same_revision(&source) {
+            // Sort and visibility are not part of the selection's revision.
+            self.source.listing = source.listing;
             return;
         }
         self.external_open_pauses.clear();

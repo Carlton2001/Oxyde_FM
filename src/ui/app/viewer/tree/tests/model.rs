@@ -41,7 +41,7 @@ fn complete_levels_are_sorted_folders_first_and_counted_before_cutting() {
     let folder = Folder::new(entries, true, sort());
     assert_eq!(folder.entries[0].name, "zdir");
     assert_eq!((folder.folders, folder.files, folder.file_bytes), (1, SHOWN_PER_FOLDER + 5, 2 * (SHOWN_PER_FOLDER as u64 + 5)));
-    assert_eq!(folder.entries.len(), SHOWN_PER_FOLDER);
+    assert_eq!(folder.shown().len(), SHOWN_PER_FOLDER);
     assert_eq!(folder.hidden(), 6);
 }
 
@@ -140,4 +140,15 @@ fn archive_ratio_needs_both_sizes() {
     assert_eq!(info(Some(1), 3).percent(), Some(33));
     assert_eq!(info(None, 100).percent(), None);
     assert_eq!(info(Some(10), 0).percent(), None);
+}
+
+#[test]
+fn a_new_sort_reorders_every_read_entry_of_complete_levels_only() {
+    let entries = || (0..SHOWN_PER_FOLDER + 1).map(|index| entry(&format!("/r/f{index:04}"), false, index as u64)).collect::<Vec<_>>();
+    let folder = Folder::new(entries(), true, sort()).resorted((SortColumn::Name, SortDirection::Descending));
+    // The last entry by name was past the shown ones before.
+    assert_eq!(folder.shown()[0].name, format!("f{:04}", SHOWN_PER_FOLDER));
+    assert_eq!(folder.hidden(), 1);
+    let partial = Folder::new(entries(), false, sort()).resorted((SortColumn::Name, SortDirection::Descending));
+    assert_eq!(partial.shown()[0].name, "f0000");
 }

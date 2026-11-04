@@ -31,7 +31,8 @@ pub(super) struct Listing {
     pub(super) sort: (SortColumn, SortDirection),
 }
 
-/// One level, already sorted and cut to `SHOWN_PER_FOLDER`.
+/// One level, sorted when complete. Every entry read is kept so that a new sort
+/// of the pane can reorder it; the first `SHOWN_PER_FOLDER` are shown.
 pub(super) struct Folder {
     pub(super) entries: Vec<Arc<FileEntry>>,
     /// Visible entries read, shown or not.
@@ -54,7 +55,6 @@ impl Folder {
         if complete {
             crate::ui::workspace::sort_files(&mut entries, sort.0, sort.1);
         }
-        entries.truncate(SHOWN_PER_FOLDER);
         Self {
             entries: entries.into_iter().map(Arc::new).collect(),
             total,
@@ -65,8 +65,21 @@ impl Folder {
         }
     }
 
+    pub(super) fn shown(&self) -> &[Arc<FileEntry>] {
+        &self.entries[..self.entries.len().min(SHOWN_PER_FOLDER)]
+    }
+
     pub(super) fn hidden(&self) -> usize {
-        self.total - self.entries.len()
+        self.total - self.shown().len()
+    }
+
+    /// The same level in another order; a truncated level keeps reading order.
+    pub(super) fn resorted(self, sort: (SortColumn, SortDirection)) -> Self {
+        if !self.complete {
+            return self;
+        }
+        let entries = self.entries.into_iter().map(Arc::unwrap_or_clone).collect();
+        Self::new(entries, true, sort)
     }
 }
 
@@ -195,7 +208,7 @@ impl Tree {
     pub(super) fn flatten(&self) -> Vec<Row> {
         let mut rows = Vec::new();
         match self.root_level() {
-            Some(Level::Ready(folder)) if folder.entries.is_empty() => rows.push(Row::Empty { depth: 0 }),
+            Some(Level::Ready(folder)) if folder.total == 0 => rows.push(Row::Empty { depth: 0 }),
             Some(Level::Ready(folder)) => self.push_level(folder, &self.root, 0, &mut rows),
             _ => {}
         }
@@ -210,7 +223,7 @@ impl Tree {
     }
 
     fn push_level(&self, folder: &Folder, path: &str, depth: usize, rows: &mut Vec<Row>) {
-        for file in &folder.entries {
+        for file in folder.shown() {
             let open = self.expanded.contains(&file.path);
             let contents = self.contents.get(&file.path).copied().filter(|_| file.is_dir).unwrap_or_default();
             let chevron = match (contents.entries, open) {
@@ -223,7 +236,7 @@ impl Tree {
                 continue;
             }
             match self.levels.get(&file.path) {
-                Some(Level::Ready(child)) if child.entries.is_empty() => rows.push(Row::Empty { depth: depth + 1 }),
+                Some(Level::Ready(child)) if child.total == 0 => rows.push(Row::Empty { depth: depth + 1 }),
                 Some(Level::Ready(child)) => self.push_level(child, &file.path, depth + 1, rows),
                 Some(Level::Failed(_)) => rows.push(Row::Failed { depth: depth + 1 }),
                 Some(Level::Loading) | None => rows.push(Row::Loading { depth: depth + 1 }),

@@ -45,7 +45,7 @@ fn read_local(path: &str, listing: Listing, cancelled: &AtomicBool) -> Result<Re
     crate::ui::workspace::resolve_native_kinds(&mut entries);
     let folder = Folder::new(entries, complete, listing.sort);
     let mut contents = Vec::new();
-    for entry in folder.entries.iter().filter(|entry| entry.is_dir) {
+    for entry in folder.shown().iter().filter(|entry| entry.is_dir) {
         if cancelled.load(Ordering::Relaxed) {
             break;
         }
@@ -143,12 +143,68 @@ impl Viewer {
                 let level = match result {
                     Ok((Ok(read), _completion)) => {
                         tree.contents.extend(read.contents);
-                        Level::Ready(read.folder)
+                        // The pane's order may have changed during the read.
+                        if listing.sort == tree.listing.sort {
+                            Level::Ready(read.folder)
+                        } else {
+                            Level::Ready(read.folder.resorted(tree.listing.sort))
+                        }
                     }
                     Ok((Err(failure), _)) => Level::Failed(failure),
                     Err(_) => Level::Failed(Failure::Unreadable),
                 };
                 tree.levels.insert(path, level);
+                tree.refresh(row_height());
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+/// Follows the source pane's listing choices: a new order re-sorts the open
+    /// levels in the background, a visibility change reads the tree again.
+    pub(in crate::ui::app::viewer) fn sync_tree_listing(&mut self, cx: &mut Context<Self>) {
+        let listing = self.source.listing;
+        let generation = self.generation;
+        let Some(tree) = self.tree_mut(generation) else { return };
+        if tree.listing == listing {
+            return;
+        }
+        if (tree.listing.show_hidden, tree.listing.show_system) != (listing.show_hidden, listing.show_system) {
+            self.load_current(cx);
+            return;
+        }
+        tree.listing.sort = listing.sort;
+        let sort = listing.sort;
+        let levels: Vec<(String, Vec<std::sync::Arc<FileEntry>>)> = tree
+            .levels
+            .iter()
+            .filter_map(|(path, level)| match level {
+                Level::Ready(folder) if folder.complete => Some((path.clone(), folder.entries.clone())),
+                _ => None,
+            })
+            .collect();
+        let work = cx.background_executor().spawn(async move {
+            levels
+                .into_iter()
+                .map(|(path, entries)| {
+                    let entries = entries.into_iter().map(std::sync::Arc::unwrap_or_clone).collect();
+                    (path, Folder::new(entries, true, sort))
+                })
+                .collect::<Vec<_>>()
+        });
+        cx.spawn(async move |this, cx| {
+            let sorted = work.await;
+            let _ = this.update(cx, |this, cx| {
+                let Some(tree) = this.tree_mut(generation) else { return };
+                if tree.listing.sort != sort {
+                    return;
+                }
+                for (path, folder) in sorted {
+                    if let Some(level @ Level::Ready(_)) = tree.levels.get_mut(&path) {
+                        *level = Level::Ready(folder);
+                    }
+                }
                 tree.refresh(row_height());
                 cx.notify();
             });
