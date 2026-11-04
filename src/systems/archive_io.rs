@@ -171,6 +171,9 @@ pub(crate) fn decode(
         source_size: size,
         selected: selected.map(str::to_owned),
         stream_name: stream_name(path, format)?,
+        password: matches!(format, Format::Zip | Format::SevenZip)
+            .then(|| crate::utils::archive_password::for_archive(path))
+            .flatten(),
         limits,
     };
     let started = std::time::Instant::now();

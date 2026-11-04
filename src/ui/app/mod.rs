@@ -47,6 +47,7 @@ pub use drag::drives_differ;
 use toasts::{Toast, ToastKind};
 pub(crate) mod network;
 pub(crate) mod remote;
+pub(crate) mod archive_password;
 pub mod selection;
 mod item_pointer;
 pub(crate) mod search;
@@ -296,6 +297,7 @@ pub struct OxydeApp {
     dialog_windows_open: [bool; dialog_windows::DIALOG_KINDS],
     pub(crate) network_dialog: Option<network::NetworkDialog>,
     pub(crate) remote_login: Option<remote::RemoteLogin>,
+    pub(crate) archive_password: Option<archive_password::ArchivePasswordPrompt>,
     /// Servers and network lists connected this session, listed by URI.
     pub(super) browsable_remotes: std::collections::HashSet<String>,
     pub(crate) network_dialog_revision: u64,
@@ -488,6 +490,7 @@ impl OxydeApp {
             disk_image_refresh_task: None,
             network_dialog: None,
             remote_login: None,
+            archive_password: None,
             browsable_remotes: std::collections::HashSet::new(),
             trash_settings: None,
             dialog_windows_open: [false; dialog_windows::DIALOG_KINDS],

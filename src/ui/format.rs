@@ -400,13 +400,19 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
         args.set("locations", recovery.locations.iter().map(|path| display_paths(path)).collect::<Vec<_>>().join("\n"));
         let mut text = i18n.text_with_args(if recovery.completed { Message::ArchiveRecoveryCompleted } else { Message::ArchiveRecoveryStopped }, &args).to_string();
         let cause = &recovery.cause;
-        if ArchiveLimitFailure::from_message(cause).is_some() || oxyde_lib::models::error::ArchiveProcessingFailure::from_message(cause) || oxyde_lib::models::error::ArchiveSourceConflict::from_message(cause) || oxyde_lib::models::error::SourceSelectionFailure::from_message(cause).is_some() || oxyde_lib::models::error::TransferDestinationCollision::from_message(cause).is_some() {
+        if ArchiveLimitFailure::from_message(cause).is_some() || oxyde_lib::models::error::ArchiveProcessingFailure::from_message(cause) || oxyde_lib::models::error::ArchiveSourceConflict::from_message(cause) || oxyde_lib::models::error::ArchivePasswordFailure::from_message(cause).is_some() || oxyde_lib::models::error::SourceSelectionFailure::from_message(cause).is_some() || oxyde_lib::models::error::TransferDestinationCollision::from_message(cause).is_some() {
             text.push('\n'); text.push_str(&error_detail(cause, i18n));
         }
         if recovery.omitted > 0 { args.set("count", format_number(recovery.omitted, i18n.language())); text.push('\n'); text.push_str(&i18n.text_with_args(Message::ArchiveRecoveryMore, &args)); }
         return text;
     }
     if oxyde_lib::models::error::ArchiveProcessingFailure::from_message(detail) { return i18n.text(Message::ArchiveProcessingFailed).to_string(); }
+    if let Some(failure) = oxyde_lib::models::error::ArchivePasswordFailure::from_message(detail) {
+        return i18n.text(match failure {
+            oxyde_lib::models::error::ArchivePasswordFailure::Required => Message::ArchivePasswordRequired,
+            oxyde_lib::models::error::ArchivePasswordFailure::Wrong => Message::ArchivePasswordRejected,
+        }).to_string();
+    }
     if let Some(failure) = oxyde_lib::models::error::ArchiveListingFailure::from_message(detail) {
         return match failure {
             oxyde_lib::models::error::ArchiveListingFailure::MetadataLimit => {

@@ -1,5 +1,7 @@
 //! Filesystem-free archive codecs. The broker owns every input and output object.
+use crate::models::error::ArchivePasswordFailure;
 use crate::models::CommandError;
+use crate::utils::archive_password::{self, ArchiveSecret};
 use crate::utils::archive_io_protocol::{
     invalid, Entry, Format, Frame, Limits, Message, Operation, Quality, Timestamp, MAX_BLOCK,
 };
@@ -192,6 +194,7 @@ pub fn run<T: Exchange + Send + 'static>(
             format,
             source_size,
             selected,
+            password,
             ..
         } => {
             decode(
@@ -199,6 +202,7 @@ pub fn run<T: Exchange + Send + 'static>(
                 format,
                 source_size,
                 selected.as_deref(),
+                password.as_ref(),
                 &budget,
                 &checkpoint,
             )?;
@@ -213,6 +217,7 @@ fn decode<T: Exchange + 'static>(
     format: Format,
     size: u64,
     selected: Option<&str>,
+    password: Option<&ArchiveSecret>,
     budget: &ArchiveBudget,
     checkpoint: &dyn Fn() -> io::Result<()>,
 ) -> Result<(), CommandError> {
@@ -259,18 +264,31 @@ fn decode<T: Exchange + 'static>(
                 if requested.is_some() && selection != Some(index) {
                     continue;
                 }
-                let mut entry = archive.by_index(index).map_err(io::Error::other)?;
+                let encrypted = archive.by_index_raw(index).map_err(io::Error::other)?.encrypted();
+                let opened = match (encrypted, password) {
+                    (true, Some(password)) => archive.by_index_decrypt(index, password.expose().as_bytes()),
+                    _ => archive.by_index(index),
+                };
+                let mut entry = opened.map_err(|error| match archive_password::zip_failure(&error) {
+                    Some(failure) => CommandError::from(failure),
+                    None => io::Error::other(error).into(),
+                })?;
                 let meta = empty_entry(
                     index as u64,
                     entry.name().map_err(io::Error::other)?.into_owned(),
                     entry.is_dir(),
                     entry.size(),
                 );
-                copy_entry(connection, &meta, &mut entry, budget, checkpoint)?;
+                let copied = copy_entry(connection, &meta, &mut entry, budget, checkpoint);
+                // ZipCrypto accepts one wrong password in 256: the checksum then refuses it.
+                if encrypted && copied.as_ref().is_err_and(|error| error.to_string().contains("Invalid checksum")) {
+                    return Err(ArchivePasswordFailure::Wrong.into());
+                }
+                copied?;
             }
         }
         Format::SevenZip => {
-            decode_seven(connection, size, requested.as_deref(), budget, checkpoint)?
+            decode_seven(connection, size, requested.as_deref(), password, budget, checkpoint)?
         }
         Format::Stream(_) => return Err(invalid().into()),
         Format::Tar
@@ -335,13 +353,15 @@ fn decode_seven<T: Exchange>(
     connection: &Connection<T>,
     size: u64,
     requested: Option<&std::path::Path>,
+    secret: Option<&ArchiveSecret>,
     budget: &ArchiveBudget,
     checkpoint: &dyn Fn() -> io::Result<()>,
 ) -> Result<(), CommandError> {
-    let password = sevenz_rust2::Password::empty();
+    let password = secret.map_or_else(sevenz_rust2::Password::empty, ArchiveSecret::seven);
+    let archive_error = |error| super::archive_seven_open::archive_error_with(error, secret.is_some());
     let mut source = Reader::new(connection.clone(), 0, size);
     let archive = sevenz_rust2::Archive::read(&mut source, &password)
-        .map_err(super::archive_seven_open::archive_error)?;
+        .map_err(archive_error)?;
     budget.check_entry_count(archive.files.len())?;
     let mut selected = None;
     for (index, entry) in archive.files.iter().enumerate() {
@@ -419,7 +439,7 @@ fn decode_seven<T: Exchange>(
                         Ok(true)
                     }
                 })
-                .map_err(super::archive_seven_open::archive_error)?;
+                .map_err(archive_error)?;
             if !found || (verify && decoded != archive.blocks[block].get_unpack_size()) {
                 return Err(invalid().into());
             }
@@ -434,7 +454,7 @@ fn decode_seven<T: Exchange>(
             .collect();
         let mut seven =
             sevenz_rust2::ArchiveReader::new(Reader::new(connection.clone(), 0, size), password)
-                .map_err(super::archive_seven_open::archive_error)?;
+                .map_err(archive_error)?;
         seven.set_thread_count(1);
         seven
             .for_each_entries(|entry, input| {
@@ -448,7 +468,7 @@ fn decode_seven<T: Exchange>(
                 )?;
                 Ok(true)
             })
-            .map_err(super::archive_seven_open::archive_error)?;
+            .map_err(archive_error)?;
     }
     Ok(())
 }
@@ -921,6 +941,7 @@ mod tests {
                 source_size: size,
                 selected: selected.map(str::to_owned),
                 stream_name: None,
+                password: None,
                 limits: limits(allowance),
             },
         )
@@ -1031,6 +1052,7 @@ mod tests {
                 source_size: size,
                 selected: selected.map(str::to_owned),
                 stream_name: None,
+                password: None,
                 limits: limits(allowance)
             }
         )
@@ -1116,4 +1138,6 @@ mod tests {
             }
         }
     }
+
+    mod passwords;
 }

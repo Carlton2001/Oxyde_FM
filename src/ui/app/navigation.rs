@@ -526,6 +526,7 @@ impl OxydeApp {
                     // Its stable id, not the pane captured at request time, owns the result.
                     let mut refresh_subdirectory_flags = false;
                     let mut vanished = false;
+                    let mut locked = None;
                     if let Some(tab) = this.state.find_tab_mut(&tab_id) {
                         if tab.path != path {
                             return;
@@ -547,6 +548,7 @@ impl OxydeApp {
                                 tab.clear_files();
                                 tab.load_status = crate::ui::errors::path_load_status(&error);
                                 log::warn!("Cannot list {}: {error:?}", path);
+                                locked = Some(error.to_string());
                                 vanished = restored
                                     && matches!(error, oxyde_lib::models::CommandError::PathNotFound(_));
                             }
@@ -556,6 +558,9 @@ impl OxydeApp {
                     if vanished {
                         this.leave_vanished_location(&tab_id, cx);
                         return;
+                    }
+                    if let Some(detail) = locked {
+                        this.ask_listing_password(&tab_id, &path, &detail, cx);
                     }
                     // A watcher burst during the listing needs one follow-up,
                     // not another concurrent directory read on every tick.

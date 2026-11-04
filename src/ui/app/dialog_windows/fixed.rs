@@ -28,6 +28,7 @@ impl DialogKind {
             Self::Network => app.network_dialog.is_some() && app.network_force_confirmation.is_none(),
             Self::NetworkForce => app.network_force_confirmation.is_some(),
             Self::RemoteLogin => app.remote_login.is_some(),
+            Self::ArchivePassword => app.archive_password.is_some(),
             Self::TrashDelete => app.pending_trash_delete.is_some(),
             Self::SettingsConfirmation => app.settings_confirmation.is_some(),
             Self::Notice => app.file_operation_notice.is_some(),
@@ -41,6 +42,7 @@ impl DialogKind {
             Self::Network => app.network_dialog.as_ref().map(|dialog| dialog.focus.clone()),
             Self::NetworkForce => app.network_force_confirmation.as_ref().map(|c| c.focus.clone()),
             Self::RemoteLogin => app.remote_login.as_ref().map(|login| login.initial.clone()),
+            Self::ArchivePassword => app.archive_password.as_ref().map(|prompt| prompt.input.read(cx).focus_handle.clone()),
             Self::TrashDelete => app.pending_trash_delete.as_ref().map(|p| p.focus.clone()),
             Self::SettingsConfirmation => app.settings_confirmation.as_ref().map(|c| c.focus.clone()),
             _ => None,
@@ -69,6 +71,7 @@ impl DialogKind {
             }
             Self::NetworkForce => app.resolve_network_force(false, window, cx),
             Self::RemoteLogin => app.answer_remote_login(true, window, cx),
+            Self::ArchivePassword => app.answer_archive_password(true, window, cx),
             Self::TrashDelete => app.pending_trash_delete = None,
             Self::SettingsConfirmation => app.resolve_settings_confirmation(false, window, cx),
             Self::Notice => app.file_operation_notice = None,
@@ -85,6 +88,7 @@ impl DialogKind {
             Self::Network => app.network_dialog = None,
             Self::NetworkForce => app.network_force_confirmation = None,
             Self::RemoteLogin => app.dismiss_remote_login(),
+            Self::ArchivePassword => app.dismiss_archive_password(),
             Self::TrashDelete => app.pending_trash_delete = None,
             Self::SettingsConfirmation => app.settings_confirmation = None,
             Self::Notice => app.file_operation_notice = None,
@@ -100,12 +104,13 @@ impl DialogKind {
         window: &mut Window,
         cx: &mut Context<OxydeApp>,
     ) -> AnyElement {
-        use crate::ui::components::{network_dialog, remote_login_dialog, rename_dialog, settings};
+        use crate::ui::components::{archive_password_dialog, network_dialog, remote_login_dialog, rename_dialog, settings};
         match self {
             Self::Rename => rename_dialog::render_rename_dialog(app, owner, cx).into_any_element(),
             Self::Network => network_dialog::render_network_dialog(app, owner, window, cx).into_any_element(),
             Self::NetworkForce => network_dialog::render_force_confirmation(app, owner, window, cx).into_any_element(),
             Self::RemoteLogin => remote_login_dialog::render_remote_login_dialog(app, owner, window, cx).into_any_element(),
+            Self::ArchivePassword => archive_password_dialog::render_archive_password_dialog(app, owner, window, cx).into_any_element(),
             Self::TrashDelete => super::super::trash_settings::render_delete_confirmation(app, owner, window, cx).into_any_element(),
             Self::SettingsConfirmation => settings::render_settings_confirmation(app, owner, window, cx).into_any_element(),
             Self::Notice => render_notice(app, owner, focus, cx).into_any_element(),

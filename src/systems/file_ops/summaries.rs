@@ -20,6 +20,12 @@ impl FileOperationManager {
             total_bytes: op.total_bytes, processed_bytes: op.processed_bytes,
             total_files: op.total_files, processed_files: op.processed_files })
     }
+    /// What an operation was asked to do, to run it again.
+    pub fn operation_request(&self, id: &str) -> Option<(FileOpType, Vec<std::path::PathBuf>, Option<std::path::PathBuf>)> {
+        let operations = self.operations.lock().unwrap();
+        let op = operations.get(id)?.lock().unwrap();
+        Some((op.op_type.clone(), op.sources.clone(), op.destination.clone()))
+    }
     pub fn operation_counts(&self) -> (usize, usize) {
         let operations = self.operations.lock().unwrap();
         let active = operations

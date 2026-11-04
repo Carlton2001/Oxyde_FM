@@ -25,6 +25,14 @@ fn invalid(message: &str) -> io::Error {
 }
 
 pub(super) fn archive_error(error: sevenz_rust2::Error) -> CommandError {
+    archive_error_with(error, false)
+}
+
+/// `tried`: a password was given, so a bad-password guess means a wrong one.
+pub(super) fn archive_error_with(error: sevenz_rust2::Error, tried: bool) -> CommandError {
+    if let Some(failure) = crate::utils::archive_password::seven_failure(&error, tried) {
+        return failure.into();
+    }
     // sevenz's Display delegates to Debug, which erases the Display marker of
     // typed IO causes such as ArchiveLimitFailure. Keep their original text.
     CommandError::ArchiveError(match error {
@@ -106,7 +114,11 @@ pub(super) fn indexed_file(
         budget: &budget,
         checkpoint,
     };
-    let archive = Archive::read(&mut source, &Password::empty()).map_err(archive_error)?;
+    // Encrypted headers hide even the names: listing needs the password too.
+    let secret = crate::utils::archive_password::for_archive(archive_path);
+    let password = secret.as_ref().map_or_else(Password::empty, |secret| secret.seven());
+    let archive = Archive::read(&mut source, &password)
+        .map_err(|error| archive_error_with(error, secret.is_some()))?;
     budget.check_entry_count(archive.files.len())?;
     let mut entries = Vec::new();
     let archive_origin = std::sync::Arc::new(archive_path.to_path_buf());

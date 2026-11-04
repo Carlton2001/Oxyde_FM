@@ -383,6 +383,34 @@ impl ArchiveProcessingFailure {
 impl fmt::Display for ArchiveProcessingFailure { fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str(Self::MARKER) } }
 impl std::error::Error for ArchiveProcessingFailure {}
 
+/// An encrypted archive refused its entries: no password yet, or a wrong one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ArchivePasswordFailure {
+    Required,
+    Wrong,
+}
+impl ArchivePasswordFailure {
+    const REQUIRED: &str = "Archive password required [archive-password-required]";
+    const WRONG: &str = "Archive password rejected [archive-password-wrong]";
+    pub fn from_message(message: &str) -> Option<Self> {
+        if message.contains(Self::REQUIRED) { Some(Self::Required) }
+        else if message.contains(Self::WRONG) { Some(Self::Wrong) }
+        else { None }
+    }
+}
+impl fmt::Display for ArchivePasswordFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self { Self::Required => Self::REQUIRED, Self::Wrong => Self::WRONG })
+    }
+}
+impl std::error::Error for ArchivePasswordFailure {}
+impl From<ArchivePasswordFailure> for std::io::Error {
+    fn from(value: ArchivePasswordFailure) -> Self { Self::new(std::io::ErrorKind::InvalidInput, value) }
+}
+impl From<ArchivePasswordFailure> for CommandError {
+    fn from(value: ArchivePasswordFailure) -> Self { Self::ArchiveError(value.to_string()) }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ArchiveLimitKind {
     Bytes,

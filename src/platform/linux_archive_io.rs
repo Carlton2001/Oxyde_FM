@@ -60,7 +60,8 @@ pub(super) fn run(operation: Operation, controls: &dyn Fn() -> io::Result<Contro
         if (parent_failed && error.to_string() != invalid().to_string())
             || error.kind() == io::ErrorKind::Interrupted
             || ArchiveLimitFailure::from_message(&error.to_string()).is_some()
-            || ArchiveSourceConflict::from_message(&error.to_string()) {
+            || ArchiveSourceConflict::from_message(&error.to_string())
+            || crate::models::error::ArchivePasswordFailure::from_message(&error.to_string()).is_some() {
             return error;
         }
         log::warn!("Archive worker failure: {error:?}");

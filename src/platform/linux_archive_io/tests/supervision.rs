@@ -53,7 +53,7 @@ fn the_worker_encodes_and_decodes_through_the_parent_alone() {
     let content: Vec<u8> = (0..1_500_000u32).map(|value| (value % 251) as u8).collect();
     for format in [Format::Zip, Format::SevenZip, Format::Tar, Format::TarZst, Format::TarGz, Format::TarXz, Format::TarBz2, Format::TarLz4] {
         let archive = encoded(format, &content, &free).unwrap();
-        let operation = Operation::Decode { format, source_size: archive.len() as u64, selected: None, stream_name: None, limits: limits() };
+        let operation = Operation::Decode { format, source_size: archive.len() as u64, selected: None, stream_name: None, password: None, limits: limits() };
         let mut restored = Vec::new();
         let finished = Cell::new(false);
         let mut handler = |frame: Frame| {
@@ -108,7 +108,7 @@ fn hostile(script: &str) -> PathBuf {
 }
 
 fn decode_with(executable: &Path, deadline: Duration) -> io::Result<Duration> {
-    let operation = Operation::Decode { format: Format::Tar, source_size: 0, selected: None, stream_name: None, limits: limits() };
+    let operation = Operation::Decode { format: Format::Tar, source_size: 0, selected: None, stream_name: None, password: None, limits: limits() };
     run_in(executable, operation, &free, &mut |_| Ok(Frame::new(Message::Ack { pause: false, turbo: false })), deadline)
 }
 

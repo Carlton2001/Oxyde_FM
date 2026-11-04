@@ -250,6 +250,9 @@ impl OxydeApp {
                             handle.update(&mut cx, |this, cx| {
                                 this.resume_viewers_after_deletion(&op_id, true, cx);
                                 log::warn!("File operation failed: {error}");
+                                if this.retry_operation_with_password(&op_id, &error, cx) {
+                                    return;
+                                }
                                 let recovery = this.archive_recovery_notice(&error, cx);
                                 this.file_operation_notice = Some((if recovery { Message::ArchiveRecoveryNotice } else { Message::TransferFailed }, error));
                                 cx.notify();

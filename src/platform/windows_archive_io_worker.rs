@@ -115,6 +115,7 @@ pub(super) fn run(
             || error.kind() == io::ErrorKind::Interrupted
             || ArchiveLimitFailure::from_message(&error.to_string()).is_some()
             || ArchiveSourceConflict::from_message(&error.to_string())
+            || crate::models::error::ArchivePasswordFailure::from_message(&error.to_string()).is_some()
         {
             return error;
         }
@@ -474,6 +475,7 @@ mod tests {
             source_size: 0,
             selected: None,
             stream_name: None,
+            password: None,
             limits: crate::utils::archive_io_protocol::Limits {
                 entries: 1,
                 bytes: 1,

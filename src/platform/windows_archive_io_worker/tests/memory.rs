@@ -32,6 +32,7 @@ fn only_seven_encoding_uses_the_larger_envelope_and_navigation_stays_reserved() 
             source_size: 1024,
             selected: None,
             stream_name: None,
+            password: None,
             limits,
         };
         assert_eq!(worker_memory(&decode), MEMORY_BYTES);

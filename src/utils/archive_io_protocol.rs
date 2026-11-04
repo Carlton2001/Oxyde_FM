@@ -115,6 +115,9 @@ pub enum Operation {
         /// Member name of a single compressed file; the worker never sees the path.
         #[serde(default)]
         stream_name: Option<String>,
+        /// For an encrypted ZIP or 7z only; never logged.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        password: Option<super::archive_password::ArchiveSecret>,
         limits: Limits,
     },
     Encode {
@@ -231,6 +234,8 @@ pub enum FailureKind {
     Depth,
     Seconds,
     Decoded,
+    PasswordRequired,
+    PasswordWrong,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -305,9 +310,16 @@ impl Message {
                         format,
                         selected,
                         stream_name,
+                        password,
                         limits,
                         ..
                     } => {
+                        if let Some(password) = password {
+                            password.validate()?;
+                            if !matches!(format, Format::Zip | Format::SevenZip) {
+                                return Err(invalid());
+                            }
+                        }
                         if let Some(name) = selected {
                             validate_name(name)?;
                         }

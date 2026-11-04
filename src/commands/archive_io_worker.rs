@@ -1,5 +1,5 @@
 //! Headless codec dispatch: no native paths, user state, caches, or GPUI.
-use crate::models::error::{ArchiveLimitFailure, ArchiveLimitKind, ArchiveSourceConflict};
+use crate::models::error::{ArchiveLimitFailure, ArchiveLimitKind, ArchivePasswordFailure, ArchiveSourceConflict};
 use crate::utils::archive_io_protocol::{invalid, FailureKind, Frame, Message, Wire, MAX_ERROR};
 use crate::utils::archive_io_stream::Exchange;
 use std::io::{self, Read, Write};
@@ -106,6 +106,11 @@ pub fn error_frame(error: &crate::models::CommandError) -> Frame {
         )
     } else if ArchiveSourceConflict::from_message(&detail) {
         (FailureKind::SourceChanged, 0)
+    } else if let Some(failure) = ArchivePasswordFailure::from_message(&detail) {
+        (match failure {
+            ArchivePasswordFailure::Required => FailureKind::PasswordRequired,
+            ArchivePasswordFailure::Wrong => FailureKind::PasswordWrong,
+        }, 0)
     } else {
         (FailureKind::Corrupt, 0)
     };

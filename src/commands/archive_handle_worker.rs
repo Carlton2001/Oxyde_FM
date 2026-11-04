@@ -80,6 +80,7 @@ pub fn run_if_requested() -> bool {
         if gate != [0xA7] {
             return Err(io::Error::other("Invalid metadata start gate"));
         }
+        crate::utils::archive_password::receive(&mut io::stdin())?;
         let mode = arguments
             .next()
             .ok_or_else(|| io::Error::other("Missing metadata mode"))?;

@@ -8,6 +8,7 @@ pub mod modal;
 pub(crate) mod network;
 pub(crate) mod network_dialog;
 pub(crate) mod remote_login_dialog;
+pub(crate) mod archive_password_dialog;
 pub mod operations;
 pub mod rename_dialog;
 pub mod scrollbar;

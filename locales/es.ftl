@@ -527,6 +527,12 @@ remote-retry = Credenciales rechazadas. Inténtelo de nuevo.
 remote-connect = Conectar
 remote-connect-failed = No se puede conectar con esta ubicación.
 remote-connect-failed-toast = No se puede conectar: { $detail }
+archive-password-title = Archivo protegido
+archive-password-prompt = «{ $name }» está protegido con contraseña.
+archive-password-wrong = Contraseña incorrecta. Inténtelo de nuevo.
+archive-password-unlock = Desbloquear
+archive-password-required = Este archivo está protegido con contraseña.
+archive-password-rejected = La contraseña de este archivo es incorrecta.
 
 drive-eject-failed = No se pudo expulsar la unidad. Puede que otra aplicación la esté usando. { $detail }
 drive-unmount-failed = No se pudo desmontar el volumen. Puede que otra aplicación lo esté usando. { $detail }

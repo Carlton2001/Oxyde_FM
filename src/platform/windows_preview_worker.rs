@@ -339,6 +339,20 @@ pub(super) fn supervise_source(
     max_reply: usize,
     checkpoint: &dyn Fn() -> io::Result<()>,
 ) -> io::Result<Vec<u8>> {
+    supervise_source_with_input(command, source, deadline, memory_bytes, max_reply, &[], checkpoint)
+}
+
+/// As `supervise_source`, writing `request` after the start gate: a few bytes the
+/// pipe holds without waiting for the worker.
+pub(super) fn supervise_source_with_input(
+    command: Command,
+    source: &std::fs::File,
+    deadline: Duration,
+    memory_bytes: usize,
+    max_reply: usize,
+    request: &[u8],
+    checkpoint: &dyn Fn() -> io::Result<()>,
+) -> io::Result<Vec<u8>> {
     let started = Instant::now();
     let timeout_detail = if command
         .get_args()
@@ -363,6 +377,11 @@ pub(super) fn supervise_source(
         &checked,
         source,
     )?;
+    let mut input = input;
+    if !request.is_empty() {
+        input.write_all(request)?;
+        input.flush()?;
+    }
     drop(input);
     collect_reply(
         output,

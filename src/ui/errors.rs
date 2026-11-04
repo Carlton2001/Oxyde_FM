@@ -108,6 +108,11 @@ pub fn path_load_status(error: &CommandError) -> crate::ui::workspace::TabLoadSt
 /// Maps backend failures to concise UI message keys.
 /// Technical details remain available in logs instead of leaking OS error strings to users.
 pub fn path_load_message(error: &CommandError) -> Message {
+    match oxyde_lib::models::error::ArchivePasswordFailure::from_message(&error.to_string()) {
+        Some(oxyde_lib::models::error::ArchivePasswordFailure::Required) => return Message::ArchivePasswordRequired,
+        Some(oxyde_lib::models::error::ArchivePasswordFailure::Wrong) => return Message::ArchivePasswordRejected,
+        None => {}
+    }
     match error {
         CommandError::PathNotFound(_) => Message::PathNotFound,
         CommandError::AccessDenied(_) => Message::PathAccessDenied,

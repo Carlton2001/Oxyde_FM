@@ -31,6 +31,11 @@ impl OxydeApp {
                 Err(error) => error.to_string(),
             };
             let _ = this.update(cx, |this, cx| {
+                let archive = super::archive_password::archive_of(&source);
+                let retry = source.clone();
+                if this.ask_archive_password(&archive, &error, move |this, cx| this.open_external_item(retry, cx), cx) {
+                    return;
+                }
                 this.toast(ToastKind::Error, Message::OpenItemFailed, error, 0, cx);
                 cx.notify();
             });

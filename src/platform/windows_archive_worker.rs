@@ -115,12 +115,16 @@ fn confined(
 ) -> Result<Vec<u8>, CommandError> {
     checkpoint()?;
     let source = crate::platform::platform().retain_archive_source(path)?;
-    super::windows_preview_worker::supervise_source(
+    let mut request = zeroize::Zeroizing::new(Vec::new());
+    crate::utils::archive_password::send(&mut *request, crate::utils::archive_password::for_archive(path).as_ref())
+        .map_err(|_| failed())?;
+    super::windows_preview_worker::supervise_source_with_input(
         command,
         &source.file,
         deadline,
         MEMORY_BYTES,
         archive_listing_protocol::MAX_REPLY,
+        &request,
         checkpoint,
     )
     .map_err(|error| {

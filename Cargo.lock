@@ -4495,6 +4495,7 @@ dependencies = [
  "windows-core 0.62.2",
  "xz2",
  "zbus",
+ "zeroize",
  "zip",
  "zstd",
 ]

@@ -118,6 +118,7 @@ fn encoded(format: Format, quality: Quality) -> Vec<u8> {
         source_size: bytes.len() as u64,
         selected: Some("école_日本語.txt".into()),
         stream_name: None,
+        password: None,
         limits: limits(),
     };
     windows_archive_io_worker::run_in(
@@ -180,6 +181,7 @@ fn decode_fixture(format: Format, bytes: Vec<u8>, selected: &str, expected: &[u8
             source_size: bytes.len() as u64,
             selected: Some(selected.into()),
             stream_name: None,
+            password: None,
             limits: limits(),
         },
         &|| Ok(Control::default()),
@@ -277,6 +279,7 @@ fn confirmed_pause_excludes_elapsed_time_and_produces_no_effects() {
         source_size: bytes.len() as u64,
         selected: Some("école_日本語.txt".into()),
         stream_name: None,
+        password: None,
         limits: limits(),
     };
     let mut state = ExtractionState::new(limits(), Some("école_日本語.txt"), true).unwrap();
@@ -343,6 +346,7 @@ fn listing_search_and_preview_advance_while_archive_io_is_confirmed_paused() {
                 source_size: bytes.len() as u64,
                 selected: Some("école_日本語.txt".into()),
                 stream_name: None,
+                password: None,
                 limits: limits(),
             },
             &|| {
@@ -453,6 +457,7 @@ fn deadline_and_cancellation_remain_live_when_child_does_not_read_its_input() {
         source_size: 0,
         selected: Some("x".repeat(32 * 1024)),
         stream_name: None,
+        password: None,
         limits: limits(),
     };
     for cancel in [false, true] {
@@ -688,6 +693,7 @@ fn cancellation_remains_live_during_a_confirmed_pause() {
             source_size: bytes.len() as u64,
             selected: None,
             stream_name: None,
+            password: None,
             limits: limits(),
         },
         &|| {

@@ -8,6 +8,7 @@ fn start(format: Format, stream_name: Option<&str>) -> io::Result<()> {
             source_size: 1,
             selected: None,
             stream_name: stream_name.map(str::to_owned),
+            password: None,
             limits: Limits { entries: 1, bytes: 1, depth: 1, seconds: 1 },
         },
     })

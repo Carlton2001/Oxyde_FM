@@ -70,6 +70,12 @@ fn confined(executable: &Path, flag: &str, internal: Option<&str>, path: &Path, 
         command.arg(flag);
         command.args(source);
         command.args(internal);
+    }).and_then(|mut worker| {
+        let secret = crate::utils::archive_password::for_archive(path);
+        let mut frame = Vec::new();
+        crate::utils::archive_password::send(&mut frame, secret.as_ref())?;
+        worker.send(&zeroize::Zeroizing::new(frame))?;
+        Ok(worker)
     }).and_then(|mut worker| worker.read_to_end_checked(archive_listing_protocol::MAX_REPLY, Instant::now() + deadline, checkpoint));
     reply.map_err(|error| {
         log::warn!("Confined archive metadata worker failed: {error}");
@@ -88,3 +94,7 @@ fn confined(executable: &Path, flag: &str, internal: Option<&str>, path: &Path, 
 #[cfg(test)]
 #[path = "linux_archive_list/tests/workers.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "linux_archive_list/tests/passwords.rs"]
+mod password_tests;

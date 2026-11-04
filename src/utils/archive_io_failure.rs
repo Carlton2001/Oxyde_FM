@@ -1,6 +1,6 @@
 //! A worker's reported failure, turned into the parent's typed errors. Its limits are
 //! accepted only if they are the ones the parent gave it.
-use crate::models::error::{ArchiveLimitFailure, ArchiveLimitKind, ArchiveSourceConflict};
+use crate::models::error::{ArchiveLimitFailure, ArchivePasswordFailure, ArchiveLimitKind, ArchiveSourceConflict};
 use crate::utils::archive_io_protocol::{invalid, FailureKind, Frame, Message, Operation};
 use std::io;
 
@@ -42,6 +42,8 @@ pub(crate) fn failure(frame: &Frame) -> io::Error {
     match cause {
         FailureKind::SourceChanged => io::Error::other(ArchiveSourceConflict),
         FailureKind::Cancelled => cancelled(),
+        FailureKind::PasswordRequired => ArchivePasswordFailure::Required.into(),
+        FailureKind::PasswordWrong => ArchivePasswordFailure::Wrong.into(),
         FailureKind::Corrupt | FailureKind::Unsupported | FailureKind::Worker => {
             log::warn!("Archive codec failure: {detail:?}");
             io::Error::other(crate::models::error::ArchiveProcessingFailure)

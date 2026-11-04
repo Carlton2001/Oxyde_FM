@@ -316,3 +316,45 @@ fn a_large_file_that_deflate_expands_joins_a_zip() {
         println!("{} MiB", fs::metadata(&archive).unwrap().len() >> 20);
     });
 }
+
+/// Encrypted ZIP (AES-256) and 7z extract and open only with the remembered password.
+#[test]
+fn encrypted_archives_extract_and_open_with_their_password() {
+    use oxyde_lib::models::error::ArchivePasswordFailure;
+    use oxyde_lib::utils::archive_password::{forget, remember, ArchiveSecret};
+    confined(|| {
+        let temp = tempfile::tempdir().unwrap();
+        let zip_path = temp.path().join("locked.zip");
+        let mut writer = zip::ZipWriter::new(fs::File::create(&zip_path).unwrap());
+        writer.start_file("note.txt", zip::write::SimpleFileOptions::default()
+            .with_aes_encryption(zip::AesMode::Aes256, "correct horse")).unwrap();
+        writer.write_all(b"secret").unwrap();
+        writer.finish().unwrap();
+        let source = temp.path().join("source");
+        fs::create_dir(&source).unwrap();
+        fs::write(source.join("note.txt"), b"secret").unwrap();
+        let seven_path = temp.path().join("locked.7z");
+        sevenz_rust2::compress_to_path_encrypted(&source, &seven_path, "correct horse".into()).unwrap();
+        let base = temp.path().join("cache");
+        fs::create_dir(&base).unwrap();
+        for (index, archive) in [zip_path, seven_path].into_iter().enumerate() {
+            let target = temp.path().join(format!("output-{index}"));
+            let extract = |target: &Path| FileOperationManager::perform_extract(
+                &operation(FileOpType::Extract), vec![archive.clone()], Some(target.to_path_buf()));
+            let refusal = |error: String| ArchivePasswordFailure::from_message(&error);
+            let error = extract(&target).unwrap_err();
+            assert_eq!(refusal(error), Some(ArchivePasswordFailure::Required), "{archive:?}");
+            assert!(!target.join("note.txt").exists());
+            remember(&archive, ArchiveSecret::new("wrong".into()).unwrap());
+            assert_eq!(refusal(extract(&target).unwrap_err()), Some(ArchivePasswordFailure::Wrong), "{archive:?}");
+            remember(&archive, ArchiveSecret::new("correct horse".into()).unwrap());
+            extract(&target).unwrap();
+            assert_eq!(fs::read(target.join("note.txt")).unwrap(), b"secret");
+            oxyde_lib::commands::archive::with_archive_cache_base_for_tests(&base, || {
+                let cached = oxyde_lib::commands::archive::prepare_archive_file_for_open(&archive.join("note.txt")).unwrap();
+                assert_eq!(fs::read(cached).unwrap(), b"secret");
+            });
+            forget(&archive);
+        }
+    });
+}

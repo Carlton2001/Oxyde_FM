@@ -50,6 +50,17 @@ For a group, prepare all archives then publish while keeping originals until com
 
 A move removes only sources actually copied; skipped conflicts stay. Archive mutations add no filesystem Undo/Redo. An external open uses a temporary copy, with no automatic reintegration of edits.
 
+## Encrypted archives
+
+ZIP (ZipCrypto, AES) and 7z encrypted with a password are read, browsed, opened and extracted; creating and rebuilding them is not supported yet. `utils/archive_password.rs` holds the passwords:
+
+- The parent remembers each password in memory for its archive path until Oxyde exits, never in configuration, workspace or logs. `ArchiveSecret` hides its value from `Debug` and clears its memory on drop.
+- A listing worker receives a `u16` length and the UTF-8 password (1024 bytes at most, empty without one) on its standard input right after the start gate, never in its arguments. Decode receives it in `Operation::Decode::password`, accepted for ZIP and 7z only.
+- A refusal is the typed `ArchivePasswordFailure` (`Required`, `Wrong`), carried by `FailureKind::PasswordRequired`/`PasswordWrong` or by the listing's error text. 7z with encrypted headers refuses even its listing; ZIP and 7z with clear headers list without a password. A ZipCrypto password passing its one-byte check but failing the CRC counts as wrong.
+- The interface (`ui/app/archive_password.rs`) asks for the password when a listing, an opening or an extraction (or a copy out of an archive) is refused, then runs the refused action again. A wrong password is forgotten and asked again; cancelling leaves the translated error.
+
+Known gap: a file opened from an encrypted archive stays decrypted in the open cache under the cache's usual rules (up to 7 days on Linux), not until exit.
+
 ## Guarantees to preserve
 
 - Exclusive publication, destination checks and partial-effect recovery in the parent.

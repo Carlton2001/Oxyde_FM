@@ -527,6 +527,12 @@ remote-retry = Anmeldedaten abgelehnt. Bitte erneut versuchen.
 remote-connect = Verbinden
 remote-connect-failed = Verbindung zu diesem Ort nicht möglich.
 remote-connect-failed-toast = Verbindung nicht möglich: { $detail }
+archive-password-title = Geschütztes Archiv
+archive-password-prompt = „{ $name }“ ist durch ein Passwort geschützt.
+archive-password-wrong = Falsches Passwort. Bitte erneut versuchen.
+archive-password-unlock = Entsperren
+archive-password-required = Dieses Archiv ist durch ein Passwort geschützt.
+archive-password-rejected = Das Passwort für dieses Archiv ist falsch.
 
 drive-eject-failed = Laufwerk konnte nicht ausgeworfen werden. Eine andere Anwendung verwendet es möglicherweise. { $detail }
 drive-unmount-failed = Datenträger konnte nicht ausgehängt werden. Eine andere Anwendung verwendet ihn möglicherweise. { $detail }
