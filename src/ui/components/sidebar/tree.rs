@@ -83,7 +83,7 @@ pub(super) fn render_sidebar_tree(
     let content_w = calculated_content_w.max(viewport_w);
     // Reserve scrollbar gutters only when their axis actually overflows.
     let h_overflow = content_w > viewport_w + 1.0;
-    let list_top = crate::ui::scale::rem_pixels(crate::ui::style::TAB_BAR_HEIGHT).as_f32();
+    let list_top = crate::ui::scale::rem_pixels(list_top_rems()).as_f32();
     let list_bottom = if h_overflow { crate::ui::components::scrollbar::zed_track_width() } else { 0.0 };
     let viewport_h = (view.list_height - list_top - list_bottom).max(1.0);
     let content_h = sidebar_items.iter().map(sidebar_item_height).sum::<f32>().max(1.0);
@@ -131,7 +131,7 @@ pub(super) fn render_sidebar_tree(
                 .child(
                     div()
                         .absolute()
-                        .top(crate::ui::style::TAB_BAR_HEIGHT)
+                        .top(list_top_rems())
                         .bottom(px(list_bottom))
                         .left(rems(0.5))
                         .right(list_right) // 12 px scrollbar track + 6 px clear margin when needed.
@@ -189,7 +189,7 @@ pub(super) fn render_sidebar_tree(
         container = container.child(
             div()
                 .absolute()
-                .top(crate::ui::style::TAB_BAR_HEIGHT - rems(0.0625))
+                .top(list_top_rems() - rems(0.0625))
                 .left_0()
                 .right_0()
                 .h(rems(0.0625))
@@ -209,7 +209,7 @@ pub(super) fn render_sidebar_tree(
             .as_f32();
         div()
             .absolute()
-            .top(crate::ui::style::TAB_BAR_HEIGHT)
+            .top(list_top_rems())
             .bottom(px(list_bottom))
             .right_0()
             .w(rems(0.75))
@@ -256,3 +256,8 @@ pub(super) fn render_sidebar_tree(
     container
 }
 
+
+/// The toolbar height plus a gap, so the first entry does not touch the toolbar.
+fn list_top_rems() -> Rems {
+    crate::ui::style::TAB_BAR_HEIGHT + rems(0.375)
+}

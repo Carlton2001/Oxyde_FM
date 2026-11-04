@@ -14,7 +14,7 @@ pub(super) fn render_sidebar_rail(
     cx: &mut Context<OxydeApp>,
 ) -> Div {
     let theme = *cx.theme();
-    let mut rail = div()
+    let rail = div()
         .size_full()
         .flex()
         .flex_col()
@@ -22,8 +22,8 @@ pub(super) fn render_sidebar_rail(
         .rounded_bl(view.window_corners.bottom_left)
         .child(sidebar_toolbar(view, handle.clone(), false, cx));
     let h = handle.clone();
-    rail = rail.child(
-        div().px_2().py_2().child(
+    let mut pinned = Some(
+        div().child(
             sidebar_button(
                 "sidebar-pinned".into(),
                 cx.i18n().text(Message::SidebarQuickAccess),
@@ -67,6 +67,8 @@ pub(super) fn render_sidebar_rail(
         .flex()
         .flex_col()
         .items_center()
+        .pt(rems(0.375))
+        .pb_2()
         .gap_2();
     for item in &view.state.sidebar_items {
         if !super::sidebar_item_visible(
@@ -81,8 +83,8 @@ pub(super) fn render_sidebar_rail(
             SidebarItem::Drive { drive, .. } => (
                 drive.path.clone(),
                 crate::ui::format::drive_name(drive, cx.i18n()),
-                None,
-                Some(drive.path.chars().next().unwrap_or('/').to_string()),
+                drive_letter(&drive.path).is_none().then(|| crate::ui::components::icons::drive_icon_path(drive)),
+                drive_letter(&drive.path),
             ),
             SidebarItem::OneDrive { item } => (item.path.clone(), item.name.clone(), Some("icons/cloudy.svg"), None),
             SidebarItem::Linux { .. } => (
@@ -109,6 +111,13 @@ pub(super) fn render_sidebar_rail(
             }
             _ => continue,
         };
+        let is_home = matches!(item, SidebarItem::Pinned { item } if item.name.is_empty());
+        // Places come first, as in the expanded tree: Home, then the pinned folders.
+        if !is_home {
+            if let Some(pinned) = pinned.take() {
+                entries = entries.child(pinned);
+            }
+        }
         let h = handle.clone();
         let middle = handle.clone();
         let middle_path = path.clone();
@@ -207,7 +216,7 @@ pub(super) fn render_sidebar_rail(
                     cx.notify();
                 });
             })
-            .when(is_drive, |d| {
+            .when(is_drive && icon.is_none(), |d| {
                 d.font_weight(FontWeight::BOLD).text_size(rems(0.75))
             })
             .when(selected, |d| {
@@ -215,6 +224,9 @@ pub(super) fn render_sidebar_rail(
                     .text_color(theme.accent)
             }),
         );
+    }
+    if let Some(pinned) = pinned {
+        entries = entries.child(pinned);
     }
     // Mark the fixed header edge only once entries have scrolled beneath it.
     let scrolled = crate::ui::components::scrollbar::scrolled_from_top(&view.sidebar_rail_scroll);
@@ -236,4 +248,13 @@ pub(super) fn render_sidebar_rail(
                 )
             }),
     )
+}
+
+/// Windows drives show their letter; volumes without one show their type icon.
+fn drive_letter(path: &str) -> Option<String> {
+    let mut chars = path.chars();
+    match (chars.next(), chars.next()) {
+        (Some(letter), Some(':')) if letter.is_ascii_alphabetic() => Some(letter.to_ascii_uppercase().to_string()),
+        _ => None,
+    }
 }

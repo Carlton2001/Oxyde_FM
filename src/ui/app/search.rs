@@ -564,32 +564,19 @@ impl OxydeApp {
                 )
             })
             .child(
-                div()
-                    .id(SharedString::from(format!("clear-search-{id}")))
-                    .flex_none()
-                    .flex()
-                    .items_center()
-                    .gap(rems(0.375))
-                    .h(rems(1.5))
-                    .m(rems(0.25))
-                    .px(rems(0.5))
-                    .rounded_sm()
-                    .bg(theme.control_hover)
-                    .text_color(theme.text)
-                    .hover(move |style| style.bg(theme.control_hover))
-                    .child(
-                        svg()
-                            .path("icons/x.svg")
-                            .size(rems(0.875))
-                            .text_color(theme.text),
-                    )
-                    .child(cx.i18n().text(Message::QuickSearchClear))
-                    .on_click(move |_, window, cx| {
-                        handle.update(cx, |this, cx| {
-                            this.clear_quick_search(&id, cx);
-                            window.focus(&this.focus_handle, cx);
-                        });
-                    }),
+                div().flex_none().child(
+                    crate::ui::elements::button::Button::new(SharedString::from(format!("clear-search-{id}")))
+                        .icon("icons/x.svg")
+                        .label(cx.i18n().text(Message::QuickSearchClear))
+                        // Match the banner text rather than the dialog button size.
+                        .label_size(13.0)
+                        .on_click(move |window, cx| {
+                            handle.update(cx, |this, cx| {
+                                this.clear_quick_search(&id, cx);
+                                window.focus(&this.focus_handle, cx);
+                            });
+                        }),
+                ),
             )
             .into_any_element()
     }
