@@ -36,3 +36,6 @@ Local source changes, all marked `Oxyde:`:
 Reason: GPUI repositions a popup only when it resizes, so a tooltip could not follow the
 pointer. Windows and X11 reject anchored popups and are unchanged. When updating GPUI,
 compare both copies to the new upstream.
+- `gpui_linux/src/linux/wayland/{client,window}.rs`: a window's mouse position is the pointer's
+  only while the pointer is over it. Upstream gives every window the last location in the
+  hovered surface's coordinates, so a submenu opened beside its parent showed a hovered row.

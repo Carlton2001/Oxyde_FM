@@ -40,7 +40,7 @@ impl<T: InteractiveElement> ClientDecorationsExt for T {}
 pub(crate) fn frame(content: impl IntoElement + Styled, border: Hsla, window: &mut Window) -> AnyElement {
     #[cfg(target_os = "linux")]
     {
-        let Some(tiling) = client_tiling(window) else {
+        let Decorations::Client { tiling } = window.window_decorations() else {
             return content.into_any_element();
         };
         window.set_client_inset(MARGIN);
@@ -105,7 +105,7 @@ pub(crate) fn frame(content: impl IntoElement + Styled, border: Hsla, window: &m
 /// which rounds natively, or where a corner meets a screen edge.
 pub(crate) fn inner_corners(window: &Window) -> Corners<Pixels> {
     #[cfg(target_os = "linux")]
-    if let Some(tiling) = client_tiling(window) {
+    if let Decorations::Client { tiling } = window.window_decorations() {
         if !window.is_fullscreen() && !window.is_maximized() {
             return rounded_corners(tiling, CORNER_RADIUS);
         }
@@ -134,7 +134,7 @@ pub(crate) const TOP: Corners<bool> = Corners { top_left: true, top_right: true,
 pub(crate) fn content_bounds(window: &Window) -> Bounds<Pixels> {
     let viewport = window.viewport_size();
     #[cfg(target_os = "linux")]
-    if let Some(tiling) = client_tiling(window) {
+    if let Decorations::Client { tiling } = window.window_decorations() {
         let margin = margin(tiling);
         return Bounds::new(point(margin.left, margin.top), size(
             (viewport.width - margin.left - margin.right).max(px(0.0)),
@@ -159,28 +159,6 @@ thread_local! {
 /// Transparent margin holding the shadow and the resize zones.
 #[cfg(target_os = "linux")]
 const MARGIN: Pixels = px(10.0);
-
-#[cfg(target_os = "linux")]
-thread_local! {
-    static NEVER_TILED: std::cell::RefCell<std::collections::HashSet<WindowId>> = Default::default();
-}
-
-/// Marks a modal prompt: Mutter reports its attachment to the owner as a tiled top edge,
-/// but the prompt floats over the owner and keeps its whole frame.
-pub(crate) fn never_tiled(window: &Window) {
-    #[cfg(target_os = "linux")]
-    NEVER_TILED.with(|windows| windows.borrow_mut().insert(window.window_handle().window_id()));
-    #[cfg(not(target_os = "linux"))]
-    let _ = window;
-}
-
-/// The tiling of a client-decorated window, none for a modal prompt.
-#[cfg(target_os = "linux")]
-fn client_tiling(window: &Window) -> Option<Tiling> {
-    let Decorations::Client { tiling } = window.window_decorations() else { return None };
-    let floating = NEVER_TILED.with(|windows| windows.borrow().contains(&window.window_handle().window_id()));
-    Some(if floating && !window.is_maximized() && !window.is_fullscreen() { Tiling::default() } else { tiling })
-}
 
 /// Radius of the window outline, as in Soliton.
 #[cfg(target_os = "linux")]

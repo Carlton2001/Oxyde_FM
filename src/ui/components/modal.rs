@@ -221,6 +221,8 @@ impl RenderOnce for Modal {
                     .when(fill_window, |body| body.flex_1()).child(self.body), false, window, cx);
             let corners = super::client_decorations::inner_corners(window);
             return div().id(self.id).relative().w_full().max_h(height_limit)
+                // Its background reaches all four corners: the header's rounding alone leaves it square.
+                .rounded_tl(corners.top_left).rounded_tr(corners.top_right)
                 .rounded_bl(corners.bottom_left).rounded_br(corners.bottom_right)
                 .when(fill_window, |frame| frame.h_full())
                 .flex().flex_col().bg(self.body_background.unwrap_or(theme.active_background))

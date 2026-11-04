@@ -1856,12 +1856,14 @@ impl PlatformWindow for WaylandWindow {
     }
 
     fn mouse_position(&self) -> Point<Pixels> {
-        self.borrow()
-            .client
-            .get_client()
-            .borrow()
-            .mouse_location
-            .unwrap_or_default()
+        let client = self.borrow().client.get_client();
+        let state = client.borrow();
+        // Oxyde: the location is relative to the surface under the pointer. Another window,
+        // such as a menu opening beside it, would otherwise show a hover where no pointer is.
+        match &state.mouse_focused_window {
+            Some(window) if window.ptr_eq(&self.0) => state.mouse_location.unwrap_or_default(),
+            _ => Point::new(gpui::px(-1.0e6), gpui::px(-1.0e6)),
+        }
     }
 
     fn modifiers(&self) -> Modifiers {

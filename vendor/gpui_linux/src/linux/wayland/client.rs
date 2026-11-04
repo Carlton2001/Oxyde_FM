@@ -367,7 +367,8 @@ pub(crate) struct WaylandClientState {
     scroll_event_received: bool,
     enter_token: Option<()>,
     button_pressed: Option<MouseButton>,
-    mouse_focused_window: Option<WaylandWindowStatePtr>,
+    // Oxyde: read by `WaylandWindow::mouse_position`.
+    pub(crate) mouse_focused_window: Option<WaylandWindowStatePtr>,
     keyboard_focused_window: Option<WaylandWindowStatePtr>,
     loop_handle: LoopHandle<'static, WaylandClientStatePtr>,
     cursor_style: Option<CursorStyle>,
