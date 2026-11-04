@@ -1,5 +1,7 @@
 //! Read-only overview of a folder or an archive in the Viewer. Folders open by
-//! their chevron only; a double-click hands the item to the source pane. Local
+//! their left chevron only, as in the sidebar tree; the right one only says that
+//! a folder holds subfolders, as in the pane. A double-click hands the item to the
+//! source pane. Local
 //! folders are read level by level in the background; an archive is indexed once.
 mod loading;
 mod render;
@@ -98,6 +100,14 @@ impl ArchiveInfo {
     }
 }
 
+/// What a folder holds, known before it is opened.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct Contents {
+    /// Any visible entry: the folder can open.
+    pub(super) entries: bool,
+    pub(super) subfolders: bool,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Chevron {
     None,
@@ -109,7 +119,7 @@ pub(super) enum Chevron {
 
 #[derive(Clone)]
 pub(super) enum Row {
-    Entry { file: Arc<FileEntry>, depth: usize, chevron: Chevron },
+    Entry { file: Arc<FileEntry>, depth: usize, chevron: Chevron, subfolders: bool },
     Loading { depth: usize },
     Failed { depth: usize },
     Empty { depth: usize },
@@ -131,7 +141,7 @@ pub(super) struct Tree {
     pub(super) listing: Listing,
     pub(super) levels: HashMap<String, Level>,
     pub(super) expanded: HashSet<String>,
-    pub(super) subfolders: HashMap<String, bool>,
+    pub(super) contents: HashMap<String, Contents>,
     pub(super) archive: Option<ArchiveInfo>,
     pub(super) rows: Arc<Vec<Row>>,
     pub(super) list: ListState,
@@ -154,7 +164,7 @@ impl Tree {
             listing,
             levels,
             expanded: HashSet::new(),
-            subfolders: HashMap::new(),
+            contents: HashMap::new(),
             archive: None,
             rows: Arc::new(Vec::new()),
             list: ListState::new(0, ListAlignment::Top, gpui::px(800.0)),
@@ -170,7 +180,7 @@ impl Tree {
         if self.expanded.remove(path) {
             return Toggle::Changed;
         }
-        if self.subfolders.get(path) != Some(&true) || self.rows.len() >= MAX_ROWS {
+        if !self.contents.get(path).is_some_and(|contents| contents.entries) || self.rows.len() >= MAX_ROWS {
             return Toggle::Refused;
         }
         self.expanded.insert(path.to_owned());
@@ -202,12 +212,13 @@ impl Tree {
     fn push_level(&self, folder: &Folder, path: &str, depth: usize, rows: &mut Vec<Row>) {
         for file in &folder.entries {
             let open = self.expanded.contains(&file.path);
-            let chevron = match (file.is_dir && self.subfolders.get(&file.path) == Some(&true), open) {
+            let contents = self.contents.get(&file.path).copied().filter(|_| file.is_dir).unwrap_or_default();
+            let chevron = match (contents.entries, open) {
                 (false, _) => Chevron::None,
                 (true, false) => Chevron::Collapsed,
                 (true, true) => Chevron::Expanded,
             };
-            rows.push(Row::Entry { file: file.clone(), depth, chevron });
+            rows.push(Row::Entry { file: file.clone(), depth, chevron, subfolders: contents.subfolders });
             if chevron != Chevron::Expanded {
                 continue;
             }

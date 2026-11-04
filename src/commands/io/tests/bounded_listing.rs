@@ -31,22 +31,25 @@ fn bounded_listing_skips_hidden_entries_unless_shown() {
 }
 
 #[test]
-fn subdirectory_detection_ignores_files_and_hidden_folders() {
+fn contents_tell_empty_files_only_and_nested_folders_apart() {
     let root = tempfile::tempdir().unwrap();
+    let empty = root.path().join("empty");
+    std::fs::create_dir(&empty).unwrap();
     let files_only = root.path().join("files");
     std::fs::create_dir(&files_only).unwrap();
     std::fs::write(files_only.join("a"), b"x").unwrap();
     let nested = root.path().join("nested");
     std::fs::create_dir_all(nested.join("child")).unwrap();
     let text = |path: &std::path::Path| path.to_string_lossy().into_owned();
-    assert!(!has_visible_subdirectory(&text(&files_only), true, true));
-    assert!(has_visible_subdirectory(&text(&nested), false, false));
-    assert!(!has_visible_subdirectory(&text(&root.path().join("missing")), true, true));
+    assert_eq!(visible_contents(&text(&empty), true, true), (false, false));
+    assert_eq!(visible_contents(&text(&files_only), true, true), (true, false));
+    assert_eq!(visible_contents(&text(&nested), false, false), (true, true));
+    assert_eq!(visible_contents(&text(&root.path().join("missing")), true, true), (false, false));
     #[cfg(unix)]
     {
         let hidden = root.path().join("hidden");
         std::fs::create_dir_all(hidden.join(".git")).unwrap();
-        assert!(!has_visible_subdirectory(&text(&hidden), false, false));
-        assert!(has_visible_subdirectory(&text(&hidden), true, false));
+        assert_eq!(visible_contents(&text(&hidden), false, false), (false, false));
+        assert_eq!(visible_contents(&text(&hidden), true, false), (true, true));
     }
 }

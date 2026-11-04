@@ -10,7 +10,7 @@ use crate::ui::{
 };
 use gpui::{prelude::*, *};
 
-pub(super) const ROW_HEIGHT: Rems = rems(1.625);
+pub(super) const ROW_HEIGHT: Rems = crate::ui::style::ROW_HEIGHT;
 const INDENT: Rems = rems(1.25);
 const PADDING: Rems = rems(1.0);
 
@@ -106,44 +106,56 @@ fn note(depth: usize, text: SharedString, cx: &App) -> Div {
         .h(ROW_HEIGHT)
         .flex()
         .items_center()
-        .pl(PADDING + INDENT * depth as f32)
+        // Aligned with the names: past the toggle slot of the rows above.
+        .pl(PADDING + INDENT * depth as f32 + rems(1.25))
         .pr(PADDING)
+        .text_size(rems(0.8125))
         .text_color(cx.theme().text_muted)
         .child(div().min_w_0().truncate().child(text))
 }
 
-fn chevron(
-    index: usize,
-    path: String,
-    state: Chevron,
-    viewer: WeakEntity<Viewer>,
-    cx: &App,
-) -> AnyElement {
+/// The sidebar tree's toggle, before the icon; it opens on press, like there.
+fn toggle(index: usize, path: String, state: Chevron, viewer: WeakEntity<Viewer>, cx: &App) -> AnyElement {
     let theme = *cx.theme();
-    let slot = div().id(("viewer-tree-chevron", index)).flex_none().size(rems(1.25)).flex().items_center().justify_center().rounded_sm();
+    let slot = div().id(("viewer-tree-toggle", index)).w_4().h_4().mr_1().flex_none().flex().items_center().justify_center();
     let icon = match state {
         Chevron::None => return slot.into_any_element(),
         Chevron::Expanded => "icons/chevron-down.svg",
         Chevron::Collapsed | Chevron::Disabled => "icons/chevron-right.svg",
     };
     let enabled = state != Chevron::Disabled;
-    slot.child(svg().path(icon).size_3().text_color(theme.text).when(!enabled, |icon| icon.opacity(0.35)))
-        // The chevron alone opens a folder; its presses never reach the row's double-click.
-        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-        .when(enabled, |slot| {
-            slot.hover(move |style| style.bg(theme.control_hover)).on_click(move |_, _, cx| {
+    slot.child(svg().path(icon).size_full().text_color(theme.text).when(!enabled, |icon| icon.opacity(0.35)))
+        // Its presses never reach the row's double-click.
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+            cx.stop_propagation();
+            if enabled {
                 let _ = viewer.update(cx, |viewer, cx| viewer.toggle_tree_folder(path.clone(), cx));
-            })
+            }
         })
         .when(!enabled, |slot| slot.fixed_tooltip(Tooltip::text(cx.i18n().text(Message::ViewerTreeRowLimit))))
         .into_any_element()
 }
 
+/// A column at the pane's size, aligned by its minimum width but never cut.
+fn column(text: String, min_width: Rems, right: bool, cx: &App) -> Div {
+    div()
+        .flex_none()
+        .min_w(min_width)
+        .px(rems(0.5))
+        .whitespace_nowrap()
+        .when(right, |cell| cell.text_right())
+        .text_size(rems(0.75))
+        .text_color(cx.theme().text_muted)
+        .child(text)
+}
+
+#[allow(clippy::too_many_arguments)]
 fn entry_row(
     index: usize,
     file: &oxyde_lib::models::FileEntry,
     depth: usize,
     state: Chevron,
+    subfolders: bool,
     system_icons: bool,
     viewer: WeakEntity<Viewer>,
     cx: &App,
@@ -154,18 +166,34 @@ fn entry_row(
     let date = (file.modified > 0)
         .then(|| format_date(file.modified, crate::ui::format::date_format(cx)))
         .unwrap_or_default();
+    let icon = match crate::ui::components::icons::entry_icon(file) {
+        crate::ui::components::icons::IconType::Folder if state == Chevron::Expanded && !system_icons => {
+            crate::ui::components::icons::IconType::FolderOpen
+        }
+        icon => icon,
+    };
     let reveal = viewer.clone();
     let path = file.path.clone();
+    // The name and the pane's subfolder indicator share the flexible width.
+    let name = div()
+        .flex_1()
+        .min_w_0()
+        .flex()
+        .items_center()
+        .overflow_hidden()
+        .child(div().flex_shrink(1.0).min_w_0().truncate().font_weight(FontWeight::MEDIUM).text_color(theme.text).child(file.name.clone()))
+        .when(subfolders, |name| {
+            name.child(div().ml_2().flex_none().child(svg().path("icons/chevron-right.svg").size_3().text_color(theme.text)))
+        });
     div()
         .id(("viewer-tree-row", index))
         .w_full()
-        .h(ROW_HEIGHT)
+        .h(crate::ui::style::ROW_HEIGHT)
         .flex()
         .items_center()
-        .gap(rems(0.5))
         .pl(PADDING + INDENT * depth as f32)
         .pr(rems(0.5))
-        .overflow_hidden()
+        .text_size(rems(0.8125))
         .hover(move |style| style.bg(theme.hover))
         .on_mouse_down(MouseButton::Left, move |event: &MouseDownEvent, _, cx| {
             if event.click_count == 2 {
@@ -173,18 +201,18 @@ fn entry_row(
                 let _ = reveal.update(cx, |viewer, cx| viewer.reveal_tree_item(path, cx));
             }
         })
-        .child(crate::ui::components::icons::render_file_icon(
+        .child(toggle(index, file.path.clone(), state, viewer, cx))
+        .child(div().flex_none().mr_2().child(crate::ui::components::icons::render_file_icon(
             file.path.clone(),
-            crate::ui::components::icons::entry_icon(file),
+            icon,
             rems(1.0),
             &theme,
             system_icons,
             false,
-        ))
-        .child(div().flex_1().min_w_0().truncate().text_color(theme.text).child(file.name.clone()))
-        .child(div().flex_none().w(rems(5.5)).text_right().truncate().text_color(theme.text_muted).child(size))
-        .child(div().flex_none().w(rems(8.5)).truncate().text_color(theme.text_muted).child(date))
-        .child(chevron(index, file.path.clone(), state, viewer, cx))
+        )))
+        .child(name)
+        .child(column(size, rems(5.5), true, cx))
+        .child(column(date, rems(8.0), false, cx))
         .into_any_element()
 }
 
@@ -224,7 +252,7 @@ impl Viewer {
                 return summary_element(&header, cx);
             };
             match row {
-                Some(Row::Entry { file, depth, chevron }) => entry_row(index, file, *depth, *chevron, system_icons, viewer, cx),
+                Some(Row::Entry { file, depth, chevron, subfolders }) => entry_row(index, file, *depth, *chevron, *subfolders, system_icons, viewer, cx),
                 Some(Row::Loading { depth }) => note(*depth, cx.i18n().text(Message::ViewerTreeLoading), cx).into_any_element(),
                 Some(Row::Failed { depth }) => note(*depth, cx.i18n().text(Message::ViewerTreeFailed), cx).into_any_element(),
                 Some(Row::Empty { depth }) => note(*depth, cx.i18n().text(Message::ViewerTreeEmpty), cx).into_any_element(),

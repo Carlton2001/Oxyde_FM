@@ -1,6 +1,6 @@
 //! Background reads of the Viewer's tree. Each read publishes only into the tree
 //! of the file it was started for.
-use super::{archive_levels, ArchiveInfo, Failure, Folder, Level, Listing, Toggle, Tree, READ_PER_FOLDER};
+use super::{archive_levels, ArchiveInfo, Contents, Failure, Folder, Level, Listing, Toggle, Tree, READ_PER_FOLDER};
 use crate::ui::app::viewer::{content::Content, Viewer};
 use gpui::*;
 use oxyde_lib::models::FileEntry;
@@ -30,7 +30,7 @@ pub(in crate::ui::app::viewer) fn has_tree(file: &FileEntry) -> bool {
 
 struct Read {
     folder: Folder,
-    subfolders: Vec<(String, bool)>,
+    contents: Vec<(String, Contents)>,
 }
 
 fn read_local(path: &str, listing: Listing, cancelled: &AtomicBool) -> Result<Read, Failure> {
@@ -41,16 +41,18 @@ fn read_local(path: &str, listing: Listing, cancelled: &AtomicBool) -> Result<Re
         log::warn!("Viewer could not list {path}: {error}");
         Failure::Unreadable
     })?;
+    let mut entries = entries;
+    crate::ui::workspace::resolve_native_kinds(&mut entries);
     let folder = Folder::new(entries, complete, listing.sort);
-    let mut subfolders = Vec::new();
+    let mut contents = Vec::new();
     for entry in folder.entries.iter().filter(|entry| entry.is_dir) {
         if cancelled.load(Ordering::Relaxed) {
             break;
         }
-        let found = oxyde_lib::commands::io::has_visible_subdirectory(&entry.path, listing.show_hidden, listing.show_system);
-        subfolders.push((entry.path.clone(), found));
+        let (entries, subfolders) = oxyde_lib::commands::io::visible_contents(&entry.path, listing.show_hidden, listing.show_system);
+        contents.push((entry.path.clone(), Contents { entries, subfolders }));
     }
-    Ok(Read { folder, subfolders })
+    Ok(Read { folder, contents })
 }
 
 struct Indexed {
@@ -67,6 +69,8 @@ fn read_archive(archive: PathBuf, listing: Listing, cancelled: &AtomicBool) -> R
             Failure::Unreadable
         }
     })?;
+    let mut entries = entries;
+    crate::ui::workspace::resolve_native_kinds(&mut entries);
     let extracted = entries.iter().filter(|entry| !entry.is_dir).map(|entry| entry.size).sum();
     let levels = archive_levels(&archive, entries)
         .into_iter()
@@ -108,7 +112,7 @@ impl Viewer {
                 match result {
                     Ok((Ok(indexed), _completion)) => {
                         for (path, folder) in &indexed.levels {
-                            tree.subfolders.insert(path.clone(), folder.folders > 0);
+                            tree.contents.insert(path.clone(), Contents { entries: folder.total > 0, subfolders: folder.folders > 0 });
                         }
                         tree.levels = indexed.levels.into_iter().map(|(path, folder)| (path, Level::Ready(folder))).collect();
                         if !tree.levels.contains_key(&tree.root) {
@@ -138,7 +142,7 @@ impl Viewer {
                 let Some(tree) = this.tree_mut(generation) else { return };
                 let level = match result {
                     Ok((Ok(read), _completion)) => {
-                        tree.subfolders.extend(read.subfolders);
+                        tree.contents.extend(read.contents);
                         Level::Ready(read.folder)
                     }
                     Ok((Err(failure), _)) => Level::Failed(failure),

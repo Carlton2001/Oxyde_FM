@@ -167,22 +167,31 @@ pub fn list_local_dir_bounded(
     read_local_entries(&path_buf, path, show_hidden, show_system, Some(limit))
 }
 
-/// Whether a local directory holds a visible subdirectory; stops at the first one.
-/// Unreadable directories count as having none. Blocking.
-pub fn has_visible_subdirectory(path: &str, show_hidden: bool, show_system: bool) -> bool {
+/// Whether a local directory holds any visible entry, and a visible subdirectory.
+/// Reading stops at the first visible subdirectory; files are looked at only until
+/// one visible entry is found. Unreadable directories count as empty. Blocking.
+pub fn visible_contents(path: &str, show_hidden: bool, show_system: bool) -> (bool, bool) {
     let path_buf = crate::utils::path_text::decode(path);
-    let Ok(dir) = std::fs::read_dir(&path_buf) else { return false };
+    let Ok(dir) = std::fs::read_dir(&path_buf) else { return (false, false) };
     let attributes = crate::utils::visibility::DirectoryAttributes::load(&path_buf);
-    dir.filter_map(Result::ok).any(|entry| {
-        // The directory entry type avoids a stat for every file.
-        if !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
-            return false;
+    let mut any = false;
+    for entry in dir.filter_map(Result::ok) {
+        // The directory entry type avoids a stat for files once one is visible.
+        let directory = entry.file_type().is_ok_and(|kind| kind.is_dir());
+        if any && !directory {
+            continue;
         }
-        let Ok(metadata) = entry.metadata() else { return false };
+        let Ok(metadata) = entry.metadata() else { continue };
         let name = entry.file_name().to_string_lossy().into_owned();
         let (hidden, system, _) = attributes.of(&metadata, &name);
-        crate::utils::visibility::is_visible(hidden, system, show_hidden, show_system)
-    })
+        if crate::utils::visibility::is_visible(hidden, system, show_hidden, show_system) {
+            any = true;
+            if directory {
+                return (true, true);
+            }
+        }
+    }
+    (any, false)
 }
 
 fn sort_file_entries(entries: &mut [FileEntry]) {

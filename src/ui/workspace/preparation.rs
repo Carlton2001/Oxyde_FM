@@ -82,25 +82,8 @@ impl Request {
                 }
             }
         }
-        // A batch cache avoids repeated Shell calls, including for unknown extensions.
-        // Recreated per preparation so association changes are picked up on refresh.
-        let mut native_kinds = std::collections::HashMap::new();
-        for file in Arc::make_mut(&mut files)
-            .iter_mut()
-            .filter(|file| !file.is_dir && !matches!(self.update, FileUpdate::FolderSizes(_)))
-        {
-            let extension = std::path::Path::new(&file.name)
-                .extension()
-                .and_then(|value| value.to_str())
-                .filter(|value| !value.is_empty());
-            file.native_kind = extension.and_then(|extension| {
-                let extension = format!(".{}", extension.to_ascii_lowercase());
-                *native_kinds
-                    .entry(extension)
-                    .or_insert_with_key(|extension| {
-                        oxyde_lib::platform::platform().file_kind_for_extension(extension)
-                    })
-            });
+        if !matches!(self.update, FileUpdate::FolderSizes(_)) {
+            resolve_native_kinds(Arc::make_mut(&mut files).as_mut_slice());
         }
         let sort = if matches!(self.update, FileUpdate::Listing(_)) {
             super::sorting::sort_listed_files
@@ -183,3 +166,22 @@ mod tests;
 #[cfg(all(test, target_os = "windows"))]
 #[path = "preparation/tests/native_kinds.rs"]
 mod native_kind_tests;
+
+/// Native categories of files by extension, which icons and their colors follow.
+/// A batch cache avoids repeated Shell calls, including for unknown extensions; it is
+/// recreated per call so association changes are picked up on refresh. Blocking.
+pub(crate) fn resolve_native_kinds(files: &mut [FileEntry]) {
+    let mut native_kinds = std::collections::HashMap::new();
+    for file in files.iter_mut().filter(|file| !file.is_dir) {
+        let extension = std::path::Path::new(&file.name)
+            .extension()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty());
+        file.native_kind = extension.and_then(|extension| {
+            let extension = format!(".{}", extension.to_ascii_lowercase());
+            *native_kinds
+                .entry(extension)
+                .or_insert_with_key(|extension| oxyde_lib::platform::platform().file_kind_for_extension(extension))
+        });
+    }
+}

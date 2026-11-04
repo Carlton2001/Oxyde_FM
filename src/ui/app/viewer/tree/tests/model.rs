@@ -14,6 +14,10 @@ fn sort() -> (SortColumn, SortDirection) {
     (SortColumn::Name, SortDirection::Ascending)
 }
 
+fn contents(entries: bool, subfolders: bool) -> Contents {
+    Contents { entries, subfolders }
+}
+
 fn ready(tree: &mut Tree, path: &str, entries: Vec<FileEntry>) {
     tree.levels.insert(path.to_owned(), Level::Ready(Folder::new(entries, true, sort())));
 }
@@ -48,11 +52,11 @@ fn truncated_levels_keep_reading_order() {
 }
 
 #[test]
-fn only_folders_with_subfolders_open_and_their_level_loads_once() {
+fn only_folders_with_entries_open_and_their_level_loads_once() {
     let mut tree = Tree::new("/r".into(), Listing::default());
     ready(&mut tree, "/r", vec![entry("/r/a", true, 0), entry("/r/b", true, 0), entry("/r/c.txt", false, 1)]);
-    tree.subfolders.insert("/r/a".into(), true);
-    tree.subfolders.insert("/r/b".into(), false);
+    tree.contents.insert("/r/a".into(), contents(true, false));
+    tree.contents.insert("/r/b".into(), contents(false, false));
     assert_eq!(tree.toggle("/r/b"), Toggle::Refused);
     assert_eq!(tree.toggle("/r/c.txt"), Toggle::Refused);
     assert_eq!(tree.toggle("/r/a"), Toggle::Load);
@@ -63,8 +67,10 @@ fn only_folders_with_subfolders_open_and_their_level_loads_once() {
     assert_eq!(names(&tree.flatten()), ["0:a", "0:b", "0:c.txt"]);
     // Reopening reuses the level already read.
     assert_eq!(tree.toggle("/r/a"), Toggle::Changed);
-    assert!(matches!(tree.flatten()[0], Row::Entry { chevron: Chevron::Expanded, .. }));
+    assert!(matches!(tree.flatten()[0], Row::Entry { chevron: Chevron::Expanded, subfolders: false, .. }));
     assert!(matches!(tree.flatten()[2], Row::Entry { chevron: Chevron::None, .. }));
+    tree.contents.insert("/r/b".into(), contents(true, true));
+    assert!(matches!(tree.flatten()[2], Row::Entry { chevron: Chevron::Collapsed, subfolders: true, .. }));
 }
 
 #[test]
@@ -73,7 +79,7 @@ fn hidden_entries_and_empty_levels_get_their_own_rows() {
     let mut entries = vec![entry("/r/a", true, 0)];
     entries.extend((0..SHOWN_PER_FOLDER).map(|index| entry(&format!("/r/f{index:04}"), false, 0)));
     ready(&mut tree, "/r", entries);
-    tree.subfolders.insert("/r/a".into(), true);
+    tree.contents.insert("/r/a".into(), contents(true, false));
     ready(&mut tree, "/r/a", Vec::new());
     tree.toggle("/r/a");
     let rows = tree.flatten();
@@ -92,7 +98,7 @@ fn the_row_limit_disables_closed_folders() {
     for folder in 0..=MAX_ROWS / SHOWN_PER_FOLDER {
         let path = format!("/r/d{folder:03}");
         root.push(entry(&path, true, 0));
-        tree.subfolders.insert(path.clone(), true);
+        tree.contents.insert(path.clone(), contents(true, false));
         ready(&mut tree, &path, (0..SHOWN_PER_FOLDER).map(|index| entry(&format!("{path}/f{index:04}"), false, 0)).collect());
     }
     ready(&mut tree, "/r", root);
