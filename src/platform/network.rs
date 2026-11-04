@@ -78,6 +78,7 @@ pub fn list_network_entries(path: Option<String>) -> Result<Vec<FileEntry>, crat
                 files_count: None,
                 original_path: None,
                 deleted_time: None,
+                mode: None,
             }
         })
         .collect())

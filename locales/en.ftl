@@ -63,6 +63,7 @@ selected-mixed = { $folder_count ->
 tooltip-type = Type: { $value }
 tooltip-size = Size: { $value }
 tooltip-modified = Modified: { $value }
+tooltip-permissions = Mode: { $value }
 tooltip-location = Location: { $value }
 tooltip-original-location = Original location: { $value }
 tooltip-deleted = Deleted: { $value }
@@ -92,6 +93,7 @@ column-name = Name
 column-type = Type
 column-size = Size
 column-modified = Date modified
+column-permissions = Mode
 file-type-folder = Folder
 file-type-file = File
 file-type-symlink = Symbolic link
@@ -212,6 +214,9 @@ settings-windows-icons-description = Use Windows file and folder icons in list a
 
 settings-checkboxes = Selection checkboxes
 settings-checkboxes-description = Select multiple items without holding Ctrl.
+
+settings-permissions-column = Mode column
+settings-permissions-column-description = Show access permissions as octal mode in the list view.
 
 settings-path-tracking = Follow active path
 settings-path-tracking-description = Expand parent folders and reveal the active folder in the sidebar.

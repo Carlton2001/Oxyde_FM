@@ -206,6 +206,29 @@ impl OxydeApp {
                 })
                 .into_any_element()
             }
+            ContextMenuHeader::PermissionsSelectAll { pane_id } => {
+                use crate::ui::app::filters::PermissionFilterChange;
+                let pane_id = pane_id.clone();
+                let handle = h.clone();
+                let should_clear = self.state.find_pane(&pane_id).is_some_and(|pane| {
+                    let tab = pane.active_tab();
+                    let mut present = tab.files.iter().filter_map(|file| file.mode).peekable();
+                    present.peek().is_some() && present.all(|mode| tab.filter_permissions.contains(&mode))
+                });
+                crate::ui::elements::button::Button::new(SharedString::from(format!("select-all-permissions-{pane_id}")))
+                    .label(cx.i18n().text(if should_clear { Message::DeselectAllChecks } else { Message::SelectAllChecks }))
+                    .icon(if should_clear { "icons/square-minus.svg" } else { "icons/square-check-big.svg" })
+                    .label_size(13.0)
+                    .on_click(move |_, cx| {
+                        let pane_id = pane_id.clone();
+                        handle.update(cx, |this, cx| {
+                            this.set_filter_permissions(&pane_id, if should_clear { PermissionFilterChange::None } else { PermissionFilterChange::All }, cx);
+                            this.context_menus.truncate(m_idx + 1);
+                            this.open_permissions_filter_menu(&pane_id, pos, cx);
+                        });
+                    })
+                    .into_any_element()
+            }
         });
 
         let dropdown_items = items

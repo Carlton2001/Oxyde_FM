@@ -48,6 +48,7 @@ async fn list_dir_impl(path: String, show_hidden: Option<bool>, show_system: Opt
                 original_path: Some(t.original_path),
                 network_details: None,
                 deleted_time: Some(t.deleted_time as i64),
+                mode: None,
             })
             .collect();
         return Ok(entries);

@@ -108,6 +108,7 @@ tooltip-type = Typ: { $value }
 tooltip-size = Größe: { $value }
 
 tooltip-modified = Geändert: { $value }
+tooltip-permissions = Rechte: { $value }
 
 tooltip-location = Speicherort: { $value }
 tooltip-original-location = Ursprünglicher Speicherort: { $value }
@@ -158,6 +159,7 @@ column-type = Typ
 column-size = Größe
 
 column-modified = Geändert
+column-permissions = Rechte
 
 file-type-folder = Ordner
 
@@ -368,6 +370,9 @@ settings-windows-icons-description = Windows-Symbole für Dateien und Ordner in 
 settings-checkboxes = Auswahl-Checkboxen
 
 settings-checkboxes-description = Mehrere Elemente auswählen, ohne Strg gedrückt zu halten.
+
+settings-permissions-column = Spalte Rechte
+settings-permissions-column-description = Zugriffsrechte in Oktalschreibweise in der Listenansicht anzeigen.
 
 settings-path-tracking = Aktivem Pfad folgen
 

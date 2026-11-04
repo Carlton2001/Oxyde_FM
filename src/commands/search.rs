@@ -201,6 +201,7 @@ pub fn advanced_search(
                             is_hidden: hidden,
                             is_system: system,
                             is_symlink: entry.file_type().is_symlink(),
+                            mode: crate::models::file_entry::unix_mode(&m),
                             ..Default::default()
                         });
                     }
@@ -327,6 +328,7 @@ pub fn quick_search(
                         is_hidden: hidden,
                         is_system: system,
                         is_symlink: entry.file_type().is_symlink(),
+                        mode: crate::models::file_entry::unix_mode(&metadata),
                         size: if metadata.is_dir() { 0 } else { metadata.len() },
                         modified: metadata
                             .modified()

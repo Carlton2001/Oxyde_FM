@@ -41,6 +41,9 @@ pub struct FileEntry {
     pub is_calculated: bool,
     pub original_path: Option<String>,
     pub deleted_time: Option<i64>,
+    /// Unix permission and special bits (`0o7777`), without the file type; a link
+    /// shows its target's. None outside Unix and for virtual entries.
+    pub mode: Option<u32>,
 }
 
 /// File revision used by asynchronous consumers; this does not establish object identity.
@@ -299,7 +302,16 @@ pub(crate) fn file_entry_from_metadata(path: &Path, metadata: &std::fs::Metadata
         original_path: None,
         network_details: None,
         deleted_time: None,
+        mode: unix_mode(target.as_ref().unwrap_or(metadata)),
     }
+}
+
+/// Permission bits for the details column, read from metadata already fetched.
+pub(crate) fn unix_mode(metadata: &std::fs::Metadata) -> Option<u32> {
+    #[cfg(unix)]
+    { use std::os::unix::fs::PermissionsExt; Some(metadata.permissions().mode() & 0o7777) }
+    #[cfg(not(unix))]
+    { let _ = metadata; None }
 }
 
 #[cfg(test)]

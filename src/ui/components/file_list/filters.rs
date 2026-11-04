@@ -58,6 +58,41 @@ pub fn get_type_filter_items(
     items
 }
 
+/// One entry per permission value present, in numeric order.
+pub fn get_permissions_filter_items(
+    i18n: &crate::ui::i18n::I18n,
+    handle: Entity<OxydeApp>,
+    pane_id: String,
+    files: std::sync::Arc<Vec<FileEntry>>,
+    current_filters: std::collections::HashSet<u32>,
+    pos: Point<Pixels>,
+) -> Vec<crate::ui::components::dropdown::DropdownItem> {
+    use crate::ui::components::dropdown::{DropdownItem, IconName};
+    let mut counts = std::collections::BTreeMap::<u32, u64>::new();
+    for mode in files.iter().filter_map(|file| file.mode) {
+        *counts.entry(mode).or_default() += 1;
+    }
+    counts.into_iter().map(|(mode, count)| {
+        let handle = handle.clone();
+        let pane_id = pane_id.clone();
+        DropdownItem {
+            label: crate::ui::format::permissions::paired(mode),
+            icon: Some(IconName::Checkbox(current_filters.contains(&mode))),
+            badge: Some(crate::ui::format::format_number(count, i18n.language())),
+            stay_open: true,
+            has_submenu: false,
+            is_dimmed: false,
+            on_click: std::rc::Rc::new(move |_, app| {
+                handle.update(app, |this, cx| {
+                    this.set_filter_permissions(&pane_id, crate::ui::app::filters::PermissionFilterChange::Toggle(mode), cx);
+                    this.open_permissions_filter_menu(&pane_id, pos, cx);
+                });
+            }),
+            on_hover: None,
+        }
+    }).collect()
+}
+
 pub fn get_date_filter_items(
     i18n: &crate::ui::i18n::I18n,
     handle: Entity<OxydeApp>,

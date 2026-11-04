@@ -3,6 +3,9 @@ use crate::ui::app::{ContextMenuContent, ContextMenuHeader, ContextMenuInstance,
 use crate::ui::i18n::{I18nContext, Message};
 use gpui::*;
 
+#[derive(Clone, Copy)]
+pub enum PermissionFilterChange { Toggle(u32), All, None }
+
 impl OxydeApp {
     pub fn update_filter_size(
         &mut self,
@@ -100,6 +103,45 @@ impl OxydeApp {
             });
             cx.notify();
         }
+    }
+
+    pub fn open_permissions_filter_menu(&mut self, pane_id: &str, pos: Point<Pixels>, cx: &mut Context<Self>) {
+        let Some(pane) = self.state.find_pane(pane_id) else { return; };
+        let tab = pane.active_tab();
+        let items = crate::ui::components::file_list::get_permissions_filter_items(
+            cx.i18n(),
+            self.handle.as_ref().unwrap().clone(),
+            pane_id.to_string(),
+            tab.files.clone(),
+            tab.filter_permissions.clone(),
+            pos,
+        );
+        self.context_menus.clear();
+        self.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
+            position: pos,
+            content: ContextMenuContent::Items(items, Some(ContextMenuHeader::PermissionsSelectAll { pane_id: pane_id.to_string() })),
+            scroll_handle: UniformListScrollHandle::new(),
+            width: px(0.0),
+            open_left: false,
+            hovered_item: None,
+            native_request_id: None, open_up: false,
+        });
+        cx.notify();
+    }
+
+    /// Toggle one permission value, keep every value present, or clear the filter.
+    pub fn set_filter_permissions(&mut self, pane_id: &str, change: PermissionFilterChange, cx: &mut Context<Self>) {
+        let Some(pane) = self.state.find_pane_mut(pane_id) else { return; };
+        let tab = pane.active_tab_mut();
+        match change {
+            PermissionFilterChange::Toggle(mode) => if !tab.filter_permissions.remove(&mode) { tab.filter_permissions.insert(mode); },
+            PermissionFilterChange::All => { let modes: Vec<u32> = tab.files.iter().filter_map(|file| file.mode).collect(); tab.filter_permissions.extend(modes); }
+            PermissionFilterChange::None => tab.filter_permissions.clear(),
+        }
+        let id = tab.id.clone();
+        self.prepare_current_tab(id, cx);
+        cx.notify();
     }
 
     pub fn update_filter_date(

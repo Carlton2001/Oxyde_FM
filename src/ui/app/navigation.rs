@@ -387,6 +387,7 @@ impl OxydeApp {
             active_tab.filter_name.clear();
             active_tab.filter_original_location.clear();
             active_tab.filter_sizes.clear();
+            active_tab.filter_permissions.clear();
             active_tab.filter_dates.clear();
             active_tab.selected_paths.clear();
             active_tab.selection_anchor = None;

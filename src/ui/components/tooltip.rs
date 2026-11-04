@@ -59,6 +59,8 @@ struct FileInfo {
     notice: Vec<SharedString>,
     network: Option<oxyde_lib::models::FileEntry>,
     size: (u64, bool, bool),
+    /// Unix permission bits, shown above the modification date.
+    mode: Option<u32>,
     date: u64,
 }
 
@@ -130,7 +132,7 @@ impl Tooltip {
             if file.original_path.is_none() && crate::ui::components::file_list::network_entry(&file) {
                 return cx.new(|_| Self {
                     native_presentation: false, secondary_action: None, title: file.name.clone().into(), wrap_title: false, meta: None, shortcut: None,
-                    file_info: Some(FileInfo { type_label: String::new(), location: None, extra: Vec::new(), notice: Vec::new(), network: Some(file.clone()), size: (0, false, false), date: 0 }),
+                    file_info: Some(FileInfo { type_label: String::new(), location: None, extra: Vec::new(), notice: Vec::new(), network: Some(file.clone()), size: (0, false, false), mode: None, date: 0 }),
                     fixed_bounds: None, preview_view: None,
                 }).into();
             }
@@ -155,7 +157,7 @@ impl Tooltip {
             let info = FileInfo {
                 type_label: crate::ui::components::file_list::file_type_display(&file, cx.i18n()),
                 location, extra, notice, network: None,
-                size: (file.size, file.is_dir, file.is_calculated), date: file.modified,
+                size: (file.size, file.is_dir, file.is_calculated), mode: file.mode, date: file.modified,
             };
             Self::new_for_file(crate::ui::format::entry_name(&file, cx.i18n()), file.path.clone(), info, previews, cx).into()
         }

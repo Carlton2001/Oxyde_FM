@@ -176,6 +176,13 @@ impl OxydeApp {
         self.config.show_checkboxes = !self.config.show_checkboxes;
         self.save_preferences(cx);
     }
+    /// The column exists only where files carry Unix permissions.
+    pub(crate) fn show_permissions_column(&self) -> bool { cfg!(unix) && self.config.show_permissions_column }
+    pub(crate) fn toggle_permissions_column(&mut self, cx: &mut Context<Self>) {
+        self.config.show_permissions_column = !self.config.show_permissions_column;
+        self.save_preferences(cx);
+        cx.notify();
+    }
     pub(crate) fn use_system_icons(&self) -> bool { self.config.use_system_icons }
     pub(crate) fn toggle_system_icons(&mut self, cx: &mut Context<Self>) {
         self.config.use_system_icons = !self.config.use_system_icons;

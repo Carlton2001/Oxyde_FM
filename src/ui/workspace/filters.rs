@@ -48,11 +48,12 @@ impl FileFilters {
             trash_search: if tab.path == "trash://" { tab.search_text.trim().to_lowercase() } else { String::new() },
             filter_original_location: tab.filter_original_location.clone(),
             filter_sizes: tab.filter_sizes.clone(),
+            filter_permissions: tab.filter_permissions.clone(),
             filter_dates: tab.filter_dates.clone(),
         }
     }
     pub(super) fn snapshot(&self, files: &std::sync::Arc<Vec<FileEntry>>, today: chrono::NaiveDate) -> std::sync::Arc<Vec<FileEntry>> {
-        if self.filter_types.is_empty() && self.filter_name.is_empty() && self.trash_search.is_empty() && self.filter_original_location.is_empty() && self.filter_sizes.is_empty() && self.filter_dates.is_empty() {
+        if self.filter_types.is_empty() && self.filter_name.is_empty() && self.trash_search.is_empty() && self.filter_original_location.is_empty() && self.filter_sizes.is_empty() && self.filter_permissions.is_empty() && self.filter_dates.is_empty() {
             files.clone()
         } else { self.filtered_files_on(files, today).into() }
     }
@@ -62,6 +63,7 @@ impl FileFilters {
             || !self.trash_search.is_empty()
             || !self.filter_original_location.is_empty()
             || !self.filter_sizes.is_empty()
+            || !self.filter_permissions.is_empty()
             || !self.filter_dates.is_empty()
         {
             let name_filter = self.filter_name.to_lowercase();
@@ -96,6 +98,8 @@ impl FileFilters {
                     } else {
                         self.filter_sizes.iter().any(|cat| cat.matches(f.size))
                     };
+                    let matches_permissions = self.filter_permissions.is_empty()
+                        || f.mode.is_some_and(|mode| self.filter_permissions.contains(&mode));
                     let matches_date = if self.filter_dates.is_empty() {
                         true
                     } else {
@@ -116,7 +120,7 @@ impl FileFilters {
                         Some(Err(_)) => false,
                         None => self.trash_search.is_empty() || f.name.to_lowercase().contains(&self.trash_search),
                     };
-                    matches_type && matches_name && matches_search && matches_size && matches_date && matches_location
+                    matches_type && matches_name && matches_search && matches_size && matches_permissions && matches_date && matches_location
                 })
                 .cloned()
                 .collect()
@@ -140,7 +144,10 @@ impl CalendarFilterRequest {
 
 impl TabState {
     /// Match the header indicators: selecting every present value does not filter.
-    pub(crate) fn metadata_filter_flags(&self) -> (bool, bool, bool) {
+    /// Type, size, date and permissions indicators.
+    pub(crate) fn column_filter_flags(&self) -> (bool, bool, bool, bool) {
+        let permissions_filtered = !self.filter_permissions.is_empty() && self.files.iter()
+            .any(|file| file.mode.is_some_and(|mode| !self.filter_permissions.contains(&mode)));
         let type_filtered = !self.filter_types.is_empty() && self.files.iter().any(|file| {
             !self.filter_types.contains(&crate::ui::components::file_list::file_type_label(file))
         });
@@ -153,7 +160,7 @@ impl TabState {
         let date_filtered = !self.filter_dates.is_empty() &&
             crate::ui::date_groups::counts_by_date(&self.files, chrono::Local::now().date_naive())
                 .keys().any(|group| !self.filter_dates.contains(group));
-        (type_filtered, size_filtered, date_filtered)
+        (type_filtered, size_filtered, date_filtered, permissions_filtered)
     }
 
     pub fn update_cache(&mut self) {

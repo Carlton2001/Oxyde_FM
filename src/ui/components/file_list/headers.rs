@@ -13,6 +13,7 @@ pub(super) fn render_headers(
     location_w: f32,
     type_w: f32,
     size_w: f32,
+    permissions_w: f32,
     date_w: f32,
     deleted_w: f32,
     theme: &OxydeTheme,
@@ -33,7 +34,7 @@ pub(super) fn render_headers(
     // Check filters
     let name_filtered = !tab.filter_name.is_empty();
 
-    let (type_filtered, size_filtered, date_filtered) = tab.metadata_filter_flags();
+    let (type_filtered, size_filtered, date_filtered, permissions_filtered) = tab.column_filter_flags();
 
     div()
         .flex()
@@ -169,6 +170,23 @@ pub(super) fn render_headers(
                     });
                 }
             }),
+        ))
+        .when(!network_panel && permissions_w > 0.0, |row| row.child(
+            header_cell(i18n.text(Message::ColumnPermissions).as_ref(), permissions_w, current_col == SortColumn::Permissions, current_dir, permissions_filtered, theme, handle.clone(), format!("filter-{pane_id}-permissions"), {
+                let handle = handle.clone(); let pane_id = pane_id.clone();
+                move |_, _, cx| { handle.update(cx, |this, cx| this.toggle_sort(&pane_id, SortColumn::Permissions, cx)); }
+            }).on_mouse_down(MouseButton::Right, {
+                let handle = handle.clone(); let pane_id = pane_id.clone();
+                let anchor_key = format!("filter-{pane_id}-permissions");
+                move |event, _, cx| {
+                    handle.update(cx, |this, cx| {
+                        let anchor = this.context_anchor_points.get(&anchor_key).copied().unwrap_or(event.position);
+                        if this.close_menu_owned_by(&anchor_key, cx) { return; }
+                        this.open_permissions_filter_menu(&pane_id, anchor, cx);
+                        this.mark_menu_owner(anchor_key.clone());
+                    });
+                }
+            })
         ))
         .when(!network_panel, |row| row.child(
             header_cell(

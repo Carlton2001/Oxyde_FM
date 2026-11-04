@@ -63,15 +63,18 @@ pub(super) fn render_details_file_list(
 
     let trash_panel = active_tab.path == "trash://";
     let active_deleted_width = active_tab.deleted_col_width;
+    let show_permissions = view.show_permissions_column();
+    let fixed_w = logical(active_tab.fixed_columns_width(show_permissions));
+    let permissions_w = logical(active_tab.permissions_column_width(show_permissions));
     let columns = DetailsColumnWidths::for_viewport_with_search(
-        pane_viewport_w - if trash_panel { logical(active_tab.deleted_col_width) } else { 0.0 },
+        pane_viewport_w - fixed_w,
         active_tab.type_col_width,
         active_tab.size_col_width,
         active_tab.date_col_width,
         search_results || trash_panel,
     );
     // Reserve the horizontal track only when the columns overflow the pane.
-    let h_track = if columns.content_width() + if trash_panel { logical(active_deleted_width) } else { 0.0 } > pane_viewport_w + 1.0 { crate::ui::components::scrollbar::zed_track_width() } else { 0.0 };
+    let h_track = if columns.content_width() + fixed_w > pane_viewport_w + 1.0 { crate::ui::components::scrollbar::zed_track_width() } else { 0.0 };
     let estimated_v_h =
         (pane_size.height - rem_pixels(crate::ui::style::TAB_BAR_HEIGHT).as_f32() - rem_pixels(crate::ui::style::NAV_BAR_HEIGHT).as_f32() - if active_tab.quick_search_query().is_some() { logical(32.0) } else { 0.0 } - crate::ui::style::column_header_height() - status_bar_height() - h_track).max(1.0);
     let content_h = (count * crate::ui::style::row_height()).max(1.0);
@@ -81,7 +84,7 @@ pub(super) fn render_details_file_list(
     let size_w = if network_panel { columns.total() * 0.22 } else { columns.size };
     let date_w = if network_panel { columns.total() * 0.22 } else { columns.date };
     let location_w = columns.location;
-    let total_w = columns.total() + if trash_panel { logical(active_tab.deleted_col_width) } else { 0.0 };
+    let total_w = columns.total() + fixed_w;
 
     let is_active_pane = view.state.active_pane_id == pane_id;
     let status_corner = view.pane_corner(&pane_id);
@@ -185,7 +188,7 @@ pub(super) fn render_details_file_list(
                         .bottom(px(status_bar_height() + h_track))
                         .flex()
                         .flex_col()
-                        .child(render_headers(view, pane_id.clone(), handle.clone(), name_w, location_w, type_w, size_w, date_w, if trash_panel { logical(active_tab.deleted_col_width) } else { 0.0 }, &theme, cx.i18n()))
+                        .child(render_headers(view, pane_id.clone(), handle.clone(), name_w, location_w, type_w, size_w, permissions_w, date_w, if trash_panel { logical(active_tab.deleted_col_width) } else { 0.0 }, &theme, cx.i18n()))
                         .child(
                             uniform_list(
                                 SharedString::from(format!("file-list-{}", pane_id)),
@@ -250,6 +253,7 @@ pub(super) fn render_details_file_list(
                                                 location_w,
                                                 type_w,
                                                 size_w,
+                                                permissions_w,
                                                 date_w,
                                                 active_deleted_width,
                                                 is_active_pane,
@@ -514,7 +518,7 @@ pub(super) fn render_details_file_list(
     // Horizontal scrollbar overlay
     container = container.child(
         div().absolute().left_0().bottom(px(status_bar_height())).right(px(crate::ui::components::scrollbar::zed_track_width())).h(px(crate::ui::components::scrollbar::zed_track_width()))
-            .child(render_scrollbar(theme, handle.clone(), ScrollbarAxis::Horizontal, pane_viewport_w, columns.content_width() + if trash_panel { logical(active_deleted_width) } else { 0.0 }, -active_tab.list_scroll_h.offset().x.as_f32(), matches!(view.drag_target, Some(DragTarget::FileListH { ref pane_id, .. }) if pane_id == &p_id_cap), format!("h-{}", pane_suffix), None, {
+            .child(render_scrollbar(theme, handle.clone(), ScrollbarAxis::Horizontal, pane_viewport_w, columns.content_width() + fixed_w, -active_tab.list_scroll_h.offset().x.as_f32(), matches!(view.drag_target, Some(DragTarget::FileListH { ref pane_id, .. }) if pane_id == &p_id_cap), format!("h-{}", pane_suffix), None, {
                 let p_id = p_id_cap.clone();
                 move |this, track_id, v_w, c_w, _| {
                     this.drag_target = Some(DragTarget::FileListH { pane_id: p_id.clone(), viewport_w: v_w, content_w: c_w, track_id });

@@ -65,6 +65,16 @@ pub(super) fn left_column(view: &OxydeApp, handle: Entity<OxydeApp>, left_width:
             theme,
             |view, cx| view.toggle_checkboxes(cx),
         ))
+        .when(cfg!(unix), |body| body.child(settings_row(
+            i18n.text(Message::SettingsPermissionsColumn),
+            i18n.text(Message::SettingsPermissionsColumnDescription),
+            "icons/key.svg",
+            view.show_permissions_column(),
+            "toggle-permissions-column",
+            handle.clone(),
+            theme,
+            |view, cx| view.toggle_permissions_column(cx),
+        )))
         .child(settings_row(
             i18n.text(Message::SettingsPathTracking),
             i18n.text(Message::SettingsPathTrackingDescription),

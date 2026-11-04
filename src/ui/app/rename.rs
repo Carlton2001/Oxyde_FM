@@ -535,6 +535,7 @@ impl OxydeApp {
                     tab.filter_original_location.clear();
                     tab.filter_types.clear();
                     tab.filter_sizes.clear();
+                    tab.filter_permissions.clear();
                     tab.filter_dates.clear();
                     tab.update_cache();
                     tab.selected_paths.clear();

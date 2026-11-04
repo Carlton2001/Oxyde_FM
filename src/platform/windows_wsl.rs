@@ -54,6 +54,7 @@ pub(super) fn entries() -> Vec<FileEntry> {
         files_count: None,
         original_path: None,
         deleted_time: None,
+        mode: None,
     }).collect()
 }
 

@@ -30,6 +30,7 @@ fn old_sort(tab: &mut TabState) {
                 ext_a.to_lowercase().cmp(&ext_b.to_lowercase())
             }
             SortColumn::Size => a.size.cmp(&b.size),
+            SortColumn::Permissions => a.mode.cmp(&b.mode),
             SortColumn::Modified => a.modified.cmp(&b.modified),
             SortColumn::OriginalLocation => {
                 let location = |file: &FileEntry| {

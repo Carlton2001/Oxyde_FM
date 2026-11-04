@@ -311,6 +311,7 @@ fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, 
                         original_path: None,
                         network_details: None,
                         deleted_time: None,
+                        mode: None,
                     });
                 }
             }

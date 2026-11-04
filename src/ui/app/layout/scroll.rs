@@ -20,6 +20,7 @@ impl OxydeApp {
         let p_sizes = &self.pane_sizes;
         let l_w = self.list_width;
         let l_h = self.list_height;
+        let permissions = self.show_permissions_column();
 
         self.state.layout.visit_panes_mut(&mut |pane| {
             let pane_id = pane.id.clone();
@@ -30,13 +31,13 @@ impl OxydeApp {
             });
 
             let columns = crate::ui::style::DetailsColumnWidths::for_viewport_with_search(
-                pane_size.width - if active_tab.path == "trash://" { logical(active_tab.deleted_col_width) } else { 0.0 },
+                pane_size.width - logical(active_tab.fixed_columns_width(permissions)),
                 active_tab.type_col_width,
                 active_tab.size_col_width,
                 active_tab.date_col_width,
                 active_tab.quick_search.is_some() || active_tab.path == "trash://",
             );
-            let total_w = columns.content_width() + if active_tab.path == "trash://" { logical(active_tab.deleted_col_width) } else { 0.0 };
+            let total_w = columns.content_width() + logical(active_tab.fixed_columns_width(permissions));
 
             let max_h_offset = (total_w - pane_size.width).max(0.0);
             let current_h_offset = active_tab.list_scroll_h.offset().x.as_f32().abs();

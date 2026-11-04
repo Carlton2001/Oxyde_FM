@@ -144,7 +144,7 @@ fn render_settings_surface(
     let left_width = [
         Message::SettingsTheme,
         Message::SettingsGridThumbnails, Message::SettingsWindowsIcons,
-        Message::SettingsCheckboxes, Message::SettingsPathTracking,
+        Message::SettingsCheckboxes, Message::SettingsPermissionsColumn, Message::SettingsPathTracking,
         Message::SettingsHidden, Message::SettingsSystem,
         Message::SettingsPreviews, Message::SettingsNetwork,
     ].into_iter().map(|message| label_width(message) + 5.0625)

@@ -150,6 +150,7 @@ pub enum ContextMenuHeader {
     TypeSelectAll { pane_id: String },
     SizeSelectAll { pane_id: String },
     DateSelectAll { pane_id: String },
+    PermissionsSelectAll { pane_id: String },
 }
 
 #[derive(Clone)]

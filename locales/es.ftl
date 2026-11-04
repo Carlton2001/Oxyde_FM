@@ -108,6 +108,7 @@ tooltip-type = Tipo: { $value }
 tooltip-size = Tamaño: { $value }
 
 tooltip-modified = Modificado: { $value }
+tooltip-permissions = Permisos: { $value }
 
 tooltip-location = Ubicación: { $value }
 tooltip-original-location = Ubicación original: { $value }
@@ -158,6 +159,7 @@ column-type = Tipo
 column-size = Tamaño
 
 column-modified = Modificado
+column-permissions = Permisos
 
 file-type-folder = Carpeta
 
@@ -368,6 +370,9 @@ settings-windows-icons-description = Usar los iconos de archivos y carpetas de W
 settings-checkboxes = Casillas de selección
 
 settings-checkboxes-description = Seleccionar varios elementos sin mantener pulsado Ctrl.
+
+settings-permissions-column = Columna Permisos
+settings-permissions-column-description = Mostrar los permisos de acceso en octal en la vista de lista.
 
 settings-path-tracking = Seguir ruta activa
 

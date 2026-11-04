@@ -69,6 +69,7 @@ selected-mixed = { $folder_count ->
 tooltip-type = Type : { $value }
 tooltip-size = Taille : { $value }
 tooltip-modified = Modifié le : { $value }
+tooltip-permissions = Droits : { $value }
 tooltip-location = Emplacement : { $value }
 tooltip-original-location = Emplacement d’origine : { $value }
 tooltip-deleted = Supprimé le : { $value }
@@ -98,6 +99,7 @@ column-name = Nom
 column-type = Type
 column-size = Taille
 column-modified = Modifié le
+column-permissions = Droits
 file-type-folder = Dossier
 file-type-file = Fichier
 file-type-symlink = Lien symbolique
@@ -218,6 +220,9 @@ settings-windows-icons-description = Utiliser les icônes Windows des fichiers e
 
 settings-checkboxes = Cases à cocher de sélection
 settings-checkboxes-description = Sélectionner plusieurs éléments sans maintenir Ctrl.
+
+settings-permissions-column = Colonne Droits
+settings-permissions-column-description = Afficher les droits d’accès en octal dans la vue liste.
 
 settings-path-tracking = Suivi du chemin
 settings-path-tracking-description = Déplier les dossiers parents et révéler le dossier actif dans la barre latérale.

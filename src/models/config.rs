@@ -66,6 +66,9 @@ pub struct AppConfig {
     pub show_grid_thumbnails: bool,
     #[serde(default)]
     pub show_checkboxes: bool,
+    /// Octal Permissions column of the details view, offered on Unix only.
+    #[serde(default)]
+    pub show_permissions_column: bool,
     #[serde(default)]
     pub sync_sidebar_with_path: bool,
     #[serde(default)]
@@ -131,6 +134,7 @@ impl Default for AppConfig {
             default_turbo_mode: true,
             show_grid_thumbnails: false,
             show_checkboxes: false,
+            show_permissions_column: false,
             sync_sidebar_with_path: false,
             show_network: true,
             show_onedrive: true,

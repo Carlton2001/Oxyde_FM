@@ -441,7 +441,7 @@ impl Render for Tooltip {
     }
 }
 
-/// Type, size and modification date lines, measured before layout so they never wrap.
+/// Type, size, permissions and modification date lines, measured before layout so they never wrap.
 fn file_detail_lines(info: &super::FileInfo, cx: &App) -> Vec<SharedString> {
     let i18n = cx.i18n();
     let mut args = FluentArgs::new();
@@ -449,8 +449,14 @@ fn file_detail_lines(info: &super::FileInfo, cx: &App) -> Vec<SharedString> {
     let type_line = i18n.text_with_args(Message::TooltipType, &args);
     args.set("value", format_size(info.size.0, info.size.1, info.size.2, i18n.language()));
     let size_line = i18n.text_with_args(Message::TooltipSize, &args);
+    let mut lines = vec![type_line, size_line];
+    if let Some(mode) = info.mode {
+        args.set("value", crate::ui::format::permissions::paired(mode));
+        lines.push(i18n.text_with_args(Message::TooltipPermissions, &args));
+    }
     args.set("value", format_date(info.date, crate::ui::format::date_format(cx)));
-    vec![type_line, size_line, i18n.text_with_args(Message::TooltipModified, &args)]
+    lines.push(i18n.text_with_args(Message::TooltipModified, &args));
+    lines
 }
 
 fn network_tooltip_lines(file: &oxyde_lib::models::FileEntry, i18n: &crate::ui::i18n::I18n) -> Vec<SharedString> {

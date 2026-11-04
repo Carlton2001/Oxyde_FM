@@ -32,6 +32,7 @@ pub(super) struct DetailsRowParams<'a> {
     pub(super) location_w: f32,
     pub(super) type_w: f32,
     pub(super) size_w: f32,
+    pub(super) permissions_w: f32,
     pub(super) date_w: f32,
     pub(super) active_deleted_width: f32,
     pub(super) is_active_pane: bool,
@@ -68,6 +69,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
         location_w,
         type_w,
         size_w,
+        permissions_w,
         date_w,
         active_deleted_width,
         is_active_pane,
@@ -381,6 +383,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                 } else {
                     div().child(format_size(file.size, is_dir, file.is_calculated, language)).into_any_element()
                 }), &path, size_flash, theme.accent))
+                .when(permissions_w > 0.0, |row| row.child(div().w(px(permissions_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).children(file.mode.map(crate::ui::format::permissions::octal))))
                 .child(div().w(px(date_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_date(file.modified, crate::ui::format::date_format(cx)))))
             .when(trash_panel, |row| row.child(div().w(px(logical(active_deleted_width))).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).child(format_date(file.deleted_time.and_then(|date| u64::try_from(date).ok()).unwrap_or(0), crate::ui::format::date_format(cx)))))
             .into_any_element()

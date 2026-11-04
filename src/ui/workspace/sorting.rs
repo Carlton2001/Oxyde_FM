@@ -82,6 +82,7 @@ fn sort(files: &mut [FileEntry], col: SortColumn, direction: SortDirection, list
         Text(String),
         Number(u64),
         Deleted(Option<i64>),
+        Mode(Option<u32>),
         Location(Option<std::path::PathBuf>),
     }
 
@@ -97,6 +98,7 @@ fn sort(files: &mut [FileEntry], col: SortColumn, direction: SortDirection, list
                     .to_lowercase(),
             ),
             SortColumn::Size => Value::Number(file.size),
+            SortColumn::Permissions => Value::Mode(file.mode),
             SortColumn::Modified => Value::Number(file.modified),
             SortColumn::DeletedAt => Value::Deleted(file.deleted_time),
             SortColumn::OriginalLocation => Value::Text(

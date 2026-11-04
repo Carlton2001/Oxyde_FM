@@ -91,6 +91,7 @@ pub enum SortColumn {
     DeletedAt,
     Type,
     Size,
+    Permissions,
     Modified,
 }
 
@@ -170,6 +171,8 @@ pub struct TabState {
     pub filter_name: String,
     pub filter_original_location: String,
     pub filter_sizes: std::collections::HashSet<SizeCategory>,
+    /// Unix permission bits kept by the Permissions column filter.
+    pub filter_permissions: std::collections::HashSet<u32>,
     pub filter_dates: std::collections::HashSet<DateGroup>,
     pub selected_paths: std::collections::HashSet<String>,
     pub selection_anchor: Option<String>,
@@ -185,9 +188,10 @@ pub struct TabState {
     pub size_col_width: f32,
     pub date_col_width: f32,
     pub deleted_col_width: f32,
+    pub permissions_col_width: f32,
     pub column_type_labels: std::collections::HashSet<String>,
     pub column_size_values: std::collections::HashSet<(u64, bool, bool)>,
-    pub column_measurement_key: Option<(u32, crate::ui::i18n::Language, crate::ui::format::DateFormat, bool, bool, bool)>,
+    pub column_measurement_key: Option<(u32, crate::ui::i18n::Language, crate::ui::format::DateFormat, [bool; 4])>,
     pub load_status: TabLoadStatus,
 }
 
@@ -207,6 +211,7 @@ struct FileFilters {
     trash_search: String,
     filter_original_location: String,
     filter_sizes: std::collections::HashSet<SizeCategory>,
+    filter_permissions: std::collections::HashSet<u32>,
     filter_dates: std::collections::HashSet<DateGroup>,
 }
 pub(crate) struct CalendarFilterRequest {

@@ -93,6 +93,7 @@ impl TabState {
             filter_name: String::new(),
             filter_original_location: String::new(),
             filter_sizes: std::collections::HashSet::new(),
+            filter_permissions: std::collections::HashSet::new(),
             filter_dates: std::collections::HashSet::new(),
             selected_paths: std::collections::HashSet::new(),
             selection_anchor: None,
@@ -108,6 +109,7 @@ impl TabState {
             size_col_width: 100.0,
             date_col_width: 180.0,
             deleted_col_width: 180.0,
+            permissions_col_width: 64.0,
             column_type_labels: Default::default(),
             column_size_values: Default::default(),
             column_measurement_key: None,
@@ -127,6 +129,16 @@ impl TabState {
 
             self.column_size_values.insert((f.size, f.is_dir, f.is_calculated));
         }
+    }
+
+    /// Baseline width of the Permissions column, zero where it is not shown.
+    pub fn permissions_column_width(&self, enabled: bool) -> f32 {
+        if enabled && self.path != "__network_vincinity__" { self.permissions_col_width } else { 0.0 }
+    }
+
+    /// Baseline width of the columns kept outside the shared layout: Permissions and Deleted.
+    pub fn fixed_columns_width(&self, permissions: bool) -> f32 {
+        self.permissions_column_width(permissions) + if self.path == "trash://" { self.deleted_col_width } else { 0.0 }
     }
 
     pub fn filtered_files(&self) -> &[FileEntry] {

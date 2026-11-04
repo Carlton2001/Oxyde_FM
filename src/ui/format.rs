@@ -6,6 +6,7 @@ pub struct DateFormatPreference(pub DateFormat);
 #[cfg(test)]
 #[path = "format/tests/transfer_collision.rs"]
 mod transfer_collision_tests;
+pub mod permissions;
 impl gpui::Global for DateFormatPreference {}
 
 pub fn drive_label(label: &str, path: &str, i18n: &crate::ui::i18n::I18n) -> String {
