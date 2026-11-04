@@ -25,6 +25,48 @@ pub(crate) fn field_frame(input: &Entity<TextInput>, window: &Window, cx: &App) 
     control_frame(input.read(cx).focus_handle.is_focused(window), cx)
 }
 
+/// An Embedded password editor in the standard frame, with its show/hide eye integrated on
+/// the right like the regex switch on the left of the search fields. The caller owns the
+/// revealed state and its action.
+pub(crate) fn password_field(
+    input: &Entity<TextInput>,
+    id: impl Into<ElementId>,
+    revealed: bool,
+    on_toggle: impl Fn(&mut Window, &mut App) + 'static,
+    window: &Window,
+    cx: &App,
+) -> Div {
+    let theme = *cx.theme();
+    field_frame(input, window, cx)
+        .w_full()
+        .child(div().flex_1().min_w_0().h_full().child(input.clone()))
+        .child(
+            div()
+                .id(id)
+                .flex_none()
+                .w(rems(2.375))
+                .h_full()
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded_r(rems(0.3125))
+                .bg(theme.header)
+                .border_l(rems(0.0625))
+                .border_color(theme.border)
+                .hover(move |style| style.bg(theme.control_hover))
+                .child(
+                    svg()
+                        .path(if revealed { "icons/eye-off.svg" } else { "icons/eye.svg" })
+                        .size(rems(0.875))
+                        .text_color(theme.text),
+                )
+                .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                    cx.stop_propagation();
+                    on_toggle(window, cx);
+                }),
+        )
+}
+
 /// Matching frame for non-editable form controls such as selection pickers.
 pub(crate) fn control_frame(focused: bool, cx: &App) -> Div {
     standard_surface(div(), focused, cx.theme())

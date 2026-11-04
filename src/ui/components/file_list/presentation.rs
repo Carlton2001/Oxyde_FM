@@ -184,56 +184,52 @@ pub(super) fn selection_checkbox(
         )
 }
 
-pub(super) fn view_mode_button(
+/// Details and grid as one segmented switch in the status bar.
+pub(super) fn view_mode_switch(
     pane_id: &str,
-    mode: ViewMode,
     active_mode: ViewMode,
-    icon: &'static str,
-    tooltip: Message,
     handle: Entity<OxydeApp>,
     theme: OxydeTheme,
     cx: &mut Context<OxydeApp>,
 ) -> impl IntoElement {
-    let selected = mode == active_mode;
-    let pane_id = pane_id.to_string();
-    button_style(div()
-        .id(SharedString::from(format!(
-            "view-mode-{}-{}",
-            pane_id,
-            if mode == ViewMode::Grid {
-                "grid"
-            } else {
-                "details"
-            }
-        ))), theme, ButtonVariant::Ghost, true)
-        .w(rems(1.5))
-        .h(rems(1.5))
-        .flex_none()
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded_md()
-        .bg(if selected {
-            theme.selected
-        } else {
-            theme.header
-        })
-        .fixed_tooltip(Tooltip::text(cx.i18n().text(tooltip)))
-        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-            cx.stop_propagation();
-            handle.update(cx, |this, cx| {
-                if let Some(pane) = this.state.find_pane_mut(&pane_id) {
-                    pane.active_tab_mut().view_mode = mode;
-                }
-                this.save_workspace(cx);
-                cx.notify();
-            });
-        })
-        .child(svg().path(icon).size_4().text_color(if selected {
-            theme.accent
-        } else {
-            theme.text
-        }))
+    let mut switch = crate::ui::elements::segmented::segmented(
+        SharedString::from(format!("view-mode-{pane_id}")),
+        None,
+        theme,
+    )
+    .p(rems(0.0625));
+    for (mode, name, icon, tooltip) in [
+        (ViewMode::Details, "details", "icons/list.svg", Message::ViewDetails),
+        (ViewMode::Grid, "grid", "icons/layout-grid.svg", Message::ViewGrid),
+    ] {
+        let selected = mode == active_mode;
+        let pane_id = pane_id.to_string();
+        let handle = handle.clone();
+        switch = switch.child(
+            crate::ui::elements::segmented::segment(
+                SharedString::from(format!("view-mode-{pane_id}-{name}")),
+                selected,
+                true,
+                theme,
+            )
+            .h(rems(1.25))
+            .w(rems(1.5))
+            .px_0()
+            .fixed_tooltip(Tooltip::text(cx.i18n().text(tooltip)))
+            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                cx.stop_propagation();
+                handle.update(cx, |this, cx| {
+                    if let Some(pane) = this.state.find_pane_mut(&pane_id) {
+                        pane.active_tab_mut().view_mode = mode;
+                    }
+                    this.save_workspace(cx);
+                    cx.notify();
+                });
+            })
+            .child(svg().path(icon).size(rems(0.875)).text_color(if selected { theme.accent } else { theme.text })),
+        );
+    }
+    switch
 }
 
 pub(super) fn size_histogram(size: u64, total: u64, color: Hsla) -> Div {

@@ -2,7 +2,7 @@
 //! refused. The answer is remembered for the archive until Oxyde exits, then the refused
 //! action runs again; a wrong password is forgotten and asked again.
 use super::*;
-use crate::ui::components::input::{TextInput, TextInputOptions};
+use crate::ui::components::input::{InputAppearance, TextInput, TextInputOptions};
 use oxyde_lib::models::error::ArchivePasswordFailure;
 use oxyde_lib::utils::archive_password::{self, ArchiveSecret};
 use std::path::{Path, PathBuf};
@@ -148,7 +148,7 @@ impl OxydeApp {
                 move |input, selected, point, window, cx| {
                     menu.update(cx, |this, cx| this.open_text_context_menu(input, selected, point, window, cx))
                 },
-                TextInputOptions::default(),
+                TextInputOptions { appearance: InputAppearance::Embedded, ..Default::default() },
                 window,
             )
             .password()

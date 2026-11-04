@@ -32,7 +32,6 @@ pub struct OxydeTheme {
     pub error: Hsla,             // Messages d'erreur
     pub text_on_accent: Hsla,    // Texte sur une action remplie avec accent
     pub control_hover: Hsla,     // Survol d'une action secondaire
-    pub stepper_surface: Hsla,   // Fond des contrôles − valeur +
     pub menu_surface: Hsla,
     pub menu_border: Hsla,
     pub menu_hover: Hsla,
@@ -114,7 +113,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0xabb0b618).into(),
                 search_banner: rgb(0xffffff).into(),
                 badge_surface: rgb(0xffffff).into(),
-                stepper_surface: rgb(0xffffff).into(),
                 dialog_tabs: rgb(0xffffff).into(),
                 ..Self::light()
             },
@@ -146,7 +144,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0x626a7318).into(),
                 search_banner: rgb(0x0f131a).into(),
                 badge_surface: rgb(0x0f131a).into(),
-                stepper_surface: rgb(0x0f131a).into(),
                 dialog_tabs: rgb(0x0f131a).into(),
                 ..Self::dark()
             },
@@ -178,7 +175,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0x656d7618).into(),
                 search_banner: rgb(0xffffff).into(),
                 badge_surface: rgb(0xffffff).into(),
-                stepper_surface: rgb(0xffffff).into(),
                 dialog_tabs: rgb(0xffffff).into(),
                 ..Self::light()
             },
@@ -210,7 +206,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0x7d859018).into(),
                 search_banner: rgb(0x161b22).into(),
                 badge_surface: rgb(0x161b22).into(),
-                stepper_surface: rgb(0x161b22).into(),
                 dialog_tabs: rgb(0x161b22).into(),
                 ..Self::dark()
             },
@@ -242,7 +237,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0x88846f18).into(),
                 search_banner: rgb(0x3e3d32).into(),
                 badge_surface: rgb(0x3e3d32).into(),
-                stepper_surface: rgb(0x3e3d32).into(),
                 dialog_tabs: rgb(0x3e3d32).into(),
                 ..Self::dark()
             },
@@ -274,7 +268,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0xa0a1a718).into(),
                 search_banner: rgb(0xffffff).into(),
                 badge_surface: rgb(0xffffff).into(),
-                stepper_surface: rgb(0xffffff).into(),
                 dialog_tabs: rgb(0xffffff).into(),
                 ..Self::light()
             },
@@ -306,7 +299,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0x5c637018).into(),
                 search_banner: rgb(0x2c313a).into(),
                 badge_surface: rgb(0x2c313a).into(),
-                stepper_surface: rgb(0x2c313a).into(),
                 dialog_tabs: rgb(0x2c313a).into(),
                 ..Self::dark()
             },
@@ -338,7 +330,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0x93a1a118).into(),
                 search_banner: rgb(0xfdf6e3).into(),
                 badge_surface: rgb(0xfdf6e3).into(),
-                stepper_surface: rgb(0xfdf6e3).into(),
                 dialog_tabs: rgb(0xfdf6e3).into(),
                 ..Self::light()
             },
@@ -370,7 +361,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0x586e7518).into(),
                 search_banner: rgb(0x124550).into(),
                 badge_surface: rgb(0x194854).into(),
-                stepper_surface: rgb(0x194854).into(),
                 dialog_tabs: rgb(0x073642).into(),
                 ..Self::dark()
             },
@@ -402,7 +392,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0x80808018).into(),
                 search_banner: rgb(0xffffff).into(),
                 badge_surface: rgb(0xffffff).into(),
-                stepper_surface: rgb(0xffffff).into(),
                 dialog_tabs: rgb(0xffffff).into(),
                 ..Self::light()
             },
@@ -434,7 +423,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0x80808018).into(),
                 search_banner: rgb(0x1e1e1e).into(),
                 badge_surface: rgb(0x1e1e1e).into(),
-                stepper_surface: rgb(0x1e1e1e).into(),
                 dialog_tabs: rgb(0x1e1e1e).into(),
                 ..Self::dark()
             },
@@ -483,7 +471,6 @@ impl OxydeTheme {
             error: rgb(0xb42335).into(),
             text_on_accent: rgb(0xffffff).into(),
             control_hover: rgb(0xe6e2d9).into(),
-            stepper_surface: rgb(0xdfddd9).into(),
             menu_surface: rgb(0xfafafa).into(),
             menu_border: rgb(0xe6e1d6).into(),
             menu_hover: rgb(0xe6e2d9).into(),
@@ -534,7 +521,6 @@ impl OxydeTheme {
             error: rgb(0xf87171).into(),
             text_on_accent: rgb(0x0e0c15).into(),
             control_hover: rgb(0x1c1a2b).into(),
-            stepper_surface: rgb(0x302b3d).into(),
             menu_surface: rgb(0x151320).into(),
             menu_border: rgb(0x2d2a3c).into(),
             menu_hover: rgb(0x1c1a2b).into(),

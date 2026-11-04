@@ -2,7 +2,7 @@ mod completion_menu;
 mod field;
 mod options;
 mod render;
-pub(crate) use field::{control_frame, field_frame, read_only_field};
+pub(crate) use field::{control_frame, field_frame, password_field, read_only_field};
 pub(crate) use options::{InputAppearance, TextInputOptions};
 use crate::ui::scale::rem_pixels;
 use crate::ui::theme::ThemeContext;
@@ -65,8 +65,11 @@ pub struct TextInput {
     completion_pointer: completion_menu::scroll::PointerState,
 }
 
+/// A vertically centered bullet for each character, finer than the native disc.
+const MASK: char = '•';
+
 fn masked_display_index(content: &str, byte: usize) -> usize {
-    content[..byte].chars().count()
+    content[..byte].chars().count() * MASK.len_utf8()
 }
 
 fn completion_parts(text: &str) -> Option<(String, String, char)> {
@@ -111,7 +114,7 @@ fn completion_matches(name: &str, prefix: &str) -> bool {
 fn masked_byte_index(content: &str, index: usize) -> usize {
     content
         .char_indices()
-        .nth(index)
+        .nth(index / MASK.len_utf8())
         .map_or(content.len(), |(byte, _)| byte)
 }
 
@@ -850,7 +853,7 @@ impl Element for TextInputElement {
             input.placeholder.clone()
         } else {
             if input.password {
-                "*".repeat(input.content.chars().count()).into()
+                MASK.to_string().repeat(input.content.chars().count()).into()
             } else {
                 input.content.clone().into()
             }
@@ -1018,18 +1021,19 @@ impl Focusable for TextInput {
 
 #[cfg(test)]
 mod password_tests {
-    use super::{masked_byte_index, masked_display_index};
+    use super::{masked_byte_index, masked_display_index, MASK};
     #[::core::prelude::v1::test]
     fn masked_unicode_selection_and_caret_round_trip_to_original_byte_boundaries() {
         for content in ["", "secret", "été🔑密碼", "a\u{301}🔒"] {
             for (index, (byte, _)) in content.char_indices().enumerate() {
-                assert_eq!(masked_display_index(content, byte), index);
-                assert_eq!(masked_byte_index(content, index), byte);
+                let display = index * MASK.len_utf8();
+                assert_eq!(masked_display_index(content, byte), display);
+                assert_eq!(masked_byte_index(content, display), byte);
             }
-            let end = content.chars().count();
+            let end = content.chars().count() * MASK.len_utf8();
             assert_eq!(masked_display_index(content, content.len()), end);
             assert_eq!(masked_byte_index(content, end), content.len());
-            assert_eq!(masked_byte_index(content, end + 1), content.len());
+            assert_eq!(masked_byte_index(content, end + MASK.len_utf8()), content.len());
         }
     }
 }

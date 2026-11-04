@@ -104,8 +104,8 @@ pub(super) fn scale_row(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &App) -> 
     args.set("percentage", (reference * 100 + BASE_REM_SIZE / 2) / BASE_REM_SIZE);
     let reset = handle.clone();
     let value = div().id("scale-reset").min_w(rems(3.25)).h(rems(1.5)).flex().items_center().justify_center()
-        .rounded_md()
-        .hover(|style| style.bg(theme.control_hover))
+        .rounded(rems(0.25))
+        .hover(|style| style.bg(crate::ui::elements::segmented::hover_fill(theme)))
         .native_tooltip(Tooltip::text(cx.i18n().text(Message::SettingsScaleReset)))
         .child(cx.i18n().text_with_args(Message::SettingsScaleValue, &args))
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
@@ -134,8 +134,8 @@ pub(super) fn search_limit_row(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &A
     let reset = handle.clone();
     let value = div().id("search-limit-reset").min_w(rems(3.25)).h(rems(1.5))
         .flex().items_center().justify_center()
-        .rounded_md()
-        .hover(|style| style.bg(theme.control_hover))
+        .rounded(rems(0.25))
+        .hover(|style| style.bg(crate::ui::elements::segmented::hover_fill(theme)))
         .native_tooltip(Tooltip::text(cx.i18n().text(Message::SettingsSearchLimitReset)))
         .child(limit.to_string())
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {

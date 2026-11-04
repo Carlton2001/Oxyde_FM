@@ -1,7 +1,7 @@
 //! The protection a new archive is created with: no password, or a password typed twice.
 //! Only ZIP and 7z can be encrypted (AES-256); other formats keep the choice disabled.
 use super::*;
-use crate::ui::components::input::{TextInput, TextInputOptions};
+use crate::ui::components::input::{InputAppearance, TextInput, TextInputOptions};
 use oxyde_lib::utils::archive_password::ArchiveSecret;
 
 pub(crate) struct ArchiveProtection {
@@ -48,7 +48,7 @@ impl OxydeApp {
                     move |input, selected, point, window, cx| {
                         menu.update(cx, |this, cx| this.open_text_context_menu(input, selected, point, window, cx))
                     },
-                    TextInputOptions::default(),
+                    TextInputOptions { appearance: InputAppearance::Embedded, ..Default::default() },
                     window,
                 )
                 .password()

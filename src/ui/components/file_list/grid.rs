@@ -3,7 +3,7 @@ use crate::ui::app::{FileDropTargetExt, FileDragData};
 use crate::ui::app::GroupSelection;
 use crate::ui::components::tooltip::NativeTooltipExt;
 use super::grid_card::{render_grid_card, GridCardParams};
-use super::presentation::{grouping_button, sizes_button, view_mode_button};
+use super::presentation::{grouping_button, sizes_button, view_mode_switch};
 use super::status_bar_height;
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, DragTarget, OxydeApp};
 use crate::ui::components::{with_grid_sort, pane_context_menu_items};
@@ -533,25 +533,6 @@ pub(super) fn render_grid_file_list(
                 .child(div().flex_none().w(rems(0.0625)).h(rems(1.0)).bg(theme.border))
                 .child(grouping_button(&pane_id, tab.is_grouped(), handle.clone(), theme))
                 .child(div().flex_none().w(rems(0.0625)).h(rems(1.0)).bg(theme.border))
-                .child(view_mode_button(
-                    &pane_id,
-                    ViewMode::Details,
-                    ViewMode::Grid,
-                    "icons/list.svg",
-                    Message::ViewDetails,
-                    handle.clone(),
-                    theme,
-                    cx,
-                ))
-                .child(view_mode_button(
-                    &pane_id,
-                    ViewMode::Grid,
-                    ViewMode::Grid,
-                    "icons/layout-grid.svg",
-                    Message::ViewGrid,
-                    handle.clone(),
-                    theme,
-                    cx,
-                )),
+                .child(view_mode_switch(&pane_id, ViewMode::Grid, handle.clone(), theme, cx)),
         )
 }
