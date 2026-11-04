@@ -114,7 +114,6 @@ impl OxydeApp {
         }
         let Some(mut prompt) = self.archive_password.take() else { return };
         let value = std::mem::take(&mut prompt.value);
-        prompt.input.update(cx, |input, cx| input.set_content(String::new(), cx));
         self.context_menus.clear();
         window.focus(&self.focus_handle, cx);
         cx.notify();
