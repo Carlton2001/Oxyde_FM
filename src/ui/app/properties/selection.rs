@@ -2,7 +2,6 @@ use super::{PropertiesDialog, PropertiesWindow};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::OxydeTheme;
 use gpui::*;
-use gpui::prelude::FluentBuilder;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 #[derive(Debug)]
@@ -171,68 +170,10 @@ pub(super) fn render(
         "number",
         crate::ui::format::format_number(dialog.paths.len() as u64, cx.i18n().language()),
     );
-    let name = cx
-        .i18n()
-        .text_with_args(Message::PropertiesSelectionItems, &args);
-    let row = |label, value| super::general::property_row(label, value, label_width, compact, theme);
-    let mut body = div().flex().flex_col().gap(rems(0.375)).child(
-        div()
-            .flex()
-            .items_center()
-            .gap(rems(1.25))
-            .when(compact, |header| header.flex_col().items_stretch().gap(rems(0.75)))
-            .mb(rems(1.25))
-            .child(
-                svg()
-                    .path("icons/folder.svg")
-                    .size(rems(3.0))
-                    .text_color(theme.text),
-            )
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .px(rems(0.625))
-                    .min_h(rems(2.0))
-                    .flex()
-                    .items_center()
-                    .border(rems(0.0625))
-                    .border_color(theme.border)
-                    .bg(theme.surface)
-                    .rounded_sm()
-                    .child(name),
-            ),
-    );
-    if let Some(summary) = &dialog.selection {
-        let mut args = FluentArgs::new();
-        args.set(
-            "files",
-            crate::ui::format::format_number(summary.files, cx.i18n().language()),
-        );
-        args.set(
-            "folders",
-            crate::ui::format::format_number(summary.folders, cx.i18n().language()),
-        );
-        body = body
-            .child(row(
-                cx.i18n().text(Message::ColumnLocation),
-                summary.location.clone().unwrap_or_else(|| {
-                    cx.i18n()
-                        .text(Message::PropertiesMultipleLocations)
-                        .to_string()
-                }),
-            ))
-            .child(row(
-                cx.i18n().text(Message::PropertiesContains),
-                cx.i18n()
-                    .text_with_args(Message::PropertiesCounts, &args)
-                    .to_string(),
-            ));
-    }
+    let name = cx.i18n().text_with_args(Message::PropertiesSelectionItems, &args);
+    let row = |label, value| super::section::row(label, value, px(label_width), compact, theme);
     let total = if dialog.calculating {
-        cx.i18n()
-            .text(Message::PropertiesCalculatingSize)
-            .to_string()
+        cx.i18n().text(Message::PropertiesCalculatingSize).to_string()
     } else if dialog.error.is_some() {
         cx.i18n().text(Message::OperationFailed).to_string()
     } else if let Some(summary) = &dialog.selection {
@@ -240,7 +181,36 @@ pub(super) fn render(
     } else {
         cx.i18n().text(Message::PropertiesLoading).to_string()
     };
-    body.child(row(cx.i18n().text(Message::PropertiesTotalSize), total))
+    let graphic = svg().path("icons/folder.svg").size(rems(3.0)).text_color(theme.text);
+    let mut body = div()
+        .flex()
+        .flex_col()
+        .gap(rems(1.25))
+        .child(super::section::header(graphic, name, total, theme));
+    if let Some(summary) = &dialog.selection {
+        let mut args = FluentArgs::new();
+        args.set("files", crate::ui::format::format_number(summary.files, cx.i18n().language()));
+        args.set("folders", crate::ui::format::format_number(summary.folders, cx.i18n().language()));
+        let details = super::section::card(theme)
+            .child(row(
+                cx.i18n().text(Message::ColumnLocation),
+                summary
+                    .location
+                    .clone()
+                    .unwrap_or_else(|| cx.i18n().text(Message::PropertiesMultipleLocations).to_string()),
+            ))
+            .child(row(
+                cx.i18n().text(Message::PropertiesContains),
+                cx.i18n().text_with_args(Message::PropertiesCounts, &args).to_string(),
+            ));
+        body = body.child(super::section::section(
+            cx.i18n().text(Message::PropertiesSectionDetails),
+            "icons/info.svg",
+            details,
+            theme,
+        ));
+    }
+    body
 }
 
 #[cfg(test)]

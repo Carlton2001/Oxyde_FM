@@ -44,7 +44,7 @@ fn secondary_information_remains_readable_on_its_surfaces() {
     for id in ThemeId::ALL {
         let theme = OxydeTheme::for_id(id);
         for background in [theme.background, theme.active_background, theme.surface,
-            theme.sidebar, theme.header, theme.menu_surface, theme.search_banner, theme.dialog_tabs] {
+            theme.sidebar, theme.header, theme.menu_surface, theme.search_banner] {
             let ratio = contrast(theme.text_muted, background);
             assert!(ratio >= 4.5, "{id:?} secondary text: {ratio:.2}");
             assert!(contrast(theme.text, background) >= ratio, "{id:?}: preserve text hierarchy");

@@ -179,6 +179,7 @@ impl AdvancedSearchWindow {
             ],
             unit,
             help: false,
+            settings_height: Default::default(),
             error: false,
             focus: cx.focus_handle(),
             pane,

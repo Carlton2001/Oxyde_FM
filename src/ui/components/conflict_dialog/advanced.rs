@@ -2,7 +2,6 @@ use super::comparison::conflict_icon;
 use super::controls::{automatic_badge, edit, visible};
 use super::rules::{ancestors, category, decision, parent};
 use crate::ui::app::{OxydeApp, PendingFileOperation};
-use crate::ui::components::modal::action_button;
 use crate::ui::format::format_number;
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::ThemeContext;
@@ -40,16 +39,7 @@ pub(super) fn render_advanced_body(
     let t = *cx.theme();
     let sidebar_drag = handle.clone();
     let mut body = div().flex().flex_col().flex_1().min_h_0().gap(rems(0.0));
-    let mut tabs = div()
-        .flex()
-        .flex_none()
-        .items_center()
-        .gap(rems(0.25))
-        .px(rems(1.25))
-        .h(rems(2.625))
-        .bg(t.dialog_tabs)
-        .border_b(rems(0.0625))
-        .border_color(t.border);
+    let mut filters = crate::ui::elements::segmented::segmented("conflict-filters", None, t);
     for (filter, message) in [
         Message::ConflictAll,
         Message::ConflictIdentical,
@@ -65,29 +55,10 @@ pub(super) fn render_advanced_body(
             .filter(|c| filter == 0 || category(c) == filter)
             .count();
         let h = handle.clone();
-        tabs = tabs.child(
-            action_button(("conflict-filter", filter))
-                .flex()
-                .flex_none()
-                .items_center()
-                .gap(rems(0.75))
-                .h_full()
-                .rounded_none()
-                .whitespace_nowrap()
-                .px(rems(1.0))
-                .border_b(rems(0.0625))
-                .border_color(if pending.dialog.filter == filter {
-                    t.accent
-                } else {
-                    gpui::transparent_black()
-                })
-                .text_color(if pending.dialog.filter == filter {
-                    t.accent
-                } else if count == 0 {
-                    t.icon_disabled
-                } else {
-                    t.text_muted
-                })
+        let selected = pending.dialog.filter == filter;
+        filters = filters.child(
+            crate::ui::elements::segmented::segment(("conflict-filter", filter), selected, count > 0, t)
+                .gap(rems(0.5))
                 .child(cx.i18n().text(message))
                 .when(count > 0, |d| {
                     d.child(
@@ -97,19 +68,26 @@ pub(super) fn render_advanced_body(
                             .child(format_number(count as u64, cx.i18n().language())),
                     )
                 })
-                .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                    if count == 0 {
-                        return;
-                    }
-                    edit(&h, cx, |p| {
-                        p.dialog.filter = filter;
-                        if let Some(&i) = visible(p).first() {
-                            p.dialog.selected = i;
-                        }
-                    });
+                .when(count > 0 && !selected, |d| {
+                    d.on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                        edit(&h, cx, |p| {
+                            p.dialog.filter = filter;
+                            if let Some(&i) = visible(p).first() {
+                                p.dialog.selected = i;
+                            }
+                        });
+                    })
                 }),
         );
     }
+    let mut tabs = div()
+        .flex()
+        .flex_none()
+        .items_center()
+        .gap(rems(0.75))
+        .px(rems(1.25))
+        .py(rems(0.625))
+        .child(filters);
     if let Some(input) = pending.dialog.input.clone() {
         input.update(cx, |input, cx| {
             input.set_placeholder(cx.i18n().text(Message::ConflictSearch), cx)

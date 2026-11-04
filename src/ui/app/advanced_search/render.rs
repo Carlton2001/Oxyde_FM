@@ -25,77 +25,42 @@ impl AdvancedSearchWindow {
             .flex_col()
             .gap(rems(0.75))
             .when(d.help, |body| body.h_full().min_h_0());
-        let mut tabs = div()
-            .flex()
-            .flex_none()
-            .items_center()
-            .px(rems(1.25))
-            .bg(theme.dialog_tabs)
-            .gap(rems(0.25))
-            .border_b(rems(0.0625))
-            .border_color(theme.border);
+        let mut tabs = crate::ui::elements::segmented::segmented("advanced-tabs", None, theme);
         for (help, message) in [
             (false, Message::AdvancedSettings),
             (true, Message::AdvancedHelp),
         ] {
             let h = handle.clone();
+            let active = d.help == help;
             tabs = tabs.child(
-                div()
-                    .id(if help {
-                        "advanced-help"
-                    } else {
-                        "advanced-settings"
-                    })
-                    .px(rems(1.0))
-                    .py(rems(0.75))
-                    .text_size(rems(0.8125))
-                    .font_weight(FontWeight::MEDIUM)
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .when(d.help != help, |tab| {
-                        tab.hover(move |style| style.bg(theme.hover).text_color(theme.text))
-                    })
-                    .gap(rems(0.5))
-                    .child(
-                        svg()
-                            .path(if help {
-                                "icons/regex.svg"
-                            } else {
-                                "icons/target.svg"
-                            })
-                            .size(rems(0.875))
-                            .text_color(if d.help == help {
-                                theme.accent
-                            } else {
-                                theme.text
-                            }),
-                    )
-                    .track_focus(&d.controls[if help { 7 } else { 6 }])
-                    .focus(move |style| style.bg(theme.control_hover))
-                    .rounded_none()
-                    .border_b(rems(0.0625))
-                    .border_color(if d.help == help {
-                        theme.accent
-                    } else {
-                        transparent_black()
-                    })
-                    .text_color(if d.help == help {
-                        theme.accent
-                    } else {
-                        theme.text_muted
-                    })
-                    .child(cx.i18n().text(message))
-                    .on_click(move |_, _, cx| {
-                        h.update(cx, |this, cx| {
-                            if let Some(d) = &mut this.advanced_search {
-                                d.help = help;
-                            }
-                            cx.notify();
-                        });
-                    }),
+                crate::ui::elements::segmented::segment(
+                    if help { "advanced-help" } else { "advanced-settings" },
+                    active,
+                    true,
+                    theme,
+                )
+                .px(rems(0.875))
+                .child(
+                    svg()
+                        .path(if help { "icons/regex.svg" } else { "icons/target.svg" })
+                        .size(rems(0.875))
+                        .flex_none()
+                        .text_color(if active { theme.accent } else { theme.text }),
+                )
+                .child(cx.i18n().text(message))
+                .track_focus(&d.controls[if help { 7 } else { 6 }])
+                .focus_visible(move |style| style.border_1().border_color(theme.accent))
+                .on_click(move |_, _, cx| {
+                    h.update(cx, |this, cx| {
+                        if let Some(d) = &mut this.advanced_search {
+                            d.help = help;
+                        }
+                        cx.notify();
+                    });
+                }),
             );
         }
+        let tabs = div().flex().flex_none().justify_center().px(rems(1.0)).pt(rems(0.75)).child(tabs);
         if d.help {
             body = self.render_advanced_help(body, handle.clone(), cx);
         } else {
@@ -119,16 +84,22 @@ impl AdvancedSearchWindow {
             div().id("advanced-form-scroll")
                 .when(d.help, |body| body.flex_1().min_h_0())
                 .px(rems(1.0)).py(rems(1.25)).child(body), false, window, cx);
+        let settings_height = d.settings_height.clone();
         let frame = div()
             .relative()
             .w_full()
             .max_h(height_limit)
-            .when(d.help, |frame| frame.h_full())
+            .when(d.help, |frame| match settings_height.get() {
+                Some(height) => frame.h(height),
+                None => frame.h_full(),
+            })
             .when(!d.help, |frame| {
+                let measured = settings_height.clone();
                 frame.child(
                     canvas(
                         |bounds, _, _| bounds,
-                        |bounds, _, window, cx| {
+                        move |bounds, _, window, cx| {
+                            measured.set(Some(bounds.size.height));
                             crate::ui::components::tool_window::fit_content_height(bounds.size.height, window, cx);
                         },
                     )

@@ -6,6 +6,7 @@ mod permissions;
 mod shortcut;
 mod tabs;
 mod window;
+mod section;
 mod selection;
 
 pub(crate) use window::close_properties_windows;
@@ -66,10 +67,8 @@ pub(crate) enum PropertiesTab {
     General,
     /// Windows shortcuts.
     Shortcut,
-    /// Unix permissions, outside Windows.
+    /// Unix permissions, outside Windows, with those of a folder's content.
     Permissions,
-    /// Permissions of everything inside the folders, outside Windows.
-    Contents,
 }
 
 struct PropertyPresentation<'a> {

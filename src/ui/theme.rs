@@ -37,7 +37,6 @@ pub struct OxydeTheme {
     pub menu_hover: Hsla,
     pub file_icons: crate::ui::components::icons::FileIconPalette,
     pub icon_disabled: Hsla,
-    pub dialog_tabs: Hsla,       // Fond légèrement teinté des onglets de formulaire
     pub tab_active: Hsla,
     pub tab_close_hover: Hsla,
     pub selection_hover: Hsla,
@@ -64,7 +63,6 @@ impl OxydeTheme {
             self.surface,
             self.search_banner,
             self.menu_surface,
-            self.dialog_tabs,
             self.tab_active,
         ]
         .into_iter()
@@ -113,7 +111,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0xabb0b618).into(),
                 search_banner: rgb(0xffffff).into(),
                 badge_surface: rgb(0xffffff).into(),
-                dialog_tabs: rgb(0xffffff).into(),
                 ..Self::light()
             },
             ThemeId::AyuDark => Self {
@@ -144,7 +141,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0x626a7318).into(),
                 search_banner: rgb(0x0f131a).into(),
                 badge_surface: rgb(0x0f131a).into(),
-                dialog_tabs: rgb(0x0f131a).into(),
                 ..Self::dark()
             },
             ThemeId::GithubLight => Self {
@@ -175,7 +171,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0x656d7618).into(),
                 search_banner: rgb(0xffffff).into(),
                 badge_surface: rgb(0xffffff).into(),
-                dialog_tabs: rgb(0xffffff).into(),
                 ..Self::light()
             },
             ThemeId::GithubDark => Self {
@@ -206,7 +201,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0x7d859018).into(),
                 search_banner: rgb(0x161b22).into(),
                 badge_surface: rgb(0x161b22).into(),
-                dialog_tabs: rgb(0x161b22).into(),
                 ..Self::dark()
             },
             ThemeId::Monokai => Self {
@@ -237,7 +231,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0x88846f18).into(),
                 search_banner: rgb(0x3e3d32).into(),
                 badge_surface: rgb(0x3e3d32).into(),
-                dialog_tabs: rgb(0x3e3d32).into(),
                 ..Self::dark()
             },
             ThemeId::OneLight => Self {
@@ -268,7 +261,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0xa0a1a718).into(),
                 search_banner: rgb(0xffffff).into(),
                 badge_surface: rgb(0xffffff).into(),
-                dialog_tabs: rgb(0xffffff).into(),
                 ..Self::light()
             },
             ThemeId::OneDark => Self {
@@ -299,7 +291,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0x5c637018).into(),
                 search_banner: rgb(0x2c313a).into(),
                 badge_surface: rgb(0x2c313a).into(),
-                dialog_tabs: rgb(0x2c313a).into(),
                 ..Self::dark()
             },
             ThemeId::SolarizedLight => Self {
@@ -330,7 +321,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0x93a1a118).into(),
                 search_banner: rgb(0xfdf6e3).into(),
                 badge_surface: rgb(0xfdf6e3).into(),
-                dialog_tabs: rgb(0xfdf6e3).into(),
                 ..Self::light()
             },
             ThemeId::SolarizedDark => Self {
@@ -361,7 +351,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0x586e7518).into(),
                 search_banner: rgb(0x124550).into(),
                 badge_surface: rgb(0x194854).into(),
-                dialog_tabs: rgb(0x073642).into(),
                 ..Self::dark()
             },
             ThemeId::WindowsLight => Self {
@@ -392,7 +381,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0x80808018).into(),
                 search_banner: rgb(0xffffff).into(),
                 badge_surface: rgb(0xffffff).into(),
-                dialog_tabs: rgb(0xffffff).into(),
                 ..Self::light()
             },
             ThemeId::WindowsDark => Self {
@@ -423,7 +411,6 @@ impl OxydeTheme {
                 scrollbar_track: rgba(0x80808018).into(),
                 search_banner: rgb(0x1e1e1e).into(),
                 badge_surface: rgb(0x1e1e1e).into(),
-                dialog_tabs: rgb(0x1e1e1e).into(),
                 ..Self::dark()
             },
         };
@@ -476,7 +463,6 @@ impl OxydeTheme {
             menu_hover: rgb(0xe6e2d9).into(),
             file_icons: crate::ui::components::icons::FileIconPalette::for_theme(ThemeId::Light),
             icon_disabled: rgba(0x7c7994a6).into(),
-            dialog_tabs: rgb(0xf8f6f2).into(),
             tab_active: rgb(0xfafafa).into(),
             tab_close_hover: rgb(0xd4cec2).into(),
             selection_hover: rgba(0x3d5af14d).into(),
@@ -526,7 +512,6 @@ impl OxydeTheme {
             menu_hover: rgb(0x1c1a2b).into(),
             file_icons: crate::ui::components::icons::FileIconPalette::for_theme(ThemeId::Dark),
             icon_disabled: rgba(0xa5a2b8a6).into(),
-            dialog_tabs: rgb(0x12101a).into(),
             tab_active: rgb(0x151320).into(),
             tab_close_hover: rgb(0x353046).into(),
             selection_hover: rgba(0xd4a54a4d).into(),

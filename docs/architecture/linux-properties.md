@@ -4,10 +4,10 @@ The Properties window on Linux: Unix permissions (owner, group, access, executio
 
 ## Rules
 
-- **Permissions tab** for a single item, like Nautilus's Permissions page: owner, group and others, each with an access level.
-  - File: None, Read only, Read and write. The owner has no "None". The "Allow executing file as program" box sets the three execute bits. As in Nautilus (GIO's rule), it appears only for a type that can execute: subtype of `application/x-executable` or `text/plain`.
+- **Permissions tab** for a single item, like Nautilus's Permissions page: owner, group and others, each with an access level picked in a segmented control (short labels, full label as tooltip).
+  - File: None, Read only, Read and write. The owner has no "None". The "Allow executing file as program" switch sets the three execute bits. As in Nautilus (GIO's rule), it appears only for a type that can execute: subtype of `application/x-executable` or `text/plain`.
   - Folder: None, List files only, Access files, Create and delete files. The owner has no "None" here either.
-  - A combination matching no level shows as is (`rw-`, …) and stays a menu choice, to return to the original state.
+  - A combination matching no level shows as is (`rw-`, …) and stays a segment of its own, in italics, to return to the original state.
 - **Who can change**: the owner or root. Otherwise the tab is read-only, with Nautilus's message. The group is chosen from the user's groups.
 - **Administrator**: when Oxyde runs as root, owner and group open to all accounts: every NSS account, named "login – Real name" from GECOS, and every group. Oxyde does not ask for elevation.
 - **Applying** happens on OK, like the rest of the window, off the UI thread. It targets the object opened at load (same `dev`/inode, same rights and group). If the item has changed, nothing is applied and a message invites reopening. setuid, setgid and sticky bits are kept, except when the kernel removes them on a group change.
@@ -15,12 +15,12 @@ The Properties window on Linux: Unix permissions (owner, group, access, executio
 - A symbolic link describes its target; a broken link has no Permissions tab.
 - **Multiple selection**, like Nautilus:
   - one level per class for files and one for folders when the selection has both;
-  - a class whose items differ shows "Mixed"; that choice stays in the menu and gives each item back its own bits;
-  - owner and group shown, common or "Several", not editable; no execute box;
-  - editable if the user can change each item of the type; Content tab when the selection has only editable folders;
+  - a class whose items differ shows "Mixed"; that choice stays a segment and gives each item back its own bits;
+  - owner and group shown, common or "Several", not editable; no execute switch; with both files and folders, a Files | Folders control picks which levels are shown;
+  - editable if the user can change each item of the type; Content section when the selection has only editable folders;
   - OK applies item by item, each checked as a single item. Failures are counted and the first named; other items change, and a new OK retries only what remains;
   - account names are kept a few seconds, so a large selection does not run one `getent` per item.
-- **Content tab** (folders only): Nautilus 50's "Change permissions of enclosed items" dialog, without a sub-screen. For each class, a level for files and one for folders, prefilled from the umask (read from `/proc/self/status`). A class whose bits match no level stays "Unchanged". Nothing changes inside until the "Change permissions of enclosed items" box is checked; OK then applies these levels at any depth, before changing the folder itself:
+- **Content section** (folders only, at the bottom of the Permissions tab): Nautilus 50's "Change permissions of enclosed items" dialog, without a sub-screen. For each class, a level for files and one for folders, behind a Files | Folders control, prefilled from the umask (read from `/proc/self/status`). A class whose bits match no level stays "Unchanged". Nothing changes inside until the "Change permissions of enclosed items" switch is on (the levels show only then); OK then applies these levels at any depth, before changing the folder itself:
   - each folder changes after its content, so one closing itself to its owner is still traversed;
   - a closed folder the change opens is changed first, then traversed;
   - links are never followed and other filesystems never visited;

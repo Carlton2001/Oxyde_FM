@@ -18,6 +18,9 @@ pub struct AdvancedSearchDialog {
     flags: [bool; 6], // name regex, content regex, recursive, archives, case, accents
     unit: usize,
     help: bool,
+    /// Height of the Settings page as laid out: Help keeps it, so the footer stays
+    /// where it was rather than moving by the fraction the window rounded away.
+    settings_height: std::rc::Rc<std::cell::Cell<Option<gpui::Pixels>>>,
     error: bool,
     focus: FocusHandle,
     pane: String,

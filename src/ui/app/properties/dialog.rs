@@ -20,8 +20,8 @@ pub(crate) fn render(
     let label_width = general::label_width(presentation.as_ref(), has_file_system, theme, window, cx);
     let compact = window.viewport_size().width < rems(28.0).to_pixels(window.rem_size());
     let mut body = div().flex().flex_col().gap(rems(0.375));
-    if let Some(edit) = dialog.permissions.as_ref().filter(|_| matches!(dialog.tab, PropertiesTab::Permissions | PropertiesTab::Contents)) {
-        body = permissions::render(body, dialog, edit, dialog.tab == PropertiesTab::Contents, &handle, compact, theme, cx);
+    if let Some(edit) = dialog.permissions.as_ref().filter(|_| dialog.tab == PropertiesTab::Permissions) {
+        body = permissions::render(body, dialog, edit, view.owner.upgrade(), &handle, compact, theme, cx);
     } else if dialog.paths.len() > 1 {
         body = super::selection::render(dialog, label_width, compact, theme, cx);
     } else if let Some(p) = dialog.properties.as_ref().filter(|_| dialog.tab == PropertiesTab::General) {
@@ -45,8 +45,7 @@ pub(crate) fn render(
         .as_ref()
         .is_some_and(|properties| properties.shortcut.is_some());
     let has_permissions = dialog.permissions.is_some();
-    let has_contents = dialog.permissions.as_ref().is_some_and(|edit| edit.offers_enclosed());
-    let property_tabs = tabs::render(dialog, &handle, has_shortcut, has_permissions, has_contents, theme, cx);
+    let property_tabs = tabs::render(dialog, &handle, has_shortcut, has_permissions, theme, cx);
     if dialog.saving {
         body = body.child(cx.i18n().text(Message::ShortcutSaving));
     }
@@ -67,7 +66,7 @@ pub(crate) fn render(
             .flex()
             .flex_col()
             .child(tabs)
-            .child(div().px(rems(1.0)).py(rems(1.25)).child(body));
+            .child(div().px(rems(1.25)).py(rems(1.25)).child(body));
     }
     let keyboard = handle.clone();
     let cancel = handle.clone();
@@ -76,7 +75,7 @@ pub(crate) fn render(
     let title_close = handle;
     let body = crate::ui::components::scroll_area::scroll_area("properties-body-scroll-state", div(),
         div().id("properties-body")
-            .when(!has_shortcut && !has_permissions, |body| body.px(rems(1.0)).py(rems(1.25)))
+            .when(!has_shortcut && !has_permissions, |body| body.px(rems(1.25)).py(rems(1.25)))
             .child(body), false, window, cx);
     div()
         .absolute()

@@ -6,6 +6,8 @@ use gpui::{App, Entity, WeakEntity, Window};
 pub(crate) enum HoverRegion {
     Files(String),
     DirectoryTree,
+    /// A group of controls in a secondary window, named by its caller.
+    Controls(&'static str),
 }
 
 #[derive(Clone)]
@@ -29,6 +31,7 @@ impl Scope {
                 }
                 format!("{:?}|directory-tree", owner.entity_id())
             }
+            HoverRegion::Controls(name) => format!("{:?}|controls|{name}", owner.entity_id()),
         };
         Some(Self {
             tag,

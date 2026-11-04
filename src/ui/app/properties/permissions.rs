@@ -8,6 +8,7 @@ mod item;
 mod save;
 
 use super::{PropertiesDialog, PropertiesWindow};
+use crate::ui::app::OxydeApp;
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::OxydeTheme;
 use gpui::*;
@@ -45,10 +46,14 @@ pub(super) struct PermissionsEdit {
     /// Owner and group of a single item; a selection keeps those of each item.
     owner: u32,
     group: u32,
-    /// Levels of the Contents tab, prefilled from the umask as Nautilus does.
+    /// Levels for a folder's content, prefilled from the umask as Nautilus does.
     enclosed: Levels,
-    /// Its checkbox: OK applies those levels inside the folders.
+    /// Its switch: OK applies those levels inside the folders.
     enclosed_apply: bool,
+    /// Whether folders' levels are shown rather than files', for a selection holding
+    /// both and for the content.
+    folders_shown: bool,
+    enclosed_folders_shown: bool,
     pub(super) menu: Option<PermissionMenu>,
     bounds: HashMap<PermissionMenu, Bounds<Pixels>>,
 }
@@ -64,6 +69,8 @@ impl PermissionsEdit {
             executable: None,
             enclosed: enclosed_defaults,
             enclosed_apply: false,
+            folders_shown: false,
+            enclosed_folders_shown: false,
             menu: None,
             bounds: HashMap::new(),
         })
@@ -238,8 +245,98 @@ fn update(handle: &Entity<PropertiesWindow>, cx: &mut App, change: impl FnOnce(&
     });
 }
 
-fn form_row(label: Message, value: impl IntoElement, compact: bool, cx: &App) -> Div {
-    crate::ui::components::modal::responsive_form_row(cx.i18n().text(label), value, rems(6.0), compact, cx)
+fn form_row(label: Message, value: impl IntoElement, compact: bool, theme: OxydeTheme, cx: &App) -> Div {
+    crate::ui::app::properties::section::row(cx.i18n().text(label), value, crate::ui::scale::rem_pixels(rems(6.5)), compact, theme)
+}
+
+/// The short name of a level, for its segment; the full one is its tooltip.
+fn short_message(access: Access) -> Message {
+    match access {
+        Access::None => Message::PermissionsNone,
+        Access::ReadOnly => Message::PermissionsShortRead,
+        Access::ReadWrite => Message::PermissionsShortReadWrite,
+        Access::ListFiles => Message::PermissionsShortList,
+        Access::AccessFiles => Message::PermissionsShortAccess,
+        Access::CreateDelete => Message::PermissionsShortModify,
+    }
+}
+
+/// The hover region of the levels' tooltips.
+const REGION: crate::ui::components::tooltip::hover::HoverRegion =
+    crate::ui::components::tooltip::hover::HoverRegion::Controls("permission-levels");
+
+/// A segmented control as wide as its options, not as its row.
+fn hugged(control: impl IntoElement) -> AnyElement {
+    div().flex().min_w_0().child(control).into_any_element()
+}
+
+/// The levels of a menu as one segmented control; a value outside the levels, or
+/// « Mixed », stays a segment of its own.
+fn levels(
+    menu: PermissionMenu,
+    id: String,
+    edit: &PermissionsEdit,
+    editable: bool,
+    owner: Option<&Entity<OxydeApp>>,
+    handle: &Entity<PropertiesWindow>,
+    theme: OxydeTheme,
+    cx: &mut App,
+) -> AnyElement {
+    use crate::ui::components::tooltip::hover::SharedTooltipExt;
+    use crate::ui::elements::segmented::{segment, segmented};
+    use gpui::prelude::FluentBuilder;
+    let mut control = segmented(SharedString::from(id.clone()), None, theme);
+    for (index, (label, selected, pick)) in edit.entries(menu, cx).into_iter().enumerate() {
+        let short = match pick {
+            Pick::Access(Some(access)) => cx.i18n().text(short_message(access)).to_string(),
+            _ => label.clone(),
+        };
+        let choose = handle.clone();
+        let key = format!("{id}-{index}");
+        let mut item = segment(SharedString::from(key.clone()), selected, editable || selected, theme)
+            .when(!matches!(pick, Pick::Access(Some(_))), |segment| segment.italic());
+        // One session for every level: once a tooltip shows, the next follows at once.
+        if let Some(owner) = owner.cloned().filter(|_| short != label) {
+            item = item.shared_tooltip(owner, REGION, key, cx, crate::ui::components::tooltip::Tooltip::text(label.clone()));
+        }
+        control = control.child(
+            item
+                .child(short)
+                .when(editable && !selected, |segment| {
+                    segment.on_click(move |_, _, cx| {
+                        cx.stop_propagation();
+                        update(&choose, cx, move |edit| edit.pick(menu, pick));
+                    })
+                }),
+        );
+    }
+    hugged(control)
+}
+
+/// Files or folders, for the levels shown below it.
+fn kind_switch(id: &'static str, folders: bool, handle: &Entity<PropertiesWindow>, theme: OxydeTheme, cx: &App, set: fn(&mut PermissionsEdit, bool)) -> AnyElement {
+    use crate::ui::elements::segmented::{segment, segmented};
+    use gpui::prelude::FluentBuilder;
+    let mut control = segmented(id, None, theme);
+    for (shown, label, icon) in [
+        (false, Message::PermissionsFiles, "icons/file-text.svg"),
+        (true, Message::PermissionsFolders, "icons/folder.svg"),
+    ] {
+        let choose = handle.clone();
+        let selected = shown == folders;
+        control = control.child(
+            segment(SharedString::from(format!("{id}-{shown}")), selected, true, theme)
+                .child(svg().path(icon).size(rems(0.8125)).flex_none().text_color(if selected { theme.accent } else { theme.text }))
+                .child(cx.i18n().text(label))
+                .when(!selected, |segment| {
+                    segment.on_click(move |_, _, cx| {
+                        cx.stop_propagation();
+                        update(&choose, cx, move |edit| set(edit, shown));
+                    })
+                }),
+        );
+    }
+    hugged(control)
 }
 
 /// A value that cannot be changed, its text where a menu's would be.
@@ -311,22 +408,24 @@ fn choice(
         .into_any_element()
 }
 
-/// The Permissions tab, or the Contents tab when `enclosed`.
+/// The Permissions tab, then the levels for a folder's content.
 pub(super) fn render(
     body: Div,
     dialog: &PropertiesDialog,
     edit: &PermissionsEdit,
-    enclosed: bool,
+    owner: Option<Entity<OxydeApp>>,
     handle: &Entity<PropertiesWindow>,
     compact: bool,
     theme: OxydeTheme,
     cx: &mut Context<PropertiesWindow>,
 ) -> Div {
-    let body = if enclosed {
-        enclosed::render(body, edit, handle, compact, theme, cx)
-    } else {
-        item::render(body, dialog, edit, handle, compact, theme, cx)
-    };
+    let mut body = item::render(body.gap(rems(1.25)).relative(), dialog, edit, owner.as_ref(), handle, compact, theme, cx);
+    if edit.offers_enclosed() {
+        body = enclosed::render(body, edit, owner.as_ref(), handle, compact, theme, cx);
+    }
+    if let Some(owner) = owner {
+        body = body.child(crate::ui::components::tooltip::hover::region_container(owner, REGION, px(0.0), px(0.0), cx));
+    }
     match edit.menu.filter(|_| !dialog.saving) {
         Some(menu) => body.child(menu_view(edit, menu, handle, theme, cx)),
         None => body,
