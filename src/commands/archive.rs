@@ -37,6 +37,14 @@ pub fn create_archive_directory_with_quality(
     crate::systems::archive_workspace::create_directory(path, quality)
 }
 
+/// Checks the password remembered for `path` before the action it unlocks.
+pub fn verify_archive_password(path: &Path) -> Result<(), CommandError> {
+    #[cfg(test)]
+    { super::archive_verify::verify_file(path, std::fs::File::open(path)?) }
+    #[cfg(not(test))]
+    { platform().verify_archive_password(path) }
+}
+
 pub fn prepare_archive_file_for_open(path: &Path) -> Result<PathBuf, CommandError> {
     crate::systems::archive_workspace::external_file(path)
 }

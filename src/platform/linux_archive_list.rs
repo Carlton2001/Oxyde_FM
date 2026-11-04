@@ -14,6 +14,7 @@ const MEMORY_BYTES: u64 = 512 * 1024 * 1024;
 const DEADLINE: Duration = Duration::from_secs(120);
 const LIST_FLAG: &str = "--oxyde-archive-list-worker-v1";
 const INDEX_FLAG: &str = "--oxyde-archive-index-worker-v1";
+const VERIFY_FLAG: &str = "--oxyde-archive-verify-worker-v1";
 // Independent admissions: a long search never delays navigation.
 static SLOT: Mutex<()> = Mutex::new(());
 static SEARCH_SLOT: Mutex<()> = Mutex::new(());
@@ -41,6 +42,17 @@ pub(super) fn index(path: &Path, checkpoint: &dyn Fn() -> io::Result<()>) -> Res
         }
     };
     index_in(&executable()?, path, DEADLINE, checkpoint)
+}
+
+/// Checks the remembered password on the navigation slot: the user waits for it.
+pub(super) fn verify(path: &Path) -> Result<(), CommandError> {
+    let _slot = SLOT.lock().map_err(|_| failed())?;
+    verify_in(&executable()?, path, DEADLINE)
+}
+
+fn verify_in(executable: &Path, path: &Path, deadline: Duration) -> Result<(), CommandError> {
+    let bytes = confined(executable, VERIFY_FLAG, None, path, deadline, &|| Ok(()))?;
+    archive_listing_protocol::decode_index(&bytes, path, &|| Ok(())).map(drop)
 }
 
 fn list_in(executable: &Path, path: &Path, internal: &str, deadline: Duration) -> Result<Vec<FileEntry>, CommandError> {

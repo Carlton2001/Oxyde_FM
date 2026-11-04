@@ -24,6 +24,9 @@ impl Platform for LinuxPlatform {
     fn list_archive_directory(&self, path: &std::path::Path, internal: &str) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError> {
         super::linux_archive_list::list(path, internal)
     }
+    fn verify_archive_password(&self, path: &std::path::Path) -> Result<(), crate::models::CommandError> {
+        super::linux_archive_list::verify(path)
+    }
     fn open_archive_source(&self, path: &std::path::Path, _allow_changes: bool) -> std::io::Result<std::fs::File> {
         let file = std::fs::File::open(path)?;
         if !file.metadata()?.is_file() {return Err(std::io::Error::other("Archive source is not a regular file"));}

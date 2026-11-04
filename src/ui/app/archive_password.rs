@@ -16,6 +16,10 @@ pub(crate) struct ArchivePasswordPrompt {
     pub input: Entity<TextInput>,
     /// Kept as typed: an input calling back cannot be read while it updates.
     pub value: String,
+    /// The typed password is being checked.
+    pub checking: bool,
+    /// Restarts the field's shake for each refusal.
+    pub shake_id: u64,
     pub focus: FocusHandle,
     /// Cancel and unlock.
     pub controls: Vec<FocusHandle>,
@@ -32,7 +36,56 @@ pub(crate) fn password_failure(detail: &str) -> Option<ArchivePasswordFailure> {
     ArchivePasswordFailure::from_message(detail)
 }
 
+/// A 7z may encrypt its header, hiding even its names: before showing it, its listing
+/// is tried, so the password is asked over the current folder rather than an empty one.
+pub(crate) fn locks_its_listing(path: &str) -> bool {
+    let path = Path::new(path);
+    oxyde_lib::utils::archive::ArchiveFormat::from_path(path) == Some(oxyde_lib::utils::archive::ArchiveFormat::SevenZip)
+        && archive_password::for_archive(path).is_none()
+}
+
 impl OxydeApp {
+    pub(super) fn open_locked_archive(&mut self, pane_id: &str, path: String, new_tab: bool, cx: &mut Context<Self>) {
+        let pane = pane_id.to_string();
+        let origin = self.state.find_pane(pane_id)
+            .map(|pane| (pane.active_tab().id.clone(), pane.active_tab().path.clone()));
+        cx.spawn(async move |this, cx| {
+            let probe = path.clone();
+            let refusal = tokio::task::spawn_blocking(move || {
+                oxyde_lib::commands::archive::list_archive_contents(probe, String::new())
+                    .err()
+                    .map(|error| error.to_string())
+                    .filter(|detail| password_failure(detail).is_some())
+            })
+            .await
+            .ok()
+            .flatten();
+            let _ = this.update(cx, |this, cx| {
+                // The user went elsewhere meanwhile.
+                let current = this.state.find_pane(&pane)
+                    .map(|pane| (pane.active_tab().id.clone(), pane.active_tab().path.clone()));
+                if !new_tab && current != origin {
+                    return;
+                }
+                let archive = PathBuf::from(&path);
+                let open = move |this: &mut Self, cx: &mut Context<Self>| {
+                    if new_tab {
+                        this.add_tab(&pane, path, false, cx);
+                    } else {
+                        this.navigate_to(&pane, path, cx);
+                    }
+                };
+                match refusal {
+                    Some(detail) => {
+                        this.ask_archive_password(&archive, &detail, open, cx);
+                    }
+                    None => open(this, cx),
+                }
+            });
+        })
+        .detach();
+    }
+
     /// When `detail` is a password refusal for `archive`, asks for one and returns true;
     /// `retry` then runs once the user has answered.
     pub(crate) fn ask_archive_password(
@@ -101,6 +154,8 @@ impl OxydeApp {
             wrong,
             input,
             value: String::new(),
+            checking: false,
+            shake_id: 0,
             focus: cx.focus_handle(),
             controls: (0..2).map(|_| cx.focus_handle()).collect(),
             retry: Some(retry),
@@ -108,20 +163,62 @@ impl OxydeApp {
         cx.notify();
     }
 
+    /// Cancels, or checks the typed password off the UI thread. A wrong one keeps the
+    /// dialog open: the field shakes, empties and says so, as the path bar does.
     pub(crate) fn answer_archive_password(&mut self, cancel: bool, window: &mut Window, cx: &mut Context<Self>) {
-        if !cancel && self.archive_password.as_ref().is_some_and(|prompt| prompt.value.is_empty()) {
-            return;
-        }
-        let Some(mut prompt) = self.archive_password.take() else { return };
-        let value = std::mem::take(&mut prompt.value);
-        self.context_menus.clear();
-        window.focus(&self.focus_handle, cx);
-        cx.notify();
         if cancel {
+            if self.archive_password.take().is_some() {
+                self.context_menus.clear();
+                window.focus(&self.focus_handle, cx);
+                cx.notify();
+            }
             return;
         }
-        let Some(secret) = ArchiveSecret::new(value) else { return };
-        archive_password::remember(&prompt.archive, secret);
+        let Some(prompt) = self.archive_password.as_mut().filter(|prompt| !prompt.checking) else { return };
+        let Some(secret) = ArchiveSecret::new(std::mem::take(&mut prompt.value)) else { return };
+        prompt.checking = true;
+        let archive = prompt.archive.clone();
+        archive_password::remember(&archive, secret);
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let check = archive.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                oxyde_lib::commands::archive::verify_archive_password(&check)
+            })
+            .await;
+            let wrong = matches!(&result, Ok(Err(error))
+                if password_failure(&error.to_string()) == Some(ArchivePasswordFailure::Wrong));
+            let _ = this.update(cx, |this, cx| this.finish_password_check(&archive, wrong, cx));
+        })
+        .detach();
+    }
+
+    fn finish_password_check(&mut self, archive: &Path, wrong: bool, cx: &mut Context<Self>) {
+        if self.archive_password.as_ref().is_none_or(|prompt| prompt.archive != archive || !prompt.checking) {
+            return;
+        }
+        if wrong {
+            archive_password::forget(archive);
+            if let Some(prompt) = &mut self.archive_password {
+                prompt.checking = false;
+                prompt.wrong = true;
+                prompt.shake_id = prompt.shake_id.wrapping_add(1);
+                // A task of its own: the field is not updating itself here.
+                prompt.input.update(cx, |input, cx| input.set_content(String::new(), cx));
+            }
+            cx.notify();
+            return;
+        }
+        // Any other outcome is the action's to report.
+        let Some(mut prompt) = self.archive_password.take() else { return };
+        self.context_menus.clear();
+        if let Some(window) = self.main_window {
+            let focus = self.focus_handle.clone();
+            cx.defer(move |cx| {
+                let _ = window.update(cx, |_, window, cx| window.focus(&focus, cx));
+            });
+        }
+        cx.notify();
         if let Some(retry) = prompt.retry.take() {
             retry(self, cx);
         }

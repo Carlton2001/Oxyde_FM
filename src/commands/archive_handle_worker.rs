@@ -105,9 +105,13 @@ pub fn run_if_requested() -> bool {
         }
         let file = unsafe { File::from_raw_handle(handle as *mut std::ffi::c_void) };
         let path = Path::new(&archive);
-        let entries = indexed(path, file);
+        let entries = if mode == "verify" {
+            super::archive_verify::verify_file(path, file).map(|()| Vec::new())
+        } else {
+            indexed(path, file)
+        };
         let mut output = io::stdout().lock();
-        let encoded = if mode == "index" {
+        let encoded = if mode == "index" || mode == "verify" {
             archive_listing_protocol::encode_index(entries, path, &mut output)
         } else if mode == "directory" {
             archive_listing_protocol::encode(
@@ -119,7 +123,7 @@ pub fn run_if_requested() -> bool {
         };
         if let Err(error) = encoded {
             let failed = Err(CommandError::ArchiveError(error.to_string()));
-            if mode == "index" {
+            if mode == "index" || mode == "verify" {
                 archive_listing_protocol::encode_index(failed, path, &mut output)?;
             } else {
                 archive_listing_protocol::encode(failed, &mut output)?;

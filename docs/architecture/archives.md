@@ -57,7 +57,8 @@ ZIP (ZipCrypto, AES) and 7z encrypted with a password are read, browsed, opened 
 - The parent remembers each password in memory for its archive path until Oxyde exits, never in configuration, workspace or logs. `ArchiveSecret` hides its value from `Debug` and clears its memory on drop.
 - A listing worker receives a `u16` length and the UTF-8 password (1024 bytes at most, empty without one) on its standard input right after the start gate, never in its arguments. Decode receives it in `Operation::Decode::password`, accepted for ZIP and 7z only.
 - A refusal is the typed `ArchivePasswordFailure` (`Required`, `Wrong`), carried by `FailureKind::PasswordRequired`/`PasswordWrong` or by the listing's error text. 7z with encrypted headers refuses even its listing; ZIP and 7z with clear headers list without a password. A ZipCrypto password passing its one-byte check but failing the CRC counts as wrong.
-- The interface (`ui/app/archive_password.rs`) asks for the password when a listing, an opening or an extraction (or a copy out of an archive) is refused, then runs the refused action again. A wrong password is forgotten and asked again; cancelling leaves the translated error.
+- The interface (`ui/app/archive_password.rs`) asks for the password when a listing, an opening or an extraction (or a copy out of an archive) is refused. Before closing, the dialog checks it in the metadata worker (`verify` mode, `commands/archive_verify.rs`: the smallest encrypted member decoded up to 1 MiB); a wrong one keeps the dialog open, shakes and empties the field. The refused action then runs again; cancelling leaves the translated error.
+- A 7z without a remembered password is listed before the tab moves into it, so a password its header needs is asked over the current folder, not an empty pane.
 
 Known gap: a file opened from an encrypted archive stays decrypted in the open cache under the cache's usual rules (up to 7 days on Linux), not until exit.
 

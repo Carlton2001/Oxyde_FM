@@ -77,6 +77,8 @@ impl OxydeApp {
                 });
             })
             .detach();
+        } else if super::archive_password::locks_its_listing(&path) {
+            self.open_locked_archive(pane_id, path, new_tab, cx);
         } else if new_tab {
             self.add_tab(pane_id, path, false, cx);
         } else {

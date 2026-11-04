@@ -20,6 +20,7 @@ pub mod audio_handle_worker;
 mod archive_iso_open;
 mod archive_metadata;
 mod archive_seven_open;
+pub(crate) mod archive_verify;
 #[cfg(test)]
 mod archive_tar_open;
 pub mod duplicates;

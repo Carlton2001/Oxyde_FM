@@ -102,6 +102,18 @@ pub(super) fn index_in(
     let bytes = confined(command, path, deadline, checkpoint)?;
     archive_listing_protocol::decode_index(&bytes, path, checkpoint)
 }
+/// Checks the remembered password on the navigation slot: the user waits for it.
+pub(super) fn verify(path: &Path) -> Result<(), CommandError> {
+    let _slot = SLOT.lock().map_err(|_| failed())?;
+    let mut command = Command::new(executable()?);
+    command
+        .arg(crate::commands::archive_handle_worker::FLAG)
+        .arg("verify")
+        .arg(path)
+        .arg("");
+    let bytes = confined(command, path, DEADLINE, &|| Ok(()))?;
+    archive_listing_protocol::decode_index(&bytes, path, &|| Ok(())).map(drop)
+}
 fn executable() -> Result<std::path::PathBuf, CommandError> {
     Ok(std::env::current_exe()
         .map_err(|_| failed())?

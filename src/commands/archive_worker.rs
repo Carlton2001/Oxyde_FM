@@ -4,9 +4,10 @@ use std::io::{Read, Write};
 
 pub fn run_if_requested() -> bool {
     let mut arguments = std::env::args_os().skip(1);
-    let index = match arguments.next().as_deref() {
-        Some(flag) if flag == std::ffi::OsStr::new("--oxyde-archive-list-worker-v1") => false,
-        Some(flag) if flag == std::ffi::OsStr::new("--oxyde-archive-index-worker-v1") => true,
+    let (index, verify) = match arguments.next().as_deref() {
+        Some(flag) if flag == std::ffi::OsStr::new("--oxyde-archive-list-worker-v1") => (false, false),
+        Some(flag) if flag == std::ffi::OsStr::new("--oxyde-archive-index-worker-v1") => (true, false),
+        Some(flag) if flag == std::ffi::OsStr::new("--oxyde-archive-verify-worker-v1") => (true, true),
         _ => return false,
     };
     let result = (|| -> std::io::Result<()> {
@@ -35,7 +36,12 @@ pub fn run_if_requested() -> bool {
         }
         let path =
             crate::utils::path_security::validate_path(&archive).map_err(std::io::Error::other)?;
-        let result = if index {
+        let result = if verify {
+            std::fs::File::open(&path)
+                .map_err(crate::models::CommandError::from)
+                .and_then(|file| super::archive_verify::verify_file(&path, file))
+                .map(|()| Vec::new())
+        } else if index {
             super::archive::index_archive_contents_local(&path, &|| Ok(()))
         } else {
             super::archive::list_archive_contents_local(archive, internal)

@@ -21,10 +21,15 @@ fn encrypted_seven_zip_headers_list_with_the_remembered_password() {
     std::fs::write(source.join("docs/note.txt"), b"safe").unwrap();
     let archive = directory.path().join("locked.7z");
     sevenz_rust2::compress_to_path_encrypted(&source, &archive, "correct horse".into()).unwrap();
+    let verified = || verify_in(&worker(), &archive, DEADLINE).err()
+        .and_then(|error| ArchivePasswordFailure::from_message(&error.to_string()));
     assert_eq!(refusal(list_in(&worker(), &archive, "", DEADLINE)), Some(ArchivePasswordFailure::Required));
+    assert_eq!(verified(), Some(ArchivePasswordFailure::Required));
     remember(&archive, ArchiveSecret::new("wrong".into()).unwrap());
     assert_eq!(refusal(list_in(&worker(), &archive, "", DEADLINE)), Some(ArchivePasswordFailure::Wrong));
+    assert_eq!(verified(), Some(ArchivePasswordFailure::Wrong));
     remember(&archive, ArchiveSecret::new("correct horse".into()).unwrap());
+    assert_eq!(verified(), None);
     let nested = list_in(&worker(), &archive, "docs", DEADLINE).unwrap();
     assert_eq!(nested[0].name, "note.txt");
     let all = index_in(&worker(), &archive, DEADLINE, &|| Ok(())).unwrap();

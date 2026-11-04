@@ -24,13 +24,29 @@ pub(crate) fn render_archive_password_dialog(
         |name| name.to_string_lossy().into_owned(),
     );
     args.set("name", name);
+    let field = div().flex_1().min_w_0().child(prompt.input.clone());
+    let field = if prompt.wrong {
+        field
+            .with_animation(
+                SharedString::from(format!("archive-password-shake-{}", prompt.shake_id)),
+                Animation::new(std::time::Duration::from_millis(300)),
+                |field, delta| {
+                    let amplitude = (1.0 - delta) * crate::ui::scale::logical(8.0);
+                    let offset = (delta * std::f32::consts::PI * 6.0).sin() * amplitude;
+                    field.relative().left(px(offset))
+                },
+            )
+            .into_any_element()
+    } else {
+        field.into_any_element()
+    };
     let mut body = div()
         .flex()
         .flex_col()
         .gap(rems(0.375))
         .text_size(rems(0.8125))
         .child(div().pb(rems(0.375)).child(cx.i18n().text_with_args(Message::ArchivePasswordPrompt, &args)))
-        .child(form_row(cx.i18n().text(Message::NetworkPassword), prompt.input.clone().into_any_element(), cx));
+        .child(form_row(cx.i18n().text(Message::NetworkPassword), field, cx));
     if prompt.wrong {
         body = body.child(div().text_color(theme.error).child(cx.i18n().text(Message::ArchivePasswordWrong)));
     }
@@ -52,7 +68,7 @@ pub(crate) fn render_archive_password_dialog(
                 .on_click(move |_, window, cx| cancel.update(cx, |view, cx| view.answer_archive_password(true, window, cx))),
         )
         .action(
-            button_style(action_button("archive-password-unlock"), theme, ButtonVariant::Primary, !prompt.value.is_empty())
+            button_style(action_button("archive-password-unlock"), theme, ButtonVariant::Primary, !prompt.value.is_empty() && !prompt.checking)
                 .track_focus(&prompt.controls[UNLOCK])
                 .rounded_md()
                 .border(rems(0.0625))

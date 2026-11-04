@@ -231,6 +231,8 @@ pub trait Platform: Send + Sync {
         handler: &mut dyn FnMut(crate::utils::archive_io_protocol::Frame) -> std::io::Result<crate::utils::archive_io_protocol::Frame>) -> std::io::Result<std::time::Duration>;
     fn list_archive_directory(&self, path: &std::path::Path, internal: &str) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError>;
     fn index_archive_contents(&self, path: &std::path::Path, checkpoint: &dyn Fn() -> std::io::Result<()>) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError>;
+    /// Checks the password remembered for an encrypted archive in a confined worker.
+    fn verify_archive_password(&self, path: &std::path::Path) -> Result<(), crate::models::CommandError>;
     fn initialize_preview_worker(&self) -> std::io::Result<()> { Ok(()) }
     #[doc(hidden)]
     fn decode_preview_worker(&self, _mode: &str, _path: &std::path::Path) -> crate::utils::preview_protocol::Reply {
