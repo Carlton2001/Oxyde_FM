@@ -1,6 +1,6 @@
 //! Presentation of the Viewer's tree: a summary above a virtualized list of
 //! rows with name, file size and date, and the chevron on the right.
-use super::{ArchiveInfo, Chevron, Failure, Folder, Level, Row, Tree};
+use super::{ArchiveInfo, Chevron, Count, Failure, Folder, Level, Row, Totals, Tree};
 use crate::ui::{
     app::viewer::Viewer,
     components::tooltip::{NativeTooltipExt, Tooltip},
@@ -29,34 +29,32 @@ fn centered(text: SharedString, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-fn counts(folder: &Folder, cx: &App) -> SharedString {
+fn counts(totals: &Totals, cx: &App) -> Vec<SharedString> {
     let language = cx.i18n().language();
-    let label = |count: usize, message| {
+    let label = |count: u64, message| {
         let mut args = FluentArgs::new();
         args.set("count", count);
-        args.set("number", format_number(count as u64, language));
+        args.set("number", format_number(count, language));
         cx.i18n().text_with_args(message, &args)
     };
-    let mut parts = vec![label(folder.folders, Message::StatusFolders), label(folder.files, Message::StatusFiles)];
-    if folder.files > 0 {
-        // Folder sizes are never computed here: say the total is the files'.
-        let mut args = FluentArgs::new();
-        args.set("size", format_size(folder.file_bytes, false, true, language));
-        parts.push(cx.i18n().text_with_args(Message::ViewerTreeFilesSize, &args));
+    let content = totals.content;
+    let mut parts = vec![
+        label(content.folders, Message::StatusFolders),
+        label(content.files, Message::StatusFiles),
+        format_size(content.bytes, false, true, language).into(),
+    ];
+    match totals.count {
+        Count::Running => parts.push(cx.i18n().text(Message::ViewerTreeCounting)),
+        Count::Capped => parts.push(label(super::COUNT_LIMIT, Message::ViewerTreeCountCapped)),
+        Count::Done => {}
     }
-    parts.join(" · ").into()
+    parts
 }
 
-fn archive_line(info: &ArchiveInfo, cx: &App) -> SharedString {
+fn archive_line(info: &ArchiveInfo, cx: &App) -> Option<SharedString> {
     let mut args = FluentArgs::new();
-    args.set("size", format_size(info.extracted, false, true, cx.i18n().language()));
-    match info.percent() {
-        Some(percent) => {
-            args.set("percent", percent);
-            cx.i18n().text_with_args(Message::ViewerTreeArchiveRatio, &args)
-        }
-        None => cx.i18n().text_with_args(Message::ViewerTreeArchiveSize, &args),
-    }
+    args.set("percent", info.percent()?);
+    Some(cx.i18n().text_with_args(Message::ViewerTreeArchiveRatio, &args))
 }
 
 /// Summary lines, computed once per render and drawn as the list's first item.
@@ -66,15 +64,13 @@ struct Summary {
 }
 
 fn summary(tree: &Tree, folder: &Folder, cx: &App) -> Summary {
-    let mut lines = vec![counts(folder, cx)];
+    let mut lines = tree.totals.as_ref().map(|totals| counts(totals, cx)).unwrap_or_default();
     if !folder.complete {
         let mut args = FluentArgs::new();
         args.set("number", format_number(super::READ_PER_FOLDER as u64, cx.i18n().language()));
         lines.push(cx.i18n().text_with_args(Message::ViewerTreeUnsorted, &args));
     }
-    if let Some(info) = &tree.archive {
-        lines.push(archive_line(info, cx));
-    }
+    lines.extend(tree.archive.as_ref().and_then(|info| archive_line(info, cx)));
     let password = tree.archive.filter(|info| info.password).map(|_| cx.i18n().text(Message::ViewerTreePassword));
     Summary { lines, password }
 }

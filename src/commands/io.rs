@@ -194,6 +194,64 @@ pub fn visible_contents(path: &str, show_hidden: bool, show_system: bool) -> (bo
     (any, false)
 }
 
+/// Visible content of a whole local tree, links not followed.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ContentTotals {
+    pub folders: u64,
+    pub files: u64,
+    pub bytes: u64,
+}
+
+/// Counts a local tree depth first, reporting partial totals about every 200 ms.
+/// Stops after `max_entries` entries, `max_time` or `cancelled`; returns whether the
+/// whole tree was counted. Unreadable folders are skipped. Blocking.
+pub fn walk_contents(
+    path: &str,
+    show_hidden: bool,
+    show_system: bool,
+    max_entries: u64,
+    max_time: std::time::Duration,
+    cancelled: &std::sync::atomic::AtomicBool,
+    report: &mut dyn FnMut(&ContentTotals),
+) -> bool {
+    let started = std::time::Instant::now();
+    let mut reported = started;
+    let mut totals = ContentTotals::default();
+    let mut pending = vec![crate::utils::path_text::decode(path)];
+    while let Some(directory) = pending.pop() {
+        let Ok(entries) = std::fs::read_dir(&directory) else { continue };
+        let attributes = crate::utils::visibility::DirectoryAttributes::load(&directory);
+        for entry in entries.filter_map(Result::ok) {
+            if cancelled.load(std::sync::atomic::Ordering::Relaxed)
+                || totals.folders + totals.files >= max_entries
+                || started.elapsed() >= max_time
+            {
+                report(&totals);
+                return false;
+            }
+            let Ok(metadata) = entry.metadata() else { continue };
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let (hidden, system, _) = attributes.of(&metadata, &name);
+            if !crate::utils::visibility::is_visible(hidden, system, show_hidden, show_system) {
+                continue;
+            }
+            if metadata.is_dir() {
+                totals.folders += 1;
+                pending.push(entry.path());
+            } else {
+                totals.files += 1;
+                totals.bytes += metadata.len();
+            }
+            if reported.elapsed() >= std::time::Duration::from_millis(200) {
+                reported = std::time::Instant::now();
+                report(&totals);
+            }
+        }
+    }
+    report(&totals);
+    true
+}
+
 fn sort_file_entries(entries: &mut [FileEntry]) {
     entries.sort_unstable_by(|a, b| {
         b.is_dir

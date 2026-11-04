@@ -53,3 +53,22 @@ fn contents_tell_empty_files_only_and_nested_folders_apart() {
         assert_eq!(visible_contents(&text(&hidden), true, false), (true, true));
     }
 }
+
+#[test]
+fn walking_counts_the_whole_tree_and_stops_at_its_limit() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(root.path().join("a/b")).unwrap();
+    std::fs::write(root.path().join("a/b/one"), b"123").unwrap();
+    std::fs::write(root.path().join("two"), b"45").unwrap();
+    let path = root.path().to_string_lossy().into_owned();
+    let running = std::sync::atomic::AtomicBool::new(false);
+    let mut last = ContentTotals::default();
+    let complete = walk_contents(&path, true, true, 100, std::time::Duration::from_secs(10), &running, &mut |totals| last = *totals);
+    assert!(complete);
+    assert_eq!(last, ContentTotals { folders: 2, files: 2, bytes: 5 });
+    let complete = walk_contents(&path, true, true, 2, std::time::Duration::from_secs(10), &running, &mut |totals| last = *totals);
+    assert!(!complete);
+    assert_eq!(last.folders + last.files, 2);
+    let cancelled = std::sync::atomic::AtomicBool::new(true);
+    assert!(!walk_contents(&path, true, true, 100, std::time::Duration::from_secs(10), &cancelled, &mut |_| {}));
+}

@@ -1,6 +1,6 @@
 //! Background reads of the Viewer's tree. Each read publishes only into the tree
 //! of the file it was started for.
-use super::{archive_levels, ArchiveInfo, Contents, Failure, Folder, Level, Listing, Toggle, Tree, READ_PER_FOLDER};
+use super::{archive_levels, subtree_totals, ArchiveInfo, Contents, Count, Failure, Totals, Folder, Level, Listing, Toggle, Tree, READ_PER_FOLDER};
 use crate::ui::app::viewer::{content::Content, Viewer};
 use gpui::*;
 use oxyde_lib::models::FileEntry;
@@ -58,9 +58,10 @@ fn read_local(path: &str, listing: Listing, cancelled: &AtomicBool) -> Result<Re
 struct Indexed {
     levels: HashMap<String, Folder>,
     info: ArchiveInfo,
+    totals: oxyde_lib::commands::io::ContentTotals,
 }
 
-fn read_archive(archive: PathBuf, listing: Listing, cancelled: &AtomicBool) -> Result<Indexed, Failure> {
+fn read_archive(archive: PathBuf, root: &str, listing: Listing, cancelled: &AtomicBool) -> Result<Indexed, Failure> {
     let entries = oxyde_lib::commands::archive::index_archive_for_preview(&archive, cancelled).map_err(|error| {
         if oxyde_lib::models::error::ArchivePasswordFailure::from_message(&error.to_string()).is_some() {
             Failure::Locked
@@ -72,17 +73,20 @@ fn read_archive(archive: PathBuf, listing: Listing, cancelled: &AtomicBool) -> R
     let mut entries = entries;
     crate::ui::workspace::resolve_native_kinds(&mut entries);
     let extracted = entries.iter().filter(|entry| !entry.is_dir).map(|entry| entry.size).sum();
-    let levels = archive_levels(&archive, entries)
+    let levels: HashMap<String, Folder> = archive_levels(&archive, entries)
         .into_iter()
         .map(|(path, entries)| (path, Folder::new(entries, true, listing.sort)))
         .collect();
-    let packed = (!oxyde_lib::utils::archive_volumes::is_rar_volume_set(&archive))
+    let totals = subtree_totals(root, levels.iter());
+    // The compression share describes the archive file, so only at its root.
+    let whole = root == archive.to_string_lossy();
+    let packed = (whole && !oxyde_lib::utils::archive_volumes::is_rar_volume_set(&archive))
         .then(|| std::fs::metadata(&archive).ok().map(|metadata| metadata.len()))
         .flatten();
     let password = oxyde_lib::commands::archive::verify_archive_password(&archive).is_err_and(|error| {
         oxyde_lib::models::error::ArchivePasswordFailure::from_message(&error.to_string()).is_some()
     });
-    Ok(Indexed { levels, info: ArchiveInfo { extracted, packed, password } })
+    Ok(Indexed { levels, info: ArchiveInfo { extracted, packed, password }, totals })
 }
 
 impl Viewer {
@@ -101,10 +105,11 @@ impl Viewer {
         self.replace_content(Content::Tree(tree), cx);
         let generation = self.generation;
         let Some(archive) = archive_of(file) else {
+            self.count_tree(root.clone(), cx);
             self.read_tree_level(root, cx);
             return;
         };
-        let work = self.load_work(move || Ok::<_, String>(read_archive(archive, listing, &cancelled)));
+        let work = self.load_work(move || Ok::<_, String>(read_archive(archive, &root, listing, &cancelled)));
         cx.spawn(async move |this, cx| {
             let result = work.await;
             let _ = this.update(cx, |this, cx| {
@@ -119,6 +124,7 @@ impl Viewer {
                             tree.levels.insert(tree.root.clone(), Level::Failed(Failure::Unreadable));
                         }
                         tree.archive = Some(indexed.info);
+                        tree.totals = Some(Totals { content: indexed.totals, count: Count::Done });
                     }
                     Ok((Err(failure), _)) => { tree.levels.insert(tree.root.clone(), Level::Failed(failure)); }
                     Err(_) => { tree.levels.insert(tree.root.clone(), Level::Failed(Failure::Unreadable)); }
@@ -126,6 +132,43 @@ impl Viewer {
                 tree.refresh(row_height());
                 cx.notify();
             });
+        })
+        .detach();
+    }
+
+/// Counts the whole local tree on its own thread, publishing partial totals;
+    /// dropping the tree stops it.
+    fn count_tree(&mut self, root: String, cx: &mut Context<Self>) {
+        let generation = self.generation;
+        let Some(tree) = self.tree_mut(generation) else { return };
+        let (listing, cancelled) = (tree.listing, tree.cancelled.clone());
+        tree.totals = Some(Totals { content: Default::default(), count: Count::Running });
+        let (sender, mut receiver) = futures::channel::mpsc::unbounded();
+        let spawned = std::thread::Builder::new().name("viewer-tree-count".into()).spawn(move || {
+            let report = sender.clone();
+            let complete = oxyde_lib::commands::io::walk_contents(
+                &root, listing.show_hidden, listing.show_system, super::COUNT_LIMIT, super::COUNT_TIME, &cancelled,
+                &mut |totals| { let _ = report.unbounded_send((*totals, Count::Running)); },
+            );
+            let _ = sender.unbounded_send((Default::default(), if complete { Count::Done } else { Count::Capped }));
+        });
+        if spawned.is_err() {
+            return;
+        }
+        cx.spawn(async move |this, cx| {
+            use futures::StreamExt;
+            while let Some((content, count)) = receiver.next().await {
+                let updated = this.update(cx, |this, cx| {
+                    let Some(tree) = this.tree_mut(generation) else { return false };
+                    let totals = tree.totals.get_or_insert(Totals { content, count });
+                    // The final message only carries the outcome.
+                    if count == Count::Running { totals.content = content; }
+                    totals.count = count;
+                    cx.notify();
+                    true
+                });
+                if !matches!(updated, Ok(true)) { break; }
+            }
         })
         .detach();
     }

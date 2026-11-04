@@ -152,3 +152,18 @@ fn archive_ratio_needs_both_sizes() {
     assert_eq!(info(None, 100).percent(), None);
     assert_eq!(info(Some(10), 0).percent(), None);
 }
+
+#[test]
+fn archive_subtree_totals_count_each_folder_once_below_the_root() {
+    let levels = archive_levels(Path::new("/x/a.zip"), vec![
+        entry("/x/a.zip/docs/guide/intro.md", false, 10),
+        entry("/x/a.zip/docs/notes.txt", false, 5),
+        entry("/x/a.zip/docsextra.txt", false, 7),
+    ]);
+    let levels: HashMap<String, Folder> = levels.into_iter().map(|(path, entries)| (path, Folder::new(entries, true, sort()))).collect();
+    let whole = subtree_totals("/x/a.zip", levels.iter());
+    assert_eq!((whole.folders, whole.files, whole.bytes), (2, 3, 22));
+    // A sibling sharing the name's start is outside the subtree.
+    let docs = subtree_totals("/x/a.zip/docs", levels.iter());
+    assert_eq!((docs.folders, docs.files, docs.bytes), (1, 2, 15));
+}

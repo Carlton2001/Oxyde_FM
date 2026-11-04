@@ -97,6 +97,41 @@ pub(super) enum Level {
     Failed(Failure),
 }
 
+/// Whole content under the root, shown above the tree whatever is unfolded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct Totals {
+    pub(super) content: oxyde_lib::commands::io::ContentTotals,
+    pub(super) count: Count,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Count {
+    Running,
+    Done,
+    /// Stopped at `COUNT_LIMIT` entries or `COUNT_TIME`.
+    Capped,
+}
+
+/// Bounds of the background count of a local tree.
+pub(super) const COUNT_LIMIT: u64 = 100_000;
+pub(super) const COUNT_TIME: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Totals of an archive subtree from its levels: each folder is counted once, as
+/// an entry of its parent level.
+pub(super) fn subtree_totals<'a>(root: &str, levels: impl Iterator<Item = (&'a String, &'a Folder)>) -> oxyde_lib::commands::io::ContentTotals {
+    let mut totals = oxyde_lib::commands::io::ContentTotals::default();
+    for (path, folder) in levels {
+        let inside = path == root
+            || path.strip_prefix(root).is_some_and(|rest| rest.starts_with(std::path::is_separator));
+        if inside {
+            totals.folders += folder.folders as u64;
+            totals.files += folder.files as u64;
+            totals.bytes += folder.file_bytes;
+        }
+    }
+    totals
+}
+
 /// Whole-archive facts shown above the tree.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct ArchiveInfo {
@@ -157,6 +192,7 @@ pub(super) struct Tree {
     pub(super) expanded: HashSet<String>,
     pub(super) contents: HashMap<String, Contents>,
     pub(super) archive: Option<ArchiveInfo>,
+    pub(super) totals: Option<Totals>,
     pub(super) rows: Arc<Vec<Row>>,
     pub(super) list: ListState,
     /// Set when the tree is dropped; background reads stop at their next entry.
@@ -180,6 +216,7 @@ impl Tree {
             expanded: HashSet::new(),
             contents: HashMap::new(),
             archive: None,
+            totals: None,
             rows: Arc::new(Vec::new()),
             list: ListState::new(0, ListAlignment::Top, gpui::px(800.0)),
             cancelled: Arc::new(AtomicBool::new(false)),
