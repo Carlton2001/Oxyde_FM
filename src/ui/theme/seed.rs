@@ -1,4 +1,4 @@
-//! Builds every theme token from seven input colors.
+//! Builds every theme token from six input colors.
 
 use super::{legibility, OxydeTheme, ThemeId};
 use gpui::{rgb, Hsla};
@@ -11,38 +11,39 @@ pub(super) struct ThemeSeed {
     pub sidebar: u32,
     pub surface: u32,
     pub text: u32,
-    pub text_muted: u32,
     pub accent: u32,
 }
 
 impl ThemeSeed {
     pub(super) fn for_id(id: ThemeId) -> Self {
-        let s = |background, active_background, sidebar, surface, text, text_muted, accent| Self {
+        let s = |background, active_background, sidebar, surface, text, accent| Self {
             background,
             active_background,
             sidebar,
             surface,
             text,
-            text_muted,
             accent,
         };
         match id {
-            ThemeId::Light => s(0xf0ede6, 0xfdfbf7, 0xf1ede6, 0xfafafa, 0x242433, 0x6b6882, 0x3d5af1),
-            ThemeId::Dark => s(0x12101b, 0x1c1927, 0x08070d, 0x151320, 0xe2e0ed, 0x8b86a3, 0xd4a54a),
-            ThemeId::AyuLight => s(0xeef0f2, 0xf8f9fa, 0xf3f4f5, 0xffffff, 0x5c6166, 0x60666d, 0xff9940),
-            ThemeId::AyuDark => s(0x0b0e14, 0x10151e, 0x090c10, 0x0f131a, 0xb3b1ad, 0x89919b, 0xe6b450),
-            ThemeId::GithubLight => s(0xf0f2f4, 0xffffff, 0xf6f8fa, 0xffffff, 0x1f2328, 0x656d76, 0x0969da),
-            ThemeId::GithubDark => s(0x0d1117, 0x161b22, 0x010409, 0x161b22, 0xe6edf3, 0x7d8590, 0x2f81f7),
-            ThemeId::Monokai => s(0x272822, 0x32332c, 0x1e1f1c, 0x3e3d32, 0xf8f8f2, 0xaeaa92, 0xfd971f),
-            ThemeId::OneLight => s(0xeaeaeb, 0xfafafa, 0xf3f3f3, 0xffffff, 0x383a42, 0x60636d, 0x4078f2),
-            ThemeId::OneDark => s(0x21252b, 0x282c34, 0x21252b, 0x2c313a, 0xabb2bf, 0x969fae, 0x61afef),
-            ThemeId::SolarizedLight => s(0xeee8d5, 0xfdf6e3, 0xeee8d5, 0xfdf6e3, 0x465c64, 0x556b72, 0xd33682),
-            ThemeId::SolarizedDark => s(0x00252f, 0x002b36, 0x001e26, 0x0b3a46, 0xa9b8b8, 0xa0b1b2, 0x268bd2),
-            ThemeId::WindowsLight => s(0xeeeeee, 0xfbfbfb, 0xf2f2f2, 0xffffff, 0x2e2e2e, 0x666666, 0x0672cb),
-            ThemeId::WindowsDark => s(0x181818, 0x222222, 0x111111, 0x1e1e1e, 0xd0d0d0, 0x999999, 0x52a8ff),
+            ThemeId::Light => s(0xf0ede6, 0xfdfbf7, 0xf1ede6, 0xfafafa, 0x242433, 0x3d5af1),
+            ThemeId::Dark => s(0x12101b, 0x1c1927, 0x08070d, 0x151320, 0xe2e0ed, 0xd4a54a),
+            ThemeId::AyuLight => s(0xeef0f2, 0xf8f9fa, 0xf3f4f5, 0xffffff, 0x5c6166, 0xff9940),
+            ThemeId::AyuDark => s(0x0b0e14, 0x10151e, 0x090c10, 0x0f131a, 0xb3b1ad, 0xe6b450),
+            ThemeId::GithubLight => s(0xf0f2f4, 0xffffff, 0xf6f8fa, 0xffffff, 0x1f2328, 0x0969da),
+            ThemeId::GithubDark => s(0x0d1117, 0x161b22, 0x010409, 0x161b22, 0xe6edf3, 0x2f81f7),
+            ThemeId::Monokai => s(0x272822, 0x32332c, 0x1e1f1c, 0x3e3d32, 0xf8f8f2, 0xfd971f),
+            ThemeId::OneLight => s(0xeaeaeb, 0xfafafa, 0xf3f3f3, 0xffffff, 0x383a42, 0x4078f2),
+            ThemeId::OneDark => s(0x21252b, 0x282c34, 0x21252b, 0x2c313a, 0xabb2bf, 0x61afef),
+            ThemeId::SolarizedLight => s(0xeee8d5, 0xfdf6e3, 0xeee8d5, 0xfdf6e3, 0x465c64, 0xd33682),
+            ThemeId::SolarizedDark => s(0x00252f, 0x002b36, 0x001e26, 0x0b3a46, 0xa9b8b8, 0x268bd2),
+            ThemeId::WindowsLight => s(0xeeeeee, 0xfbfbfb, 0xf2f2f2, 0xffffff, 0x2e2e2e, 0x0672cb),
+            ThemeId::WindowsDark => s(0x181818, 0x222222, 0x111111, 0x1e1e1e, 0xd0d0d0, 0x52a8ff),
         }
     }
 }
+
+/// How far secondary text moves from `text` toward the background.
+const TEXT_MUTED_FADE: f32 = 0.4;
 
 /// Smallest blend of `color` toward `toward` reaching `min` against every surface.
 fn reach(color: Hsla, toward: Hsla, surfaces: &[Hsla], min: f32) -> Hsla {
@@ -61,8 +62,10 @@ pub(super) fn derive(id: ThemeId) -> OxydeTheme {
     let c = |value: u32| -> Hsla { rgb(value).into() };
     let (background, active_background, sidebar, surface) =
         (c(seed.background), c(seed.active_background), c(seed.sidebar), c(seed.surface));
-    let (text, text_muted, accent) = (c(seed.text), c(seed.text_muted), c(seed.accent));
+    let (text, accent) = (c(seed.text), c(seed.accent));
     let panes = [background, active_background, sidebar, surface];
+    // Secondary text: a step from text toward the background, kept legible on every pane.
+    let text_muted = reach(text.blend(background.opacity(TEXT_MUTED_FADE)), text, &panes, 4.5);
     let thumb_hover = reach(surface, text, &panes, 1.8);
     let (on_dark, on_light): (Hsla, Hsla) = (c(0x0e0c15), c(0xffffff));
     let text_on_accent = if legibility::contrast(on_dark, accent) >= legibility::contrast(on_light, accent) {
