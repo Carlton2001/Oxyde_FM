@@ -240,6 +240,9 @@ impl OxydeApp {
                         }
                     }
                     tool_window::install_icon(kind.icon(), window);
+                    if kind.is_fixed() {
+                        crate::ui::components::client_decorations::never_tiled(window);
+                    }
                     let closing = close.clone();
                     window.on_window_should_close(cx, move |window, cx| {
                         let Some(main) = closing.upgrade() else {

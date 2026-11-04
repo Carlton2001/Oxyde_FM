@@ -20,10 +20,12 @@ const SECTIONS: [(ApplicationFit, Message); 3] = [
 pub(crate) fn row_child(prompt: &OpenWithPrompt, index: usize) -> usize {
     let Some(choices) = &prompt.choices else { return index };
     let Some(fit) = choices.get(index).map(|choice| choice.fit) else { return index };
+    let visible = prompt.visible();
+    let position = visible.iter().position(|shown| *shown == index).unwrap_or(0);
     let headings = SECTIONS.iter()
-        .filter(|(section, _)| *section <= fit && choices.iter().any(|choice| choice.fit == *section))
+        .filter(|(section, _)| *section <= fit && visible.iter().any(|shown| choices[*shown].fit == *section))
         .count();
-    index + headings
+    position + headings
 }
 
 fn row(choice: &ApplicationChoice, index: usize, selected: bool, handle: &Entity<OxydeApp>, cx: &App) -> AnyElement {
@@ -45,6 +47,10 @@ fn row(choice: &ApplicationChoice, index: usize, selected: bool, handle: &Entity
         .when(!selected, |row| row.hover(|row| row.bg(theme.hover)))
         .child(div().flex_none().size(rems(1.5)).flex().items_center().justify_center().child(icon))
         .child(div().flex_1().min_w_0().truncate().child(choice.name.clone()))
+        .when(choice.is_default, |row| row.child(
+            div().flex_none().text_size(rems(0.75)).text_color(theme.text_muted)
+                .child(cx.i18n().text(Message::OpenWithDefault)),
+        ))
         .on_mouse_down(MouseButton::Left, move |event, _, cx| {
             handle.update(cx, |view, cx| {
                 view.select_open_with(index, cx);
@@ -92,20 +98,23 @@ pub(crate) fn render_open_with_dialog(
         .bg(theme.background);
     match &prompt.choices {
         None => list = list.child(div().p(rems(0.5)).text_color(theme.text_muted).child(i18n.text(Message::OpenWithLoading))),
-        Some(choices) if choices.is_empty() => {
+        Some(choices) if prompt.visible().is_empty() => {
+            let _ = choices;
             list = list.child(div().p(rems(0.5)).text_color(theme.text_muted).child(i18n.text(Message::OpenWithNone)));
         }
         Some(choices) => {
+            let visible = prompt.visible();
             for (fit, heading) in SECTIONS {
-                if !choices.iter().any(|choice| choice.fit == fit) {
+                let shown: Vec<_> = visible.iter().copied().filter(|index| choices[*index].fit == fit).collect();
+                if shown.is_empty() {
                     continue;
                 }
                 list = list.child(
                     div().px(rems(0.5)).pt(rems(0.5)).pb(rems(0.25)).text_size(rems(0.75))
                         .text_color(theme.text_muted).child(i18n.text(heading)),
                 );
-                for (index, choice) in choices.iter().enumerate().filter(|(_, choice)| choice.fit == fit) {
-                    list = list.child(row(choice, index, prompt.selected == Some(index), &handle, cx));
+                for index in shown {
+                    list = list.child(row(&choices[index], index, prompt.selected == Some(index), &handle, cx));
                 }
             }
         }
@@ -117,8 +126,8 @@ pub(crate) fn render_open_with_dialog(
         .items_center()
         .gap(rems(0.5))
         .pt(rems(0.25))
-        .child(crate::ui::elements::checkbox::checkbox(theme, prompt.remember, false))
-        .child(i18n.text(Message::OpenWithAlways))
+        .child(div().flex_1().min_w_0().child(i18n.text(Message::OpenWithAlways)))
+        .child(crate::ui::elements::toggle::toggle(prompt.remember, theme))
         .on_click(move |_, _, cx| toggle.update(cx, |view, cx| view.toggle_open_with_remember(cx)));
     let body = div()
         .flex()
@@ -126,10 +135,11 @@ pub(crate) fn render_open_with_dialog(
         .gap(rems(0.5))
         .text_size(rems(0.8125))
         .child(div().pb(rems(0.25)).child(intro))
+        .child(div().w_full().child(prompt.input.clone()))
         .child(list)
         .child(remember);
     let (cancel, open, close) = (handle.clone(), handle.clone(), handle.clone());
-    let can_open = prompt.selected.is_some();
+    let can_open = prompt.selected.is_some_and(|index| prompt.visible().contains(&index));
     let modal = Modal::new("open-with", i18n.text(Message::OpenWith), body)
         .title_icon("icons/app-window.svg")
         .standalone(false)
@@ -157,18 +167,26 @@ pub(crate) fn render_open_with_dialog(
         .absolute()
         .inset_0()
         .track_focus(&prompt.focus)
-        .on_key_down(move |event, _, cx| {
+        // In the search field, the arrows arrive as its completion actions.
+        .on_action({
+            let handle = keyboard.clone();
+            move |_: &crate::ui::components::input::CompletionUp, _, cx| handle.update(cx, |view, cx| view.move_open_with_selection(-1, cx))
+        })
+        .on_action({
+            let handle = keyboard.clone();
+            move |_: &crate::ui::components::input::CompletionDown, _, cx| handle.update(cx, |view, cx| view.move_open_with_selection(1, cx))
+        })
+        .on_key_down(move |event, window, cx| {
+            let typing = keyboard.read(cx).open_with.as_ref()
+                .is_some_and(|prompt| prompt.input.read(cx).focus_handle.is_focused(window));
             keyboard.update(cx, |view, cx| {
                 match event.keystroke.key.as_str() {
                     "escape" => view.answer_open_with(false, cx),
                     "enter" => view.answer_open_with(true, cx),
-                    "up" => view.move_open_with_selection(-1, cx),
-                    "down" => view.move_open_with_selection(1, cx),
+                    "up" if !typing => view.move_open_with_selection(-1, cx),
+                    "down" if !typing => view.move_open_with_selection(1, cx),
                     "pageup" => view.move_open_with_selection(-8, cx),
                     "pagedown" => view.move_open_with_selection(8, cx),
-                    "home" => view.move_open_with_selection(isize::MIN, cx),
-                    "end" => view.move_open_with_selection(isize::MAX, cx),
-                    "space" => view.toggle_open_with_remember(cx),
                     _ => return,
                 }
                 cx.stop_propagation();

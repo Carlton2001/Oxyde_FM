@@ -35,7 +35,7 @@ use gpui::*;
 pub(crate) fn context_menu_sections(items: Vec<dropdown::DropdownItem>, i18n: &I18n) -> Vec<dropdown::DropdownItem> {
     use dropdown::IconName;
     const GROUPS: &[&[Message]] = &[
-        &[Message::OpenFileLocation, Message::Open, Message::OpenNewTab, Message::OpenTerminal],
+        &[Message::OpenFileLocation, Message::Open, Message::OpenWith, Message::OpenNewTab, Message::OpenTerminal],
         &[Message::ExpandAll, Message::CollapseAll],
         &[Message::MapNetworkDrive, Message::DisconnectNetworkDrive, Message::DisconnectThisNetworkDrive],
         &[Message::MountDiskImage, Message::UnmountDiskImage, Message::PinQuickAccess,

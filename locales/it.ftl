@@ -557,6 +557,8 @@ open-with-related = Applicazioni correlate
 open-with-other-applications = Altre applicazioni
 open-with-none = Nessuna applicazione può aprire questi file.
 open-with-loading = Caricamento delle applicazioni…
+open-with-search = Cerca applicazioni…
+open-with-default = Predefinita
 
 drive-eject-failed = Impossibile espellere l’unità. Un’altra applicazione potrebbe usarla. { $detail }
 drive-unmount-failed = Impossibile smontare il volume. Un’altra applicazione potrebbe usarlo. { $detail }

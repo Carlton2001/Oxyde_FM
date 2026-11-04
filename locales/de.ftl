@@ -557,6 +557,8 @@ open-with-related = Verwandte Anwendungen
 open-with-other-applications = Andere Anwendungen
 open-with-none = Keine Anwendung kann diese Dateien öffnen.
 open-with-loading = Anwendungen werden geladen …
+open-with-search = Anwendungen durchsuchen …
+open-with-default = Standard
 
 drive-eject-failed = Laufwerk konnte nicht ausgeworfen werden. Eine andere Anwendung verwendet es möglicherweise. { $detail }
 drive-unmount-failed = Datenträger konnte nicht ausgehängt werden. Eine andere Anwendung verwendet ihn möglicherweise. { $detail }

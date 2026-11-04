@@ -44,7 +44,7 @@ impl DialogKind {
             Self::NetworkForce => app.network_force_confirmation.as_ref().map(|c| c.focus.clone()),
             Self::RemoteLogin => app.remote_login.as_ref().map(|login| login.initial.clone()),
             Self::ArchivePassword => app.archive_password.as_ref().map(|prompt| prompt.input.read(cx).focus_handle.clone()),
-            Self::OpenWith => app.open_with.as_ref().map(|prompt| prompt.focus.clone()),
+            Self::OpenWith => app.open_with.as_ref().map(|prompt| prompt.input.read(cx).focus_handle.clone()),
             Self::TrashDelete => app.pending_trash_delete.as_ref().map(|p| p.focus.clone()),
             Self::SettingsConfirmation => app.settings_confirmation.as_ref().map(|c| c.focus.clone()),
             _ => None,
