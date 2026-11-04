@@ -159,6 +159,11 @@ pub fn render_title_bar(
     // ── Assemble ─────────────────────────────────────────────────────────────
     let corners = crate::ui::components::client_decorations::inner_corners(window);
     let is_maximized = window.is_maximized();
+    let close_handle = handle.clone();
+    let on_close: crate::ui::components::window_controls::OnClose = std::rc::Rc::new(move |window, cx| {
+        close_main_window(&close_handle, "title bar close button", window, cx);
+    });
+    use crate::ui::components::window_controls::{render as window_controls, Side};
     crate::ui::components::client_decorations::round(div(), corners, crate::ui::components::client_decorations::TOP)
         .id("title-bar")
         .w_full()
@@ -169,6 +174,7 @@ pub fn render_title_bar(
         .bg(theme.surface)
         .border_b(rems(0.0625))
         .border_color(theme.border)
+        .child(window_controls(Side::Left, is_maximized, true, corners.top_left, cx, on_close.clone()))
         .child(app_button)
         .child(drag_area)
         .child(refresh)
@@ -177,9 +183,7 @@ pub fn render_title_bar(
         .child(tools)
         .child(crate::ui::components::operations::render_operations_footer(view, handle.clone(), cx))
         .child(div().w(rems(0.5)).h_full().flex_none())
-        .child(render_window_controls(is_maximized, corners.top_right, cx, move |window, cx| {
-            close_main_window(&handle, "title bar close button", window, cx);
-        }))
+        .child(window_controls(Side::Right, is_maximized, true, corners.top_right, cx, on_close))
 }
 
 /// Close the main window the way its close button does, ending the application.
@@ -193,92 +197,3 @@ pub(crate) fn close_main_window(handle: &Entity<OxydeApp>, reason: &'static str,
     window.remove_window();
 }
 
-/// Shared title-bar controls. The caller owns its close lifecycle.
-/// Dedicated caption symbols use a 12-unit grid and a one-unit stroke,
-/// independently of the Lucide assets and their global stroke setting.
-pub fn render_window_controls(
-    is_maximized: bool,
-    corner: Pixels,
-    cx: &App,
-    on_close: impl Fn(&mut Window, &mut App) + 'static,
-) -> impl IntoElement {
-    render_window_controls_with_options(is_maximized, true, corner, cx, on_close)
-}
-
-pub(crate) fn render_window_controls_with_options(
-    is_maximized: bool,
-    allow_resize: bool,
-    corner: Pixels,
-    cx: &App,
-    on_close: impl Fn(&mut Window, &mut App) + 'static,
-) -> impl IntoElement {
-    let theme = *cx.theme();
-    let minimize_btn = {
-        div()
-            .id("wc-minimize")
-            .w(rems(2.875))
-            .h_full()
-            .flex()
-            .items_center()
-            .justify_center()
-            .flex_none()
-            .window_control_area(WindowControlArea::Min)
-            .hover(move |s| s.bg(theme.control_hover))
-            .on_mouse_down(MouseButton::Left, |_, window, _| {
-                window.minimize_window();
-            })
-            .child(
-                svg()
-                    .path("visuals/window-controls/minimize.svg")
-                    .size_3()
-                    .text_color(theme.text),
-            )
-    };
-
-    let maximize_icon = if is_maximized {
-        "visuals/window-controls/restore.svg"
-    } else {
-        "visuals/window-controls/maximize.svg"
-    };
-    let maximize_btn = div()
-        .id("wc-maximize")
-        .w(rems(2.875))
-        .h_full()
-        .flex()
-        .items_center()
-        .justify_center()
-        .flex_none()
-        .window_control_area(WindowControlArea::Max)
-        .hover(move |s| s.bg(theme.control_hover))
-        .on_mouse_down(MouseButton::Left, |_, window, _| {
-            window.zoom_window();
-        })
-        .child(svg().path(maximize_icon).size_3().text_color(theme.text));
-
-    let close_btn = div()
-        .id("wc-close")
-        .group("window-close")
-        .w(rems(2.875))
-        .h_full()
-        .flex()
-        .items_center()
-        .justify_center()
-        .flex_none()
-        .window_control_area(WindowControlArea::Close)
-        .rounded_tr(corner)
-        .hover(|s| s.bg(theme.danger_hover))
-        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-            on_close(window, cx);
-        })
-        .child(
-            svg()
-                .path("visuals/window-controls/close.svg")
-                .size_3()
-                .text_color(theme.text)
-                .group_hover("window-close", |s| s.text_color(theme.text_on_danger)),
-        );
-
-    div().h_full().flex().items_center().flex_none()
-        .when(allow_resize, |controls| controls.child(minimize_btn).child(maximize_btn)).child(close_btn)
-}
-use gpui::prelude::FluentBuilder;

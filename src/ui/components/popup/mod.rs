@@ -17,6 +17,9 @@ pub(crate) struct PopupAnchor {
     pub open_left: bool,
     pub beside: bool,
     pub above: bool,
+    /// Opens flush with the window's left edge: the compositor must not slide its shadow
+    /// margin back on screen, which would push the frame away from that edge.
+    pub at_window_edge: bool,
     pub parent: Option<AnyWindowHandle>,
 }
 impl PopupAnchor {
@@ -26,6 +29,7 @@ impl PopupAnchor {
             open_left,
             beside: false,
             above: false,
+            at_window_edge: false,
             parent: None,
         }
     }
@@ -35,6 +39,7 @@ impl PopupAnchor {
             open_left: false,
             beside: false,
             above: false,
+            at_window_edge: false,
             parent: None,
         }
     }
@@ -44,11 +49,16 @@ impl PopupAnchor {
             open_left,
             beside: true,
             above: false,
+            at_window_edge: false,
             parent: None,
         }
     }
     pub(crate) fn above(mut self, above: bool) -> Self {
         self.above = above;
+        self
+    }
+    pub(crate) fn at_window_edge(mut self) -> Self {
+        self.at_window_edge = true;
         self
     }
     pub(crate) fn parent(mut self, parent: Option<AnyWindowHandle>) -> Self {

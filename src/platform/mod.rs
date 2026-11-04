@@ -131,6 +131,17 @@ pub fn is_wsl_path(path: &str) -> bool {
         && path[WSL_ROOT.len()..].chars().next().is_none_or(|next| next == '\\')
 }
 
+/// Look of the minimize, maximize and close buttons drawn by Oxyde's own title bars.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowControlStyle {
+    /// Full-height caption buttons with a red close hover.
+    Windows,
+    /// GNOME: round buttons on a translucent disc.
+    Adwaita,
+    /// KDE Plasma: bare glyphs, a disc only under the pointer.
+    Breeze,
+}
+
 /// Abstraction des opérations spécifiques à l'OS.
 /// Toute fonctionnalité native (lecteurs, ouverture, raccourcis, etc.)
 /// doit passer par ce trait plutôt qu'appeler directement les API OS.
@@ -193,6 +204,8 @@ pub trait Platform: Send + Sync {
     fn startup_locations(&self) -> Vec<String> { Vec::new() }
     /// Whether Oxyde installs its own releases; Linux packages update through the system.
     fn updates_itself(&self) -> bool { false }
+    /// Window buttons that match the running desktop.
+    fn window_control_style(&self) -> WindowControlStyle { WindowControlStyle::Windows }
     /// HTTPS GET into memory, bounded by `limit` bytes.
     fn download(&self, _url: &str, _limit: usize) -> std::io::Result<Vec<u8>> {
         Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
@@ -787,6 +800,8 @@ mod linux_hidden_list;
 mod linux_settings;
 #[cfg(not(target_os = "windows"))]
 mod linux_terminal;
+#[cfg(not(target_os = "windows"))]
+mod linux_window_controls;
 #[cfg(not(target_os = "windows"))]
 mod linux_startup;
 #[cfg(not(target_os = "windows"))]

@@ -22,6 +22,7 @@ pub mod tooltip;
 pub(crate) mod popup;
 pub(crate) mod tool_window;
 pub mod top_bar;
+pub(crate) mod window_controls;
 mod history_actions;
 
 use crate::ui::i18n::{I18n, Message};

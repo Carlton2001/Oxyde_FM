@@ -35,3 +35,9 @@ fn a_change_of_side_or_form_needs_another_surface() {
     assert!(!same_placement(&anchor(10.0), &anchor(10.0).above(true), INSET));
     assert!(!same_placement(&PopupAnchor::beside(anchor(10.0).bounds, false), &anchor(10.0), INSET));
 }
+
+#[::core::prelude::v1::test]
+fn a_panel_at_the_window_edge_does_not_slide_sideways() {
+    assert!(!adjustment(&anchor(36.0).at_window_edge()).contains(Adjust::SLIDE_X));
+    assert!(adjustment(&anchor(36.0)).contains(Adjust::SLIDE_X));
+}

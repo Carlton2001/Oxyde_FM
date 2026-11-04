@@ -9,6 +9,9 @@ impl LinuxPlatform {
 }
 
 impl Platform for LinuxPlatform {
+    fn window_control_style(&self) -> super::WindowControlStyle {
+        super::linux_window_controls::style()
+    }
     fn file_name_rules(&self, directory: &std::fs::File) -> std::io::Result<super::FileNameRules> {
         super::linux_file_names::rules(directory)
     }

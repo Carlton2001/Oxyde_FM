@@ -86,8 +86,19 @@ pub(super) fn rect(anchor: &PopupAnchor, bounds: Bounds<Pixels>, inset: Pixels) 
 pub(super) fn options(parent: AnyWindowHandle, anchor: &PopupAnchor, bounds: Bounds<Pixels>, inset: Pixels, grab: bool) -> PopupOptions {
     let (x, y) = axes(anchor, bounds, inset);
     let (anchor_rect, corner, gravity, offset) = positioner(x, y);
-    let constraint_adjustment = if anchor.beside { Adjust::FLIP_X | Adjust::SLIDE_Y } else { Adjust::SLIDE_X | Adjust::FLIP_Y | Adjust::SLIDE_Y };
+    let constraint_adjustment = adjustment(anchor);
     PopupOptions { parent, anchor_rect, anchor: corner, gravity, constraint_adjustment, offset, grab }
+}
+
+/// How the compositor may move a surface that would leave the screen.
+fn adjustment(anchor: &PopupAnchor) -> Adjust {
+    if anchor.beside {
+        Adjust::FLIP_X | Adjust::SLIDE_Y
+    } else if anchor.at_window_edge {
+        Adjust::FLIP_Y | Adjust::SLIDE_Y
+    } else {
+        Adjust::SLIDE_X | Adjust::FLIP_Y | Adjust::SLIDE_Y
+    }
 }
 
 #[cfg(test)]

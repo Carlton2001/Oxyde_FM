@@ -160,6 +160,8 @@ fn header_frame(
 ) -> impl IntoElement {
     let theme = *cx.theme();
     let corners = super::client_decorations::inner_corners(window);
+    let on_close: super::window_controls::OnClose = std::rc::Rc::new(on_close);
+    use super::window_controls::{render as window_controls, Side};
     super::client_decorations::round(div(), corners, super::client_decorations::TOP)
         .h(rems(2.25))
         .w_full()
@@ -169,6 +171,7 @@ fn header_frame(
         .bg(theme.surface)
         .border_b(rems(0.0625))
         .border_color(theme.border)
+        .child(window_controls(Side::Left, window.is_maximized(), allow_resize, corners.top_left, cx, on_close.clone()))
         .child(
             div().px(rems(0.75)).child(
                 svg()
@@ -194,13 +197,7 @@ fn header_frame(
                     .child(title)),
         )
         .when_some(actions, |header, actions| header.child(actions))
-        .child(super::title_bar::render_window_controls_with_options(
-            window.is_maximized(),
-            allow_resize,
-            corners.top_right,
-            cx,
-            on_close,
-        ))
+        .child(window_controls(Side::Right, window.is_maximized(), allow_resize, corners.top_right, cx, on_close))
 }
 
 /// Shared secondary-window footer, matching the recycle-bin properties modal.

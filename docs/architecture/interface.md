@@ -10,6 +10,11 @@ Business state and actions belong to `src/ui/app/`. Components receive data and 
 - Coordinates from GPUI are already in pixels: do not convert twice. Content zoom does not resize the native window.
 - The default weight is Regular (400), from `ui/style.rs`. Separately rendered roots apply it too. Another weight must be an intentional variation.
 
+## Window buttons
+
+- `components/window_controls.rs` draws minimize, maximize and close for every Oxyde title bar, in the style `Platform::window_control_style` picks: Windows captions, Adwaita discs under GNOME and other Linux desktops, bare Breeze glyphs (Lucide chevrons and diamond) under KDE.
+- The desktop's button layout (`cx.button_layout()`) decides which buttons show, their order and their side. Buttons on the left come before the logo and settings button, which keep their place.
+
 ## Languages and formats
 
 `cx.i18n()` resolves `Message` variants. For any user text, add or reuse a key and its translations in `locales/{fr,en,de,es,it}.ftl`, then check catalogs and parameters.

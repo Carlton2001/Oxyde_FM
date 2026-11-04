@@ -29,8 +29,11 @@ pub(crate) enum SettingsPicker {
 
 pub fn render_settings_panel(view: &OxydeApp, handle: Entity<OxydeApp>, window: &mut Window, cx: &mut Context<OxydeApp>) -> AnyElement {
     if crate::ui::components::popup::supported(window, cx) {
-        let bounds = view.settings_button_bounds.unwrap_or(Bounds::new(point(px(0.0), px(0.0)), size(px(0.0), px(44.0))));
-        crate::ui::components::popup::show("settings-panel", crate::ui::components::popup::PopupAnchor::element(bounds), handle.clone(), window, cx,
+        // Pinned to the window's left edge, below the title bar, wherever window buttons push the settings button.
+        let bounds = view.settings_button_bounds
+            .map(|button| Bounds::new(point(px(0.0), button.top()), size(px(0.0), button.size.height)))
+            .unwrap_or(Bounds::new(point(px(0.0), px(0.0)), size(px(0.0), px(44.0))));
+        crate::ui::components::popup::show("settings-panel", crate::ui::components::popup::PopupAnchor::element(bounds).at_window_edge(), handle.clone(), window, cx,
             |view| view.settings_open,
             |view, window, cx| render_settings_surface(view, cx.entity(), window, cx, None),
             |view, _, cx| { view.archive_format_bounds = None; view.settings_open = false; view.settings_about_open = false; view.settings_picker = None; view.settings_submenu_bounds = None; cx.notify(); });
