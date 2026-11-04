@@ -1070,6 +1070,20 @@ group-deselect-all = Auswahl aller Elemente der Gruppe aufheben
 viewer-title = Dateibetrachter
 viewer-visual-paused = Videoanzeige pausiert
 viewer-file-unavailable = Diese Datei kann nicht angezeigt werden.
+viewer-tree-loading = Wird geladen…
+viewer-tree-empty = Leerer Ordner
+viewer-tree-failed = Dieser Inhalt kann nicht gelesen werden.
+viewer-tree-locked = Der Inhalt dieses Archivs ist durch ein Passwort geschützt.
+viewer-tree-password = Zum Öffnen der Dateien ist ein Passwort erforderlich.
+viewer-tree-more = { $count ->
+    [one] + { $number } weiteres Element
+   *[other] + { $number } weitere Elemente
+    }
+viewer-tree-more-at-least = + { $number } oder mehr Elemente
+viewer-tree-unsorted = Mehr als { $number } Elemente: in Lesereihenfolge angezeigt, unsortiert.
+viewer-tree-row-limit = Zu viele Zeilen angezeigt: Klappen Sie einen Ordner zu, um einen anderen aufzuklappen.
+viewer-tree-archive-size = { $size } entpackt
+viewer-tree-archive-ratio = { $size } entpackt · das Archiv belegt { $percent } % davon
 viewer-open = Dateibetrachter öffnen
 viewer-close = Dateibetrachter schließen
 viewer-slide = Folie

@@ -40,7 +40,7 @@ impl PartialOrd for NaturalName {
     }
 }
 
-pub(super) fn sort_files(files: &mut [FileEntry], col: SortColumn, direction: SortDirection) {
+pub(crate) fn sort_files(files: &mut [FileEntry], col: SortColumn, direction: SortDirection) {
     sort(files, col, direction, false);
 }
 

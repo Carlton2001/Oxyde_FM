@@ -771,6 +771,20 @@ viewer-open = Ouvrir la visionneuse
 viewer-close = Fermer la visionneuse
 viewer-visual-paused = Affichage vidéo en pause
 viewer-file-unavailable = Ce fichier ne peut pas être affiché.
+viewer-tree-loading = Chargement…
+viewer-tree-empty = Dossier vide
+viewer-tree-failed = Ce contenu ne peut pas être lu.
+viewer-tree-locked = Le contenu de cette archive est protégé par un mot de passe.
+viewer-tree-password = Un mot de passe est requis pour ouvrir ses fichiers.
+viewer-tree-more = { $count ->
+    [one] + { $number } autre élément
+   *[other] + { $number } autres éléments
+    }
+viewer-tree-more-at-least = + { $number } autres éléments ou plus
+viewer-tree-unsorted = Plus de { $number } éléments : affichés dans l’ordre de lecture, sans tri.
+viewer-tree-row-limit = Trop de lignes affichées : repliez un dossier pour en déplier un autre.
+viewer-tree-archive-size = { $size } une fois extraite
+viewer-tree-archive-ratio = { $size } une fois extraite · l’archive en occupe { $percent } %
 viewer-slide = Diapositive
 viewer-text-truncated = Seuls les 512 premiers Mio du fichier sont affichés.
 viewer-empty = Sélectionnez un fichier dans un panneau explorateur.

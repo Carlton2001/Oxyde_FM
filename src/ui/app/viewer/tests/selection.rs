@@ -74,6 +74,7 @@ fn source_revision_distinguishes_replacements_with_the_same_file_list() {
             path: "first".into(),
             ..Default::default()
         }]),
+        listing: Default::default(),
     };
     let captured = source.clone();
     let latest = Source {

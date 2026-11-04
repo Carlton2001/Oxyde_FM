@@ -249,7 +249,6 @@ impl DuplicateWindow {
             .parent()
             .map(|p| p.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let destination = parent.clone();
         let hover_path = target.clone();
         let hover_name = file.name.clone();
         let hover_parent = parent.clone();
@@ -336,15 +335,7 @@ impl DuplicateWindow {
                 cx.notify();
                 let _ = this.owner.update(cx, |owner, cx| {
                     let pane = owner.state.active_pane_id.clone();
-                    owner.navigate_to(&pane, destination.clone(), cx);
-                    if let Some(pane) = owner.state.find_pane_mut(&pane) {
-                        let tab = pane.active_tab_mut();
-                        tab.selected_paths.clear();
-                        tab.selected_paths.insert(target.clone());
-                        tab.selection_anchor = Some(target.clone());
-                        tab.pending_reveal = Some(target.clone());
-                    }
-                    cx.notify();
+                    owner.reveal_item(&pane, target.clone(), cx);
                 });
             }))
             .child(crate::ui::components::icons::render_file_icon(

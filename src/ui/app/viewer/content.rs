@@ -23,6 +23,8 @@ pub(super) enum Content {
     Document(Arc<Vec<Block>>, ListState),
     Text(super::text::TextFile),
     Markdown(super::markdown::Markdown),
+    /// Folders and archives: a read-only tree of their content.
+    Tree(super::tree::Tree),
     /// Formats without a complete renderer keep the existing preview.
     Preview(Entity<PreviewTask>),
 }

@@ -1,0 +1,52 @@
+use super::*;
+
+#[test]
+fn bounded_listing_stops_at_its_limit_and_reports_the_end() {
+    let root = tempfile::tempdir().unwrap();
+    for index in 0..5 {
+        std::fs::write(root.path().join(format!("file{index}")), b"x").unwrap();
+    }
+    let path = root.path().to_string_lossy().into_owned();
+    let (entries, complete) = list_local_dir_bounded(&path, true, true, 3).unwrap();
+    assert_eq!((entries.len(), complete), (3, false));
+    let (entries, complete) = list_local_dir_bounded(&path, true, true, 5).unwrap();
+    assert_eq!((entries.len(), complete), (5, true));
+}
+
+#[test]
+fn bounded_listing_skips_hidden_entries_unless_shown() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(root.path().join(".hidden"), b"x").unwrap();
+    std::fs::write(root.path().join("shown"), b"x").unwrap();
+    let path = root.path().to_string_lossy().into_owned();
+    let names = |show_hidden| {
+        let (entries, _) = list_local_dir_bounded(&path, show_hidden, true, 10).unwrap();
+        let mut names: Vec<_> = entries.into_iter().map(|entry| entry.name).collect();
+        names.sort();
+        names
+    };
+    #[cfg(unix)]
+    assert_eq!(names(false), ["shown"]);
+    assert_eq!(names(true), [".hidden", "shown"]);
+}
+
+#[test]
+fn subdirectory_detection_ignores_files_and_hidden_folders() {
+    let root = tempfile::tempdir().unwrap();
+    let files_only = root.path().join("files");
+    std::fs::create_dir(&files_only).unwrap();
+    std::fs::write(files_only.join("a"), b"x").unwrap();
+    let nested = root.path().join("nested");
+    std::fs::create_dir_all(nested.join("child")).unwrap();
+    let text = |path: &std::path::Path| path.to_string_lossy().into_owned();
+    assert!(!has_visible_subdirectory(&text(&files_only), true, true));
+    assert!(has_visible_subdirectory(&text(&nested), false, false));
+    assert!(!has_visible_subdirectory(&text(&root.path().join("missing")), true, true));
+    #[cfg(unix)]
+    {
+        let hidden = root.path().join("hidden");
+        std::fs::create_dir_all(hidden.join(".git")).unwrap();
+        assert!(!has_visible_subdirectory(&text(&hidden), false, false));
+        assert!(has_visible_subdirectory(&text(&hidden), true, false));
+    }
+}

@@ -763,6 +763,20 @@ group-deselect-all = Deselect all items in the group
 viewer-title = Viewer
 viewer-visual-paused = Video display paused
 viewer-file-unavailable = This file cannot be displayed.
+viewer-tree-loading = Loading…
+viewer-tree-empty = Empty folder
+viewer-tree-failed = This content cannot be read.
+viewer-tree-locked = The content of this archive is protected by a password.
+viewer-tree-password = A password is required to open its files.
+viewer-tree-more = { $count ->
+    [one] + { $number } more item
+   *[other] + { $number } more items
+    }
+viewer-tree-more-at-least = + { $number } or more items
+viewer-tree-unsorted = More than { $number } items: shown in reading order, unsorted.
+viewer-tree-row-limit = Too many rows shown: collapse a folder to expand another.
+viewer-tree-archive-size = { $size } once extracted
+viewer-tree-archive-ratio = { $size } once extracted · the archive takes { $percent } % of it
 viewer-open = Open the Viewer
 viewer-close = Close the Viewer
 viewer-slide = Slide

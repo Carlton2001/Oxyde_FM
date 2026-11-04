@@ -1070,6 +1070,20 @@ group-deselect-all = Deseleccionar todos los elementos del grupo
 viewer-title = Visor
 viewer-visual-paused = Visualización del vídeo en pausa
 viewer-file-unavailable = No se puede mostrar este archivo.
+viewer-tree-loading = Cargando…
+viewer-tree-empty = Carpeta vacía
+viewer-tree-failed = Este contenido no se puede leer.
+viewer-tree-locked = El contenido de este archivo comprimido está protegido con contraseña.
+viewer-tree-password = Se necesita una contraseña para abrir sus archivos.
+viewer-tree-more = { $count ->
+    [one] + { $number } elemento más
+   *[other] + { $number } elementos más
+    }
+viewer-tree-more-at-least = + { $number } elementos o más
+viewer-tree-unsorted = Más de { $number } elementos: se muestran en orden de lectura, sin ordenar.
+viewer-tree-row-limit = Demasiadas filas mostradas: contraiga una carpeta para expandir otra.
+viewer-tree-archive-size = { $size } una vez extraído
+viewer-tree-archive-ratio = { $size } una vez extraído · el archivo comprimido ocupa el { $percent } %
 viewer-open = Abrir el Visor
 viewer-close = Cerrar el Visor
 viewer-slide = Diapositiva

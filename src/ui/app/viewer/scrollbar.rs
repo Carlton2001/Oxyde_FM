@@ -55,6 +55,7 @@ impl Viewer {
             Content::Markdown(document) => Some(&document.list),
             Content::Document(_, list) => Some(list),
             Content::Pdf(pdf) => Some(&pdf.list),
+            Content::Tree(tree) => Some(&tree.list),
             _ => None,
         }
     }

@@ -245,6 +245,51 @@ impl OxydeApp {
         }
     }
 
+/// Opens `target`'s folder in the pane and selects `target` alone, scrolled into view.
+    pub(crate) fn reveal_item(&mut self, pane_id: &str, target: String, cx: &mut Context<Self>) {
+        let Some(parent) = std::path::Path::new(&target).parent().map(|parent| parent.to_string_lossy().into_owned()) else {
+            return;
+        };
+        self.navigate_to(pane_id, parent, cx);
+        let width = self.pane_sizes.get(pane_id).map_or(self.list_width, |size| size.width);
+        if let Some(pane) = self.state.find_pane_mut(pane_id) {
+            let tab = pane.active_tab_mut();
+            tab.selected_paths.clear();
+            tab.selected_paths.insert(target.clone());
+            tab.selection_anchor = Some(target.clone());
+            tab.keyboard_cursor = Some(target.clone());
+            tab.pending_reveal = Some(target);
+            // Already in that folder: its listing is there, reveal now.
+            if matches!(tab.load_status, crate::ui::workspace::TabLoadStatus::Ready) {
+                tab.reveal_pending_item(width);
+            }
+        }
+        cx.notify();
+    }
+
+    fn pane_showing_tab(&self, tab_id: &str) -> Option<String> {
+        let mut found = None;
+        self.state.layout.visit_panes(&mut |pane| {
+            if pane.active_tab().id == tab_id {
+                found = Some(pane.id.clone());
+            }
+        });
+        found
+    }
+
+    /// The Viewer's double-click: reveal in the pane whose tab it follows, without activating it.
+    pub(crate) fn reveal_in_tab(&mut self, tab_id: &str, target: String, cx: &mut Context<Self>) {
+        if let Some(pane) = self.pane_showing_tab(tab_id) {
+            self.reveal_item(&pane, target, cx);
+        }
+    }
+
+    pub(crate) fn open_in_tab(&mut self, tab_id: &str, folder: String, cx: &mut Context<Self>) {
+        if let Some(pane) = self.pane_showing_tab(tab_id) {
+            self.navigate_to(&pane, folder, cx);
+        }
+    }
+
     pub fn go_back(&mut self, pane_id: &str, cx: &mut Context<Self>) {
         if let Some(pane) = self.state.find_pane_mut(pane_id) {
             let active_tab = pane.active_tab_mut();

@@ -9,6 +9,7 @@ mod preparation;
 mod folder_sizes;
 pub(crate) use preparation::FileUpdate;
 pub(crate) use folder_sizes::SIZE_FLASH_DURATION;
+pub(crate) use sorting::sort_files;
 mod tree;
 mod viewer;
 

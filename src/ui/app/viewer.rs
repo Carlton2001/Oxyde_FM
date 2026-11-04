@@ -16,6 +16,7 @@ mod pdf;
 mod render;
 mod scrollbar;
 mod text;
+mod tree;
 mod window;
 pub(crate) use window::close_viewer_windows;
 
@@ -31,6 +32,8 @@ struct Source {
     /// Keyboard cursor, then anchor: the selected file the Viewer shows.
     focus: Option<String>,
     files: Arc<Vec<FileEntry>>,
+    /// The pane's sort and visibility, read when a folder tree opens.
+    listing: tree::Listing,
 }
 
 /// The shown file and the nearest media of the same kind on each side.
@@ -245,6 +248,11 @@ impl Source {
             focus: tab.keyboard_cursor.clone().filter(|path| tab.selected_paths.contains(path))
                 .or_else(|| tab.selection_anchor.clone()),
             files: tab.cached_filtered_files.clone(),
+            listing: tree::Listing {
+                show_hidden: owner.show_hidden,
+                show_system: owner.show_system,
+                sort: (tab.sort_column, tab.sort_direction),
+            },
         };
         let mut tab = owner
             .state
@@ -424,10 +432,15 @@ impl Viewer {
         let Some(file) = self.file.as_ref() else {
             return;
         };
-        if file.is_dir || file.archive_path.is_some() {
+        if self.deletion_blocks(&file.path) {
             return;
         }
-        if self.deletion_blocks(&file.path) {
+        if tree::has_tree(file) {
+            let file = file.clone();
+            self.load_tree(&file, cx);
+            return;
+        }
+        if file.is_dir || file.archive_path.is_some() {
             return;
         }
         use crate::ui::components::icons::{AUDIO_EXTENSIONS, VIDEO_EXTENSIONS};

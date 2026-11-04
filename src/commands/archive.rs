@@ -204,6 +204,21 @@ pub(crate) fn index_archive_contents(path: &Path, checkpoint: &dyn Fn() -> io::R
     }
 }
 
+/// Every entry of an archive for the Viewer's tree, through the same confined
+/// parser as search. Setting `cancelled` stops the parse at its next checkpoint.
+pub fn index_archive_for_preview(
+    path: &Path,
+    cancelled: &std::sync::atomic::AtomicBool,
+) -> Result<Vec<FileEntry>, CommandError> {
+    index_archive_contents(path, &|| {
+        if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+            Err(io::Error::new(io::ErrorKind::Interrupted, "Archive preview cancelled"))
+        } else {
+            Ok(())
+        }
+    })
+}
+
 pub(crate) fn index_archive_contents_local(path: &Path, checkpoint: &dyn Fn() -> io::Result<()>) -> Result<Vec<FileEntry>, CommandError> {
     match ArchiveFormat::from_path(path) {
         Some(format) if matches!(format, ArchiveFormat::Zip | ArchiveFormat::Rar | ArchiveFormat::Stream(_)) || format.is_tar() => super::archive_metadata::indexed_files(path, checkpoint),

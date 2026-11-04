@@ -239,8 +239,7 @@ fn oxyde_context_menu_items_raw(
     let mut items = vec![];
 
     if view.state.find_pane(&view.state.active_pane_id).is_some_and(|pane| pane.active_tab().quick_search.is_some()) {
-        if let Some(parent) = std::path::Path::new(&path).parent() {
-            let parent = parent.to_string_lossy().into_owned();
+        if std::path::Path::new(&path).parent().is_some() {
             let target = path.clone();
             let handle = h_app.clone();
             items.push(crate::ui::components::dropdown::DropdownItem {
@@ -249,13 +248,7 @@ fn oxyde_context_menu_items_raw(
                 on_click: std::rc::Rc::new(move |_, app| { handle.update(app, |this, cx| {
                     this.context_menus.clear();
                     let pane = this.state.active_pane_id.clone();
-                    this.navigate_to(&pane, parent.clone(), cx);
-                    if let Some(pane) = this.state.find_pane_mut(&pane) {
-                        pane.active_tab_mut().selected_paths.insert(target.clone());
-                        pane.active_tab_mut().selection_anchor = Some(target.clone());
-                        pane.active_tab_mut().pending_reveal = Some(target.clone());
-                    }
-                    cx.notify();
+                    this.reveal_item(&pane, target.clone(), cx);
                 }); }), on_hover: None,
             });
         }

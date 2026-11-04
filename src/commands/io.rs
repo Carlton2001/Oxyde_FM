@@ -110,36 +110,79 @@ fn list_dir_blocking(
             return Ok(entries);
         }
     }
-    let mut entries = Vec::new();
-
-    {
-        let dir = std::fs::read_dir(&path_buf).map_err(|error| match error.kind() {
-            std::io::ErrorKind::NotFound => CommandError::PathNotFound(path.clone()),
-            std::io::ErrorKind::PermissionDenied => CommandError::AccessDenied(path.clone()),
-            _ => CommandError::IoError(error.to_string()),
-        })?;
-        let attributes = crate::utils::visibility::DirectoryAttributes::load(&path_buf);
-        for entry in dir {
-            let entry = entry.map_err(|e| CommandError::IoError(e.to_string()))?;
-            let metadata = entry
-                .metadata()
-                .map_err(|e| CommandError::IoError(e.to_string()))?;
-            let name = entry.file_name().to_string_lossy().to_string();
-
-            let (is_hidden, is_system, _) = attributes.of(&metadata, &name);
-
-            if !crate::utils::visibility::is_visible(is_hidden, is_system, show_hidden, show_system) {
-                continue;
-            }
-
-            let mut file_entry = crate::models::file_entry::file_entry_from_metadata(&entry.path(), &metadata);
-            file_entry.is_hidden = is_hidden;
-            entries.push(file_entry);
-        }
-    }
-
+    let (mut entries, _) = read_local_entries(&path_buf, &path, show_hidden, show_system, None)?;
     if ordered { sort_file_entries(&mut entries); }
     Ok(entries)
+}
+
+/// Visible entries of a local directory, stopping after `limit` of them when given.
+/// The flag tells whether the directory was read to its end.
+fn read_local_entries(
+    path_buf: &std::path::Path,
+    path: &str,
+    show_hidden: bool,
+    show_system: bool,
+    limit: Option<usize>,
+) -> Result<(Vec<FileEntry>, bool), CommandError> {
+    let mut entries = Vec::new();
+    let dir = std::fs::read_dir(path_buf).map_err(|error| match error.kind() {
+        std::io::ErrorKind::NotFound => CommandError::PathNotFound(path.to_owned()),
+        std::io::ErrorKind::PermissionDenied => CommandError::AccessDenied(path.to_owned()),
+        _ => CommandError::IoError(error.to_string()),
+    })?;
+    let attributes = crate::utils::visibility::DirectoryAttributes::load(path_buf);
+    for entry in dir {
+        let entry = entry.map_err(|e| CommandError::IoError(e.to_string()))?;
+        let metadata = entry
+            .metadata()
+            .map_err(|e| CommandError::IoError(e.to_string()))?;
+        let name = entry.file_name().to_string_lossy().to_string();
+
+        let (is_hidden, is_system, _) = attributes.of(&metadata, &name);
+
+        if !crate::utils::visibility::is_visible(is_hidden, is_system, show_hidden, show_system) {
+            continue;
+        }
+        // One visible entry past the limit proves the directory goes on.
+        if limit.is_some_and(|limit| entries.len() >= limit) {
+            return Ok((entries, false));
+        }
+
+        let mut file_entry = crate::models::file_entry::file_entry_from_metadata(&entry.path(), &metadata);
+        file_entry.is_hidden = is_hidden;
+        entries.push(file_entry);
+    }
+    Ok((entries, true))
+}
+
+/// Viewer folder previews: at most `limit` visible entries of a local directory, in
+/// reading order, and whether the directory ended within them. Blocking.
+pub fn list_local_dir_bounded(
+    path: &str,
+    show_hidden: bool,
+    show_system: bool,
+    limit: usize,
+) -> Result<(Vec<FileEntry>, bool), CommandError> {
+    let path_buf = crate::utils::path_text::decode(path);
+    read_local_entries(&path_buf, path, show_hidden, show_system, Some(limit))
+}
+
+/// Whether a local directory holds a visible subdirectory; stops at the first one.
+/// Unreadable directories count as having none. Blocking.
+pub fn has_visible_subdirectory(path: &str, show_hidden: bool, show_system: bool) -> bool {
+    let path_buf = crate::utils::path_text::decode(path);
+    let Ok(dir) = std::fs::read_dir(&path_buf) else { return false };
+    let attributes = crate::utils::visibility::DirectoryAttributes::load(&path_buf);
+    dir.filter_map(Result::ok).any(|entry| {
+        // The directory entry type avoids a stat for every file.
+        if !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+            return false;
+        }
+        let Ok(metadata) = entry.metadata() else { return false };
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let (hidden, system, _) = attributes.of(&metadata, &name);
+        crate::utils::visibility::is_visible(hidden, system, show_hidden, show_system)
+    })
 }
 
 fn sort_file_entries(entries: &mut [FileEntry]) {
@@ -153,6 +196,10 @@ fn sort_file_entries(entries: &mut [FileEntry]) {
 #[cfg(test)]
 #[path = "io/tests/listing_preparation.rs"]
 mod listing_preparation_tests;
+
+#[cfg(test)]
+#[path = "io/tests/bounded_listing.rs"]
+mod bounded_listing_tests;
 
 #[cfg(all(test, unix))]
 #[path = "io/tests/invalid_names.rs"]

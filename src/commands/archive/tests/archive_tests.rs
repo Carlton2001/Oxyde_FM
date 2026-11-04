@@ -463,3 +463,26 @@ fn iso_extraction_rejects_path_components() {
         "document.txt;1"
     );
 }
+
+#[test]
+fn preview_index_lists_nested_members_and_stops_when_cancelled() {
+    use std::io::Write;
+    let dir = tempfile::tempdir().unwrap();
+    let archive = dir.path().join("tree.zip");
+    let mut writer = zip::ZipWriter::new(File::create(&archive).unwrap());
+    for name in ["docs/guide/intro.md", "readme.txt"] {
+        writer.start_file(name, zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(b"content").unwrap();
+    }
+    writer.finish().unwrap();
+    let running = std::sync::atomic::AtomicBool::new(false);
+    let mut names: Vec<_> = index_archive_for_preview(&archive, &running)
+        .unwrap()
+        .into_iter()
+        .map(|entry| entry.path.strip_prefix(&*archive.to_string_lossy()).unwrap().to_owned())
+        .collect();
+    names.sort();
+    assert_eq!(names, ["/docs/guide/intro.md", "/readme.txt"]);
+    let cancelled = std::sync::atomic::AtomicBool::new(true);
+    assert!(index_archive_for_preview(&archive, &cancelled).is_err());
+}

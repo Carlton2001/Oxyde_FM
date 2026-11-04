@@ -135,6 +135,7 @@ impl Viewer {
             Content::Preview(preview) if preview.read(cx).file_unavailable() => self.render_unavailable_file(cx),
             Content::Preview(preview) => preview.clone().into_any_element(),
             Content::Markdown(_) => self.render_markdown(cx),
+            Content::Tree(tree) => self.render_tree(tree, cx),
             Content::Text(text) => {
                 use super::text::{ROW_HEIGHT, TEXT_PADDING, TEXT_SIZE};
                 let rows = text.rows();
