@@ -50,9 +50,9 @@ fn counts(folder: &Folder, cx: &App) -> SharedString {
 fn archive_line(info: &ArchiveInfo, cx: &App) -> SharedString {
     let mut args = FluentArgs::new();
     args.set("size", format_size(info.extracted, false, true, cx.i18n().language()));
-    match info.packed {
-        Some(packed) => {
-            args.set("packed", format_size(packed, false, true, cx.i18n().language()));
+    match info.percent() {
+        Some(percent) => {
+            args.set("percent", percent);
             cx.i18n().text_with_args(Message::ViewerTreeArchiveRatio, &args)
         }
         None => cx.i18n().text_with_args(Message::ViewerTreeArchiveSize, &args),

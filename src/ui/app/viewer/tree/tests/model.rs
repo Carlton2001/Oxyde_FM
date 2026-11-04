@@ -143,3 +143,12 @@ fn a_new_sort_reorders_every_read_entry_of_complete_levels_only() {
     let partial = Folder::new(entries(), false, sort()).resorted((SortColumn::Name, SortDirection::Descending));
     assert_eq!(partial.shown()[0].name, "f0000");
 }
+
+#[test]
+fn archive_ratio_needs_both_sizes() {
+    let info = |packed, extracted| ArchiveInfo { extracted, packed, password: false };
+    assert_eq!(info(Some(25), 100).percent(), Some(25));
+    assert_eq!(info(Some(1), 3).percent(), Some(33));
+    assert_eq!(info(None, 100).percent(), None);
+    assert_eq!(info(Some(10), 0).percent(), None);
+}

@@ -2337,7 +2337,7 @@ mod tests {
             args.set("applications", "nautilus");
             args.set("size", "487 Go");
             args.set("rate", "23,976");
-            args.set("packed", "256 Mo");
+            args.set("percent", 98);
             for message in messages {
                 let pattern = i18n
                     .active
