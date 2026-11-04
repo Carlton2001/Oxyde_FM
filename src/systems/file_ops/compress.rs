@@ -289,6 +289,12 @@ impl FileOperationManager {
             } else {
                 final_target
             };
+            // A protected archive published under another name keeps its password.
+            if display_path != requested {
+                if let Some(secret) = crate::utils::archive_password::for_archive(&requested) {
+                    crate::utils::archive_password::remember(&display_path, secret);
+                }
+            }
             op.lock().unwrap().destination = Some(display_path);
         }
         log::info!(target: "oxyde_lib::archive_timing", "archive_compress_end publication_s={:.6} total_s={:.6}", publication_started.elapsed().as_secs_f64(), timing_started.elapsed().as_secs_f64());

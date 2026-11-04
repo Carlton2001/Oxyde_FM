@@ -48,6 +48,7 @@ use toasts::{Toast, ToastKind};
 pub(crate) mod network;
 pub(crate) mod remote;
 pub(crate) mod archive_password;
+pub(crate) mod archive_protection;
 pub mod selection;
 mod item_pointer;
 pub(crate) mod search;
@@ -352,6 +353,7 @@ pub struct OxydeApp {
     pub(crate) operations_panel_scroll: ScrollHandle,
     pub(crate) expanded_operations: std::collections::HashSet<String>,
     pub(crate) archive_creation: Option<(Vec<std::path::PathBuf>, String)>,
+    pub(crate) archive_protection: Option<archive_protection::ArchiveProtection>,
     pub(crate) rename_error: Option<Message>,
     pub(crate) rename_shake_id: u64,
 
@@ -558,6 +560,7 @@ impl OxydeApp {
             operations_panel_scroll: ScrollHandle::new(),
             expanded_operations: std::collections::HashSet::new(),
             archive_creation: None,
+            archive_protection: None,
             rename_error: None,
             rename_shake_id: 0,
             show_hidden: config.show_hidden,

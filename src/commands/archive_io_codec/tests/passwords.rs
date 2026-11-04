@@ -82,3 +82,46 @@ fn a_refusal_travels_as_its_own_failure_kind() {
         assert_eq!(ArchivePasswordFailure::from_message(&error.to_string()), Some(failure));
     }
 }
+
+fn encrypted(format: Format, password: &str) -> Vec<u8> {
+    let mut broker = Broker::new();
+    broker.metadata = vec![
+        empty_entry(0, "docs".into(), true, 0),
+        empty_entry(1, "docs/note.txt".into(), false, CONTENT.len() as u64),
+    ];
+    broker.sources.insert(0, Vec::new());
+    broker.sources.insert(1, CONTENT.to_vec());
+    let connection = Arc::new(Mutex::new(broker));
+    run(
+        connection.clone(),
+        Operation::Encode {
+            format,
+            quality: Quality::Normal,
+            entries: 2,
+            output_limit: 1024 * 1024,
+            password: ArchiveSecret::new(password.into()),
+            limits: limits(1024),
+        },
+    )
+    .unwrap();
+    let broker = connection.lock().unwrap();
+    broker.output.get_ref().clone()
+}
+
+#[test]
+fn protected_archives_are_written_encrypted_and_read_back_with_their_password() {
+    for format in [Format::Zip, Format::SevenZip] {
+        let bytes = encrypted(format, "correct horse");
+        assert!(!bytes.windows(CONTENT.len()).any(|window| window == CONTENT), "{format:?}");
+        let (result, _) = decode_with(format, bytes.clone(), None, None);
+        assert_eq!(refusal(result), Some(ArchivePasswordFailure::Required), "{format:?}");
+        let (result, _) = decode_with(format, bytes.clone(), None, Some("wrong"));
+        assert_eq!(refusal(result), Some(ArchivePasswordFailure::Wrong), "{format:?}");
+        let (result, broker) = decode_with(format, bytes, None, Some("correct horse"));
+        result.unwrap();
+        assert!(broker.extracted.values().any(|bytes| bytes == CONTENT), "{format:?}");
+    }
+    // The 7z header is encrypted too: its names do not appear.
+    let seven = encrypted(Format::SevenZip, "correct horse");
+    assert!(!seven.windows(8).any(|window| window == b"n\0o\0t\0e\0"));
+}

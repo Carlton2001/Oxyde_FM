@@ -533,6 +533,12 @@ archive-password-wrong = Password errata. Riprova.
 archive-password-unlock = Sblocca
 archive-password-required = Questo archivio è protetto da password.
 archive-password-rejected = La password di questo archivio è errata.
+archive-protection-none = Nessuna password
+archive-protection-password = Protetto da password
+archive-password-confirm = Conferma
+archive-password-empty = Inserisci una password.
+archive-password-mismatch = Le password non corrispondono.
+archive-password-too-long = La password è troppo lunga.
 
 drive-eject-failed = Impossibile espellere l’unità. Un’altra applicazione potrebbe usarla. { $detail }
 drive-unmount-failed = Impossibile smontare il volume. Un’altra applicazione potrebbe usarlo. { $detail }

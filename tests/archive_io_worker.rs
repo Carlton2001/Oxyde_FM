@@ -48,6 +48,7 @@ fn encode_operation(format: Format, quality: Quality) -> Operation {
         quality,
         entries: 1,
         output_limit: 2 * 1024 * 1024,
+        password: None,
         limits: limits(),
     }
 }

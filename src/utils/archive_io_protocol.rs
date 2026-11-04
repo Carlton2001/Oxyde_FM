@@ -125,6 +125,9 @@ pub enum Operation {
         quality: Quality,
         entries: u64,
         output_limit: u64,
+        /// Encrypts a ZIP (AES-256) or a 7z (AES-256, header included); never logged.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        password: Option<super::archive_password::ArchiveSecret>,
         limits: Limits,
     },
 }
@@ -337,9 +340,16 @@ impl Message {
                         format,
                         entries,
                         output_limit,
+                        password,
                         limits,
                         ..
                     } => {
+                        if let Some(password) = password {
+                            password.validate()?;
+                            if !matches!(format, Format::Zip | Format::SevenZip) {
+                                return Err(invalid());
+                            }
+                        }
                         let writable = matches!(format, Format::Zip | Format::SevenZip)
                             || (format.is_tar()
                                 && format.tar_codec().is_none_or(|codec| codec.writable()));

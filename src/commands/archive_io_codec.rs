@@ -144,6 +144,7 @@ pub fn run<T: Exchange + Send + 'static>(
             quality,
             entries,
             output_limit,
+            password,
             ..
         } => {
             // Codec finish/MT backpressure can spend seconds computing without an
@@ -160,6 +161,7 @@ pub fn run<T: Exchange + Send + 'static>(
                         quality,
                         entries,
                         output_limit,
+                        password.as_ref(),
                         &budget,
                         &checkpoint,
                     )
@@ -908,6 +910,7 @@ mod tests {
                 quality,
                 entries: 3,
                 output_limit: 2 * 1024 * 1024,
+                password: None,
                 limits: limits(content.len() as u64),
             },
         )

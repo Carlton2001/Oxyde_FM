@@ -135,6 +135,15 @@ impl TextInput {
         self
     }
 
+    /// Shows or masks a password field's characters, as its eye button asks.
+    pub fn set_masked(&mut self, masked: bool, cx: &mut Context<Self>) {
+        if self.password != masked {
+            self.password = masked;
+            self.last_layout = None;
+            cx.notify();
+        }
+    }
+
     pub fn content(&self) -> &str {
         &self.content
     }

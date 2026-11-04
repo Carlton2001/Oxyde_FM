@@ -34,6 +34,7 @@ fn encoders_exist_for_writable_tar_codecs_only() {
                 quality: Quality::Fast,
                 entries: 1,
                 output_limit: 1,
+                password: None,
                 limits: Limits { entries: 1, bytes: 1, depth: 1, seconds: 1 },
             },
         })

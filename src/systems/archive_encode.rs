@@ -77,11 +77,18 @@ pub(super) fn run(
         "best" => Quality::Best,
         _ => Quality::Normal,
     };
+    let format = format(path)?;
+    // A rebuild keeps the password the archive was opened with; a new archive gets
+    // the one its dialog remembered for it.
+    let password = matches!(format, crate::utils::archive_io_protocol::Format::Zip | crate::utils::archive_io_protocol::Format::SevenZip)
+        .then(|| op.lock().unwrap().archive_password.clone().or_else(|| crate::utils::archive_password::for_archive(path)))
+        .flatten();
     let operation = Operation::Encode {
-        format: format(path)?,
+        format,
         quality,
         entries: entries.len() as u64,
         output_limit,
+        password,
         limits,
     };
     let mut source: Option<Source> = None;

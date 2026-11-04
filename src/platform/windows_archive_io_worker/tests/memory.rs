@@ -15,6 +15,7 @@ fn only_seven_encoding_uses_the_larger_envelope_and_navigation_stays_reserved() 
             quality: Quality::Normal,
             entries: 1,
             output_limit: 2048,
+            password: None,
             limits,
         };
         let expected = if format == Format::SevenZip {

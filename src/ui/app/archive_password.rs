@@ -254,23 +254,49 @@ impl OxydeApp {
         }, cx);
     }
 
-    /// An extraction or a copy out of an archive refused for its password runs again,
-    /// with the same sources and destination, once unlocked.
+    /// An operation refused for an archive's password (extraction, copy out of or into
+    /// it, deletion inside it) runs again with the same sources and destination.
     pub(super) fn retry_operation_with_password(&mut self, op_id: &str, error: &str, cx: &mut Context<Self>) -> bool {
         if password_failure(error).is_none() {
             return false;
         }
         let Some((kind, sources, destination)) = self.file_ops.operation_request(op_id) else { return false };
-        let Some(archive) = sources.iter().find_map(|source| {
+        let Some(archive) = sources.iter().chain(destination.iter()).find_map(|source| {
             oxyde_lib::utils::archive::split_virtual_path(&source.to_string_lossy())
                 .map(|(archive, _)| archive)
                 .or_else(|| oxyde_lib::utils::archive::is_archive(source).then(|| source.clone()))
         }) else {
             return false;
         };
-        let Some(destination) = destination else { return false };
         self.ask_archive_password(&archive, error, move |this, cx| {
-            this.queue_archive_operation(kind, sources, destination, cx);
+            this.requeue_operation(kind, sources, destination, cx);
         }, cx)
+    }
+
+    fn requeue_operation(
+        &mut self,
+        kind: oxyde_lib::systems::file_ops::FileOpType,
+        sources: Vec<PathBuf>,
+        destination: Option<PathBuf>,
+        cx: &mut Context<Self>,
+    ) {
+        let quality_path = destination.clone().or_else(|| sources.first().cloned());
+        let quality = quality_path.map(|path| self.archive_quality_for_path(&path));
+        let (qualities, turbo) = (self.archive_qualities(), self.config.default_turbo_mode);
+        // As `queue_archive_operation`: the runtime is reached from a spawned task.
+        cx.spawn(async move |this, cx| {
+            let runtime = tokio::runtime::Handle::current();
+            let _ = this.update(cx, |this, cx| {
+                let mut operation = oxyde_lib::systems::file_ops::FileOperation::new(kind, sources, destination, None);
+                if let Some(quality) = quality {
+                    operation.compression_quality = quality;
+                }
+                operation.archive_qualities = qualities;
+                operation.set_turbo(turbo);
+                let id = this.file_ops.queue_operation_on(&runtime, this.history.clone(), operation);
+                this.watch_file_operation(id, cx);
+            });
+        })
+        .detach();
     }
 }

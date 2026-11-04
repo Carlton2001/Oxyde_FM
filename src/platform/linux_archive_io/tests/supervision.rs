@@ -19,7 +19,7 @@ fn entry(size: u64) -> Entry {
 
 /// Runs the real encoder over one file and returns the archive it wrote.
 fn encoded(format: Format, content: &[u8], controls: &dyn Fn() -> io::Result<Control>) -> io::Result<Vec<u8>> {
-    let operation = Operation::Encode { format, quality: Quality::Fast, entries: 1, output_limit: 64 * 1024 * 1024, limits: limits() };
+    let operation = Operation::Encode { format, quality: Quality::Fast, entries: 1, output_limit: 64 * 1024 * 1024, password: None, limits: limits() };
     let output = RefCell::new(Vec::new());
     let mut handler = |frame: Frame| {
         frame.validate()?;

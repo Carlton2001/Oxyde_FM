@@ -7,6 +7,7 @@ fn timing() -> Timing {
         quality: Quality::Fast,
         entries: 1,
         output_limit: 1024,
+        password: None,
         limits: Limits {
             entries: 1,
             bytes: 1024,

@@ -297,7 +297,10 @@ impl ArchiveWorkspace {
             .cloned()
             .unwrap_or_else(|| original_quality.clone());
         op.lock().unwrap().compression_quality = quality;
+        // The rebuild is written beside the original: it keeps the original's password.
+        op.lock().unwrap().archive_password = crate::utils::archive_password::for_archive(&self.archive);
         let result = FileOperationManager::perform_compress_retained(op, sources, Some(destination.clone()), retained);
+        op.lock().unwrap().archive_password = None;
         op.lock().unwrap().destination = original_destination;
         op.lock().unwrap().compression_quality = original_quality;
         result?;

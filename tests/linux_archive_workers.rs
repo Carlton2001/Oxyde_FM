@@ -358,3 +358,33 @@ fn encrypted_archives_extract_and_open_with_their_password() {
         }
     });
 }
+
+/// A protected ZIP or 7z is created encrypted and stays encrypted when Oxyde adds to it.
+#[test]
+fn protected_archives_are_created_and_rebuilt_encrypted() {
+    use oxyde_lib::models::error::ArchivePasswordFailure;
+    use oxyde_lib::utils::archive_password::{forget, remember, ArchiveSecret};
+    confined(|| {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("dossier");
+        fs::create_dir(&source).unwrap();
+        fs::write(source.join("note.txt"), b"original").unwrap();
+        let added = temp.path().join("added.txt");
+        fs::write(&added, b"copied").unwrap();
+        for extension in ["zip", "7z"] {
+            let archive = temp.path().join(format!("protected.{extension}"));
+            remember(&archive, ArchiveSecret::new("correct horse".into()).unwrap());
+            FileOperationManager::perform_compress(&operation(FileOpType::Compress), vec![source.clone()], Some(archive.clone())).unwrap();
+            FileOperationManager::perform_copy(&operation(FileOpType::Copy), vec![added.clone()], Some(archive.clone()), false, None).unwrap();
+            forget(&archive);
+            let target = temp.path().join(format!("back-{extension}"));
+            let error = FileOperationManager::perform_extract(&operation(FileOpType::Extract), vec![archive.clone()], Some(target.clone())).unwrap_err();
+            assert_eq!(ArchivePasswordFailure::from_message(&error), Some(ArchivePasswordFailure::Required), "{extension}");
+            remember(&archive, ArchiveSecret::new("correct horse".into()).unwrap());
+            FileOperationManager::perform_extract(&operation(FileOpType::Extract), vec![archive.clone()], Some(target.clone())).unwrap();
+            assert_eq!(fs::read(target.join("dossier/note.txt")).unwrap(), b"original", "{extension}");
+            assert_eq!(fs::read(target.join("added.txt")).unwrap(), b"copied", "{extension}");
+            forget(&archive);
+        }
+    });
+}

@@ -13,9 +13,19 @@ pub(super) fn encode<T: Exchange>(
     quality: Quality,
     entries: u64,
     output_limit: u64,
+    password: Option<&ArchiveSecret>,
     budget: &ArchiveBudget,
     checkpoint: &dyn Fn() -> io::Result<()>,
 ) -> Result<(), CommandError> {
+    // AES encrypts each 7z block: the key comes before the compressor.
+    let seven_methods = |level: u32, turbo: bool| -> Vec<sevenz_rust2::EncoderConfiguration> {
+        let mut methods = Vec::new();
+        if let Some(password) = password {
+            methods.push(sevenz_rust2::encoder_options::AesEncoderOptions::new(password.seven()).into());
+        }
+        methods.push(seven_options(level, turbo).into());
+        methods
+    };
     budget.check_entry_count(entries.try_into().map_err(|_| invalid())?)?;
     budget.checkpoint(checkpoint)?;
     let output = Writer::new(connection.clone(), output_limit);
@@ -34,7 +44,8 @@ pub(super) fn encode<T: Exchange>(
                 let entry = metadata(connection, id)?;
                 budget.entry(&entry.name, entry.size)?;
                 notify(connection, Frame::new(Message::Begin { id }))?;
-                let count = threads(turbo(connection)?);
+                // Encryption happens as the writer stores: compressed jobs cannot be copied raw.
+                let count = if password.is_some() { 1 } else { threads(turbo(connection)?) };
                 while jobs.full(entry.size.min(ZIP_BUFFER), count) {
                     jobs.drain_one(&mut writer, checkpoint)?;
                 }
@@ -58,10 +69,15 @@ pub(super) fn encode<T: Exchange>(
                     .compression_method(zip::CompressionMethod::Deflated)
                     .compression_level(Some(level));
                 if entry.directory {
+                    // A folder holds no data to encrypt.
                     writer
                         .add_directory(format!("{}/", entry.name.trim_end_matches('/')), options)
                         .map_err(io::Error::other)?;
                 } else {
+                    let options = match password {
+                        Some(password) => options.with_aes_encryption(zip::AesMode::Aes256, password.expose()),
+                        None => options,
+                    };
                     writer
                         .start_file(entry.name, options)
                         .map_err(io::Error::other)?;
@@ -82,7 +98,7 @@ pub(super) fn encode<T: Exchange>(
             let mut writer = sevenz_rust2::ArchiveWriter::new(output)
                 .map_err(super::super::archive_seven_open::archive_error)?;
             writer
-                .set_content_methods(vec![seven_options(level as u32, turbo(connection)?).into()]);
+                .set_content_methods(seven_methods(level as u32, turbo(connection)?));
             let mut solid = Vec::new();
             let mut solid_bytes = 0u64;
             for id in 0..entries {
@@ -134,7 +150,7 @@ pub(super) fn encode<T: Exchange>(
                 }
                 // lzma-rust2 0.22 keeps at most one chunk per thread in flight, so
                 // large files no longer need a single-threaded stream to bound memory.
-                writer.set_content_methods(vec![seven_options(level as u32, turbo(connection)?).into()]);
+                writer.set_content_methods(seven_methods(level as u32, turbo(connection)?));
                 if !entry.directory && entry.size <= SOLID_BUFFER {
                     let mut bytes = Vec::with_capacity(entry.size as usize);
                     let mut reader = io::BufReader::with_capacity(

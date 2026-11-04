@@ -102,6 +102,8 @@ impl ArchiveWorkspace {
             )
         };
         op.lock().unwrap().compression_quality = quality;
+        // The rebuild is written beside the original: it keeps the original's password.
+        op.lock().unwrap().archive_password = crate::utils::archive_password::for_archive(&self.archive);
         let rename = self.rename.lock().unwrap();
         let result = FileOperationManager::perform_compress_workspace(
             op,
@@ -117,6 +119,7 @@ impl ArchiveWorkspace {
             let mut locked = op.lock().unwrap();
             locked.destination = original_destination;
             locked.compression_quality = original_quality;
+            locked.archive_password = None;
         }
         let rebuilt = result?;
         output

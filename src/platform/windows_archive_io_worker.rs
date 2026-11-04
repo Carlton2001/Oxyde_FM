@@ -421,6 +421,7 @@ mod tests {
             quality: Quality::Fast,
             entries: 1,
             output_limit: 100,
+            password: None,
             limits,
         };
         let frame = |cause, limit| {

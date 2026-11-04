@@ -128,6 +128,7 @@ impl OxydeApp {
         };
 
         self.archive_creation = None;
+        self.archive_protection = None;
         self.rename_cancel
             .store(true, std::sync::atomic::Ordering::Relaxed);
         self.rename_cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -224,6 +225,15 @@ impl OxydeApp {
                 cx.notify();
                 return;
             }
+            let secret = match self.archive_protection_secret(&extension) {
+                Ok(secret) => secret,
+                Err(message) => {
+                    self.rename_error = Some(message);
+                    self.rename_shake_id = self.rename_shake_id.wrapping_add(1);
+                    cx.notify();
+                    return;
+                }
+            };
             let suffix = format!(".{extension}");
             let name = if name.to_lowercase().ends_with(&suffix) {
                 name.to_string()
@@ -234,6 +244,12 @@ impl OxydeApp {
                 .parent()
                 .unwrap_or(std::path::Path::new(""))
                 .join(name);
+            // The encoder finds the new archive's password where a rebuild finds its own;
+            // an older archive's password must not protect a new unprotected one.
+            match secret {
+                Some(secret) => oxyde_lib::utils::archive_password::remember(&destination, secret),
+                None => oxyde_lib::utils::archive_password::forget(&destination),
+            }
             self.cancel_rename(cx);
             self.queue_archive_operation(
                 oxyde_lib::systems::file_ops::FileOpType::Compress,
@@ -266,6 +282,7 @@ impl OxydeApp {
         self.rename_cancel
             .store(true, std::sync::atomic::Ordering::Relaxed);
         self.archive_creation = None;
+        self.archive_protection = None;
         self.rename_generation = self.rename_generation.wrapping_add(1);
         self.editing_path = None;
         self.editing_view = None;
@@ -342,6 +359,10 @@ impl OxydeApp {
                             } else {
                                 this.rename_error = Some(crate::ui::errors::rename_message(&error));
                                 this.rename_shake_id = this.rename_shake_id.wrapping_add(1);
+                                // Renaming inside a protected archive rebuilds it: once
+                                // unlocked, the same name is submitted again.
+                                let archive = super::archive_password::archive_of(&path_for_check);
+                                this.ask_archive_password(&archive, &error.to_string(), |this, cx| this.submit_rename(cx), cx);
                             }
                             cx.notify();
                         }

@@ -92,6 +92,7 @@ impl OxydeApp {
             cx,
         );
         self.archive_creation = Some((paths, extension));
+        self.begin_archive_protection(window, cx);
     }
 
     pub(crate) fn default_archive_format(&self) -> &str {
