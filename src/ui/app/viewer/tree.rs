@@ -106,14 +106,6 @@ pub(super) struct ArchiveInfo {
     pub(super) password: bool,
 }
 
-impl ArchiveInfo {
-    /// Share of the extracted size the archive takes, when both are known.
-    pub(super) fn percent(&self) -> Option<u64> {
-        let packed = self.packed?;
-        (self.extracted > 0).then(|| (packed.saturating_mul(100) + self.extracted / 2) / self.extracted)
-    }
-}
-
 /// What a folder holds, known before it is opened.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct Contents {

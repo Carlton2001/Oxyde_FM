@@ -134,15 +134,6 @@ fn archive_levels_include_folders_known_only_from_member_paths() {
 }
 
 #[test]
-fn archive_ratio_needs_both_sizes() {
-    let info = |packed, extracted| ArchiveInfo { extracted, packed, password: false };
-    assert_eq!(info(Some(25), 100).percent(), Some(25));
-    assert_eq!(info(Some(1), 3).percent(), Some(33));
-    assert_eq!(info(None, 100).percent(), None);
-    assert_eq!(info(Some(10), 0).percent(), None);
-}
-
-#[test]
 fn a_new_sort_reorders_every_read_entry_of_complete_levels_only() {
     let entries = || (0..SHOWN_PER_FOLDER + 1).map(|index| entry(&format!("/r/f{index:04}"), false, index as u64)).collect::<Vec<_>>();
     let folder = Folder::new(entries(), true, sort()).resorted((SortColumn::Name, SortDirection::Descending));
