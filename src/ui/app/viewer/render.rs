@@ -258,7 +258,8 @@ impl Viewer {
             .border_color(theme.border)
             .child(self.render_file_title(title, cx))
             .child(self.render_display_options(cx))
-            .when(!self.detached, |bar| {
+            // A folder or archive overview has nothing to gain from its own window.
+            .when(!self.detached && !matches!(self.content, super::content::Content::Tree(_)), |bar| {
                 bar.child(
                     bar_button(
                         "viewer-detach",

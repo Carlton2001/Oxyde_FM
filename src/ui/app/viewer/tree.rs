@@ -6,6 +6,7 @@
 mod loading;
 mod render;
 pub(super) use loading::has_tree;
+pub(super) use render::LIST_PADDING;
 
 use crate::ui::workspace::{SortColumn, SortDirection};
 use gpui::{ListAlignment, ListOffset, ListState, Pixels};
@@ -248,14 +249,15 @@ impl Tree {
     }
 
     /// Rebuilds the rows and keeps the first visible row in place: rows change
-    /// only below the pressed chevron, which is on screen. The list's first item
-    /// is the summary, measured when drawn.
+    /// only below the pressed chevron, which is on screen.
     pub(super) fn refresh(&mut self, row_height: Pixels) {
         let rows = self.flatten();
         let top = self.list.logical_scroll_top();
-        self.list.reset_with_uniform_height(rows.len() + 1, row_height);
-        let item_ix = top.item_ix.min(rows.len());
-        self.list.scroll_to(ListOffset { item_ix, offset_in_item: top.offset_in_item });
+        self.list.reset_with_uniform_height(rows.len(), row_height);
+        if !rows.is_empty() {
+            let item_ix = top.item_ix.min(rows.len() - 1);
+            self.list.scroll_to(ListOffset { item_ix, offset_in_item: top.offset_in_item });
+        }
         self.rows = Arc::new(rows);
     }
 }

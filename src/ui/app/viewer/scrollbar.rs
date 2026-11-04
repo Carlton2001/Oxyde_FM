@@ -40,10 +40,14 @@ impl Viewer {
     pub(super) fn list_scroll_maximum(&self) -> f32 {
         let Some(list) = self.list_state() else { return 0.0 };
         let maximum = list.max_offset_for_scrollbar().y.as_f32();
-        // GPUI's scrollbar maximum excludes list padding. Every Viewer list
-        // has one rem at each end, also reachable when dragging to the bottom.
+        // GPUI's scrollbar maximum excludes list padding, also reachable when
+        // dragging to the bottom: one rem at each end, less for the tree's rows.
+        let padding = match &self.content {
+            Content::Tree(_) => super::tree::LIST_PADDING * 2.0,
+            _ => rems(2.0),
+        };
         if maximum > 0.0 {
-            maximum + crate::ui::scale::rem_pixels(rems(2.0)).as_f32()
+            maximum + crate::ui::scale::rem_pixels(padding).as_f32()
         } else {
             maximum
         }

@@ -12,7 +12,10 @@ use gpui::{prelude::*, *};
 
 pub(super) const ROW_HEIGHT: Rems = crate::ui::style::ROW_HEIGHT;
 const INDENT: Rems = rems(1.25);
-const PADDING: Rems = rems(1.0);
+/// The toolbar's and the pane's side margin, shared by the summary and the rows.
+const PADDING: Rems = rems(0.5);
+/// Space above the first row and below the last, part of the scroll.
+pub(in crate::ui::app::viewer) const LIST_PADDING: Rems = rems(0.5);
 
 fn centered(text: SharedString, cx: &App) -> AnyElement {
     div()
@@ -73,31 +76,38 @@ fn summary(tree: &Tree, folder: &Folder, cx: &App) -> Summary {
     Summary { lines, password }
 }
 
-fn summary_element(summary: &Summary, cx: &App) -> AnyElement {
+/// A band under the toolbar, with its colors, margins and minimum height.
+fn summary_element(summary: &Summary, cx: &App) -> Div {
     let theme = *cx.theme();
+    let item = |text: SharedString| div().flex_none().whitespace_nowrap().child(text);
     div()
+        .flex_none()
         .w_full()
+        .min_h(crate::ui::style::NAV_BAR_HEIGHT)
         .px(PADDING)
-        .pb(rems(0.5))
-        .mb(rems(0.25))
+        .py(rems(0.25))
         .flex()
-        .flex_col()
-        .gap(rems(0.125))
+        .flex_wrap()
+        .items_center()
+        .gap_x(rems(1.0))
+        .gap_y(rems(0.125))
+        .bg(theme.surface)
         .border_b(rems(0.0625))
         .border_color(theme.border)
+        .text_size(rems(0.75))
         .text_color(theme.text_muted)
-        .children(summary.lines.iter().map(|line| div().w_full().truncate().child(line.clone())))
+        .children(summary.lines.iter().cloned().map(item))
         .when_some(summary.password.clone(), |element, text| {
             element.child(
                 div()
+                    .flex_none()
                     .flex()
                     .items_center()
                     .gap(rems(0.375))
                     .child(svg().path("icons/key.svg").size(rems(0.875)).flex_none().text_color(theme.text_muted))
-                    .child(div().min_w_0().truncate().child(text)),
+                    .child(item(text)),
             )
         })
-        .into_any_element()
 }
 
 fn note(depth: usize, text: SharedString, cx: &App) -> Div {
@@ -194,7 +204,7 @@ fn entry_row(
         .pl(PADDING + INDENT * depth as f32)
         .pr(rems(0.5))
         .text_size(rems(0.8125))
-        .hover(move |style| style.bg(theme.hover))
+        .hover(move |style| style.bg(theme.control_hover))
         .on_mouse_down(MouseButton::Left, move |event: &MouseDownEvent, _, cx| {
             if event.click_count == 2 {
                 let path = path.clone();
@@ -224,7 +234,7 @@ fn more_row(index: usize, folder: String, count: usize, exact: bool, depth: usiz
     let text = cx.i18n().text_with_args(if exact { Message::ViewerTreeMore } else { Message::ViewerTreeMoreAtLeast }, &args);
     note(depth, text, cx)
         .id(("viewer-tree-more", index))
-        .hover(move |style| style.bg(theme.hover))
+        .hover(move |style| style.bg(theme.control_hover))
         .on_mouse_down(MouseButton::Left, move |event: &MouseDownEvent, _, cx| {
             if event.click_count == 2 {
                 let folder = folder.clone();
@@ -242,16 +252,13 @@ impl Viewer {
             Some(Level::Failed(Failure::Unreadable)) | None => return centered(cx.i18n().text(Message::ViewerTreeFailed), cx),
             Some(Level::Loading) => return centered(cx.i18n().text(Message::ViewerLoading), cx),
         };
-        let header = summary(tree, folder, cx);
+        let header = summary_element(&summary(tree, folder, cx), cx);
         let rows = tree.rows.clone();
         let viewer = cx.entity().downgrade();
         let system_icons = self.owner.upgrade().is_some_and(|owner| owner.read(cx).use_system_icons());
-        list(tree.list.clone(), move |index, _, cx| {
+        let body = list(tree.list.clone(), move |index, _, cx| {
             let viewer = viewer.clone();
-            let Some(row) = index.checked_sub(1).map(|index| rows.get(index)) else {
-                return summary_element(&header, cx);
-            };
-            match row {
+            match rows.get(index) {
                 Some(Row::Entry { file, depth, chevron, subfolders }) => entry_row(index, file, *depth, *chevron, *subfolders, system_icons, viewer, cx),
                 Some(Row::Loading { depth }) => note(*depth, cx.i18n().text(Message::ViewerTreeLoading), cx).into_any_element(),
                 Some(Row::Failed { depth }) => note(*depth, cx.i18n().text(Message::ViewerTreeFailed), cx).into_any_element(),
@@ -261,7 +268,13 @@ impl Viewer {
             }
         })
         .size_full()
-        .py(rems(1.0))
-        .into_any_element()
+        .py(LIST_PADDING);
+        div()
+            .size_full()
+            .flex()
+            .flex_col()
+            .child(header)
+            .child(div().flex_1().min_h_0().child(body))
+            .into_any_element()
     }
 }
