@@ -485,10 +485,7 @@ fn oxyde_context_menu_items_raw(
         }).icon(IconName::Archive));
 
     if !is_dir
-        && matches!(
-            oxyde_lib::utils::archive::ArchiveFormat::from_path(std::path::Path::new(&path)),
-            Some(format) if format != oxyde_lib::utils::archive::ArchiveFormat::Rar
-        )
+        && oxyde_lib::utils::archive::ArchiveFormat::from_path(std::path::Path::new(&path)).is_some()
     {
         items.push(crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::OpExtractHere).to_string(),

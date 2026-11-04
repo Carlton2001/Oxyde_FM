@@ -52,12 +52,7 @@ pub(crate) fn format(path: &Path) -> io::Result<Format> {
         ArchiveFormat::TarLzma => Format::TarLzma,
         ArchiveFormat::Stream(codec) => Format::Stream(codec),
         ArchiveFormat::Iso => Format::Iso,
-        ArchiveFormat::Rar => {
-            return Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "RAR extraction is not supported",
-            ))
-        }
+        ArchiveFormat::Rar => Format::Rar,
     })
 }
 pub(crate) fn stream_name(path: &Path, format: Format) -> io::Result<Option<String>> {
@@ -171,7 +166,7 @@ pub(crate) fn decode(
         source_size: size,
         selected: selected.map(str::to_owned),
         stream_name: stream_name(path, format)?,
-        password: matches!(format, Format::Zip | Format::SevenZip)
+        password: matches!(format, Format::Zip | Format::SevenZip | Format::Rar)
             .then(|| crate::utils::archive_password::for_archive(path))
             .flatten(),
         limits,

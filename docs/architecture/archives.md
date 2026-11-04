@@ -19,7 +19,7 @@ Local `cfg(test)` variants only serve unit tests, which do not prove the product
 
 ## Formats and mutations
 
-ZIP, 7z, TAR, TAR.ZST, TAR.GZ, TAR.XZ, TAR.BZ2 and TAR.LZ4 can be created and modified through a workspace. TAR.LZMA and the other browsable formats stay read/extract only. `ArchiveFormat::from_path` checks compound TAR suffixes (`.tar.gz`, `.tgz`, `.tlz`…) before the last extension; the codecs live in `utils/archive_codec.rs`.
+ZIP, 7z, TAR, TAR.ZST, TAR.GZ, TAR.XZ, TAR.BZ2 and TAR.LZ4 can be created and modified through a workspace. TAR.LZMA, RAR and the other browsable formats stay read/extract only. `ArchiveFormat::from_path` checks compound TAR suffixes (`.tar.gz`, `.tgz`, `.tlz`…) before the last extension; the codecs live in `utils/archive_codec.rs`.
 
 A single compressed file (`.gz`, `.xz`, `.bz2`, `.zst`, `.lz4`, `.lzma`) is browsed as an archive holding one member named after the file without its suffix. Its size is only known by decoding: listing decodes it under the listing budget, and the worker decodes it twice, once to declare size and hash, then to stream the content checked against that hash. The parent passes the member name in `Operation::Decode::stream_name`, because the worker never sees the path; the Linux listing sandbox names the document `source.gz`, so the parent restores the name. Extraction decodes into a hidden private folder of the destination, then renames the member beside the archive without replacing anything (`notes (1).txt` on conflict) and removes the folder. Decoders accept concatenated members, refuse an empty or foreign prefix, and cap LZMA-alone dictionaries at 1 GiB. These files are never created or modified. ISO and IMG ISO9660 are virtual and read-only; on Windows, unrecognized images and VHD/VHDX go through native mounting via `Platform`.
 
@@ -50,16 +50,20 @@ For a group, prepare all archives then publish while keeping originals until com
 
 A move removes only sources actually copied; skipped conflicts stay. Archive mutations add no filesystem Undo/Redo. An external open uses a temporary copy, with no automatic reintegration of edits.
 
+### RAR
+
+RAR 1.3 to 7 is read by `rars` (pure Rust, Apache-2.0), compiled without its writer, recovery or Rayon; tests alone enable its writer to build fixtures. `commands/archive_rar.rs` serves listing, search index, password check and broker decoding, only inside the confined workers: the crate is young and fast-moving. Its options bound header count (twice the entry limit plus 64) and bytes (64 MiB), member and total output (the byte limit), reader workspace (512 MiB) and RAR 5/7 dictionaries (1 GiB). Links (redirections) are refused, as are members split across volumes: only single-volume archives open. A solid archive decodes the members before a selected one into a sink. Oxyde never creates or modifies a RAR.
+
 ## Encrypted archives
 
-ZIP (ZipCrypto, AES) and 7z encrypted with a password are read, browsed, opened and extracted. Oxyde creates them in AES-256 (ZIP entries with WinZip AES, 7z blocks and header), and a rebuild re-encrypts with the archive's password. `utils/archive_password.rs` holds the passwords:
+ZIP (ZipCrypto, AES), 7z and RAR encrypted with a password are read, browsed, opened and extracted. Oxyde creates them in AES-256 (ZIP entries with WinZip AES, 7z blocks and header), and a rebuild re-encrypts with the archive's password. `utils/archive_password.rs` holds the passwords:
 
 - The parent remembers each password in memory for its archive path until Oxyde exits, never in configuration, workspace or logs. `ArchiveSecret` hides its value from `Debug` and clears its memory on drop.
 - A listing worker receives a `u16` length and the UTF-8 password (1024 bytes at most, empty without one) on its standard input right after the start gate, never in its arguments. Decode receives it in `Operation::Decode::password`, accepted for ZIP and 7z only.
 - `Operation::Encode::password` encrypts a ZIP or 7z. A new archive takes the password its compression dialog remembered for its path (`ui/app/archive_protection.rs`: no password, or password and confirmation, ZIP and 7z only); compressing without one forgets any password left for that path. A rebuild runs at a temporary path, so the workspace passes the original's password in `FileOperation::archive_password`. An encrypted ZIP is written on one thread: its parallel jobs copy compressed data raw, which the writer cannot encrypt. Folders stay unencrypted.
-- A refusal is the typed `ArchivePasswordFailure` (`Required`, `Wrong`), carried by `FailureKind::PasswordRequired`/`PasswordWrong` or by the listing's error text. 7z with encrypted headers refuses even its listing; ZIP and 7z with clear headers list without a password. A ZipCrypto password passing its one-byte check but failing the CRC counts as wrong.
+- A refusal is the typed `ArchivePasswordFailure` (`Required`, `Wrong`), carried by `FailureKind::PasswordRequired`/`PasswordWrong` or by the listing's error text. 7z and RAR with encrypted headers refuse even their listing; ZIP and 7z with clear headers list without a password. A ZipCrypto password passing its one-byte check but failing the CRC counts as wrong.
 - The interface (`ui/app/archive_password.rs`) asks for the password when a listing, an opening or an extraction (or a copy out of an archive) is refused. Before closing, the dialog checks it in the metadata worker (`verify` mode, `commands/archive_verify.rs`: the smallest encrypted member decoded up to 1 MiB); a wrong one keeps the dialog open, shakes and empties the field. The refused action then runs again; cancelling leaves the translated error.
-- A 7z without a remembered password is listed before the tab moves into it, so a password its header needs is asked over the current folder, not an empty pane.
+- A 7z or RAR without a remembered password is listed before the tab moves into it, so a password its header needs is asked over the current folder, not an empty pane.
 
 Known gap: a file opened from an encrypted archive stays decrypted in the open cache under the cache's usual rules (up to 7 days on Linux), not until exit.
 

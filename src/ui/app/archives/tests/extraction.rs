@@ -53,12 +53,12 @@ fn multiple_zip_archives_each_get_their_own_extraction_job() {
 }
 
 #[test]
-fn mixed_selection_only_extracts_supported_archives_in_their_own_directories() {
+fn mixed_selection_extracts_archives_rar_included_in_their_own_directories() {
     let jobs = extraction_jobs(vec![
         real("first/data.zip"),
         real("second/backup.tar.gz"),
         real("first/readme.txt"),
-        real("first/unsupported.rar"),
+        real("first/photos.rar"),
         member("first/container.zip/nested.zip", "first/container.zip"),
     ]);
     assert_eq!(
@@ -69,6 +69,7 @@ fn mixed_selection_only_extracts_supported_archives_in_their_own_directories() {
                 PathBuf::from("second/backup.tar.gz"),
                 PathBuf::from("second/backup")
             ),
+            (PathBuf::from("first/photos.rar"), PathBuf::from("first/photos")),
         ]
     );
 }

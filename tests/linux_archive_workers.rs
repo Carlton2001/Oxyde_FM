@@ -388,3 +388,58 @@ fn protected_archives_are_created_and_rebuilt_encrypted() {
         }
     });
 }
+
+fn rar(password: Option<&str>, headers: bool, solid: bool) -> Vec<u8> {
+    let mut builder = rars::Builder::new(rars::ArchiveVersion::Rar50)
+        .password(password.map(|value| value.as_bytes().to_vec()))
+        .header_encryption(headers)
+        .solid(solid);
+    builder.add_directory(b"docs".to_vec(), None, None).unwrap();
+    builder.add_bytes(b"docs/note.txt".to_vec(), b"secret payload".to_vec(), None, None).unwrap();
+    builder.add_bytes(b"big.bin".to_vec(), (0..400_000u32).map(|value| (value % 253) as u8).collect(), None, None).unwrap();
+    builder.add_bytes(b"last.txt".to_vec(), b"tail".to_vec(), None, None).unwrap();
+    builder.to_bytes().unwrap()
+}
+
+/// RAR is read through `rars` in the worker: extraction, a selected file, and passwords.
+#[test]
+fn rar_archives_extract_and_open_with_or_without_password() {
+    use oxyde_lib::models::error::ArchivePasswordFailure;
+    use oxyde_lib::utils::archive_password::{forget, remember, ArchiveSecret};
+    confined(|| {
+        let temp = tempfile::tempdir().unwrap();
+        let base = temp.path().join("cache");
+        fs::create_dir(&base).unwrap();
+        let cases = [
+            ("plain.rar", None, false, false),
+            ("solid.rar", None, false, true),
+            ("content.rar", Some("correct horse"), false, true),
+            ("headers.rar", Some("correct horse"), true, false),
+        ];
+        for (name, password, headers, solid) in cases {
+            let archive = temp.path().join(name);
+            fs::write(&archive, rar(password, headers, solid)).unwrap();
+            let target = temp.path().join(format!("out-{name}"));
+            let extract = || FileOperationManager::perform_extract(&operation(FileOpType::Extract), vec![archive.clone()], Some(target.clone()));
+            if password.is_some() {
+                let refusal = ArchivePasswordFailure::from_message(&extract().unwrap_err());
+                assert_eq!(refusal, Some(ArchivePasswordFailure::Required), "{name}");
+                assert!(!target.join("last.txt").exists(), "{name}");
+                remember(&archive, ArchiveSecret::new("wrong".into()).unwrap());
+                assert_eq!(ArchivePasswordFailure::from_message(&extract().unwrap_err()), Some(ArchivePasswordFailure::Wrong), "{name}");
+                remember(&archive, ArchiveSecret::new("correct horse".into()).unwrap());
+            }
+            extract().unwrap();
+            assert_eq!(fs::read(target.join("docs/note.txt")).unwrap(), b"secret payload", "{name}");
+            assert_eq!(fs::read(target.join("last.txt")).unwrap(), b"tail", "{name}");
+            assert_eq!(fs::read(target.join("big.bin")).unwrap().len(), 400_000, "{name}");
+            oxyde_lib::commands::archive::with_archive_cache_base_for_tests(&base, || {
+                for (member, expected) in [("docs/note.txt", &b"secret payload"[..]), ("last.txt", &b"tail"[..])] {
+                    let cached = oxyde_lib::commands::archive::prepare_archive_file_for_open(&archive.join(member)).unwrap();
+                    assert_eq!(fs::read(cached).unwrap(), expected, "{name} {member}");
+                }
+            });
+            forget(&archive);
+        }
+    });
+}

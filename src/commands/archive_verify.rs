@@ -20,6 +20,7 @@ pub(crate) fn verify_file(path: &Path, file: File) -> Result<(), CommandError> {
     let refusal = match ArchiveFormat::from_path(path) {
         Some(ArchiveFormat::Zip) => zip(file, secret.as_ref()),
         Some(ArchiveFormat::SevenZip) => seven(file, secret.as_ref()),
+        Some(ArchiveFormat::Rar) => super::archive_rar::verify(path, file, SAMPLE),
         _ => None,
     };
     refusal.map_or(Ok(()), |failure| Err(failure.into()))

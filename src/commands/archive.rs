@@ -165,13 +165,11 @@ pub(crate) fn list_archive_contents_local(
 
     match format {
         ArchiveFormat::SevenZip => list_seven_zip(path, &internal_path),
-        format if format == ArchiveFormat::Zip || matches!(format, ArchiveFormat::Stream(_)) || format.is_tar() => {
+        format if matches!(format, ArchiveFormat::Zip | ArchiveFormat::Rar | ArchiveFormat::Stream(_)) || format.is_tar() => {
             list_indexed_metadata(path, &internal_path)
         }
         ArchiveFormat::Iso => list_iso(path, &internal_path),
-        _ => Err(CommandError::ArchiveError(
-            "Rar navigation not supported yet. Please extract it first.".to_string(),
-        )),
+        _ => Err(CommandError::ArchiveError("Unsupported archive format".to_string())),
     }
 }
 
@@ -193,7 +191,7 @@ pub(crate) fn index_archive_contents(path: &Path, checkpoint: &dyn Fn() -> io::R
 
 pub(crate) fn index_archive_contents_local(path: &Path, checkpoint: &dyn Fn() -> io::Result<()>) -> Result<Vec<FileEntry>, CommandError> {
     match ArchiveFormat::from_path(path) {
-        Some(format) if format == ArchiveFormat::Zip || matches!(format, ArchiveFormat::Stream(_)) || format.is_tar() => super::archive_metadata::indexed_files(path, checkpoint),
+        Some(format) if matches!(format, ArchiveFormat::Zip | ArchiveFormat::Rar | ArchiveFormat::Stream(_)) || format.is_tar() => super::archive_metadata::indexed_files(path, checkpoint),
         Some(ArchiveFormat::SevenZip) => super::archive_seven_open::indexed_files(path, checkpoint),
         Some(ArchiveFormat::Iso) => super::archive_iso_open::indexed_files(path, checkpoint),
         _ => Err(CommandError::ArchiveError("Unsupported archive search format".into())),

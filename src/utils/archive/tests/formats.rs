@@ -40,7 +40,8 @@ fn only_tar_codecs_with_an_encoder_are_writable() {
         assert!(!writable_format(Path::new(name)), "{name}");
     }
     assert!(navigable_format(Path::new("notes.txt.gz")));
-    assert!(!navigable_format(Path::new("a.rar")));
+    // RAR is browsed and extracted, never written.
+    assert!(navigable_format(Path::new("a.rar")));
 }
 
 #[test]

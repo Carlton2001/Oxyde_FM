@@ -38,11 +38,11 @@ pub(crate) fn password_failure(detail: &str) -> Option<ArchivePasswordFailure> {
     ArchivePasswordFailure::from_message(detail)
 }
 
-/// A 7z may encrypt its header, hiding even its names: before showing it, its listing
+/// A 7z or a RAR may encrypt its headers, hiding even its names: before showing it, its listing
 /// is tried, so the password is asked over the current folder rather than an empty one.
 pub(crate) fn locks_its_listing(path: &str) -> bool {
     let path = Path::new(path);
-    oxyde_lib::utils::archive::ArchiveFormat::from_path(path) == Some(oxyde_lib::utils::archive::ArchiveFormat::SevenZip)
+    matches!(oxyde_lib::utils::archive::ArchiveFormat::from_path(path), Some(oxyde_lib::utils::archive::ArchiveFormat::SevenZip | oxyde_lib::utils::archive::ArchiveFormat::Rar))
         && archive_password::for_archive(path).is_none()
 }
 

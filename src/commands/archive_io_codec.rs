@@ -29,6 +29,9 @@ fn notify<T: Exchange>(connection: &Connection<T>, frame: Frame) -> io::Result<(
     }
     Ok(())
 }
+pub(super) fn notify_frame<T: Exchange>(connection: &Connection<T>, frame: Frame) -> io::Result<()> {
+    notify(connection, frame)
+}
 fn archive_limits(limits: Limits) -> io::Result<ArchiveLimits> {
     Ok(ArchiveLimits {
         max_entries: limits.entries.try_into().map_err(|_| invalid())?,
@@ -214,7 +217,7 @@ pub fn run<T: Exchange + Send + 'static>(
     Ok(())
 }
 
-fn decode<T: Exchange + 'static>(
+fn decode<T: Exchange + Send + 'static>(
     connection: &Connection<T>,
     format: Format,
     size: u64,
@@ -292,6 +295,7 @@ fn decode<T: Exchange + 'static>(
         Format::SevenZip => {
             decode_seven(connection, size, requested.as_deref(), password, budget, checkpoint)?
         }
+        Format::Rar => super::archive_rar::decode(connection, size, requested.as_deref(), password, budget, checkpoint)?,
         Format::Stream(_) => return Err(invalid().into()),
         Format::Tar
         | Format::TarGz

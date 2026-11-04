@@ -118,6 +118,9 @@ pub(super) fn indexed_file(
     let budget = ArchiveBudget::new(limits);
     let archive_origin = std::sync::Arc::new(path.to_path_buf());
     budget.checkpoint(checkpoint)?;
+    if ArchiveFormat::from_path(path) == Some(ArchiveFormat::Rar) {
+        return super::archive_rar::indexed_file(path, file, limits, checkpoint);
+    }
     let format = ArchiveFormat::from_path(path)
         .filter(|format| {
             matches!(format, ArchiveFormat::Zip | ArchiveFormat::Stream(_)) || format.is_tar()

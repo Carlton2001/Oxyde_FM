@@ -118,6 +118,7 @@ dependencies = [
  "cipher 0.5.2",
  "cpubits",
  "cpufeatures 0.3.1",
+ "zeroize",
 ]
 
 [[package]]
@@ -4471,6 +4472,7 @@ dependencies = [
  "once_cell",
  "percent-encoding",
  "pulldown-cmark",
+ "rars",
  "raw-window-handle",
  "rayon",
  "regex",
@@ -5019,6 +5021,22 @@ name = "rangemap"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a611d15b50743feb4c76b7d03edcb0e64f399c26961e4efe6975bc398be6aa3d"
+
+[[package]]
+name = "rars"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8cfe43d4831a02f45c89f11a84fb32b45e818e8914396038cf3494501041f95"
+dependencies = [
+ "aes 0.9.3",
+ "aho-corasick",
+ "crc32fast",
+ "getrandom 0.4.3",
+ "hmac 0.13.0",
+ "sha1",
+ "sha2 0.11.0",
+ "zeroize",
+]
 
 [[package]]
 name = "rav1e"

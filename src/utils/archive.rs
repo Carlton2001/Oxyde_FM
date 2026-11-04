@@ -118,7 +118,7 @@ pub fn resolve_virtual_path(path: &Path) -> Option<(PathBuf, String)> {
 }
 
 pub(crate) fn navigable_format(path: &Path) -> bool {
-    matches!(ArchiveFormat::from_path(path), Some(format) if format != ArchiveFormat::Rar)
+    ArchiveFormat::from_path(path).is_some()
 }
 
 pub(crate) fn writable_format(path: &Path) -> bool {

@@ -21,6 +21,7 @@ mod archive_iso_open;
 mod archive_metadata;
 mod archive_seven_open;
 pub(crate) mod archive_verify;
+mod archive_rar;
 #[cfg(test)]
 mod archive_tar_open;
 pub mod duplicates;

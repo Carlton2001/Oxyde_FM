@@ -36,3 +36,24 @@ fn encrypted_seven_zip_headers_list_with_the_remembered_password() {
     assert!(all.iter().any(|entry| Path::new(&entry.path) == archive.join("docs/note.txt")));
     forget(&archive);
 }
+
+#[test]
+fn rar_lists_in_the_worker_and_its_encrypted_headers_need_the_password() {
+    let directory = tempfile::tempdir().unwrap();
+    let archive = directory.path().join("locked.rar");
+    let mut builder = rars::Builder::new(rars::ArchiveVersion::Rar50)
+        .password(Some(b"correct horse".to_vec()))
+        .header_encryption(true);
+    builder.add_bytes(b"docs/note.txt".to_vec(), b"safe".to_vec(), None, None).unwrap();
+    std::fs::write(&archive, builder.to_bytes().unwrap()).unwrap();
+    assert_eq!(refusal(list_in(&worker(), &archive, "", DEADLINE)), Some(ArchivePasswordFailure::Required));
+    remember(&archive, ArchiveSecret::new("wrong".into()).unwrap());
+    assert_eq!(refusal(list_in(&worker(), &archive, "", DEADLINE)), Some(ArchivePasswordFailure::Wrong));
+    assert!(verify_in(&worker(), &archive, DEADLINE).is_err());
+    remember(&archive, ArchiveSecret::new("correct horse".into()).unwrap());
+    assert_eq!(list_in(&worker(), &archive, "docs", DEADLINE).unwrap()[0].name, "note.txt");
+    assert!(verify_in(&worker(), &archive, DEADLINE).is_ok());
+    let all = index_in(&worker(), &archive, DEADLINE, &|| Ok(())).unwrap();
+    assert!(all.iter().any(|entry| Path::new(&entry.path) == archive.join("docs/note.txt")));
+    forget(&archive);
+}

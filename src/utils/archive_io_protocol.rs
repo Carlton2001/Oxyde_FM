@@ -69,6 +69,8 @@ pub enum Format {
     TarLzma,
     Stream(super::archive_codec::Codec),
     Iso,
+    /// Read only: never a valid encoding target.
+    Rar,
 }
 
 impl Format {
@@ -319,7 +321,7 @@ impl Message {
                     } => {
                         if let Some(password) = password {
                             password.validate()?;
-                            if !matches!(format, Format::Zip | Format::SevenZip) {
+                            if !matches!(format, Format::Zip | Format::SevenZip | Format::Rar) {
                                 return Err(invalid());
                             }
                         }
