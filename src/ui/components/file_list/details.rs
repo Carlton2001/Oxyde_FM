@@ -174,6 +174,9 @@ pub(super) fn render_details_file_list(
                 .right_0()
                 .h(crate::ui::style::COLUMN_HEADER_HEIGHT)
                 .bg(theme.header)
+                // The full-width strip owns the separator: the header cells only span the columns.
+                .border_b(rems(0.0625))
+                .border_color(theme.border)
         )
         // 2. Contenu défilant (Headers + List)
         .child(

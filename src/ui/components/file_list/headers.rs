@@ -25,7 +25,7 @@ pub(super) fn render_headers(
     let network_panel = tab.path == "__network_vincinity__";
     let current_dir = tab.sort_direction;
     if network_panel {
-        return div().flex().items_center().h(crate::ui::style::COLUMN_HEADER_HEIGHT).border_b(rems(0.0625)).border_color(theme.border).text_color(theme.text_muted).text_size(rems(0.75)).font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT).flex_none()
+        return div().flex().items_center().h(crate::ui::style::COLUMN_HEADER_HEIGHT).text_color(theme.text_muted).text_size(rems(0.75)).font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT).flex_none()
             .child(header_cell(i18n.text(Message::ColumnName).as_ref(), name_w, current_col == SortColumn::Name, current_dir, false, theme, handle.clone(), format!("network-name-{}", pane_id), {
                 let h = handle.clone(); let pid = pane_id.clone(); move |_, _, cx| { h.update(cx, |this, cx| this.toggle_sort(&pid, SortColumn::Name, cx)); }
             }))
@@ -40,7 +40,7 @@ pub(super) fn render_headers(
         .flex()
         .items_center()
         .h(crate::ui::style::COLUMN_HEADER_HEIGHT)
-        .border_b(rems(0.0625)).border_color(theme.border).text_color(theme.text_muted)
+        .text_color(theme.text_muted)
         .text_size(rems(0.75)).font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
         .flex_none()
         .child(

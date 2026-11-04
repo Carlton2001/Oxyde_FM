@@ -257,5 +257,12 @@ pub(crate) fn render_scrollbar_on_track<T: ScrollbarState + 'static>(
             }
         });
 
-    track_container.into_any_element()
+    // While the thumb is dragged, nothing else in the window reacts to the pointer passing over it.
+    // Every owner tracks the drag with window-level handlers, which this hitbox does not intercept.
+    track_container
+        .when(is_dragging, |track| track.child(deferred(canvas(
+            |_, window, _| window.insert_hitbox(Bounds::new(Point::default(), window.viewport_size()), HitboxBehavior::BlockMouse),
+            |_, _, _, _| {},
+        ).absolute().size_0()).with_priority(100)))
+        .into_any_element()
 }
