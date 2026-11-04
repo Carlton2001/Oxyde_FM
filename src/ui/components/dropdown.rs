@@ -32,6 +32,8 @@ pub enum IconName {
     Checkbox(bool),
     FolderOpen,
     NativeFolder(String),
+    /// An image file, such as an application's icon; the window icon when missing.
+    Image(Option<std::path::PathBuf>),
     HardDrive,
     Copy,
     Undo,
@@ -428,6 +430,10 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                                 rems(1.0), &theme, true, false,
                                                             )).when(item.is_dimmed, |d| d.opacity(0.5));
                                                         }
+                                                        if let IconName::Image(Some(path)) = icon {
+                                                            return d.child(img(path.clone()).size_full().object_fit(ObjectFit::Contain))
+                                                                .when(item.is_dimmed, |d| d.opacity(0.5));
+                                                        }
                                                         if let IconName::Checkbox(checked) = icon {
                                                             return d.child(crate::ui::elements::checkbox::checkbox(theme, *checked, false)).when(item.is_dimmed, |d| d.opacity(0.5));
                                                         }
@@ -447,6 +453,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                                         "icons/square.svg"
                                                                     }
                                                                     IconName::NativeFolder(_) => "icons/folder.svg",
+                                                                    IconName::Image(_) => "icons/app-window.svg",
                                                                     IconName::FolderOpen => {
                                                                         "icons/folder-open.svg"
                                                                     }

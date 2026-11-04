@@ -663,6 +663,16 @@ pub trait Platform: Send + Sync {
 
     /// Ouvre un fichier ou dossier avec l'application par défaut de l'OS.
     fn open_item(&self, path: &str) -> Result<(), String>;
+    /// Whether Oxyde offers its own « Open With » for files, rather than the system menu's.
+    fn offers_open_with(&self) -> bool { false }
+    /// Applications able to open every one of `paths`, the default first.
+    fn open_with_choices(&self, _paths: &[String]) -> Result<Vec<crate::models::ApplicationChoice>, String> {
+        Err("Open With is not available on this system".into())
+    }
+    /// Opens `paths` with the application `id`; `remember` makes it their types' default.
+    fn open_with(&self, _id: &str, _paths: &[String], _remember: bool) -> Result<(), String> {
+        Err("Open With is not available on this system".into())
+    }
     /// Whether this system offers to open a folder in a terminal.
     fn offers_terminal(&self) -> bool { false }
     fn open_terminal(&self, _path: &str) -> Result<(), String> {

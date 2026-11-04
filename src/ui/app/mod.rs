@@ -49,6 +49,7 @@ use toasts::{Toast, ToastKind};
 pub(crate) mod network;
 pub(crate) mod remote;
 pub(crate) mod archive_password;
+pub(crate) mod open_with;
 pub(crate) mod archive_protection;
 pub mod selection;
 mod item_pointer;
@@ -302,6 +303,7 @@ pub struct OxydeApp {
     pub(crate) network_dialog: Option<network::NetworkDialog>,
     pub(crate) remote_login: Option<remote::RemoteLogin>,
     pub(crate) archive_password: Option<archive_password::ArchivePasswordPrompt>,
+    pub(crate) open_with: Option<open_with::OpenWithPrompt>,
     /// Servers and network lists connected this session, listed by URI.
     pub(super) browsable_remotes: std::collections::HashSet<String>,
     pub(crate) network_dialog_revision: u64,
@@ -497,6 +499,7 @@ impl OxydeApp {
             network_dialog: None,
             remote_login: None,
             archive_password: None,
+            open_with: None,
             browsable_remotes: std::collections::HashSet::new(),
             trash_settings: None,
             dialog_windows_open: [false; dialog_windows::DIALOG_KINDS],

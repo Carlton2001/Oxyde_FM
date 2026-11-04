@@ -9,6 +9,7 @@ pub(crate) mod network;
 pub(crate) mod network_dialog;
 pub(crate) mod remote_login_dialog;
 pub(crate) mod archive_password_dialog;
+pub(crate) mod open_with_dialog;
 pub mod operations;
 pub mod rename_dialog;
 pub mod scrollbar;
@@ -281,6 +282,32 @@ fn oxyde_context_menu_items_raw(
         }),
         on_hover: None,
     });
+
+    if crate::ui::app::open_with::offers(&path, is_dir) && !entry.is_navigable_archive() {
+        let (menu, prompt) = (h_app.clone(), h_app.clone());
+        let (hovered, clicked) = (path.clone(), path.clone());
+        items.push(crate::ui::components::dropdown::DropdownItem {
+            label: i18n.text(Message::OpenWith).to_string(),
+            icon: Some(IconName::Image(None)),
+            badge: None,
+            stay_open: true,
+            has_submenu: true,
+            is_dimmed: false,
+            on_click: std::rc::Rc::new(move |_, app| {
+                prompt.update(app, |this, cx| {
+                    this.context_menus.clear();
+                    let paths = this.open_with_paths(&clicked);
+                    this.show_open_with_prompt(paths, cx);
+                });
+            }),
+            on_hover: Some(std::rc::Rc::new(move |position, open_left, app| {
+                menu.update(app, |this, cx| {
+                    let paths = this.open_with_paths(&hovered);
+                    this.show_open_with_menu(paths, position, open_left, cx);
+                });
+            })),
+        });
+    }
 
     if is_dir
         || entry.is_navigable_archive()

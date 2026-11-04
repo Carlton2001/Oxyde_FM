@@ -772,6 +772,16 @@ impl Platform for LinuxPlatform {
         }
     }
 
+    fn offers_open_with(&self) -> bool { cfg!(target_os = "linux") }
+    #[cfg(target_os = "linux")]
+    fn open_with_choices(&self, paths: &[String]) -> Result<Vec<crate::models::ApplicationChoice>, String> {
+        super::linux_gio::applications::choices(paths)
+    }
+    #[cfg(target_os = "linux")]
+    fn open_with(&self, id: &str, paths: &[String], remember: bool) -> Result<(), String> {
+        super::linux_gio::applications::launch(id, paths, remember)
+    }
+
     fn offers_terminal(&self) -> bool { true }
     fn open_terminal(&self, path: &str) -> Result<(), String> {
         super::linux_terminal::open(std::path::Path::new(path))

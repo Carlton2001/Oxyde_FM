@@ -3,6 +3,14 @@ use super::super::linux_library::library;
 pub(super) use super::super::linux_library::{GError, Object};
 use std::ffi::{c_char, c_int, c_uint, c_ulong, c_void};
 
+/// A GLib doubly linked list cell.
+#[repr(C)]
+pub(super) struct GList {
+    pub data: *mut c_void,
+    pub next: *mut GList,
+    pub prev: *mut GList,
+}
+
 pub(super) type ReadyCallback = unsafe extern "C" fn(source: Object, result: Object, data: *mut c_void);
 
 library! { Gio from "libgio-2.0.so.0" {
@@ -42,6 +50,22 @@ library! { Gio from "libgio-2.0.so.0" {
     g_mount_operation_set_anonymous: fn(Object, c_int);
     g_mount_operation_set_password_save: fn(Object, c_uint);
     g_mount_operation_reply: fn(Object, c_uint);
+    g_list_free: fn(*mut GList);
+    g_app_info_get_all: fn() -> *mut GList;
+    g_app_info_get_all_for_type: fn(*const c_char) -> *mut GList;
+    g_app_info_get_recommended_for_type: fn(*const c_char) -> *mut GList;
+    g_app_info_get_default_for_type: fn(*const c_char, c_int) -> Object;
+    g_app_info_get_id: fn(Object) -> *const c_char;
+    g_app_info_get_display_name: fn(Object) -> *const c_char;
+    g_app_info_get_icon: fn(Object) -> Object;
+    g_app_info_should_show: fn(Object) -> c_int;
+    g_app_info_launch_uris: fn(Object, *mut GList, Object, *mut *mut GError) -> c_int;
+    g_app_info_set_as_default_for_type: fn(Object, *const c_char, *mut *mut GError) -> c_int;
+    g_app_info_set_as_last_used_for_type: fn(Object, *const c_char, *mut *mut GError) -> c_int;
+    g_desktop_app_info_new: fn(*const c_char) -> Object;
+    g_app_launch_context_new: fn() -> Object;
+    g_app_launch_context_unsetenv: fn(Object, *const c_char);
+    g_icon_to_string: fn(Object) -> *mut c_char;
 }}
 
 pub(super) fn gio() -> Option<&'static Gio> {

@@ -1,3 +1,4 @@
+pub mod application;
 pub mod error;
 pub mod file_entry;
 pub mod history;
@@ -5,6 +6,7 @@ pub mod permissions;
 pub mod preferences;
 pub mod transaction;
 
+pub use application::{ApplicationChoice, ApplicationFit};
 pub use error::CommandError;
 
 pub use config::{AppConfig, ConfigManager};

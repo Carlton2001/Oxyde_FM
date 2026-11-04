@@ -547,6 +547,16 @@ archive-password-confirm = Confirmar
 archive-password-empty = Introduzca una contraseña.
 archive-password-mismatch = Las contraseñas no coinciden.
 archive-password-too-long = La contraseña es demasiado larga.
+open-with = Abrir con
+open-with-other = Otra aplicación…
+open-with-prompt = Elija una aplicación para abrir «{ $name }».
+open-with-prompt-many = Elija una aplicación para abrir { $count } archivos.
+open-with-always = Usar siempre para este tipo de archivo
+open-with-recommended = Aplicaciones recomendadas
+open-with-related = Aplicaciones relacionadas
+open-with-other-applications = Otras aplicaciones
+open-with-none = Ninguna aplicación puede abrir estos archivos.
+open-with-loading = Cargando aplicaciones…
 
 drive-eject-failed = No se pudo expulsar la unidad. Puede que otra aplicación la esté usando. { $detail }
 drive-unmount-failed = No se pudo desmontar el volumen. Puede que otra aplicación lo esté usando. { $detail }

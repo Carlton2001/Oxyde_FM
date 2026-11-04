@@ -69,6 +69,11 @@ pub(super) fn prefer_display_gpu() -> Option<String> {
     Some(globs)
 }
 
+/// The variable `leave_out_of` removes, when Oxyde set it for itself.
+pub(super) fn own_variable() -> Option<&'static str> {
+    DISABLED_HERE.load(Ordering::Relaxed).then_some(DISABLED)
+}
+
 /// Applications Oxyde opens choose their GPU for themselves, as if opened by the desktop.
 pub(super) fn leave_out_of(command: &mut Command) {
     if DISABLED_HERE.load(Ordering::Relaxed) {

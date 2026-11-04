@@ -8,6 +8,8 @@ use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::{Path, PathBuf};
 
 mod library;
+#[cfg(target_os = "linux")]
+pub(super) mod applications;
 
 // GIOErrorEnum.
 const ALREADY_MOUNTED: i32 = 17;

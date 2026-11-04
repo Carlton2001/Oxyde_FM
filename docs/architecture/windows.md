@@ -11,7 +11,7 @@ On Windows, menus and tooltips use owned GPUI windows; a native failure must rea
 | Interactive menu | `components::popup` with factory, validity condition and close callback |
 | Path suggestions | `popup::show_passive`; focus and keyboard stay in the field |
 | Secondary window | `components::tool_window`; business state in the calling view |
-| Modal prompt (rename, compression, network drive, confirmations, failure notices) | Fixed `DialogKind` from `app/dialog_windows`; `Modal::standalone`, never an overlay in the main window |
+| Modal prompt (rename, compression, network drive, Open With, confirmations, failure notices) | Fixed `DialogKind` from `app/dialog_windows`; `Modal::standalone`, never an overlay in the main window |
 
 An identifier reuses the existing window; a pending request is replaced by the latest. The factory rebuilds current state, with no frozen business copy. On close, read the current spec rather than a callback captured at first opening.
 
