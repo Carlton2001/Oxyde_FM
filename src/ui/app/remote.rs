@@ -4,6 +4,8 @@
 use super::*;
 use crate::ui::components::input::{TextInput, TextInputOptions};
 use oxyde_lib::platform::{PasswordSave, RemoteAnswer, RemoteError, RemoteLocation, RemotePrompt};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 
 pub(crate) struct RemoteLogin {
@@ -31,9 +33,14 @@ impl OxydeApp {
     /// Connects before listing; a share then opens at its local path.
     pub(super) fn connect_remote_tab(&mut self, tab_id: String, request_id: u64, uri: String, cx: &mut Context<Self>) {
         let Some(handle) = self.handle.clone() else { return };
+        let cancel = Arc::new(AtomicBool::new(false));
+        self.remote_connections.insert(tab_id.clone(), (request_id, cancel.clone()));
         cx.spawn(async move |_, cx| {
-            let result = connect(&handle, cx, uri.clone()).await;
+            let result = connect(&handle, cx, uri.clone(), cancel).await;
             let _ = handle.update(cx, |this, cx| {
+                if this.remote_connections.get(&tab_id).is_some_and(|(request, _)| *request == request_id) {
+                    this.remote_connections.remove(&tab_id);
+                }
                 if this.pending_file_requests.get(&tab_id) != Some(&request_id) {
                     return;
                 }
@@ -82,12 +89,59 @@ impl OxydeApp {
         cx.notify();
     }
 
+    /// Drops a recent server, then lists the network again without it.
+    pub(crate) fn forget_recent_server(&mut self, uri: String, cx: &mut Context<Self>) {
+        self.context_menus.clear();
+        cx.spawn(async move |this, cx| {
+            let _ = tokio::task::spawn_blocking(move || oxyde_lib::platform::platform().forget_recent_server(&uri)).await;
+            let _ = this.update(cx, |this, cx| {
+                let mut tabs = Vec::new();
+                this.state.layout.visit_panes_mut(&mut |pane| {
+                    for (index, tab) in pane.tabs.iter().enumerate() {
+                        if tab.path == "__network_vincinity__" {
+                            tabs.push((pane.id.clone(), index));
+                        }
+                    }
+                });
+                for (pane_id, index) in tabs {
+                    this.refresh_tab_files(&pane_id, index, "__network_vincinity__".into(), cx);
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// The tab went elsewhere: its connection in progress gives up.
+    pub(super) fn cancel_remote_connection(&mut self, tab_id: &str) {
+        if let Some((_, cancel)) = self.remote_connections.remove(tab_id) {
+            cancel.store(true, Ordering::Release);
+        }
+    }
+
     fn show_remote_login(
         &mut self, prompt: RemotePrompt, reply: oneshot::Sender<RemoteAnswer>, window: &mut Window, cx: &mut Context<Self>,
     ) {
         // One prompt at a time; a second connection asking meanwhile gives up.
         if self.remote_login.is_some() {
             let _ = reply.send(RemoteAnswer::Cancel);
+            return;
+        }
+        if !prompt.choices.is_empty() {
+            let controls: Vec<_> = prompt.choices.iter().map(|_| cx.focus_handle()).collect();
+            // The last choice is GVfs's refusal: the safe default.
+            let initial = controls.last().cloned().unwrap_or_else(|| cx.focus_handle());
+            self.remote_login = Some(RemoteLogin {
+                prompt,
+                initial,
+                inputs: Vec::new(),
+                values: Default::default(),
+                anonymous: false,
+                save: PasswordSave::Never,
+                focus: cx.focus_handle(),
+                controls,
+                reply: Some(reply),
+            });
+            cx.notify();
             return;
         }
         let handle = cx.entity();
@@ -156,6 +210,16 @@ impl OxydeApp {
         cx.notify();
     }
 
+    /// Answers a server's question with the choice at `index`.
+    pub(crate) fn answer_remote_question(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(mut login) = self.remote_login.take() else { return };
+        if let Some(reply) = login.reply.take() {
+            let _ = reply.send(RemoteAnswer::Choice(index));
+        }
+        window.focus(&self.focus_handle, cx);
+        cx.notify();
+    }
+
     /// The dialog could not open: the connection gives up.
     pub(super) fn dismiss_remote_login(&mut self) {
         if let Some(reply) = self.remote_login.take().and_then(|mut login| login.reply.take()) {
@@ -177,7 +241,7 @@ impl OxydeApp {
 }
 
 /// Mounts on a blocking worker; each prompt waits for the dialog's answer.
-async fn connect(handle: &Entity<OxydeApp>, cx: &mut AsyncApp, uri: String) -> Result<RemoteLocation, RemoteError> {
+async fn connect(handle: &Entity<OxydeApp>, cx: &mut AsyncApp, uri: String, cancel: Arc<AtomicBool>) -> Result<RemoteLocation, RemoteError> {
     let (sender, mut receiver) = mpsc::unbounded_channel();
     let target = uri.clone();
     tokio::task::spawn_blocking(move || {
@@ -187,7 +251,7 @@ async fn connect(handle: &Entity<OxydeApp>, cx: &mut AsyncApp, uri: String) -> R
                 return RemoteAnswer::Cancel;
             }
             answer.blocking_recv().unwrap_or(RemoteAnswer::Cancel)
-        });
+        }, &cancel);
         let _ = sender.send(Progress::Done(result));
     });
     while let Some(progress) = receiver.recv().await {

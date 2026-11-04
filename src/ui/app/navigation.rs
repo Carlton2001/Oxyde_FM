@@ -515,6 +515,7 @@ impl OxydeApp {
         let request_id = self.next_file_request;
         self.pending_file_requests
             .insert(tab_id.clone(), request_id);
+        self.cancel_remote_connection(&tab_id);
         let show_hidden = self.show_hidden;
         let show_system = self.show_system;
         let pane_width = self.pane_sizes.get(pane_id).map(|size| size.width).unwrap_or(self.list_width);

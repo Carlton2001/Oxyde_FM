@@ -306,6 +306,8 @@ pub struct OxydeApp {
     pub(crate) open_with: Option<open_with::OpenWithPrompt>,
     /// Servers and network lists connected this session, listed by URI.
     pub(super) browsable_remotes: std::collections::HashSet<String>,
+    /// Connections in progress by tab: their request and cancellation flag.
+    pub(super) remote_connections: std::collections::HashMap<String, (u64, std::sync::Arc<std::sync::atomic::AtomicBool>)>,
     pub(crate) network_dialog_revision: u64,
     pub(crate) network_force_confirmation: Option<network::NetworkForceConfirmation>,
     pub(crate) network_force_focus_pending: bool,
@@ -503,6 +505,7 @@ impl OxydeApp {
             archive_password: None,
             open_with: None,
             browsable_remotes: std::collections::HashSet::new(),
+            remote_connections: std::collections::HashMap::new(),
             trash_settings: None,
             dialog_windows_open: [false; dialog_windows::DIALOG_KINDS],
             pending_trash_delete: None,

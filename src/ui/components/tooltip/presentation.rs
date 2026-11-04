@@ -76,11 +76,13 @@ mod filename_tests {
         assert_eq!(lines.last(), Some(&"examples"));
     }
 
+    /// Workgroup and location come from the Windows Shell.
+    #[cfg(target_os = "windows")]
     #[test]
     fn network_tooltips_show_only_available_network_properties() {
         let file = oxyde_lib::models::FileEntry {
             name: "PC".into(), path: "\\\\PC".into(),
-            network_details: Some(oxyde_lib::models::file_entry::NetworkDetails { category: "Computer".into(), workgroup: "WORKGROUP".into(), location: "Bbox-445D52D4".into() }),
+            network_details: Some(oxyde_lib::models::file_entry::NetworkDetails { category: "Computer".into(), workgroup: "WORKGROUP".into(), location: "Bbox-445D52D4".into(), recent: false }),
             ..Default::default()
         };
         for language in [crate::ui::i18n::Language::French, crate::ui::i18n::Language::English] {
@@ -461,7 +463,7 @@ fn file_detail_lines(info: &super::FileInfo, cx: &App) -> Vec<SharedString> {
 
 fn network_tooltip_lines(file: &oxyde_lib::models::FileEntry, i18n: &crate::ui::i18n::I18n) -> Vec<SharedString> {
     let details = file.network_details.as_ref();
-    let category = details.map(|d| d.category.clone()).filter(|value| !value.is_empty()).unwrap_or_else(|| i18n.text(if oxyde_lib::commands::io::is_network_server(&file.path) { Message::NetworkComputer } else { Message::NetworkOtherDevices }).to_string());
+    let category = crate::ui::components::file_list::network_category(file, i18n);
     [(Message::TooltipNetworkCategory, category), (Message::TooltipNetworkWorkgroup, details.map(|d| d.workgroup.clone()).unwrap_or_default()), (Message::TooltipNetworkLocation, details.map(|d| d.location.clone()).unwrap_or_default())]
         .into_iter().filter(|(_, value)| !value.is_empty()).map(|(message, value)| {
             let mut args = FluentArgs::new(); args.set("value", value); i18n.text_with_args(message, &args)

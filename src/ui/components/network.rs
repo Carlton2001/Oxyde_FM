@@ -28,6 +28,30 @@ pub(crate) fn network_actions(
     if !cfg!(target_os = "windows") {
         return Vec::new();
     }
+    windows_actions(i18n, handle, path, remote_drive)
+}
+
+/// Forgets a recent server the network list shows, as Nautilus's « Remove » does.
+pub(crate) fn recent_server_action(i18n: &I18n, handle: Entity<OxydeApp>, path: &str, view: &OxydeApp) -> Option<DropdownItem> {
+    let pane = view.state.find_pane(&view.state.active_pane_id)?;
+    let tab = pane.active_tab();
+    let recent = tab.path == "__network_vincinity__"
+        && tab.files.iter().any(|file| file.path == path && file.network_details.as_ref().is_some_and(|details| details.recent));
+    if !recent {
+        return None;
+    }
+    let uri = path.to_string();
+    Some(DropdownItem::new(i18n.text(Message::ForgetRecentServer).to_string(), move |_, cx| {
+        handle.update(cx, |this, cx| this.forget_recent_server(uri.clone(), cx));
+    }).icon(IconName::CircleX))
+}
+
+fn windows_actions(
+    i18n: &I18n,
+    handle: Entity<OxydeApp>,
+    path: &str,
+    remote_drive: bool,
+) -> Vec<DropdownItem> {
     let mut items = Vec::new();
     let neighborhood = path == "__network_vincinity__";
     if neighborhood || crate::ui::app::network::mappable_network_path(path) {

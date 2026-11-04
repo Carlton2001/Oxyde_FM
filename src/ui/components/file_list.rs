@@ -12,7 +12,7 @@ mod scroll_top;
 mod thumbnails;
 
 pub use filters::{get_date_filter_items, get_permissions_filter_items, get_size_filter_items, get_type_filter_items};
-pub(crate) use presentation::{file_type_display, file_type_label, network_entry};
+pub(crate) use presentation::{file_type_display, file_type_label, network_category, network_entry};
 pub(crate) use thumbnails::{invalidate_thumbnail, clear_grid_thumbnails};
 
 use crate::ui::app::OxydeApp;

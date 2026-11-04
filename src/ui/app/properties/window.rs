@@ -39,6 +39,10 @@ impl OxydeApp {
             self.open_trash_settings(window, cx);
             return;
         }
+        // Servers and shares by URI: nothing local to describe (Alt+Enter).
+        if paths.iter().any(|path| oxyde_lib::platform::platform().is_remote_uri(path)) {
+            return;
+        }
         if paths.len() == 1 && path == "__network_vincinity__" {
             cx.spawn(async move |_, _| {
                 let _ = tokio::task::spawn_blocking(move || {

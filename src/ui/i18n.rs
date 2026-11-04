@@ -481,6 +481,9 @@ pub enum Message {
     NetworkLocation,
     NetworkComputer,
     NetworkOtherDevices,
+    NetworkService,
+    RemoteQuestionTitle,
+    ForgetRecentServer,
     NetworkForceAction,
     NetworkDriveFailed,
     OpenItemFailed,
@@ -1212,6 +1215,9 @@ impl Message {
             Self::NetworkLocation => "network-location",
             Self::NetworkComputer => "network-computer",
             Self::NetworkOtherDevices => "network-other-devices",
+            Self::NetworkService => "network-service",
+            Self::RemoteQuestionTitle => "remote-question-title",
+            Self::ForgetRecentServer => "forget-recent-server",
             Self::NetworkForceAction => "network-force-action",
             Self::NetworkDriveFailed => "network-drive-failed",
             Self::OpenItemFailed => "open-item-failed",
@@ -2105,6 +2111,9 @@ mod tests {
                 Message::NetworkLocation,
                 Message::NetworkComputer,
                 Message::NetworkOtherDevices,
+                Message::NetworkService,
+                Message::RemoteQuestionTitle,
+                Message::ForgetRecentServer,
                 Message::NetworkForceAction,
                 Message::NetworkDriveFailed,
                 Message::OpenItemFailed,
@@ -2427,6 +2436,7 @@ mod tests {
             args.set("percent", 98);
             args.set("from", "txt");
             args.set("to", "md");
+            args.set("protocol", "SMB");
             for message in messages {
                 let pattern = i18n
                     .active

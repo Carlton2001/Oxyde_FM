@@ -29,7 +29,8 @@ pub(super) fn render_headers(
             .child(header_cell(i18n.text(Message::ColumnName).as_ref(), name_w, current_col == SortColumn::Name, current_dir, false, theme, handle.clone(), format!("network-name-{}", pane_id), {
                 let h = handle.clone(); let pid = pane_id.clone(); move |_, _, cx| { h.update(cx, |this, cx| this.toggle_sort(&pid, SortColumn::Name, cx)); }
             }))
-            .children([(Message::NetworkCategory, type_w), (Message::NetworkWorkgroup, size_w), (Message::NetworkLocation, date_w)].into_iter().map(|(message, width)| div().w(px(width)).flex_none().h_full().flex().items_center().px(rems(0.5)).border_l(rems(0.0625)).border_color(theme.border).text_size(rems(0.75)).child(i18n.text(message))));
+            // Workgroup and network location are Windows Shell columns GVfs never fills.
+            .children(network_columns(type_w, size_w, date_w).into_iter().map(|(message, width)| div().w(px(width)).flex_none().h_full().flex().items_center().px(rems(0.5)).border_l(rems(0.0625)).border_color(theme.border).text_size(rems(0.75)).child(i18n.text(message))));
     }
     // Check filters
     let name_filtered = !tab.filter_name.is_empty();
@@ -310,4 +311,14 @@ fn header_cell(
         )
         .hover(|s| s.bg(theme.hover))
         .on_mouse_down(MouseButton::Left, on_click)
+}
+
+/// Workgroup and network location are Windows Shell columns: GVfs never fills them, and
+/// its services are told apart by protocol.
+pub(super) fn network_columns<T>(category: T, workgroup: T, location: T) -> Vec<(Message, T)> {
+    if cfg!(target_os = "windows") {
+        vec![(Message::NetworkCategory, category), (Message::NetworkWorkgroup, workgroup), (Message::NetworkLocation, location)]
+    } else {
+        vec![(Message::ColumnType, category)]
+    }
 }

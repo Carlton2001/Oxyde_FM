@@ -487,6 +487,7 @@ network-location = Percorso di rete
 network-computer = Computer
 
 network-other-devices = Altri dispositivi
+network-service = Condivisione { $protocol }
 
 network-drive-failed = Impossibile modificare la connessione di rete. { $detail }
 
@@ -526,6 +527,8 @@ network-working = Operazione in corso…
 
 network-loading = Caricamento delle unità…
 remote-login-title = Autenticazione richiesta
+remote-question-title = Conferma richiesta
+forget-recent-server = Rimuovi dai server recenti
 remote-domain = Dominio
 remote-anonymous = Connetti in modo anonimo
 remote-remember-never = Dimenticare la password immediatamente

@@ -816,12 +816,18 @@ pub fn oxyde_context_menu_items(
     path: String,
     view: &crate::ui::app::OxydeApp,
 ) -> Vec<dropdown::DropdownItem> {
-    let actions = network::network_actions(i18n, h.clone(), &path, false);
+    let mut actions = network::network_actions(i18n, h.clone(), &path, false);
+    actions.extend(network::recent_server_action(i18n, h.clone(), &path, view));
     let mut items = network::insert_after_open(
         oxyde_context_menu_items_raw(i18n, h.clone(), is_dir, is_pinned, path.clone(), view),
         actions,
         i18n,
     );
+    // A server or a share by URI has no local file to describe until it is opened.
+    if oxyde_lib::platform::platform().is_remote_uri(&path) {
+        let properties = i18n.text(Message::Properties);
+        items.retain(|item| item.label != properties.as_ref());
+    }
     // A terminal has one working directory: like Nautilus, no entry for a multiple selection.
     let in_trash = view.state.find_pane(&view.state.active_pane_id).is_some_and(|pane| pane.active_tab().path == "trash://");
     if is_dir && !in_trash && view.context_action_paths(&path).len() == 1 {

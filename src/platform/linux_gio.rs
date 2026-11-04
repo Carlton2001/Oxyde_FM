@@ -6,8 +6,10 @@ use library::{gio, GError, Gio, Object};
 use std::ffi::{c_char, c_uint, c_void, CStr, CString};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 mod library;
+pub(super) mod servers;
 #[cfg(target_os = "linux")]
 pub(super) mod applications;
 
@@ -22,9 +24,9 @@ const SHORTCUT: c_uint = 5;
 const MOUNTABLE: c_uint = 6;
 
 /// Schemes GVfs mounts that Oxyde opens, `network` being the neighborhood.
-const SCHEMES: &[&str] = &["smb", "sftp", "ftp", "ftps", "dav", "davs", "afp", "nfs", "network"];
+const SCHEMES: &[&str] = &["smb", "sftp", "ftp", "ftps", "dav", "davs", "dav+sd", "davs+sd", "afp", "nfs", "network"];
 /// Mount types under the FUSE folder that the drive list shows as network shares.
-const NETWORK_MOUNTS: &[&str] = &["smb-share", "sftp", "ftp", "ftps", "dav", "davs", "afp-volume", "nfs"];
+const NETWORK_MOUNTS: &[&str] = &["smb-share", "sftp", "ftp", "ftps", "dav", "davs", "dav+sd", "davs+sd", "afp-volume", "nfs"];
 
 pub(super) fn is_remote_uri(text: &str) -> bool {
     text.split_once("://").is_some_and(|(scheme, _)| SCHEMES.iter().any(|known| scheme.eq_ignore_ascii_case(known)))
@@ -142,18 +144,56 @@ fn uri_of(gio: &Gio, file: Object) -> String {
 }
 
 /// Mounts the location when GVfs has not, asking `ask` whenever the server wants
-/// credentials, again after a refused answer.
-pub(super) fn connect(uri: &str, ask: &mut dyn FnMut(&RemotePrompt) -> RemoteAnswer) -> Result<RemoteLocation, RemoteError> {
+/// credentials, again after a refused answer. Setting `cancel` gives up.
+pub(super) fn connect(
+    uri: &str, ask: &mut dyn FnMut(&RemotePrompt) -> RemoteAnswer, cancel: &AtomicBool,
+) -> Result<RemoteLocation, RemoteError> {
     let gio = gio().ok_or(RemoteError::Unsupported)?;
     let file = file_for_uri(gio, uri)?;
-    mount(gio, &file, ask)?;
-    Ok(match local_path(gio, &file) {
+    mount(gio, &file, ask, cancel)?;
+    Ok(match local_path(gio, &file).or_else(|| mount_root_path(uri)) {
         Some(path) => {
             appear(&path);
             RemoteLocation::Local(path)
         }
         None => RemoteLocation::Browse(uri_of(gio, file.1)),
     })
+}
+
+/// The FUSE path of a mounted share whose URI GIO cannot map: a DNS-SD WebDAV service,
+/// such as GNOME's personal file sharing, mounts under a root URI whose host is escaped
+/// once more than the URI the network list gives, and GIO then says it is not mounted.
+fn mount_root_path(uri: &str) -> Option<PathBuf> {
+    let wanted = unescaped(uri);
+    mounts().into_iter().find(|mount| unescaped(&mount.uri) == wanted).map(|mount| mount.path)
+}
+
+/// A URI with every escaping level undone, without its trailing slash, for comparisons.
+fn unescaped(uri: &str) -> String {
+    let mut text = uri.trim_end_matches('/').to_string();
+    loop {
+        let bytes = text.as_bytes();
+        let mut decoded = Vec::with_capacity(bytes.len());
+        let mut index = 0;
+        while index < bytes.len() {
+            let hex = bytes.get(index + 1..index + 3).and_then(|pair| std::str::from_utf8(pair).ok()).and_then(|pair| u8::from_str_radix(pair, 16).ok());
+            match (bytes[index], hex) {
+                (b'%', Some(byte)) => {
+                    decoded.push(byte);
+                    index += 3;
+                }
+                (byte, _) => {
+                    decoded.push(byte);
+                    index += 1;
+                }
+            }
+        }
+        let next = String::from_utf8_lossy(&decoded).into_owned();
+        if next == text {
+            return text.to_lowercase();
+        }
+        text = next;
+    }
 }
 
 /// `gvfsd-fuse` learns of a mount by signal, after GIO: its folder can lag behind,
@@ -169,6 +209,8 @@ struct Asking<'a> {
     gio: &'static Gio,
     ask: &'a mut dyn FnMut(&RemotePrompt) -> RemoteAnswer,
     asked: bool,
+    /// The user turned down a question: the failure that follows is theirs, not an error.
+    declined: bool,
 }
 
 #[derive(Default)]
@@ -177,27 +219,54 @@ struct Finished {
     error: std::cell::Cell<Option<Failure>>,
 }
 
-fn mount(gio: &'static Gio, file: &Owned, ask: &mut dyn FnMut(&RemotePrompt) -> RemoteAnswer) -> Result<(), RemoteError> {
+fn mount(
+    gio: &'static Gio, file: &Owned, ask: &mut dyn FnMut(&RemotePrompt) -> RemoteAnswer, cancel: &AtomicBool,
+) -> Result<(), RemoteError> {
     let context = ThreadContext::new(gio);
-    // SAFETY: a new operation, released at the end of this call.
+    // SAFETY: new objects, released at the end of this call.
     let operation = Owned::new(gio, unsafe { (gio.g_mount_operation_new)() }).ok_or(RemoteError::Unsupported)?;
-    let mut asking = Asking { gio, ask, asked: false };
+    let cancellable = Owned::new(gio, unsafe { (gio.g_cancellable_new)() }).ok_or(RemoteError::Unsupported)?;
+    let mut asking = Asking { gio, ask, asked: false, declined: false };
     let finished = Finished::default();
-    // SAFETY: `asking` and `finished` outlive the loop that runs both callbacks; the
-    // handler is disconnected before `asking` goes out of scope.
-    let result = unsafe {
-        let handler = (gio.g_signal_connect_data)(
-            operation.1, c"ask-password".as_ptr(), ask_password as *const c_void,
-            (&raw mut asking).cast(), std::ptr::null(), 0,
-        );
-        (gio.g_file_mount_enclosing_volume)(file.1, 0, operation.1, std::ptr::null_mut(), Some(mounted), (&raw const finished).cast_mut().cast());
-        context.run_until(&|| finished.done.get());
-        (gio.g_signal_handler_disconnect)(operation.1, handler);
-        finished.error.take()
-    };
+    let over = AtomicBool::new(false);
+    let result = std::thread::scope(|scope| {
+        // GIO's loop blocks: a watcher turns the flag into a cancellation, which
+        // `g_cancellable_cancel` allows from any thread.
+        let target = SendObject(cancellable.1);
+        let over = &over;
+        scope.spawn(move || {
+            let target = target;
+            while !over.load(Ordering::Acquire) {
+                if cancel.load(Ordering::Acquire) {
+                    // SAFETY: the cancellable lives until this scope ends.
+                    unsafe { (gio.g_cancellable_cancel)(target.0) };
+                    return;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        });
+        // SAFETY: `asking` and `finished` outlive the loop that runs the callbacks; the
+        // handlers are disconnected before `asking` goes out of scope.
+        let result = unsafe {
+            let data: *mut c_void = (&raw mut asking).cast();
+            let handlers = [
+                (gio.g_signal_connect_data)(operation.1, c"ask-password".as_ptr(), ask_password as *const c_void, data, std::ptr::null(), 0),
+                (gio.g_signal_connect_data)(operation.1, c"ask-question".as_ptr(), ask_question as *const c_void, data, std::ptr::null(), 0),
+            ];
+            (gio.g_file_mount_enclosing_volume)(file.1, 0, operation.1, cancellable.1, Some(mounted), (&raw const finished).cast_mut().cast());
+            context.run_until(&|| finished.done.get());
+            for handler in handlers {
+                (gio.g_signal_handler_disconnect)(operation.1, handler);
+            }
+            finished.error.take()
+        };
+        over.store(true, Ordering::Release);
+        result
+    });
     match result {
         None => Ok(()),
         Some(Failure { code: Some(ALREADY_MOUNTED), .. }) => Ok(()),
+        Some(_) if asking.declined => Err(RemoteError::Cancelled),
         Some(failure) => Err(remote_error(failure)),
     }
 }
@@ -232,6 +301,7 @@ unsafe extern "C" fn ask_password(
             saving: flags & 8 != 0,
             anonymous: flags & 16 != 0,
             retry: asking.asked,
+            choices: Vec::new(),
         };
         asking.asked = true;
         let gio = asking.gio;
@@ -255,7 +325,44 @@ unsafe extern "C" fn ask_password(
                 (gio.g_mount_operation_set_anonymous)(operation, 1);
                 0
             }
-            RemoteAnswer::Cancel => 1,
+            RemoteAnswer::Cancel | RemoteAnswer::Choice(_) => 1,
+        };
+        (gio.g_mount_operation_reply)(operation, reply);
+    }
+}
+
+/// A GObject handed to the cancellation watcher.
+#[derive(Clone, Copy)]
+struct SendObject(Object);
+// SAFETY: only `g_cancellable_cancel`, which GIO makes thread-safe, uses it there.
+unsafe impl Send for SendObject {}
+
+/// GVfs asks a question with choices, such as accepting an unknown SFTP host key.
+unsafe extern "C" fn ask_question(operation: Object, message: *const c_char, choices: *const *const c_char, data: *mut c_void) {
+    // SAFETY: `data` is the `Asking` of `mount`; `choices` ends with a null pointer.
+    unsafe {
+        let asking = &mut *data.cast::<Asking>();
+        let mut list = Vec::new();
+        while !choices.is_null() && !(*choices.add(list.len())).is_null() {
+            list.push(borrowed(*choices.add(list.len())));
+        }
+        let prompt = RemotePrompt { message: borrowed(message), choices: list, ..Default::default() };
+        let gio = asking.gio;
+        // GVfs offers to go on first, then to give up.
+        let reply = match (asking.ask)(&prompt) {
+            RemoteAnswer::Choice(0) => {
+                (gio.g_mount_operation_set_choice)(operation, 0);
+                0
+            }
+            RemoteAnswer::Choice(index) if index < prompt.choices.len() => {
+                asking.declined = true;
+                (gio.g_mount_operation_set_choice)(operation, index as i32);
+                0
+            }
+            _ => {
+                asking.declined = true;
+                1
+            }
         };
         (gio.g_mount_operation_reply)(operation, reply);
     }
@@ -274,7 +381,7 @@ pub(super) fn children(uri: &str) -> Result<Vec<RemoteChild>, RemoteError> {
     let gio = gio().ok_or(RemoteError::Unsupported)?;
     let parent = file_for_uri(gio, uri)?;
     // A refresh or a reopened tab mounts again with saved credentials, never a prompt.
-    mount(gio, &parent, &mut |_| RemoteAnswer::Cancel)?;
+    mount(gio, &parent, &mut |_| RemoteAnswer::Cancel, &AtomicBool::new(false))?;
     // The neighborhood points at servers. A server's shares are named from its URI: their
     // target drops a non-default port and GIO's child of a server is `._share`.
     let targets = uri.get(..10).is_some_and(|scheme| scheme.eq_ignore_ascii_case("network://"));

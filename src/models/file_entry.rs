@@ -7,6 +7,8 @@ pub struct NetworkDetails {
     pub category: String,
     pub workgroup: String,
     pub location: String,
+    /// A recent server the network did not announce, which the user can forget.
+    pub recent: bool,
 }
 
 /// Broad native category, resolved by extension outside the UI thread.

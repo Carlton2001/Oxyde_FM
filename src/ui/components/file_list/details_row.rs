@@ -366,7 +366,9 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
             .when(network_panel, |row| {
                 let details = file.network_details.as_ref();
                 let category = network_category(file, cx.i18n());
-                row.children([(type_w, category), (size_w, details.map(|d| d.workgroup.clone()).unwrap_or_default()), (date_w, details.map(|d| d.location.clone()).unwrap_or_default())].into_iter().map(|(width, value)| div().w(px(width)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).child(value)))
+                let workgroup = details.map(|d| d.workgroup.clone()).unwrap_or_default();
+                let location = details.map(|d| d.location.clone()).unwrap_or_default();
+                row.children(super::headers::network_columns((type_w, category), (size_w, workgroup), (date_w, location)).into_iter().map(|(_, (width, value))| div().w(px(width)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).child(value)))
             })
             .when(location_w > 0.0, |row| row.child(div().w(px(location_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).child(std::path::Path::new(file.original_path.as_deref().unwrap_or(&file.path)).parent().map(|parent| parent.to_string_lossy().into_owned()).unwrap_or_default())))
             .when(!network_panel, |row| row.child(div().w(px(type_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(file_type_display(file, cx.i18n()))))

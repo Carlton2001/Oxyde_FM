@@ -39,7 +39,7 @@ unsafe fn shell_network_details(item: &IShellItem) -> Option<crate::models::file
             unsafe { CoTaskMemFree(Some(value.as_ptr().cast())) };
             result
         };
-        Some(crate::models::file_entry::NetworkDetails { category: get(1), workgroup: get(2), location: get(3) })
+        Some(crate::models::file_entry::NetworkDetails { category: get(1), workgroup: get(2), location: get(3), recent: false })
     })();
     unsafe { CoTaskMemFree(Some(pidl.cast())) };
     result

@@ -548,10 +548,15 @@ pub trait Platform: Send + Sync {
     fn list_network_vicinity(&self) -> Result<Vec<crate::models::FileEntry>, String>;
     /// Shares of a `\\server`, or on Linux the entries of a remote URI that `connect_remote` browses.
     fn list_network_shares(&self, server: &str) -> Result<Vec<crate::models::FileEntry>, String>;
+    /// Drops a server from the recent servers the network list shows.
+    fn forget_recent_server(&self, _uri: &str) {}
     /// Locations that `connect_remote` opens, such as `smb://server/share` on Linux.
     fn is_remote_uri(&self, _text: &str) -> bool { false }
-    /// Mounts the location when needed, asking `ask` for credentials. Blocking.
-    fn connect_remote(&self, _uri: &str, _ask: &mut dyn FnMut(&RemotePrompt) -> RemoteAnswer) -> Result<RemoteLocation, RemoteError> {
+    /// Mounts the location when needed, asking `ask` for credentials or a choice; setting
+    /// `cancel` gives up. Blocking.
+    fn connect_remote(
+        &self, _uri: &str, _ask: &mut dyn FnMut(&RemotePrompt) -> RemoteAnswer, _cancel: &std::sync::atomic::AtomicBool,
+    ) -> Result<RemoteLocation, RemoteError> {
         Err(RemoteError::Unsupported)
     }
 

@@ -653,8 +653,15 @@ impl Platform for LinuxPlatform {
     fn is_remote_uri(&self, text: &str) -> bool {
         super::linux_gio::is_remote_uri(text)
     }
-    fn connect_remote(&self, uri: &str, ask: &mut dyn FnMut(&super::RemotePrompt) -> super::RemoteAnswer) -> Result<super::RemoteLocation, super::RemoteError> {
-        super::linux_gio::connect(uri, ask)
+    fn connect_remote(
+        &self, uri: &str, ask: &mut dyn FnMut(&super::RemotePrompt) -> super::RemoteAnswer, cancel: &std::sync::atomic::AtomicBool,
+    ) -> Result<super::RemoteLocation, super::RemoteError> {
+        let location = super::linux_gio::connect(uri, ask, cancel)?;
+        // Remembered as Nautilus does; the neighborhood is no server to come back to.
+        if !uri.to_ascii_lowercase().starts_with("network:") {
+            super::linux_gio::servers::remember(uri, None);
+        }
+        Ok(location)
     }
     fn map_network_drive(&self, _letter: String, _path: String, _reconnect: bool, _username: Option<String>, _password: Option<String>) -> Result<(), String> {
         Err("Network drive mapping is only available on Windows".into())
@@ -679,9 +686,28 @@ impl Platform for LinuxPlatform {
         super::hardware::is_network_path(path)
     }
 
-    /// Nautilus' « Networks »: servers GVfs discovers by WS-Discovery, DNS-SD and SMB.
+    /// Nautilus' « Networks »: servers GVfs discovers by WS-Discovery, DNS-SD and SMB,
+    /// then the recent servers it does not announce.
     fn list_network_vicinity(&self) -> Result<Vec<crate::models::FileEntry>, String> {
-        self.list_network_shares("network:///")
+        let mut entries = self.list_network_shares("network:///")?;
+        let known = |uri: &str| entries.iter().any(|entry| same_location(&entry.path, uri));
+        let recent: Vec<_> = super::linux_gio::servers::recent().into_iter()
+            .filter(|server| !known(&server.uri))
+            .map(|server| crate::models::FileEntry {
+                name: server.title.unwrap_or_else(|| server.uri.clone()),
+                path: server.uri,
+                is_dir: true,
+                is_calculated: true,
+                network_details: Some(crate::models::file_entry::NetworkDetails { recent: true, ..Default::default() }),
+                ..Default::default()
+            })
+            .collect();
+        entries.extend(recent);
+        Ok(entries)
+    }
+
+    fn forget_recent_server(&self, uri: &str) {
+        super::linux_gio::servers::forget(uri);
     }
 
     fn shell_delete(&self, paths: &[std::path::PathBuf], recycle: bool) -> Result<(), String> {
@@ -850,4 +876,9 @@ fn only_fuse_hidden(directory: &std::path::Path) -> bool {
     std::fs::read_dir(directory).is_ok_and(|mut entries| {
         entries.all(|entry| entry.is_ok_and(|entry| entry.file_name().as_encoded_bytes().starts_with(b".fuse_hidden")))
     })
+}
+
+/// Two URIs of one location, whatever their case or trailing slash.
+fn same_location(left: &str, right: &str) -> bool {
+    left.trim_end_matches('/').eq_ignore_ascii_case(right.trim_end_matches('/'))
 }

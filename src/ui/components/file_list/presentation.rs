@@ -137,11 +137,27 @@ pub(crate) fn network_entry(file: &FileEntry) -> bool {
         })
 }
 
-pub(super) fn network_category(file: &FileEntry, i18n: &crate::ui::i18n::I18n) -> String {
+pub(crate) fn network_category(file: &FileEntry, i18n: &crate::ui::i18n::I18n) -> String {
+    // GVfs announces services, not machines: the protocol is what tells them apart.
+    if !cfg!(target_os = "windows") {
+        let mut args = fluent_bundle::FluentArgs::new();
+        args.set("protocol", network_protocol(&file.path));
+        return i18n.text_with_args(Message::NetworkService, &args).to_string();
+    }
     if let Some(category) = file.network_details.as_ref().map(|d| &d.category).filter(|category| !category.is_empty()) {
         return category.clone();
     }
     i18n.text(if oxyde_lib::commands::io::is_network_server(&file.path) { Message::NetworkComputer } else { Message::NetworkOtherDevices }).to_string()
+}
+
+/// The protocol of a GVfs location, named as users meet it.
+pub(crate) fn network_protocol(uri: &str) -> String {
+    let scheme = uri.split_once("://").map_or("", |(scheme, _)| scheme).to_ascii_lowercase();
+    match scheme.trim_end_matches("+sd") {
+        "dav" | "davs" => "WebDAV".into(),
+        "ftps" => "FTP".into(),
+        other => other.to_ascii_uppercase(),
+    }
 }
 
 pub(super) fn selection_checkbox(
@@ -258,6 +274,26 @@ mod network_type_tests {
                 let file = FileEntry { name: "folder".into(), path: path.into(), is_dir: true, ..Default::default() };
                 assert_eq!(file_type_display(&file, &i18n), i18n.text(Message::FileTypeFolder).as_ref());
             }
+        }
+    }
+
+    #[::core::prelude::v1::test]
+    fn gvfs_services_are_named_by_protocol() {
+        for (uri, protocol) in [
+            ("smb://DESKTOP.local/", "SMB"),
+            ("dav+sd://files%20on%20host._webdav._tcp.local", "WebDAV"),
+            ("davs://host/", "WebDAV"),
+            ("sftp://host/", "SFTP"),
+            ("ftps://host/", "FTP"),
+            ("afp://mac/", "AFP"),
+        ] {
+            assert_eq!(network_protocol(uri), protocol);
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            let i18n = crate::ui::i18n::I18n::for_language(crate::ui::i18n::Language::French);
+            let file = FileEntry { name: "nas".into(), path: "smb://nas/".into(), is_dir: true, ..Default::default() };
+            assert_eq!(network_category(&file, &i18n).replace(['\u{2068}', '\u{2069}'], ""), "Partage SMB");
         }
     }
 }

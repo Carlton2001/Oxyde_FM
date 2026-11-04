@@ -1,4 +1,5 @@
-//! Credentials a remote server asks for while its share mounts, as GTK's mount dialog.
+//! Credentials a remote server asks for while its share mounts, as GTK's mount dialog,
+//! or its question with choices, such as accepting an unknown SFTP host key.
 use crate::ui::app::OxydeApp;
 use crate::ui::components::modal::{action_button, form_row, Modal};
 use crate::ui::elements::button::{button_style, ButtonVariant};
@@ -31,8 +32,11 @@ pub(crate) fn render_remote_login_dialog(
     handle: Entity<OxydeApp>,
     window: &mut Window,
     cx: &mut Context<OxydeApp>,
-) -> impl IntoElement {
+) -> AnyElement {
     let login = view.remote_login.as_ref().expect("remote login");
+    if !login.prompt.choices.is_empty() {
+        return render_question(view, handle, window, cx).into_any_element();
+    }
     let theme = *cx.theme();
     let prompt = &login.prompt;
     // GVfs puts a title line first, which the dialog title already says.
@@ -190,5 +194,73 @@ pub(crate) fn render_remote_login_dialog(
         .on_action(|_: &crate::ui::app::Annuler, _, cx| cx.stop_propagation())
         .on_action(|_: &crate::ui::app::Refaire, _, cx| cx.stop_propagation())
         .on_action(|_: &crate::ui::app::Actualiser, _, cx| cx.stop_propagation())
+        .child(modal)
+        .into_any_element()
+}
+
+/// GVfs's question, its answers as buttons in its order; Escape refuses.
+fn render_question(
+    view: &OxydeApp,
+    handle: Entity<OxydeApp>,
+    window: &mut Window,
+    cx: &mut Context<OxydeApp>,
+) -> impl IntoElement {
+    let login = view.remote_login.as_ref().expect("remote question");
+    let theme = *cx.theme();
+    // GVfs's first line is a heading, such as « Identity verification failed ».
+    let (heading, text) = login.prompt.message.split_once('\n').unwrap_or(("", login.prompt.message.as_str()));
+    let body = div().flex().flex_col().gap(rems(0.5)).text_size(rems(0.8125))
+        .when(!heading.trim().is_empty(), |body| body.child(div().font_weight(FontWeight::MEDIUM).child(heading.trim().to_string())))
+        .children(text.split("\n\n").map(|paragraph| div().child(paragraph.trim().to_string())));
+    let close = handle.clone();
+    let mut modal = Modal::new("remote-question", cx.i18n().text(Message::RemoteQuestionTitle), body)
+        .title_icon("icons/server.svg")
+        .standalone(false)
+        .body_background(theme.active_background)
+        .on_close(move |window, cx| close.update(cx, |view, cx| view.answer_remote_login(true, window, cx)))
+        .width(rems(30.0));
+    for (index, choice) in login.prompt.choices.iter().enumerate() {
+        let answer = handle.clone();
+        let focus = &login.controls[index];
+        modal = modal.action(
+            button_style(action_button(("remote-choice", index)), theme, ButtonVariant::Secondary, true)
+                .track_focus(focus)
+                .rounded_md()
+                .border(rems(0.0625))
+                .border_color(if focus.is_focused(window) { theme.accent } else { theme.border })
+                .child(choice.clone())
+                .on_click(move |_, window, cx| answer.update(cx, |view, cx| view.answer_remote_question(index, window, cx))),
+        );
+    }
+    let keyboard = handle.clone();
+    div()
+        .absolute()
+        .inset_0()
+        .track_focus(&login.focus)
+        .on_key_down(move |event, window, cx| {
+            keyboard.update(cx, |view, cx| {
+                let Some(login) = &view.remote_login else { return };
+                let count = login.controls.len();
+                let current = login.controls.iter().position(|focus| focus.is_focused(window));
+                match event.keystroke.key.as_str() {
+                    "escape" => view.answer_remote_login(true, window, cx),
+                    "tab" | "left" | "right" => {
+                        let back = event.keystroke.modifiers.shift || event.keystroke.key == "left";
+                        let next = match current {
+                            Some(current) if back => (current + count - 1) % count,
+                            Some(current) => (current + 1) % count,
+                            None => count - 1,
+                        };
+                        window.focus(&login.controls[next], cx);
+                    }
+                    "enter" | "space" => match current {
+                        Some(index) => view.answer_remote_question(index, window, cx),
+                        None => return,
+                    },
+                    _ => return,
+                }
+                cx.stop_propagation();
+            })
+        })
         .child(modal)
 }

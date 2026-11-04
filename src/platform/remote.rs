@@ -13,6 +13,8 @@ pub struct RemotePrompt {
     pub anonymous: bool,
     pub saving: bool,
     pub retry: bool,
+    /// A question rather than credentials: the answers offered, in order.
+    pub choices: Vec<String>,
 }
 
 /// How long the password outlives the mount, as GNOME's mount dialog offers.
@@ -31,6 +33,8 @@ pub enum PasswordSave {
 pub enum RemoteAnswer {
     Login { user: String, domain: String, password: String, save: PasswordSave },
     Anonymous,
+    /// The index of the chosen answer to a question.
+    Choice(usize),
     Cancel,
 }
 
