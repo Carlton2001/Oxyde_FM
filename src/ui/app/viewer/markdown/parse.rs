@@ -1,7 +1,9 @@
-use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{Alignment, BlockQuoteKind, CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 use std::{
+    collections::HashMap,
     ops::Range,
     path::Path,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -10,9 +12,13 @@ pub(super) enum Kind {
     Paragraph,
     Heading(u8),
     Code,
-    Quote,
+    /// Inside a block quote, or a GitHub alert of the given kind.
+    Quote(Option<BlockQuoteKind>),
+    /// The title line of a GitHub alert, written by the view in its language.
+    AlertTitle(BlockQuoteKind),
     Rule,
-    TableRow(bool),
+    /// A table row, whether it is the header, and its columns' alignment.
+    TableRow(bool, Arc<[Alignment]>),
     Image(Option<String>),
 }
 
@@ -69,7 +75,16 @@ struct Builder<'a> {
     /// Inside an HTML block that started with `<pre>`.
     html_code: bool,
     lists: Vec<Option<u64>>,
-    quote_depth: usize,
+    /// Open block quotes, innermost last, with their alert kind.
+    quotes: Vec<Option<BlockQuoteKind>>,
+    alignments: Arc<[Alignment]>,
+    /// Consecutive text, joined so autolinks are found across parser splits.
+    pending: String,
+    /// Footnote numbers, in order of first reference like GitHub.
+    footnotes: HashMap<String, usize>,
+    /// The number of the footnote definition being read; its blocks go last.
+    footnote: Option<usize>,
+    notes: Vec<(usize, Block)>,
     language: String,
     started: Instant,
 }
@@ -79,7 +94,7 @@ impl Builder<'_> {
         if self.stopped || (self.cancelled)() {
             return;
         }
-        if self.text.is_empty() && !matches!(self.kind, Kind::Image(_) | Kind::Rule) {
+        if self.text.is_empty() && !matches!(self.kind, Kind::Image(_) | Kind::Rule | Kind::AlertTitle(_)) {
             return;
         }
         let text = std::mem::take(&mut self.text);
@@ -94,20 +109,55 @@ impl Builder<'_> {
                 })
                 .collect();
         }
-        self.blocks.push(Block {
+        let block = Block {
             kind: self.kind.clone(),
             text,
             spans,
-        });
+        };
+        if let Some(number) = self.footnote {
+            self.notes.push((number, block));
+            self.kind = self.quote_kind();
+            return;
+        }
+        self.blocks.push(block);
         if self.first || self.blocks.len() >= 32 {
             self.first = false;
             self.stopped = !(self.publish)(std::mem::take(&mut self.blocks));
         }
-        self.kind = if self.quote_depth > 0 {
-            Kind::Quote
-        } else {
-            Kind::Paragraph
-        };
+        self.kind = self.quote_kind();
+    }
+
+    fn quote_kind(&self) -> Kind {
+        match self.quotes.last() {
+            Some(alert) => Kind::Quote(*alert),
+            None => Kind::Paragraph,
+        }
+    }
+
+    fn footnote_number(&mut self, label: &str) -> usize {
+        let next = self.footnotes.len() + 1;
+        *self.footnotes.entry(label.to_owned()).or_insert(next)
+    }
+
+    /// Appends the joined text, marking GFM extended autolinks outside code and links.
+    fn flush_text(&mut self) {
+        if self.pending.is_empty() {
+            return;
+        }
+        let text = std::mem::take(&mut self.pending).replace('\t', "    ");
+        if matches!(self.kind, Kind::Code) || self.links > 0 || self.code > 0 {
+            self.append(&text, false);
+            return;
+        }
+        let mut last = 0;
+        for range in super::autolink::find(&text) {
+            self.append(&text[last..range.start], false);
+            self.links += 1;
+            self.append(&text[range.clone()], false);
+            self.links -= 1;
+            last = range.end;
+        }
+        self.append(&text[last..], false);
     }
 
     /// A code block's closing line break is not an empty last line.
@@ -177,16 +227,32 @@ pub(super) fn parse_progressively(
         code: 0,
         html_code: false,
         lists: Vec::new(),
-        quote_depth: 0,
+        quotes: Vec::new(),
+        alignments: Arc::from([]),
+        pending: String::new(),
+        footnotes: HashMap::new(),
+        footnote: None,
+        notes: Vec::new(),
         language: String::new(),
         started: Instant::now(),
     };
-    let options =
-        Options::ENABLE_TABLES | Options::ENABLE_STRIKETHROUGH | Options::ENABLE_TASKLISTS;
+    let options = Options::ENABLE_TABLES
+        | Options::ENABLE_STRIKETHROUGH
+        | Options::ENABLE_TASKLISTS
+        | Options::ENABLE_FOOTNOTES
+        | Options::ENABLE_GFM;
     let mut image = None::<(Option<String>, String)>;
     for event in Parser::new_ext(source, options) {
         if builder.stopped || cancelled() {
             return;
+        }
+        if let Event::Text(value) = &event {
+            if image.is_none() {
+                builder.pending.push_str(value);
+                continue;
+            }
+        } else {
+            builder.flush_text();
         }
         if let Some((_, alt)) = &mut image {
             match event {
@@ -251,24 +317,49 @@ pub(super) fn parse_progressively(
                 };
                 builder.append(&format!("{indent}{marker}"), false);
             }
-            Event::Start(Tag::BlockQuote(_)) => {
+            Event::Start(Tag::BlockQuote(alert)) => {
                 builder.flush();
-                builder.quote_depth += 1;
-                builder.kind = Kind::Quote;
+                // A nested quote keeps the color of the alert around it.
+                builder.quotes.push(alert.or(builder.quotes.last().copied().flatten()));
+                if let Some(alert) = alert {
+                    builder.kind = Kind::AlertTitle(alert);
+                    builder.flush();
+                }
+                builder.kind = builder.quote_kind();
             }
             Event::End(TagEnd::BlockQuote(_)) => {
                 builder.flush();
-                builder.quote_depth = builder.quote_depth.saturating_sub(1);
-                builder.kind = Kind::Paragraph;
+                builder.quotes.pop();
+                builder.kind = builder.quote_kind();
+            }
+            Event::Start(Tag::FootnoteDefinition(label)) => {
+                builder.flush();
+                let number = builder.footnote_number(&label);
+                builder.footnote = Some(number);
+                builder.append(&format!("{number}. "), false);
+            }
+            Event::End(TagEnd::FootnoteDefinition) => {
+                builder.flush();
+                builder.footnote = None;
+            }
+            Event::FootnoteReference(label) => {
+                let number = builder.footnote_number(&label);
+                builder.links += 1;
+                builder.append(&format!("[{number}]"), false);
+                builder.links -= 1;
+            }
+            Event::Start(Tag::Table(alignments)) => {
+                builder.flush();
+                builder.alignments = alignments.into();
             }
             Event::Start(Tag::TableHead) => {
                 builder.flush();
-                builder.kind = Kind::TableRow(true);
+                builder.kind = Kind::TableRow(true, builder.alignments.clone());
                 builder.bold += 1;
             }
             Event::Start(Tag::TableRow) => {
                 builder.flush();
-                builder.kind = Kind::TableRow(false);
+                builder.kind = Kind::TableRow(false, builder.alignments.clone());
             }
             Event::End(TagEnd::TableHead) => {
                 builder.flush();
@@ -282,7 +373,6 @@ pub(super) fn parse_progressively(
                 | TagEnd::Item
                 | TagEnd::TableRow,
             ) => builder.flush(),
-            Event::Text(value) => builder.append(&value.replace('\t', "    "), false),
             Event::Code(value) => builder.append(&value, true),
             Event::SoftBreak => builder.append(
                 if matches!(builder.kind, Kind::Code) {
@@ -294,7 +384,16 @@ pub(super) fn parse_progressively(
             ),
             Event::HardBreak => builder.append("\n", false),
             Event::TaskListMarker(checked) => {
-                builder.append(if checked { "☑ " } else { "☐ " }, false)
+                let marker = if checked { "☑ " } else { "☐ " };
+                // A task item shows its box in place of the bullet, like GitHub
+                // and Zed. Both markers have the same byte length, so the
+                // spans already recorded stay valid.
+                if builder.text.ends_with("• ") {
+                    let start = builder.text.len() - "• ".len();
+                    builder.text.replace_range(start.., marker);
+                } else {
+                    builder.append(marker, false);
+                }
             }
             Event::Rule => {
                 builder.flush();
@@ -328,7 +427,15 @@ pub(super) fn parse_progressively(
             _ => {}
         }
     }
+    builder.flush_text();
     builder.flush();
+    if !builder.notes.is_empty() && !builder.stopped && !cancelled() {
+        // Footnotes close the document, in reference order, like on GitHub.
+        let mut notes = std::mem::take(&mut builder.notes);
+        notes.sort_by_key(|(number, _)| *number);
+        builder.blocks.push(Block { kind: Kind::Rule, text: String::new(), spans: Vec::new() });
+        builder.blocks.extend(notes.into_iter().map(|(_, block)| block));
+    }
     if !builder.stopped && !cancelled() && !builder.blocks.is_empty() {
         (builder.publish)(builder.blocks);
     }

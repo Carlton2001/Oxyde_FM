@@ -1,5 +1,6 @@
 //! Markdown parsing is bounded and performed off the UI thread. Images use
 //! the existing isolated preview decoder and its shared memory budget.
+mod autolink;
 mod loading;
 mod parse;
 mod selection;
@@ -11,6 +12,7 @@ use crate::ui::{
 };
 use gpui::{prelude::*, *};
 use parse::{Block, Kind};
+use pulldown_cmark::{Alignment, BlockQuoteKind};
 use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 pub(super) struct Markdown {
@@ -154,16 +156,17 @@ impl Viewer {
                 return div().into_any_element();
             };
             let theme = *cx.theme();
-            if let Kind::TableRow(header) = block.kind {
+            if let Kind::TableRow(header, alignments) = &block.kind {
+                let header = *header;
                 // The table starts at the nearest header at or above this row.
-                let table = (0..=index).rev().find(|row| matches!(blocks[*row].kind, Kind::TableRow(true))).unwrap_or(index);
+                let table = (0..=index).rev().find(|row| matches!(blocks[*row].kind, Kind::TableRow(true, _))).unwrap_or(index);
                 let hover = handle.clone();
                 let button = header.then(|| {
                     // Tab-separated rows paste as a table in spreadsheets.
                     let source = blocks[index..]
                         .iter()
                         .enumerate()
-                        .take_while(|(offset, row)| matches!(row.kind, Kind::TableRow(false)) || *offset == 0)
+                        .take_while(|(offset, row)| matches!(row.kind, Kind::TableRow(false, _)) || *offset == 0)
                         .map(|(_, row)| row.text.trim_end_matches('\t'))
                         .collect::<Vec<_>>()
                         .join("\n");
@@ -189,7 +192,8 @@ impl Viewer {
                     .w_full()
                     .px(rems(2.0))
                     .flex()
-                    .children(block.text.trim_end_matches('\t').split('\t').map(|cell| {
+                    .children(block.text.trim_end_matches('\t').split('\t').enumerate().map(|(column, cell)| {
+                        let alignment = alignments.get(column).copied().unwrap_or(Alignment::None);
                         div()
                             .flex_1()
                             .min_w_0()
@@ -197,6 +201,8 @@ impl Viewer {
                             .py(rems(0.375))
                             .border_1()
                             .border_color(theme.border)
+                            .when(alignment == Alignment::Center, |cell| cell.text_center())
+                            .when(alignment == Alignment::Right, |cell| cell.text_right())
                             .when(header, |cell| {
                                 cell.bg(theme.sidebar).font_weight(FontWeight::SEMIBOLD)
                             })
@@ -268,6 +274,21 @@ impl Viewer {
                 .px(rems(2.0))
                 .py(rems(0.375))
                 .text_color(theme.text);
+            if let Kind::AlertTitle(alert) = block.kind {
+                let (icon, color, title) = alert_style(alert, &theme);
+                return frame
+                    .pt(rems(0.5))
+                    .border_l(rems(0.1875))
+                    .border_color(color)
+                    .flex()
+                    .items_center()
+                    .gap(rems(0.5))
+                    .text_color(color)
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(svg().path(icon).size(rems(1.0)).flex_none().text_color(color))
+                    .child(cx.i18n().text(title))
+                    .into_any_element();
+            }
             frame = match block.kind {
                 Kind::Heading(level) => frame
                     .pt(rems(0.75))
@@ -279,10 +300,13 @@ impl Viewer {
                         _ => 1.0,
                     })),
                 Kind::Code => frame.py(rems(0.5)),
-                Kind::Quote => frame
+                Kind::Quote(None) => frame
                     .border_l(rems(0.1875))
                     .border_color(theme.border)
                     .text_color(theme.text_muted),
+                Kind::Quote(Some(alert)) => frame
+                    .border_l(rems(0.1875))
+                    .border_color(alert_style(alert, &theme).1),
                 Kind::Rule => {
                     return frame
                         .child(div().h(rems(0.0625)).bg(theme.border))
@@ -411,7 +435,18 @@ impl Viewer {
             )
             .into_any_element()
     }
-}/// The copy button at a code block's or table's top right; a check replaces
+}/// The icon, color and title GitHub gives each alert kind.
+fn alert_style(alert: BlockQuoteKind, theme: &crate::ui::theme::OxydeTheme) -> (&'static str, Hsla, Message) {
+    match alert {
+        BlockQuoteKind::Note => ("icons/info.svg", theme.accent, Message::MarkdownNote),
+        BlockQuoteKind::Tip => ("icons/lightbulb.svg", theme.success_text, Message::MarkdownTip),
+        BlockQuoteKind::Important => ("icons/message-square-exclamation-point.svg", theme.accent, Message::MarkdownImportant),
+        BlockQuoteKind::Warning => ("icons/triangle-alert.svg", theme.warning_text, Message::MarkdownWarning),
+        BlockQuoteKind::Caution => ("icons/octagon-exclamation-point.svg", theme.error, Message::MarkdownCaution),
+    }
+}
+
+/// The copy button at a code block's or table's top right; a check replaces
 /// its icon for a moment after a copy.
 fn copy_button(index: usize, source: String, done: bool, handle: &WeakEntity<Viewer>, cx: &App) -> Stateful<Div> {
     let theme = *cx.theme();

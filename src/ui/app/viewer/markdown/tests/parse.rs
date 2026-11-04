@@ -48,7 +48,7 @@ fn raw_html_stays_literal_and_all_style_offsets_are_utf8_boundaries() {
         "readme.md",
     );
     assert!(blocks.iter().any(|block| block.text.contains("<script>")));
-    assert!(blocks.iter().any(|block| matches!(block.kind, Kind::Quote)));
+    assert!(blocks.iter().any(|block| matches!(block.kind, Kind::Quote(None))));
     for block in blocks {
         for span in block.spans {
             assert!(span.range.end <= block.text.len());
@@ -64,8 +64,8 @@ fn tables_and_large_blocks_have_bounded_native_layout() {
         "| Name | Value |\n| --- | --- |\n| Alpha | Beta |",
         "readme.md",
     );
-    assert!(matches!(blocks[0].kind, Kind::TableRow(true)));
-    assert!(matches!(blocks[1].kind, Kind::TableRow(false)));
+    assert!(matches!(blocks[0].kind, Kind::TableRow(true, _)));
+    assert!(matches!(blocks[1].kind, Kind::TableRow(false, _)));
     assert_eq!(blocks[1].text, "Alpha\tBeta\t");
     let (blocks, limited) = parse(&"é".repeat(20_000), "readme.md");
     assert!(!limited);
@@ -191,3 +191,40 @@ fn html_code_elements_render_as_code() {
     assert_eq!(html_code_tag("</CODE>"), Some(false));
 }
 
+
+#[test]
+fn task_items_replace_the_bullet_with_their_box() {
+    let (blocks, _) = parse("- [ ] todo\n- [x] done\n  - [ ] nested\n- plain", "C:/docs/readme.md");
+    let texts: Vec<_> = blocks.iter().map(|block| block.text.as_str()).collect();
+    assert!(texts.contains(&"☐ todo"));
+    assert!(texts.contains(&"☑ done"));
+    assert!(texts.contains(&"  ☐ nested"));
+    assert!(texts.contains(&"• plain"));
+}
+
+#[test]
+fn plain_text_addresses_become_links_but_not_inside_code() {
+    let (blocks, _) = parse("Visit www.example.com. Or `www.code.org`.", "C:/docs/readme.md");
+    let block = &blocks[0];
+    let linked: Vec<_> = block.spans.iter().filter(|span| span.link).map(|span| &block.text[span.range.clone()]).collect();
+    assert_eq!(linked, ["www.example.com"]);
+}
+
+#[test]
+fn alerts_get_a_title_and_footnotes_close_the_document() {
+    let (blocks, _) = parse("> [!WARNING]\n> Careful.\n\nText[^b] and[^a].\n\n[^a]: First.\n\n[^b]: Second.\n\nEnd.", "C:/docs/readme.md");
+    assert!(matches!(blocks[0].kind, Kind::AlertTitle(BlockQuoteKind::Warning)));
+    assert!(matches!(blocks[1].kind, Kind::Quote(Some(BlockQuoteKind::Warning))) && blocks[1].text == "Careful.");
+    assert_eq!(blocks[2].text, "Text[1] and[2].");
+    assert_eq!(blocks[3].text, "End.");
+    assert!(matches!(blocks[4].kind, Kind::Rule));
+    assert_eq!(blocks[5].text, "1. Second.");
+    assert_eq!(blocks[6].text, "2. First.");
+}
+
+#[test]
+fn table_rows_carry_their_column_alignment() {
+    let (blocks, _) = parse("| a | b | c |\n|:--|:-:|--:|\n| 1 | 2 | 3 |", "C:/docs/readme.md");
+    assert!(matches!(&blocks[1].kind, Kind::TableRow(false, alignments)
+        if alignments[..] == [Alignment::Left, Alignment::Center, Alignment::Right]));
+}

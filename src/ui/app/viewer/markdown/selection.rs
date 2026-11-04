@@ -75,7 +75,7 @@ impl Markdown {
         let parts: Vec<&str> = blocks
             .iter()
             .enumerate()
-            .filter(|(_, block)| !matches!(block.kind, Kind::Rule | Kind::Image(_)))
+            .filter(|(_, block)| !matches!(block.kind, Kind::Rule | Kind::Image(_) | Kind::AlertTitle(_)))
             .filter_map(|(index, block)| Some(&block.text[selection.within(index, block.text.len())?]))
             .collect();
         (!parts.is_empty()).then(|| parts.join("\n"))
