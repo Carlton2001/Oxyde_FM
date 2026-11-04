@@ -20,6 +20,7 @@ mod grouping;
 mod group_selection;
 pub(crate) use group_selection::GroupSelection;
 mod keyboard;
+mod type_select;
 mod keyboard_menu;
 mod toasts;
 mod updates;
@@ -230,6 +231,7 @@ pub struct OxydeApp {
     pub drag_target: Option<DragTarget>,
     item_press: Option<item_pointer::ItemPress>,
     item_selection_drag: bool,
+    type_select: type_select::TypeSelect,
     pub(crate) suppress_item_selection_click: bool,
     pub drop_target_idx: Option<usize>,
     pub drop_target_pane: Option<String>,
@@ -430,6 +432,7 @@ impl OxydeApp {
             drag_target: None,
             item_press: None,
             item_selection_drag: false,
+            type_select: Default::default(),
             suppress_item_selection_click: false,
             drop_target_idx: None,
             drop_target_pane: None,

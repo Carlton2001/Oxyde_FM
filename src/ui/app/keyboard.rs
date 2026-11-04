@@ -41,7 +41,11 @@ impl OxydeApp {
             | ("s", false, true, true)
             | ("menu", false, false, _)
             | ("f10", false, false, true));
-        if !recognized { return false; }
+        if !recognized {
+            if m.control || m.alt { return false; }
+            let Some(text) = key.key_char.as_deref() else { return false; };
+            return self.type_select(text, cx);
+        }
         if !self.context_menus.is_empty() {
             self.context_menus.clear();
             cx.notify();
