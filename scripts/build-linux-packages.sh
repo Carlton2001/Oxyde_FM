@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Build Oxyde's RPM on Fedora, or its DEB on Ubuntu 24.04, in a podman container
-# elsewhere. A package only runs on systems at least as recent as the one that built it.
+# Build Oxyde's RPM on Fedora, or its DEB or per-user archive on Ubuntu 24.04, in a podman
+# container elsewhere. A package only runs on systems at least as recent as the one that
+# built it: the archive takes the oldest supported glibc so that it runs on most systems.
 set -euo pipefail
 
 app_id=io.github.Carlton2001.Oxyde
 
 usage() {
-    printf 'Usage: bash scripts/build-linux-packages.sh (--rpm | --deb) [--offline] [--skip-build]\n'
+    printf 'Usage: bash scripts/build-linux-packages.sh (--rpm | --deb | --tar) [--offline] [--skip-build]\n'
     printf 'Writes to target/linux-packages/output. --offline reuses cached crates and keeps\n'
     printf 'the notices of the previous run, which needs every crate of every target.\n'
 }
@@ -18,6 +19,7 @@ for argument in "$@"; do
     case "$argument" in
         --rpm) format=rpm ;;
         --deb) format=deb ;;
+        --tar) format=tar ;;
         --offline) offline=(--offline) ;;
         --skip-build) skip_build=true ;;
         --help|-h) usage; exit 0 ;;
@@ -30,7 +32,7 @@ root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd -- "$root"
 
 # The objects link against Ubuntu's libraries: they get a target folder of their own.
-if [[ $format == deb && $(. /etc/os-release; echo "$ID:$VERSION_ID") != ubuntu:24.04 ]]; then
+if [[ $format != rpm && $(. /etc/os-release; echo "$ID:$VERSION_ID") != ubuntu:24.04 ]]; then
     image=localhost/oxyde-build-ubuntu:24.04
     podman build -q -t "$image" packaging/linux/debian >/dev/null
     exec podman run --rm --userns=keep-id --security-opt label=disable -e HOME=/tmp \
@@ -60,23 +62,29 @@ if [[ ${#offline[@]} -eq 0 || ! -s $notices ]]; then
 fi
 
 rm -rf "$stage"
-install -d "$stage/usr/bin"
+# Packages install under /usr; the archive is one folder that install.sh places as a whole.
+archive_name=oxyde-$version-x86_64-linux
+case $format in
+    tar) prefix=$stage/$archive_name ;;
+    *) prefix=$stage/usr ;;
+esac
+install -d "$prefix/bin"
 for binary in oxyde oxyde-archive-io-worker oxyde-archive-list-worker; do
-    install -m 755 -s "$target/release/$binary" "$stage/usr/bin/$binary"
+    install -m 755 -s "$target/release/$binary" "$prefix/bin/$binary"
 done
-install -Dm 644 "packaging/linux/$app_id.desktop" "$stage/usr/share/applications/$app_id.desktop"
-install -Dm 644 assets/icons/logo_oxyde.svg "$stage/usr/share/icons/hicolor/scalable/apps/$app_id.svg"
+install -Dm 644 "packaging/linux/$app_id.desktop" "$prefix/share/applications/$app_id.desktop"
+install -Dm 644 assets/icons/logo_oxyde.svg "$prefix/share/icons/hicolor/scalable/apps/$app_id.svg"
 for icon in packaging/linux/icons/*/"$app_id.png"; do
     size=$(basename "$(dirname "$icon")")
-    install -Dm 644 "$icon" "$stage/usr/share/icons/hicolor/$size/apps/$app_id.png"
+    install -Dm 644 "$icon" "$prefix/share/icons/hicolor/$size/apps/$app_id.png"
 done
-install -d "$stage/usr/share/metainfo"
+install -d "$prefix/share/metainfo"
 sed -e "s/@VERSION@/$version/" -e "s/@DATE@/$date/" "packaging/linux/$app_id.metainfo.xml" \
-    > "$stage/usr/share/metainfo/$app_id.metainfo.xml"
-chmod 644 "$stage/usr/share/metainfo/$app_id.metainfo.xml"
+    > "$prefix/share/metainfo/$app_id.metainfo.xml"
+chmod 644 "$prefix/share/metainfo/$app_id.metainfo.xml"
 
-desktop-file-validate "$stage/usr/share/applications/$app_id.desktop"
-appstreamcli validate --no-net "$stage/usr/share/metainfo/$app_id.metainfo.xml"
+desktop-file-validate "$prefix/share/applications/$app_id.desktop"
+appstreamcli validate --no-net "$prefix/share/metainfo/$app_id.metainfo.xml"
 
 licenses() {
     install -Dm 644 "$notices" "$1/THIRD-PARTY-NOTICES.md"
@@ -130,6 +138,18 @@ case $format in
         SOURCE_DATE_EPOCH=$commit_time dpkg-deb --root-owner-group -Zxz --build "$stage" "$output/$package"
         # Warnings are reported; an error tag stops the build.
         lintian --fail-on error --tag-display-limit 0 "$output/$package"
+        ;;
+    tar)
+        licenses "$prefix/share/licenses"
+        install -m 644 LICENSE "$prefix/share/licenses/LICENSE"
+        sed "s/^release_version=@VERSION@$/release_version=$version/" packaging/linux/install.sh > "$prefix/install.sh"
+        chmod 755 "$prefix/install.sh"
+        package=$archive_name.tar.gz
+        tar -C "$stage" --sort=name --mtime="@$commit_time" --owner=0 --group=0 --numeric-owner \
+            -cf - "$archive_name" | gzip -9n > "$output/$package"
+        # The installer published beside the archive, for curl | bash.
+        install -m 755 "$prefix/install.sh" "$output/install.sh"
+        (cd "$output" && sha256sum install.sh > install.sh.sha256)
         ;;
 esac
 (cd "$output" && sha256sum "$package" > "$package.sha256")

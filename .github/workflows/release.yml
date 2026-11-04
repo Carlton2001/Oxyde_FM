@@ -38,8 +38,10 @@ jobs:
     uses: ./.github/workflows/_audit.yml
   distribution:
     uses: ./.github/workflows/_distribution.yml
+  linux:
+    uses: ./.github/workflows/_linux-distribution.yml
   release:
-    needs: [version, tests, audit, distribution]
+    needs: [version, tests, audit, distribution, linux]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Holds the updater signing secrets; protection rules can be added on GitHub.
@@ -81,5 +83,8 @@ jobs:
             --notes 'Consultez le CHANGELOG pour la liste des changements.' `
             $setup "$setup.sig" "$setup.sha256" `
             "$output/Oxyde_FM-$version-x64-portable.zip" "$output/Oxyde_FM-$version-x64-portable.zip.sha256" `
-            "$output/latest.json"
+            "$output/latest.json" `
+            "$output/oxyde-$version-x86_64-linux.tar.gz" "$output/oxyde-$version-x86_64-linux.tar.gz.sha256" `
+            "$output/oxyde_$version-1_amd64.deb" "$output/oxyde_$version-1_amd64.deb.sha256" `
+            "$output/install.sh" "$output/install.sh.sha256"
           if ($LASTEXITCODE -ne 0) { throw 'Release creation failed.' }

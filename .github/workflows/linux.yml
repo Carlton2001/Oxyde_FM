@@ -17,6 +17,7 @@ on:
       - scripts/rpm-license.py
       - scripts/third-party-notices.hbs
       - .github/workflows/linux.yml
+      - .github/workflows/_linux-distribution.yml
   pull_request:
     branches: [main, linux-foundation]
     paths: *paths
@@ -92,7 +93,7 @@ jobs:
           rustup-init -y --no-modify-path --profile minimal --default-toolchain "$RUST_VERSION"
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
       - name: Install cargo-about
-        run: &install-cargo-about |
+        run: |
           package="cargo-about-$CARGO_ABOUT_VERSION-x86_64-unknown-linux-musl"
           curl -fsSL -o /tmp/cargo-about.tar.gz \
             "https://github.com/EmbarkStudios/cargo-about/releases/download/$CARGO_ABOUT_VERSION/$package.tar.gz"
@@ -114,37 +115,7 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
-  deb:
+  # The DEB and the per-user archive, as a release builds them.
+  distribution:
     needs: tests
-    runs-on: ubuntu-24.04
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            gcc g++ make pkg-config libfontconfig-dev libfreetype-dev libxkbcommon-dev \
-            libxkbcommon-x11-dev libxcb1-dev libwayland-dev dpkg-dev lintian python3 \
-            desktop-file-utils appstream
-      - name: Install Rust
-        run: rustup toolchain install "$RUST_VERSION" --profile minimal --no-self-update && rustup default "$RUST_VERSION"
-      - name: Install cargo-about
-        run: *install-cargo-about
-      - name: Restore Rust dependencies
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          shared-key: linux-deb-v1
-          cache-bin: false
-      - name: Build the DEB
-        run: bash scripts/build-linux-packages.sh --deb
-      - name: Install the DEB with its dependencies
-        run: sudo apt-get install -y ./target/linux-packages/output/*.deb && test -x /usr/bin/oxyde-archive-io-worker
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: Oxyde-deb-x64
-          path: target/linux-packages/output/*.deb*
-          if-no-files-found: error
-          compression-level: 0
+    uses: ./.github/workflows/_linux-distribution.yml

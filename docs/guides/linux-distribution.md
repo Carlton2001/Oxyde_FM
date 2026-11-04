@@ -1,17 +1,35 @@
 # Distributing Oxyde on Linux
 
-RPM and DEB packages are built and tested in CI. The Windows side has [its own guide](distribution.md). Packaging sources: [`packaging/`](../../packaging/README.md).
+RPM and DEB packages and a per-user archive are built and tested in CI. The Windows side has [its own guide](distribution.md). Packaging sources: [`packaging/`](../../packaging/README.md).
 
 ## Build
 
 ```bash
 bash scripts/build-linux-packages.sh --rpm   # on Fedora
 bash scripts/build-linux-packages.sh --deb   # anywhere: podman outside Ubuntu 24.04
+bash scripts/build-linux-packages.sh --tar   # per-user archive, same image as the DEB
 ```
 
-Files and their SHA-256 land in `target/linux-packages/output`. Beyond the [development dependencies](linux-development.md#setup-on-fedora-workstation), Fedora needs `rpm-build`, `desktop-file-utils`, `appstream`, `python3` and `cargo-about` 0.9.2. The DEB builds in the image from `packaging/linux/debian/Containerfile`, with its own `target/ubuntu-24.04` folder; `lintian` stops the build on an error, `rpmlint` is informational. `--skip-build` reuses existing release executables. `--offline` keeps the previous build's notices: `cargo-about` reads crates for every target, macOS included, which a Linux cache does not hold.
+Files and their SHA-256 land in `target/linux-packages/output`. Beyond the [development dependencies](linux-development.md#setup-on-fedora-workstation), Fedora needs `rpm-build`, `desktop-file-utils`, `appstream`, `python3` and `cargo-about` 0.9.2. The DEB and the archive build in the image from `packaging/linux/debian/Containerfile`, with its own `target/ubuntu-24.04` folder; `lintian` stops the build on an error, `rpmlint` is informational. `--skip-build` reuses existing release executables. `--offline` keeps the previous build's notices: `cargo-about` reads crates for every target, macOS included, which a Linux cache does not hold.
 
-A package installs only on a system at least as recent as the one that built it (glibc): Fedora 44+ for the RPM, Ubuntu 24.04+ and Debian 13+ for the DEB. x86-64 only, with no signature or repository for now. `release.yml` does not publish these packages: a release remains Windows only.
+A package installs only on a system at least as recent as the one that built it (glibc): Fedora 44+ for the RPM, Ubuntu 24.04+ and Debian 13+ for the DEB, glibc 2.39+ for the archive. x86-64 only, with no signature beyond SHA-256 and no repository, by choice: a release publishes the archive, the DEB and `install.sh`; the RPM stays a CI artifact.
+
+## Per-user installation
+
+`packaging/linux/install.sh` is the single entry point, published with each release:
+
+```bash
+curl -fsSL https://github.com/Carlton2001/Oxyde_FM/releases/latest/download/install.sh | bash
+```
+
+The build writes the release version into the copy it publishes; run from a checkout, the script asks GitHub for the latest release. It checks each download against the `.sha256` beside it, then:
+
+- **Debian and Ubuntu**: installs the DEB with `apt`, because only `/usr/bin/oxyde` gets the AppArmor profile that lets bubblewrap confine decoders.
+- **Everything else**, Fedora Silverblue and other image-based systems included: places `oxyde-<version>-x86_64-linux` in `~/.local/lib/oxyde/<version>` (executable and workers in `bin/`), switches the `current` link atomically, links `~/.local/bin/oxyde`, and writes the desktop entry (marked `X-Oxyde-Install=user`), icons and AppStream metadata under `~/.local/share`. Nothing needs root or a reboot. The replaced version is kept for an Oxyde still running from it; older ones are removed. No `data` folder is created next to the executable, which would make Oxyde portable.
+
+It then probes the runtime dependencies listed below and, when some are missing, prints the feature each one carries and the exact `dnf`, `rpm-ostree`, `pacman`, `zypper` or `apt-get` command, and offers to run it. Codecs are left to the user.
+
+Options: `--version X.Y.Z`, `--archive FILE|FOLDER` (offline, or `./install.sh` from an extracted archive), `--set-default` (default application for folders through `xdg-mime`), `--yes`, `--uninstall` (settings are kept). Running it again updates; Oxyde does not update itself on Linux yet.
 
 ## Package contents
 
@@ -57,6 +75,7 @@ Limits: each launch is a new process, with no single instance, and its preferenc
 `.github/workflows/linux.yml`, on `main` and its PRs:
 
 - **tests** on `ubuntu-24.04`: warning-free compile, full suite, then `preview_jobs` separately, whose 2 s timeouts fail when the whole suite loads the machine. The AppArmor restriction is lifted so confinement tests run.
-- **rpm** in a `fedora:44` container and **deb** on `ubuntu-24.04`: build, install with dependencies, downloadable artifact.
+- **rpm** in a `fedora:44` container: build, install with dependencies, downloadable artifact.
+- **distribution** on `ubuntu-24.04`, `_linux-distribution.yml`, also run by `release.yml`: builds the DEB and the archive from the same executables, installs the DEB, installs the archive twice for a user then removes it.
 
 Rust is pinned to 1.99.1 and `cargo-about` verified by hash. Containers forbid bubblewrap, so they do not exercise confinement.

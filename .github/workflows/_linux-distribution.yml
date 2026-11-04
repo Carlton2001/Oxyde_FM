@@ -1,0 +1,72 @@
+name: Linux distribution (reusable)
+
+# Build the DEB and the per-user archive once on Ubuntu 24.04, the oldest supported glibc,
+# install both, and upload them with install.sh; a release run publishes these same files.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  RUST_VERSION: 1.99.1
+  CARGO_ABOUT_VERSION: 0.9.2
+  # From the official release's .tar.gz.sha256; pin locally, never trust a downloaded checksum alone.
+  CARGO_ABOUT_SHA256: 9099a59e820c38a68b9d65f300662a567d56562f9a10f6aa4c7e86c17c2566af
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc g++ make pkg-config libfontconfig-dev libfreetype-dev libxkbcommon-dev \
+            libxkbcommon-x11-dev libxcb1-dev libwayland-dev dpkg-dev lintian python3 \
+            desktop-file-utils appstream
+      - name: Install Rust
+        run: rustup toolchain install "$RUST_VERSION" --profile minimal --no-self-update && rustup default "$RUST_VERSION"
+      - name: Install cargo-about
+        run: |
+          package="cargo-about-$CARGO_ABOUT_VERSION-x86_64-unknown-linux-musl"
+          curl -fsSL -o /tmp/cargo-about.tar.gz \
+            "https://github.com/EmbarkStudios/cargo-about/releases/download/$CARGO_ABOUT_VERSION/$package.tar.gz"
+          echo "$CARGO_ABOUT_SHA256  /tmp/cargo-about.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/cargo-about.tar.gz -C "$HOME/.cargo/bin" --strip-components=1 "$package/cargo-about"
+      - name: Restore Rust dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          shared-key: linux-deb-v1
+          cache-bin: false
+      - name: Build the DEB
+        run: bash scripts/build-linux-packages.sh --deb
+      - name: Build the per-user archive from the same executables
+        run: bash scripts/build-linux-packages.sh --tar --skip-build --offline
+      - name: Install the DEB with its dependencies
+        run: sudo apt-get install -y ./target/linux-packages/output/*.deb && test -x /usr/bin/oxyde-archive-io-worker
+      - name: Install, update and remove the archive for a user
+        run: |
+          export HOME=$(mktemp -d) XDG_DATA_HOME=
+          output=$PWD/target/linux-packages/output
+          bash "$output/install.sh" --archive "$output"/oxyde-*-x86_64-linux.tar.gz
+          bash "$output/install.sh" --archive "$output"/oxyde-*-x86_64-linux.tar.gz
+          test -x "$HOME/.local/bin/oxyde"
+          test -x "$HOME/.local/lib/oxyde/current/bin/oxyde-archive-io-worker"
+          grep -q '^X-Oxyde-Install=user$' "$HOME/.local/share/applications/io.github.Carlton2001.Oxyde.desktop"
+          desktop-file-validate "$HOME/.local/share/applications/io.github.Carlton2001.Oxyde.desktop"
+          bash "$output/install.sh" --uninstall
+          test ! -e "$HOME/.local/lib/oxyde" && test ! -e "$HOME/.local/bin/oxyde"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Oxyde_FM-linux-x64
+          path: |
+            target/linux-packages/output/*.deb*
+            target/linux-packages/output/*.tar.gz*
+            target/linux-packages/output/install.sh*
+          if-no-files-found: error
+          compression-level: 0
