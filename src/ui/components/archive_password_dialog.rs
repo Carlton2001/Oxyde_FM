@@ -60,7 +60,7 @@ pub(crate) fn render_archive_password_dialog(
         .child(div().pb(rems(0.375)).child(cx.i18n().text_with_args(Message::ArchivePasswordPrompt, &args)))
         .child(form_row(cx.i18n().text(Message::NetworkPassword), field, cx));
     if prompt.wrong {
-        body = body.child(div().w_full().text_right().text_color(theme.error).child(cx.i18n().text(Message::ArchivePasswordWrong)));
+        body = body.child(crate::ui::components::modal::field_error(cx.i18n().text(Message::ArchivePasswordWrong), theme));
     }
     let focused = |control: usize| prompt.controls[control].is_focused(window);
     let (cancel, submit, close) = (handle.clone(), handle.clone(), handle.clone());

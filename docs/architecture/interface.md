@@ -36,6 +36,7 @@ Toggles use `elements::toggle::toggle`, including in trash settings: slightly ti
 | Button | `elements/button/style.rs`: `button_style`, `ButtonVariant` |
 | Single choice among a few options | `elements/segmented.rs`: `segmented`, `segment` |
 | Form or modal | `components/modal.rs`: `Modal`, `form_row`, `action_button` |
+| Confirmation or notice | `components/confirmation.rs`: `body` (icon in a tinted disc, question, details, irreversibility warning), `cancel_button`, `confirm_button` with `Tone::Danger` for destructive actions |
 | Secondary window and footer | `components/tool_window`; [window contracts](windows.md) |
 | Plain field | `TextInput::new` with `TextInputOptions::default()` |
 | Composite field | `input::field_frame` with `InputAppearance::Embedded` |

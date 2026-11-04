@@ -136,6 +136,7 @@ impl OxydeApp {
         self.rename_pending = false;
         self.rename_click_candidate = None;
         self.editing_path = Some(path);
+        self.editing_is_dir = is_dir;
         self.editing_text = initial_name.clone();
         self.rename_error = None;
         self.inline_rename = inline;
@@ -209,6 +210,7 @@ impl OxydeApp {
             let name = self.editing_text.trim();
             if name.is_empty() {
                 self.rename_error = Some(Message::RenameEmptyName);
+                self.rename_shake_id = self.rename_shake_id.wrapping_add(1);
                 cx.notify();
                 return;
             }
@@ -222,6 +224,7 @@ impl OxydeApp {
             };
             if name == "." || name == ".." || invalid {
                 self.rename_error = Some(Message::RenameInvalidName);
+                self.rename_shake_id = self.rename_shake_id.wrapping_add(1);
                 cx.notify();
                 return;
             }

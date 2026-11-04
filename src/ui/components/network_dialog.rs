@@ -73,7 +73,14 @@ pub(crate) fn render_force_confirmation(
             Modal::new(
                 "network-force-confirmation",
                 cx.i18n().text(Message::DisconnectThisNetworkDrive),
-                div().child(cx.i18n().text_with_args(Message::NetworkForcePrompt, &args)),
+                crate::ui::components::confirmation::body(
+                    "icons/triangle-alert.svg",
+                    crate::ui::components::confirmation::Tone::Danger,
+                    cx.i18n().text_with_args(Message::NetworkForcePrompt, &args),
+                    Vec::new(),
+                    None,
+                    theme,
+                ),
             )
             .title_icon("icons/triangle-alert.svg")
             .standalone(false)
@@ -81,28 +88,25 @@ pub(crate) fn render_force_confirmation(
                 close.update(cx, |view, cx| view.resolve_network_force(false, window, cx));
             })
             .action(
-                button_style(action_button("network-force-cancel"), theme, ButtonVariant::Secondary, true)
-                    .border(rems(0.0625))
-                    .border_color(if confirmation.focus.is_focused(window) {
-                        theme.accent
-                    } else {
-                        theme.control_hover
-                    })
-                    .child(cx.i18n().text(Message::Cancel))
+                crate::ui::components::confirmation::cancel_button(
+                    "network-force-cancel",
+                    confirmation.focus.is_focused(window),
+                    cx.i18n().text(Message::Cancel),
+                    theme,
+                )
                     .on_click(move |_, window, cx| {
                         cancel.update(cx, |view, cx| view.resolve_network_force(false, window, cx));
                     }),
             )
             .action(
-                button_style(action_button("network-force-accept"), theme, ButtonVariant::Danger, true)
-                    .track_focus(&confirmation.confirm_focus)
-                    .border(rems(0.0625))
-                    .border_color(if confirmation.confirm_focus.is_focused(window) {
-                        theme.text
-                    } else {
-                        theme.danger_background
-                    })
-                    .child(cx.i18n().text(Message::NetworkForceAction))
+                crate::ui::components::confirmation::confirm_button(
+                    "network-force-accept",
+                    confirmation.confirm_focus.is_focused(window),
+                    crate::ui::components::confirmation::Tone::Danger,
+                    cx.i18n().text(Message::NetworkForceAction),
+                    theme,
+                )
+                .track_focus(&confirmation.confirm_focus)
                     .on_click(move |_, window, cx| {
                         force.update(cx, |view, cx| view.resolve_network_force(true, window, cx));
                     }),

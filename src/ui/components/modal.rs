@@ -46,6 +46,21 @@ pub(crate) fn responsive_form_row(
             .when(stacked, |value| value.w_full()).child(value))
 }
 
+/// The message of a refused field, under it and aligned to its right edge: the field
+/// shakes, this says why.
+pub(crate) fn field_error(message: SharedString, theme: crate::ui::theme::OxydeTheme) -> Div {
+    div()
+        .w_full()
+        .flex()
+        .items_center()
+        .justify_end()
+        .gap(rems(0.375))
+        .text_size(rems(0.75))
+        .text_color(theme.error)
+        .child(svg().path("icons/circle-x.svg").size(rems(0.75)).flex_none().text_color(theme.error))
+        .child(message)
+}
+
 /// Compact action dimensions shared by every application modal.
 pub fn action_button(id: impl Into<ElementId>) -> Stateful<Div> {
     div()

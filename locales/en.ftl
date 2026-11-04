@@ -503,14 +503,12 @@ trash-kde-retention-note = KDE settings, applied to files deleted from Dolphin a
 trash-retention-error = Could not apply settings. Check the entered values.
 
 trash-settings-ok = OK
-trash-delete-prompt = Delete the selected items?
 
 trash-item-count = { $count ->
     [one] ({ $formatted } item)
    *[other] ({ $formatted } items)
     }
 
-trash-permanent-delete-prompt = Permanently delete the selected items?
 
 drive-tooltip-usage = { $used } / { $total }
 
@@ -837,3 +835,20 @@ quick-search-content-skipped =
        *[other] Content not checked: { $number } files
     }
 quick-search-content-skipped-detail = Content search incomplete for { $path }: unreadable document or resource limit reached.
+delete-prompt-count = { $count ->
+    [one] Delete this item?
+   *[other] Delete these { $number } items?
+    }
+delete-permanent-prompt-count = { $count ->
+    [one] Permanently delete this item?
+   *[other] Permanently delete these { $number } items?
+    }
+delete-more = { $count ->
+    [one] and { $number } other
+   *[other] and { $number } others
+    }
+delete-restore-hint = You can restore them from the trash.
+delete-irreversible = This cannot be undone.
+rename-extension-changed = The extension changes from .{ $from } to .{ $to }.
+rename-extension-removed = The name loses its .{ $from } extension.
+compression-protection = Protection

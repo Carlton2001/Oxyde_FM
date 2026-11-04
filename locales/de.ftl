@@ -810,14 +810,12 @@ trash-kde-retention-note = KDE-Einstellungen, gelten für Dateien, die in Dolphi
 trash-retention-error = Einstellungen konnten nicht angewendet werden. Prüfen Sie die eingegebenen Werte.
 
 trash-settings-ok = OK
-trash-delete-prompt = Ausgewählte Elemente löschen?
 
 trash-item-count = { $count ->
     [one] ({ $formatted } Element)
    *[other] ({ $formatted } Elemente)
     }
 
-trash-permanent-delete-prompt = Ausgewählte Elemente endgültig löschen?
 
 drive-tooltip-usage = { $used } / { $total }
 
@@ -1144,3 +1142,20 @@ quick-search-content-skipped =
        *[other] Inhalt nicht geprüft: { $number } Dateien
     }
 quick-search-content-skipped-detail = Inhaltssuche für { $path } unvollständig: Dokument nicht lesbar oder Ressourcenlimit erreicht.
+delete-prompt-count = { $count ->
+    [one] Dieses Element löschen?
+   *[other] Diese { $number } Elemente löschen?
+    }
+delete-permanent-prompt-count = { $count ->
+    [one] Dieses Element endgültig löschen?
+   *[other] Diese { $number } Elemente endgültig löschen?
+    }
+delete-more = { $count ->
+    [one] und { $number } weiteres
+   *[other] und { $number } weitere
+    }
+delete-restore-hint = Sie können sie aus dem Papierkorb wiederherstellen.
+delete-irreversible = Dies kann nicht rückgängig gemacht werden.
+rename-extension-changed = Die Endung ändert sich von .{ $from } zu .{ $to }.
+rename-extension-removed = Der Name verliert seine Endung .{ $from }.
+compression-protection = Schutz

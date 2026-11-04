@@ -810,14 +810,12 @@ trash-kde-retention-note = Impostazioni di KDE, applicate ai file eliminati da D
 trash-retention-error = Impossibile applicare le impostazioni. Controlla i valori inseriti.
 
 trash-settings-ok = OK
-trash-delete-prompt = Eliminare gli elementi selezionati?
 
 trash-item-count = { $count ->
     [one] ({ $formatted } elemento)
    *[other] ({ $formatted } elementi)
     }
 
-trash-permanent-delete-prompt = Eliminare definitivamente gli elementi selezionati?
 
 drive-tooltip-usage = { $used } / { $total }
 
@@ -1144,3 +1142,20 @@ quick-search-content-skipped =
        *[other] Contenuto non verificato: { $number } file
     }
 quick-search-content-skipped-detail = Ricerca del contenuto incompleta per { $path }: documento illeggibile o limite di risorse raggiunto.
+delete-prompt-count = { $count ->
+    [one] Eliminare questo elemento?
+   *[other] Eliminare questi { $number } elementi?
+    }
+delete-permanent-prompt-count = { $count ->
+    [one] Eliminare definitivamente questo elemento?
+   *[other] Eliminare definitivamente questi { $number } elementi?
+    }
+delete-more = { $count ->
+    [one] e { $number } altro
+   *[other] e altri { $number }
+    }
+delete-restore-hint = Potrà ripristinarli dal cestino.
+delete-irreversible = Questa azione non può essere annullata.
+rename-extension-changed = L’estensione passa da .{ $from } a .{ $to }.
+rename-extension-removed = Il nome perde l’estensione .{ $from }.
+compression-protection = Protezione

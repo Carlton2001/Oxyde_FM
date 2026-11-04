@@ -1,10 +1,11 @@
+use crate::ui::components::confirmation;
 use crate::ui::app::OxydeApp;
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::{OxydeTheme, ThemeContext};
 use gpui::prelude::*;
 use gpui::*;
 use crate::ui::app::SettingsDataAction;
-use crate::ui::components::modal::{action_button, Modal};
+use crate::ui::components::modal::Modal;
 use super::controls::icon;
 
 pub(crate) fn render_settings_confirmation(
@@ -18,6 +19,8 @@ pub(crate) fn render_settings_confirmation(
     let title = if reset { Message::SettingsResetPreferences } else { Message::SettingsClearCache };
     let prompt = if reset { Message::SettingsResetConfirm } else { Message::SettingsClearCacheConfirm };
     let icon_path = if reset { "icons/rotate-ccw.svg" } else { "icons/trash.svg" };
+    // Resetting loses choices; the cache is rebuilt on its own.
+    let tone = if reset { confirmation::Tone::Danger } else { confirmation::Tone::Neutral };
     let theme = *cx.theme();
     let keyboard = handle.clone();
     let cancel = handle.clone();
@@ -61,30 +64,21 @@ pub(crate) fn render_settings_confirmation(
         .on_action(|_: &crate::ui::app::Actualiser, _, cx| cx.stop_propagation())
         .child(
             Modal::new("settings-data-confirmation", cx.i18n().text(title),
-                div().child(cx.i18n().text(prompt)))
+                confirmation::body(icon_path, tone, cx.i18n().text(prompt), Vec::new(), None, theme))
                 .title_icon(icon_path)
                 .standalone(false)
                 .on_backdrop_dismiss(move |window, cx| {
                     backdrop.update(cx, |view, cx| view.resolve_settings_confirmation(false, window, cx));
                 })
                 .action(
-                    action_button("settings-confirm-cancel")
-                        .bg(theme.control_hover)
-                        .border(rems(0.0625))
-                        .border_color(if confirmation.focus.is_focused(window) { theme.accent } else { theme.control_hover })
-                        .child(cx.i18n().text(Message::Cancel))
+                    confirmation::cancel_button("settings-confirm-cancel", confirmation.focus.is_focused(window), cx.i18n().text(Message::Cancel), theme)
                         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                             cancel.update(cx, |view, cx| view.resolve_settings_confirmation(false, window, cx));
                         }),
                 )
                 .action(
-                    action_button("settings-confirm-accept")
+                    confirmation::confirm_button("settings-confirm-accept", confirmation.confirm_focus.is_focused(window), tone, cx.i18n().text(title), theme)
                         .track_focus(&confirmation.confirm_focus)
-                        .bg(theme.accent).text_color(theme.text_on_accent)
-                        .hover(|d| d.opacity(0.85))
-                        .border(rems(0.0625))
-                        .border_color(if confirmation.confirm_focus.is_focused(window) { theme.text } else { theme.accent })
-                        .child(cx.i18n().text(title))
                         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                             confirm.update(cx, |view, cx| view.resolve_settings_confirmation(true, window, cx));
                         }),

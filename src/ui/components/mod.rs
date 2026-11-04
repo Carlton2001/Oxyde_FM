@@ -5,6 +5,7 @@ pub mod file_list;
 pub mod icons;
 pub mod input;
 pub mod modal;
+pub(crate) mod confirmation;
 pub(crate) mod network;
 pub(crate) mod network_dialog;
 pub(crate) mod remote_login_dialog;

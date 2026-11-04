@@ -2,7 +2,7 @@
 //! credentials, « Open With », confirmations and operation notices.
 use super::DialogKind;
 use crate::ui::app::OxydeApp;
-use crate::ui::components::modal::{action_button, Modal};
+use crate::ui::components::modal::Modal;
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
@@ -160,15 +160,20 @@ fn render_notice(
             Modal::new(
                 "operation-notice",
                 cx.i18n().text(Message::OperationFailed),
-                div().text_color(theme.text_muted).child(message),
+                crate::ui::components::confirmation::body(
+                    "icons/circle-x.svg",
+                    crate::ui::components::confirmation::Tone::Danger,
+                    SharedString::default(),
+                    vec![div().child(message).into_any_element()],
+                    None,
+                    theme,
+                ),
             )
             .title_icon("icons/circle-x.svg")
             .standalone(false)
             .on_close(move |_, cx| dismiss(&close, cx))
             .action(
-                action_button("operation-notice-close")
-                    .hover(|d| d.bg(theme.control_hover))
-                    .child(cx.i18n().text(Message::Close))
+                crate::ui::components::confirmation::cancel_button("operation-notice-close", false, cx.i18n().text(Message::Close), theme)
                     .on_mouse_down(MouseButton::Left, move |_, _, cx| dismiss(&button, cx)),
             ),
         )

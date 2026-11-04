@@ -329,6 +329,8 @@ pub struct OxydeApp {
     pub(crate) drag_tab_switch: Option<(String, usize)>,
 
     pub editing_path: Option<String>,
+    /// Whether the item being renamed is a folder, whose name has no extension.
+    pub(crate) editing_is_dir: bool,
     pub editing_text: String,
     pub editing_view: Option<Entity<TextInput>>,
     pub inline_rename: bool,
@@ -539,6 +541,7 @@ impl OxydeApp {
             drag_target_default_copy: false,
             drag_tab_switch: None,
             editing_path: None,
+            editing_is_dir: false,
             editing_text: String::new(),
             editing_view: None,
             inline_rename: false,
