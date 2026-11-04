@@ -122,15 +122,20 @@ pub(crate) fn render_open_with_dialog(
         }
     }
     let toggle = handle.clone();
+    // The default application is already used for this type: the switch shows it, fixed.
+    let is_default = prompt.selected
+        .and_then(|index| prompt.choices.as_ref()?.get(index))
+        .is_some_and(|choice| choice.is_default);
     let remember = div()
         .id("open-with-remember")
+        .when(is_default, |row| row.opacity(0.5))
         .flex()
         .items_center()
         .gap(rems(0.5))
         .pt(rems(0.25))
         .child(div().flex_1().min_w_0().child(i18n.text(Message::OpenWithAlways)))
-        .child(crate::ui::elements::toggle::toggle(prompt.remember, theme))
-        .on_click(move |_, _, cx| toggle.update(cx, |view, cx| view.toggle_open_with_remember(cx)));
+        .child(crate::ui::elements::toggle::toggle(prompt.remember || is_default, theme))
+        .when(!is_default, |row| row.on_click(move |_, _, cx| toggle.update(cx, |view, cx| view.toggle_open_with_remember(cx))));
     let body = div()
         .flex()
         .flex_col()
