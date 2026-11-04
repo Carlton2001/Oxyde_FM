@@ -1084,6 +1084,7 @@ viewer-tree-unsorted = Più di { $number } elementi: mostrati in ordine di lettu
 viewer-tree-row-limit = Troppe righe visualizzate: comprimi una cartella per espanderne un'altra.
 viewer-tree-archive-size = { $size } una volta estratto
 viewer-tree-archive-ratio = { $size } una volta estratto · l'archivio ne occupa il { $percent } %
+viewer-tree-files-size = { $size } (file)
 viewer-open = Apri il Visualizzatore
 viewer-close = Chiudi il Visualizzatore
 viewer-slide = Diapositiva

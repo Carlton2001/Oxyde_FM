@@ -39,7 +39,10 @@ fn counts(folder: &Folder, cx: &App) -> SharedString {
     };
     let mut parts = vec![label(folder.folders, Message::StatusFolders), label(folder.files, Message::StatusFiles)];
     if folder.files > 0 {
-        parts.push(format_size(folder.file_bytes, false, true, language).into());
+        // Folder sizes are never computed here: say the total is the files'.
+        let mut args = FluentArgs::new();
+        args.set("size", format_size(folder.file_bytes, false, true, language));
+        parts.push(cx.i18n().text_with_args(Message::ViewerTreeFilesSize, &args));
     }
     parts.join(" · ").into()
 }
@@ -274,7 +277,7 @@ impl Viewer {
             .flex()
             .flex_col()
             .child(header)
-            .child(div().flex_1().min_h_0().child(body))
+            .child(div().flex_1().min_h_0().child(self.with_scrollbar(body.into_any_element(), cx)))
             .into_any_element()
     }
 }

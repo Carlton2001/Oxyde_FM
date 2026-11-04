@@ -785,6 +785,7 @@ viewer-tree-unsorted = Plus de { $number } éléments : affichés dans l’ordre
 viewer-tree-row-limit = Trop de lignes affichées : repliez un dossier pour en déplier un autre.
 viewer-tree-archive-size = { $size } une fois extraite
 viewer-tree-archive-ratio = { $size } une fois extraite · l’archive en occupe { $percent } %
+viewer-tree-files-size = { $size } (fichiers)
 viewer-slide = Diapositive
 viewer-text-truncated = Seuls les 512 premiers Mio du fichier sont affichés.
 viewer-empty = Sélectionnez un fichier dans un panneau explorateur.

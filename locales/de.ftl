@@ -1084,6 +1084,7 @@ viewer-tree-unsorted = Mehr als { $number } Elemente: in Lesereihenfolge angezei
 viewer-tree-row-limit = Zu viele Zeilen angezeigt: Klappen Sie einen Ordner zu, um einen anderen aufzuklappen.
 viewer-tree-archive-size = { $size } entpackt
 viewer-tree-archive-ratio = { $size } entpackt · das Archiv belegt { $percent } % davon
+viewer-tree-files-size = { $size } (Dateien)
 viewer-open = Dateibetrachter öffnen
 viewer-close = Dateibetrachter schließen
 viewer-slide = Folie

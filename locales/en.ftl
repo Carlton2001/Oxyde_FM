@@ -777,6 +777,7 @@ viewer-tree-unsorted = More than { $number } items: shown in reading order, unso
 viewer-tree-row-limit = Too many rows shown: collapse a folder to expand another.
 viewer-tree-archive-size = { $size } once extracted
 viewer-tree-archive-ratio = { $size } once extracted · the archive takes { $percent } % of it
+viewer-tree-files-size = { $size } (files)
 viewer-open = Open the Viewer
 viewer-close = Close the Viewer
 viewer-slide = Slide

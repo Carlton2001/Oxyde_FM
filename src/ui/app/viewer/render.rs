@@ -224,7 +224,8 @@ impl Render for Viewer {
                             } else {
                                 content.child({
                                     let body = self.render_content(window, cx);
-                                    self.with_scrollbar(body, cx)
+                                    // The tree draws its rail beside its rows, under its summary band.
+                                    if matches!(self.content, super::content::Content::Tree(_)) { body } else { self.with_scrollbar(body, cx) }
                                 })
                             }
                         },
