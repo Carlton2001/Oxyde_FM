@@ -12,7 +12,14 @@ pub(crate) struct ArchiveProtection {
     pub values: [String; 2],
     /// Each field's eye shows its characters.
     pub revealed: [bool; 2],
+    /// Format row, protection row, Cancel and Compress, as Tab reaches them.
+    pub controls: [FocusHandle; 4],
 }
+
+pub(crate) const FORMATS: usize = 0;
+pub(crate) const PROTECTION: usize = 1;
+pub(crate) const CANCEL: usize = 2;
+pub(crate) const SUBMIT: usize = 3;
 
 /// Formats whose content Oxyde can encrypt.
 pub(crate) fn encryptable(extension: &str) -> bool {
@@ -52,6 +59,7 @@ impl OxydeApp {
             inputs,
             values: Default::default(),
             revealed: [false; 2],
+            controls: [(); 4].map(|_| cx.focus_handle()),
         });
     }
 
@@ -87,5 +95,65 @@ impl OxydeApp {
             return Err(Message::ArchivePasswordMismatch);
         }
         ArchiveSecret::new(password.clone()).map(Some).ok_or(Message::ArchivePasswordTooLong)
+    }
+
+    /// Tab order of the compression dialog: name, format, protection, the two password
+    /// fields when they show, then the actions. The eyes stay out of it, as on Windows.
+    fn compression_focus_order(&self, cx: &App) -> Vec<FocusHandle> {
+        let Some(protection) = &self.archive_protection else { return Vec::new() };
+        let mut order: Vec<FocusHandle> = self.editing_view.iter().map(|input| input.read(cx).focus_handle.clone()).collect();
+        order.push(protection.controls[FORMATS].clone());
+        let allowed = self.archive_creation.as_ref().is_some_and(|(_, extension)| encryptable(extension));
+        if allowed {
+            order.push(protection.controls[PROTECTION].clone());
+        }
+        if allowed && protection.protected {
+            order.extend(protection.inputs.iter().map(|input| input.read(cx).focus_handle.clone()));
+        }
+        order.extend(protection.controls[CANCEL..].iter().cloned());
+        order
+    }
+
+    /// Keys of the compression dialog; true when one was handled.
+    pub(crate) fn compression_key(&mut self, key: &str, shift: bool, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let Some(protection) = &self.archive_protection else { return false };
+        let focused = |control: usize| protection.controls[control].is_focused(window);
+        match key {
+            "tab" => {
+                let order = self.compression_focus_order(cx);
+                if order.is_empty() {
+                    return false;
+                }
+                let current = order.iter().position(|focus| focus.contains_focused(window, cx) || focus.is_focused(window));
+                let next = if shift {
+                    current.map_or(order.len() - 1, |current| (current + order.len() - 1) % order.len())
+                } else {
+                    current.map_or(0, |current| (current + 1) % order.len())
+                };
+                window.focus(&order[next], cx);
+                cx.notify();
+            }
+            "left" | "right" if focused(FORMATS) => {
+                let Some((_, extension)) = &self.archive_creation else { return false };
+                let formats = OxydeApp::ARCHIVE_FORMATS;
+                let index = formats.iter().position(|(format, _)| super::archive_extension(format) == *extension).unwrap_or(0);
+                let step = if key == "left" { formats.len() - 1 } else { 1 };
+                self.select_archive_format(formats[(index + step) % formats.len()].0, cx);
+            }
+            "left" | "right" | "space" if focused(PROTECTION) => {
+                let protected = !protection.protected;
+                if let Some(protection) = &mut self.archive_protection {
+                    protection.protected = protected;
+                }
+                self.rename_error = None;
+                cx.notify();
+            }
+            "enter" | "space" if focused(CANCEL) => self.cancel_rename(cx),
+            "enter" | "space" if focused(SUBMIT) => self.submit_rename(cx),
+            "enter" if focused(FORMATS) || focused(PROTECTION) => self.submit_rename(cx),
+            "escape" => self.cancel_rename(cx),
+            _ => return false,
+        }
+        true
     }
 }

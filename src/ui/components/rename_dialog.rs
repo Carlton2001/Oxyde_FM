@@ -9,8 +9,16 @@ use gpui::*;
 pub fn render_rename_dialog(
     view: &OxydeApp,
     handle: Entity<OxydeApp>,
+    window: &mut Window,
     cx: &mut Context<OxydeApp>,
 ) -> impl IntoElement {
+    use crate::ui::app::archive_protection::{CANCEL, FORMATS, PROTECTION, SUBMIT};
+    let controls = view.archive_protection.as_ref().map(|protection| protection.controls.clone());
+    // A focus ring for the dialog's controls reached by Tab.
+    let ring = |control: usize, idle: Hsla| {
+        controls.as_ref().filter(|controls| controls[control].is_focused(window)).map_or(idle, |_| theme_accent(cx))
+    };
+    let key_handle = handle.clone();
     let title = if view.archive_creation.is_some() {
         Message::Compress
     } else {
@@ -25,7 +33,19 @@ pub fn render_rename_dialog(
 
     // Eight formats do not fit beside the actions: they get their own row.
     let formats = view.archive_creation.as_ref().map(|(_, extension)| {
-        let mut formats = div().flex().w_full().mt(rems(0.625)).gap(rems(0.375));
+        let mut formats = div()
+            .id("archive-formats")
+            .flex()
+            .w_full()
+            .mt(rems(0.625))
+            .gap(rems(0.375))
+            .p(rems(0.125))
+            .rounded_md()
+            .border(rems(0.0625))
+            .border_color(ring(FORMATS, theme.surface.alpha(0.0)));
+        if let Some(controls) = &controls {
+            formats = formats.track_focus(&controls[FORMATS]);
+        }
         for (format, label) in OxydeApp::ARCHIVE_FORMATS {
             let format_handle = cancel_handle.clone();
             formats = formats.child(
@@ -54,7 +74,17 @@ pub fn render_rename_dialog(
     let protection = view.archive_creation.as_ref().zip(view.archive_protection.as_ref()).map(|((_, extension), protection)| {
         let allowed = crate::ui::app::archive_protection::encryptable(extension);
         let protected = allowed && protection.protected;
-        let mut choices = div().flex().w_full().mt(rems(0.625)).gap(rems(0.375));
+        let mut choices = div()
+            .id("archive-protection")
+            .track_focus(&protection.controls[PROTECTION])
+            .flex()
+            .w_full()
+            .mt(rems(0.5))
+            .gap(rems(0.375))
+            .p(rems(0.125))
+            .rounded_md()
+            .border(rems(0.0625))
+            .border_color(ring(PROTECTION, theme.surface.alpha(0.0)));
         for (value, label) in [(false, Message::ArchiveProtectionNone), (true, Message::ArchiveProtectionPassword)] {
             let select = cancel_handle.clone();
             choices = choices.child(
@@ -137,7 +167,7 @@ pub fn render_rename_dialog(
         .on_backdrop_dismiss(move |_, cx| {
             backdrop_handle.update(cx, |this, cx| this.cancel_rename(cx));
         });
-    modal
+    let modal = modal
         .action(
             button_style(
                 action_button("rename-cancel"),
@@ -145,6 +175,9 @@ pub fn render_rename_dialog(
                 ButtonVariant::Secondary,
                 true,
             )
+            .when_some(controls.as_ref(), |button, controls| {
+                button.track_focus(&controls[CANCEL]).border(rems(0.0625)).border_color(ring(CANCEL, theme.border))
+            })
             .child(cx.i18n().text(Message::Cancel))
             .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                 cancel_handle.update(cx, |this, cx| this.cancel_rename(cx));
@@ -157,9 +190,29 @@ pub fn render_rename_dialog(
                 ButtonVariant::Primary,
                 true,
             )
+            .when_some(controls.as_ref(), |button, controls| {
+                button.track_focus(&controls[SUBMIT]).border(rems(0.0625)).border_color(ring(SUBMIT, theme.accent))
+            })
             .child(cx.i18n().text(title))
             .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                 submit_handle.update(cx, |this, cx| this.submit_rename(cx));
             }),
-        )
+        );
+    div()
+        .absolute()
+        .inset_0()
+        .on_key_down(move |event, window, cx| {
+            key_handle.update(cx, |view, cx| {
+                if view.archive_creation.is_some()
+                    && view.compression_key(event.keystroke.key.as_str(), event.keystroke.modifiers.shift, window, cx)
+                {
+                    cx.stop_propagation();
+                }
+            })
+        })
+        .child(modal)
+}
+
+fn theme_accent(cx: &App) -> Hsla {
+    cx.theme().accent
 }

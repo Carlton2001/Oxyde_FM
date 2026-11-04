@@ -106,7 +106,7 @@ impl DialogKind {
     ) -> AnyElement {
         use crate::ui::components::{archive_password_dialog, network_dialog, remote_login_dialog, rename_dialog, settings};
         match self {
-            Self::Rename => rename_dialog::render_rename_dialog(app, owner, cx).into_any_element(),
+            Self::Rename => rename_dialog::render_rename_dialog(app, owner, window, cx).into_any_element(),
             Self::Network => network_dialog::render_network_dialog(app, owner, window, cx).into_any_element(),
             Self::NetworkForce => network_dialog::render_force_confirmation(app, owner, window, cx).into_any_element(),
             Self::RemoteLogin => remote_login_dialog::render_remote_login_dialog(app, owner, window, cx).into_any_element(),
