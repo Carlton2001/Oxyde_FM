@@ -701,7 +701,12 @@ impl Platform for LinuxPlatform {
     fn set_thread_priority(&self, _priority: ThreadPriority) {}
 
     fn file_attributes(&self, _metadata: &std::fs::Metadata, name: &str) -> (bool, bool, bool) {
-        (name.starts_with('.'), false, false)
+        // GIO treats dot files as hidden and `~` files as backups; Nautilus hides both.
+        (name.starts_with('.') || name.ends_with('~'), false, false)
+    }
+
+    fn listed_hidden_names(&self, directory: &std::path::Path) -> std::collections::HashSet<String> {
+        super::linux_hidden_list::read(directory)
     }
 
     fn file_clipboard(&self) -> &dyn super::FileClipboard {

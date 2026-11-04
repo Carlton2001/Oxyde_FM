@@ -639,6 +639,8 @@ impl Platform for WindowsPlatform {
         )
     }
 
+    fn has_system_file_attribute(&self) -> bool { true }
+
     fn file_clipboard(&self) -> &dyn super::FileClipboard {
         &super::windows_file_clipboard::WindowsFileClipboard
     }

@@ -140,6 +140,7 @@ pub fn advanced_search(
             let mut batch = Vec::new();
             let mut count = 0;
             let mut flush = std::time::Instant::now();
+            let attributes = std::cell::RefCell::new(crate::utils::visibility::WalkAttributes::default());
             let walker = walkdir::WalkDir::new(&root)
                 .follow_links(false)
                 .max_depth(if options.recursive { usize::MAX } else { 1 })
@@ -150,7 +151,7 @@ pub fn advanced_search(
                     }
                     let name = e.file_name().to_string_lossy();
                     e.metadata().is_ok_and(|m| {
-                        let (hidden, system, _) = crate::utils::get_file_attributes(&m, &name);
+                        let (hidden, system, _) = attributes.borrow_mut().of(e.path(), &m, &name);
                         crate::utils::visibility::is_visible(hidden, system, show_hidden, show_system)
                     })
                 });
@@ -188,7 +189,7 @@ pub fn advanced_search(
                         return Ok(());
                     }
                     if matches {
-                        let (hidden, system, _) = crate::utils::get_file_attributes(&m, &name);
+                        let (hidden, system, _) = attributes.borrow_mut().of(path, &m, &name);
                         batch.push(FileEntry {
                             content_stamp: crate::models::FileStamp::for_entry(path, &m),
                             created: m.created().ok().and_then(|time| time.duration_since(SystemTime::UNIX_EPOCH).ok()).and_then(|duration| duration.as_millis().try_into().ok()),
@@ -277,6 +278,7 @@ pub fn quick_search(
         } else {
             SearchPattern::Literal(query, false, false)
         };
+        let attributes = std::cell::RefCell::new(crate::utils::visibility::WalkAttributes::default());
         let walker = walkdir::WalkDir::new(&root)
             .follow_links(false)
             .into_iter()
@@ -291,7 +293,7 @@ pub fn quick_search(
                 let Ok(metadata) = entry.metadata() else {
                     return false;
                 };
-                let (hidden, system, _) = crate::utils::get_file_attributes(&metadata, &name);
+                let (hidden, system, _) = attributes.borrow_mut().of(entry.path(), &metadata, &name);
                 crate::utils::visibility::is_visible(hidden, system, show_hidden, show_system)
             });
         let mut batch = Vec::new();
@@ -315,7 +317,7 @@ pub fn quick_search(
             let name = entry.file_name().to_string_lossy().into_owned();
             if pattern.matches(&name) {
                 if let Ok(metadata) = entry.metadata() {
-                    let (hidden, system, _) = crate::utils::get_file_attributes(&metadata, &name);
+                    let (hidden, system, _) = attributes.borrow_mut().of(entry.path(), &metadata, &name);
                     batch.push(FileEntry {
                         content_stamp: crate::models::FileStamp::for_entry(entry.path(), &metadata),
                         created: metadata.created().ok().and_then(|time| time.duration_since(SystemTime::UNIX_EPOCH).ok()).and_then(|duration| duration.as_millis().try_into().ok()),

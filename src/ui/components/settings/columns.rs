@@ -91,7 +91,7 @@ pub(super) fn left_column(view: &OxydeApp, handle: Entity<OxydeApp>, left_width:
                 view.save_preferences(cx);
             },
         ))
-        .child(settings_row(
+        .when(oxyde_lib::platform::platform().has_system_file_attribute(), |column| column.child(settings_row(
             i18n.text(Message::SettingsSystem),
             i18n.text(Message::SettingsSystemDescription),
             "icons/eye.svg",
@@ -104,7 +104,7 @@ pub(super) fn left_column(view: &OxydeApp, handle: Entity<OxydeApp>, left_width:
                 view.refresh_all_tabs(cx);
                 view.save_preferences(cx);
             },
-        ))
+        )))
         .child(settings_row(
             i18n.text(Message::SettingsPreviews),
             i18n.text(Message::SettingsPreviewsDescription),

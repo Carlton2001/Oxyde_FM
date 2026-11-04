@@ -117,6 +117,7 @@ fn list_dir_blocking(
             std::io::ErrorKind::PermissionDenied => CommandError::AccessDenied(path.clone()),
             _ => CommandError::IoError(error.to_string()),
         })?;
+        let attributes = crate::utils::visibility::DirectoryAttributes::load(&path_buf);
         for entry in dir {
             let entry = entry.map_err(|e| CommandError::IoError(e.to_string()))?;
             let metadata = entry
@@ -124,13 +125,15 @@ fn list_dir_blocking(
                 .map_err(|e| CommandError::IoError(e.to_string()))?;
             let name = entry.file_name().to_string_lossy().to_string();
 
-            let (is_hidden, is_system, _) = crate::utils::get_file_attributes(&metadata, &name);
+            let (is_hidden, is_system, _) = attributes.of(&metadata, &name);
 
             if !crate::utils::visibility::is_visible(is_hidden, is_system, show_hidden, show_system) {
                 continue;
             }
 
-            entries.push(crate::models::file_entry::file_entry_from_metadata(&entry.path(), &metadata));
+            let mut file_entry = crate::models::file_entry::file_entry_from_metadata(&entry.path(), &metadata);
+            file_entry.is_hidden = is_hidden;
+            entries.push(file_entry);
         }
     }
 

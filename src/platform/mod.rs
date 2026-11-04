@@ -493,6 +493,14 @@ pub trait Platform: Send + Sync {
     /// Returns hidden, system, and reparse point flags for a directory entry.
     fn file_attributes(&self, metadata: &std::fs::Metadata, name: &str) -> (bool, bool, bool);
 
+    /// Names a directory hides through its own list (`.hidden` on Linux, as GIO and Nautilus read it).
+    fn listed_hidden_names(&self, _directory: &std::path::Path) -> std::collections::HashSet<String> {
+        std::collections::HashSet::new()
+    }
+
+    /// Whether the file system exposes a System attribute distinct from Hidden.
+    fn has_system_file_attribute(&self) -> bool { false }
+
     /// Mark an application-owned staging or undo-backup file as hidden.
     fn set_hidden_attribute(&self, path: &std::path::Path, hidden: bool) -> Result<(), String>;
 
@@ -773,6 +781,8 @@ pub mod icons;
 mod linux_impl;
 #[cfg(not(target_os = "windows"))]
 mod linux_gpu;
+#[cfg(not(target_os = "windows"))]
+mod linux_hidden_list;
 #[cfg(not(target_os = "windows"))]
 mod linux_settings;
 #[cfg(not(target_os = "windows"))]

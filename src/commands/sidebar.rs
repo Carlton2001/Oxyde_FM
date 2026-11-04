@@ -20,6 +20,7 @@ fn get_sidebar_nodes_blocking(path: String) -> Result<Vec<SidebarNode>, CommandE
 
     let entries = fs::read_dir(&pb).map_err(|e| CommandError::IoError(e.to_string()))?;
     let mut nodes = Vec::new();
+    let attributes = crate::utils::visibility::DirectoryAttributes::load(&pb);
 
     for entry in entries.filter_map(|e| e.ok()) {
         let metadata = match entry.metadata() {
@@ -32,7 +33,7 @@ fn get_sidebar_nodes_blocking(path: String) -> Result<Vec<SidebarNode>, CommandE
         }
 
         let name = entry.file_name().to_string_lossy().to_string();
-        let (is_hidden, is_system, _) = crate::utils::get_file_attributes(&metadata, &name);
+        let (is_hidden, is_system, _) = attributes.of(&metadata, &name);
 
         // Efficiently check for subdirectories
         let mut node_has_subdirs = false;
@@ -94,6 +95,7 @@ fn get_subtree_nodes_blocking(
         };
 
         let mut nodes = Vec::new();
+        let attributes = crate::utils::visibility::DirectoryAttributes::load(&current_pb);
         for entry in entries.filter_map(|e| e.ok()) {
             let metadata = match entry.metadata() {
                 Ok(m) => m,
@@ -106,7 +108,7 @@ fn get_subtree_nodes_blocking(
 
             let name = entry.file_name().to_string_lossy().to_string();
             let (is_hidden, is_system, is_reparse_point) =
-                crate::utils::get_file_attributes(&metadata, &name);
+                attributes.of(&metadata, &name);
 
             let node_path = entry.path();
             let mut node_has_subdirs = false;
