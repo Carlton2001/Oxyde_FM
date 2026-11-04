@@ -27,6 +27,8 @@ Keep whole sentences in Fluent, with numeric parameters for plurals. Paths and u
 
 Checkboxes use `elements::checkbox::checkbox`: 1 rem square, 1/16 rem outline, 1/4 rem radius. At rest the neutral outline mixes surface and secondary text, staying less present than labels. Checked uses an accent background and outline with a centered check. Partial keeps the accent outline but reduces the accent background to 20% over the neutral surface, with a text-colored dash. Views keep click areas, focus and actions. Toggles and plain choice marks keep their distinct roles.
 
+Theme palettes pass through `theme/legibility.rs`: pane borders, menu outlines, secondary button fills, ghost and row hovers are pulled toward the text until they reach a minimum contrast against their surfaces (1.18, 1.3, 1.2, 1.15). Add a palette by its original colors; do not hand-tune these tokens per theme, raise the floor instead.
+
 Single choices with few, short options (archive format and protection, view mode) use `elements::segmented`: one frame, shared with the − value + stepper, filled with the text color at 5% and outlined at 16% so it contrasts on every theme; the chosen option sits on `selected` in accent text. The outline turns into the accent focus ring only when the group was reached by the keyboard, never after a click. Longer lists stay in menus.
 
 Toggles use `elements::toggle::toggle`, including in trash settings: slightly tinted neutral track and thin outline when off, with a stronger knob; accent track and `text_on_accent` knob when on. Keep the knob's movement as an extra state cue.

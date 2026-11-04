@@ -1,4 +1,5 @@
 use gpui::Render;
+mod legibility;
 use gpui::*;
 pub use oxyde_lib::models::preferences::ThemeId;
 
@@ -422,6 +423,7 @@ impl OxydeTheme {
         if id == ThemeId::Dark {
             theme.control_hover = theme.control_hover.blend(theme.text.opacity(0.12));
         }
+        legibility::enforce(&mut theme);
         theme
     }
 

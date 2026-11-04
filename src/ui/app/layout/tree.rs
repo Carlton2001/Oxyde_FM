@@ -73,7 +73,10 @@ impl OxydeApp {
                                     .cursor(CursorStyle::ResizeLeftRight)
                                     .h_full()
                                     .flex()
-                                    .justify_center()
+                                    // Keep the line on the pane before the handle: the next pane paints
+                                    // later and its opaque bars would otherwise cut it.
+                                    .justify_end()
+                                    .pr(rems(0.125))
                                     .occlude()
                                     .child(
                                         div()
@@ -109,7 +112,8 @@ impl OxydeApp {
                                 .cursor(CursorStyle::ResizeUpDown)
                                 .w_full()
                                 .flex()
-                                .items_center()
+                                .items_end()
+                                .pb(rems(0.125))
                                 .child(
                                     div()
                                         .h(rems(0.0625))

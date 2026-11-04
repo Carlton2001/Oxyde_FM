@@ -197,7 +197,8 @@ impl OxydeApp {
                     });
                 }
             })
-            .on_right_click({
+            // The viewer tab has no tab-level actions worth a menu.
+            .when(!tab_data.is_viewer(), |tab| tab.on_right_click({
                 let h = h.clone();
                 let p_id_cap = p_id.clone();
                 let anchor_key = context_anchor_key.clone();
@@ -233,7 +234,7 @@ impl OxydeApp {
                         cx.notify();
                     });
                 }
-            })
+            }))
             .when(can_close_tab, |tab| {
                 tab.on_middle_click({
                     let h = h.clone();

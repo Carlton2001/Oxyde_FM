@@ -46,15 +46,21 @@ impl OxydeApp {
             cx.notify();
             return;
         }
-        let already_active = tab.show_size_histogram;
-        if !already_active {
-            tab.show_size_histogram = true;
-            tab.queue_missing_folder_sizes();
+        // A second press hides the sizes: cancel the scans and reload the plain listing.
+        if tab.show_size_histogram {
+            tab.reset_folder_sizes();
+            let path = tab.path.clone();
+            let pane_id = self.state.active_pane_id.clone();
+            if let Some(index) = self.state.find_pane(&pane_id).map(|pane| pane.active_tab_index) {
+                self.refresh_tab_files(&pane_id, index, path, cx);
+            }
+            self.reconcile_watchers(cx);
+            cx.notify();
+            return;
         }
+        tab.show_size_histogram = true;
+        tab.queue_missing_folder_sizes();
         let id = tab.id.clone();
-        if already_active {
-            self.refresh_folder_size_requests(&id, cx);
-        }
         // Install the recursive watcher before letting the first two scans run.
         // Otherwise its conservative gap check dirties those scans immediately.
         self.reconcile_watchers(cx);

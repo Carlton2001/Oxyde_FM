@@ -65,3 +65,28 @@ fn success_labels_remain_readable_on_tinted_badges() {
         }
     }
 }
+
+#[test]
+fn structural_borders_and_control_states_stay_perceptible_in_every_palette() {
+    use super::legibility::{BORDER, CONTROL, MENU_BORDER, ROW_HOVER};
+    for id in ThemeId::ALL {
+        let t = OxydeTheme::for_id(id);
+        let checks = [
+            ("pane border", t.border, vec![t.background, t.active_background, t.sidebar, t.header, t.surface], BORDER),
+            ("menu border", t.menu_border, vec![t.menu_surface], MENU_BORDER),
+            ("control", t.control_hover, vec![t.surface, t.active_background, t.header, t.menu_surface], CONTROL),
+            ("row hover", t.hover, vec![t.background, t.active_background], ROW_HOVER),
+            ("menu hover", t.menu_hover, vec![t.menu_surface], CONTROL),
+        ];
+        for (label, color, surfaces, min) in checks {
+            for surface in surfaces {
+                let ratio = contrast(color, surface);
+                assert!(ratio >= min, "{id:?} {label}: {ratio:.2}");
+            }
+        }
+        // Secondary buttons: pressing must read differently from hovering.
+        let hover = t.surface.blend(t.selected);
+        let pressed = t.surface.blend(t.selection_hover);
+        assert!(contrast(hover, pressed) >= 1.05, "{id:?} secondary press");
+    }
+}

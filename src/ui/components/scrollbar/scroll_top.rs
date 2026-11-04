@@ -38,6 +38,8 @@ pub(crate) fn button(
         .absolute()
         .right(rems(1.0))
         .size(rems(2.0))
+        // Text viewers show an I-beam underneath; the button keeps the arrow.
+        .cursor(CursorStyle::Arrow)
         .flex()
         .items_center()
         .justify_center()

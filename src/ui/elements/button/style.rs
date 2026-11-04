@@ -49,7 +49,13 @@ pub fn button_style(
                 }
             })
             .active(move |s| {
-                let s = s.bg(if filled { background } else { theme.selected });
+                // Pressing must differ from hovering: secondary hover already uses `selected`.
+                let pressed = match variant {
+                    ButtonVariant::Primary | ButtonVariant::Danger => background,
+                    ButtonVariant::Secondary => theme.selection_hover,
+                    ButtonVariant::Ghost => theme.selected,
+                };
+                let s = s.bg(pressed);
                 if filled {
                     s.opacity(0.7)
                 } else {

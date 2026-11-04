@@ -5,6 +5,7 @@ use crate::ui::components::tooltip::Tooltip;
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::scale::rem_pixels;
 use crate::ui::theme::ThemeContext;
+use gpui::prelude::*;
 use gpui::*;
 
 pub const TITLEBAR_H: Rems = rems(2.25);
@@ -23,38 +24,40 @@ pub fn render_title_bar(
     let btn_hover_bg: Hsla = theme.control_hover;
     let icon_color: Hsla = theme.text;
 
-    let action_button = |id: &'static str, icon: &'static str, label: Message| {
+    let action_button = |id: &'static str, icon: &'static str, label: Message, active: bool| {
         let bounds = std::rc::Rc::new(std::cell::Cell::new(Bounds::<Pixels>::default()));
         let measured = bounds.clone();
         div().id(id).w(rems(2.25)).h_full().flex().items_center()
             .justify_center().flex_none().relative()
-            .hover(move |s| s.bg(btn_hover_bg))
+            // An active toggle keeps its selected fill and accent icon while hovered.
+            .when(active, |d| d.bg(theme.selected))
+            .when(!active, |d| d.hover(move |s| s.bg(btn_hover_bg)))
             .native_tooltip(Tooltip::anchored(Tooltip::with_shortcut(
                 cx.i18n().text(label),
                 match label { Message::Refresh => Some("F5 / Ctrl+R".into()), Message::NewPanel => Some("Ctrl+N".into()), _ => None },
             ), bounds))
             .child(canvas(move |rect, _, _| measured.set(rect), |_, _, _, _| {}).absolute().left_0().top_0().size_full())
-            .child(svg().path(icon).size_4().text_color(icon_color))
+            .child(svg().path(icon).size_4().text_color(if active { theme.accent } else { icon_color }))
     };
     let refresh_handle = handle.clone();
-    let refresh = action_button("title-refresh", "icons/refresh-cw.svg", Message::Refresh)
+    let refresh = action_button("title-refresh", "icons/refresh-cw.svg", Message::Refresh, false)
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             refresh_handle.update(cx, |view, cx| view.refresh_all(cx));
         });
     let panel_handle = handle.clone();
-    let new_panel = action_button("title-new-panel", "icons/plus.svg", Message::NewPanel)
+    let new_panel = action_button("title-new-panel", "icons/plus.svg", Message::NewPanel, false)
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             panel_handle.update(cx, |view, cx| view.add_panel_right(cx));
         });
     let viewer_handle = handle.clone();
     let viewer_label = if view.viewer_open() { Message::ViewerClose } else { Message::ViewerOpen };
-    let viewer = action_button("title-viewer", "icons/eye.svg", viewer_label)
+    let viewer = action_button("title-viewer", "icons/eye.svg", viewer_label, view.viewer_open())
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             viewer_handle.update(cx, |view, cx| view.toggle_viewer(cx));
         });
     let tools_handle = handle.clone();
     let tools_measure_handle = handle.clone();
-    let tools = action_button("title-tools", "icons/search.svg", Message::Tools)
+    let tools = action_button("title-tools", "icons/search.svg", Message::Tools, false)
         .w_auto().px(rems(0.5)).gap(rems(0.125))
         .child(crate::ui::elements::button::menu_chevron(false, theme.text_muted))
         .relative()
