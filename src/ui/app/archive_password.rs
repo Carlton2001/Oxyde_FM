@@ -20,6 +20,8 @@ pub(crate) struct ArchivePasswordPrompt {
     pub checking: bool,
     /// Restarts the field's shake for each refusal.
     pub shake_id: u64,
+    /// The field takes the focus back at the next frame, after a refusal.
+    pub refocus: std::cell::Cell<bool>,
     pub focus: FocusHandle,
     /// Cancel and unlock.
     pub controls: Vec<FocusHandle>,
@@ -156,6 +158,7 @@ impl OxydeApp {
             value: String::new(),
             checking: false,
             shake_id: 0,
+            refocus: Default::default(),
             focus: cx.focus_handle(),
             controls: (0..2).map(|_| cx.focus_handle()).collect(),
             retry: Some(retry),
@@ -203,6 +206,8 @@ impl OxydeApp {
                 prompt.checking = false;
                 prompt.wrong = true;
                 prompt.shake_id = prompt.shake_id.wrapping_add(1);
+                // The Unlock button had the focus: typing again starts in the field.
+                prompt.refocus.set(true);
                 // A task of its own: the field is not updating itself here.
                 prompt.input.update(cx, |input, cx| input.set_content(String::new(), cx));
             }

@@ -24,6 +24,10 @@ pub(crate) fn render_archive_password_dialog(
         |name| name.to_string_lossy().into_owned(),
     );
     args.set("name", name);
+    if prompt.refocus.take() {
+        let focus = prompt.input.read(cx).focus_handle.clone();
+        window.focus(&focus, cx);
+    }
     let field = div().flex_1().min_w_0().child(prompt.input.clone());
     let field = if prompt.wrong {
         field
@@ -48,7 +52,7 @@ pub(crate) fn render_archive_password_dialog(
         .child(div().pb(rems(0.375)).child(cx.i18n().text_with_args(Message::ArchivePasswordPrompt, &args)))
         .child(form_row(cx.i18n().text(Message::NetworkPassword), field, cx));
     if prompt.wrong {
-        body = body.child(div().text_color(theme.error).child(cx.i18n().text(Message::ArchivePasswordWrong)));
+        body = body.child(div().w_full().text_right().text_color(theme.error).child(cx.i18n().text(Message::ArchivePasswordWrong)));
     }
     let focused = |control: usize| prompt.controls[control].is_focused(window);
     let (cancel, submit, close) = (handle.clone(), handle.clone(), handle.clone());
