@@ -117,8 +117,10 @@ fn main() {
             cx.set_global(folder_icons);
             let assets = crate::ui::assets::EmbeddedAssetSource::new();
             assets.load_fonts(cx).expect("fonts could not be loaded");
-            cx.set_global(crate::ui::theme::OxydeTheme::for_id(
-                crate::ui::theme::ThemeId::from_id(&config.theme),
+            cx.set_global(crate::ui::theme::OxydeTheme::for_choice(
+                &crate::ui::theme::ThemeChoice::from_config(&config.theme, &config.custom_themes),
+                &config.custom_themes,
+                crate::ui::theme::ColorVision::from_id(&config.color_vision),
             ));
             cx.set_global(crate::ui::i18n::I18n::for_language(
                 crate::ui::i18n::Language::from_id(&config.language),
@@ -177,6 +179,7 @@ fn main() {
                         crate::ui::app::duplicates::close_duplicate_windows(cx);
                         crate::ui::components::operations::close_operations_windows(cx);
                         crate::ui::app::advanced_search::close_advanced_search_windows(cx);
+                        crate::ui::app::theme_window::close_theme_windows(cx);
                         crate::ui::app::viewer::close_viewer_windows(cx);
                         crate::ui::app::properties::close_properties_windows(cx);
                         crate::ui::app::close_dialog_windows(cx);

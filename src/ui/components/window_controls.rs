@@ -113,6 +113,23 @@ pub(crate) fn render(
         .children(elements)
 }
 
+const ADWAITA_DISC: Rems = rems(1.1875);
+const BREEZE_DISC: Rems = rems(1.375);
+
+/// Disc size in an even number of pixels: centered in an even title bar, its edges
+/// and center fall on whole pixels instead of being snapped half a pixel aside.
+fn disc_pixels(disc: Rems) -> Pixels {
+    (crate::ui::scale::rem_pixels(disc) / 2.0).round() * 2.0
+}
+
+/// Glyph size leaving the same whole margin on each side of its disc: an odd
+/// difference would put the glyph half a pixel off, snapped toward the top left.
+fn centered(disc: Rems, glyph: Rems) -> Pixels {
+    let disc = disc_pixels(disc);
+    let margin = ((disc - crate::ui::scale::rem_pixels(glyph)) / 2.0).round();
+    disc - margin * 2.0
+}
+
 fn glyph(style: WindowControlStyle, button: WindowButton, is_maximized: bool, cx: &App) -> Svg {
     let theme = *cx.theme();
     let path = icon(style, button, is_maximized);
@@ -121,13 +138,13 @@ fn glyph(style: WindowControlStyle, button: WindowButton, is_maximized: bool, cx
         WindowControlStyle::Windows => symbol.size_3().when(button == WindowButton::Close, |symbol| {
             symbol.group_hover("window-close", move |s| s.text_color(theme.text_on_danger))
         }),
-        WindowControlStyle::Adwaita => symbol.size(rems(0.875)),
+        WindowControlStyle::Adwaita => symbol.size(centered(ADWAITA_DISC, rems(0.875))),
         WindowControlStyle::Breeze if button == WindowButton::Close => symbol
-            .size(rems(0.5625))
+            .size(centered(BREEZE_DISC, rems(0.5625)))
             .group_hover("window-close", move |s| s.text_color(theme.text_on_danger)),
         // Sized after Plasma's own title bar: chevrons, diamond and cross read alike.
-        WindowControlStyle::Breeze if is_maximized && button == WindowButton::Maximize => symbol.size(rems(0.75)),
-        WindowControlStyle::Breeze => symbol.size(rems(1.0)),
+        WindowControlStyle::Breeze if is_maximized && button == WindowButton::Maximize => symbol.size(centered(BREEZE_DISC, rems(0.75))),
+        WindowControlStyle::Breeze => symbol.size(centered(BREEZE_DISC, rems(1.0))),
     }
 }
 
@@ -154,7 +171,7 @@ fn windows_button(button: WindowButton, side: Side, outermost: bool, corner: Pix
 /// A disc, faintly filled at rest, darker under the pointer and pressed.
 fn adwaita_button(button: WindowButton, cx: &App) -> Stateful<Div> {
     let theme = *cx.theme();
-    round_button(button, rems(1.1875))
+    round_button(button, ADWAITA_DISC)
         .bg(theme.text.opacity(0.1))
         .hover(move |s| s.bg(theme.text.opacity(0.15)))
         .active(move |s| s.bg(theme.text.opacity(0.25)))
@@ -163,7 +180,7 @@ fn adwaita_button(button: WindowButton, cx: &App) -> Stateful<Div> {
 /// A bare glyph; a disc appears under the pointer, red for close.
 fn breeze_button(button: WindowButton, cx: &App) -> Stateful<Div> {
     let theme = *cx.theme();
-    round_button(button, rems(1.375))
+    round_button(button, BREEZE_DISC)
         .when(button == WindowButton::Close, |shell| shell.group("window-close"))
         .hover(move |s| {
             s.bg(if button == WindowButton::Close { theme.danger_hover } else { theme.text.opacity(0.15) })
@@ -176,7 +193,7 @@ fn breeze_button(button: WindowButton, cx: &App) -> Stateful<Div> {
 fn round_button(button: WindowButton, size: Rems) -> Stateful<Div> {
     div()
         .id(button.id())
-        .size(size)
+        .size(disc_pixels(size))
         .rounded_full()
         .flex()
         .items_center()

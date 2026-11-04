@@ -113,6 +113,37 @@ impl ThemeId {
     }
 }
 
+/// Color vision the interface adapts its colors to.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum ColorVision {
+    #[default]
+    Typical,
+    /// Protan and deutan deficiencies: red, orange and green merge.
+    RedGreen,
+    /// Tritan deficiencies: blue and green, yellow and violet merge.
+    BlueYellow,
+}
+
+impl ColorVision {
+    pub const ALL: [Self; 3] = [Self::Typical, Self::RedGreen, Self::BlueYellow];
+
+    pub fn from_id(id: &str) -> Self {
+        match id {
+            "red-green" => Self::RedGreen,
+            "blue-yellow" => Self::BlueYellow,
+            _ => Self::Typical,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Typical => "typical",
+            Self::RedGreen => "red-green",
+            Self::BlueYellow => "blue-yellow",
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Language {
     #[default]

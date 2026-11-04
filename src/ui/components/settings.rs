@@ -5,7 +5,7 @@ mod compression;
 mod default_format;
 mod data_actions;
 
-use controls::{choice, choice_with_icon, section, submenu_choice};
+use controls::{choice, section, submenu_choice};
 use compression::compression_table;
 
 pub(crate) use data_actions::render_settings_confirmation;
@@ -13,14 +13,13 @@ pub(crate) use data_actions::render_settings_confirmation;
 use crate::ui::app::OxydeApp;
 
 use crate::ui::format::{date_format, DateFormat};
-use crate::ui::i18n::{FluentArgs, I18nContext, Language, Message};
-use crate::ui::theme::{ThemeContext, ThemeId};
+use crate::ui::i18n::{I18nContext, Language, Message};
+use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SettingsPicker {
-    Theme,
     Language,
     Date,
     About,
@@ -57,26 +56,6 @@ fn render_settings_surface(
     let theme = *cx.theme();
     let i18n = cx.i18n();
     let backdrop = handle.clone();
-    let themes = ThemeId::ALL.into_iter().map(|id| {
-        let handle = handle.clone();
-        let mut args = FluentArgs::new();
-        args.set("name", id.name());
-        let label = if id == ThemeId::Monokai {
-            id.name().into()
-        } else {
-            i18n.text_with_args(if id.is_light() { Message::ThemeLight } else { Message::ThemeDark }, &args)
-        };
-        choice_with_icon(
-            id.as_str(), label, view.theme_id == id, theme,
-            Some(if id.is_light() { "icons/sun.svg" } else { "icons/moon.svg" }),
-            move |cx| {
-                handle.update(cx, |view, cx| {
-                    view.set_theme(id, cx);
-                    cx.notify();
-                });
-            },
-        ).into_any_element()
-    }).collect();
     let languages = [
         (Language::French, "Français"),
         (Language::English, "English"),
@@ -279,7 +258,6 @@ fn render_settings_surface(
         .child(anchored().position(origin).snap_to_window().child(panel));
     if let (Some(kind), Some(bounds)) = (view.settings_picker.filter(|kind| *kind != SettingsPicker::About), view.settings_submenu_bounds) {
         let (title, choices): (SharedString, Vec<AnyElement>) = match kind {
-            SettingsPicker::Theme => (cx.i18n().text(Message::SettingsTheme), themes),
             SettingsPicker::Language => (cx.i18n().text(Message::SettingsLanguage), languages),
             SettingsPicker::Date => (cx.i18n().text(Message::SettingsDateFormat), dates),
             SettingsPicker::About => unreachable!("About is rendered as a settings column"),

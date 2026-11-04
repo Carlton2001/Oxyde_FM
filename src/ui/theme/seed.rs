@@ -1,11 +1,12 @@
 //! Builds every theme token from six input colors.
 
-use super::{legibility, OxydeTheme, ThemeId};
+use super::{legibility, ColorVision, OxydeTheme, ThemeId};
+use crate::ui::components::icons::FileIconPalette;
 use gpui::{rgb, Hsla};
 
 /// The colors a theme provides; everything else is derived.
-#[derive(Debug, Clone, Copy)]
-pub(super) struct ThemeSeed {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ThemeSeed {
     pub background: u32,
     pub active_background: u32,
     pub sidebar: u32,
@@ -15,7 +16,16 @@ pub(super) struct ThemeSeed {
 }
 
 impl ThemeSeed {
-    pub(super) fn for_id(id: ThemeId) -> Self {
+    /// Order shared with `CustomTheme::colors` and the theme editor.
+    pub(crate) fn colors(self) -> [u32; 6] {
+        [self.background, self.active_background, self.sidebar, self.surface, self.text, self.accent]
+    }
+
+    pub(crate) fn from_colors([background, active_background, sidebar, surface, text, accent]: [u32; 6]) -> Self {
+        Self { background, active_background, sidebar, surface, text, accent }
+    }
+
+    pub(crate) fn for_id(id: ThemeId) -> Self {
         let s = |background, active_background, sidebar, surface, text, accent| Self {
             background,
             active_background,
@@ -57,8 +67,10 @@ fn reach(color: Hsla, toward: Hsla, surfaces: &[Hsla], min: f32) -> Hsla {
         .unwrap_or(toward)
 }
 
-pub(super) fn derive(id: ThemeId) -> OxydeTheme {
-    let seed = ThemeSeed::for_id(id);
+/// `light` picks the status colors; the caller provides file colors fitting the seed.
+/// `vision` moves success off green where red-green deficiencies would merge it with errors.
+pub(super) fn derive(seed: ThemeSeed, light: bool, file_icons: FileIconPalette, vision: ColorVision) -> OxydeTheme {
+    let red_green = vision == ColorVision::RedGreen;
     let c = |value: u32| -> Hsla { rgb(value).into() };
     let (background, active_background, sidebar, surface) =
         (c(seed.background), c(seed.active_background), c(seed.sidebar), c(seed.surface));
@@ -73,9 +85,9 @@ pub(super) fn derive(id: ThemeId) -> OxydeTheme {
     } else {
         on_light
     };
-    let light = id.is_light();
     let pick = |l: u32, d: u32| c(if light { l } else { d });
     OxydeTheme {
+        light,
         background,
         active_background,
         sidebar,
@@ -98,8 +110,8 @@ pub(super) fn derive(id: ThemeId) -> OxydeTheme {
         warning_border: pick(0xf4e7ad, 0x5a4522),
         warning_background: pick(0xfff8df, 0x302618),
         warning_text: pick(0x915500, 0xf3c56a),
-        toast_success: c(0x10b981),
-        success_text: pick(0x08613f, 0x49d6a4),
+        toast_success: c(if red_green { 0x2563eb } else { 0x10b981 }),
+        success_text: if red_green { pick(0x1d4ed8, 0x7cb8ff) } else { pick(0x08613f, 0x49d6a4) },
         toast_error: c(0xef4444),
         error: pick(0xb42335, 0xf87171),
         text_on_accent,
@@ -107,7 +119,7 @@ pub(super) fn derive(id: ThemeId) -> OxydeTheme {
         menu_surface: surface,
         menu_border: reach(surface, text, &[surface], legibility::MENU_BORDER),
         menu_hover: reach(surface, text, &[surface], legibility::CONTROL),
-        file_icons: crate::ui::components::icons::FileIconPalette::for_theme(id),
+        file_icons,
         icon_disabled: text_muted.opacity(0.65),
         tab_active: surface,
         tab_close_hover: reach(surface, text, &[surface], 1.45),

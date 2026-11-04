@@ -34,7 +34,7 @@ pub(super) fn about_column(view: &OxydeApp, handle: Entity<OxydeApp>, about_widt
         .child(about_tool("about-gpui", "GPUI", "icons/zed.svg",
             "https://www.gpui.rs", false, handle.clone(), theme))
         .child(about_tool("about-lucide", "Lucide",
-            if view.theme_id.is_light() { "icons/lucide-light.svg" } else { "icons/lucide-dark.svg" },
+            if theme.light { "icons/lucide-light.svg" } else { "icons/lucide-dark.svg" },
             "https://lucide.dev", true, handle.clone(), theme))
 }
 

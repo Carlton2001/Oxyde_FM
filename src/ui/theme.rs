@@ -1,11 +1,16 @@
 use gpui::Render;
+mod file_colors;
 mod legibility;
 mod seed;
+pub(crate) use seed::ThemeSeed;
+pub use oxyde_lib::models::custom_theme::{CustomTheme, ThemeChoice};
 use gpui::*;
-pub use oxyde_lib::models::preferences::ThemeId;
+pub use oxyde_lib::models::preferences::{ColorVision, ThemeId};
 
 #[derive(Debug, Clone, Copy)]
 pub struct OxydeTheme {
+    /// Light background: picks status colors and light-variant assets.
+    pub light: bool,
     pub background: Hsla,        // Fond des panneaux de fichiers inactifs
     pub active_background: Hsla, // Fond du panneau actif
     pub sidebar: Hsla,           // Sidebar et panneaux latéraux
@@ -54,6 +59,16 @@ pub struct OxydeTheme {
 
 impl Global for OxydeTheme {}
 
+/// Whether dark text reads better than white text on `background`.
+pub(crate) fn is_light_background(background: Hsla) -> bool {
+    legibility::contrast(background, black()) >= legibility::contrast(background, white())
+}
+
+/// WCAG contrast ratio, shown by the theme editor.
+pub(crate) fn contrast(a: Hsla, b: Hsla) -> f32 {
+    legibility::contrast(a, b)
+}
+
 impl OxydeTheme {
     /// Fond le plus foncé parmi les surfaces du thème, pour la visionneuse.
     pub fn darkest_background(&self) -> Hsla {
@@ -81,10 +96,40 @@ impl OxydeTheme {
         }
     }
 
+    #[cfg(test)]
     pub fn for_id(id: ThemeId) -> Self {
-        let mut theme = seed::derive(id);
+        Self::for_id_with(id, ColorVision::Typical)
+    }
+
+    pub fn for_id_with(id: ThemeId, vision: ColorVision) -> Self {
+        Self::from_seed(ThemeSeed::for_id(id), id.is_light(), vision)
+    }
+
+    /// A theme from user seeds; brightness comes from the background.
+    pub fn from_colors(colors: [u32; 6], vision: ColorVision) -> Self {
+        let seed = ThemeSeed::from_colors(colors);
+        Self::from_seed(seed, is_light_background(rgb(seed.background).into()), vision)
+    }
+
+    /// Every token, file icon colors included, follows from the seeds and the color vision.
+    fn from_seed(seed: ThemeSeed, light: bool, vision: ColorVision) -> Self {
+        let icons = file_colors::derive([seed.background, seed.active_background], seed.accent, light, vision);
+        let mut theme = seed::derive(seed, light, icons, vision);
         legibility::enforce(&mut theme);
         theme
+    }
+
+    pub fn for_custom(custom: &CustomTheme, vision: ColorVision) -> Self {
+        let base = custom.base();
+        Self::from_colors(custom.colors(ThemeSeed::for_id(base).colors()), vision)
+    }
+
+    pub fn for_choice(choice: &ThemeChoice, custom: &[CustomTheme], vision: ColorVision) -> Self {
+        match choice {
+            ThemeChoice::Builtin(id) => Self::for_id_with(*id, vision),
+            ThemeChoice::Custom(id) => custom.iter().find(|theme| &theme.id == id)
+                .map_or_else(|| Self::for_id_with(ThemeId::default(), vision), |theme| Self::for_custom(theme, vision)),
+        }
     }
 
     #[cfg(test)]

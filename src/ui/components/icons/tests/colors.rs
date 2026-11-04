@@ -1,4 +1,5 @@
 use super::*;
+use crate::ui::theme::ThemeId;
 
 #[test]
 fn pdf_color_depends_on_filename_and_preserves_other_text_documents() {

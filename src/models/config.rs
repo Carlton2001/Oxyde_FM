@@ -23,6 +23,12 @@ pub struct AppConfig {
     pub tool_window_placements: std::collections::BTreeMap<String, WindowPlacement>,
     #[serde(default = "default_theme")]
     pub theme: String,
+    /// Themes the user created; kept by a preferences reset.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub custom_themes: Vec<crate::models::custom_theme::CustomTheme>,
+    /// `ColorVision` identifier; kept by a preferences reset.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub color_vision: String,
     #[serde(default = "default_language")]
     pub language: String,
     #[serde(default)]
@@ -113,6 +119,8 @@ impl Default for AppConfig {
             window_placement: None,
             tool_window_placements: Default::default(),
             theme: default_theme(),
+            custom_themes: Vec::new(),
+            color_vision: String::new(),
             language: default_language(),
             show_hidden: false,
             show_system: false,
@@ -165,7 +173,11 @@ impl AppConfig {
         let operations_panel_position = self.operations_panel_position;
         let window_placement = self.window_placement;
         let tool_window_placements = std::mem::take(&mut self.tool_window_placements);
+        let custom_themes = std::mem::take(&mut self.custom_themes);
+        let color_vision = std::mem::take(&mut self.color_vision);
         *self = Self {
+            custom_themes,
+            color_vision,
             workspace_state,
             last_notified_update,
             duplicate_search_options,

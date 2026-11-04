@@ -30,7 +30,40 @@ settings-title = Einstellungen
 
 settings-appearance = Erscheinungsbild
 
-settings-theme = Design
+settings-theme = Designs
+theme-window-title = Designs
+theme-color-vision = Farbsehen
+theme-color-vision-description =
+    Passt die Farben der Dateisymbole und Statusanzeigen an, in allen Designs.
+    Rot-Grün: Protanomalie und Deuteranomalie, bei denen Rot, Orange und Grün verschmelzen.
+    Blau-Gelb: Tritanomalie, bei der Blau und Grün, Gelb und Violett verschmelzen.
+color-vision-typical = Standard
+color-vision-red-green = Rot-Grün
+color-vision-blue-yellow = Blau-Gelb
+theme-builtin = Integrierte Designs
+theme-custom = Meine Designs
+theme-custom-empty = Noch kein eigenes Design.
+theme-intro = Ein Oxyde-Design besteht aus sechs Farben. Alle anderen werden daraus abgeleitet: Sekundärtext, Rahmen, Hover-Zustände, Bildlaufleisten und die Mindestkontraste, die die Oberfläche lesbar halten.
+theme-create-hint = Um ein eigenes Design zu erstellen, gehen Sie vom ähnlichsten aus: Wählen Sie es in der Liste und dann „Aus diesem Design erstellen“.
+theme-create = Aus diesem Design erstellen
+theme-delete = Löschen
+theme-save = Speichern
+theme-name = Name
+theme-new-name = { $name } angepasst
+theme-color-background = Hintergrund
+theme-color-background-description = Inaktiver Dateibereich bei geteilter Ansicht.
+theme-color-active-background = Aktiver Hintergrund
+theme-color-active-background-description = Aktiver Dateibereich und Nebenfenster.
+theme-color-sidebar = Seitenleiste
+theme-color-sidebar-description = Seitenleiste, Titelleiste und Tableiste.
+theme-color-surface = Oberfläche
+theme-color-surface-description = Menüs, Felder, Fensterköpfe und aktiver Tab.
+theme-color-text = Text
+theme-color-text-description = Haupttext; Sekundärtext und Rahmen werden daraus abgeleitet.
+theme-color-accent = Akzent
+theme-color-accent-description = Auswahl, Hauptschaltflächen, Fokus und Ordner.
+theme-picker-hint = Wählen Sie links eine Farbe und passen Sie sie im Quadrat und im Farbtonstreifen an, oder geben Sie ihren Hexcode ein (#3d5af1 oder #fa0).
+theme-contrast-low = Textkontrast: { $ratio }:1. Mindestens 4,5:1 hält ihn lesbar.
 
 settings-scale = Oberflächenskalierung
 

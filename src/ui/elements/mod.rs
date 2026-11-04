@@ -6,3 +6,4 @@ pub(crate) mod motion;
 pub mod stepper;
 pub(crate) mod segmented;
 pub(crate) mod rounded_fill;
+pub(crate) mod color_picker;

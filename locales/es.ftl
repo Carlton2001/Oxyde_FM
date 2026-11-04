@@ -30,7 +30,40 @@ settings-title = Preferencias
 
 settings-appearance = Apariencia
 
-settings-theme = Tema
+settings-theme = Temas
+theme-window-title = Temas
+theme-color-vision = Visión del color
+theme-color-vision-description =
+    Adapta los colores de los iconos de archivo y de los estados, en todos los temas.
+    Rojo-verde: protanomalía y deuteranomalía, en las que se confunden rojo, naranja y verde.
+    Azul-amarillo: tritanomalía, en la que se confunden azul y verde, amarillo y violeta.
+color-vision-typical = Estándar
+color-vision-red-green = Rojo-verde
+color-vision-blue-yellow = Azul-amarillo
+theme-builtin = Temas integrados
+theme-custom = Mis temas
+theme-custom-empty = Aún no hay temas personalizados.
+theme-intro = Un tema de Oxyde se reduce a seis colores. Todos los demás se derivan de ellos: texto secundario, bordes, estados al pasar el puntero, barras de desplazamiento y los contrastes mínimos que mantienen legible la interfaz.
+theme-create-hint = Para crear su tema, parta del más parecido: elíjalo en la lista y luego «Crear a partir de este tema».
+theme-create = Crear a partir de este tema
+theme-delete = Eliminar
+theme-save = Guardar
+theme-name = Nombre
+theme-new-name = { $name } personalizado
+theme-color-background = Fondo
+theme-color-background-description = Panel de archivos inactivo, cuando la vista está dividida.
+theme-color-active-background = Fondo activo
+theme-color-active-background-description = Panel de archivos activo y ventanas secundarias.
+theme-color-sidebar = Barra lateral
+theme-color-sidebar-description = Barra lateral, barra de título y barra de pestañas.
+theme-color-surface = Superficie
+theme-color-surface-description = Menús, campos, encabezados de ventana y pestaña activa.
+theme-color-text = Texto
+theme-color-text-description = Texto principal; el texto secundario y los bordes se derivan de él.
+theme-color-accent = Acento
+theme-color-accent-description = Selección, botones principales, foco y carpetas.
+theme-picker-hint = Elija un color a la izquierda y ajústelo en el cuadrado y la franja de tonos, o escriba su código hexadecimal (#3d5af1 o #fa0).
+theme-contrast-low = Contraste del texto: { $ratio }:1. Apunte a 4,5:1 como mínimo para que siga legible.
 
 settings-scale = Escala de la interfaz
 

@@ -1,6 +1,6 @@
 use super::OxydeApp;
 use crate::ui::i18n::{I18n, I18nContext, Language, Message};
-use crate::ui::theme::{OxydeTheme, ThemeId};
+use crate::ui::theme::{ColorVision, CustomTheme, OxydeTheme, ThemeChoice};
 use gpui::{Context, Window};
 use oxyde_lib::models::{AppConfig, ConfigManager};
 use std::sync::Mutex;
@@ -137,7 +137,7 @@ impl OxydeApp {
                 tab.collapsed_groups.clear();
             }
         });
-        self.set_theme(ThemeId::default(), cx);
+        self.set_theme(ThemeChoice::default(), cx);
         self.set_language(Language::default(), cx);
         cx.set_global(crate::ui::format::DateFormatPreference(crate::ui::format::DateFormat::default()));
         crate::ui::scale::set_reference(self.config.ui_rem_size);
@@ -264,13 +264,67 @@ impl OxydeApp {
         cx.notify();
     }
 
-    pub(crate) fn set_theme(&mut self, theme: ThemeId, cx: &mut Context<Self>) {
-        if self.theme_id == theme {
+    pub(crate) fn set_theme(&mut self, theme: ThemeChoice, cx: &mut Context<Self>) {
+        if self.theme_choice == theme {
             return;
         }
-        self.theme_id = theme;
-        cx.set_global(OxydeTheme::for_id(theme));
+        self.theme_choice = theme;
+        self.apply_theme(cx);
+        self.save_preferences(cx);
+    }
+
+    /// Show the saved selection again, after a preview.
+    pub(crate) fn apply_theme(&mut self, cx: &mut Context<Self>) {
+        cx.set_global(OxydeTheme::for_choice(&self.theme_choice, &self.config.custom_themes, self.color_vision()));
         cx.refresh_windows();
+    }
+
+    /// Draw every window with an unsaved theme, as the theme editor changes it.
+    pub(crate) fn preview_theme(&mut self, theme: OxydeTheme, cx: &mut Context<Self>) {
+        cx.set_global(theme);
+        cx.refresh_windows();
+    }
+
+    pub(crate) fn color_vision(&self) -> ColorVision {
+        ColorVision::from_id(&self.config.color_vision)
+    }
+
+    /// Recolors every theme, the one being edited included.
+    pub(crate) fn set_color_vision(&mut self, vision: ColorVision, cx: &mut Context<Self>) {
+        if self.color_vision() == vision {
+            return;
+        }
+        self.config.color_vision = vision.as_str().into();
+        self.apply_theme(cx);
+        self.save_preferences(cx);
+    }
+
+    pub(crate) fn custom_themes(&self) -> &[CustomTheme] {
+        &self.config.custom_themes
+    }
+
+    /// Add or replace a user theme and select it.
+    pub(crate) fn save_custom_theme(&mut self, theme: CustomTheme, cx: &mut Context<Self>) {
+        let id = theme.id.clone();
+        match self.config.custom_themes.iter_mut().find(|saved| saved.id == id) {
+            Some(saved) => *saved = theme,
+            None => self.config.custom_themes.push(theme),
+        }
+        self.theme_choice = ThemeChoice::Custom(id);
+        self.apply_theme(cx);
+        self.save_preferences(cx);
+    }
+
+    /// A deleted theme in use gives way to the built-in theme it started from.
+    pub(crate) fn delete_custom_theme(&mut self, id: &str, cx: &mut Context<Self>) {
+        let Some(index) = self.config.custom_themes.iter().position(|theme| theme.id == id) else {
+            return;
+        };
+        let removed = self.config.custom_themes.remove(index);
+        if self.theme_choice == ThemeChoice::Custom(removed.id.clone()) {
+            self.theme_choice = ThemeChoice::Builtin(removed.base());
+        }
+        self.apply_theme(cx);
         self.save_preferences(cx);
     }
 
@@ -336,7 +390,7 @@ impl OxydeApp {
         let Some(path) = self.config_path.clone() else {
             return;
         };
-        self.config.theme = self.theme_id.as_str().into();
+        self.config.theme = self.theme_choice.to_config();
         self.config.language = self.language.as_str().into();
         self.config.show_hidden = self.show_hidden;
         self.config.show_system = self.show_system;

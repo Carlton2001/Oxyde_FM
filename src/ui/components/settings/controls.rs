@@ -96,6 +96,32 @@ pub(super) fn picker(
 
 }
 
+/// Row opening a separate window; the settings menu closes behind it.
+pub(super) fn window_row(
+    id: &'static str,
+    icon_path: &'static str,
+    label: SharedString,
+    theme: OxydeTheme,
+    on_open: impl Fn(&mut Window, &mut App) + 'static,
+) -> impl IntoElement {
+    let open = Rc::new(on_open);
+    let key_open = open.clone();
+    let row = div()
+        .id(id)
+        .h(rems(2.0))
+        .px(rems(0.375))
+        .flex()
+        .items_center()
+        .gap(rems(0.5))
+        .rounded_md()
+        .hover(|s| s.bg(theme.menu_hover))
+        .child(icon(icon_path, theme))
+        .child(div().flex_1().flex_shrink_0().whitespace_nowrap().child(label))
+        .child(icon("icons/external-link.svg", theme))
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| open(window, cx));
+    crate::ui::components::popup::keyboard::item(row, Rc::new(move |window, cx| key_open(window, cx)), None, None)
+}
+
 pub(super) fn scale_row(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &App) -> impl IntoElement {
     use crate::ui::scale::{BASE_REM_SIZE, MAX_REM_SIZE, MIN_REM_SIZE};
     let theme = *cx.theme();

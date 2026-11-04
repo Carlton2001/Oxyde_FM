@@ -30,7 +30,40 @@ settings-title = Preferenze
 
 settings-appearance = Aspetto
 
-settings-theme = Tema
+settings-theme = Temi
+theme-window-title = Temi
+theme-color-vision = Visione dei colori
+theme-color-vision-description =
+    Adatta i colori delle icone dei file e degli stati, in tutti i temi.
+    Rosso-verde: protanomalia e deuteranomalia, in cui rosso, arancione e verde si confondono.
+    Blu-giallo: tritanomalia, in cui blu e verde, giallo e viola si confondono.
+color-vision-typical = Standard
+color-vision-red-green = Rosso-verde
+color-vision-blue-yellow = Blu-giallo
+theme-builtin = Temi integrati
+theme-custom = I miei temi
+theme-custom-empty = Ancora nessun tema personalizzato.
+theme-intro = Un tema di Oxyde si riduce a sei colori. Tutti gli altri ne derivano: testo secondario, bordi, stati al passaggio del puntatore, barre di scorrimento e i contrasti minimi che mantengono leggibile l’interfaccia.
+theme-create-hint = Per creare il tuo tema, parti da quello più simile: sceglilo nell’elenco, poi «Crea da questo tema».
+theme-create = Crea da questo tema
+theme-delete = Elimina
+theme-save = Salva
+theme-name = Nome
+theme-new-name = { $name } personalizzato
+theme-color-background = Sfondo
+theme-color-background-description = Pannello file inattivo, quando la vista è divisa.
+theme-color-active-background = Sfondo attivo
+theme-color-active-background-description = Pannello file attivo e finestre secondarie.
+theme-color-sidebar = Barra laterale
+theme-color-sidebar-description = Barra laterale, barra del titolo e barra delle schede.
+theme-color-surface = Superficie
+theme-color-surface-description = Menu, campi, intestazioni delle finestre e scheda attiva.
+theme-color-text = Testo
+theme-color-text-description = Testo principale; testo secondario e bordi ne derivano.
+theme-color-accent = Accento
+theme-color-accent-description = Selezione, pulsanti principali, focus e cartelle.
+theme-picker-hint = Scegli un colore a sinistra, poi regolalo nel quadrato e nella striscia delle tinte, oppure digita il suo codice esadecimale (#3d5af1 o #fa0).
+theme-contrast-low = Contrasto del testo: { $ratio }:1. Punta ad almeno 4,5:1 perché resti leggibile.
 
 settings-scale = Scala dell’interfaccia
 

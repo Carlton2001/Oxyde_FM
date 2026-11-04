@@ -1,4 +1,5 @@
 pub mod application;
+pub mod custom_theme;
 pub mod error;
 pub mod file_entry;
 pub mod history;

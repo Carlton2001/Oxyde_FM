@@ -4,7 +4,7 @@ use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
 use super::SettingsPicker;
-use super::controls::{picker, scale_row, search_limit_row, section, separator, settings_row};
+use super::controls::{picker, window_row, scale_row, search_limit_row, section, separator, settings_row};
 use super::data_actions::data_action_row;
 use crate::ui::app::SettingsDataAction;
 
@@ -20,15 +20,12 @@ pub(super) fn left_column(view: &OxydeApp, handle: Entity<OxydeApp>, left_width:
         .border_r(rems(0.0625))
         .border_color(theme.border)
         .child(section(i18n.text(Message::SettingsAppearance), theme))
-        .child(picker(
-            view,
-            handle.clone(),
-            SettingsPicker::Theme,
-            "settings-theme-picker",
-            "icons/sun.svg",
-            i18n.text(Message::SettingsTheme),
-            theme,
-        ))
+        .child({
+            let handle = handle.clone();
+            window_row("settings-theme-window", "icons/palette.svg", i18n.text(Message::SettingsTheme), theme,
+                move |window, cx| crate::ui::components::popup::with_owner(window, cx,
+                    |window, cx| handle.update(cx, |view, cx| view.open_theme_window(window, cx))))
+        })
         .child(scale_row(view, handle.clone(), cx))
         .child(settings_row(
             i18n.text(Message::SettingsGridThumbnails),

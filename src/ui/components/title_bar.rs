@@ -196,6 +196,7 @@ pub(crate) fn close_main_window(handle: &Entity<OxydeApp>, reason: &'static str,
     crate::ui::app::duplicates::close_duplicate_windows(cx);
     crate::ui::components::operations::close_operations_windows(cx);
     crate::ui::app::advanced_search::close_advanced_search_windows(cx);
+    crate::ui::app::theme_window::close_theme_windows(cx);
     crate::ui::app::viewer::close_viewer_windows(cx);
     window.remove_window();
 }

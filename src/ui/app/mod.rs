@@ -56,6 +56,7 @@ mod item_pointer;
 pub(crate) mod search;
 pub(crate) mod advanced_search;
 pub(crate) mod duplicates;
+pub(crate) mod theme_window;
 
 use crate::ui::components::input::TextInput;
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
@@ -379,7 +380,7 @@ pub struct OxydeApp {
     pub(crate) archive_format_bounds: Option<Bounds<Pixels>>,
     pub(crate) settings_picker: Option<crate::ui::components::settings::SettingsPicker>,
     pub(crate) settings_confirmation: Option<SettingsDataConfirmation>,
-    pub(crate) theme_id: crate::ui::theme::ThemeId,
+    pub(crate) theme_choice: crate::ui::theme::ThemeChoice,
     pub(crate) language: crate::ui::i18n::Language,
     pub(crate) settings_error: Option<Message>,
     pub(crate) settings_data_status: Option<Message>,
@@ -588,7 +589,7 @@ impl OxydeApp {
             archive_format_bounds: None,
             settings_picker: None,
             settings_confirmation: None,
-            theme_id: crate::ui::theme::ThemeId::from_id(&config.theme),
+            theme_choice: crate::ui::theme::ThemeChoice::from_config(&config.theme, &config.custom_themes),
             language: crate::ui::i18n::Language::from_id(&config.language),
             settings_error: load_failed.then_some(Message::SettingsLoadError),
             settings_data_status: None,
