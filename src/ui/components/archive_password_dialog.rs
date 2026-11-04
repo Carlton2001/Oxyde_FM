@@ -44,6 +44,24 @@ pub(crate) fn render_archive_password_dialog(
     } else {
         field.into_any_element()
     };
+    let reveal = handle.clone();
+    let eye = if prompt.revealed { "icons/eye-off.svg" } else { "icons/eye.svg" };
+    let field = div()
+        .flex()
+        .items_center()
+        .gap(rems(0.375))
+        .w_full()
+        .child(field)
+        .child(
+            button_style(action_button("archive-password-prompt-reveal"), theme, ButtonVariant::Secondary, true)
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(svg().path(eye).size(rems(1.0)).text_color(theme.text))
+                .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                    reveal.update(cx, |view, cx| view.toggle_archive_password_prompt_reveal(cx));
+                }),
+        );
     let mut body = div()
         .flex()
         .flex_col()

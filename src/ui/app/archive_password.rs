@@ -18,6 +18,8 @@ pub(crate) struct ArchivePasswordPrompt {
     pub value: String,
     /// The typed password is being checked.
     pub checking: bool,
+    /// The eye shows the typed characters.
+    pub revealed: bool,
     /// Restarts the field's shake for each refusal.
     pub shake_id: u64,
     /// The field takes the focus back at the next frame, after a refusal.
@@ -157,6 +159,7 @@ impl OxydeApp {
             input,
             value: String::new(),
             checking: false,
+            revealed: false,
             shake_id: 0,
             refocus: Default::default(),
             focus: cx.focus_handle(),
@@ -227,6 +230,14 @@ impl OxydeApp {
         if let Some(retry) = prompt.retry.take() {
             retry(self, cx);
         }
+    }
+
+    pub(crate) fn toggle_archive_password_prompt_reveal(&mut self, cx: &mut Context<Self>) {
+        let Some(prompt) = &mut self.archive_password else { return };
+        prompt.revealed = !prompt.revealed;
+        let masked = !prompt.revealed;
+        prompt.input.update(cx, |input, cx| input.set_masked(masked, cx));
+        cx.notify();
     }
 
     /// The dialog could not open: the action stays refused.
