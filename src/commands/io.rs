@@ -171,6 +171,21 @@ pub fn create_local_folder(
     crate::systems::new_folder_history::create(path)
 }
 
+/// Worker-only local creation of an empty file; an existing name is never reused.
+pub fn create_local_file(path: &std::path::Path) -> std::io::Result<()> {
+    if crate::utils::archive::resolve_virtual_path(path).is_some() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "Local file creation requires a filesystem path",
+        ));
+    }
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map(drop)
+}
+
 /// Worker-only relocation using the proof captured by the original rename.
 pub fn record_captured_folder_rename(
     history: &crate::models::HistoryManager,

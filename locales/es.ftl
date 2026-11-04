@@ -138,6 +138,7 @@ menu-properties = Propiedades
 menu-more-options = Más opciones
 
 menu-new-folder = Nueva carpeta
+menu-new-file = Nuevo archivo
 
 menu-duplicate-tab = Duplicar pestaña
 
@@ -332,6 +333,8 @@ drag-move = Mover
 new-folder-name = Nueva carpeta
 
 new-folder-numbered = Nueva carpeta ({ $number })
+new-file-name = Nuevo archivo
+new-file-numbered = Nuevo archivo ({ $number })
 
 native-menu-empty = No hay comandos disponibles
 

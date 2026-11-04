@@ -380,11 +380,25 @@ impl OxydeApp {
     }
 
     pub fn create_new_folder(&mut self, pane_id: &str, cx: &mut Context<Self>) {
+        self.create_new_item(pane_id, true, cx);
+    }
+
+    /// Creates an empty file without extension, then starts renaming it.
+    pub fn create_new_file(&mut self, pane_id: &str, cx: &mut Context<Self>) {
+        self.create_new_item(pane_id, false, cx);
+    }
+
+    fn create_new_item(&mut self, pane_id: &str, is_dir: bool, cx: &mut Context<Self>) {
         use oxyde_lib::models::transaction::{Transaction, TransactionDetails, TransactionType};
 
         if let Some(pane) = self.state.layout.find_pane(pane_id) {
             let current_path = pane.active_tab().path.clone();
             if current_path.starts_with("search://") { return; }
+            let (name_key, numbered_key) = if is_dir {
+                (Message::NewFolderName, Message::NewFolderNumbered)
+            } else {
+                (Message::NewFileName, Message::NewFileNumbered)
+            };
             let language = cx.i18n().language();
             let quality = self.archive_quality_for_path(std::path::Path::new(&current_path));
             let tab_id = pane.active_tab().id.clone();
@@ -401,15 +415,18 @@ impl OxydeApp {
                             let in_archive = oxyde_lib::utils::archive::resolve_virtual_path(std::path::Path::new(&current_path)).is_some();
                             for counter in 0.. {
                                 let name = if counter == 0 {
-                                    i18n.text(Message::NewFolderName).to_string()
+                                    i18n.text(name_key).to_string()
                                 } else {
                                     let mut args = FluentArgs::new();
                                     args.set("number", counter);
-                                    i18n.text_with_args(Message::NewFolderNumbered, &args)
+                                    i18n.text_with_args(numbered_key, &args)
                                         .replace(['\u{2068}', '\u{2069}'], "")
                                 };
                                 let path = std::path::Path::new(&current_path).join(name);
-                                let created = if in_archive {
+                                let created = if !is_dir {
+                                    // Archives only receive folders from here.
+                                    oxyde_lib::commands::io::create_local_file(&path).map(|()| None)
+                                } else if in_archive {
                                     oxyde_lib::commands::archive::create_archive_directory_with_quality(&path, &quality).map(|()| None)
                                 } else {
                                     oxyde_lib::commands::io::create_local_folder(&path)
@@ -433,10 +450,10 @@ impl OxydeApp {
                             this.queue_created_item_rename(
                                 tab_id,
                                 folder_path.to_string_lossy().into_owned(),
-                                true,
+                                is_dir,
                                 cx,
                             );
-                            if !in_archive {
+                            if is_dir && !in_archive {
                                 this.history.push(Transaction::new(
                                     TransactionType::NewFolder,
                                     TransactionDetails {

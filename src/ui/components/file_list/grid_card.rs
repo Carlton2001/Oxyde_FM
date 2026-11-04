@@ -1,4 +1,4 @@
-use super::presentation::{file_type_display, grid_display_name, network_category, network_entry, selection_checkbox, size_loading};
+use super::presentation::{file_type_display, network_category, network_entry, selection_checkbox, size_loading};
 use super::thumbnails::render_grid_thumbnail;
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, FileDragData, FileDragPreview, FileDropTargetExt, OxydeApp};
 use crate::ui::components::{paths_match, with_grid_sort, oxyde_context_menu_items};
@@ -309,11 +309,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                         div()
                             .id(SharedString::from(format!("rename-name-{path}")))
                             .font_weight(FontWeight::MEDIUM)
-                            .child(if file.is_dir {
-                                name.clone()
-                            } else {
-                                grid_display_name(&name)
-                            })
+                            .child(name.clone())
                             .on_click(move |event, window, cx| {
                                 h_click.update(cx, |this, cx| {
                                     this.handle_slow_rename_click(

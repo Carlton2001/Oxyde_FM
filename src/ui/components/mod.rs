@@ -40,7 +40,7 @@ pub(crate) fn context_menu_sections(items: Vec<dropdown::DropdownItem>, i18n: &I
         &[Message::MountDiskImage, Message::UnmountDiskImage, Message::PinQuickAccess,
             Message::UnpinQuickAccess, Message::UnmountDrive, Message::EjectDrive, Message::TrashRestore, Message::TrashRestoreAll],
         &[Message::Cut, Message::Copy, Message::Paste],
-        &[Message::NewFolder],
+        &[Message::NewFolder, Message::NewFile],
         &[Message::SelectAll],
         &[Message::Compress, Message::OpExtractHere],
         &[], // Undo/Redo, recognised by their icons.
@@ -625,6 +625,17 @@ fn pane_context_menu_items_raw(
             }),
             on_hover: None,
         },
+        crate::ui::components::dropdown::DropdownItem::new(i18n.text(Message::NewFile).to_string(), {
+            let h = h_app.clone();
+            let p_id = pane_id.clone();
+            move |_, app| {
+                h.update(app, |this, cx| {
+                    this.context_menus.clear();
+                    this.create_new_file(&p_id, cx);
+                });
+            }
+        })
+        .icon(IconName::FilePlus),
         crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::SelectAll).to_string(),
             icon: Some(IconName::SquareDashedMousePointer),
@@ -825,8 +836,10 @@ pub fn pane_context_menu_items(i18n: &I18n, h: Entity<crate::ui::app::OxydeApp>,
     let mut items = with_terminal_action(items, h.clone(), path, i18n);
     history_actions::insert_menu_items(&mut items, i18n, h, view);
     if path.starts_with("search://") {
-        items.retain(|item| ![Message::NewFolder, Message::Paste, Message::Properties, Message::MoreOptions]
+        items.retain(|item| ![Message::NewFolder, Message::NewFile, Message::Paste, Message::Properties, Message::MoreOptions]
             .iter().any(|message| item.label == i18n.text(*message).as_ref()));
+    } else if oxyde_lib::utils::archive::resolve_virtual_path(std::path::Path::new(path)).is_some() {
+        items.retain(|item| item.label != i18n.text(Message::NewFile).as_ref());
     }
     context_menu_sections(items, i18n)
 }

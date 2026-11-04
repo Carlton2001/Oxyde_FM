@@ -144,17 +144,6 @@ pub(super) fn network_category(file: &FileEntry, i18n: &crate::ui::i18n::I18n) -
     i18n.text(if oxyde_lib::commands::io::is_network_server(&file.path) { Message::NetworkComputer } else { Message::NetworkOtherDevices }).to_string()
 }
 
-/// Uppercases only the extension for presentation in grid cards.
-pub(super) fn grid_display_name(name: &str) -> String {
-    let Some((stem, extension)) = name.rsplit_once('.') else {
-        return name.to_string();
-    };
-    if stem.is_empty() || extension.is_empty() {
-        return name.to_string();
-    }
-    format!("{stem}.{}", extension.to_uppercase())
-}
-
 pub(super) fn selection_checkbox(
     selected: bool,
     path: String,

@@ -61,6 +61,7 @@ pub enum IconName {
     Scissors,
     ClipboardPaste,
     FolderPlus,
+    FilePlus,
     Ellipsis,
     ChevronDown,
     ChevronUp,
@@ -527,6 +528,9 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                                     }
                                                                     IconName::FolderPlus => {
                                                                         "icons/folder-plus.svg"
+                                                                    }
+                                                                    IconName::FilePlus => {
+                                                                        "icons/file-plus.svg"
                                                                     }
                                                                     IconName::Ellipsis => {
                                                                         "icons/ellipsis.svg"
