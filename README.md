@@ -127,6 +127,12 @@ Options:
 | `--yes` | Answers yes to every question |
 | `--uninstall` | Removes the per-user installation and keeps your settings |
 
+To pass options through the pipe, add `-s --` after `bash`:
+
+```bash
+curl -fsSL https://github.com/Carlton2001/Oxyde_FM/releases/latest/download/install.sh | bash -s -- --set-default
+```
+
 Running the script again updates Oxyde. Running the `install.sh` found in an extracted archive installs that archive.
 
 #### Other installation methods
