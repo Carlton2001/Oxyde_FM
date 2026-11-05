@@ -677,6 +677,12 @@ pub fn get_pdf_grid_thumbnail_raw(path: String) -> Result<RgbaImage, CommandErro
     isolated_thumbnail("pdf-thumbnail", &path)
 }
 
+/// Isolated like the other shell handlers: video handlers parse the file.
+#[cfg(target_os = "windows")]
+pub fn get_video_shell_thumbnail_raw(path: &str) -> Result<RgbaImage, CommandError> {
+    isolated_thumbnail("video-shell", path)
+}
+
 #[cfg(target_os = "windows")]
 fn shell_thumbnail_raw(path: &str) -> Result<RgbaImage, CommandError> {
     use windows::core::PCWSTR;
@@ -785,6 +791,7 @@ pub(super) fn worker_reply(mode: &str, path: &Path) -> crate::utils::preview_pro
                 super::icons::get_file_icon(path, size.into())
             }
             "thumbnail" => get_thumbnail_uncached(path),
+            "video-shell" => shell_thumbnail_raw(&path),
             "office" => get_office_thumbnail_uncached(path),
             "pdf" => super::windows_pdf_thumbnail::get(path),
             "pdf-thumbnail" => super::windows_pdf_thumbnail::get_grid(path),

@@ -595,6 +595,18 @@ impl Platform for WindowsPlatform {
         super::thumbnails::worker_reply(mode,path)
     }
 
+    /// Windows' own thumbnail (system cache, hardware decoding); the decoded
+    /// frame at two seconds only when no shell handler provides one.
+    fn video_grid_thumbnail(&self, path: String) -> Result<image::RgbaImage, crate::models::CommandError> {
+        match super::thumbnails::get_video_shell_thumbnail_raw(&path) {
+            Ok(image) => Ok(image),
+            Err(error) => {
+                log::debug!("Shell video thumbnail unavailable, decoding frames: {error}");
+                super::video_thumbnail::grid_frame(path, |path, on_frame| self.video_frames(path, on_frame, Box::new(|| false)))
+            }
+        }
+    }
+
     fn decode_video_worker(&self, path: String, on_frame: &mut dyn FnMut(image::RgbaImage,std::time::Duration) -> bool) -> Result<(),crate::models::CommandError> {
         super::thumbnails::stream_video_frames_local(path,on_frame,|| false)
     }
