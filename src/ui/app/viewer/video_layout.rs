@@ -29,12 +29,14 @@ impl Viewer {
         let (width, height) = ((dimensions >> 32) as u32, dimensions as u32);
         let info = self.media.as_ref().and_then(|media| media.control.info());
         let labels = (!window.is_fullscreen()).then(|| {
+            // Wrapped labels make the row taller; the video gives up that height.
             div()
-                .size_full()
+                .w_full()
+                .min_h(super::media_labels::ROW_HEIGHT)
                 .flex()
                 .items_center()
                 .px(rems(0.5))
-                .overflow_hidden()
+                .py(rems(0.25))
                 .child(super::media_labels::row(
                     format!("viewer-video-labels-{}", self.generation).into(),
                     super::media_labels::video((width, height), info, cx),
@@ -63,17 +65,23 @@ impl Viewer {
             } else {
                 16.0 / 9.0
             },
-            placeholder: self.blocked.then(|| div()
-                .size_full()
-                .bg(rgb(0x000000))
-                .border_1()
-                .border_color(cx.theme().border)
-                .flex().items_center().justify_center()
-                .p(rems(1.0))
-                .text_color(rgb(0xffffff))
-                .text_center()
-                .child(cx.i18n().text(Message::ViewerVisualPaused))
-                .into_any_element()),
+            placeholder: {
+                let missing = info.filter(|info| info.video_decoder_missing());
+                (self.blocked || missing.is_some()).then(|| div()
+                    .size_full()
+                    .bg(rgb(0x000000))
+                    .border_1()
+                    .border_color(cx.theme().border)
+                    .flex().items_center().justify_center()
+                    .p(rems(1.0))
+                    .text_color(rgb(0xffffff))
+                    .text_center()
+                    .map(|placeholder| match missing.filter(|_| !self.blocked) {
+                        Some(info) => placeholder.child(super::media_labels::missing_codec_notice(&info, cx)),
+                        None => placeholder.child(cx.i18n().text(Message::ViewerVisualPaused)),
+                    })
+                    .into_any_element())
+            },
         }
     }
 }
@@ -120,7 +128,12 @@ impl Element for VideoLayout {
         cx: &mut App,
     ) -> Bounds<Pixels> {
         let bar_height = if self.fullscreen { px(0.0) } else { crate::ui::scale::rem_pixels(rems(2.5625)) };
-        let labels_height = if self.labels.is_some() { crate::ui::scale::rem_pixels(super::media_labels::ROW_HEIGHT) } else { px(0.0) };
+        let labels_height = match &mut self.labels {
+            Some(labels) => labels
+                .layout_as_root(size(AvailableSpace::Definite(bounds.size.width), AvailableSpace::MinContent), window, cx)
+                .height,
+            None => px(0.0),
+        };
         let video = fitted_video(bounds, self.ratio, bar_height + labels_height);
         let Bounds { origin, size: Size { width, height } } = video;
         if self.floating_bar {
@@ -139,7 +152,6 @@ impl Element for VideoLayout {
         self.bar
             .prepaint_at(origin + point(px(0.0), height), window, cx); }
         if let Some(labels) = &mut self.labels {
-            labels.layout_as_root(size(AvailableSpace::Definite(bounds.size.width), AvailableSpace::Definite(labels_height)), window, cx);
             labels.prepaint_at(point(bounds.origin.x, origin.y + height + bar_height), window, cx);
         }
         if let Some(placeholder) = &mut self.placeholder {

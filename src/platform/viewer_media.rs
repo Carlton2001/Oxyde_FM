@@ -58,7 +58,12 @@ pub struct MediaInfo {
     pub frame_rate_milli: u32,
     pub sample_rate: u32,
     pub channels: u8,
+    /// `MISSING_VIDEO` and `MISSING_AUDIO`: streams no installed decoder can play.
+    pub missing_decoders: u8,
 }
+
+pub const MISSING_VIDEO: u8 = 1;
+pub const MISSING_AUDIO: u8 = 2;
 
 impl MediaInfo {
     pub fn video_codec_name(&self) -> Option<&'static str> {
@@ -66,6 +71,12 @@ impl MediaInfo {
     }
     pub fn audio_codec_name(&self) -> Option<&'static str> {
         AUDIO_CODECS.get(usize::from(self.audio_codec).checked_sub(1)?).copied()
+    }
+    pub fn video_decoder_missing(&self) -> bool {
+        self.missing_decoders & MISSING_VIDEO != 0
+    }
+    pub fn audio_decoder_missing(&self) -> bool {
+        self.missing_decoders & MISSING_AUDIO != 0
     }
 }
 
@@ -85,6 +96,7 @@ pub fn encode_media_info(info: &MediaInfo) -> [u8; MEDIA_REPORT_BYTES] {
     report[3..7].copy_from_slice(&info.frame_rate_milli.to_le_bytes());
     report[7..11].copy_from_slice(&info.sample_rate.to_le_bytes());
     report[11] = info.channels;
+    report[12] = info.missing_decoders;
     report
 }
 
@@ -99,11 +111,13 @@ pub fn decode_media_info(report: &[u8; MEDIA_REPORT_BYTES]) -> Option<MediaInfo>
         frame_rate_milli: u32::from_le_bytes(report[3..7].try_into().ok()?),
         sample_rate: u32::from_le_bytes(report[7..11].try_into().ok()?),
         channels: report[11],
+        missing_decoders: report[12],
     };
     (usize::from(info.video_codec) <= VIDEO_CODECS.len()
         && usize::from(info.audio_codec) <= AUDIO_CODECS.len()
         && info.frame_rate_milli <= 1_000_000
-        && info.sample_rate <= 1_000_000)
+        && info.sample_rate <= 1_000_000
+        && info.missing_decoders & !(MISSING_VIDEO | MISSING_AUDIO) == 0)
         .then_some(info)
 }
 
@@ -178,3 +192,7 @@ impl ViewerMediaControl {
         self.wake();
     }
 }
+
+#[cfg(test)]
+#[path = "viewer_media/tests/info.rs"]
+mod info_tests;

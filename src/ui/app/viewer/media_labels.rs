@@ -7,7 +7,7 @@ use gpui::{prelude::*, *};
 use oxyde_lib::models::preferences::Language;
 use oxyde_lib::platform::MediaInfo;
 
-/// Height the video layout reserves for one row of labels.
+/// Least height of the label row under the video.
 pub(super) const ROW_HEIGHT: Rems = Rems(2.0);
 
 /// Fades in once `labels` holds everything known about the file; `id` names
@@ -37,6 +37,31 @@ pub(super) fn row(id: SharedString, labels: Vec<SharedString>, cx: &App) -> AnyE
         }))
         .with_spring(id, crate::ui::elements::motion::presence(true).from(0.0), |row, progress| row.opacity(progress))
         .into_any_element()
+}
+
+/// Names the stream no installed decoder plays, with its codec when known.
+pub(super) fn missing_codec(video: bool, info: &MediaInfo, cx: &App) -> SharedString {
+    let (message, codec) = if video {
+        (Message::ViewerVideoCodecMissing, info.video_codec_name())
+    } else {
+        (Message::ViewerAudioCodecMissing, info.audio_codec_name())
+    };
+    let mut args = FluentArgs::new();
+    args.set("codec", codec.unwrap_or("unknown"));
+    cx.i18n().text_with_args(message, &args)
+}
+
+/// What cannot be played and how to fix it, in place of the picture or of the file.
+pub(super) fn missing_codec_notice(info: &MediaInfo, cx: &App) -> Div {
+    let lines = [(info.video_decoder_missing(), true), (info.audio_decoder_missing(), false)];
+    div()
+        .flex()
+        .flex_col()
+        .items_center()
+        .gap(rems(0.5))
+        .text_center()
+        .children(lines.into_iter().filter(|(missing, _)| *missing).map(|(_, video)| missing_codec(video, info, cx)))
+        .child(div().text_size(rems(0.75)).opacity(0.75).child(cx.i18n().text(Message::ViewerCodecMissingHint)))
 }
 
 /// `value` with at most `decimals` digits, trailing zeros removed, in the UI's notation.
@@ -93,7 +118,11 @@ pub(super) fn video(dimensions: (u32, u32), info: Option<MediaInfo>, cx: &App) -
         args.set("rate", decimal(f64::from(info.frame_rate_milli) / 1000.0, 3, cx));
         labels.push(cx.i18n().text_with_args(Message::VideoFrameRate, &args));
     }
-    labels.extend(info.audio_codec_name().map(SharedString::from));
+    if info.audio_decoder_missing() {
+        labels.push(missing_codec(false, &info, cx));
+    } else {
+        labels.extend(info.audio_codec_name().map(SharedString::from));
+    }
     if info.sample_rate > 0 {
         labels.push(sample_rate(info.sample_rate, cx));
     }

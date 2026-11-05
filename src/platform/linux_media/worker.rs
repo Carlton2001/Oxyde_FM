@@ -1,6 +1,6 @@
 //! Worker side: plays the file, applies commands, reports and sends frames.
 use super::super::linux_gstreamer::{Player, PAUSED, PLAYING};
-use super::super::viewer_media::{encode_media_info, encode_media_report, MEDIA_ENDED, MEDIA_FAILED, MEDIA_LOADING, MEDIA_PAUSED, MEDIA_PLAYING};
+use super::super::viewer_media::{encode_media_info, encode_media_report, MediaInfo, MEDIA_ENDED, MEDIA_FAILED, MEDIA_LOADING, MEDIA_PAUSED, MEDIA_PLAYING};
 use super::{Command, FRAME, MAX_SIDE, REPORT};
 use std::ffi::{CStr, CString};
 use std::io::{self, Read, Write};
@@ -61,12 +61,15 @@ pub(in crate::platform) fn run(path: &Path) -> io::Result<()> {
     };
     let mut loaded = false;
     let mut ended = false;
-    let mut applied_seek = 0;
+    let mut applied_seek: u32 = 0;
     let mut size = [0; 2];
     let mut shown = (0, 0);
     let mut last_report = Instant::now() - REPORT_INTERVAL;
     let mut resized: Option<Instant> = None;
     let mut position = Duration::from_millis(command.seek_ms);
+    // Decoders found missing may follow the stream description: it is sent again.
+    let mut info = None;
+    let mut missing = MediaInfo::default();
     loop {
         loop {
             match commands.try_recv() {
@@ -84,12 +87,26 @@ pub(in crate::platform) fn run(path: &Path) -> io::Result<()> {
             }
         }
         let events = player.events();
+        let newly_missing = events.missing.missing_decoders & !missing.missing_decoders != 0;
+        missing.missing_decoders |= events.missing.missing_decoders;
+        missing.video_codec = missing.video_codec.max(events.missing.video_codec);
+        missing.audio_codec = missing.audio_codec.max(events.missing.audio_codec);
+        if events.error.is_some() && info.is_none() && missing.missing_decoders != 0 {
+            info = Some(MediaInfo::default());
+        }
+        if let Some(described) = events.info {
+            info = Some(described);
+        }
+        if let Some(info) = info.as_mut().filter(|_| events.info.is_some() || newly_missing || events.error.is_some()) {
+            // Streams without a decoder are left out of the selection: their codecs come from here.
+            info.missing_decoders = missing.missing_decoders;
+            if info.video_codec == 0 { info.video_codec = missing.video_codec; }
+            if info.audio_codec == 0 { info.audio_codec = missing.audio_codec; }
+            packet(REPORT, &[&encode_media_info(info), &applied_seek.to_le_bytes()], &mut output)?;
+        }
         if let Some(error) = events.error {
             log::warn!("Viewer media worker: {error}");
             return report(MEDIA_FAILED, position.as_millis() as u64, 0, size, applied_seek, &mut output);
-        }
-        if let Some(info) = events.info {
-            packet(REPORT, &[&encode_media_info(&info), &applied_seek.to_le_bytes()], &mut output)?;
         }
         loaded |= events.settled;
         ended |= events.ended;

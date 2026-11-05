@@ -25,6 +25,7 @@ const STATE_CHANGE_FAILURE: i32 = 0;
 // GstMessageType: extended types share bits with the basic ones.
 const MESSAGE_EOS: u32 = 1 << 0;
 const MESSAGE_ERROR: u32 = 1 << 1;
+const MESSAGE_ELEMENT: u32 = 1 << 15;
 const MESSAGE_ASYNC_DONE: u32 = 1 << 21;
 const MESSAGE_STREAMS_SELECTED: u32 = (1 << 31) + 5;
 // GstStreamType, GstFormat, GstSeekFlags (flush, key unit, nearest), GstMapFlags.
@@ -111,6 +112,9 @@ pub(super) struct Events {
     pub video: Option<bool>,
     /// Codecs and rates of the selected streams, read from their caps.
     pub info: Option<crate::platform::MediaInfo>,
+    /// Streams decodebin3 found no decoder for, and their codecs: playbin3 leaves
+    /// them out of the selected streams.
+    pub missing: crate::platform::MediaInfo,
 }
 
 /// Codec name of a compressed stream's caps, as `MediaInfo` lists it.
@@ -150,6 +154,50 @@ pub(super) fn codec_name(media_type: &str, mpeg_version: Option<i32>, layer: Opt
         "audio/x-true-hd" => "TrueHD",
         _ => return None,
     })
+}
+
+/// Adds the stream a `missing-plugin` message lacks a decoder for to `missing`, as a
+/// `MISSING_VIDEO` or `MISSING_AUDIO` flag and its codec; other element messages
+/// change nothing.
+///
+/// # Safety
+/// `message` is a live element message.
+unsafe fn missing_decoder(gst: &Gst, message: *mut library::Message, missing: &mut crate::platform::MediaInfo) {
+    use super::viewer_media::{audio_codec_index, video_codec_index, MISSING_AUDIO, MISSING_VIDEO};
+    let text = |pointer: *const std::ffi::c_char| (!pointer.is_null()).then(|| unsafe { CStr::from_ptr(pointer) });
+    // SAFETY: the message owns its structure and the caps it holds, read in place.
+    unsafe {
+        let structure = (gst.gst_message_get_structure)(message);
+        if structure.is_null()
+            || text((gst.gst_structure_get_name)(structure)) != Some(c"missing-plugin")
+            || text((gst.gst_structure_get_string)(structure, c"type".as_ptr())) != Some(c"decoder") {
+            return;
+        }
+        let detail = (gst.gst_structure_get_value)(structure, c"detail".as_ptr());
+        if detail.is_null() || (*detail).kind != (gst.gst_caps_get_type)() {
+            return;
+        }
+        let caps = (gst.gst_value_get_caps)(detail);
+        let first = if caps.is_null() { caps } else { (gst.gst_caps_get_structure)(caps, 0) };
+        let Some(media_type) = (!first.is_null()).then(|| text((gst.gst_structure_get_name)(first))).flatten() else { return };
+        let media_type = media_type.to_string_lossy();
+        let int = |field: &CStr| {
+            let mut value = 0;
+            ((gst.gst_structure_get_int)(first, field.as_ptr(), &mut value) != 0).then_some(value)
+        };
+        let codec = codec_name(&media_type, int(c"mpegversion"), int(c"layer"));
+        if media_type.starts_with("video/") || media_type.starts_with("image/") {
+            missing.missing_decoders |= MISSING_VIDEO;
+            if missing.video_codec == 0 {
+                missing.video_codec = codec.map_or(0, video_codec_index);
+            }
+        } else if media_type.starts_with("audio/") {
+            missing.missing_decoders |= MISSING_AUDIO;
+            if missing.audio_codec == 0 {
+                missing.audio_codec = codec.map_or(0, audio_codec_index);
+            }
+        }
+    }
 }
 
 /// Reads one selected stream's caps into `info`.
@@ -351,6 +399,7 @@ impl Player {
                         events.error = Some(error_text(gst, error, "Media decoding failed"));
                     }
                     MESSAGE_EOS => events.ended = true,
+                    MESSAGE_ELEMENT => missing_decoder(gst, message, &mut events.missing),
                     MESSAGE_ASYNC_DONE => events.settled = true,
                     MESSAGE_STREAMS_SELECTED => {
                         let mut video = false;

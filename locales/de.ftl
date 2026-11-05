@@ -1120,6 +1120,15 @@ group-deselect-all = Auswahl aller Elemente der Gruppe aufheben
 viewer-title = Dateibetrachter
 viewer-visual-paused = Videoanzeige pausiert
 viewer-file-unavailable = Diese Datei kann nicht angezeigt werden.
+viewer-video-codec-missing = { $codec ->
+    [unknown] Videocodec fehlt
+   *[other] Videocodec { $codec } fehlt
+}
+viewer-audio-codec-missing = { $codec ->
+    [unknown] Audiocodec fehlt
+   *[other] Audiocodec { $codec } fehlt
+}
+viewer-codec-missing-hint = Installieren Sie den GStreamer-Decoder für dieses Format und starten Sie Oxyde neu.
 viewer-tree-loading = Wird geladen…
 viewer-tree-empty = Leerer Ordner
 viewer-tree-failed = Dieser Inhalt kann nicht gelesen werden.

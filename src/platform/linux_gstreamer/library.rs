@@ -95,6 +95,10 @@ library! { Gst from "libgstapp-1.0.so.0" {
     gst_stream_get_stream_type: fn(Object) -> c_uint;
     gst_stream_get_caps: fn(Object) -> Object;
     gst_structure_get_name: fn(Object) -> *const c_char;
+    gst_structure_get_string: fn(Object, *const c_char) -> *const c_char;
+    gst_structure_get_value: fn(Object, *const c_char) -> *const Value;
+    gst_value_get_caps: fn(*const Value) -> Object;
+    gst_message_get_structure: fn(*mut Message) -> Object;
     gst_mini_object_unref: fn(*mut c_void);
     gst_app_sink_try_pull_sample: fn(Object, u64) -> Object;
     gst_app_sink_try_pull_preroll: fn(Object, u64) -> Object;

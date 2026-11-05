@@ -821,6 +821,15 @@ viewer-open = Ouvrir la visionneuse
 viewer-close = Fermer la visionneuse
 viewer-visual-paused = Affichage vidéo en pause
 viewer-file-unavailable = Ce fichier ne peut pas être affiché.
+viewer-video-codec-missing = { $codec ->
+    [unknown] Codec vidéo manquant
+   *[other] Codec vidéo { $codec } manquant
+}
+viewer-audio-codec-missing = { $codec ->
+    [unknown] Codec audio manquant
+   *[other] Codec audio { $codec } manquant
+}
+viewer-codec-missing-hint = Installez le décodeur GStreamer de ce format, puis redémarrez Oxyde.
 viewer-tree-loading = Chargement…
 viewer-tree-empty = Dossier vide
 viewer-tree-failed = Ce contenu ne peut pas être lu.

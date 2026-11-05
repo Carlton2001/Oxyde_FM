@@ -29,6 +29,9 @@ pub enum Message {
     ViewerTitle,
     ViewerVisualPaused,
     ViewerFileUnavailable,
+    ViewerVideoCodecMissing,
+    ViewerAudioCodecMissing,
+    ViewerCodecMissingHint,
     ViewerTreeLoading,
     ViewerTreeEmpty,
     ViewerTreeFailed,
@@ -1031,6 +1034,9 @@ impl Message {
             Self::ViewerTitle => "viewer-title",
             Self::ViewerVisualPaused => "viewer-visual-paused",
             Self::ViewerFileUnavailable => "viewer-file-unavailable",
+            Self::ViewerVideoCodecMissing => "viewer-video-codec-missing",
+            Self::ViewerAudioCodecMissing => "viewer-audio-codec-missing",
+            Self::ViewerCodecMissingHint => "viewer-codec-missing-hint",
             Self::ViewerTreeLoading => "viewer-tree-loading",
             Self::ViewerTreeEmpty => "viewer-tree-empty",
             Self::ViewerTreeFailed => "viewer-tree-failed",
@@ -1721,6 +1727,9 @@ mod tests {
                 Message::ViewerTitle,
                 Message::ViewerVisualPaused,
                 Message::ViewerFileUnavailable,
+                Message::ViewerVideoCodecMissing,
+                Message::ViewerAudioCodecMissing,
+                Message::ViewerCodecMissingHint,
                 Message::ViewerTreeLoading,
                 Message::ViewerTreeEmpty,
                 Message::ViewerTreeFailed,
@@ -2528,6 +2537,7 @@ mod tests {
             args.set("to", "md");
             args.set("protocol", "SMB");
             args.set("ratio", "3.2");
+            args.set("codec", "HEVC");
             for message in messages {
                 let pattern = i18n
                     .active

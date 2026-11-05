@@ -87,10 +87,14 @@ impl Viewer {
         let owner = self.owner.clone();
         let file = self.file.clone();
         let source_tab = self.source.tab.clone();
+        let missing = self.media.as_ref().and_then(|media| media.control.info()).filter(|info| info.missing_decoders != 0);
         div().flex().flex_col().items_center().justify_center()
             .gap(rems(1.0)).p(rems(1.0))
             .text_color(cx.theme().text_muted)
-            .child(cx.i18n().text(Message::ViewerFileUnavailable))
+            .map(|body| match missing {
+                Some(info) => body.child(super::media_labels::missing_codec_notice(&info, cx)),
+                None => body.child(cx.i18n().text(Message::ViewerFileUnavailable)),
+            })
             .when_some(file, |body, file| body.child(
                 crate::ui::elements::button::Button::new("viewer-open-file")
                     .label(cx.i18n().text(Message::Open))

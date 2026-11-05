@@ -204,10 +204,33 @@ fn refresh_media_registry(executable: &Path) {
     if std::mem::replace(&mut *refreshed, true) {
         return;
     }
+    forget_outdated_registry();
     let deadline = Instant::now() + Duration::from_secs(60);
     if let Err(error) = Worker::start(executable, "media-registry", None, 1024 * 1024 * 1024)
         .and_then(|mut worker| worker.read_to_end(0, deadline)) {
         log::warn!("GStreamer registry not refreshed: {error}");
+    }
+}
+
+/// GStreamer rescans a plugin only when its own file changes, not the libraries it
+/// loads: once RPM Fusion's FFmpeg replaced Fedora's, the registry would still list
+/// the old decoders. Installing a library rewrites the linker cache, so a cache of
+/// another date starts the registry over.
+fn forget_outdated_registry() {
+    let Some(directory) = linux_sandbox::registry() else { return };
+    let stamp = directory.join("ld.so.cache.stamp");
+    let Ok(modified) = std::fs::metadata("/etc/ld.so.cache").and_then(|metadata| metadata.modified()) else { return };
+    let current = modified.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos().to_string();
+    if std::fs::read_to_string(&stamp).is_ok_and(|previous| previous == current) {
+        return;
+    }
+    match std::fs::remove_file(directory.join("registry.bin")) {
+        Ok(()) => log::info!("Linker cache changed: GStreamer registry rebuilt"),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return log::warn!("Outdated GStreamer registry kept: {error}"),
+    }
+    if let Err(error) = std::fs::write(&stamp, current) {
+        log::warn!("GStreamer registry stamp not written: {error}");
     }
 }
 
