@@ -612,7 +612,7 @@ impl Platform for LinuxPlatform {
         use raw_window_handle::RawWindowHandle;
         match handle {
             RawWindowHandle::Wayland(handle) => Some(handle.surface.as_ptr() as u64),
-            RawWindowHandle::Xlib(handle) => Some(handle.window as u64),
+            RawWindowHandle::Xlib(handle) => Some(handle.window),
             RawWindowHandle::Xcb(handle) => Some(u64::from(handle.window.get())),
             _ => None,
         }

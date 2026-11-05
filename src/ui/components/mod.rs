@@ -240,20 +240,20 @@ fn oxyde_context_menu_items_raw(
     }
     let mut items = vec![];
 
-    if view.state.find_pane(&view.state.active_pane_id).is_some_and(|pane| pane.active_tab().quick_search.is_some()) {
-        if std::path::Path::new(&path).parent().is_some() {
-            let target = path.clone();
-            let handle = h_app.clone();
-            items.push(crate::ui::components::dropdown::DropdownItem {
-                label: i18n.text(Message::OpenFileLocation).to_string(),
-                icon: Some(IconName::ExternalLink), badge: None, stay_open: false, has_submenu: false, is_dimmed: false,
-                on_click: std::rc::Rc::new(move |_, app| { handle.update(app, |this, cx| {
-                    this.context_menus.clear();
-                    let pane = this.state.active_pane_id.clone();
-                    this.reveal_item(&pane, target.clone(), cx);
-                }); }), on_hover: None,
-            });
-        }
+    if view.state.find_pane(&view.state.active_pane_id).is_some_and(|pane| pane.active_tab().quick_search.is_some())
+        && std::path::Path::new(&path).parent().is_some()
+    {
+        let target = path.clone();
+        let handle = h_app.clone();
+        items.push(crate::ui::components::dropdown::DropdownItem {
+            label: i18n.text(Message::OpenFileLocation).to_string(),
+            icon: Some(IconName::ExternalLink), badge: None, stay_open: false, has_submenu: false, is_dimmed: false,
+            on_click: std::rc::Rc::new(move |_, app| { handle.update(app, |this, cx| {
+                this.context_menus.clear();
+                let pane = this.state.active_pane_id.clone();
+                this.reveal_item(&pane, target.clone(), cx);
+            }); }), on_hover: None,
+        });
     }
 
     items.push(crate::ui::components::dropdown::DropdownItem {

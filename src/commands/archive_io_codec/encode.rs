@@ -7,6 +7,7 @@ fn turbo<T: Exchange>(connection: &Connection<T>) -> io::Result<bool> {
     Ok(connection.lock().map_err(|_| invalid())?.turbo())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn encode<T: Exchange>(
     connection: &Connection<T>,
     format: Format,

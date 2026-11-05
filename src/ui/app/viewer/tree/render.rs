@@ -171,10 +171,12 @@ fn entry_row(
 ) -> AnyElement {
     let theme = *cx.theme();
     let language = cx.i18n().language();
-    let size = (!file.is_dir).then(|| format_size(file.size, false, true, language)).unwrap_or_default();
-    let date = (file.modified > 0)
-        .then(|| format_date(file.modified, crate::ui::format::date_format(cx)))
-        .unwrap_or_default();
+    let size = if file.is_dir { String::new() } else { format_size(file.size, false, true, language) };
+    let date = if file.modified > 0 {
+        format_date(file.modified, crate::ui::format::date_format(cx))
+    } else {
+        String::new()
+    };
     let icon = match crate::ui::components::icons::entry_icon(file) {
         crate::ui::components::icons::IconType::Folder if state == Chevron::Expanded && !system_icons => {
             crate::ui::components::icons::IconType::FolderOpen

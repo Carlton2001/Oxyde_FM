@@ -82,7 +82,7 @@ fn rule(bytes: &[u8]) -> Option<(Option<Rule>, &[u8])> {
 
 /// Values of host-order words are stored big-endian: swap them on this host.
 fn swapped(mut value: Vec<u8>, mut mask: Option<Vec<u8>>, word: usize) -> (Vec<u8>, Option<Vec<u8>>) {
-    if cfg!(target_endian = "little") && matches!(word, 2 | 4) && value.len() % word == 0 {
+    if cfg!(target_endian = "little") && matches!(word, 2 | 4) && value.len().is_multiple_of(word) {
         value.chunks_mut(word).for_each(<[u8]>::reverse);
         if let Some(mask) = &mut mask {
             mask.chunks_mut(word).for_each(<[u8]>::reverse);

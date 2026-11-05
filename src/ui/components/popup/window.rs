@@ -50,7 +50,7 @@ impl Global for Surfaces {}
 fn owner_origin(state: &Surfaces, mut id: WindowId) -> Point<Pixels> {
     let mut origin = Point::default();
     while let Some(offset) = state.origins.get(&id) {
-        origin = origin + offset.get();
+        origin += offset.get();
         let Some(parent) = state.logical_owners.get(&id) else { break };
         id = parent.window_id();
     }

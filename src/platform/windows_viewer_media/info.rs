@@ -51,7 +51,7 @@ pub(super) fn read(path: &Path) -> MediaInfo {
         if let Ok(video) = reader.GetNativeMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32, 0) {
             info.video_codec = video.GetGUID(&MF_MT_SUBTYPE).ok().and_then(video_codec).map_or(0, video_codec_index);
             if let Ok(rate) = video.GetUINT64(&MF_MT_FRAME_RATE) {
-                let (numerator, denominator) = ((rate >> 32) as u64, (rate & 0xffff_ffff) as u64);
+                let (numerator, denominator) = (rate >> 32, rate & 0xffff_ffff);
                 if numerator > 0 && denominator > 0 {
                     info.frame_rate_milli = (numerator * 1000 / denominator).min(1_000_000) as u32;
                 }

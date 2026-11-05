@@ -37,7 +37,7 @@ impl OxydeApp {
         self.remote_connections.insert(tab_id.clone(), (request_id, cancel.clone()));
         cx.spawn(async move |_, cx| {
             let result = connect(&handle, cx, uri.clone(), cancel).await;
-            let _ = handle.update(cx, |this, cx| {
+            handle.update(cx, |this, cx| {
                 if this.remote_connections.get(&tab_id).is_some_and(|(request, _)| *request == request_id) {
                     this.remote_connections.remove(&tab_id);
                 }

@@ -50,12 +50,10 @@ pub(crate) fn offers(path: &str, is_dir: bool) -> bool {
         && oxyde_lib::utils::archive::split_virtual_path(path).is_none()
 }
 
-fn load(paths: Vec<String>) -> impl std::future::Future<Output = Result<Vec<ApplicationChoice>, String>> {
-    async move {
-        tokio::task::spawn_blocking(move || oxyde_lib::platform::platform().open_with_choices(&paths))
-            .await
-            .unwrap_or_else(|error| Err(error.to_string()))
-    }
+async fn load(paths: Vec<String>) -> Result<Vec<ApplicationChoice>, String> {
+    tokio::task::spawn_blocking(move || oxyde_lib::platform::platform().open_with_choices(&paths))
+        .await
+        .unwrap_or_else(|error| Err(error.to_string()))
 }
 
 impl OxydeApp {

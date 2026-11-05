@@ -64,9 +64,8 @@ fn trim(text: &str, minimum: usize, mut end: usize) -> usize {
         if end <= minimum {
             return end;
         }
-        if matches!(last, '?' | '!' | '.' | ',' | ':' | '*' | '_' | '~' | '\'' | '"') {
-            end -= 1;
-        } else if last == ')' && link[minimum..].matches('(').count() < link[minimum..].matches(')').count() {
+        let unbalanced = || link[minimum..].matches('(').count() < link[minimum..].matches(')').count();
+        if matches!(last, '?' | '!' | '.' | ',' | ':' | '*' | '_' | '~' | '\'' | '"') || (last == ')' && unbalanced()) {
             end -= 1;
         } else if last == ';' {
             let entity = link[..end - 1].rfind('&').filter(|amp| {

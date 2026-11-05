@@ -30,7 +30,7 @@ struct Frame {
 /// after the other; on ext4 it is 2.5 to 3 times faster.
 pub(super) fn parallel(path: &Path) -> bool {
     let folder = path.parent().filter(|parent| !parent.as_os_str().is_empty()).unwrap_or(path);
-    rustix::fs::statfs(folder).map_or(true, |stat| stat.f_type as i64 != BTRFS)
+    rustix::fs::statfs(folder).map_or(true, |stat| stat.f_type != BTRFS)
 }
 
 fn located(path: &Path, error: impl Into<io::Error>) -> io::Error {
