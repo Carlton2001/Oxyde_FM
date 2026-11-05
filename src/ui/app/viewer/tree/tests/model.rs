@@ -123,6 +123,7 @@ fn archive_levels_include_folders_known_only_from_member_paths() {
         entry("/x/a.zip/docs", true, 0),
         entry("/x/a.zip/readme", false, 3),
     ]);
+    let levels = slash_keys(levels);
     let mut root: Vec<_> = levels["/x/a.zip"].iter().map(|entry| (entry.name.clone(), entry.is_dir)).collect();
     root.sort();
     assert_eq!(root, [("docs".to_owned(), true), ("readme".to_owned(), false)]);
@@ -160,10 +161,15 @@ fn archive_subtree_totals_count_each_folder_once_below_the_root() {
         entry("/x/a.zip/docs/notes.txt", false, 5),
         entry("/x/a.zip/docsextra.txt", false, 7),
     ]);
-    let levels: HashMap<String, Folder> = levels.into_iter().map(|(path, entries)| (path, Folder::new(entries, true, sort()))).collect();
+    let levels: HashMap<String, Folder> = slash_keys(levels).into_iter().map(|(path, entries)| (path, Folder::new(entries, true, sort()))).collect();
     let whole = subtree_totals("/x/a.zip", levels.iter());
     assert_eq!((whole.folders, whole.files, whole.bytes), (2, 3, 22));
     // A sibling sharing the name's start is outside the subtree.
     let docs = subtree_totals("/x/a.zip/docs", levels.iter());
     assert_eq!((docs.folders, docs.files, docs.bytes), (1, 2, 15));
+}
+
+/// Levels are keyed by native paths; the fixtures are written with `/`.
+fn slash_keys(levels: HashMap<String, Vec<FileEntry>>) -> HashMap<String, Vec<FileEntry>> {
+    levels.into_iter().map(|(path, entries)| (path.replace('\\', "/"), entries)).collect()
 }

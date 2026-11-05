@@ -28,7 +28,7 @@ fn members_list_with_their_paths_sizes_and_folders() {
     let path = write(folder.path(), "plain.rar", fixture(None, false));
     let files = indexed_file(&path, File::open(&path).unwrap(), ArchiveLimits::LISTING, &|| Ok(())).unwrap();
     let note = files.iter().find(|file| file.name == "note.txt").unwrap();
-    assert_eq!(note.path, path.join("docs/note.txt").to_string_lossy());
+    assert_eq!(note.path, path.join("docs").join("note.txt").to_string_lossy());
     assert_eq!(note.size, 14);
     assert!(files.iter().any(|file| file.name == "docs" && file.is_dir));
     assert_eq!(verify(&path, File::open(&path).unwrap(), 1024), None);

@@ -479,7 +479,7 @@ fn preview_index_lists_nested_members_and_stops_when_cancelled() {
     let mut names: Vec<_> = index_archive_for_preview(&archive, &running)
         .unwrap()
         .into_iter()
-        .map(|entry| entry.path.strip_prefix(&*archive.to_string_lossy()).unwrap().to_owned())
+        .map(|entry| entry.path.strip_prefix(&*archive.to_string_lossy()).unwrap().replace('\\', "/"))
         .collect();
     names.sort();
     assert_eq!(names, ["/docs/guide/intro.md", "/readme.txt"]);
