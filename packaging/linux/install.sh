@@ -76,16 +76,65 @@ download() {
     fi
 }
 
-# Downloads a release file and checks it against the .sha256 published beside it.
+# Oxyde's package signing key, the same as packaging/linux/signing/oxyde-packages.asc.
+package_key() {
+    cat <<'KEY'
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+mDMEauvNxRYJKwYBBAHaRw8BAQdAhzxjWxqmVfqyifvS26Zphk3iZE427h1QD6kN
+lskMxUm0L094eWRlIChwYWNrYWdlIHNpZ25pbmcpIDxjYXJsdG9uMjAwMUBnbWFp
+bC5jb20+iJMEExYKADsWIQT512ueO+3V6syc/n2sLpYfMgKXBgUCauvNxQIbAwUL
+CQgHAgIiAgYVCgkICwIEFgIDAQIeBwIXgAAKCRCsLpYfMgKXBnJ7AQD5cEvWNk2w
+YHru+mIpnXZA1rfWanABRgm8GDlQFzzLRgD+NCefhjYnUGPmZ6PyzywBR0TMSrd0
+5MEPv4QQRsHhdww=
+=gYzm
+-----END PGP PUBLIC KEY BLOCK-----
+KEY
+}
+
+# The binary packets of an armored block, which is all gpgv reads as a keyring.
+dearmor() {
+    sed -e '1,/^$/d' -e '/^-----END/,$d' -e '/^=/d' | base64 -d
+}
+
+# Checks SHA256SUMS against SHA256SUMS.asc with the key above. Without gpgv, only the
+# checksums protect the download, which HTTPS already does.
+verify_checksums() {
+    local directory=$1
+    if ! command -v gpgv >/dev/null; then
+        warn 'gpgv is missing: the checksums are used without checking their signature.'
+        return 0
+    fi
+    mkdir -p -m 700 "$directory/gnupg"
+    package_key | dearmor > "$directory/keyring.gpg" || die 'cannot read the package signing key.'
+    gpgv --homedir "$directory/gnupg" --keyring "$directory/keyring.gpg" \
+        "$directory/SHA256SUMS.asc" "$directory/SHA256SUMS" 2>/dev/null \
+        || die "SHA256SUMS is not signed by Oxyde's package key; nothing was installed."
+}
+
+# Checks a downloaded file against its line of SHA256SUMS.
+check_file() {
+    local directory=$1 name=$2 line
+    line=$(awk -v name="$name" '$2 == name' "$directory/SHA256SUMS")
+    [[ -n $line ]] || die "$name is not listed in SHA256SUMS."
+    (cd "$directory" && printf '%s\n' "$line" | sha256sum --quiet -c -) \
+        || die "$name does not match its SHA-256; nothing was installed."
+}
+
+# Downloads a release file and checks it against the release's signed SHA256SUMS.
 fetch_release_file() {
     local version=$1 name=$2 directory=$3
     local base=https://github.com/$repository/releases/download/v$version
+    if [[ ! -f $directory/SHA256SUMS ]]; then
+        download "$base/SHA256SUMS" "$directory/SHA256SUMS" 2>/dev/null \
+            || die "SHA256SUMS is not in release v$version."
+        download "$base/SHA256SUMS.asc" "$directory/SHA256SUMS.asc" 2>/dev/null \
+            || die "SHA256SUMS.asc is not in release v$version."
+        verify_checksums "$directory"
+    fi
     say "Downloading $name"
     download "$base/$name" "$directory/$name" || die "$name is not in release v$version."
-    download "$base/$name.sha256" "$directory/$name.sha256" 2>/dev/null \
-        || die "$name.sha256 is not in release v$version."
-    (cd "$directory" && sha256sum --quiet -c "$name.sha256") \
-        || die "$name does not match its SHA-256; nothing was installed."
+    check_file "$directory" "$name"
 }
 
 resolve_version() {
@@ -170,6 +219,7 @@ recommended|lib libpoppler-glib.so.8|PDF previews|poppler-glib|poppler-glib|libp
 recommended|lib libgstapp-1.0.so.0|audio and video previews|gstreamer1-plugins-base gstreamer1-plugins-good|gst-plugins-base gst-plugins-good|gstreamer-plugins-base gstreamer-plugins-good|gstreamer1.0-plugins-base gstreamer1.0-plugins-good
 recommended|gvfs|network locations|gvfs gvfs-fuse gvfs-smb|gvfs gvfs-smb|gvfs gvfs-backends gvfs-fuse|gvfs gvfs-fuse gvfs-backends
 recommended|cmd udisksctl|mounting volumes|udisks2|udisks2|udisks2|udisks2
+recommended|cmd gpgv|checking the signature of updates|gnupg2|gnupg|gpg2|gpgv
 recommended|cmd wl-copy|copying files to other applications under Wayland|wl-clipboard|wl-clipboard|wl-clipboard|wl-clipboard
 EOF
 }
@@ -451,4 +501,7 @@ main() {
     say 'or with --uninstall to remove it.'
 }
 
-main "$@"
+# Sourced, by the tests, it only defines its functions.
+if [[ -z ${BASH_SOURCE[0]:-} || ${BASH_SOURCE[0]} == "$0" ]]; then
+    main "$@"
+fi

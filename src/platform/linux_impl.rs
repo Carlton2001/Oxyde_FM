@@ -754,6 +754,10 @@ impl Platform for LinuxPlatform {
         super::linux_download::download(url, limit)
     }
 
+    fn verify_openpgp(&self, data: &std::path::Path, signature: &[u8]) -> std::io::Result<()> {
+        super::linux_signature::verify(data, signature)
+    }
+
     fn launch_update(&self, archive: &std::path::Path) -> std::io::Result<()> {
         super::linux_update::install(archive)
     }

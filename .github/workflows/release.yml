@@ -58,23 +58,44 @@ jobs:
           pattern: Oxyde_FM-*-x64
           merge-multiple: true
           path: target/distribution/output
-      - name: Sign setup, archive and DEB for the updater
+      - name: Sign setup for the updater
         shell: pwsh
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           if (-not $env:TAURI_SIGNING_PRIVATE_KEY) { throw 'Missing TAURI_SIGNING_PRIVATE_KEY secret.' }
+          $setup = "target/distribution/output/Oxyde_FM_${{ needs.version.outputs.version }}_x64-setup.exe"
+          npx --yes @tauri-apps/cli@2.10.1 signer sign $setup
+          if ($LASTEXITCODE -ne 0) { throw 'Updater signature failed.' }
+      # The key Oxyde compiles in decides whether Windows copies accept the update: a
+      # secret holding another key would sign a Setup that every updater refuses.
+      - name: Check the Setup signature against Oxyde's updater key
+        env:
+          RELEASE_VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends minisign
+          bash scripts/check-updater-signature.sh "target/distribution/output/Oxyde_FM_${RELEASE_VERSION}_x64-setup.exe"
+      # After the Setup's .sig: SHA256SUMS covers every file of the release.
+      - name: Sign Linux packages and checksums with GPG
+        env:
+          OXYDE_GPG_PRIVATE_KEY: ${{ secrets.OXYDE_GPG_PRIVATE_KEY }}
+          OXYDE_GPG_PASSPHRASE: ${{ secrets.OXYDE_GPG_PASSPHRASE }}
+          RELEASE_VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          sudo apt-get install -y --no-install-recommends rpm
+          bash scripts/sign-linux-release.sh "$RELEASE_VERSION" target/distribution/output
+      - name: Write the update manifest
+        shell: pwsh
+        run: |
           $version = '${{ needs.version.outputs.version }}'
           $output = 'target/distribution/output'
-          $setup = "$output/Oxyde_FM_${version}_x64-setup.exe"
-          $archive = "$output/oxyde-$version-x86_64-linux.tar.gz"
-          $deb = "$output/oxyde_$version-1_amd64.deb"
-          foreach ($file in @($setup, $archive, $deb)) {
-            npx --yes @tauri-apps/cli@2.10.1 signer sign $file
-            if ($LASTEXITCODE -ne 0) { throw "Updater signature failed for $file." }
-          }
-          ./scripts/write-update-manifest.ps1 -Version $version -Setup $setup -LinuxArchive $archive -LinuxDeb $deb -Destination "$output/latest.json"
+          $rpm = @(Get-ChildItem -LiteralPath $output -Filter "oxyde-$version-1.*.x86_64.rpm")
+          if ($rpm.Count -ne 1) { throw 'Expected exactly one RPM.' }
+          ./scripts/write-update-manifest.ps1 -Version $version -Setup "$output/Oxyde_FM_${version}_x64-setup.exe" `
+            -LinuxArchive "$output/oxyde-$version-x86_64-linux.tar.gz" -LinuxDeb "$output/oxyde_$version-1_amd64.deb" `
+            -LinuxRpm $rpm[0].FullName -Destination "$output/latest.json"
       - name: Create draft release
         shell: pwsh
         env:
@@ -83,16 +104,15 @@ jobs:
           $version = '${{ needs.version.outputs.version }}'
           $output = 'target/distribution/output'
           $setup = "$output/Oxyde_FM_${version}_x64-setup.exe"
-          $hash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
-          [IO.File]::WriteAllText("$setup.sha256", "$hash  $([IO.Path]::GetFileName($setup))`n")
+          $rpm = (Get-ChildItem -LiteralPath $output -Filter "oxyde-$version-1.*.x86_64.rpm").FullName
           gh release create "v$version" --draft --verify-tag --title "Oxyde v$version" `
             --notes 'Consultez le CHANGELOG pour la liste des changements.' `
-            $setup "$setup.sig" "$setup.sha256" `
-            "$output/Oxyde_FM-$version-x64-portable.zip" "$output/Oxyde_FM-$version-x64-portable.zip.sha256" `
+            $setup "$setup.sig" `
+            "$output/Oxyde_FM-$version-x64-portable.zip" `
             "$output/latest.json" `
-            "$output/oxyde-$version-x86_64-linux.tar.gz" "$output/oxyde-$version-x86_64-linux.tar.gz.sha256" `
-            "$output/oxyde-$version-x86_64-linux.tar.gz.sig" `
-            "$output/oxyde_$version-1_amd64.deb" "$output/oxyde_$version-1_amd64.deb.sha256" `
-            "$output/oxyde_$version-1_amd64.deb.sig" `
-            "$output/install.sh" "$output/install.sh.sha256"
+            "$output/oxyde-$version-x86_64-linux.tar.gz" "$output/oxyde-$version-x86_64-linux.tar.gz.asc" `
+            "$output/oxyde_$version-1_amd64.deb" "$output/oxyde_$version-1_amd64.deb.asc" `
+            $rpm "$rpm.asc" `
+            "$output/install.sh" `
+            "$output/SHA256SUMS" "$output/SHA256SUMS.asc"
           if ($LASTEXITCODE -ne 0) { throw 'Release creation failed.' }

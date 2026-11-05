@@ -18,7 +18,7 @@ fn user_home(version: &str) -> (tempfile::TempDir, PathBuf) {
 #[test]
 fn per_user_installation_updates_itself() {
     let (home, executable) = user_home("2.0.3");
-    assert_eq!(detect(&executable, Some(home.path()), false), Installation::SelfUpdating { manifest_key: ARCHIVE_KEY });
+    assert_eq!(detect(&executable, Some(home.path()), false), Installation::SelfUpdating { manifest_key: ARCHIVE_KEY, signature: ReleaseSignature::OpenPgp });
     assert_eq!(user_root(&executable, Some(home.path())), Some(executable.parent().unwrap().parent().unwrap().parent().unwrap().to_path_buf()));
 }
 
@@ -42,10 +42,10 @@ fn copies_outside_install_layout_are_unmanaged() {
 }
 
 #[test]
-fn system_packages_announce_the_deb_only_when_dpkg_owns_oxyde() {
+fn system_packages_announce_the_deb_or_the_rpm() {
     let executable = Path::new(SYSTEM_EXECUTABLE);
     assert_eq!(detect(executable, None, true), Installation::Package { manifest_key: Some(DEB_KEY) });
-    assert_eq!(detect(executable, None, false), Installation::Package { manifest_key: None });
+    assert_eq!(detect(executable, None, false), Installation::Package { manifest_key: Some(RPM_KEY) });
 }
 
 #[test]
@@ -161,7 +161,7 @@ fn update_switches_versions_and_keeps_the_running_one() {
     assert!(entry.lines().any(|line| line == "X-Oxyde-Install=user"));
     assert!(data.join(format!("icons/hicolor/scalable/apps/{APP_ID}.svg")).exists());
     let executable = std::fs::canonicalize(root.join("current/bin/oxyde")).unwrap();
-    assert_eq!(detect(&executable, Some(home.path()), false), Installation::SelfUpdating { manifest_key: ARCHIVE_KEY });
+    assert_eq!(detect(&executable, Some(home.path()), false), Installation::SelfUpdating { manifest_key: ARCHIVE_KEY, signature: ReleaseSignature::OpenPgp });
 }
 
 #[test]

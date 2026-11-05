@@ -69,7 +69,7 @@ impl Platform for WindowsPlatform {
     fn onedrive_folders(&self) -> Vec<crate::models::QuickAccessItem> { super::windows_onedrive::folders() }
     fn wsl_distributions(&self) -> Vec<crate::models::SidebarNode> { super::windows_wsl::distributions() }
     fn installation(&self) -> super::Installation {
-        super::Installation::SelfUpdating { manifest_key: "windows-x86_64" }
+        super::Installation::SelfUpdating { manifest_key: "windows-x86_64", signature: super::ReleaseSignature::Minisign }
     }
     fn download(&self, url: &str, limit: usize) -> std::io::Result<Vec<u8>> { super::windows_download::download(url, limit) }
     fn office_search_text(&self, path: &std::path::Path, checkpoint: &dyn Fn() -> std::io::Result<()>) -> std::io::Result<String> {

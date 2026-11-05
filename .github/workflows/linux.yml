@@ -32,9 +32,6 @@ concurrency:
 
 env:
   RUST_VERSION: 1.99.1
-  CARGO_ABOUT_VERSION: 0.9.2
-  # From the official release's .tar.gz.sha256; pin locally, never trust a downloaded checksum alone.
-  CARGO_ABOUT_SHA256: 9099a59e820c38a68b9d65f300662a567d56562f9a10f6aa4c7e86c17c2566af
 
 jobs:
   tests:
@@ -74,48 +71,7 @@ jobs:
       - name: Run the tests with deadlines alone
         run: cargo test --locked --bin oxyde preview_jobs
 
-  rpm:
-    needs: tests
-    runs-on: ubuntu-24.04
-    container: registry.fedoraproject.org/fedora:44
-    timeout-minutes: 60
-    steps:
-      - name: Install build dependencies
-        run: |
-          dnf install -y git-core tar gzip zstd rustup rpm-build python3 binutils gcc gcc-c++ make \
-            pkgconf-pkg-config fontconfig-devel freetype-devel libxkbcommon-devel \
-            libxkbcommon-x11-devel libxcb-devel wayland-devel desktop-file-utils appstream
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Install Rust
-        run: |
-          rustup-init -y --no-modify-path --profile minimal --default-toolchain "$RUST_VERSION"
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-      - name: Install cargo-about
-        run: |
-          package="cargo-about-$CARGO_ABOUT_VERSION-x86_64-unknown-linux-musl"
-          curl -fsSL -o /tmp/cargo-about.tar.gz \
-            "https://github.com/EmbarkStudios/cargo-about/releases/download/$CARGO_ABOUT_VERSION/$package.tar.gz"
-          echo "$CARGO_ABOUT_SHA256  /tmp/cargo-about.tar.gz" | sha256sum -c -
-          tar -xzf /tmp/cargo-about.tar.gz -C "$HOME/.cargo/bin" --strip-components=1 "$package/cargo-about"
-      - name: Restore Rust dependencies
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          shared-key: linux-rpm-v1
-          cache-bin: false
-      - name: Build the RPM
-        run: bash scripts/build-linux-packages.sh --rpm
-      - name: Install the RPM with its dependencies
-        run: dnf install -y target/linux-packages/output/*.rpm && test -x /usr/bin/oxyde-archive-io-worker
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: Oxyde-rpm-x64
-          path: target/linux-packages/output/*.rpm*
-          if-no-files-found: error
-          compression-level: 0
-
-  # The DEB and the per-user archive, as a release builds them.
+  # The DEB, the RPM and the per-user archive, as a release builds them.
   distribution:
     needs: tests
     uses: ./.github/workflows/_linux-distribution.yml

@@ -3,7 +3,7 @@
 //! pulls files from under a running Oxyde. The signed archive's own install.sh places it,
 //! which keeps one description of that layout; its `--archive` and `--update` options are
 //! therefore a contract between releases.
-use super::Installation;
+use super::{Installation, ReleaseSignature};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read};
 use std::os::unix::fs::OpenOptionsExt;
@@ -14,6 +14,7 @@ use std::sync::OnceLock;
 
 const ARCHIVE_KEY: &str = "linux-x86_64";
 const DEB_KEY: &str = "linux-x86_64-deb";
+const RPM_KEY: &str = "linux-x86_64-rpm";
 const SYSTEM_EXECUTABLE: &str = "/usr/bin/oxyde";
 const DPKG_FILE_LIST: &str = "/var/lib/dpkg/info/oxyde.list";
 const SCRIPT_LIMIT: u64 = 1024 * 1024;
@@ -30,10 +31,10 @@ pub(super) fn installation() -> Installation {
 
 fn detect(executable: &Path, home: Option<&Path>, dpkg_owned: bool) -> Installation {
     if executable == Path::new(SYSTEM_EXECUTABLE) {
-        // Only the DEB is published; another package gets the release page.
-        Installation::Package { manifest_key: dpkg_owned.then_some(DEB_KEY) }
+        // Oxyde publishes a DEB and an RPM, and /usr/bin/oxyde comes from one of them.
+        Installation::Package { manifest_key: Some(if dpkg_owned { DEB_KEY } else { RPM_KEY }) }
     } else if user_root(executable, home).is_some() {
-        Installation::SelfUpdating { manifest_key: ARCHIVE_KEY }
+        Installation::SelfUpdating { manifest_key: ARCHIVE_KEY, signature: ReleaseSignature::OpenPgp }
     } else {
         Installation::Unmanaged
     }

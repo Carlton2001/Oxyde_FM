@@ -12,7 +12,25 @@ bash scripts/build-linux-packages.sh --tar   # per-user archive, same image as t
 
 Files and their SHA-256 land in `target/linux-packages/output`. Beyond the [development dependencies](linux-development.md#setup-on-fedora-workstation), Fedora needs `rpm-build`, `desktop-file-utils`, `appstream`, `python3` and `cargo-about` 0.9.2. The DEB and the archive build in the image from `packaging/linux/debian/Containerfile`, with its own `target/ubuntu-24.04` folder; `lintian` stops the build on an error, `rpmlint` is informational. `--skip-build` reuses existing release executables. `--offline` keeps the previous build's notices: `cargo-about` reads crates for every target, macOS included, which a Linux cache does not hold.
 
-A package installs only on a system at least as recent as the one that built it (glibc): Fedora 44+ for the RPM, Ubuntu 24.04+ and Debian 13+ for the DEB, glibc 2.39+ for the archive. x86-64 only, with no repository, by choice: a release publishes the archive, the DEB and `install.sh`; the RPM stays a CI artifact. `install.sh` checks SHA-256; Oxyde checks the minisign signature of what it installs.
+A package installs only on a system at least as recent as the one that built it (glibc): Fedora 44+ for the RPM, Ubuntu 24.04+ and Debian 13+ for the DEB, glibc 2.39+ for the archive. x86-64 only, with no repository, by choice: a release publishes the archive, the DEB, the RPM and `install.sh`.
+
+## Signatures
+
+Linux files are signed with Oxyde's own GPG key, distinct from the Windows updater's minisign key and from Soliton's: `Oxyde (package signing) <carlton2001@gmail.com>`, Ed25519, fingerprint `F9D7 6B9E 3BED D5EA CC9C  FE7D AC2E 961F 3202 9706`, public key in `packaging/linux/signing/oxyde-packages.asc`. `scripts/sign-linux-release.sh`, run by the release job with the secrets `OXYDE_GPG_PRIVATE_KEY` (armored secret key) and `OXYDE_GPG_PASSPHRASE`:
+
+- signs the RPM's header (`rpmsign`), checked by `rpm -K` once the key is imported with `rpm --import`;
+- writes a detached armored `.asc` for the archive, the DEB and the RPM, which `latest.json` carries;
+- replaces the per-file `.sha256` with one `SHA256SUMS` listing every release file, Windows included, and signs it into `SHA256SUMS.asc`;
+- checks every signature against the committed public key before the release is created.
+
+A DEB carries no signature of its own, which `apt` would not check: `SHA256SUMS.asc` covers it. By hand:
+
+```bash
+gpg --import oxyde-packages.asc
+gpg --verify SHA256SUMS.asc SHA256SUMS && sha256sum --ignore-missing -c SHA256SUMS
+```
+
+The key is also compiled into Oxyde (`platform/linux_signature.rs`, fingerprint pinned) and written into `install.sh`; tests check both copies against the committed file.
 
 ## Per-user installation
 
@@ -22,7 +40,7 @@ A package installs only on a system at least as recent as the one that built it 
 curl -fsSL https://github.com/Carlton2001/Oxyde_FM/releases/latest/download/install.sh | bash
 ```
 
-The build writes the release version into the copy it publishes; run from a checkout, the script asks GitHub for the latest release. It checks each download against the `.sha256` beside it, then:
+The build writes the release version into the copy it publishes; run from a checkout, the script asks GitHub for the latest release. It downloads `SHA256SUMS` and `SHA256SUMS.asc`, checks their signature with `gpgv` and the key it embeds, then checks each download against its line. Without `gpgv` it says so and relies on the checksums alone. Then:
 
 - **Debian and Ubuntu**: installs the DEB with `apt`, because only `/usr/bin/oxyde` gets the AppArmor profile that lets bubblewrap confine decoders.
 - **Everything else**, Fedora Silverblue and other image-based systems included: places `oxyde-<version>-x86_64-linux` in `~/.local/lib/oxyde/<version>` (executable and workers in `bin/`), switches the `current` link atomically, links `~/.local/bin/oxyde`, and writes the desktop entry (marked `X-Oxyde-Install=user`), icons and AppStream metadata under `~/.local/share`. Nothing needs root or a reboot. The replaced version is kept for an Oxyde still running from it; older ones are removed. No `data` folder is created next to the executable, which would make Oxyde portable.
@@ -39,12 +57,12 @@ The flow is Windows' ([in-app updates](distribution.md#in-app-updates)); `platfo
 | --- | --- | --- |
 | `~/.local/lib/oxyde/<version>/bin/oxyde`, beside a `current` link | `SelfUpdating`, entry `linux-x86_64` | installs |
 | `/usr/bin/oxyde`, listed by dpkg | `Package`, entry `linux-x86_64-deb` | downloads the DEB in the browser |
-| `/usr/bin/oxyde`, another package | `Package`, no entry | opens the release page |
+| `/usr/bin/oxyde`, another package | `Package`, entry `linux-x86_64-rpm` | downloads the RPM in the browser |
 | anything else, such as `target/` | `Unmanaged` | no check, no row |
 
-`release.yml` signs the archive and the DEB with the updater's minisign key and adds both entries to `latest.json`; Tauri clients ignore them. A release without a Linux entry is no update for a per-user installation.
+`latest.json` carries the three Linux entries with the base64 of each file's `.asc`; Tauri clients ignore them. A release without a Linux entry is no update for a per-user installation, and a package without its entry gets the release page.
 
-Installing downloads the archive with `curl`, or `wget`, the tools `install.sh` already needs (`platform/linux_download.rs`: HTTPS only, redirects included, `~/.curlrc` ignored, bounded size). Once the signature is verified, Oxyde copies the archive's own `install.sh` out of it and runs `install.sh --archive <file> --update` with `HOME` set to the home holding the running copy: no dependency check, no question. The new version's script thus places the new version, and those two options are a contract between releases. A detached `sh` then waits for Oxyde's process to end before starting `current/bin/oxyde`, so the new version reads the session saved on close. Oxyde closes as on Windows. The version it ran from stays on disk until the next update.
+Installing downloads the archive with `curl`, or `wget`, the tools `install.sh` already needs (`platform/linux_download.rs`: HTTPS only, redirects included, `~/.curlrc` ignored, bounded size). Oxyde writes it to a temporary folder and checks its GPG signature there with `gpgv`, a private keyring holding only the compiled-in key and an empty home; the signing key's fingerprint must match too. Without `gpgv` (package `gnupg2` on Fedora, `gpgv` on Debian) the update fails, and `install.sh` lists it among recommended packages. Once the signature is verified, Oxyde copies the archive's own `install.sh` out of it and runs `install.sh --archive <file> --update` with `HOME` set to the home holding the running copy: no dependency check, no question. The new version's script thus places the new version, and those two options are a contract between releases. A detached `sh` then waits for Oxyde's process to end before starting `current/bin/oxyde`, so the new version reads the session saved on close. Oxyde closes as on Windows. The version it ran from stays on disk until the next update.
 
 ## Package contents
 
@@ -90,7 +108,6 @@ Limits: each launch is a new process, with no single instance, and its preferenc
 `.github/workflows/linux.yml`, on `main` and its PRs:
 
 - **tests** on `ubuntu-24.04`: warning-free compile, full suite, then `preview_jobs` separately, whose 2 s timeouts fail when the whole suite loads the machine. The AppArmor restriction is lifted so confinement tests run.
-- **rpm** in a `fedora:44` container: build, install with dependencies, downloadable artifact.
-- **distribution** on `ubuntu-24.04`, `_linux-distribution.yml`, also run by `release.yml`: builds the DEB and the archive from the same executables, installs the DEB, installs the archive twice for a user then removes it.
+- **distribution**, `_linux-distribution.yml`, also run by `release.yml`: on `ubuntu-24.04`, builds the DEB and the archive from the same executables, installs the DEB, installs the archive twice for a user then removes it; in a `fedora:44` container, builds and installs the RPM. Signing happens only in the release job.
 
 Rust is pinned to 1.99.1 and `cargo-about` verified by hash. Containers forbid bubblewrap, so they do not exercise confinement.

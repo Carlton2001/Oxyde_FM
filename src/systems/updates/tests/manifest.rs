@@ -1,9 +1,10 @@
 use super::*;
 
-const WINDOWS: Installation = Installation::SelfUpdating { manifest_key: "windows-x86_64" };
-const ARCHIVE: Installation = Installation::SelfUpdating { manifest_key: "linux-x86_64" };
+const WINDOWS: Installation = Installation::SelfUpdating { manifest_key: "windows-x86_64", signature: ReleaseSignature::Minisign };
+const ARCHIVE: Installation = Installation::SelfUpdating { manifest_key: "linux-x86_64", signature: ReleaseSignature::OpenPgp };
 const DEB: Installation = Installation::Package { manifest_key: Some("linux-x86_64-deb") };
-const RPM: Installation = Installation::Package { manifest_key: None };
+const RPM: Installation = Installation::Package { manifest_key: Some("linux-x86_64-rpm") };
+const UNKNOWN_PACKAGE: Installation = Installation::Package { manifest_key: None };
 
 const MANIFEST: &str = r#"{
   "version": "2.0.0",
@@ -21,6 +22,10 @@ const MANIFEST: &str = r#"{
     "linux-x86_64-deb": {
       "signature": "ZGVi",
       "url": "https://github.com/Carlton2001/Oxyde_FM/releases/download/v2.0.0/oxyde_2.0.0-1_amd64.deb"
+    },
+    "linux-x86_64-rpm": {
+      "signature": "cnBt",
+      "url": "https://github.com/Carlton2001/Oxyde_FM/releases/download/v2.0.0/oxyde-2.0.0-1.fc44.x86_64.rpm"
     }
   }
 }"#;
@@ -59,11 +64,13 @@ fn release_without_a_build_for_this_system_is_not_an_update() {
 }
 
 #[test]
-fn packages_download_the_deb_or_open_the_release_page() {
+fn packages_download_their_package_or_open_the_release_page() {
     let deb = parse_manifest(MANIFEST.as_bytes(), "1.9.0", DEB).unwrap().unwrap();
     assert!(deb.manual_download().ends_with("oxyde_2.0.0-1_amd64.deb"));
     let rpm = parse_manifest(MANIFEST.as_bytes(), "1.9.0", RPM).unwrap().unwrap();
-    assert_eq!(rpm.manual_download(), "https://github.com/Carlton2001/Oxyde_FM/releases/tag/v2.0.0");
+    assert!(rpm.manual_download().ends_with("oxyde-2.0.0-1.fc44.x86_64.rpm"));
+    let unknown = parse_manifest(MANIFEST.as_bytes(), "1.9.0", UNKNOWN_PACKAGE).unwrap().unwrap();
+    assert_eq!(unknown.manual_download(), "https://github.com/Carlton2001/Oxyde_FM/releases/tag/v2.0.0");
     // A release without the DEB still announces itself through its page.
     let unpublished = parse_manifest(WINDOWS_ONLY.as_bytes(), "1.9.0", DEB).unwrap().unwrap();
     assert_eq!(unpublished.manual_download(), "https://github.com/Carlton2001/Oxyde_FM/releases/tag/v2.0.0");

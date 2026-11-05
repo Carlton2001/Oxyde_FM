@@ -137,10 +137,19 @@ pub enum Installation {
     /// Built from source, or placed by hand: releases are not checked.
     Unmanaged,
     /// Oxyde downloads, verifies and installs this entry of the update manifest itself.
-    SelfUpdating { manifest_key: &'static str },
+    SelfUpdating { manifest_key: &'static str, signature: ReleaseSignature },
     /// A system package: Oxyde announces releases and lets the user download this
     /// manifest entry, or the release page when there is none.
     Package { manifest_key: Option<&'static str> },
+}
+
+/// How a self-updating installation checks a release before installing it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReleaseSignature {
+    /// The Tauri updater key, compiled into Oxyde: Windows.
+    Minisign,
+    /// Oxyde's package signing key, checked by `Platform::verify_openpgp`: Linux.
+    OpenPgp,
 }
 
 /// Look of the minimize, maximize and close buttons drawn by Oxyde's own title bars.
@@ -220,6 +229,11 @@ pub trait Platform: Send + Sync {
     fn window_control_style(&self) -> WindowControlStyle { WindowControlStyle::Windows }
     /// HTTPS GET into memory, bounded by `limit` bytes.
     fn download(&self, _url: &str, _limit: usize) -> std::io::Result<Vec<u8>> {
+        Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
+    }
+    /// Check `signature`, an armored detached OpenPGP signature, of `data` against
+    /// Oxyde's package signing key.
+    fn verify_openpgp(&self, _data: &std::path::Path, _signature: &[u8]) -> std::io::Result<()> {
         Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
     }
     /// Install the verified release and arrange for Oxyde to start again once this
@@ -856,6 +870,8 @@ mod linux_volumes;
 mod linux_update;
 #[cfg(not(target_os = "windows"))]
 mod linux_download;
+#[cfg(not(target_os = "windows"))]
+mod linux_signature;
 #[cfg(not(target_os = "windows"))]
 pub use linux_trash::{KdeLimitAction, KdeTrashLimits, TrashRetention};
 #[cfg(target_os = "windows")]

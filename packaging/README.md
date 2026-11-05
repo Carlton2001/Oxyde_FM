@@ -7,6 +7,7 @@ Linux package sources, used by `scripts/build-linux-packages.sh`. Procedure, dep
 | `oxyde.spec` | RPM spec |
 | `debian/` | DEB `control`, `copyright`, `conffiles`, maintainer scripts and the `Containerfile` of the Ubuntu 24.04 build image |
 | `install.sh` | Release installer: DEB on Debian and Ubuntu, per-user archive elsewhere |
+| `signing/oxyde-packages.asc` | Public GPG key of Linux releases; also compiled into Oxyde and written into `install.sh` |
 | `apparmor/` | Profile allowing user namespaces on Ubuntu, so bubblewrap works |
 | `io.github.Carlton2001.Oxyde.desktop` | Desktop entry |
 | `io.github.Carlton2001.Oxyde.metainfo.xml` | AppStream metadata |

@@ -1,7 +1,7 @@
 //! Release updates, in the Tauri updater format shared with Oxyde 1.x.
 //! The manifest and the signatures come from the release workflow. Each installation
 //! reads its own manifest entry: Tauri clients ignore the Linux ones.
-use crate::platform::Installation;
+use crate::platform::{Installation, ReleaseSignature};
 use base64::Engine;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -49,17 +49,32 @@ pub fn check() -> Result<Option<Update>, String> {
     parse_manifest(&bytes, env!("CARGO_PKG_VERSION"), installation)
 }
 
-/// Download the release file and keep it only if its signature matches the updater key.
+/// Download the release file and keep it only if its signature matches the key of its
+/// system: the Tauri updater key on Windows, Oxyde's package signing key on Linux.
 pub fn download(update: &Update) -> Result<PathBuf, String> {
+    let platform = crate::platform::platform();
+    let Installation::SelfUpdating { signature, .. } = platform.installation() else {
+        return Err("This copy of Oxyde does not install updates".into());
+    };
     let name = update.url.rsplit('/').next()
         .filter(|name| !name.is_empty() && name.chars().all(|part| part.is_ascii_alphanumeric() || matches!(part, '.' | '_' | '-')))
         .ok_or_else(|| format!("Unexpected update file {}", update.url))?;
-    let bytes = crate::platform::platform().download(&update.url, SETUP_LIMIT).map_err(|error| error.to_string())?;
-    verify(&bytes, &update.signature, PUBLIC_KEY)?;
+    let bytes = platform.download(&update.url, SETUP_LIMIT).map_err(|error| error.to_string())?;
+    if signature == ReleaseSignature::Minisign {
+        verify(&bytes, &update.signature, PUBLIC_KEY)?;
+    }
     // The directory outlives Oxyde on Windows: Setup runs after the application exits.
     let directory = tempfile::Builder::new().prefix("oxyde-update-").tempdir().map_err(|error| error.to_string())?.keep();
     let path = directory.join(name);
-    std::fs::write(&path, bytes).map_err(|error| error.to_string())?;
+    let written = std::fs::write(&path, bytes).map_err(|error| error.to_string()).and_then(|()| match signature {
+        ReleaseSignature::Minisign => Ok(()),
+        // gpgv reads files: the archive is checked where it was written, before any use.
+        ReleaseSignature::OpenPgp => platform.verify_openpgp(&path, update.signature.as_bytes()).map_err(|error| error.to_string()),
+    });
+    if let Err(error) = written {
+        let _ = std::fs::remove_dir_all(&directory);
+        return Err(error);
+    }
     Ok(path)
 }
 
@@ -76,7 +91,7 @@ fn parse_manifest(bytes: &[u8], current: &str, installation: Installation) -> Re
     }
     let key = match installation {
         Installation::Unmanaged => return Ok(None),
-        Installation::SelfUpdating { manifest_key } => Some(manifest_key),
+        Installation::SelfUpdating { manifest_key, .. } => Some(manifest_key),
         Installation::Package { manifest_key } => manifest_key,
     };
     let asset = key.and_then(|key| manifest.platforms.get(key));

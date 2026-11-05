@@ -1,7 +1,8 @@
 name: Linux distribution (reusable)
 
 # Build the DEB and the per-user archive once on Ubuntu 24.04, the oldest supported glibc,
-# install both, and upload them with install.sh; a release run publishes these same files.
+# and the RPM on Fedora 44; install them, and upload them with install.sh. A release run
+# signs and publishes these same files.
 on:
   workflow_call:
 
@@ -68,5 +69,45 @@ jobs:
             target/linux-packages/output/*.deb*
             target/linux-packages/output/*.tar.gz*
             target/linux-packages/output/install.sh*
+          if-no-files-found: error
+          compression-level: 0
+
+  rpm:
+    runs-on: ubuntu-24.04
+    container: registry.fedoraproject.org/fedora:44
+    timeout-minutes: 60
+    steps:
+      - name: Install build dependencies
+        run: |
+          dnf install -y git-core tar gzip zstd rustup rpm-build python3 binutils gcc gcc-c++ make \
+            pkgconf-pkg-config fontconfig-devel freetype-devel libxkbcommon-devel \
+            libxkbcommon-x11-devel libxcb-devel wayland-devel desktop-file-utils appstream
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup-init -y --no-modify-path --profile minimal --default-toolchain "$RUST_VERSION"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Install cargo-about
+        run: |
+          package="cargo-about-$CARGO_ABOUT_VERSION-x86_64-unknown-linux-musl"
+          curl -fsSL -o /tmp/cargo-about.tar.gz \
+            "https://github.com/EmbarkStudios/cargo-about/releases/download/$CARGO_ABOUT_VERSION/$package.tar.gz"
+          echo "$CARGO_ABOUT_SHA256  /tmp/cargo-about.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/cargo-about.tar.gz -C "$HOME/.cargo/bin" --strip-components=1 "$package/cargo-about"
+      - name: Restore Rust dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          shared-key: linux-rpm-v1
+          cache-bin: false
+      - name: Build the RPM
+        run: bash scripts/build-linux-packages.sh --rpm
+      - name: Install the RPM with its dependencies
+        run: dnf install -y target/linux-packages/output/*.rpm && test -x /usr/bin/oxyde-archive-io-worker
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Oxyde_FM-linux-rpm-x64
+          path: target/linux-packages/output/*.rpm*
           if-no-files-found: error
           compression-level: 0
