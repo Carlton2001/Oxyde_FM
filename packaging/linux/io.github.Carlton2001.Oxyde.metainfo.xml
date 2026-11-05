@@ -22,6 +22,16 @@
   <launchable type="desktop-id">io.github.Carlton2001.Oxyde.desktop</launchable>
   <url type="homepage">https://github.com/Carlton2001/Oxyde_FM</url>
   <url type="bugtracker">https://github.com/Carlton2001/Oxyde_FM/issues</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Two panes side by side, one as a list, the other as a grid</caption>
+      <caption xml:lang="fr">Deux panneaux côte à côte, l'un en liste, l'autre en grille</caption>
+      <caption xml:lang="de">Zwei Bereiche nebeneinander, einer als Liste, der andere als Raster</caption>
+      <caption xml:lang="es">Dos paneles uno junto a otro, uno en lista y el otro en cuadrícula</caption>
+      <caption xml:lang="it">Due pannelli affiancati, uno a elenco e l'altro a griglia</caption>
+      <image type="source" width="1548" height="873">https://raw.githubusercontent.com/Carlton2001/Oxyde_FM/main/screenshots/linux-main.png</image>
+    </screenshot>
+  </screenshots>
   <categories>
     <category>Utility</category>
     <category>FileManager</category>
