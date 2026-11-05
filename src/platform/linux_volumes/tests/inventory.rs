@@ -25,6 +25,8 @@ fn block(device: &str, label: &str, hint_ignore: bool, mounts: Option<&[&str]>, 
         fstab: None,
         hint_ignore,
         mount_points: mounts.map(|points| points.iter().map(|point| point.to_string()).collect()),
+        loop_backing: None,
+        partition_of: None,
         drive: Some(drive),
     }
 }

@@ -345,10 +345,7 @@ fn oxyde_context_menu_items_raw(
             on_hover: None,
         });
     }
-    if !is_dir
-        && cfg!(target_os = "windows")
-        && entry.is_disk_image()
-    {
+    if !is_dir && entry.can_mount_disk_image() {
         let mounted = view
             .mounted_disk_images
             .iter()

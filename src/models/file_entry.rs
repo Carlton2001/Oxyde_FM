@@ -80,6 +80,10 @@ impl FileEntry {
     pub fn is_disk_image(&self) -> bool {
         !self.is_dir && self.archive_path.is_none() && crate::utils::disk_image::disk_image_format(Path::new(&self.path))
     }
+    /// A disk image this system can mount, as offered in its context menu.
+    pub fn can_mount_disk_image(&self) -> bool {
+        self.is_disk_image() && crate::utils::disk_image::mountable(Path::new(&self.path))
+    }
     pub fn needs_mount_for_browsing(&self) -> bool {
         self.is_disk_image() && crate::utils::disk_image::mount_format(Path::new(&self.path))
     }

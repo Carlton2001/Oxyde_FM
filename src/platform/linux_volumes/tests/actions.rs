@@ -18,6 +18,8 @@ fn block(object: &str, mounts: Option<&[&str]>, drive: Option<Drive>) -> Block {
         fstab: None,
         hint_ignore: false,
         mount_points: mounts.map(|points| points.iter().map(|point| point.to_string()).collect()),
+        loop_backing: None,
+        partition_of: None,
         drive,
     }
 }

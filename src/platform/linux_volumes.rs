@@ -7,6 +7,7 @@ mod actions;
 mod disks;
 mod fallback;
 mod holders;
+mod images;
 mod inventory;
 mod mounts;
 mod signals;
@@ -122,6 +123,10 @@ impl Volumes for LinuxVolumes {
         if gvfs_share(path) {
             return super::linux_gio::unmount(std::path::Path::new(path));
         }
+        // A mounted image releases its loop device too, as from the image's own menu.
+        if let Some(image) = udisks::blocks().ok().and_then(|blocks| images::image_at(&blocks, path)) {
+            return images::unmount(std::path::Path::new(&image));
+        }
         actions::unmount(path)
     }
 
@@ -138,12 +143,12 @@ impl Volumes for LinuxVolumes {
     }
 
     fn mounted_disk_images(&self) -> Result<Vec<MountedDiskImage>, String> {
-        Ok(Vec::new())
+        udisks::blocks().map(|blocks| images::mounted(&blocks)).map_err(|error| error.to_string())
     }
-    fn mount_disk_image(&self, _path: &str) -> Result<Vec<String>, String> {
-        Err("Disk image mounting is only supported on Windows".into())
+    fn mount_disk_image(&self, path: &str) -> Result<Vec<String>, String> {
+        images::mount(std::path::Path::new(path)).map_err(|error| error.to_string())
     }
-    fn unmount_disk_image(&self, _path: &str) -> Result<(), String> {
-        Err("Disk image unmounting is only supported on Windows".into())
+    fn unmount_disk_image(&self, path: &str) -> Result<(), String> {
+        images::unmount(std::path::Path::new(path)).map_err(|error| error.to_string())
     }
 }

@@ -19,14 +19,23 @@ pub fn needs_mount_for_browsing(path: &Path) -> bool {
     is_disk_image(path) && mount_format(path)
 }
 
+/// Images only browsable once mounted: VHD and VHDX, which only Windows mounts.
 pub(crate) fn mount_format(path: &Path) -> bool {
-    matches!(
-            path.extension()
-                .and_then(|extension| extension.to_str())
-                .map(str::to_ascii_lowercase)
-                .as_deref(),
-            Some("vhd" | "vhdx")
-    )
+    cfg!(target_os = "windows") && matches!(extension(path).as_deref(), Some("vhd" | "vhdx"))
+}
+
+/// Images this system mounts: all four on Windows; ISO and IMG through a loop device
+/// on Linux.
+pub(crate) fn mountable(path: &Path) -> bool {
+    match extension(path).as_deref() {
+        Some("iso" | "img") => true,
+        Some("vhd" | "vhdx") => cfg!(target_os = "windows"),
+        _ => false,
+    }
+}
+
+fn extension(path: &Path) -> Option<String> {
+    path.extension().and_then(|extension| extension.to_str()).map(str::to_ascii_lowercase)
 }
 
 #[cfg(test)]
@@ -49,7 +58,9 @@ mod tests {
         ] {
             assert!(!is_disk_image(&root.path().join(name)));
         }
-        assert!(needs_mount_for_browsing(&root.path().join("disk.vhdx")));
+        assert_eq!(needs_mount_for_browsing(&root.path().join("disk.vhdx")), cfg!(target_os = "windows"));
         assert!(!needs_mount_for_browsing(&root.path().join("disc.iso")));
+        assert!(mountable(&root.path().join("disc.ISO")) && mountable(&root.path().join("disc.img")));
+        assert_eq!(mountable(&root.path().join("disk.vhd")), cfg!(target_os = "windows"));
     }
 }

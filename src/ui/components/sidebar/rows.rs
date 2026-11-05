@@ -233,7 +233,9 @@ pub(super) fn render_sidebar_rows(
                         move |e, _, cx| {
                             let pos   = e.position;
                             let mut items = drive_context_menu(cx.i18n(), h.clone(), p.clone(), actions, is_remote);
-                            if let Some(image) = h.read(cx).mounted_image_for_drive(&p) {
+                            // Where the drive unmounts itself (Linux), its Unmount already releases the image.
+                            let image = (!actions.unmount && !actions.eject).then(|| h.read(cx).mounted_image_for_drive(&p)).flatten();
+                            if let Some(image) = image {
                                 let image_handle = h.clone();
                                 let action = DropdownItem::new(cx.i18n().text(Message::UnmountDiskImage).to_string(), move |_, cx| {
                                     image_handle.update(cx, |this, cx| this.change_disk_image(image.clone(), true, None, cx));

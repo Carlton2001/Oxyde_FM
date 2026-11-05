@@ -10,6 +10,8 @@ const BLOCK: &str = "org.freedesktop.UDisks2.Block";
 const FILESYSTEM: &str = "org.freedesktop.UDisks2.Filesystem";
 const DRIVE: &str = "org.freedesktop.UDisks2.Drive";
 const PARTITION_TABLE: &str = "org.freedesktop.UDisks2.PartitionTable";
+const PARTITION: &str = "org.freedesktop.UDisks2.Partition";
+pub(super) const LOOP: &str = "org.freedesktop.UDisks2.Loop";
 pub(super) const SERVICE: &str = "org.freedesktop.UDisks2";
 
 static AVAILABLE: AtomicBool = AtomicBool::new(false);
@@ -32,6 +34,10 @@ pub(super) struct Block {
     /// `None` without a filesystem; empty when the filesystem is not mounted.
     pub mount_points: Option<Vec<String>>,
     pub drive: Option<Drive>,
+    /// The file a loop device reads, as the kernel resolved it.
+    pub loop_backing: Option<String>,
+    /// The partitioned block this partition belongs to.
+    pub partition_of: Option<String>,
 }
 
 #[derive(Clone)]
@@ -110,6 +116,11 @@ pub(super) fn blocks() -> zbus::Result<Vec<Block>> {
                 fstab: fstab(block),
                 mount_points: interfaces.get(FILESYSTEM).map(|filesystem| mount_points(filesystem)),
                 drive: drive_path.and_then(|path| drives.get(path.as_str()).cloned()),
+                loop_backing: interfaces.get(LOOP).and_then(|properties| bytes_string(properties.get("BackingFile")))
+                    .filter(|path| !path.is_empty()),
+                partition_of: interfaces.get(PARTITION)
+                    .and_then(|properties| properties.get("Table")?.downcast_ref::<ObjectPath>().ok().map(|path| path.to_string()))
+                    .filter(|path| path != "/"),
             })
         })
         .collect();
@@ -122,6 +133,27 @@ pub(super) fn call(object: &str, interface: &str, method: &str) -> zbus::Result<
     with_connection(|connection| {
         let options: HashMap<&str, Value> = HashMap::new();
         Proxy::new(connection, SERVICE, object, interface)?.call_method(method, &(options,))?;
+        Ok(())
+    })
+}
+
+/// `Manager.LoopSetup` on an image opened by the caller, read-only, which returns the new
+/// loop device. polkit lets the active session's user do it.
+pub(super) fn loop_setup(image: std::os::fd::BorrowedFd<'_>) -> zbus::Result<String> {
+    with_connection(|connection| {
+        let options: HashMap<&str, Value> = HashMap::from([("read-only", Value::from(true))]);
+        let device: zbus::zvariant::OwnedObjectPath =
+            Proxy::new(connection, SERVICE, "/org/freedesktop/UDisks2/Manager", "org.freedesktop.UDisks2.Manager")?
+                .call("LoopSetup", &(zbus::zvariant::Fd::from(image), options))?;
+        Ok(device.to_string())
+    })
+}
+
+/// `Loop.SetAutoclear`: the kernel then detaches the device once nothing uses it.
+pub(super) fn set_autoclear(object: &str) -> zbus::Result<()> {
+    with_connection(|connection| {
+        let options: HashMap<&str, Value> = HashMap::new();
+        Proxy::new(connection, SERVICE, object, LOOP)?.call_method("SetAutoclear", &(true, options))?;
         Ok(())
     })
 }

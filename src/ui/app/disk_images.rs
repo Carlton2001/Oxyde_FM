@@ -42,8 +42,9 @@ impl OxydeApp {
         if image.needs_mount_for_browsing() {
             self.open_disk_image(pane_id.to_string(), path, new_tab, cx);
         } else if image.is_disk_image() {
-            // Prefer virtual ISO9660 browsing. Windows can mount UDF-only images
-            // that the retained Tauri reader cannot decode.
+            // Prefer virtual ISO9660 browsing; mount the images the reader cannot
+            // decode, such as UDF-only discs or IMG files holding a FAT filesystem.
+            let mountable = image.can_mount_disk_image();
             let pane = pane_id.to_string();
             let origin = self
                 .state
@@ -65,7 +66,7 @@ impl OxydeApp {
                     {
                         return;
                     }
-                    if readable || !cfg!(target_os = "windows") {
+                    if readable || !mountable {
                         if new_tab {
                             this.add_tab(&pane, path, false, cx);
                         } else {

@@ -13,7 +13,8 @@ fn entry_capabilities_use_known_origin_without_querying_the_filesystem() {
         file.path = format!("{parent}/disk.vhdx");
         assert!(!file.is_disk_image() && !file.needs_mount_for_browsing());
         file.archive_path = None;
-        assert!(file.is_disk_image() && file.needs_mount_for_browsing());
+        assert!(file.is_disk_image());
+        assert_eq!(file.needs_mount_for_browsing(), cfg!(target_os = "windows"));
         file.is_dir = true;
         assert!(!file.is_disk_image() && !file.needs_mount_for_browsing());
         file.path = format!("{parent}/folder.zip");
