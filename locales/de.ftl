@@ -776,7 +776,7 @@ quick-search-current-folder = Aktueller Ordner
 
 settings-clear-cache-confirm = Symbol- und Miniaturbild-Caches löschen? Sie werden bei Bedarf neu erstellt.
 
-settings-reset-confirm = Standardeinstellungen wiederherstellen? Geöffnete Tabs bleiben erhalten.
+settings-reset-confirm = Standardeinstellungen wiederherstellen? Geöffnete Tabs und eigene Designs bleiben erhalten.
 
 settings-cache-clearing = Cache wird geleert…
 

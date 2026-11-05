@@ -474,7 +474,7 @@ folder-size-provisional-description =
 quick-search-current-folder = Current folder
 
 settings-clear-cache-confirm = Delete icon and thumbnail caches? They will be recreated when needed.
-settings-reset-confirm = Restore default preferences? Open tabs will be preserved.
+settings-reset-confirm = Restore default preferences? Open tabs and your custom themes will be preserved.
 settings-cache-clearing = Clearing cache…
 settings-cache-cleared = Cache cleared.
 settings-cache-error = Could not clear the entire cache. Try again.

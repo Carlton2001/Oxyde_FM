@@ -776,7 +776,7 @@ quick-search-current-folder = Cartella corrente
 
 settings-clear-cache-confirm = Eliminare le cache di icone e miniature? Verranno ricreate quando necessario.
 
-settings-reset-confirm = Ripristinare le preferenze predefinite? Le schede aperte verranno mantenute.
+settings-reset-confirm = Ripristinare le preferenze predefinite? Le schede aperte e i tuoi temi personalizzati verranno mantenuti.
 
 settings-cache-clearing = Svuotamento della cache…
 

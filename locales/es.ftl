@@ -776,7 +776,7 @@ quick-search-current-folder = Carpeta actual
 
 settings-clear-cache-confirm = ¿Eliminar las cachés de iconos y miniaturas? Se volverán a crear cuando sea necesario.
 
-settings-reset-confirm = ¿Restablecer las preferencias predeterminadas? Se conservarán las pestañas abiertas.
+settings-reset-confirm = ¿Restablecer las preferencias predeterminadas? Se conservarán las pestañas abiertas y tus temas personalizados.
 
 settings-cache-clearing = Borrando caché…
 

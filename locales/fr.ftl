@@ -480,7 +480,7 @@ folder-size-provisional-description =
 quick-search-current-folder = Dossier courant
 
 settings-clear-cache-confirm = Supprimer les caches d’icônes et de miniatures ? Ils seront recréés au besoin.
-settings-reset-confirm = Rétablir les préférences par défaut ? Les onglets ouverts seront conservés.
+settings-reset-confirm = Rétablir les préférences par défaut ? Les onglets ouverts et vos thèmes personnalisés seront conservés.
 settings-cache-clearing = Nettoyage du cache…
 settings-cache-cleared = Cache effacé.
 settings-cache-error = Impossible d’effacer entièrement le cache. Réessayez.

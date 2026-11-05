@@ -45,6 +45,7 @@ Extract `target/distribution/output/Oxyde_FM-<version>-x64-portable.zip`, then r
 A `data` folder next to the executable turns on portable mode, whatever the working directory. It ships in the ZIP and holds:
 
 - `config.json`: preferences and session state
+- `themes.json`: custom themes, kept when preferences are reset or `config.json` is removed
 - `oxyde.log`, possibly `oxyde.previous.log`: diagnostics
 - `cache/icons`, `cache/thumbnails`: generated caches and their control files
 - `temp`: temporary files and archive/worker workspaces

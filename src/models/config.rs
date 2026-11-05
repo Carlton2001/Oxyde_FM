@@ -23,8 +23,9 @@ pub struct AppConfig {
     pub tool_window_placements: std::collections::BTreeMap<String, WindowPlacement>,
     #[serde(default = "default_theme")]
     pub theme: String,
-    /// Themes the user created; kept by a preferences reset.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// Themes the user created, saved in `themes.json` so that resetting or
+    /// deleting `config.json` keeps them. Older versions stored them here.
+    #[serde(default, skip_serializing)]
     pub custom_themes: Vec<crate::models::custom_theme::CustomTheme>,
     /// `ColorVision` identifier; kept by a preferences reset.
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -240,38 +241,68 @@ impl ConfigManager {
             .ok_or_else(|| CommandError::SystemError("Failed to get config directory".into()))
     }
 
-    pub fn read_from_path(path: &std::path::Path) -> Result<AppConfig, CommandError> {
-        match fs::read_to_string(path) {
-            Ok(content) => {
-                serde_json::from_str(&content).map_err(|e| CommandError::Other(e.to_string()))
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                Ok(AppConfig::for_system_locale(crate::platform::platform().interface_locale().as_deref()))
-            }
-            Err(error) => Err(CommandError::IoError(error.to_string())),
-        }
+    /// User themes live next to the configuration, outside of it.
+    pub fn themes_path(config_path: &std::path::Path) -> std::path::PathBuf {
+        config_path.with_file_name("themes.json")
     }
 
-    /// Replace only after the complete configuration has been written successfully.
-    pub fn write_to_path(path: &std::path::Path, config: &AppConfig) -> Result<(), CommandError> {
-        let parent = path
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .unwrap_or_else(|| std::path::Path::new("."));
-        fs::create_dir_all(parent).map_err(|e| CommandError::IoError(e.to_string()))?;
-        let mut temporary = tempfile::NamedTempFile::new_in(parent)
-            .map_err(|e| CommandError::IoError(e.to_string()))?;
-        serde_json::to_writer_pretty(&mut temporary, config)
-            .map_err(|e| CommandError::Other(e.to_string()))?;
-        temporary
-            .as_file()
-            .sync_all()
-            .map_err(|e| CommandError::IoError(e.to_string()))?;
-        temporary
-            .persist(path)
-            .map_err(|e| CommandError::IoError(e.to_string()))?;
-        Ok(())
+    pub fn read_from_path(path: &std::path::Path) -> Result<AppConfig, CommandError> {
+        let mut config: AppConfig = match fs::read_to_string(path) {
+            Ok(content) => {
+                serde_json::from_str(&content).map_err(|e| CommandError::Other(e.to_string()))?
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                AppConfig::for_system_locale(crate::platform::platform().interface_locale().as_deref())
+            }
+            Err(error) => return Err(CommandError::IoError(error.to_string())),
+        };
+        // Without `themes.json`, themes stored by older versions in `config.json` are kept
+        // and move to `themes.json` at the next write.
+        match fs::read_to_string(Self::themes_path(path)) {
+            Ok(content) => {
+                let file: ThemesFile = serde_json::from_str(&content)
+                    .map_err(|e| CommandError::Other(e.to_string()))?;
+                config.custom_themes = file.themes;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(CommandError::IoError(error.to_string())),
+        }
+        Ok(config)
     }
+
+    /// Themes are written first, so the configuration never drops them before they are saved.
+    pub fn write_to_path(path: &std::path::Path, config: &AppConfig) -> Result<(), CommandError> {
+        let themes = ThemesFile { themes: config.custom_themes.clone() };
+        write_json(&Self::themes_path(path), &themes)?;
+        write_json(path, config)
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct ThemesFile {
+    #[serde(default)]
+    themes: Vec<crate::models::custom_theme::CustomTheme>,
+}
+
+/// Replace only after the complete file has been written successfully.
+fn write_json(path: &std::path::Path, value: &impl Serialize) -> Result<(), CommandError> {
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("."));
+    fs::create_dir_all(parent).map_err(|e| CommandError::IoError(e.to_string()))?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)
+        .map_err(|e| CommandError::IoError(e.to_string()))?;
+    serde_json::to_writer_pretty(&mut temporary, value)
+        .map_err(|e| CommandError::Other(e.to_string()))?;
+    temporary
+        .as_file()
+        .sync_all()
+        .map_err(|e| CommandError::IoError(e.to_string()))?;
+    temporary
+        .persist(path)
+        .map_err(|e| CommandError::IoError(e.to_string()))?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -425,6 +456,10 @@ mod tests {
 #[cfg(test)]
 #[path = "config/tests/tool_placements.rs"]
 mod tool_placement_tests;
+
+#[cfg(test)]
+#[path = "config/tests/themes.rs"]
+mod theme_tests;
 
 #[cfg(test)]
 #[path = "config/tests/archive_format.rs"]
