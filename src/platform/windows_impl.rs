@@ -25,6 +25,9 @@ impl Platform for WindowsPlatform {
     fn cursor_client_position(&self, handle: raw_window_handle::RawWindowHandle) -> Option<[i32; 2]> {
         super::windows_viewer_controls::cursor_client_position(handle)
     }
+    fn show_window_system_menu(&self, window: raw_window_handle::RawWindowHandle) -> Result<(), String> {
+        super::windows_system_menu::show(window)
+    }
     fn viewer_image_cursor(&self, handle: raw_window_handle::RawWindowHandle, zooming: bool, dragging: bool) {
         if let raw_window_handle::RawWindowHandle::Win32(handle) = handle {
             super::windows_pointer::set_image_cursor(windows::Win32::Foundation::HWND(handle.hwnd.get() as *mut _), zooming, dragging);

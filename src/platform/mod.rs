@@ -199,6 +199,8 @@ pub trait Platform: Send + Sync {
     fn release_viewer_overlays(&self, _owner: raw_window_handle::RawWindowHandle) {}
     /// The pointer in physical client coordinates of a window, even outside it.
     fn cursor_client_position(&self, _handle: raw_window_handle::RawWindowHandle) -> Option<[i32; 2]> { None }
+    /// Open the native window menu at the pointer, for a right click on a custom title bar.
+    fn show_window_system_menu(&self, _window: raw_window_handle::RawWindowHandle) -> Result<(), String> { Ok(()) }
     /// Blocking native session. Call only on a background worker; cancellation stops its process.
     fn play_viewer_media(&self, _path: &std::path::Path, _control: &ViewerMediaControl) -> std::io::Result<()> {
         Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Native media playback unavailable"))
@@ -886,6 +888,8 @@ mod windows_pointer;
 mod windows_file_drag;
 #[cfg(target_os = "windows")]
 mod windows_window_owner;
+#[cfg(target_os = "windows")]
+mod windows_system_menu;
 
 #[cfg(target_os = "windows")]
 mod windows_hover_window;

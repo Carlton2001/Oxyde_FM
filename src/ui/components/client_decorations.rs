@@ -1,5 +1,6 @@
 //! Window moves, frame and edge resizes for Linux compositors that leave decorations to the
-//! application. Windows keeps native caption, borders and hit-testing: these are no-ops there.
+//! application. Windows keeps native caption, borders and hit-testing: only the title area's
+//! system menu needs help there.
 use gpui::*;
 #[cfg(target_os = "linux")]
 use gpui::prelude::FluentBuilder;
@@ -27,7 +28,17 @@ pub(crate) trait ClientDecorationsExt: InteractiveElement + Sized {
                 window.show_window_menu(event.position);
             })
         }
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(target_os = "windows")]
+        {
+            self.on_mouse_up(MouseButton::Right, |_, window, _| {
+                if let Ok(handle) = raw_window_handle::HasWindowHandle::window_handle(window) {
+                    if let Err(error) = oxyde_lib::platform::platform().show_window_system_menu(handle.as_raw()) {
+                        log::warn!("Cannot open the window menu: {error}");
+                    }
+                }
+            })
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
         {
             self
         }
