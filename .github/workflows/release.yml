@@ -58,17 +58,23 @@ jobs:
           pattern: Oxyde_FM-*-x64
           merge-multiple: true
           path: target/distribution/output
-      - name: Sign setup for the updater
+      - name: Sign setup, archive and DEB for the updater
         shell: pwsh
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           if (-not $env:TAURI_SIGNING_PRIVATE_KEY) { throw 'Missing TAURI_SIGNING_PRIVATE_KEY secret.' }
-          $setup = "target/distribution/output/Oxyde_FM_${{ needs.version.outputs.version }}_x64-setup.exe"
-          npx --yes @tauri-apps/cli@2.10.1 signer sign $setup
-          if ($LASTEXITCODE -ne 0) { throw 'Updater signature failed.' }
-          ./scripts/write-update-manifest.ps1 -Version ${{ needs.version.outputs.version }} -Setup $setup -Destination target/distribution/output/latest.json
+          $version = '${{ needs.version.outputs.version }}'
+          $output = 'target/distribution/output'
+          $setup = "$output/Oxyde_FM_${version}_x64-setup.exe"
+          $archive = "$output/oxyde-$version-x86_64-linux.tar.gz"
+          $deb = "$output/oxyde_$version-1_amd64.deb"
+          foreach ($file in @($setup, $archive, $deb)) {
+            npx --yes @tauri-apps/cli@2.10.1 signer sign $file
+            if ($LASTEXITCODE -ne 0) { throw "Updater signature failed for $file." }
+          }
+          ./scripts/write-update-manifest.ps1 -Version $version -Setup $setup -LinuxArchive $archive -LinuxDeb $deb -Destination "$output/latest.json"
       - name: Create draft release
         shell: pwsh
         env:
@@ -85,6 +91,8 @@ jobs:
             "$output/Oxyde_FM-$version-x64-portable.zip" "$output/Oxyde_FM-$version-x64-portable.zip.sha256" `
             "$output/latest.json" `
             "$output/oxyde-$version-x86_64-linux.tar.gz" "$output/oxyde-$version-x86_64-linux.tar.gz.sha256" `
+            "$output/oxyde-$version-x86_64-linux.tar.gz.sig" `
             "$output/oxyde_$version-1_amd64.deb" "$output/oxyde_$version-1_amd64.deb.sha256" `
+            "$output/oxyde_$version-1_amd64.deb.sig" `
             "$output/install.sh" "$output/install.sh.sha256"
           if ($LASTEXITCODE -ne 0) { throw 'Release creation failed.' }

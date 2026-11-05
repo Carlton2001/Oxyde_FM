@@ -12,7 +12,7 @@ bash scripts/build-linux-packages.sh --tar   # per-user archive, same image as t
 
 Files and their SHA-256 land in `target/linux-packages/output`. Beyond the [development dependencies](linux-development.md#setup-on-fedora-workstation), Fedora needs `rpm-build`, `desktop-file-utils`, `appstream`, `python3` and `cargo-about` 0.9.2. The DEB and the archive build in the image from `packaging/linux/debian/Containerfile`, with its own `target/ubuntu-24.04` folder; `lintian` stops the build on an error, `rpmlint` is informational. `--skip-build` reuses existing release executables. `--offline` keeps the previous build's notices: `cargo-about` reads crates for every target, macOS included, which a Linux cache does not hold.
 
-A package installs only on a system at least as recent as the one that built it (glibc): Fedora 44+ for the RPM, Ubuntu 24.04+ and Debian 13+ for the DEB, glibc 2.39+ for the archive. x86-64 only, with no signature beyond SHA-256 and no repository, by choice: a release publishes the archive, the DEB and `install.sh`; the RPM stays a CI artifact.
+A package installs only on a system at least as recent as the one that built it (glibc): Fedora 44+ for the RPM, Ubuntu 24.04+ and Debian 13+ for the DEB, glibc 2.39+ for the archive. x86-64 only, with no repository, by choice: a release publishes the archive, the DEB and `install.sh`; the RPM stays a CI artifact. `install.sh` checks SHA-256; Oxyde checks the minisign signature of what it installs.
 
 ## Per-user installation
 
@@ -29,7 +29,22 @@ The build writes the release version into the copy it publishes; run from a chec
 
 It then probes the runtime dependencies listed below and, when some are missing, prints the feature each one carries and the exact `dnf`, `rpm-ostree`, `pacman`, `zypper` or `apt-get` command, and offers to run it. Codecs are left to the user.
 
-Options: `--version X.Y.Z`, `--archive FILE|FOLDER` (offline, or `./install.sh` from an extracted archive), `--set-default` (default application for folders through `xdg-mime`), `--yes`, `--uninstall` (settings are kept). Running it again updates; Oxyde does not update itself on Linux yet.
+Options: `--version X.Y.Z`, `--archive FILE|FOLDER` (offline, or `./install.sh` from an extracted archive), `--set-default` (default application for folders through `xdg-mime`), `--yes`, `--uninstall` (settings are kept), `--update` (what Oxyde runs, below). Running it again also updates. Concurrent runs wait on a `flock` of `~/.local/lib/oxyde/.lock`.
+
+## Updates
+
+The flow is Windows' ([in-app updates](distribution.md#in-app-updates)); `platform/linux_update.rs` tells installations apart from the resolved executable:
+
+| Executable | `Platform::installation` | Settings › About |
+| --- | --- | --- |
+| `~/.local/lib/oxyde/<version>/bin/oxyde`, beside a `current` link | `SelfUpdating`, entry `linux-x86_64` | installs |
+| `/usr/bin/oxyde`, listed by dpkg | `Package`, entry `linux-x86_64-deb` | downloads the DEB in the browser |
+| `/usr/bin/oxyde`, another package | `Package`, no entry | opens the release page |
+| anything else, such as `target/` | `Unmanaged` | no check, no row |
+
+`release.yml` signs the archive and the DEB with the updater's minisign key and adds both entries to `latest.json`; Tauri clients ignore them. A release without a Linux entry is no update for a per-user installation.
+
+Installing downloads the archive with `curl`, or `wget`, the tools `install.sh` already needs (`platform/linux_download.rs`: HTTPS only, redirects included, `~/.curlrc` ignored, bounded size). Once the signature is verified, Oxyde copies the archive's own `install.sh` out of it and runs `install.sh --archive <file> --update` with `HOME` set to the home holding the running copy: no dependency check, no question. The new version's script thus places the new version, and those two options are a contract between releases. A detached `sh` then waits for Oxyde's process to end before starting `current/bin/oxyde`, so the new version reads the session saved on close. Oxyde closes as on Windows. The version it ran from stays on disk until the next update.
 
 ## Package contents
 

@@ -1,9 +1,33 @@
 use super::*;
 
+const WINDOWS: Installation = Installation::SelfUpdating { manifest_key: "windows-x86_64" };
+const ARCHIVE: Installation = Installation::SelfUpdating { manifest_key: "linux-x86_64" };
+const DEB: Installation = Installation::Package { manifest_key: Some("linux-x86_64-deb") };
+const RPM: Installation = Installation::Package { manifest_key: None };
+
 const MANIFEST: &str = r#"{
   "version": "2.0.0",
   "notes": "Notes",
   "pub_date": "2026-10-20T21:43:37.322Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "c2ln",
+      "url": "https://github.com/Carlton2001/Oxyde_FM/releases/download/v2.0.0/Oxyde_FM_2.0.0_x64-setup.exe"
+    },
+    "linux-x86_64": {
+      "signature": "dGFy",
+      "url": "https://github.com/Carlton2001/Oxyde_FM/releases/download/v2.0.0/oxyde-2.0.0-x86_64-linux.tar.gz"
+    },
+    "linux-x86_64-deb": {
+      "signature": "ZGVi",
+      "url": "https://github.com/Carlton2001/Oxyde_FM/releases/download/v2.0.0/oxyde_2.0.0-1_amd64.deb"
+    }
+  }
+}"#;
+
+/// Oxyde 2.0.0's manifest, published before the Linux entries.
+const WINDOWS_ONLY: &str = r#"{
+  "version": "2.0.0",
   "platforms": {
     "windows-x86_64": {
       "signature": "c2ln",
@@ -14,22 +38,54 @@ const MANIFEST: &str = r#"{
 
 #[test]
 fn newer_manifest_yields_the_windows_setup() {
-    let update = parse_manifest(MANIFEST.as_bytes(), "1.2.1").unwrap().unwrap();
+    let update = parse_manifest(MANIFEST.as_bytes(), "1.2.1", WINDOWS).unwrap().unwrap();
     assert_eq!(update.version, "2.0.0");
     assert!(update.url.ends_with("Oxyde_FM_2.0.0_x64-setup.exe"));
     assert_eq!(update.signature, "c2ln");
+    // A portable copy downloads by hand from the release page.
+    assert_eq!(update.manual_download(), "https://github.com/Carlton2001/Oxyde_FM/releases/tag/v2.0.0");
+}
+
+#[test]
+fn per_user_linux_installation_gets_the_signed_archive() {
+    let update = parse_manifest(MANIFEST.as_bytes(), "1.9.0", ARCHIVE).unwrap().unwrap();
+    assert!(update.url.ends_with("oxyde-2.0.0-x86_64-linux.tar.gz"));
+    assert_eq!(update.signature, "dGFy");
+}
+
+#[test]
+fn release_without_a_build_for_this_system_is_not_an_update() {
+    assert_eq!(parse_manifest(WINDOWS_ONLY.as_bytes(), "1.9.0", ARCHIVE).unwrap(), None);
+}
+
+#[test]
+fn packages_download_the_deb_or_open_the_release_page() {
+    let deb = parse_manifest(MANIFEST.as_bytes(), "1.9.0", DEB).unwrap().unwrap();
+    assert!(deb.manual_download().ends_with("oxyde_2.0.0-1_amd64.deb"));
+    let rpm = parse_manifest(MANIFEST.as_bytes(), "1.9.0", RPM).unwrap().unwrap();
+    assert_eq!(rpm.manual_download(), "https://github.com/Carlton2001/Oxyde_FM/releases/tag/v2.0.0");
+    // A release without the DEB still announces itself through its page.
+    let unpublished = parse_manifest(WINDOWS_ONLY.as_bytes(), "1.9.0", DEB).unwrap().unwrap();
+    assert_eq!(unpublished.manual_download(), "https://github.com/Carlton2001/Oxyde_FM/releases/tag/v2.0.0");
+}
+
+#[test]
+fn unmanaged_copies_get_no_update() {
+    assert_eq!(parse_manifest(MANIFEST.as_bytes(), "1.9.0", Installation::Unmanaged).unwrap(), None);
 }
 
 #[test]
 fn current_or_older_manifest_is_not_an_update() {
-    assert_eq!(parse_manifest(MANIFEST.as_bytes(), "2.0.0").unwrap(), None);
-    assert_eq!(parse_manifest(MANIFEST.as_bytes(), "10.0.0").unwrap(), None);
+    assert_eq!(parse_manifest(MANIFEST.as_bytes(), "2.0.0", WINDOWS).unwrap(), None);
+    assert_eq!(parse_manifest(MANIFEST.as_bytes(), "10.0.0", ARCHIVE).unwrap(), None);
 }
 
 #[test]
 fn foreign_download_location_is_rejected() {
     let manifest = MANIFEST.replace("https://github.com/Carlton2001/Oxyde_FM/", "https://example.com/");
-    assert!(parse_manifest(manifest.as_bytes(), "1.2.1").is_err());
+    assert!(parse_manifest(manifest.as_bytes(), "1.2.1", WINDOWS).is_err());
+    assert!(parse_manifest(manifest.as_bytes(), "1.2.1", ARCHIVE).is_err());
+    assert!(parse_manifest(manifest.as_bytes(), "1.2.1", DEB).is_err());
 }
 
 #[test]

@@ -4,7 +4,6 @@ use oxyde_lib::systems::updates::{self, Update};
 
 /// Delay before the automatic check, so startup work keeps the network and disk.
 const AUTOMATIC_CHECK_DELAY: std::time::Duration = std::time::Duration::from_secs(30);
-const RELEASES_URL: &str = "https://github.com/Carlton2001/Oxyde_FM/releases";
 
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) enum UpdateStatus {
@@ -23,7 +22,7 @@ impl OxydeApp {
 
     /// Check once per session, shortly after startup.
     pub(crate) fn schedule_update_check(&mut self, cx: &mut Context<Self>) {
-        if !oxyde_lib::platform::platform().updates_itself() {
+        if !receives_updates() {
             return;
         }
         cx.spawn(async move |this, cx| {
@@ -73,11 +72,11 @@ impl OxydeApp {
         cx.notify();
     }
 
-    /// Install the available update, or open the releases page for a portable copy.
+    /// Install the available update, or open its download for a portable copy or a package.
     pub(crate) fn install_update(&mut self, cx: &mut Context<Self>) {
         let UpdateStatus::Available(update) = self.update_status.clone() else { return; };
-        if oxyde_lib::app_paths::is_portable() {
-            self.open_external_item(RELEASES_URL.into(), cx);
+        if updates_by_hand() {
+            self.open_external_item(update.manual_download().into(), cx);
             return;
         }
         self.update_status = UpdateStatus::Downloading;
@@ -110,4 +109,15 @@ impl OxydeApp {
             });
         });
     }
+}
+
+/// Whether this copy checks for releases at all; the About page shows its row only then.
+pub(crate) fn receives_updates() -> bool {
+    oxyde_lib::platform::platform().installation() != oxyde_lib::platform::Installation::Unmanaged
+}
+
+/// Portable copies and system packages download releases; the user installs them.
+pub(crate) fn updates_by_hand() -> bool {
+    oxyde_lib::app_paths::is_portable()
+        || matches!(oxyde_lib::platform::platform().installation(), oxyde_lib::platform::Installation::Package { .. })
 }

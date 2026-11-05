@@ -241,7 +241,7 @@ pub enum Message {
     UpdateCurrent,
     UpdateCheckFailed,
     UpdateInstall,
-    UpdateDownloadPortable,
+    UpdateDownload,
     UpdateDownloading,
 
     SettingsVersion,
@@ -929,7 +929,7 @@ impl Message {
             Self::UpdateCurrent => "update-current",
             Self::UpdateCheckFailed => "update-check-failed",
             Self::UpdateInstall => "update-install",
-            Self::UpdateDownloadPortable => "update-download-portable",
+            Self::UpdateDownload => "update-download-portable",
             Self::UpdateDownloading => "update-downloading",
             Self::SettingsAbout => "settings-about",
             Self::SettingsVersion => "settings-version",
@@ -1914,7 +1914,7 @@ mod tests {
                 Message::UpdateCurrent,
                 Message::UpdateCheckFailed,
                 Message::UpdateInstall,
-                Message::UpdateDownloadPortable,
+                Message::UpdateDownload,
                 Message::UpdateDownloading,
 
                 Message::SettingsVersion,

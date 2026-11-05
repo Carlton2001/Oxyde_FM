@@ -24,7 +24,7 @@ mod type_select;
 mod keyboard_menu;
 mod toasts;
 mod updates;
-pub(crate) use updates::UpdateStatus;
+pub(crate) use updates::{receives_updates, updates_by_hand, UpdateStatus};
 mod shell_features;
 mod calendar;
 mod clipboard;

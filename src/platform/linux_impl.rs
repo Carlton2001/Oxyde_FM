@@ -746,6 +746,18 @@ impl Platform for LinuxPlatform {
         super::linux_gpu::prefer_display_gpu()
     }
 
+    fn installation(&self) -> super::Installation {
+        super::linux_update::installation()
+    }
+
+    fn download(&self, url: &str, limit: usize) -> std::io::Result<Vec<u8>> {
+        super::linux_download::download(url, limit)
+    }
+
+    fn launch_update(&self, archive: &std::path::Path) -> std::io::Result<()> {
+        super::linux_update::install(archive)
+    }
+
     fn startup_locations(&self) -> Vec<String> {
         let current = std::env::current_dir().unwrap_or_default();
         super::linux_startup::locations(std::env::args_os().skip(1), &current)

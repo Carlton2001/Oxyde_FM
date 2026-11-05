@@ -65,11 +65,11 @@ Transition from the Tauri edition: after installing, the Setup uninstalls any `O
 
 ## In-app updates
 
-`systems/updates.rs` reads `latest.json` from the latest published release, compares it with `CARGO_PKG_VERSION`, and verifies the Setup's minisign signature with the updater's public key before writing it to a temporary folder. The download goes through `Platform::download` (WinHTTP, system proxy, HTTPS only, bounded size).
+`systems/updates.rs` reads `latest.json` from the latest published release, compares it with `CARGO_PKG_VERSION`, and verifies the Setup's minisign signature with the updater's public key before writing it to a temporary folder. The download goes through `Platform::download` (WinHTTP, system proxy, HTTPS only, bounded size). `Platform::installation` names the manifest entry each copy reads: `windows-x86_64` here.
 
 An automatic check runs 30 s after start. Each version is announced once (`last_notified_update` in `config.json`), never in portable mode. Settings › About checks and installs: it runs the Setup with `/UPDATE /WAITPID=<pid>` then closes Oxyde normally; the Setup waits for exit (60 s at most), replaces files and restarts Oxyde. In portable mode the button opens the releases page.
 
-Outside Windows `Platform::updates_itself` is false: no check, no button. Like Nautilus, Oxyde leaves RPM, DEB or Flatpak packages to the system's package manager.
+Linux follows the same flow for its per-user installation and only announces releases to system packages: see [Linux updates](linux-distribution.md#updates).
 
 ## Version and tag
 

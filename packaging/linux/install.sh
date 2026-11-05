@@ -5,6 +5,8 @@
 # confine the decoders. Every other x86-64 system gets the archive under ~/.local,
 # without root, which also suits read-only systems such as Fedora Silverblue.
 # Everything runs from main, at the end, so a truncated download executes nothing.
+# Oxyde updates itself by running the new archive's copy of this script with
+# --archive FILE --update: keep both options working from one release to the next.
 set -euo pipefail
 
 app_id=io.github.Carlton2001.Oxyde
@@ -32,6 +34,7 @@ usage() {
     say '  --set-default  make Oxyde the default application for folders'
     say '  --yes          install missing system packages without asking'
     say '  --uninstall    remove the per-user installation; settings are kept'
+    say '  --update       with --archive, as Oxyde runs it: no dependency check or question'
     say 'Running it again installs the newer release and keeps the previous one.'
 }
 
@@ -280,6 +283,11 @@ prune_versions() {
 install_archive() {
     local archive=$1
     mkdir -p "$lib_root"
+    # One installation at a time, should Oxyde and a terminal update together.
+    if command -v flock >/dev/null; then
+        exec 9> "$lib_root/.lock"
+        flock 9
+    fi
     local staging
     staging=$(mktemp -d "$lib_root/.staging-XXXXXX")
     cleanup+=("$staging")
@@ -384,7 +392,7 @@ remove_temporary() { ((${#cleanup[@]} == 0)) || rm -rf -- "${cleanup[@]}"; }
 
 main() {
     trap remove_temporary EXIT
-    local archive= set_default_handler=false remove=false
+    local archive= set_default_handler=false remove=false update=false
     requested_version=
     assume_yes=false
     while (($#)); do
@@ -394,6 +402,7 @@ main() {
             --set-default) set_default_handler=true ;;
             --yes|-y) assume_yes=true ;;
             --uninstall) remove=true ;;
+            --update) update=true ;;
             --help|-h) usage; return 0 ;;
             *) warn "Unknown argument: $1"; usage >&2; return 2 ;;
         esac
@@ -403,6 +412,9 @@ main() {
     if $remove; then
         uninstall
         return 0
+    fi
+    if $update && [[ -z $archive ]]; then
+        die '--update needs --archive.'
     fi
     check_platform
     local family
@@ -432,6 +444,7 @@ main() {
         fetch_release_file "$version" "$name" "$work"
         install_archive "$work/$name"
     fi
+    $update && return 0
     check_dependencies "$family"
     $set_default_handler && set_default
     say 'Oxyde appears in your applications. Run this script again to update it,'

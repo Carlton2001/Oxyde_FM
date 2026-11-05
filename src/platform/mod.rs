@@ -131,6 +131,18 @@ pub fn is_wsl_path(path: &str) -> bool {
         && path[WSL_ROOT.len()..].chars().next().is_none_or(|next| next == '\\')
 }
 
+/// What delivered the running Oxyde, which decides how a newer release reaches it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Installation {
+    /// Built from source, or placed by hand: releases are not checked.
+    Unmanaged,
+    /// Oxyde downloads, verifies and installs this entry of the update manifest itself.
+    SelfUpdating { manifest_key: &'static str },
+    /// A system package: Oxyde announces releases and lets the user download this
+    /// manifest entry, or the release page when there is none.
+    Package { manifest_key: Option<&'static str> },
+}
+
 /// Look of the minimize, maximize and close buttons drawn by Oxyde's own title bars.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowControlStyle {
@@ -202,15 +214,16 @@ pub trait Platform: Send + Sync {
     fn prefer_display_gpu(&self) -> Option<String> { None }
     /// Locations the desktop asked this launch to open, instead of the saved tabs.
     fn startup_locations(&self) -> Vec<String> { Vec::new() }
-    /// Whether Oxyde installs its own releases; Linux packages update through the system.
-    fn updates_itself(&self) -> bool { false }
+    /// How releases reach this copy of Oxyde. Cheap: the About page asks at each render.
+    fn installation(&self) -> Installation { Installation::Unmanaged }
     /// Window buttons that match the running desktop.
     fn window_control_style(&self) -> WindowControlStyle { WindowControlStyle::Windows }
     /// HTTPS GET into memory, bounded by `limit` bytes.
     fn download(&self, _url: &str, _limit: usize) -> std::io::Result<Vec<u8>> {
         Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
     }
-    /// Launch the verified installer in the background; it waits for this process.
+    /// Install the verified release and arrange for Oxyde to start again once this
+    /// process has exited: Windows runs its Setup, which waits; Linux installs at once.
     fn launch_update(&self, _setup: &std::path::Path) -> std::io::Result<()> {
         Err(std::io::Error::from(std::io::ErrorKind::Unsupported))
     }
@@ -839,6 +852,10 @@ mod linux_worker;
 mod linux_trash;
 #[cfg(not(target_os = "windows"))]
 mod linux_volumes;
+#[cfg(not(target_os = "windows"))]
+mod linux_update;
+#[cfg(not(target_os = "windows"))]
+mod linux_download;
 #[cfg(not(target_os = "windows"))]
 pub use linux_trash::{KdeLimitAction, KdeTrashLimits, TrashRetention};
 #[cfg(target_os = "windows")]
