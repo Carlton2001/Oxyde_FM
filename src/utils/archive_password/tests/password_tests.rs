@@ -36,3 +36,17 @@ fn passwords_are_remembered_per_archive() {
     forget(archive);
     assert!(for_archive(archive).is_none());
 }
+
+#[cfg(target_os = "windows")]
+#[test]
+fn canonical_windows_paths_find_the_displayed_archive() {
+    let archive = Path::new(r"C:\Users\Test\oxyde-canonical.7z");
+    remember(archive, ArchiveSecret::new("two".into()).unwrap());
+    assert_eq!(for_archive(Path::new(r"\\?\C:\Users\Test\oxyde-canonical.7z")).unwrap().expose(), "two");
+    assert_eq!(for_archive(Path::new("c:/users/test/OXYDE-canonical.7z")).unwrap().expose(), "two");
+    forget(Path::new(r"\\?\C:\Users\Test\oxyde-canonical.7z"));
+    assert!(for_archive(archive).is_none());
+    remember(Path::new(r"\\server\share\a.zip"), ArchiveSecret::new("three".into()).unwrap());
+    assert_eq!(for_archive(Path::new(r"\\?\UNC\server\share\a.zip")).unwrap().expose(), "three");
+    forget(Path::new(r"\\server\share\a.zip"));
+}

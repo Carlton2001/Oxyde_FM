@@ -61,16 +61,32 @@ fn store() -> &'static Mutex<HashMap<PathBuf, ArchiveSecret>> {
 /// The one password a worker process received for its request.
 static WORKER: OnceLock<Option<ArchiveSecret>> = OnceLock::new();
 
+/// The archive as the store knows it. Operations open a canonical path, which Windows
+/// writes `\\?\C:\…`, while the dialog names the displayed one: both find the same entry.
+fn key(archive: &Path) -> PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        let text = archive.to_string_lossy().replace('/', r"\");
+        let text = match text.strip_prefix(r"\\?\UNC\") {
+            Some(share) => format!(r"\\{share}"),
+            None => text.strip_prefix(r"\\?\").map_or_else(|| text.clone(), str::to_owned),
+        };
+        PathBuf::from(text.to_lowercase())
+    }
+    #[cfg(not(target_os = "windows"))]
+    archive.to_path_buf()
+}
+
 /// Remembers `secret` for `archive` until Oxyde exits.
 pub fn remember(archive: &Path, secret: ArchiveSecret) {
     if let Ok(mut store) = store().lock() {
-        store.insert(archive.to_path_buf(), secret);
+        store.insert(key(archive), secret);
     }
 }
 
 pub fn forget(archive: &Path) {
     if let Ok(mut store) = store().lock() {
-        store.remove(archive);
+        store.remove(&key(archive));
     }
 }
 
@@ -79,7 +95,7 @@ pub fn for_archive(archive: &Path) -> Option<ArchiveSecret> {
     if let Some(secret) = WORKER.get() {
         return secret.clone();
     }
-    store().lock().ok()?.get(archive).cloned()
+    store().lock().ok()?.get(&key(archive)).cloned()
 }
 
 /// Parent side: sent once after the start gate, empty without a password.
