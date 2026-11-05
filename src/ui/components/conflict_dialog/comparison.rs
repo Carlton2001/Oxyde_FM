@@ -1,4 +1,4 @@
-use super::controls::{automatic_badge, button, choose};
+use super::controls::{automatic_badge, button, choose, tag};
 use super::rules::{ancestors, decision, parent};
 use crate::ui::app::{OxydeApp, PendingFileOperation};
 use crate::ui::components::icons::{entry_icon, render_file_icon};
@@ -61,36 +61,13 @@ fn card(
     let t = *cx.theme();
     let newer = entry.modified > other.modified;
     let warning = newer && entry.size < other.size;
-    let badge_color = if warning { t.error } else { t.accent };
     let mut badges = div().flex().flex_none().items_center().gap(rems(0.5));
     if newer {
-        badges = badges.child(
-            div()
-                .flex_none()
-                .whitespace_nowrap()
-                .rounded_full()
-                .px(rems(0.5))
-                .text_size(rems(0.625))
-                .font_weight(FontWeight::SEMIBOLD)
-                .border(rems(0.0625))
-                .border_color(badge_color.opacity(0.3))
-                .bg(badge_color.opacity(0.15))
-                .text_color(badge_color)
-                .child(cx.i18n().text(Message::ConflictNewer).to_uppercase()),
-        );
+        let color = if warning { t.error } else { t.accent };
+        badges = badges.child(tag(Message::ConflictNewer, color, cx));
     }
     if entry.size > other.size {
-        badges = badges.child(
-            div()
-                .flex_none()
-                .whitespace_nowrap()
-                .rounded_full()
-                .px(rems(0.5))
-                .text_size(rems(0.625))
-                .text_color(t.success_text)
-                .bg(t.toast_success.opacity(0.15))
-                .child(cx.i18n().text(Message::ConflictLarger).to_uppercase()),
-        );
+        badges = badges.child(tag(Message::ConflictLarger, t.success_text, cx));
     }
     let mut size = format_size(entry.size, entry.is_dir, true, cx.i18n().language());
     if entry.is_dir && (entry.folders_count.is_some() || entry.files_count.is_some()) {

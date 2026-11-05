@@ -135,15 +135,20 @@ pub(super) fn button_with_label(
         }
     })
 }
-pub(super) fn automatic_badge(cx: &App) -> impl IntoElement {
+/// Conflict dialog tag, in the tinted style of the operation badges.
+pub(super) fn tag(message: Message, color: Hsla, cx: &App) -> Div {
     div()
         .flex_none()
         .whitespace_nowrap()
-        .px(rems(0.25))
-        .rounded_sm()
-        .border(rems(0.0625))
-        .border_color(cx.theme().border)
-        .text_size(rems(0.625))
-        .text_color(cx.theme().text_muted)
-        .child(cx.i18n().text(Message::ConflictAutomatic))
+        .px(rems(0.375))
+        .py(rems(0.0625))
+        .rounded(rems(0.375))
+        .text_size(rems(0.6875))
+        .font_weight(FontWeight::MEDIUM)
+        .bg(color.opacity(0.10))
+        .text_color(color)
+        .child(cx.i18n().text(message))
+}
+pub(super) fn automatic_badge(cx: &App) -> impl IntoElement {
+    tag(Message::ConflictAutomatic, cx.theme().text_muted, cx)
 }
