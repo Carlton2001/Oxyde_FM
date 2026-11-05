@@ -60,6 +60,7 @@ fn stage(
                             })
                             .collect(),
                     ),
+                    ..Default::default()
                 };
                 viewer.update(cx, |viewer, cx| viewer.set_source(stale, cx));
                 app.update(cx, |app, cx| {
