@@ -292,7 +292,6 @@ tool-duplicates = Find duplicates
 tabs-new-tab = New tab
 
 date-this-month = This month
-settings-group-by-date = Group by date
 date-group-count = { $count ->
     [one] { $number } item
    *[other] { $number } items
@@ -379,7 +378,6 @@ drive-holders = Open in: { $applications }.
 drive-mount-failed = Unable to mount the volume. { $detail }
 drive-mount-hibernated = Windows was not fully shut down (hibernation or Fast Startup), so this volume stays locked. Shut Windows down completely, then try again.
 
-archive-format = Archive .{ $format }
 compression-fast = Fast
 compression-normal = Balanced
 compression-best = Maximum

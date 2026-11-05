@@ -74,7 +74,7 @@ fn mounts_lists_and_unmounts_a_live_share() {
     let shares = children(&format!("{server}/")).expect("server shares");
     let listed = shares.iter().find(|child| child.name.eq_ignore_ascii_case(share)).expect("share listed");
     assert!(listed.directory);
-    assert!(listed.uri.eq_ignore_ascii_case(&uri.trim_end_matches('/')), "{listed:?}");
+    assert!(listed.uri.eq_ignore_ascii_case(uri.trim_end_matches('/')), "{listed:?}");
 
     unmount(&path).expect("unmount");
     assert!(share_mount(&mounts()).is_none());
@@ -133,7 +133,6 @@ fn an_unknown_sftp_host_key_is_asked_then_accepted() {
             count => RemoteAnswer::Choice(count - 1),
         }
     }, &never);
-    eprintln!("{questions:#?}");
     assert_eq!(refused, Err(RemoteError::Cancelled), "{questions:?}");
     let questions: Vec<_> = questions.into_iter().filter(|prompt| !prompt.choices.is_empty()).collect();
     assert_eq!(questions.len(), 1, "{questions:?}");

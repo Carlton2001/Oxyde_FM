@@ -476,7 +476,6 @@ tabs-new-tab = Nuova scheda
 
 date-this-month = Questo mese
 
-settings-group-by-date = Raggruppa per data
 
 
 date-group-count = { $count ->
@@ -602,7 +601,6 @@ drive-holders = Aperto in: { $applications }.
 drive-mount-failed = Impossibile montare il volume. { $detail }
 drive-mount-hibernated = Windows non è stato arrestato completamente (ibernazione o avvio rapido), quindi questo volume resta bloccato. Arresta completamente Windows, quindi riprova.
 
-archive-format = Archivio .{ $format }
 
 compression-fast = Rapida
 

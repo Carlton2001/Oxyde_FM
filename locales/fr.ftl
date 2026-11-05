@@ -298,7 +298,6 @@ tool-duplicates = Rechercher les doublons
 tabs-new-tab = Nouvel onglet
 
 date-this-month = Ce mois-ci
-settings-group-by-date = Grouper par date
 date-group-count = { $count ->
     [one] { $number } élément
    *[other] { $number } éléments
@@ -385,7 +384,6 @@ drive-holders = Ouvert dans : { $applications }.
 drive-mount-failed = Impossible de monter le volume. { $detail }
 drive-mount-hibernated = Windows n’a pas été complètement arrêté (veille prolongée ou démarrage rapide) : ce volume reste verrouillé. Arrêtez complètement Windows, puis réessayez.
 
-archive-format = Archive .{ $format }
 compression-fast = Rapide
 compression-normal = Équilibrée
 compression-best = Maximale

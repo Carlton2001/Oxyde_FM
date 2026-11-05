@@ -44,14 +44,3 @@ fn categories_turn_away_from_the_accent() {
     assert!(hue_distance(folder.h, archive.h) >= ACCENT_SEPARATION - 1.0);
 }
 
-/// `cargo test --offline print_derived_file_colors -- --ignored --nocapture`
-#[test]
-#[ignore]
-fn print_derived_file_colors() {
-    for vision in ColorVision::ALL {
-        for id in ThemeId::ALL {
-            let line = entries(derived_with(id, vision)).map(|(name, color)| format!("{name}={}", hex(color))).join(" ");
-            println!("DERIVED {} {id:?} {line}", vision.as_str());
-        }
-    }
-}

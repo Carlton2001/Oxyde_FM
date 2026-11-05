@@ -476,7 +476,6 @@ tabs-new-tab = Neuer Tab
 
 date-this-month = Diesen Monat
 
-settings-group-by-date = Nach Datum gruppieren
 
 
 date-group-count = { $count ->
@@ -602,7 +601,6 @@ drive-holders = Geöffnet in: { $applications }.
 drive-mount-failed = Datenträger konnte nicht eingehängt werden. { $detail }
 drive-mount-hibernated = Windows wurde nicht vollständig heruntergefahren (Ruhezustand oder Schnellstart), daher bleibt dieser Datenträger gesperrt. Fahren Sie Windows vollständig herunter und versuchen Sie es erneut.
 
-archive-format = Archiv .{ $format }
 
 compression-fast = Schnell
 

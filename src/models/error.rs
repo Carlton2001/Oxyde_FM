@@ -505,7 +505,6 @@ pub enum CommandError {
     HistoryRename(HistoryRenameFailure),
     HistoryUndoRecovery(HistoryUndoRecoveryFailure),
     TrashError(String),
-    TrashFull(String),
     Other(String),
 }
 
@@ -528,7 +527,6 @@ impl fmt::Display for CommandError {
             CommandError::HistoryRename(failure) => failure.fmt(f),
             CommandError::HistoryUndoRecovery(failure) => failure.fmt(f),
             CommandError::TrashError(msg) => write!(f, "Trash Error: {}", msg),
-            CommandError::TrashFull(msg) => write!(f, "Trash Full: {}", msg),
             CommandError::Other(msg) => write!(f, "Error: {}", msg),
         }
     }
