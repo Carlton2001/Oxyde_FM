@@ -101,7 +101,7 @@ impl Render for Viewer {
             self.focus_pending = false;
             window.focus(&self.focus, cx);
         }
-        if !matches!(self.content, super::content::Content::Image(_)) {
+        if !matches!(self.content, super::content::Content::Image(..)) {
             use raw_window_handle::HasWindowHandle;
             if let Ok(handle) = HasWindowHandle::window_handle(window) {
                 oxyde_lib::platform::platform().viewer_image_cursor(handle.as_raw(), false, false);
@@ -186,7 +186,7 @@ impl Render for Viewer {
                             cx.stop_propagation();
                             return;
                         }
-                        if event.click_count == 2 && (matches!(this.content, super::content::Content::Image(_)) || (this.native_media && !this.audio)) {
+                        if event.click_count == 2 && (matches!(this.content, super::content::Content::Image(..)) || (this.native_media && !this.audio)) {
                             this.toggle_preview_fullscreen(window, cx);
                             cx.stop_propagation();
                         }

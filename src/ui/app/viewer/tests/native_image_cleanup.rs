@@ -12,7 +12,7 @@ struct Probe {
 impl Render for Probe {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let image = match &self.viewer.read(cx).content {
-            Content::Image(image) => Some(image.clone()),
+            Content::Image(image, _) => Some(image.clone()),
             _ => None,
         };
         div().size_full().children(image.map(|image| img(image).size(px(64.0))))
@@ -38,7 +38,7 @@ fn native_viewer_releases_image_from_current_window() {
         let image = Arc::new(RenderImage::new(vec![image::Frame::new(
             image::RgbaImage::from_pixel(64, 64, image::Rgba([30, 60, 90, 255])),
         )]));
-        viewer.update(cx, |viewer, cx| viewer.replace_content(Content::Image(image.clone()), cx));
+        viewer.update(cx, |viewer, cx| viewer.replace_content(Content::Image(image.clone(), None), cx));
         let pixels = Arc::downgrade(&image);
         drop(image);
         let handle = cx.open_window(WindowOptions {

@@ -17,7 +17,8 @@ pub(super) enum Content {
     None,
     Loading,
     Unavailable,
-    Image(Arc<RenderImage>),
+    /// The picture and the source's size in pixels, when it differs from the raster.
+    Image(Arc<RenderImage>, Option<(u32, u32)>),
     Audio(super::audio::Audio),
     Pdf(super::pdf::Pdf),
     Document(Arc<Vec<Block>>, ListState),
@@ -81,7 +82,7 @@ pub(super) fn parse_document(text: &str) -> Vec<Block> {
 impl Content {
     fn images(&self) -> Vec<Arc<RenderImage>> {
         match self {
-            Self::Image(image) => vec![image.clone()],
+            Self::Image(image, _) => vec![image.clone()],
             Self::Audio(audio) => audio.cover.iter().cloned().collect(),
             Self::Pdf(pdf) => pdf.images().collect(),
             Self::Markdown(document) => document.images(),
@@ -163,7 +164,7 @@ impl Viewer {
                     crate::ui::image_preview::load_viewer(std::path::Path::new(&path), &renderer)
                         .map_err(|error| error.to_string())
                 });
-                self.finish(generation, work, |preview| Content::Image(preview.image), cx);
+                self.finish(generation, work, |preview| Content::Image(preview.image, preview.natural_size), cx);
             }
             PreviewType::Pdf => self.load_pdf(path, cx),
             PreviewType::Text => self.load_text(path, cx),

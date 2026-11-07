@@ -18,7 +18,7 @@ struct Probe {
 impl Render for Probe {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let image = match &self.viewer.read(cx).content {
-            Content::Image(image) => Some(image.clone()),
+            Content::Image(image, _) => Some(image.clone()),
             _ => None,
         };
         div()
@@ -77,7 +77,7 @@ fn step(
                     cx.notify();
                 });
                 viewer.update(cx, |viewer, cx| {
-                    viewer.replace_content(Content::Image(image), cx)
+                    viewer.replace_content(Content::Image(image, None), cx)
                 });
                 // Separate event turns let deferred atlas eviction run between images.
                 cx.defer(move |cx| {

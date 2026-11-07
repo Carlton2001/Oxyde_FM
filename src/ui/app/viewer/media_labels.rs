@@ -1,4 +1,4 @@
-//! Technical labels under the audio and video players.
+//! Technical labels under the image, audio and video players.
 use crate::ui::{
     i18n::{FluentArgs, I18nContext, Message},
     theme::ThemeContext,
@@ -128,6 +128,30 @@ pub(super) fn video(dimensions: (u32, u32), info: Option<MediaInfo>, cx: &App) -
     }
     if info.channels > 0 {
         labels.push(channels(info.channels, cx));
+    }
+    labels
+}
+
+/// Format, size in pixels, megapixels and frame count of a picture.
+pub(super) fn image(image: &RenderImage, natural: Option<(u32, u32)>, extension: Option<&str>, cx: &App) -> Vec<SharedString> {
+    let mut labels: Vec<SharedString> = Vec::new();
+    labels.extend(extension.filter(|ext| !ext.is_empty()).map(|ext| ext.to_uppercase().into()));
+    let raster = image.size(0);
+    let (width, height) = natural.unwrap_or((raster.width.0.max(0) as u32, raster.height.0.max(0) as u32));
+    if width > 0 && height > 0 {
+        labels.push(format!("{width} × {height}").into());
+        let megapixels = f64::from(width) * f64::from(height) / 1_000_000.0;
+        if megapixels >= 0.1 {
+            let mut args = FluentArgs::new();
+            args.set("value", decimal(megapixels, 1, cx));
+            labels.push(cx.i18n().text_with_args(Message::ImageMegapixels, &args));
+        }
+    }
+    let frames = image.frame_count();
+    if frames > 1 {
+        let mut args = FluentArgs::new();
+        args.set("count", frames);
+        labels.push(cx.i18n().text_with_args(Message::ImageFrames, &args));
     }
     labels
 }

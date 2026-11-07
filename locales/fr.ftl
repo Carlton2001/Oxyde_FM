@@ -882,6 +882,8 @@ audio-mono = Mono
 audio-stereo = Stéréo
 audio-channels = { $count } canaux
 video-frame-rate = { $rate } IPS
+image-megapixels = { $value } Mpx
+image-frames = { $count } images
 
 
 quick-search-content-skipped =

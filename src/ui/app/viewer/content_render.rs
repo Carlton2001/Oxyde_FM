@@ -135,7 +135,10 @@ impl Viewer {
             Content::Loading => message(cx.i18n().text(Message::ViewerLoading), cx),
             // GPUI's img imposes the image ratio on its layout box, so the height
             // would follow the width. Paint into the available bounds instead.
-            Content::Image(image) => self.render_interactive_image(image.clone(), window.is_fullscreen(), cx),
+            Content::Image(image, natural) => {
+                let (image, natural) = (image.clone(), *natural);
+                self.render_image_with_labels(image, natural, window.is_fullscreen(), cx)
+            }
             Content::Preview(preview) if preview.read(cx).file_unavailable() => self.render_unavailable_file(cx),
             Content::Preview(preview) => preview.clone().into_any_element(),
             Content::Markdown(_) => self.render_markdown(cx),
