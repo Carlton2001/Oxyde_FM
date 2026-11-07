@@ -301,8 +301,6 @@ pub struct OxydeApp {
     /// None until read, or without a portal.
     pub(crate) chooses_files: Option<bool>,
     pub(super) changing_file_chooser: bool,
-    /// The folder the last file chooser ended in, where the next one starts.
-    pub(super) file_chooser_folder: Option<String>,
     /// Folder watching and listings started, which a file chooser alone does not need.
     browsing: bool,
     pub(crate) peek_status: oxyde_lib::platform::PeekStatus,
@@ -521,7 +519,6 @@ impl OxydeApp {
             changing_folder_handler: false,
             chooses_files: None,
             changing_file_chooser: false,
-            file_chooser_folder: None,
             browsing: false,
             peek_status: Default::default(),
             _drive_refresh_task: None,

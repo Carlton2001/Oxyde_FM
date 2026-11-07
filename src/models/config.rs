@@ -105,6 +105,9 @@ pub struct AppConfig {
     pub duplicate_search_options: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duplicate_search_window_size: Option<serde_json::Value>,
+    /// View, sort and last folder of the file chooser other applications open.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_chooser_options: Option<serde_json::Value>,
 }
 
 fn default_archive_format() -> String { "zip".into() }
@@ -163,6 +166,7 @@ impl Default for AppConfig {
             folder_handler_before: None,
             duplicate_search_options: None,
             duplicate_search_window_size: None,
+            file_chooser_options: None,
         }
     }
 }
@@ -181,6 +185,7 @@ impl AppConfig {
         let last_notified_update = self.last_notified_update.take();
         let duplicate_search_options = self.duplicate_search_options.take();
         let duplicate_search_window_size = self.duplicate_search_window_size.take();
+        let file_chooser_options = self.file_chooser_options.take();
         let operations_panel_position = self.operations_panel_position;
         let window_placement = self.window_placement;
         let tool_window_placements = std::mem::take(&mut self.tool_window_placements);
@@ -198,6 +203,7 @@ impl AppConfig {
             last_notified_update,
             duplicate_search_options,
             duplicate_search_window_size,
+            file_chooser_options,
             operations_panel_position,
             window_placement,
             tool_window_placements,
