@@ -123,7 +123,7 @@ Options:
 | --- | --- |
 | `--version X.Y.Z` | Installs a given version |
 | `--archive FILE` | Installs a downloaded archive, offline |
-| `--set-default` | Makes Oxyde the default application for folders, as the switch in Settings does |
+| `--set-default` | Makes Oxyde the default application for folders, as its option in Settings does |
 | `--yes` | Answers yes to every question |
 | `--uninstall` | Removes the per-user installation, its cache and the associations naming it (folders and Open dialogs included), then asks whether to delete your settings |
 | `--purge` | With `--uninstall`, deletes your settings without asking |

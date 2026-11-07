@@ -135,26 +135,6 @@ pub(super) fn left_column(view: &OxydeApp, handle: Entity<OxydeApp>, left_width:
             theme,
             |view, cx| view.toggle_onedrive(cx),
         )))
-        .when_some(view.opens_folders, |body, opens_folders| body.child(settings_row(
-            i18n.text(Message::SettingsDefaultFileManager),
-            i18n.text(Message::SettingsDefaultFileManagerDescription),
-            "icons/folder-check.svg",
-            opens_folders,
-            "toggle-default-file-manager",
-            handle.clone(),
-            theme,
-            |view, cx| view.toggle_folder_handler(cx),
-        )))
-        .when_some(view.chooses_files, |body, chooses_files| body.child(settings_row(
-            i18n.text(Message::SettingsFileChooser),
-            i18n.text(Message::SettingsFileChooserDescription),
-            "icons/app-window.svg",
-            chooses_files,
-            "toggle-file-chooser",
-            handle.clone(),
-            theme,
-            |view, cx| view.toggle_file_chooser_setting(cx),
-        )))
         .child(settings_row(
             i18n.text(Message::SettingsNetwork),
             i18n.text(Message::SettingsNetworkDescription),
@@ -165,6 +145,15 @@ pub(super) fn left_column(view: &OxydeApp, handle: Entity<OxydeApp>, left_width:
             theme,
             |view, cx| view.toggle_network(cx),
         ))
+        .when(super::integration::available(view), |body| body.child(separator(theme)).child(picker(
+            view,
+            handle.clone(),
+            SettingsPicker::Integration,
+            "settings-integration-picker",
+            "icons/monitor.svg",
+            i18n.text(Message::SettingsSystemIntegration),
+            theme,
+        )))
 }
 
 pub(super) fn right_column(view: &OxydeApp, handle: Entity<OxydeApp>, right_width: f32, cx: &App) -> impl IntoElement {

@@ -425,11 +425,12 @@ date-format-iso = ISO 8601 (JJJJ-MM-TT)
 settings-network = Netzwerk
 
 settings-network-description = Netzwerkumgebung im linken Bereich anzeigen.
+settings-system-integration = Systemintegration
 settings-default-file-manager = Standard-Dateimanager
-settings-default-file-manager-description = Ordner und „Im Ordner anzeigen“ anderer Anwendungen mit Oxyde öffnen. Das Dateien-Symbol im Dock bleibt das des Systems.
+settings-default-file-manager-description = Wenn eine andere Anwendung einen Ordner öffnet oder „Im Ordner anzeigen“ anbietet, zeigt Oxyde ihn an. Das Dateien-Symbol im Dock öffnet weiterhin die Dateiverwaltung des Systems.
 settings-default-file-manager-error = Der Standard-Dateimanager konnte nicht geändert werden.
 settings-file-chooser = Dialoge zum Öffnen und Speichern
-settings-file-chooser-description = Dateien und Ordner, die andere Anwendungen öffnen, und wohin sie speichern, mit Oxyde auswählen, wenn sie wie Firefox, Chrome und Flatpak-Anwendungen das Desktop-Portal fragen.
+settings-file-chooser-description = Wenn Firefox, Chrome oder eine Flatpak-Anwendung nach einer Datei zum Öffnen oder einem Speicherort fragt, erscheint das Fenster von Oxyde. Anwendungen mit eigenem Fenster behalten es.
 settings-file-chooser-error = Die Dialoge zum Öffnen und Speichern konnten nicht geändert werden.
 file-chooser-title = Datei öffnen
 file-chooser-folder-title = Ordner auswählen

@@ -425,11 +425,12 @@ date-format-iso = ISO 8601 (AAAA-MM-DD)
 settings-network = Red
 
 settings-network-description = Mostrar el entorno de red en el panel izquierdo.
+settings-system-integration = Integración con el sistema
 settings-default-file-manager = Gestor de archivos predeterminado
-settings-default-file-manager-description = Abrir con Oxyde las carpetas y «Mostrar en la carpeta» de otras aplicaciones. El icono Archivos del dock sigue siendo el del sistema.
+settings-default-file-manager-description = Cuando otra aplicación abre una carpeta, u ofrece «Mostrar en la carpeta», Oxyde la muestra. El icono Archivos del dock sigue abriendo el gestor de archivos del sistema.
 settings-default-file-manager-error = No se ha podido cambiar el gestor de archivos predeterminado.
 settings-file-chooser = Diálogos Abrir y Guardar
-settings-file-chooser-description = Elegir con Oxyde los archivos y carpetas que abren otras aplicaciones, y dónde guardan, cuando pasan por el portal del escritorio como Firefox, Chrome y las aplicaciones Flatpak.
+settings-file-chooser-description = Cuando Firefox, Chrome o una aplicación Flatpak pide un archivo para abrir o un lugar donde guardar, la ventana es la de Oxyde. Las aplicaciones que dibujan su propia ventana la conservan.
 settings-file-chooser-error = No se han podido cambiar los diálogos Abrir y Guardar.
 file-chooser-title = Abrir archivo
 file-chooser-folder-title = Seleccionar carpeta

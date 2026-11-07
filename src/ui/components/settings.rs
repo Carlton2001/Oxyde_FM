@@ -4,6 +4,7 @@ mod controls;
 mod compression;
 mod default_format;
 mod data_actions;
+mod integration;
 
 use controls::{choice, section, submenu_choice};
 use compression::compression_table;
@@ -24,6 +25,7 @@ pub(crate) enum SettingsPicker {
     Date,
     About,
     Compression,
+    Integration,
 }
 
 pub fn render_settings_panel(view: &OxydeApp, handle: Entity<OxydeApp>, window: &mut Window, cx: &mut Context<OxydeApp>) -> AnyElement {
@@ -53,6 +55,7 @@ fn render_settings_surface(
     let compression = if render_compression {
         compression_table(view, handle.clone(), window, cx)
     } else { Vec::new() };
+    let integration = integration::integration_choices(view, handle.clone(), cx);
     let theme = *cx.theme();
     let i18n = cx.i18n();
     let backdrop = handle.clone();
@@ -125,8 +128,7 @@ fn render_settings_surface(
         Message::SettingsGridThumbnails, Message::SettingsWindowsIcons,
         Message::SettingsCheckboxes, Message::SettingsPermissionsColumn, Message::SettingsPathTracking,
         Message::SettingsHidden, Message::SettingsSystem,
-        Message::SettingsPreviews, Message::SettingsNetwork, Message::SettingsDefaultFileManager,
-        Message::SettingsFileChooser,
+        Message::SettingsPreviews, Message::SettingsNetwork, Message::SettingsSystemIntegration,
     ].into_iter().map(|message| label_width(message) + 5.0625)
         .fold(16.5_f32, f32::max)
         .max(label_width(Message::SettingsScale) + 9.6875);
@@ -153,11 +155,14 @@ fn render_settings_surface(
             SettingsPicker::Date => [Message::DateFormatUs, Message::DateFormatEuropean, Message::DateFormatIso]
                 .into_iter().map(label_width).fold(0.0_f32, f32::max) + 3.5,
             SettingsPicker::Compression => 22.0,
+            // The explanations wrap at a readable width.
+            SettingsPicker::Integration => 24.0,
             _ => 18.0,
         };
         let title_width = match kind {
             SettingsPicker::Language => label_width(Message::SettingsLanguage) + 1.75,
             SettingsPicker::Date => label_width(Message::SettingsDateFormat) + 1.75,
+            SettingsPicker::Integration => label_width(Message::SettingsSystemIntegration) + 1.75,
             _ => 0.0,
         };
         content_width.max(title_width)
@@ -263,6 +268,7 @@ fn render_settings_surface(
             SettingsPicker::Date => (cx.i18n().text(Message::SettingsDateFormat), dates),
             SettingsPicker::About => unreachable!("About is rendered as a settings column"),
             SettingsPicker::Compression => (cx.i18n().text(Message::Compression), compression),
+            SettingsPicker::Integration => (cx.i18n().text(Message::SettingsSystemIntegration), integration),
 
         };
         let submenu_width =

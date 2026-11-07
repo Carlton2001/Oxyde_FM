@@ -425,11 +425,12 @@ date-format-iso = ISO 8601 (AAAA-MM-GG)
 settings-network = Rete
 
 settings-network-description = Mostra le risorse di rete nel pannello sinistro.
+settings-system-integration = Integrazione di sistema
 settings-default-file-manager = File manager predefinito
-settings-default-file-manager-description = Apri con Oxyde le cartelle e «Mostra nella cartella» delle altre applicazioni. L’icona File del dock resta quella del sistema.
+settings-default-file-manager-description = Quando un’altra applicazione apre una cartella, o propone «Mostra nella cartella», è Oxyde a mostrarla. L’icona File del dock apre sempre il file manager del sistema.
 settings-default-file-manager-error = Impossibile cambiare il file manager predefinito.
 settings-file-chooser = Finestre Apri e Salva
-settings-file-chooser-description = Scegli con Oxyde i file e le cartelle che aprono le altre applicazioni, e dove salvano, quando passano dal portale del desktop come Firefox, Chrome e le applicazioni Flatpak.
+settings-file-chooser-description = Quando Firefox, Chrome o un’applicazione Flatpak chiede un file da aprire o un posto dove salvare, la finestra è quella di Oxyde. Le applicazioni che disegnano la propria finestra la mantengono.
 settings-file-chooser-error = Impossibile cambiare le finestre Apri e Salva.
 file-chooser-title = Apri file
 file-chooser-folder-title = Seleziona cartella
