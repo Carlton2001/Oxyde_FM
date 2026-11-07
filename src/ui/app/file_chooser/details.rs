@@ -108,7 +108,7 @@ impl FileChooserWindow {
     fn render_row(&self, position: usize, widths: RowWidths, theme: OxydeTheme, cx: &mut Context<Self>) -> AnyElement {
         let Some(file) = self.shown_entry(position) else { return div().into_any_element() };
         let is_dir = file.is_dir;
-        let is_selected = self.selected == Some(position);
+        let is_selected = self.selection.contains(position);
         let has_subdirectories = is_dir && self.subfolders.get(&file.path).copied().unwrap_or(false);
         let is_dimmed = file.is_hidden || file.is_system;
         let press = self.press(position, cx);
@@ -188,14 +188,15 @@ impl FileChooserWindow {
             .into_any_element()
     }
 
-    /// An entry's press selects it, and a double press opens it.
+    /// An entry's press selects it, with Ctrl or Shift among others when several may
+    /// be chosen, and a double press opens it.
     pub(super) fn press(&self, position: usize, cx: &mut Context<Self>) -> impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static {
         let this = cx.entity().downgrade();
         move |event, window, cx| {
             cx.stop_propagation();
             let _ = this.update(cx, |this, cx| {
                 window.focus(&this.focus, cx);
-                this.select(position, cx);
+                this.press_entry(position, event.modifiers, cx);
                 if event.click_count == 2 && !event.modifiers.control && !event.modifiers.shift {
                     this.open_entry(position, window, cx);
                 }
@@ -206,7 +207,7 @@ impl FileChooserWindow {
     /// A press beside the entries: nothing is selected any more.
     pub(super) fn press_background(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus, cx);
-        if self.selected.take().is_some() {
+        if self.selection.clear() {
             cx.notify();
         }
     }

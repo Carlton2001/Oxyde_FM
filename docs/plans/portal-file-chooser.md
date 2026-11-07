@@ -23,7 +23,7 @@ Applications that go through `xdg-desktop-portal` (Flatpak, Firefox, Chrome, rec
 ## Steps (one session each, commit at the end, no push without an explicit request)
 
 - [x] **1. Minimal `OpenFile`** (effort high): `impl.portal.FileChooser` backend, `Request` object (Close), served by the running instance or by an Oxyde started without a main window; one-file picker; Settings switch; installing and removing the files plus `portals.conf`; uninstall. Test with `gdbus call` / `zenity`-style calls through the portal.
-- [ ] **2. Multiple selection, folder, filters** (medium): `multiple`, `directory`, `filters`, `current_filter`, `current_folder`.
+- [x] **2. Multiple selection, folder, filters** (medium): `multiple`, `directory`, `filters`, `current_filter`, `current_folder`.
 - [ ] **3. `SaveFile` / `SaveFiles`** (medium): `current_name`, `current_folder`, overwrite confirmation, `choices`.
 - [ ] **4. Parenting to the caller** (high/xhigh): `parent_window` (`x11:` / `wayland:` handle). On Wayland, `xdg-foreign` needs a GPUI patch; otherwise keep an independent window.
 - [ ] **5. Robustness** (high): timeouts, cancellation, behaviour when Oxyde crashes (the `gnome;gtk` fallback does not cover a failing backend), tests with Firefox, Chrome and a Flatpak.
@@ -55,3 +55,11 @@ Applications that go through `xdg-desktop-portal` (Flatpak, Firefox, Chrome, rec
 - Folders always come first; folder sizes are not counted, so Size keeps folders by name. Filtering selects the first match so Enter chooses it; the filter's Up/Down arrive as `CompletionUp`/`CompletionDown` actions and move the selection.
 - Grid columns and the details' widths come from the pane's width measured by a `canvas` in the previous frame (one extra frame on resize); thumbnails reuse `file_list::render_grid_thumbnail` under pane id `file-chooser-<entity>`, when the main window shows grid thumbnails.
 - Step 2 should build multiple selection on `selected` (now a position in `shown`), and type filters on `arrange::arrange`.
+
+### After step 2 (2026-11-07)
+
+- Platform: `FileChooserRequest` carries `multiple`, `directory`, `filters` (`FileTypeFilter`, `FileTypePattern::{Glob, MimeType}`), `current_filter` (a position), `current_folder` (checked to be a folder on the D-Bus thread); the answer is a `FileChooserAnswer` (paths, filter shown). `chooser.rs` keeps the raw `(sa(us))` filters to send the shown one back as `current_filter`; `offered_filters` resolves `current_filter` (found, alone, or appended; tested). `OpenFile` no longer forwards anything; `forward` stays for `SaveFile`/`SaveFiles`.
+- MIME: `Platform::content_type` (name only, no description) and `content_type_matches` (aliases, subclasses, `major/*`, `*`; `linux_mime::matches`, tested). Types are read off the UI thread with the listing, only when an offered filter names a MIME type. Globs keep case, as GTK's; empty files are `application/x-zerosize`, as GIO says, so an empty `.png` does not pass `image/*`.
+- UI: `file_chooser/selection.rs` (cursor, anchor, marked positions; kept and restored by path; tested), `types.rs` (the filter menu at the start of the footer, hidden in folder mode), `arrange::Admission` (folders only, the type filter, the content types; tested). Enter opens a single entry and chooses several; the button chooses files, opens a single selected folder, and in folder mode chooses the selection or the open folder. A typed file is refused in folder mode. New strings: `file-chooser-folder-title`, `file-chooser-select`; the Settings description now says only saving keeps the system dialog.
+- Verified on a private bus: options decoded from a real call (`multiple`, `directory`, filters, `current_filter`, `current_folder`), window opened in both modes, `Close` → 2. **Not yet checked by the user:** Ctrl/Shift selection by mouse and keys, the filter menu (owned popup above the footer), folder mode's button, the answer's URIs and `current_filter` in a real application.
+- Step 3 can reuse `Admission` for the save dialog's filters and `accept`'s structure; `choices` are still ignored.

@@ -1,6 +1,7 @@
 //! The file chooser's keyboard, the main window's file keys where they apply to
-//! choosing (`handle_file_key`, `type_select`), plus Ctrl+L and Ctrl+H, as other
-//! file choosers have them.
+//! choosing (`handle_file_key`, `type_select`), Shift with the arrows and Ctrl+A when
+//! several entries may be chosen, plus Ctrl+L and Ctrl+H, as other file choosers have
+//! them.
 use super::FileChooserWindow;
 use crate::ui::app::type_select::{find_match, RESET_DELAY};
 use gpui::*;
@@ -36,8 +37,9 @@ impl FileChooserWindow {
         let m = key.modifiers;
         if m.platform || m.function { return false; }
         match (key.key.as_str(), m.control, m.alt, m.shift) {
-            ("up" | "down" | "left" | "right", false, false, _) => self.move_selection(key.key.as_str(), cx),
-            ("enter", false, false, false) => self.accept(window, cx),
+            ("up" | "down" | "left" | "right", false, false, shift) => self.move_selection(key.key.as_str(), shift, cx),
+            ("a", true, false, false) if self.multiple => self.select_all(cx),
+            ("enter", false, false, false) => self.activate(window, cx),
             ("backspace", false, false, false) => {
                 if !self.back.is_empty() { self.go_back(cx); } else { self.go_up(cx); }
             }
@@ -51,13 +53,13 @@ impl FileChooserWindow {
         true
     }
 
-    /// The arrows, which leave left and right to the grid.
-    pub(super) fn move_selection(&mut self, key: &str, cx: &mut Context<Self>) {
+    /// The arrows, which leave left and right to the grid; Shift extends the selection.
+    pub(super) fn move_selection(&mut self, key: &str, shift: bool, cx: &mut Context<Self>) {
         if !self.options.grid && matches!(key, "left" | "right") { return; }
         let rows = self.position_rows();
         let rows: Vec<&[usize]> = rows.iter().map(Vec::as_slice).collect();
-        if let Some(position) = crate::ui::app::selection::arrow_target(&rows, self.selected, key) {
-            self.select(position, cx);
+        if let Some(position) = crate::ui::app::selection::arrow_target(&rows, self.selection.cursor(), key) {
+            if shift { self.extend_to(position, cx) } else { self.select(position, cx) }
         }
     }
 
@@ -74,7 +76,7 @@ impl FileChooserWindow {
         }
         let prefix = self.typed.push(text, Instant::now()).to_owned();
         let names: Vec<&str> = self.shown.iter().map(|entry| entry.name.as_str()).collect();
-        if let Some(position) = find_match(&names, self.selected, &prefix) {
+        if let Some(position) = find_match(&names, self.selection.cursor(), &prefix) {
             self.select(position, cx);
         }
         true

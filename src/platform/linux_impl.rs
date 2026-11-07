@@ -416,6 +416,14 @@ impl Platform for LinuxPlatform {
         Some(super::linux_mime::mime_type(path, is_dir, language))
     }
     #[cfg(target_os = "linux")]
+    fn content_type(&self, path: &std::path::Path, is_dir: bool) -> Option<&'static str> {
+        Some(super::linux_mime::type_name(path, is_dir))
+    }
+    #[cfg(target_os = "linux")]
+    fn content_type_matches(&self, mime: &str, pattern: &str) -> bool {
+        super::linux_mime::type_matches(mime, pattern)
+    }
+    #[cfg(target_os = "linux")]
     fn set_unix_permissions(
         &self,
         path: &std::path::Path,

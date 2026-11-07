@@ -58,18 +58,26 @@ impl FileChooserWindow {
         };
         let folders_label = count_label(self.folders, Message::StatusFolders);
         let files_label = count_label(self.shown.len().saturating_sub(self.folders), Message::StatusFiles);
-        let selection_summary = self.selected.and_then(|position| self.shown_entry(position)).map(|entry| {
-            let (folders, files) = if entry.is_dir { (1, 0) } else { (0, 1) };
-            let size = if !entry.is_dir || entry.is_calculated { entry.size } else { 0 };
+        // The selection's summary, as the main window's status bar gives it.
+        let selected: Vec<_> = self.selection.positions().filter_map(|position| self.shown_entry(position)).collect();
+        let selection_summary = (!selected.is_empty()).then(|| {
+            let folders = selected.iter().filter(|entry| entry.is_dir).count();
+            let files = selected.len() - folders;
+            let size: u64 = selected.iter().filter(|entry| !entry.is_dir || entry.is_calculated).map(|entry| entry.size).sum();
             let mut args = FluentArgs::new();
-            args.set("count", 1);
-            args.set("number", format_number(1, language));
+            args.set("count", selected.len());
+            args.set("number", format_number(selected.len() as u64, language));
             args.set("folder_count", folders);
             args.set("file_count", files);
             args.set("folders", format_number(folders as u64, language));
             args.set("files", format_number(files as u64, language));
             args.set("size", format_size(size, false, false, language));
-            cx.i18n().text_with_args(if entry.is_dir { Message::SelectedFolders } else { Message::SelectedFiles }, &args)
+            let message = match (folders, files) {
+                (0, _) => Message::SelectedFiles,
+                (_, 0) => Message::SelectedFolders,
+                _ => Message::SelectedMixed,
+            };
+            cx.i18n().text_with_args(message, &args)
         });
         div()
             .occlude()

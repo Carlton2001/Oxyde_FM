@@ -18,7 +18,7 @@ impl FileChooserWindow {
         let Some(file) = self.shown_entry(position) else { return div().into_any_element() };
         let path = file.path.clone();
         let is_dir = file.is_dir;
-        let is_selected = self.selected == Some(position);
+        let is_selected = self.selection.contains(position);
         let has_subdirectories = is_dir && self.subfolders.get(&path).copied().unwrap_or(false);
         let icon = crate::ui::components::icons::entry_icon(file);
         let press = self.press(position, cx);

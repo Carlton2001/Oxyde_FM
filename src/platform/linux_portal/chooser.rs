@@ -1,9 +1,9 @@
 //! `org.freedesktop.impl.portal.FileChooser`, as xdg-desktop-portal calls it for an
 //! application. Each call names a `Request` object the backend serves until it answers,
-//! so the portal can withdraw the request. What Oxyde cannot choose yet, folders and
-//! saving, goes to the portal that comes after Oxyde in `portals.conf`, with the same
-//! arguments, as if the portal had asked it.
-use crate::platform::{FileChooserRequest, InstanceMessage, InstanceRequest};
+//! so the portal can withdraw the request. What Oxyde cannot choose yet, saving, goes to
+//! the portal that comes after Oxyde in `portals.conf`, with the same arguments, as if
+//! the portal had asked it.
+use crate::platform::{FileChooserRequest, FileTypeFilter, FileTypePattern, InstanceMessage, InstanceRequest};
 use futures::channel::{mpsc::UnboundedSender, oneshot};
 use std::collections::HashMap;
 use std::sync::{Condvar, Mutex, OnceLock};
@@ -81,6 +81,54 @@ fn flag(options: &Options, name: &str) -> bool {
 
 fn text(options: &Options, name: &str) -> Option<String> {
     options.get(name).and_then(|value| <&str>::try_from(value).ok()).map(str::to_owned)
+}
+
+/// A type filter as the portal writes it, `(sa(us))`: a name, then rules that are a
+/// shell pattern (0) or a MIME type (1).
+type RawFilter = (String, Vec<(u32, String)>);
+
+fn raw_filter(value: &OwnedValue) -> Option<RawFilter> {
+    RawFilter::try_from(value.try_clone().ok()?).ok()
+}
+
+fn raw_filters(options: &Options) -> Vec<RawFilter> {
+    options.get("filters").and_then(|value| <Vec<RawFilter>>::try_from(value.try_clone().ok()?).ok()).unwrap_or_default()
+}
+
+/// The filters to offer and the one shown first: `current_filter` when the list holds
+/// it; alone when the application gives no list, as the specification allows; else
+/// added at the end of the list.
+pub(super) fn offered_filters(mut filters: Vec<RawFilter>, current: Option<RawFilter>) -> (Vec<RawFilter>, Option<usize>) {
+    let Some(current) = current else {
+        let first = (!filters.is_empty()).then_some(0);
+        return (filters, first);
+    };
+    let position = filters.iter().position(|filter| *filter == current).unwrap_or_else(|| {
+        filters.push(current);
+        filters.len() - 1
+    });
+    (filters, Some(position))
+}
+
+/// A raw filter in Oxyde's terms, its unknown rules left out.
+pub(super) fn type_filter((name, rules): &RawFilter) -> FileTypeFilter {
+    let patterns = rules.iter().filter_map(|(kind, pattern)| match kind {
+        0 => Some(FileTypePattern::Glob(pattern.clone())),
+        1 => Some(FileTypePattern::MimeType(pattern.clone())),
+        _ => None,
+    }).collect();
+    FileTypeFilter { name: name.clone(), patterns }
+}
+
+/// `current_folder`, a nul-terminated byte string, when it names a folder.
+fn suggested_folder(options: &Options) -> Option<std::path::PathBuf> {
+    use std::os::unix::ffi::OsStringExt;
+    let mut bytes = <Vec<u8>>::try_from(options.get("current_folder")?.try_clone().ok()?).ok()?;
+    while bytes.last() == Some(&0) {
+        bytes.pop();
+    }
+    let path = std::path::PathBuf::from(std::ffi::OsString::from_vec(bytes));
+    (path.is_absolute() && path.is_dir()).then_some(path)
 }
 
 /// A GTK label without its mnemonic marks: `_Open` reads `Open`, `__` an underscore.
@@ -202,9 +250,15 @@ impl FileChooser {
             log::warn!("Cannot serve the request of OpenFile: {error}");
         }
         log::info!("OpenFile for {:?}", call.app_id);
+        let (filters, current_filter) = offered_filters(raw_filters(&call.options), call.options.get("current_filter").and_then(raw_filter));
         let request = FileChooserRequest {
             title: call.title,
             accept_label: text(&call.options, "accept_label").map(|label| without_mnemonics(&label)),
+            multiple: flag(&call.options, "multiple"),
+            directory: flag(&call.options, "directory"),
+            filters: filters.iter().map(type_filter).collect(),
+            current_filter,
+            current_folder: suggested_folder(&call.options),
             answer,
             withdrawn,
         };
@@ -215,11 +269,16 @@ impl FileChooser {
         };
         let _ = server.remove::<Request, _>(&call.handle).await;
         match answer {
-            Ok(Some(paths)) => {
-                let uris: Vec<String> = paths.iter().map(|path| uri(path)).collect();
+            Ok(Some(chosen)) => {
+                let uris: Vec<String> = chosen.paths.iter().map(|path| uri(path)).collect();
                 let mut values = Options::new();
                 if let Ok(uris) = OwnedValue::try_from(Value::from(uris)) {
                     values.insert("uris".into(), uris);
+                }
+                // The filter shown, which the application may keep for next time.
+                let shown = chosen.filter.and_then(|position| filters.get(position)).cloned();
+                if let Some(filter) = shown.and_then(|filter| OwnedValue::try_from(Value::from(filter)).ok()) {
+                    values.insert("current_filter".into(), filter);
                 }
                 reply(SUCCESS, values, pending)
             }
@@ -243,12 +302,7 @@ impl FileChooser {
         #[zbus(object_server)] server: &ObjectServer,
     ) -> (u32, Results) {
         let pending = Pending::start();
-        let directory = flag(&options, "directory");
-        let call = Call { handle, app_id, parent_window, title, options };
-        if directory {
-            return forward("OpenFile", call, server, pending).await;
-        }
-        self.open_in_window(call, server, pending).await
+        self.open_in_window(Call { handle, app_id, parent_window, title, options }, server, pending).await
     }
 
     #[zbus(out_args("response", "results"))]

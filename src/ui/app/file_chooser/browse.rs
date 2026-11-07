@@ -1,10 +1,13 @@
 //! Browsing in the file chooser: the history, listings read and arranged in the
 //! background, the selection, and what opening an entry does, entering a folder or
-//! choosing a file.
+//! choosing a file, and what the button that accepts chooses.
+use super::selection::{Kept, Selection};
 use super::{FileChooserWindow, Listing};
 use crate::ui::workspace::{SortColumn, SortDirection};
 use gpui::*;
-use std::path::Path;
+use oxyde_lib::models::FileEntry;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// How a navigation moves through the history.
@@ -65,32 +68,43 @@ impl FileChooserWindow {
         self.shown = Arc::new(Vec::new());
         self.folders = 0;
         self.subfolders.clear();
-        self.selected = None;
+        self.selection.clear();
         self.list.0.borrow().base_handle.set_offset(point(px(0.0), px(0.0)));
         self.grid_scroll.set_offset(point(px(0.0), px(0.0)));
         // Back in a parent, the folder just left stays selected.
-        self.list_folder(Some(left), cx);
+        self.list_folder(Kept::path(left), cx);
     }
 
     /// Lists the folder again, the selection kept.
     pub(super) fn refresh(&mut self, cx: &mut Context<Self>) {
-        let keep = self.selected_path();
+        let keep = self.kept();
         self.list_folder(keep, cx);
     }
 
-    /// Lists the folder off the UI thread; a later navigation drops this listing. Its
-    /// folders are then checked for subfolders, as the main window checks them.
-    fn list_folder(&mut self, keep: Option<String>, cx: &mut Context<Self>) {
+    /// Lists the folder off the UI thread; a later navigation drops this listing. When
+    /// a type filter names MIME types, the files' types are read there too, once for
+    /// all filters. Its folders are then checked for subfolders, as the main window
+    /// checks them.
+    fn list_folder(&mut self, keep: Kept, cx: &mut Context<Self>) {
         self.listing = Listing::Loading;
         self.arrange_task = None;
         let folder = self.folder.clone();
         let (show_hidden, show_system) = (self.show_hidden, self.show_system);
+        let typed = !self.directory && self.filters.iter().any(super::arrange::names_mime_types);
         self.listing_task = Some(cx.spawn(async move |this, cx| {
             let listed = oxyde_lib::commands::io::list_dir(folder.clone(), Some(show_hidden), Some(show_system)).await;
+            let content_types = match &listed {
+                Ok(entries) if typed => {
+                    let files: Vec<String> = entries.iter().filter(|entry| !entry.is_dir).map(|entry| entry.path.clone()).collect();
+                    cx.background_spawn(async move { content_types(files) }).await
+                }
+                _ => HashMap::new(),
+            };
             let _ = this.update(cx, |this, cx| {
                 match listed {
                     Ok(entries) => {
                         this.entries = Arc::new(entries);
+                        this.admission.content_types = Arc::new(content_types);
                         this.arrange(keep, cx);
                         this.check_subfolders(cx);
                     }
@@ -99,7 +113,7 @@ impl FileChooserWindow {
                         this.entries = Arc::new(Vec::new());
                         this.shown = Arc::new(Vec::new());
                         this.folders = 0;
-                        this.selected = None;
+                        this.selection.clear();
                         this.listing = Listing::Failed(crate::ui::errors::path_load_message(&error));
                     }
                 }
@@ -123,17 +137,23 @@ impl FileChooserWindow {
     }
 
     /// Filters and sorts the entries off the UI thread, then selects `keep` again.
-    pub(super) fn arrange(&mut self, keep: Option<String>, cx: &mut Context<Self>) {
+    pub(super) fn arrange(&mut self, keep: Kept, cx: &mut Context<Self>) {
         let entries = self.entries.clone();
         let filter = self.filter.text.clone();
+        let admission = self.admission.clone();
         let (sort, direction) = (self.options.sort, self.options.direction);
         self.arrange_task = Some(cx.spawn(async move |this, cx| {
-            let arranged = cx.background_spawn(async move { super::arrange::arrange(&entries, &filter, sort, direction) }).await;
+            let arranged = cx.background_spawn(async move {
+                let platform = oxyde_lib::platform::platform();
+                super::arrange::arrange(&entries, &filter, &admission, &|mime, pattern| platform.content_type_matches(mime, pattern), sort, direction)
+            }).await;
             let _ = this.update(cx, |this, cx| {
                 let filtered = !this.filter.text.is_empty();
-                this.selected = keep.and_then(|path| arranged.shown.iter().position(|entry| entry.path == path))
-                    // Filtering, the first match is ready for Enter.
-                    .or_else(|| (filtered && !arranged.shown.is_empty()).then_some(0));
+                this.selection = Selection::restore(&keep, &arranged.shown);
+                // Filtering, the first match is ready for Enter.
+                if this.selection.is_empty() && filtered && !arranged.shown.is_empty() {
+                    this.selection.only(0);
+                }
                 this.folders = arranged.folders;
                 this.shown = Arc::new(arranged.shown);
                 if this.column_values.0 != arranged.types || this.column_values.1 != arranged.sizes {
@@ -141,7 +161,7 @@ impl FileChooserWindow {
                     this.column_revision += 1;
                 }
                 this.listing = Listing::Ready;
-                if let Some(position) = this.selected {
+                if let Some(position) = this.selection.cursor() {
                     this.reveal(position);
                 }
                 cx.notify();
@@ -149,14 +169,15 @@ impl FileChooserWindow {
         }));
     }
 
-    pub(super) fn selected_path(&self) -> Option<String> {
-        self.shown_entry(self.selected?).map(|entry| entry.path.clone())
+    /// The selection by path, to find again once the entries are arranged.
+    pub(super) fn kept(&self) -> Kept {
+        self.selection.keep(&self.shown)
     }
 
     pub(super) fn set_filter(&mut self, value: &str, cx: &mut Context<Self>) {
         if self.filter.text != value {
             self.filter.text = value.to_string();
-            let keep = self.selected_path();
+            let keep = self.kept();
             self.arrange(keep, cx);
         }
     }
@@ -172,7 +193,7 @@ impl FileChooserWindow {
             self.options.sort = column;
             self.options.direction = SortDirection::Ascending;
         }
-        let keep = self.selected_path();
+        let keep = self.kept();
         self.arrange(keep, cx);
         cx.notify();
     }
@@ -185,7 +206,7 @@ impl FileChooserWindow {
     pub(super) fn set_grid(&mut self, grid: bool, cx: &mut Context<Self>) {
         if self.options.grid != grid {
             self.options.grid = grid;
-            if let Some(position) = self.selected {
+            if let Some(position) = self.selection.cursor() {
                 self.reveal(position);
             }
             cx.notify();
@@ -223,9 +244,40 @@ impl FileChooserWindow {
         handle.set_offset(point(px(0.0), px(-target)));
     }
 
+    /// The entry alone, as a plain press or arrow selects it.
     pub(super) fn select(&mut self, position: usize, cx: &mut Context<Self>) {
+        self.change_selection(position, cx, Selection::only);
+    }
+
+    /// A press with its modifiers, which choose several entries when the application
+    /// allows it: Ctrl toggles one, Shift extends from the anchor, both add the range.
+    pub(super) fn press_entry(&mut self, position: usize, modifiers: Modifiers, cx: &mut Context<Self>) {
+        match (self.multiple, modifiers.control, modifiers.shift) {
+            (true, true, false) => self.change_selection(position, cx, Selection::toggle),
+            (true, add, true) => self.change_selection(position, cx, |selection, position| selection.extend(position, add)),
+            _ => self.select(position, cx),
+        }
+    }
+
+    /// Shift and an arrow: the range from the anchor, when several may be chosen.
+    pub(super) fn extend_to(&mut self, position: usize, cx: &mut Context<Self>) {
+        if self.multiple {
+            self.change_selection(position, cx, |selection, position| selection.extend(position, false));
+        } else {
+            self.select(position, cx);
+        }
+    }
+
+    pub(super) fn select_all(&mut self, cx: &mut Context<Self>) {
+        if self.multiple {
+            self.selection.all(self.shown.len());
+            cx.notify();
+        }
+    }
+
+    fn change_selection(&mut self, position: usize, cx: &mut Context<Self>, change: impl FnOnce(&mut Selection, usize)) {
         if position < self.shown.len() {
-            self.selected = Some(position);
+            change(&mut self.selection, position);
             self.reveal(position);
             cx.notify();
         }
@@ -243,9 +295,48 @@ impl FileChooserWindow {
         }
     }
 
-    pub(super) fn accept(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(position) = self.selected {
-            self.open_entry(position, window, cx);
+    /// Enter: a single entry opens, as on a double press; several are chosen.
+    pub(super) fn activate(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        match self.selection.single() {
+            Some(position) => self.open_entry(position, window, cx),
+            None => self.accept(window, cx),
         }
     }
+
+    /// Whether the button that accepts has something to choose.
+    pub(super) fn can_accept(&self) -> bool {
+        self.directory || !self.selection.is_empty()
+    }
+
+    /// The button that accepts. Folders: those selected, else the one open. Files: the
+    /// files selected; a single folder selected opens instead, as in GTK.
+    pub(super) fn accept(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let selected: Vec<&FileEntry> = self.selection.positions().filter_map(|position| self.shown_entry(position)).collect();
+        let decode = |entry: &&FileEntry| oxyde_lib::utils::path_text::decode(&entry.path);
+        if self.directory {
+            let chosen: Vec<PathBuf> = if selected.is_empty() {
+                vec![oxyde_lib::utils::path_text::decode(&self.folder)]
+            } else {
+                selected.iter().map(decode).collect()
+            };
+            self.finish(Some(chosen), window, cx);
+            return;
+        }
+        let files: Vec<PathBuf> = selected.iter().filter(|entry| !entry.is_dir).map(decode).collect();
+        if !files.is_empty() {
+            self.finish(Some(files), window, cx);
+        } else if let [folder] = selected[..] {
+            let path = folder.path.clone();
+            self.show_folder(path, cx);
+        }
+    }
+}
+
+/// The MIME types of files, by their listed paths.
+fn content_types(files: Vec<String>) -> HashMap<String, &'static str> {
+    let platform = oxyde_lib::platform::platform();
+    files.into_iter().filter_map(|path| {
+        let mime = platform.content_type(&oxyde_lib::utils::path_text::decode(&path), false)?;
+        Some((path, mime))
+    }).collect()
 }

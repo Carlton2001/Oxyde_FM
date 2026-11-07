@@ -168,3 +168,19 @@ fn gio_on_a_folder() {
         println!("{difference}");
     }
 }
+
+#[test]
+fn chooser_types_match_through_aliases_subclasses_and_media() {
+    let mut parents = HashMap::new();
+    parse_subclasses("text/x-python text/x-script\ntext/x-script text/plain\napplication/xml text/plain\n", &mut parents);
+    let mut aliases = HashMap::new();
+    parse_aliases("audio/mp3 audio/mpeg\napplication/x-pdf application/pdf\n", &mut aliases);
+    assert!(matches(&parents, &aliases, "text/x-python", "text/plain"));
+    assert!(matches(&parents, &aliases, "text/x-python", "TEXT/X-Script"));
+    assert!(matches(&parents, &aliases, "audio/mpeg", "audio/mp3"));
+    assert!(matches(&parents, &aliases, "application/x-pdf", "application/pdf"));
+    assert!(matches(&parents, &aliases, "image/png", "image/*"));
+    assert!(!matches(&parents, &aliases, "application/xml", "text/*"));
+    assert!(matches(&parents, &aliases, "application/xml", "*"));
+    assert!(!matches(&parents, &aliases, "image/png", "image/jpeg"));
+}

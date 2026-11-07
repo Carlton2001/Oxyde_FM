@@ -429,9 +429,11 @@ settings-default-file-manager = Gestor de archivos predeterminado
 settings-default-file-manager-description = Abrir con Oxyde las carpetas y «Mostrar en la carpeta» de otras aplicaciones. El icono Archivos del dock sigue siendo el del sistema.
 settings-default-file-manager-error = No se ha podido cambiar el gestor de archivos predeterminado.
 settings-file-chooser = Diálogos Abrir y Guardar
-settings-file-chooser-description = Elegir con Oxyde los archivos que abren otras aplicaciones, cuando pasan por el portal del escritorio como Firefox, Chrome y las aplicaciones Flatpak. Las carpetas y el guardado mantienen por ahora el diálogo del sistema.
+settings-file-chooser-description = Elegir con Oxyde los archivos y carpetas que abren otras aplicaciones, cuando pasan por el portal del escritorio como Firefox, Chrome y las aplicaciones Flatpak. El guardado mantiene por ahora el diálogo del sistema.
 settings-file-chooser-error = No se han podido cambiar los diálogos Abrir y Guardar.
 file-chooser-title = Abrir archivo
+file-chooser-folder-title = Seleccionar carpeta
+file-chooser-select = Seleccionar
 
 settings-region-language = Región e Idioma
 

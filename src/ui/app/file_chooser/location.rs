@@ -1,7 +1,8 @@
 //! Editing the folder's path in place of its crumbs, as `begin_breadcrumb_edit` does in
 //! the main window: the whole path selected, suggestions, submitted by Enter or a click
 //! outside, cancelled by Escape, and shaken with an error border when it leads nowhere.
-//! Here a typed file is chosen, and `~` and relative paths are understood.
+//! Here a typed file is chosen, unless folders are, and `~` and relative paths are
+//! understood.
 use super::FileChooserWindow;
 use crate::ui::components::input::{InputAppearance, TextInput, TextInputOptions};
 use crate::ui::i18n::{I18nContext, Message};
@@ -109,8 +110,9 @@ impl FileChooserWindow {
                         window.focus(&this.focus, cx);
                         this.show_folder(path.to_string_lossy().into_owned(), cx);
                     }
-                    Ok(false) => this.finish(Some(vec![path]), window, cx),
-                    Err(_) => {
+                    // A file is chosen, unless the application asks for folders.
+                    Ok(false) if !this.directory => this.finish(Some(vec![path]), window, cx),
+                    _ => {
                         this.location.shake = this.location.shake.wrapping_add(1);
                         this.location.invalid = true;
                     }

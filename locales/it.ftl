@@ -429,9 +429,11 @@ settings-default-file-manager = File manager predefinito
 settings-default-file-manager-description = Apri con Oxyde le cartelle e «Mostra nella cartella» delle altre applicazioni. L’icona File del dock resta quella del sistema.
 settings-default-file-manager-error = Impossibile cambiare il file manager predefinito.
 settings-file-chooser = Finestre Apri e Salva
-settings-file-chooser-description = Scegli con Oxyde i file che aprono le altre applicazioni, quando passano dal portale del desktop come Firefox, Chrome e le applicazioni Flatpak. Le cartelle e il salvataggio mantengono per ora la finestra del sistema.
+settings-file-chooser-description = Scegli con Oxyde i file e le cartelle che aprono le altre applicazioni, quando passano dal portale del desktop come Firefox, Chrome e le applicazioni Flatpak. Il salvataggio mantiene per ora la finestra del sistema.
 settings-file-chooser-error = Impossibile cambiare le finestre Apri e Salva.
 file-chooser-title = Apri file
+file-chooser-folder-title = Seleziona cartella
+file-chooser-select = Seleziona
 
 settings-region-language = Regione e Lingua
 

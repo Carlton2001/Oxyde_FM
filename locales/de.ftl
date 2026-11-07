@@ -429,9 +429,11 @@ settings-default-file-manager = Standard-Dateimanager
 settings-default-file-manager-description = Ordner und „Im Ordner anzeigen“ anderer Anwendungen mit Oxyde öffnen. Das Dateien-Symbol im Dock bleibt das des Systems.
 settings-default-file-manager-error = Der Standard-Dateimanager konnte nicht geändert werden.
 settings-file-chooser = Dialoge zum Öffnen und Speichern
-settings-file-chooser-description = Dateien, die andere Anwendungen öffnen, mit Oxyde auswählen, wenn sie wie Firefox, Chrome und Flatpak-Anwendungen das Desktop-Portal fragen. Ordner und das Speichern behalten vorerst den Dialog des Systems.
+settings-file-chooser-description = Dateien und Ordner, die andere Anwendungen öffnen, mit Oxyde auswählen, wenn sie wie Firefox, Chrome und Flatpak-Anwendungen das Desktop-Portal fragen. Das Speichern behält vorerst den Dialog des Systems.
 settings-file-chooser-error = Die Dialoge zum Öffnen und Speichern konnten nicht geändert werden.
 file-chooser-title = Datei öffnen
+file-chooser-folder-title = Ordner auswählen
+file-chooser-select = Auswählen
 
 settings-region-language = Region & Sprache
 

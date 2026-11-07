@@ -223,6 +223,8 @@ pub enum Message {
     SettingsFileChooserDescription,
     SettingsFileChooserError,
     FileChooserTitle,
+    FileChooserFolderTitle,
+    FileChooserSelect,
 
     ThemeDark,
     ThemeLight,
@@ -919,6 +921,8 @@ impl Message {
             Self::SettingsFileChooserDescription => "settings-file-chooser-description",
             Self::SettingsFileChooserError => "settings-file-chooser-error",
             Self::FileChooserTitle => "file-chooser-title",
+            Self::FileChooserFolderTitle => "file-chooser-folder-title",
+            Self::FileChooserSelect => "file-chooser-select",
 
             Self::ThemeDark => "theme-dark",
             Self::ThemeLight => "theme-light",
@@ -1920,6 +1924,8 @@ mod tests {
                 Message::SettingsFileChooserDescription,
                 Message::SettingsFileChooserError,
                 Message::FileChooserTitle,
+                Message::FileChooserFolderTitle,
+                Message::FileChooserSelect,
 
                 Message::ThemeDark,
                 Message::ThemeLight,

@@ -138,15 +138,48 @@ pub enum InstanceRequest {
     ChooseFile(FileChooserRequest),
 }
 
-/// An application's request, through the desktop portal, for a file to open.
+/// One rule of a file chooser's type filter.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FileTypePattern {
+    /// A shell pattern on the name, such as `*.png`, case kept.
+    Glob(String),
+    /// A MIME type, such as `image/png` or `image/*`.
+    MimeType(String),
+}
+
+/// A named choice of file types the application offers, such as "Images".
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FileTypeFilter {
+    pub name: String,
+    pub patterns: Vec<FileTypePattern>,
+}
+
+/// What the user chose in a file chooser.
+#[derive(Debug, Default, PartialEq)]
+pub struct FileChooserAnswer {
+    pub paths: Vec<std::path::PathBuf>,
+    /// The type filter shown when the user chose, as a position in the request's.
+    pub filter: Option<usize>,
+}
+
+/// An application's request, through the desktop portal, for files or folders to open.
 #[derive(Debug)]
 pub struct FileChooserRequest {
     /// The application's title for the window; empty when it gives none.
     pub title: String,
     /// The application's label for the button that accepts, mnemonics removed.
     pub accept_label: Option<String>,
-    /// Receives the chosen files, or nothing when the user cancels.
-    pub answer: futures::channel::oneshot::Sender<Option<Vec<std::path::PathBuf>>>,
+    /// Several items may be chosen.
+    pub multiple: bool,
+    /// Folders are chosen instead of files.
+    pub directory: bool,
+    /// The application's type filters, and the one shown first.
+    pub filters: Vec<FileTypeFilter>,
+    pub current_filter: Option<usize>,
+    /// The folder the application suggests, known to be one; else the last one.
+    pub current_folder: Option<std::path::PathBuf>,
+    /// Receives the choice, or nothing when the user cancels.
+    pub answer: futures::channel::oneshot::Sender<Option<FileChooserAnswer>>,
     /// Resolves when the application withdraws its request: the window closes unanswered.
     pub withdrawn: futures::channel::oneshot::Receiver<()>,
 }
@@ -807,6 +840,15 @@ pub trait Platform: Send + Sync {
     /// Type and description from the system's MIME database; None on Windows.
     fn mime_type(&self, _path: &std::path::Path, _is_dir: bool, _language: &str) -> Option<crate::models::MimeType> {
         None
+    }
+    /// The MIME type's name alone, as `mime_type` finds it; None on Windows.
+    fn content_type(&self, _path: &std::path::Path, _is_dir: bool) -> Option<&'static str> {
+        None
+    }
+    /// Whether a MIME type answers a file chooser's type, such as `image/png` or
+    /// `image/*`, through the system's aliases and subclasses.
+    fn content_type_matches(&self, mime: &str, pattern: &str) -> bool {
+        mime.eq_ignore_ascii_case(pattern)
     }
     /// Stops between enclosed items once `cancel` is set.
     fn set_unix_permissions(

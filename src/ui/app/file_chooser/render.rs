@@ -1,6 +1,6 @@
 //! The file chooser window, laid out as the main one: the header, the places beside a
 //! pane holding the navigation bar above the entries, in details or as a grid, and
-//! below them the buttons that answer the application.
+//! below them the application's type filters and the buttons that answer it.
 use super::{FileChooserWindow, ICON};
 use crate::ui::elements::button::{button_style, ButtonVariant};
 use crate::ui::i18n::{I18nContext, Message};
@@ -12,8 +12,9 @@ use gpui::*;
 impl FileChooserWindow {
     fn render_footer(&self, theme: OxydeTheme, cx: &mut Context<Self>) -> impl IntoElement {
         let i18n = cx.i18n();
-        let accept = self.accept_label.clone().unwrap_or_else(|| i18n.text(Message::Open));
-        let enabled = self.selected.is_some();
+        let accept = self.accept_label.clone()
+            .unwrap_or_else(|| i18n.text(if self.directory { Message::FileChooserSelect } else { Message::Open }));
+        let enabled = self.can_accept();
         let cancel = crate::ui::components::tool_window::action_button("file-chooser-cancel", cx.i18n().text(Message::Cancel), false, cx)
             .on_click(cx.listener(|this, _, window, cx| this.finish(None, window, cx)));
         let open = button_style(div().id("file-chooser-open"), theme, ButtonVariant::Primary, enabled)
@@ -21,7 +22,11 @@ impl FileChooserWindow {
             .px(rems(0.75)).py(rems(0.375)).text_size(rems(0.8125)).rounded(rems(0.375))
             .child(accept)
             .when(enabled, |button| button.tab_index(0).on_click(cx.listener(|this, _, window, cx| this.accept(window, cx))));
-        crate::ui::components::tool_window::footer(cx).child(cancel).child(open)
+        let types = self.render_type_filter(theme, cx);
+        crate::ui::components::tool_window::footer(cx)
+            .when_some(types, |footer, types| footer.child(types).child(div().flex_1()))
+            .child(cancel)
+            .child(open)
     }
 
     /// The scroll handle a dragged thumb moves, from its track's name.
@@ -81,7 +86,7 @@ impl FileChooserWindow {
 impl Render for FileChooserWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = *cx.theme();
-        let title = self.title.clone().unwrap_or_else(|| cx.i18n().text(Message::FileChooserTitle));
+        let title = self.title.clone().unwrap_or_else(|| cx.i18n().text(Self::default_title(self.directory)));
         window.set_window_title(title.as_ref());
         self.measure_columns(window, cx);
         self.window_width = window.viewport_size().width.as_f32() / logical(1.0);

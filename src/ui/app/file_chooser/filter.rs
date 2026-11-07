@@ -74,7 +74,7 @@ impl FileChooserWindow {
         self.filter.input = None;
         self.filter.slide.set_expanded(false);
         if filtered {
-            let keep = self.selected_path();
+            let keep = self.kept();
             self.arrange(keep, cx);
         }
         cx.notify();
@@ -95,8 +95,8 @@ impl FileChooserWindow {
                     .overflow_hidden()
                     .h(rems(1.5))
                     // Its arrows move the list's selection, so Enter chooses what they reach.
-                    .on_action(cx.listener(|this, _: &CompletionUp, _, cx| this.move_selection("up", cx)))
-                    .on_action(cx.listener(|this, _: &CompletionDown, _, cx| this.move_selection("down", cx)))
+                    .on_action(cx.listener(|this, _: &CompletionUp, _, cx| this.move_selection("up", false, cx)))
+                    .on_action(cx.listener(|this, _: &CompletionDown, _, cx| this.move_selection("down", false, cx)))
                     .child(div().w(rems(10.0)).h_full().pl(rems(0.25)).child(input));
                 bar.child(field.with_animation(
                     SharedString::from(format!("file-chooser-filter-slide-{revision}")),
