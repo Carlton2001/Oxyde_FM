@@ -3,7 +3,7 @@ use x11rb::connection::RequestConnection;
 
 use crate::linux::X11ClientStatePtr;
 use gpui::{
-    AnyWindowHandle, Bounds, Decorations, DevicePixels, ForegroundExecutor, GpuSpecs, Modifiers,
+    AnyWindowHandle, Bounds, Decorations, DevicePixels, ForeignWindow, ForegroundExecutor, GpuSpecs, Modifiers,
     Pixels, PlatformAtlas, PlatformDisplay, PlatformInput, PlatformInputHandler, PlatformWindow,
     Point, PromptButton, PromptLevel, RequestFrameOptions, ResizeEdge, ScaledPixels, Scene, Size,
     Tiling, WindowAppearance, WindowBackgroundAppearance, WindowBounds, WindowControlArea,
@@ -674,6 +674,47 @@ impl X11WindowState {
                         &[atoms._NET_WM_STATE_MODAL],
                     ),
                 )?;
+            }
+
+            // Oxyde: another process's window, as the portal names it. A transient modal dialog
+            // of it, as the desktop's own file dialogs are, set before the window maps.
+            match &params.foreign_parent {
+                Some(ForeignWindow::X11(foreign)) => {
+                    check_reply(
+                        || "X11 ChangeProperty32 setting WM_TRANSIENT_FOR for a foreign parent failed.",
+                        xcb.change_property32(
+                            xproto::PropMode::REPLACE,
+                            x_window,
+                            atoms.WM_TRANSIENT_FOR,
+                            xproto::AtomEnum::WINDOW,
+                            &[*foreign],
+                        ),
+                    )?;
+                    check_reply(
+                        || "X11 ChangeProperty32 setting window type for a foreign parent failed.",
+                        xcb.change_property32(
+                            xproto::PropMode::REPLACE,
+                            x_window,
+                            atoms._NET_WM_WINDOW_TYPE,
+                            xproto::AtomEnum::ATOM,
+                            &[atoms._NET_WM_WINDOW_TYPE_DIALOG],
+                        ),
+                    )?;
+                    check_reply(
+                        || "X11 ChangeProperty32 setting modal state for a foreign parent failed.",
+                        xcb.change_property32(
+                            xproto::PropMode::REPLACE,
+                            x_window,
+                            atoms._NET_WM_STATE,
+                            xproto::AtomEnum::ATOM,
+                            &[atoms._NET_WM_STATE_MODAL],
+                        ),
+                    )?;
+                }
+                Some(ForeignWindow::Wayland(_)) => {
+                    log::info!("A Wayland window cannot parent an X11 window");
+                }
+                None => {}
             }
 
             check_reply(

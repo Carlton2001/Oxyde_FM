@@ -29,7 +29,7 @@ use super::OxydeApp;
 use futures::channel::oneshot;
 use gpui::*;
 use oxyde_lib::models::{DriveInfo, FileEntry};
-use oxyde_lib::platform::{FileChooserAnswer, FileChooserPurpose, FileChooserRequest, FileTypeFilter, UnmountedVolume};
+use oxyde_lib::platform::{FileChooserAnswer, FileChooserParent, FileChooserPurpose, FileChooserRequest, FileTypeFilter, UnmountedVolume};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -215,6 +215,7 @@ impl OxydeApp {
             media_previews: self.show_media_previews,
         };
         let rem_size = self.ui_rem_size();
+        let foreign_parent = request.parent.clone().map(foreign_window);
         // GPUI draws a new window before open_window returns, and its render reads the
         // owner: the window opens once this update of the owner has ended.
         cx.defer(move |cx| {
@@ -230,6 +231,9 @@ impl OxydeApp {
                     // The narrowest sidebar, its edge and the pane's minimum fit.
                     window_min_size: Some(size(px(logical(arrange::SIDEBAR_MIN + 1.0 + arrange::PANE_MIN)), px(logical(420.0)))),
                     titlebar: Some(TitlebarOptions { appears_transparent: true, title: Some(title.into()), ..Default::default() }),
+                    // Over the application's window and modal to it, where the desktop places
+                    // it; the saved position only serves an independent window.
+                    foreign_parent,
                     ..Default::default()
                 },
                 move |window, cx| {
@@ -242,6 +246,14 @@ impl OxydeApp {
                 log::error!("Cannot open the file chooser: {error}");
             }
         });
+    }
+}
+
+/// The application's window, as GPUI parents a window to another process's.
+fn foreign_window(parent: FileChooserParent) -> ForeignWindow {
+    match parent {
+        FileChooserParent::X11(id) => ForeignWindow::X11(id),
+        FileChooserParent::Wayland(handle) => ForeignWindow::Wayland(handle),
     }
 }
 
@@ -258,7 +270,7 @@ fn default_title(purpose: &FileChooserPurpose, directory: bool) -> crate::ui::i1
 
 impl FileChooserWindow {
     fn new(owner: WeakEntity<OxydeApp>, request: FileChooserRequest, lent: Lent, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let FileChooserRequest { purpose, title, accept_label, multiple, directory, filters, current_filter, current_folder, choices, answer, withdrawn } = request;
+        let FileChooserRequest { purpose, title, accept_label, multiple, directory, filters, current_filter, current_folder, choices, parent: _, answer, withdrawn } = request;
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         crate::ui::components::tool_window::install_icon(ICON, window);

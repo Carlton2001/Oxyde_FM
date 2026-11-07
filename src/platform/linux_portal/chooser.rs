@@ -4,7 +4,7 @@
 //! window; when Oxyde's interface can no longer take a call, it goes to the portal that
 //! comes after Oxyde in `portals.conf`, with the same arguments, as if the portal had
 //! asked it.
-use crate::platform::{FileChooserChoice, FileChooserPurpose, FileChooserRequest, FileTypeFilter, FileTypePattern, InstanceMessage, InstanceRequest};
+use crate::platform::{FileChooserChoice, FileChooserParent, FileChooserPurpose, FileChooserRequest, FileTypeFilter, FileTypePattern, InstanceMessage, InstanceRequest};
 use futures::channel::{mpsc::UnboundedSender, oneshot};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -204,6 +204,16 @@ const PATH_BYTES: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUME
     .remove(b'!').remove(b'$').remove(b'&').remove(b'\'').remove(b'(').remove(b')')
     .remove(b'*').remove(b'+').remove(b',').remove(b';').remove(b'=').remove(b':').remove(b'@');
 
+/// The application's window, from the portal's `x11:<hex id>` or `wayland:<handle>`;
+/// nothing for an empty or unknown form.
+pub(super) fn parent_window(text: &str) -> Option<FileChooserParent> {
+    if let Some(id) = text.strip_prefix("x11:") {
+        let digits = id.strip_prefix("0x").or_else(|| id.strip_prefix("0X")).unwrap_or(id);
+        return u32::from_str_radix(digits, 16).ok().filter(|&id| id != 0).map(FileChooserParent::X11);
+    }
+    text.strip_prefix("wayland:").filter(|handle| !handle.is_empty()).map(|handle| FileChooserParent::Wayland(handle.to_owned()))
+}
+
 /// The `file://` URI of a local path, its bytes kept whatever their encoding.
 pub(super) fn uri(path: &Path) -> String {
     use std::os::unix::ffi::OsStrExt;
@@ -318,6 +328,7 @@ impl FileChooser {
             current_filter,
             current_folder: suggested_folder(options),
             choices: raw_choices(options).into_iter().map(choice).collect(),
+            parent: parent_window(&call.parent_window),
             answer,
             withdrawn,
         };

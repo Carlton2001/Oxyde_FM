@@ -129,3 +129,13 @@ fn choices_are_read_and_their_first_answer_checked() {
     assert_eq!(choice(unknown).initial, "utf8");
     assert_eq!(choice(("box".into(), "Box".into(), Vec::new(), "yes".into())).initial, "false");
 }
+
+#[test]
+fn parent_windows_are_read_in_both_forms() {
+    assert_eq!(parent_window("x11:3a0000b"), Some(FileChooserParent::X11(0x3a0000b)));
+    assert_eq!(parent_window("x11:0x3a0000b"), Some(FileChooserParent::X11(0x3a0000b)));
+    assert_eq!(parent_window("wayland:7c1f2e9a-handle"), Some(FileChooserParent::Wayland("7c1f2e9a-handle".into())));
+    for nothing in ["", "x11:", "x11:0", "x11:zz", "x11:1ffffffff", "wayland:", "mir:12"] {
+        assert_eq!(parent_window(nothing), None, "{nothing:?}");
+    }
+}

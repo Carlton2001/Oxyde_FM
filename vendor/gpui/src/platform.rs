@@ -2130,6 +2130,20 @@ pub struct WindowOptions {
 
     /// Tab group name, allows opening the window as a native tab on macOS 10.12+. Windows with the same tabbing identifier will be grouped together.
     pub tabbing_identifier: Option<String>,
+
+    /// Oxyde: another process's window this one opens over, modal to it (X11 and Wayland).
+    pub foreign_parent: Option<ForeignWindow>,
+}
+
+/// Oxyde: a window of another process, as the desktop portal names it. A platform that
+/// cannot reach it (an X11 window from a Wayland client, or the other way round) opens an
+/// independent window instead.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ForeignWindow {
+    /// An X11 window id.
+    X11(u32),
+    /// A toplevel exported through xdg-foreign.
+    Wayland(String),
 }
 
 /// The variables that can be configured when creating a new window
@@ -2195,6 +2209,10 @@ pub struct WindowParams {
 
     #[cfg(target_os = "macos")]
     pub tabbing_identifier: Option<String>,
+
+    /// Oxyde: see [`WindowOptions::foreign_parent`].
+    #[cfg_attr(not(any(target_os = "linux", target_os = "freebsd")), allow(dead_code))]
+    pub foreign_parent: Option<ForeignWindow>,
 }
 
 /// Represents the status of how a window should be opened.
@@ -2256,6 +2274,7 @@ impl Default for WindowOptions {
             window_min_size: None,
             window_decorations: None,
             tabbing_identifier: None,
+            foreign_parent: None,
         }
     }
 }

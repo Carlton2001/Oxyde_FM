@@ -206,10 +206,21 @@ pub struct FileChooserRequest {
     /// The folder the application suggests, known to be one; else the last one.
     pub current_folder: Option<std::path::PathBuf>,
     pub choices: Vec<FileChooserChoice>,
+    /// The application's window, which the chooser opens over.
+    pub parent: Option<FileChooserParent>,
     /// Receives the choice, or nothing when the user cancels.
     pub answer: futures::channel::oneshot::Sender<Option<FileChooserAnswer>>,
     /// Resolves when the application withdraws its request: the window closes unanswered.
     pub withdrawn: futures::channel::oneshot::Receiver<()>,
+}
+
+/// An application's window, as the desktop portal names it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FileChooserParent {
+    /// An X11 window id.
+    X11(u32),
+    /// A toplevel the application exported through xdg-foreign.
+    Wayland(String),
 }
 
 #[derive(Debug)]
