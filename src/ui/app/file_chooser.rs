@@ -101,7 +101,7 @@ pub struct FileChooserWindow {
     tooltip_folder: String,
     filter: filter::Filter,
     location: location::Location,
-    typed: keys::TypeSelect,
+    typed: super::type_select::TypeSelect,
     crumbs: crumbs::Crumbs,
     /// The details list; the grid scrolls its own handle.
     list: UniformListScrollHandle,

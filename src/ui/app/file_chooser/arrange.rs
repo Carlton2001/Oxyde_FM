@@ -68,46 +68,6 @@ pub(super) fn arrange(entries: &[FileEntry], filter: &str, sort: SortColumn, dir
     arranged
 }
 
-/// The main window's type-to-select: the name to select for a lowercase `prefix`, in
-/// display order. A repeated single letter cycles through the names starting with it;
-/// otherwise the current item stays selected while it still matches.
-pub(super) fn find_match(names: &[&str], current: Option<usize>, prefix: &str) -> Option<usize> {
-    let first = prefix.chars().next()?;
-    let count = names.len();
-    let starts = |i: usize, text: &str| names[i].to_lowercase().starts_with(text);
-    let search = |text: &str, include_current: bool| {
-        let (start, skip) = match current {
-            Some(current) => (current, usize::from(!include_current)),
-            None => (0, 0),
-        };
-        (skip..count + skip).map(|offset| (start + offset) % count).find(|&i| starts(i, text))
-    };
-    if prefix.chars().count() == 1 { return search(prefix, false); }
-    if let Some(found) = search(prefix, true) { return Some(found); }
-    if prefix.chars().all(|c| c == first) { return search(&first.to_string(), false); }
-    None
-}
-
-/// The main window's arrow keys over rows of positions: no selection starts at the
-/// first entry, and a short last grid row keeps the nearest column.
-pub(super) fn arrow_target(rows: &[&[usize]], current: Option<usize>, key: &str) -> Option<usize> {
-    let Some((row, column)) = current.and_then(|index| rows.iter().enumerate()
-        .find_map(|(row, indices)| indices.iter().position(|i| *i == index).map(|column| (row, column)))) else {
-        return rows.first().and_then(|row| row.first()).copied();
-    };
-    let target_row = match key {
-        "up" => row.saturating_sub(1),
-        "down" => (row + 1).min(rows.len() - 1),
-        _ => row,
-    };
-    let target_column = match key {
-        "left" => column.saturating_sub(1),
-        "right" => column + 1,
-        _ => column,
-    }.min(rows[target_row].len() - 1);
-    Some(rows[target_row][target_column])
-}
-
 #[cfg(test)]
 #[path = "tests/arrange.rs"]
 mod tests;

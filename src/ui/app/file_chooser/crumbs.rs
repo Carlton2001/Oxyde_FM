@@ -1,17 +1,10 @@
-//! The crumbs' state, and copies of the main navigation bar's crumb motion
-//! (`top_bar/breadcrumb_glide.rs`) and edge fades (`top_bar/breadcrumb_fades.rs`).
-use gpui::{prelude::*, *};
+//! The crumbs' state. Their motion and edge fades are the main navigation bar's
+//! (`top_bar/breadcrumb_glide.rs`, `top_bar/breadcrumb_fades.rs`).
+use crate::ui::components::top_bar::breadcrumb_glide::Glide;
+use gpui::*;
 use oxyde_lib::models::FileEntry;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
-use std::time::Instant;
-
-/// Entering a subfolder reveals a new segment: slow enough to follow.
-const ENTER_DURATION: f32 = 0.22;
-/// Matches the tab strip's wheel scrolling.
-const WHEEL_DURATION: f32 = 0.18;
-
-pub(super) type Glide = Cell<Option<(Instant, f32, Option<f32>)>>;
 
 #[derive(Default)]
 pub(super) struct Crumbs {
@@ -23,91 +16,4 @@ pub(super) struct Crumbs {
     /// A chevron's open menu: the folder it lists, the chevron's index, its folders.
     pub(super) menu: Option<(String, usize, Vec<FileEntry>)>,
     pub(super) menu_scroll: UniformListScrollHandle,
-}
-
-pub(super) fn start(glide: &Glide, previous: &str, current: &str, scroll: &ScrollHandle) {
-    let entered = entered_child(previous, current);
-    glide.set(entered.then(|| (Instant::now(), scroll.offset().x.as_f32(), None)));
-}
-
-/// Retargets the glide by `delta` from the pending wheel target, so fast wheel turns accumulate.
-pub(super) fn scroll_by(glide: &Glide, scroll: &ScrollHandle, delta: Pixels) {
-    let current = scroll.offset().x.as_f32();
-    let base = match glide.get() {
-        Some((_, _, Some(target))) => target,
-        _ => current,
-    };
-    let target = (base + delta.as_f32()).clamp(-scroll.max_offset().x.as_f32(), 0.0);
-    glide.set(Some((Instant::now(), current, Some(target))));
-}
-
-/// Moves the scroll offset one frame forward; returns whether a glide is running.
-pub(super) fn advance(glide: &Glide, scroll: &ScrollHandle, window: &Window) -> bool {
-    let Some((started, from, target)) = glide.get() else {
-        return false;
-    };
-    let max = scroll.max_offset().x.as_f32();
-    let (target, duration) = match target {
-        Some(target) => (target.clamp(-max, 0.0), WHEEL_DURATION),
-        None => (-max, ENTER_DURATION),
-    };
-    let t = (started.elapsed().as_secs_f32() / duration).min(1.0);
-    let eased = 1.0 - (1.0 - t).powi(3);
-    scroll.set_offset(point(px(from + (target - from) * eased), px(0.0)));
-    if t < 1.0 {
-        window.request_animation_frame();
-    } else {
-        glide.set(None);
-    }
-    true
-}
-
-/// Whether `current` is exactly one folder below `previous`.
-fn entered_child(previous: &str, current: &str) -> bool {
-    const SEPARATORS: fn(char) -> bool = std::path::is_separator;
-    let parent = previous.trim_end_matches(SEPARATORS);
-    if parent.is_empty() {
-        return false;
-    }
-    current
-        .strip_prefix(parent)
-        .and_then(|rest| rest.strip_prefix(SEPARATORS))
-        .is_some_and(|name| !name.is_empty() && !name.contains(SEPARATORS))
-}
-
-/// Fades only clipped path segments, using the geometry of the frame being painted.
-pub(super) fn fades(scroll: ScrollHandle, last_segment: Option<usize>, surface: Hsla) -> impl IntoElement {
-    canvas(
-        move |bounds, window, _| {
-            let fades = last_segment
-                .and_then(|index| scroll.bounds_for_item(index))
-                .map(|last| {
-                    edge_fades(scroll.bounds(), last, scroll.offset().x, scroll.max_offset().x, window.rem_size() * (2.0 / 16.0))
-                })
-                .unwrap_or((false, false));
-            (bounds, fades)
-        },
-        move |_, (bounds, (left, right)): (Bounds<Pixels>, (bool, bool)), window, _| {
-            let width = (window.rem_size() * 1.5).min(bounds.size.width);
-            for (visible, x, angle) in [(left, bounds.left(), 90.0), (right, bounds.right() - width, 270.0)] {
-                if visible {
-                    window.paint_quad(fill(
-                        Bounds::new(point(x, bounds.top()), size(width, bounds.size.height)),
-                        linear_gradient(angle, linear_color_stop(surface, 0.0), linear_color_stop(surface.alpha(0.0), 1.0)),
-                    ));
-                }
-            }
-        },
-    )
-    .absolute()
-    .size_full()
-}
-
-fn edge_fades(viewport: Bounds<Pixels>, last_segment: Bounds<Pixels>, offset: Pixels, max_offset: Pixels, tolerance: Pixels) -> (bool, bool) {
-    let offset = offset.clamp(-max_offset, px(0.0));
-    (
-        -offset > tolerance,
-        // The editable blank area after the final segment is not hidden path.
-        last_segment.right() + offset > viewport.right() + tolerance,
-    )
 }

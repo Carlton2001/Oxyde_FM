@@ -5,6 +5,7 @@
 use super::{FileChooserWindow, Place};
 use crate::ui::components::scrollbar::{render_scrollbar_with_pointer, ScrollbarAxis};
 use crate::ui::components::sidebar::sidebar_paths_equal;
+use crate::ui::components::sidebar::volume_row::name as volume_name;
 use crate::ui::components::tooltip::hover::{HoverRegion, SharedTooltipExt};
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::i18n::{I18nContext, Message};
@@ -21,15 +22,6 @@ const DRIVE_HEIGHT: Rems = rems(2.25);
 const LIST_TOP: Rems = rems(0.375);
 /// One tooltip session for the whole list, as the main sidebar's.
 const REGION: HoverRegion = HoverRegion::Controls("file-chooser-places");
-
-/// An unmounted volume's name, as the main sidebar gives it.
-fn volume_name(volume: &UnmountedVolume, i18n: &crate::ui::i18n::I18n) -> String {
-    if volume.label.is_empty() {
-        crate::ui::format::unlabeled_volume(volume.size, i18n)
-    } else {
-        volume.label.clone()
-    }
-}
 
 impl FileChooserWindow {
     /// The sidebar's width now: as dragged, within what the window leaves it.

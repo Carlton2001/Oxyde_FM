@@ -3,6 +3,7 @@
 //! the magnifier on hover, click or Ctrl+F, collapsing on a click elsewhere. Here it
 //! filters the folder's names as typed, and Enter chooses the selection.
 use super::FileChooserWindow;
+use crate::ui::app::search::{slide_progress, SearchInputSlide};
 use crate::ui::components::input::{CompletionDown, CompletionUp, InputAppearance, TextInput, TextInputOptions};
 use crate::ui::components::tooltip::{NativeTooltipExt, Tooltip};
 use crate::ui::i18n::{I18nContext, Message};
@@ -10,44 +11,17 @@ use crate::ui::theme::OxydeTheme;
 use gpui::prelude::*;
 use gpui::*;
 
-const SLIDE: f32 = 0.25;
-
+#[derive(Default)]
 pub(super) struct Filter {
     pub(super) input: Option<Entity<TextInput>>,
     pub(super) text: String,
-    expanded: bool,
-    hover_suppressed: bool,
-    from: f32,
-    started: std::time::Instant,
-    revision: u64,
-}
-
-impl Default for Filter {
-    fn default() -> Self {
-        Self { input: None, text: String::new(), expanded: false, hover_suppressed: false, from: 0.0, started: std::time::Instant::now(), revision: 0 }
-    }
-}
-
-fn slide_progress(from: f32, expanded: bool, elapsed: f32) -> f32 {
-    let t = elapsed.clamp(0.0, 1.0);
-    let eased = t * t * (3.0 - 2.0 * t);
-    from + (if expanded { 1.0 } else { 0.0 } - from) * eased
+    slide: SearchInputSlide,
 }
 
 impl Filter {
-    fn set_expanded(&mut self, expanded: bool) {
-        if self.expanded == expanded {
-            return;
-        }
-        self.from = slide_progress(self.from, self.expanded, self.started.elapsed().as_secs_f32() / SLIDE);
-        self.expanded = expanded;
-        self.started = std::time::Instant::now();
-        self.revision = self.revision.wrapping_add(1);
-    }
-
     /// Back to no filter and no field, as a new folder starts.
     pub(super) fn clear(&mut self) {
-        *self = Self { hover_suppressed: self.hover_suppressed, ..Self::default() };
+        *self = Self { slide: SearchInputSlide { hover_suppressed: self.slide.hover_suppressed, ..Default::default() }, ..Self::default() };
     }
 }
 
@@ -56,7 +30,7 @@ impl FileChooserWindow {
     pub(super) fn open_filter(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(input) = &self.filter.input {
             let focus = input.read(cx).focus_handle.clone();
-            self.filter.set_expanded(true);
+            self.filter.slide.set_expanded(true);
             window.focus(&focus, cx);
             cx.notify();
             return;
@@ -81,15 +55,15 @@ impl FileChooserWindow {
         ));
         let focus = input.read(cx).focus_handle.clone();
         self.filter.input = Some(input);
-        self.filter.from = 0.0;
-        self.filter.expanded = false;
-        self.filter.set_expanded(true);
+        self.filter.slide.from = 0.0;
+        self.filter.slide.expanded = false;
+        self.filter.slide.set_expanded(true);
         window.focus(&focus, cx);
         cx.notify();
     }
 
     fn collapse_filter(&mut self, cx: &mut Context<Self>) {
-        self.filter.set_expanded(false);
+        self.filter.slide.set_expanded(false);
         cx.notify();
     }
 
@@ -98,7 +72,7 @@ impl FileChooserWindow {
         let filtered = !self.filter.text.is_empty();
         self.filter.text.clear();
         self.filter.input = None;
-        self.filter.set_expanded(false);
+        self.filter.slide.set_expanded(false);
         if filtered {
             let keep = self.selected_path();
             self.arrange(keep, cx);
@@ -107,8 +81,8 @@ impl FileChooserWindow {
     }
 
     pub(super) fn render_filter_control(&self, theme: OxydeTheme, cx: &mut Context<Self>) -> AnyElement {
-        let expanded = self.filter.expanded && self.filter.input.is_some();
-        let (from, revision) = (self.filter.from, self.filter.revision);
+        let expanded = self.filter.slide.expanded && self.filter.input.is_some();
+        let (from, revision) = (self.filter.slide.from, self.filter.slide.revision);
         div()
             .id("file-chooser-filter-control")
             .flex()
@@ -126,7 +100,7 @@ impl FileChooserWindow {
                     .child(div().w(rems(10.0)).h_full().pl(rems(0.25)).child(input));
                 bar.child(field.with_animation(
                     SharedString::from(format!("file-chooser-filter-slide-{revision}")),
-                    Animation::new(std::time::Duration::from_secs_f32(SLIDE)),
+                    Animation::new(std::time::Duration::from_millis(250)),
                     move |field, delta| {
                         let fraction = slide_progress(from, expanded, delta);
                         field.w(rems(10.0 * fraction)).opacity(fraction)
@@ -148,14 +122,14 @@ impl FileChooserWindow {
                     .child(svg().path("icons/search.svg").size(rems(1.0)).text_color(theme.text))
                     .on_hover(cx.listener(|this, hovered: &bool, window, cx| {
                         if !*hovered {
-                            this.filter.hover_suppressed = false;
-                        } else if !this.filter.expanded && !this.filter.hover_suppressed {
+                            this.filter.slide.hover_suppressed = false;
+                        } else if !this.filter.slide.expanded && !this.filter.slide.hover_suppressed {
                             this.open_filter(window, cx);
                         }
                     }))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         if expanded {
-                            this.filter.hover_suppressed = true;
+                            this.filter.slide.hover_suppressed = true;
                             this.collapse_filter(cx);
                             window.focus(&this.focus, cx);
                         } else {

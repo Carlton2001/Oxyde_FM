@@ -26,7 +26,7 @@ use gpui::*;
 use crate::ui::style::STATUS_BAR_HEIGHT;
 fn status_bar_height() -> f32 { rem_pixels(STATUS_BAR_HEIGHT).as_f32() }
 
-fn protected_folder_message(message: String, theme: &crate::ui::theme::OxydeTheme) -> Div {
+pub(crate) fn protected_folder_message(message: String, theme: &crate::ui::theme::OxydeTheme) -> Div {
     div()
         .flex()
         .flex_col()

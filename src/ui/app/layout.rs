@@ -1,4 +1,4 @@
-mod measurements;
+pub(super) mod measurements;
 mod geometry;
 mod pane;
 mod scroll;

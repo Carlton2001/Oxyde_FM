@@ -8,6 +8,7 @@ use crate::ui::components::icons::render_file_icon;
 use crate::ui::components::scrollbar::{render_scrollbar_with_pointer, ScrollbarAxis};
 use crate::ui::components::tooltip::hover::SharedTooltipExt;
 use crate::ui::components::tooltip::Tooltip;
+use crate::ui::app::layout::measurements;
 use crate::ui::format::{format_date, format_size};
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::scale::{logical, rem_pixels};
@@ -29,8 +30,8 @@ struct RowWidths {
 }
 
 impl FileChooserWindow {
-    /// Measures the metadata columns as `measure_metadata_columns` does, again only
-    /// when the scale, the language, the date format or the measured values change.
+    /// Measures the metadata columns with `measure_metadata_columns`'s helpers, again
+    /// only when the scale, the language, the date format or the measured values change.
     pub(super) fn measure_columns(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let i18n = cx.i18n();
         let language = i18n.language();
@@ -39,30 +40,10 @@ impl FileChooserWindow {
         if self.measured == Some(key) { return; }
         // Every format has the same number of tabular digits. One sample suffices.
         let date_sample = crate::ui::format::format_date(1_760_000_000_000, date_format);
-        let measure = |text: &str, bold: bool| {
-            let mut font = window.text_style().font();
-            font.family = "Inter".into();
-            font.weight = if bold { FontWeight::BOLD } else { crate::ui::style::DEFAULT_FONT_WEIGHT };
-            font.features = crate::ui::style::TNUM.clone();
-            let line = window.text_system().shape_line(text.to_string().into(), rem_pixels(rems(if bold { 0.8125 } else { 0.75 })), &[TextRun {
-                len: text.len(), font, color: cx.theme().text, background_color: None, underline: None, strikethrough: None,
-            }], None);
-            line.width.as_f32() / logical(1.0)
-        };
+        let measure = |text: &str, bold: bool| measurements::column_text_width(window, cx, text, bold);
         let (types, sizes) = &*self.column_values;
-        let type_width = types.iter().map(|label| {
-            let message = match label.as_str() {
-                "Dossier" => Some(Message::FileTypeFolder), "Fichier" => Some(Message::FileTypeFile),
-                "Symlink" => Some(Message::FileTypeSymlink), "Junction" => Some(Message::FileTypeJunction),
-                "BrokenLink" => Some(Message::FileTypeBrokenLink),
-                "Réseau" => Some(Message::SidebarNetwork), _ => None,
-            };
-            let text = message.map(|message| i18n.text(message).to_string()).unwrap_or_else(|| label.clone());
-            measure(&text, false)
-        }).fold(0.0_f32, f32::max);
-        let size_width = sizes.iter().map(|&(size, directory, calculated)| {
-            if directory && calculated && size == 0 { measure(i18n.text(Message::FolderSizeEmpty).as_ref(), false) } else { measure(&format_size(size, directory, calculated, language), false) }
-        }).fold(0.0_f32, f32::max);
+        let type_width = types.iter().map(|label| measure(&measurements::type_column_text(label, i18n), false)).fold(0.0_f32, f32::max);
+        let size_width = sizes.iter().map(|&(size, directory, calculated)| measure(&measurements::size_column_text(size, directory, calculated, i18n), false)).fold(0.0_f32, f32::max);
         // The chooser filters no column: no header reserves a filter mark.
         self.column_widths = ColumnWidths {
             file_type: crate::ui::style::metadata_column_width(type_width, measure(i18n.text(Message::ColumnType).as_ref(), true), false),
@@ -362,7 +343,7 @@ impl FileChooserWindow {
                     .justify_center()
                     .text_color(theme.text_muted)
                     .text_size(rems(0.8125))
-                    .child(if protected { super::status::protected_folder_message(message, &theme).into_any_element() } else { div().child(message).into_any_element() }),
+                    .child(if protected { crate::ui::components::file_list::protected_folder_message(message, &theme).into_any_element() } else { div().child(message).into_any_element() }),
             );
         }
         container.child(self.render_status_bar(theme, cx)).into_any_element()

@@ -2,7 +2,7 @@
 //! without the file actions: Back and Forward, Up, the separator, the crumbs with
 //! their chevron menus, fades and glide, the path being edited in their place, and
 //! the name filter where the quick search sits.
-use super::crumbs;
+use crate::ui::components::top_bar::{breadcrumb_fades, breadcrumb_glide};
 use super::FileChooserWindow;
 use crate::ui::components::dropdown::{DropdownItem, GenericDropdown, IconName};
 use crate::ui::components::tooltip::{NativeTooltipExt, Tooltip};
@@ -182,7 +182,7 @@ impl FileChooserWindow {
         let path_changed = *self.crumbs.path.borrow() != current_path;
         if path_changed {
             let previous = self.crumbs.path.replace(current_path.clone());
-            crumbs::start(&self.crumbs.glide, &previous, &current_path, &self.crumbs.scroll);
+            breadcrumb_glide::start(&self.crumbs.glide, &previous, &current_path, &self.crumbs.scroll);
             if total_parts == 0 {
                 self.crumbs.scroll.set_offset(point(px(0.0), px(0.0)));
             }
@@ -262,7 +262,7 @@ impl FileChooserWindow {
                 .h_full()
                 .child(canvas(|bounds, _, _| bounds, move |_, bounds: Bounds<Pixels>, window, cx| {
                     let available = bounds.size.width.as_f32().max(0.0);
-                    if !crumbs::advance(&glide, &resize_scroll, window) && path_changed {
+                    if !breadcrumb_glide::advance(&glide, &resize_scroll, window) && path_changed {
                         resize_scroll.set_offset(point(-resize_scroll.max_offset().x, px(0.0)));
                     }
                     if (viewport_width.get() - available).abs() > 1.0 {
@@ -287,7 +287,7 @@ impl FileChooserWindow {
                             let delta = event.delta.pixel_delta(window.line_height());
                             let amount = if delta.y.as_f32().abs() > delta.x.as_f32().abs() { delta.y } else { delta.x };
                             if wheel_scroll.max_offset().x > px(0.0) && amount != px(0.0) {
-                                crumbs::scroll_by(&wheel_glide, &wheel_scroll, amount * 1.5);
+                                breadcrumb_glide::scroll_by(&wheel_glide, &wheel_scroll, amount * 1.5);
                                 cx.notify(entity_id);
                             }
                             // GPUI's default wheel listener otherwise applies an
@@ -296,7 +296,7 @@ impl FileChooserWindow {
                         })
                         .children(elements),
                 )
-                .child(crumbs::fades(self.crumbs.scroll.clone(), total_parts.checked_mul(2).and_then(|count| count.checked_sub(2)), theme.surface)))
+                .child(breadcrumb_fades::render(self.crumbs.scroll.clone(), total_parts.checked_mul(2).and_then(|count| count.checked_sub(2)), theme.surface)))
     }
 
     pub(super) fn render_navbar(&self, theme: OxydeTheme, cx: &mut Context<Self>) -> impl IntoElement {

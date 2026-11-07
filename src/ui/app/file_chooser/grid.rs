@@ -122,7 +122,7 @@ impl FileChooserWindow {
                 .when(protected, |empty| empty.items_center())
                 .text_color(theme.text_muted)
                 .text_size(rems(0.8125))
-                .child(if protected { super::status::protected_folder_message(message, &theme).into_any_element() } else { div().child(message).into_any_element() })
+                .child(if protected { crate::ui::components::file_list::protected_folder_message(message, &theme).into_any_element() } else { div().child(message).into_any_element() })
                 .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| this.press_background(window, cx)))
                 .into_any_element()
         } else {

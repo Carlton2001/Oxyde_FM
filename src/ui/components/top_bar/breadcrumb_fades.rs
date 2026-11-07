@@ -1,7 +1,7 @@
 //! Fade only clipped path segments, using the geometry of the frame being painted.
 use gpui::{prelude::*, *};
 
-pub(super) fn render(
+pub(crate) fn render(
     scroll: ScrollHandle,
     last_segment: Option<usize>,
     surface: Hsla,

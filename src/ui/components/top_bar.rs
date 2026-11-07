@@ -1,6 +1,6 @@
 use crate::ui::elements::button::{button_style, ButtonVariant};
-mod breadcrumb_fades;
-mod breadcrumb_glide;
+pub(crate) mod breadcrumb_fades;
+pub(crate) mod breadcrumb_glide;
 mod breadcrumb_menu;
 use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::scale::{logical};

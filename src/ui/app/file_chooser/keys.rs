@@ -2,28 +2,9 @@
 //! choosing (`handle_file_key`, `type_select`), plus Ctrl+L and Ctrl+H, as other
 //! file choosers have them.
 use super::FileChooserWindow;
+use crate::ui::app::type_select::{find_match, RESET_DELAY};
 use gpui::*;
-use std::time::{Duration, Instant};
-
-/// Pause after which typing starts a new prefix, as in the main window.
-const RESET_DELAY: Duration = Duration::from_millis(1000);
-
-#[derive(Default)]
-pub(super) struct TypeSelect {
-    prefix: String,
-    last: Option<Instant>,
-}
-
-impl TypeSelect {
-    fn push(&mut self, text: &str, now: Instant) -> &str {
-        if self.last.is_none_or(|last| now.duration_since(last) > RESET_DELAY) {
-            self.prefix.clear();
-        }
-        self.last = Some(now);
-        self.prefix.extend(text.chars().flat_map(char::to_lowercase));
-        &self.prefix
-    }
-}
+use std::time::Instant;
 
 impl FileChooserWindow {
     pub(super) fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -75,7 +56,7 @@ impl FileChooserWindow {
         if !self.options.grid && matches!(key, "left" | "right") { return; }
         let rows = self.position_rows();
         let rows: Vec<&[usize]> = rows.iter().map(Vec::as_slice).collect();
-        if let Some(position) = super::arrange::arrow_target(&rows, self.selected, key) {
+        if let Some(position) = crate::ui::app::selection::arrow_target(&rows, self.selected, key) {
             self.select(position, cx);
         }
     }
@@ -93,7 +74,7 @@ impl FileChooserWindow {
         }
         let prefix = self.typed.push(text, Instant::now()).to_owned();
         let names: Vec<&str> = self.shown.iter().map(|entry| entry.name.as_str()).collect();
-        if let Some(position) = super::arrange::find_match(&names, self.selected, &prefix) {
+        if let Some(position) = find_match(&names, self.selected, &prefix) {
             self.select(position, cx);
         }
         true

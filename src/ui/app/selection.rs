@@ -309,7 +309,7 @@ pub(super) fn scroll_row_into_view(tab: &crate::ui::workspace::TabState, rows: &
 #[path = "selection/tests/rectangle.rs"]
 mod rectangle_tests;
 
-fn arrow_target(rows: &[&[usize]], current: Option<usize>, key: &str) -> Option<usize> {
+pub(super) fn arrow_target(rows: &[&[usize]], current: Option<usize>, key: &str) -> Option<usize> {
     let Some((row, column)) = current.and_then(|index| rows.iter().enumerate()
         .find_map(|(row, indices)| indices.iter().position(|i| *i == index).map(|column| (row, column)))) else {
         return rows.first().and_then(|row| row.first()).copied();

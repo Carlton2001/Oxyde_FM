@@ -6,17 +6,17 @@ use gpui::*;
 use std::time::{Duration, Instant};
 
 /// Pause after which typing starts a new prefix, as in native file managers.
-const RESET_DELAY: Duration = Duration::from_millis(1000);
+pub(super) const RESET_DELAY: Duration = Duration::from_millis(1000);
 
 #[derive(Default)]
 pub(super) struct TypeSelect {
-    prefix: String,
-    last: Option<Instant>,
+    pub(super) prefix: String,
+    pub(super) last: Option<Instant>,
 }
 
 impl TypeSelect {
     /// Appends the typed text and returns the prefix to look for.
-    fn push(&mut self, text: &str, now: Instant) -> &str {
+    pub(super) fn push(&mut self, text: &str, now: Instant) -> &str {
         if self.last.is_none_or(|last| now.duration_since(last) > RESET_DELAY) {
             self.prefix.clear();
         }
@@ -68,7 +68,7 @@ impl OxydeApp {
 /// A repeated single letter ("aaa") cycles through names starting with that
 /// letter. Otherwise the current item stays selected while it still matches,
 /// and the search continues after it.
-fn find_match(names: &[&str], current: Option<usize>, prefix: &str) -> Option<usize> {
+pub(super) fn find_match(names: &[&str], current: Option<usize>, prefix: &str) -> Option<usize> {
     let first = prefix.chars().next()?;
     let count = names.len();
     let starts = |i: usize, text: &str| names[i].to_lowercase().starts_with(text);

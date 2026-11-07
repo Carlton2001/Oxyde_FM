@@ -10,18 +10,6 @@ use crate::ui::theme::OxydeTheme;
 use gpui::prelude::*;
 use gpui::*;
 
-pub(super) fn protected_folder_message(message: String, theme: &OxydeTheme) -> Div {
-    div()
-        .flex()
-        .flex_col()
-        .items_center()
-        .gap(rems(1.0))
-        .px(rems(1.0))
-        .text_color(theme.text_muted)
-        .child(svg().path("icons/ban.svg").size(rems(3.5)).text_color(theme.text_muted))
-        .child(div().text_size(rems(0.8125)).text_align(TextAlign::Center).italic().child(message))
-}
-
 impl FileChooserWindow {
     /// What the list says instead of entries, and whether access was denied.
     pub(super) fn empty_message(&self, cx: &App) -> Option<(String, bool)> {
