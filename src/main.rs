@@ -59,6 +59,11 @@ fn initialize_logging() {
     std::panic::set_hook(Box::new(move |info| {
         log::error!("panic: {info}");
         previous_hook(info);
+        // The interface thread takes the file choosers down with it: applications
+        // waiting on one get the system's instead, before the process ends.
+        if std::thread::current().name() == Some("main") {
+            oxyde_lib::platform::platform().hand_off_file_choosers();
+        }
     }));
 }
 
@@ -79,6 +84,29 @@ fn main() {
         return;
     }
     initialize_logging();
+    let startup_locations = oxyde_lib::platform::platform().startup_locations();
+    let for_file_chooser = oxyde_lib::platform::platform().started_for_file_chooser();
+    // A later launch hands its locations to the running Oxyde and opens no window.
+    let instance_requests = match oxyde_lib::platform::platform().claim_instance(&startup_locations) {
+        oxyde_lib::platform::InstanceClaim::Forwarded => {
+            if for_file_chooser {
+                log::info!("file chooser portal handed to the running Oxyde");
+            } else {
+                log::info!("locations handed to the running Oxyde: {startup_locations:?}");
+            }
+            log::logger().flush();
+            return;
+        }
+        oxyde_lib::platform::InstanceClaim::Relay => {
+            oxyde_lib::platform::platform().relay_file_chooser();
+            log::logger().flush();
+            return;
+        }
+        oxyde_lib::platform::InstanceClaim::First(requests) => Some(requests),
+        // Nothing could reach a file chooser started without the session bus.
+        oxyde_lib::platform::InstanceClaim::Alone if for_file_chooser => return,
+        oxyde_lib::platform::InstanceClaim::Alone => None,
+    };
     if let Some(drivers) = idle_gpus {
         log::info!("Vulkan drivers of GPUs without a screen disabled: {drivers}");
     }
@@ -108,7 +136,6 @@ fn main() {
     // The shared native folder icons are ready before any file list is painted.
     // No file operation blocks navigation: the first window does not exist yet.
     let folder_icons = crate::ui::components::icons::prepare_system_folder_icons(config.use_system_icons);
-    let startup_locations = oxyde_lib::platform::platform().startup_locations();
     let asset_source = crate::ui::assets::EmbeddedAssetSource::new();
     gpui_platform::application()
         .with_assets(asset_source)
@@ -129,16 +156,7 @@ fn main() {
             // Text fields handle their own editing actions; file shortcuts are
             // handled by the explorer only while its focus handle is focused.
             crate::ui::components::input::bind_keys(cx);
-            let mut screens = Vec::new();
-            if let Some(primary) = cx.primary_display() { screens.push(primary.visible_bounds()); }
-            screens.extend(cx.displays().into_iter().map(|display| display.visible_bounds()));
-            let screens = crate::ui::window_geometry::restorable_screens(screens);
-            // Keep the title bar, navigation bar, sidebar and one usable file column visible.
-            let rem = crate::ui::scale::normalized_reference(config.ui_rem_size) as f32;
-            let min_size = size(px(rem * 45.0), px(rem * 30.0));
-            #[cfg(not(target_os = "windows"))]
-            let min_size = crate::ui::window_geometry::fitting_min_size(min_size, &screens, px(rem * 3.0));
-            let window_bounds = crate::ui::window_geometry::restore(config.window_placement, &screens, min_size);
+            crate::ui::app::main_window::end_with_last_window(cx);
             let app = cx.new(|cx| OxydeApp::new(config, config_path, load_failed, cx));
             let operations_panel = cx.new(|cx| {
                 crate::ui::components::operations::OperationsPanelView::new(app.clone(), cx)
@@ -146,73 +164,29 @@ fn main() {
             app.update(cx, |this, cx| {
                 this.handle = Some(app.clone());
                 this.operations_panel_view = Some(operations_panel);
-                this.show_only_locations(&startup_locations);
+                match instance_requests {
+                    // The only Oxyde: its session stays, with the received locations added.
+                    Some(requests) => {
+                        this.add_startup_locations(&startup_locations);
+                        this.receive_instance_requests(requests, cx);
+                    }
+                    // Another process may own the session: show only what this one received.
+                    None => this.show_only_locations(&startup_locations),
+                }
                 if initialize_date_format && !load_failed { this.save_preferences(cx); }
-                this.start_watcher_task(cx);
-                this.reconcile_watchers(cx);
-                this.refresh_all_tabs(cx);
-                this.schedule_update_check(cx);
             });
-            cx.open_window(
-                WindowOptions {
-                    app_id: Some(crate::ui::APP_ID.into()),
-                    window_decorations: crate::ui::window_decorations(),
-                    window_bounds: Some(window_bounds),
-                    window_min_size: Some(min_size),
-                    titlebar: Some(TitlebarOptions {
-                        appears_transparent: true,
-                        title: Some("Oxyde".into()),
-                        ..Default::default()
-                    }),
-                    ..Default::default()
-                },
-                move |window, cx| {
-                    app.update(cx, |this, cx| this.observe_main_window(window, cx));
-                    let viewer_owner = app.downgrade();
-                    window.on_window_should_close(cx, move |_, cx| {
-                        let _ = viewer_owner.update(cx, |app, cx| app.stop_viewers(cx));
-                        trace_shutdown_request("native window close");
-                        #[cfg(target_os = "windows")]
-                        crate::ui::app::close_file_drag(cx);
-                        crate::ui::components::tooltip::hover::close_native_windows(cx);
-                        crate::ui::components::popup::close_all(cx);
-                        crate::ui::app::duplicates::close_duplicate_windows(cx);
-                        crate::ui::components::operations::close_operations_windows(cx);
-                        crate::ui::app::advanced_search::close_advanced_search_windows(cx);
-                        crate::ui::app::theme_window::close_theme_windows(cx);
-                        crate::ui::app::viewer::close_viewer_windows(cx);
-                        crate::ui::app::properties::close_properties_windows(cx);
-                        crate::ui::app::close_dialog_windows(cx);
-                        true
+            if for_file_chooser {
+                // Started by the bus for the portal: an Oxyde left without a window, and
+                // without a call to answer, does not stay in the background.
+                cx.spawn(async move |cx| {
+                    cx.background_executor().timer(std::time::Duration::from_secs(30)).await;
+                    cx.update(|cx| if cx.windows().is_empty() {
+                        crate::ui::app::main_window::end_when_unused(cx);
                     });
-                    let focus_handle = app.read(cx).focus_handle.clone();
-                    #[cfg(target_os = "windows")]
-                    let drag_owner = app.clone();
-                    window.on_next_frame(move |window, cx| {
-                        #[cfg(target_os = "windows")]
-                        crate::ui::app::OxydeApp::install_file_drag(&drag_owner, window, cx);
-                        window.focus(&focus_handle, cx);
-                        match raw_window_handle::HasWindowHandle::window_handle(window) {
-                            Ok(handle) => {
-                                let platform = oxyde_lib::platform::platform();
-                                if let Err(error) = platform.install_pointer_capture(handle.as_raw()) {
-                                    log::warn!("Cannot install pointer capture: {error}");
-                                }
-                                if let Err(error) = platform.install_disk_image_autoplay_handler(handle.as_raw()) {
-                                    log::warn!("Cannot install disk-image AutoPlay handler: {error}");
-                                }
-                                let assets = crate::ui::assets::EmbeddedAssetSource::new();
-                                if let Ok(Some(icon_bytes)) = assets.load("icons/logo.png") {
-                                    platform.set_application_icon(handle.as_raw(), &icon_bytes);
-                                }
-                            }
-                            Err(error) => log::warn!("Cannot access Oxyde window handle: {error}"),
-                        }
-                    });
-                    app
-                },
-            )
-            .expect("window opens");
+                }).detach();
+            } else if crate::ui::app::main_window::open(app, cx).is_none() {
+                cx.quit();
+            }
         });
     trace_shutdown_stage("GPUI event loop returned");
     crate::ui::app::shutdown::finish_pending_cleanup();

@@ -261,7 +261,7 @@ pub(super) fn settings_row(
         .gap(rems(0.5))
         .rounded_md()
         .hover(|s| s.bg(theme.control_hover))
-        .native_tooltip(Tooltip::text(description))
+        .native_tooltip(Tooltip::wrapped_text(description))
         .child(icon(icon_path, theme))
         .child(div().flex_1().flex_shrink_0().whitespace_nowrap().text_size(rems(0.8125)).child(label))
         .child(

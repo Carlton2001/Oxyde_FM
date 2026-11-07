@@ -237,6 +237,67 @@ pub(in crate::platform) fn launch(id: &str, paths: &[String], remember: bool) ->
     Ok(())
 }
 
+/// Oxyde's desktop entry, as its packages and install.sh name it.
+const OXYDE_ENTRY: &str = "io.github.Carlton2001.Oxyde.desktop";
+const FOLDER_TYPE: &str = "inode/directory";
+
+/// The application other programs open folders with, by its identifier.
+fn folder_default(gio: &'static Gio) -> Option<String> {
+    let folder = text(FOLDER_TYPE);
+    // SAFETY: a type name; the application returned is owned.
+    let app = Owned::new(gio, unsafe { (gio.g_app_info_get_default_for_type)(folder.as_ptr(), 0) })?;
+    Some(id_of(gio, app.1)).filter(|id| !id.is_empty())
+}
+
+fn desktop_entry(gio: &'static Gio, id: &str) -> Option<Owned> {
+    let id = text(id);
+    // SAFETY: an identifier; the application returned is owned.
+    Owned::new(gio, unsafe { (gio.g_desktop_app_info_new)(id.as_ptr()) })
+}
+
+/// The program Oxyde's desktop entry starts, which a D-Bus service file can start too.
+pub(in crate::platform) fn oxyde_executable() -> Option<PathBuf> {
+    let gio = gio()?;
+    let app = desktop_entry(gio, OXYDE_ENTRY)?;
+    // SAFETY: a live application; the string belongs to it.
+    let executable = PathBuf::from(unsafe { borrowed((gio.g_app_info_get_executable)(app.1)) });
+    executable.is_absolute().then_some(executable)
+}
+
+/// Whether other applications open folders with Oxyde; None without an entry to name.
+pub(in crate::platform) fn opens_folders() -> Option<bool> {
+    let gio = gio()?;
+    desktop_entry(gio, OXYDE_ENTRY)?;
+    Some(folder_default(gio).as_deref() == Some(OXYDE_ENTRY))
+}
+
+/// Makes Oxyde the default for folders in the user's `mimeapps.list` and returns the
+/// application it replaces. Turned off, gives folders back to `previous` when it is
+/// still installed, or forgets the user's folder associations so the system's default,
+/// Nautilus or Dolphin, returns.
+pub(in crate::platform) fn open_folders(enabled: bool, previous: Option<&str>) -> Result<Option<String>, String> {
+    let gio = gio().ok_or("GIO is unavailable")?;
+    let folder = text(FOLDER_TYPE);
+    let replaced = folder_default(gio).filter(|id| id != OXYDE_ENTRY);
+    let target = if enabled {
+        Some(desktop_entry(gio, OXYDE_ENTRY).ok_or_else(|| format!("No application {OXYDE_ENTRY}"))?)
+    } else {
+        previous.filter(|id| *id != OXYDE_ENTRY).and_then(|id| desktop_entry(gio, id))
+    };
+    match target {
+        Some(app) => {
+            let mut error = std::ptr::null_mut();
+            // SAFETY: a live application and a type name; GIO fills the error on failure.
+            if unsafe { (gio.g_app_info_set_as_default_for_type)(app.1, folder.as_ptr(), &mut error) } == 0 {
+                return Err(if error.is_null() { "Cannot change the default for folders".into() } else { unsafe { failure(gio, error) }.message });
+            }
+        }
+        // SAFETY: a type name.
+        None => unsafe { (gio.g_app_info_reset_type_associations)(folder.as_ptr()) },
+    }
+    Ok(if enabled { replaced } else { None })
+}
+
 #[cfg(test)]
 #[path = "applications/tests/icons.rs"]
 mod tests;

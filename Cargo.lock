@@ -4438,6 +4438,7 @@ dependencies = [
 name = "oxyde"
 version = "2.1.0"
 dependencies = [
+ "async-io",
  "base64",
  "blake3",
  "bzip2",

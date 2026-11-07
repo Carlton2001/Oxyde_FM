@@ -263,6 +263,37 @@ date-format-european = European (DD/MM/YYYY)
 date-format-iso = ISO 8601 (YYYY-MM-DD)
 settings-network = Network neighborhood
 settings-network-description = Show the network neighborhood in the left panel.
+settings-system-integration = System integration
+settings-default-file-manager = Default file manager
+settings-default-file-manager-description = When another application opens a folder, or offers “Show in folder”, Oxyde shows it. The file manager icon in the dock still opens the system’s.
+settings-default-file-manager-error = Could not change the default file manager.
+settings-file-chooser = Open and Save dialogs
+settings-file-chooser-description = When another application asks for a file to open or a place to save, the window is Oxyde’s. Applications that draw their own window keep it.
+settings-file-chooser-error = Could not change the Open and Save dialogs.
+file-chooser-title = Open File
+file-chooser-folder-title = Select Folder
+file-chooser-select = Select
+file-chooser-save-title = Save File
+file-chooser-save-files-title = Save Files
+file-chooser-save = Save
+file-chooser-name = Name
+file-chooser-name-placeholder = File name
+file-chooser-replace-title = { $count ->
+    [one] Replace File
+   *[other] Replace Files
+}
+file-chooser-replace-prompt = { $count ->
+    [one] A file named “{ $name }” already exists. Do you want to replace it?
+   *[other] { $number } files already exist. Do you want to replace them?
+}
+file-chooser-replace-location = { $count ->
+    [one] It is in “{ $folder }”.
+   *[other] They are in “{ $folder }”.
+}
+file-chooser-replace-warning = { $count ->
+    [one] Replacing it overwrites its contents.
+   *[other] Replacing them overwrites their contents.
+}
 
 settings-region-language = Region & language
 settings-performance = Performance

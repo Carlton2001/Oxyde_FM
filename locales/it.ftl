@@ -425,6 +425,37 @@ date-format-iso = ISO 8601 (AAAA-MM-GG)
 settings-network = Rete
 
 settings-network-description = Mostra le risorse di rete nel pannello sinistro.
+settings-system-integration = Integrazione di sistema
+settings-default-file-manager = File manager predefinito
+settings-default-file-manager-description = Quando un’altra applicazione apre una cartella, o propone «Mostra nella cartella», è Oxyde a mostrarla. L’icona del file manager nel dock apre sempre quello del sistema.
+settings-default-file-manager-error = Impossibile cambiare il file manager predefinito.
+settings-file-chooser = Finestre Apri e Salva
+settings-file-chooser-description = Quando un’altra applicazione chiede un file da aprire o un posto dove salvare, la finestra è quella di Oxyde. Le applicazioni che disegnano la propria finestra la mantengono.
+settings-file-chooser-error = Impossibile cambiare le finestre Apri e Salva.
+file-chooser-title = Apri file
+file-chooser-folder-title = Seleziona cartella
+file-chooser-select = Seleziona
+file-chooser-save-title = Salva file
+file-chooser-save-files-title = Salva i file
+file-chooser-save = Salva
+file-chooser-name = Nome
+file-chooser-name-placeholder = Nome del file
+file-chooser-replace-title = { $count ->
+    [one] Sostituisci file
+   *[other] Sostituisci i file
+}
+file-chooser-replace-prompt = { $count ->
+    [one] Un file chiamato «{ $name }» esiste già. Vuoi sostituirlo?
+   *[other] { $number } file esistono già. Vuoi sostituirli?
+}
+file-chooser-replace-location = { $count ->
+    [one] Si trova in «{ $folder }».
+   *[other] Si trovano in «{ $folder }».
+}
+file-chooser-replace-warning = { $count ->
+    [one] Sostituirlo ne sovrascrive il contenuto.
+   *[other] Sostituirli ne sovrascrive il contenuto.
+}
 
 settings-region-language = Regione e Lingua
 

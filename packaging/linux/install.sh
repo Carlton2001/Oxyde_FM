@@ -27,13 +27,15 @@ die() { warn "Error: $*"; exit 1; }
 
 usage() {
     say 'Usage: install.sh [--version X.Y.Z] [--archive FILE] [--set-default] [--yes]'
-    say '       install.sh --uninstall'
+    say '       install.sh --uninstall [--purge]'
     say ''
     say '  --version      install this release instead of the one this script belongs to'
     say '  --archive      install a downloaded oxyde-*-x86_64-linux.tar.gz or its folder, offline'
     say '  --set-default  make Oxyde the default application for folders'
     say '  --yes          install missing system packages without asking'
-    say '  --uninstall    remove the per-user installation; settings are kept'
+    say '  --uninstall    remove the per-user installation, its cache and its associations;'
+    say '                asks whether to delete the settings too'
+    say '  --purge        with --uninstall, delete the settings without asking'
     say '  --update       with --archive, as Oxyde runs it: no dependency check or question'
     say 'Running it again installs the newer release and keeps the previous one.'
 }
@@ -44,6 +46,13 @@ confirm() {
     local answer
     { printf '%s [Y/n] ' "$1" > /dev/tty && read -r answer < /dev/tty; } 2>/dev/null || return 1
     [[ -z $answer || $answer == [yYoO]* ]]
+}
+
+# Answers no unless the user types yes, for what cannot be undone; --yes does not apply.
+ask_no() {
+    local answer
+    { printf '%s [y/N] ' "$1" > /dev/tty && read -r answer < /dev/tty; } 2>/dev/null || return 1
+    [[ $answer == [yYoO]* ]]
 }
 
 os_field() {
@@ -398,30 +407,177 @@ set_default() {
     fi
 }
 
+# True when a desktop entry outside $data still provides Oxyde, as a system package does.
+system_entry_exists() {
+    local directory
+    local -a directories
+    IFS=: read -ra directories <<< "${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+    for directory in "${directories[@]}"; do
+        [[ -n $directory && ${directory%/} != "${data%/}" ]] || continue
+        [[ -f $directory/applications/$app_id.desktop ]] && return 0
+    done
+    return 1
+}
+
+# The mimeapps.list files where xdg-mime, GIO and desktops record associations.
+association_files() {
+    local config=${XDG_CONFIG_HOME:-$HOME/.config} file
+    for file in "$config/mimeapps.list" "$config"/*-mimeapps.list "$data/applications/mimeapps.list"; do
+        [[ ! -f $file ]] || printf '%s\n' "$file"
+    done
+}
+
+# Drops Oxyde's desktop entry from every association, and a key left without any.
+# Other lines are written back unchanged, through the file itself to keep links.
+forget_associations() {
+    local file temporary
+    while IFS= read -r file; do
+        grep -qF "$app_id.desktop" "$file" || continue
+        temporary=$(mktemp)
+        cleanup+=("$temporary")
+        awk -v id="$app_id.desktop" '
+            /^[[:space:]]*[#\[]/ || index($0, "=") == 0 { print; next }
+            {
+                split_at = index($0, "=")
+                count = split(substr($0, split_at + 1), parts, ";")
+                kept = ""; found = 0
+                for (i = 1; i <= count; i++) {
+                    if (parts[i] == id) { found = 1; continue }
+                    if (parts[i] != "") kept = kept parts[i] ";"
+                }
+                if (!found) { print; next }
+                if (kept != "") print substr($0, 1, split_at) kept
+            }' "$file" > "$temporary" || continue
+        cat "$temporary" > "$file"
+    done < <(association_files)
+}
+
+# Takes Oxyde out of the portal's FileChooser line, as turning its file chooser off in
+# Settings does: the portals after it remain, a line Oxyde added goes with its comment,
+# and a copy Oxyde wrote of the system's configuration goes when nothing else changed.
+forget_file_chooser() {
+    local folder=${XDG_CONFIG_HOME:-$HOME/.config}/xdg-desktop-portal file temporary first source
+    for file in "$folder"/*portals.conf; do
+        [[ -f $file ]] || continue
+        grep -qE '^[[:space:]]*org\.freedesktop\.impl\.portal\.FileChooser[[:space:]]*=(.*;)?[[:space:]]*oxyde[[:space:]]*(;|$)' "$file" || continue
+        temporary=$(mktemp)
+        cleanup+=("$temporary")
+        awk '
+            function trim(text) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", text); return text }
+            function release() { if (holding) { print held; holding = 0 } }
+            BEGIN { key = "org.freedesktop.impl.portal.FileChooser"; added = "# Added by Oxyde for its file chooser." }
+            {
+                line = $0
+                if (line ~ /^[[:space:]]*\[.*\][[:space:]]*$/) {
+                    release(); section = line
+                    gsub(/^[[:space:]]*\[[[:space:]]*|[[:space:]]*\][[:space:]]*$/, "", section)
+                    print line; next
+                }
+                split_at = index(line, "=")
+                if (section == "preferred" && split_at > 0 && trim(substr(line, 1, split_at - 1)) == key) {
+                    was_added = holding; holding = 0
+                    count = split(substr(line, split_at + 1), parts, ";")
+                    kept = ""; found = 0
+                    for (i = 1; i <= count; i++) {
+                        portal = trim(parts[i])
+                        if (portal == "oxyde") { found = 1; continue }
+                        if (portal != "") kept = kept portal ";"
+                    }
+                    if (!found) { print line; next }
+                    if (!was_added && kept != "") print key "=" kept
+                    next
+                }
+                release()
+                if (line == added) { held = line; holding = 1; next }
+                print line
+            }
+            END { release() }' "$file" > "$temporary" || continue
+        first=$(head -n 1 "$temporary")
+        source=${first#"# Written by Oxyde from "}
+        if [[ $source != "$first" && -f $source && $(tail -n +2 "$temporary") == "$(cat "$source")" ]]; then
+            rm -f "$file"
+        else
+            cat "$temporary" > "$file"
+        fi
+        portal_changed=true
+    done
+}
+
+is_running() { command -v pgrep >/dev/null && pgrep -u "$(id -u)" -x oxyde >/dev/null; }
+
 uninstall() {
-    local found=false
+    local purge=$1 found=false shared=false portal_changed=false file
     if [[ -f $entry ]]; then
         grep -qx "$marker" "$entry" || die "$entry was not written by this script; nothing is removed."
         found=true
     fi
     [[ -d $lib_root ]] && found=true
-    if ! $found; then
-        if [[ -e /usr/bin/oxyde ]]; then
-            say 'Oxyde is installed by a system package: remove it with your package manager.'
-        else
-            say 'No per-user installation of Oxyde was found.'
+    if system_entry_exists; then
+        $found || { say 'Oxyde is installed by a system package: remove it with your package manager.'; return 0; }
+        shared=true
+    else
+        # Without any copy left, associations naming Oxyde lead nowhere.
+        local was_default=false line=inode/directory=$app_id.desktop
+        local -a files
+        mapfile -t files < <(association_files)
+        if ((${#files[@]})) && grep -qxF -e "$line" -e "$line;" "${files[@]}"; then
+            was_default=true
         fi
-        return 0
+        forget_associations
+        $was_default && say 'Oxyde is no longer the default application for folders.'
+        forget_file_chooser
+        $portal_changed && say 'Open dialogs are the system’s again.'
     fi
-    if [[ -L $bin_link && $(readlink "$bin_link") == "$lib_root"/* ]]; then
-        rm -f "$bin_link"
+    local running=false
+    is_running && running=true
+    if $found; then
+        if [[ -L $bin_link && $(readlink "$bin_link") == "$lib_root"/* ]]; then
+            rm -f "$bin_link"
+        fi
+        rm -f "$entry" "$data/metainfo/$app_id.metainfo.xml"
+        rm -f "$data"/icons/hicolor/*/apps/"$app_id".*
+        # Written by Oxyde for FileManager1 and the file chooser portal; a remaining
+        # system copy writes its own again.
+        rm -f "$data/dbus-1/services/$app_id.FileManager1.service"
+        local portal_files=("$data/xdg-desktop-portal/portals/oxyde.portal"
+            "$data/dbus-1/services/org.freedesktop.impl.portal.desktop.oxyde.service")
+        for file in "${portal_files[@]}"; do
+            [[ -e $file ]] && { rm -f "$file"; portal_changed=true; }
+        done
+        [[ -d $data/icons/hicolor ]] && touch "$data/icons/hicolor"
+        update-desktop-database -q "$data/applications" 2>/dev/null || true
+        rm -rf -- "$lib_root"
+        # Thumbnails, the GStreamer registry and copies of files opened from archives.
+        local cache=${XDG_CACHE_HOME:-$HOME/.cache}/Oxyde
+        if [[ -d $cache ]]; then
+            if $running; then
+                warn "Oxyde is running: its cache in $cache is kept; delete it once Oxyde is closed."
+            else
+                rm -rf -- "$cache"
+            fi
+        fi
+        say 'Oxyde is uninstalled.'
+    else
+        say 'No per-user installation of Oxyde was found.'
     fi
-    rm -f "$entry" "$data/metainfo/$app_id.metainfo.xml"
-    rm -f "$data"/icons/hicolor/*/apps/"$app_id".*
-    [[ -d $data/icons/hicolor ]] && touch "$data/icons/hicolor"
-    update-desktop-database -q "$data/applications" 2>/dev/null || true
-    rm -rf -- "$lib_root"
-    say "Oxyde is uninstalled. Settings remain in ${XDG_CONFIG_HOME:-$HOME/.config}/Oxyde."
+    # The portal reads its portals and configuration only when it starts.
+    if $portal_changed; then
+        systemctl --user try-restart xdg-desktop-portal.service 2>/dev/null || true
+    fi
+
+    # Preferences, themes, session and log: kept unless the user asks.
+    local settings=${XDG_CONFIG_HOME:-$HOME/.config}/Oxyde
+    [[ -d $settings ]] || return 0
+    if $shared; then
+        say "Settings remain in $settings, where the system package still uses them."
+    elif $running; then
+        warn "Oxyde is running and would write its settings again: they remain in $settings."
+    elif $purge || ask_no "Also delete your settings in $settings?"; then
+        rm -rf -- "$settings"
+        say 'Settings are deleted.'
+    else
+        say "Settings remain in $settings."
+    fi
 }
 
 install_deb() {
@@ -442,7 +598,7 @@ remove_temporary() { ((${#cleanup[@]} == 0)) || rm -rf -- "${cleanup[@]}"; }
 
 main() {
     trap remove_temporary EXIT
-    local archive= set_default_handler=false remove=false update=false
+    local archive= set_default_handler=false remove=false purge=false update=false
     requested_version=
     assume_yes=false
     while (($#)); do
@@ -452,6 +608,7 @@ main() {
             --set-default) set_default_handler=true ;;
             --yes|-y) assume_yes=true ;;
             --uninstall) remove=true ;;
+            --purge) purge=true ;;
             --update) update=true ;;
             --help|-h) usage; return 0 ;;
             *) warn "Unknown argument: $1"; usage >&2; return 2 ;;
@@ -459,8 +616,11 @@ main() {
         shift
     done
 
+    if $purge && ! $remove; then
+        die '--purge goes with --uninstall.'
+    fi
     if $remove; then
-        uninstall
+        uninstall "$purge"
         return 0
     fi
     if $update && [[ -z $archive ]]; then

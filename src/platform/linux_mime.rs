@@ -102,6 +102,51 @@ fn subclasses() -> &'static HashMap<String, Vec<String>> {
     })
 }
 
+/// Other names of types, by alias, from the `aliases` files.
+fn aliases() -> &'static HashMap<String, String> {
+    static ALIASES: OnceLock<HashMap<String, String>> = OnceLock::new();
+    ALIASES.get_or_init(|| {
+        let mut aliases = HashMap::new();
+        for dir in data_dirs() {
+            let Ok(text) = std::fs::read_to_string(dir.join("mime/aliases")) else { continue };
+            parse_aliases(&text, &mut aliases);
+        }
+        aliases
+    })
+}
+
+/// `alias type` lines of an `aliases` file; the first directory wins.
+fn parse_aliases(text: &str, aliases: &mut HashMap<String, String>) {
+    for line in text.lines() {
+        if let Some((alias, canonical)) = line.split_once(' ') {
+            aliases.entry(alias.to_ascii_lowercase()).or_insert_with(|| canonical.to_ascii_lowercase());
+        }
+    }
+}
+
+/// Whether `mime` answers a file chooser's `pattern`, as GTK's filters read it: `*` or
+/// `*/*` any type, `image/*` a type of that media, else the type, one of its aliases or
+/// one of its subclasses. Types ignore case.
+fn matches(parents: &HashMap<String, Vec<String>>, aliases: &HashMap<String, String>, mime: &str, pattern: &str) -> bool {
+    let canonical = |name: &str| {
+        let name = name.to_ascii_lowercase();
+        aliases.get(&name).cloned().unwrap_or(name)
+    };
+    let pattern = pattern.trim().to_ascii_lowercase();
+    if pattern == "*" || pattern == "*/*" {
+        return true;
+    }
+    let mime = canonical(mime);
+    match pattern.strip_suffix("/*") {
+        Some(media) => mime.split_once('/').is_some_and(|(major, _)| major == media),
+        None => is_a(parents, &mime, &canonical(&pattern)),
+    }
+}
+
+pub(super) fn type_matches(mime: &str, pattern: &str) -> bool {
+    matches(subclasses(), aliases(), mime, pattern)
+}
+
 /// `child parent` lines of a `subclasses` file.
 fn parse_subclasses(text: &str, parents: &mut HashMap<String, Vec<String>>) {
     for line in text.lines() {
@@ -230,8 +275,9 @@ fn special(path: &Path) -> Option<&'static str> {
     .find_map(|(matches, mime)| matches.then_some(mime))
 }
 
-pub(super) fn mime_type(path: &Path, is_dir: bool, language: &str) -> MimeType {
-    let name = if is_dir {
+/// The type's name alone: by file name when it names one type, else by content.
+pub(super) fn type_name(path: &Path, is_dir: bool) -> &'static str {
+    if is_dir {
         DIRECTORY
     } else if let Some(mime) = special(path) {
         mime
@@ -244,7 +290,11 @@ pub(super) fn mime_type(path: &Path, is_dir: bool, language: &str) -> MimeType {
             [only] => only,
             _ => by_content(magic_sections(), path, &named),
         }
-    };
+    }
+}
+
+pub(super) fn mime_type(path: &Path, is_dir: bool, language: &str) -> MimeType {
+    let name = type_name(path, is_dir);
     MimeType {
         description: description(name, language),
         can_be_executable: can_be_executable(subclasses(), name),

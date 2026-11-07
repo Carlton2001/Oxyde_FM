@@ -33,6 +33,23 @@ Local source changes, all marked `Oxyde:`:
   scale: 2560x1600 at 125 % reported 1280x800 instead of 2048x1280. A roundtrip at startup
   makes them known before the first window opens.
 
+- `PlatformWindow::activate_with_token` (`gpui/src/platform.rs`, `activate` by default),
+  `Window::activate_window_with_token` (`gpui/src/window.rs`) and its Wayland version
+  (`gpui_linux/src/linux/wayland/window.rs`): presents an xdg-activation token that another
+  process received, so the running Oxyde comes forward when a second launch or a
+  FileManager1 call hands it a folder. Upstream only requests a new token, which Mutter and
+  KWin refuse without a recent input event.
+
+- `WindowOptions::foreign_parent` and `WindowParams::foreign_parent` (`gpui/src/platform.rs`,
+  `gpui/src/window.rs`), with `ForeignWindow::{X11, Wayland}`: another process's window, as
+  xdg-desktop-portal names it, which the new window opens over, modal to it. X11
+  (`gpui_linux/src/linux/x11/window.rs`) sets `WM_TRANSIENT_FOR`, the dialog type and the
+  modal state before mapping; Wayland (`gpui_linux/src/linux/wayland/{client,window}.rs`)
+  binds `zxdg_importer_v2` (and v1, used when v2 is missing), imports the handle, calls
+  `set_parent_of` after any GPUI parent and adds a modal `xdg_dialog_v1`; the import is
+  destroyed before the toplevel. A handle of the other protocol is ignored. Upstream has no
+  way to parent a window to another process's, which the portal file chooser needs.
+
 Reason: GPUI repositions a popup only when it resizes, so a tooltip could not follow the
 pointer. Windows and X11 reject anchored popups and are unchanged. When updating GPUI,
 compare both copies to the new upstream.

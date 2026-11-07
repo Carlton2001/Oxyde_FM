@@ -1526,6 +1526,7 @@ impl Window {
             icon,
             #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
             tabbing_identifier,
+            foreign_parent,
         } = options;
 
         let initial_window_title = titlebar
@@ -1551,6 +1552,7 @@ impl Window {
                 icon,
                 #[cfg(target_os = "macos")]
                 tabbing_identifier,
+                foreign_parent,
             },
         )?;
 
@@ -2392,6 +2394,12 @@ impl Window {
     /// The cell follows each of its answers.
     pub fn popup_offset(&self) -> Option<std::rc::Rc<std::cell::Cell<Point<Pixels>>>> {
         self.platform_window.popup_offset()
+    }
+
+    /// Oxyde: brings the window forward with an activation token received from another
+    /// process, such as `XDG_ACTIVATION_TOKEN` or a FileManager1 `StartupId`.
+    pub fn activate_window_with_token(&self, token: Option<String>) {
+        self.platform_window.activate_with_token(token);
     }
 
     /// Linux (wayland) only: Set the window's input region, the area that receives pointer

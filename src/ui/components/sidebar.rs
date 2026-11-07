@@ -6,7 +6,7 @@ mod reorder;
 mod rows;
 mod toolbar;
 mod tree;
-mod volume_row;
+pub(crate) mod volume_row;
 
 use crate::ui::app::OxydeApp;
 use crate::ui::i18n::{I18n, Message};

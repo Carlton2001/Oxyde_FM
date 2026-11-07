@@ -62,6 +62,10 @@ use wayland_protocols::xdg::shell::client::{
     xdg_popup, xdg_positioner, xdg_surface, xdg_toplevel, xdg_wm_base,
 };
 use wayland_protocols::xdg::system_bell::v1::client::xdg_system_bell_v1;
+use wayland_protocols::xdg::foreign::{
+    zv1::client::{zxdg_imported_v1, zxdg_importer_v1},
+    zv2::client::{zxdg_imported_v2, zxdg_importer_v2},
+};
 use wayland_protocols::{
     wp::cursor_shape::v1::client::{wp_cursor_shape_device_v1, wp_cursor_shape_manager_v1},
     xdg::dialog::v1::client::xdg_wm_dialog_v1::{self, XdgWmDialogV1},
@@ -228,6 +232,9 @@ pub struct Globals {
     pub gesture_manager: Option<zwp_pointer_gestures_v1::ZwpPointerGesturesV1>,
     pub dialog: Option<xdg_wm_dialog_v1::XdgWmDialogV1>,
     pub system_bell: Option<xdg_system_bell_v1::XdgSystemBellV1>,
+    // Oxyde: parents a window to another process's exported toplevel; v1 when v2 is missing.
+    pub foreign_importer: Option<zxdg_importer_v2::ZxdgImporterV2>,
+    pub foreign_importer_v1: Option<zxdg_importer_v1::ZxdgImporterV1>,
     pub executor: ForegroundExecutor,
     pub frame_ping: Ping,
 }
@@ -275,6 +282,8 @@ impl Globals {
             gesture_manager: globals.bind(&qh, 1..=3, ()).ok(),
             dialog: globals.bind(&qh, dialog_v..=dialog_v, ()).ok(),
             system_bell: globals.bind(&qh, 1..=1, ()).ok(),
+            foreign_importer: globals.bind(&qh, 1..=1, ()).ok(),
+            foreign_importer_v1: globals.bind(&qh, 1..=1, ()).ok(),
             executor,
             qh,
             frame_ping,
@@ -3044,6 +3053,41 @@ impl Dispatch<XdgWmDialogV1, ()> for WaylandClientStatePtr {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
+    }
+}
+
+delegate_noop!(WaylandClientStatePtr: ignore zxdg_importer_v2::ZxdgImporterV2);
+delegate_noop!(WaylandClientStatePtr: ignore zxdg_importer_v1::ZxdgImporterV1);
+
+// Oxyde: the other process's toplevel is gone, or its handle was never valid. The window
+// stays, independent; its import is destroyed with it.
+impl Dispatch<zxdg_imported_v2::ZxdgImportedV2, ()> for WaylandClientStatePtr {
+    fn event(
+        _: &mut Self,
+        _: &zxdg_imported_v2::ZxdgImportedV2,
+        event: zxdg_imported_v2::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let zxdg_imported_v2::Event::Destroyed = event {
+            log::info!("The foreign parent window is gone");
+        }
+    }
+}
+
+impl Dispatch<zxdg_imported_v1::ZxdgImportedV1, ()> for WaylandClientStatePtr {
+    fn event(
+        _: &mut Self,
+        _: &zxdg_imported_v1::ZxdgImportedV1,
+        event: zxdg_imported_v1::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        if let zxdg_imported_v1::Event::Destroyed = event {
+            log::info!("The foreign parent window is gone");
+        }
     }
 }
 

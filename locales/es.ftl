@@ -425,6 +425,37 @@ date-format-iso = ISO 8601 (AAAA-MM-DD)
 settings-network = Red
 
 settings-network-description = Mostrar el entorno de red en el panel izquierdo.
+settings-system-integration = Integración con el sistema
+settings-default-file-manager = Gestor de archivos predeterminado
+settings-default-file-manager-description = Cuando otra aplicación abre una carpeta, u ofrece «Mostrar en la carpeta», Oxyde la muestra. El icono del gestor de archivos en el dock sigue abriendo el del sistema.
+settings-default-file-manager-error = No se ha podido cambiar el gestor de archivos predeterminado.
+settings-file-chooser = Diálogos Abrir y Guardar
+settings-file-chooser-description = Cuando otra aplicación pide un archivo para abrir o un lugar donde guardar, la ventana es la de Oxyde. Las aplicaciones que dibujan su propia ventana la conservan.
+settings-file-chooser-error = No se han podido cambiar los diálogos Abrir y Guardar.
+file-chooser-title = Abrir archivo
+file-chooser-folder-title = Seleccionar carpeta
+file-chooser-select = Seleccionar
+file-chooser-save-title = Guardar archivo
+file-chooser-save-files-title = Guardar archivos
+file-chooser-save = Guardar
+file-chooser-name = Nombre
+file-chooser-name-placeholder = Nombre del archivo
+file-chooser-replace-title = { $count ->
+    [one] Reemplazar archivo
+   *[other] Reemplazar archivos
+}
+file-chooser-replace-prompt = { $count ->
+    [one] Ya existe un archivo llamado «{ $name }». ¿Desea reemplazarlo?
+   *[other] Ya existen { $number } archivos. ¿Desea reemplazarlos?
+}
+file-chooser-replace-location = { $count ->
+    [one] Está en «{ $folder }».
+   *[other] Están en «{ $folder }».
+}
+file-chooser-replace-warning = { $count ->
+    [one] Reemplazarlo sobrescribe su contenido.
+   *[other] Reemplazarlos sobrescribe su contenido.
+}
 
 settings-region-language = Región e Idioma
 

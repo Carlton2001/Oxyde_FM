@@ -416,6 +416,14 @@ impl Platform for LinuxPlatform {
         Some(super::linux_mime::mime_type(path, is_dir, language))
     }
     #[cfg(target_os = "linux")]
+    fn content_type(&self, path: &std::path::Path, is_dir: bool) -> Option<&'static str> {
+        Some(super::linux_mime::type_name(path, is_dir))
+    }
+    #[cfg(target_os = "linux")]
+    fn content_type_matches(&self, mime: &str, pattern: &str) -> bool {
+        super::linux_mime::type_matches(mime, pattern)
+    }
+    #[cfg(target_os = "linux")]
     fn set_unix_permissions(
         &self,
         path: &std::path::Path,
@@ -552,6 +560,8 @@ impl Platform for LinuxPlatform {
     }
 
     fn finish_process_shutdown(&self) -> Result<(), String> {
+        // An application waiting for its file gets the answer before the process ends.
+        super::linux_portal::finish();
         Ok(())
     }
 
@@ -764,7 +774,28 @@ impl Platform for LinuxPlatform {
 
     fn startup_locations(&self) -> Vec<String> {
         let current = std::env::current_dir().unwrap_or_default();
-        super::linux_startup::locations(std::env::args_os().skip(1), &current)
+        let arguments = std::env::args_os().skip(1).filter(|argument| argument != super::linux_portal::LAUNCH);
+        super::linux_startup::locations(arguments, &current)
+    }
+
+    fn claim_instance(&self, locations: &[String]) -> super::InstanceClaim {
+        super::linux_instance::claim(locations)
+    }
+
+    fn started_for_file_chooser(&self) -> bool {
+        super::linux_portal::launched()
+    }
+
+    fn answering_file_chooser(&self) -> bool {
+        super::linux_portal::answering()
+    }
+
+    fn hand_off_file_choosers(&self) {
+        super::linux_portal::hand_off();
+    }
+
+    fn relay_file_chooser(&self) {
+        super::linux_portal::relay();
     }
 
     fn regional_locale(&self) -> Option<String> {
@@ -822,6 +853,22 @@ impl Platform for LinuxPlatform {
     #[cfg(target_os = "linux")]
     fn open_with(&self, id: &str, paths: &[String], remember: bool) -> Result<(), String> {
         super::linux_gio::applications::launch(id, paths, remember)
+    }
+    #[cfg(target_os = "linux")]
+    fn opens_folders_by_default(&self) -> Option<bool> {
+        super::linux_gio::applications::opens_folders()
+    }
+    #[cfg(target_os = "linux")]
+    fn open_folders_by_default(&self, enabled: bool, previous: Option<&str>) -> Result<Option<String>, String> {
+        let replaced = super::linux_gio::applications::open_folders(enabled, previous)?;
+        super::linux_instance::serve_file_manager(enabled);
+        Ok(replaced)
+    }
+    fn chooses_files(&self) -> Option<bool> {
+        super::linux_portal::state()
+    }
+    fn choose_files(&self, enabled: bool) -> Result<(), String> {
+        super::linux_portal::set(enabled)
     }
 
     fn offers_terminal(&self) -> bool { true }

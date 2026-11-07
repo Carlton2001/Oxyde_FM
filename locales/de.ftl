@@ -425,6 +425,37 @@ date-format-iso = ISO 8601 (JJJJ-MM-TT)
 settings-network = Netzwerk
 
 settings-network-description = Netzwerkumgebung im linken Bereich anzeigen.
+settings-system-integration = Systemintegration
+settings-default-file-manager = Standard-Dateimanager
+settings-default-file-manager-description = Wenn eine andere Anwendung einen Ordner öffnet oder „Im Ordner anzeigen“ anbietet, zeigt Oxyde ihn an. Das Dateimanager-Symbol im Dock öffnet weiterhin den des Systems.
+settings-default-file-manager-error = Der Standard-Dateimanager konnte nicht geändert werden.
+settings-file-chooser = Dialoge zum Öffnen und Speichern
+settings-file-chooser-description = Wenn eine andere Anwendung nach einer Datei zum Öffnen oder einem Speicherort fragt, erscheint das Fenster von Oxyde. Anwendungen mit eigenem Fenster behalten es.
+settings-file-chooser-error = Die Dialoge zum Öffnen und Speichern konnten nicht geändert werden.
+file-chooser-title = Datei öffnen
+file-chooser-folder-title = Ordner auswählen
+file-chooser-select = Auswählen
+file-chooser-save-title = Datei speichern
+file-chooser-save-files-title = Dateien speichern
+file-chooser-save = Speichern
+file-chooser-name = Name
+file-chooser-name-placeholder = Dateiname
+file-chooser-replace-title = { $count ->
+    [one] Datei ersetzen
+   *[other] Dateien ersetzen
+}
+file-chooser-replace-prompt = { $count ->
+    [one] Eine Datei namens „{ $name }“ existiert bereits. Möchten Sie sie ersetzen?
+   *[other] { $number } Dateien existieren bereits. Möchten Sie sie ersetzen?
+}
+file-chooser-replace-location = { $count ->
+    [one] Sie befindet sich in „{ $folder }“.
+   *[other] Sie befinden sich in „{ $folder }“.
+}
+file-chooser-replace-warning = { $count ->
+    [one] Beim Ersetzen wird ihr Inhalt überschrieben.
+   *[other] Beim Ersetzen wird ihr Inhalt überschrieben.
+}
 
 settings-region-language = Region & Sprache
 

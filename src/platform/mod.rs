@@ -123,6 +123,130 @@ impl ShellDeleteOutcome {
     }
 }
 
+/// What another process asks the running Oxyde to show: a second launch, a program
+/// calling FileManager1 such as a browser's « Show in folder », or the desktop portal
+/// asking for a file on behalf of an application.
+#[derive(Debug)]
+pub enum InstanceRequest {
+    /// Folders, each in a new tab; none only brings the window forward.
+    Folders(Vec<String>),
+    /// Items selected in their folder, one tab per folder.
+    Items(Vec<String>),
+    /// Items whose Properties window opens.
+    Properties(Vec<String>),
+    /// Files to open, or where to save, chosen in a window of its own.
+    ChooseFile(FileChooserRequest),
+}
+
+/// One rule of a file chooser's type filter.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FileTypePattern {
+    /// A shell pattern on the name, such as `*.png`, case kept.
+    Glob(String),
+    /// A MIME type, such as `image/png` or `image/*`.
+    MimeType(String),
+}
+
+/// A named choice of file types the application offers, such as "Images".
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FileTypeFilter {
+    pub name: String,
+    pub patterns: Vec<FileTypePattern>,
+}
+
+/// What the application asks the file chooser for.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FileChooserPurpose {
+    /// Files or folders to open.
+    Open,
+    /// Where to save a file, starting from the name proposed, possibly empty.
+    Save { name: String },
+    /// A folder to save files in, under these names.
+    SaveFiles { names: Vec<std::ffi::OsString> },
+}
+
+/// A question the application asks beside the files, such as an encoding.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FileChooserChoice {
+    pub id: String,
+    pub label: String,
+    /// The answers offered, by id and label; none for a checkbox, answered
+    /// `"true"` or `"false"`.
+    pub options: Vec<(String, String)>,
+    /// The answer given first, one of the options.
+    pub initial: String,
+}
+
+/// What the user chose in a file chooser.
+#[derive(Debug, Default, PartialEq)]
+pub struct FileChooserAnswer {
+    pub paths: Vec<std::path::PathBuf>,
+    /// The type filter shown when the user chose, as a position in the request's.
+    pub filter: Option<usize>,
+    /// Each choice's id and the answer given.
+    pub choices: Vec<(String, String)>,
+}
+
+/// An application's request, through the desktop portal, for files or folders to open,
+/// or where to save.
+#[derive(Debug)]
+pub struct FileChooserRequest {
+    pub purpose: FileChooserPurpose,
+    /// The application's title for the window; empty when it gives none.
+    pub title: String,
+    /// The application's label for the button that accepts, mnemonics removed.
+    pub accept_label: Option<String>,
+    /// Several items may be chosen.
+    pub multiple: bool,
+    /// Folders are chosen instead of files, as when saving several files.
+    pub directory: bool,
+    /// The application's type filters, and the one shown first.
+    pub filters: Vec<FileTypeFilter>,
+    pub current_filter: Option<usize>,
+    /// The folder the application suggests, known to be one; else the last one.
+    pub current_folder: Option<std::path::PathBuf>,
+    pub choices: Vec<FileChooserChoice>,
+    /// The application's window, which the chooser opens over.
+    pub parent: Option<FileChooserParent>,
+    /// Receives the choice, or nothing when the user cancels.
+    pub answer: futures::channel::oneshot::Sender<Option<FileChooserAnswer>>,
+    /// Resolves when the application withdraws its request: the window closes unanswered.
+    /// Also ends when the request is given up, which leaves the window unopened.
+    pub withdrawn: futures::channel::oneshot::Receiver<()>,
+    /// Told once the window is open; taken by the interface. A window that does not
+    /// open in time leaves the request to the system's file chooser.
+    pub shown: Option<futures::channel::oneshot::Sender<()>>,
+}
+
+/// An application's window, as the desktop portal names it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FileChooserParent {
+    /// An X11 window id.
+    X11(u32),
+    /// A toplevel the application exported through xdg-foreign.
+    Wayland(String),
+}
+
+#[derive(Debug)]
+pub struct InstanceMessage {
+    pub request: InstanceRequest,
+    /// The token the sender's launcher gave it, which lets the window come forward.
+    pub activation_token: Option<String>,
+}
+
+/// Whether this process is the session's Oxyde.
+pub enum InstanceClaim {
+    /// The first one: requests from later launches and FileManager1 calls arrive here.
+    First(futures::channel::mpsc::UnboundedReceiver<InstanceMessage>),
+    /// Another Oxyde runs and received the locations: this process ends.
+    Forwarded,
+    /// Started for the file chooser portal after starts that failed before showing a
+    /// window: this process shows none and only relays the portal's calls.
+    Relay,
+    /// No session bus, or no single instance on this system: this process stands alone.
+    Alone,
+}
+
 /// Parent of the WSL distributions, which Explorer calls "Linux".
 pub const WSL_ROOT: &str = r"\\wsl.localhost";
 
@@ -225,6 +349,21 @@ pub trait Platform: Send + Sync {
     fn prefer_display_gpu(&self) -> Option<String> { None }
     /// Locations the desktop asked this launch to open, instead of the saved tabs.
     fn startup_locations(&self) -> Vec<String> { Vec::new() }
+    /// Becomes the session's Oxyde, or hands `locations` to the one already running.
+    /// Runs before the first window, which the forwarding process never opens.
+    fn claim_instance(&self, _locations: &[String]) -> InstanceClaim { InstanceClaim::Alone }
+    /// Whether the session bus started this process to choose files for the desktop
+    /// portal: it opens no main window until a later launch asks for one.
+    fn started_for_file_chooser(&self) -> bool { false }
+    /// Whether an application still waits for a file chosen through Oxyde, which keeps
+    /// Oxyde running after its last window.
+    fn answering_file_chooser(&self) -> bool { false }
+    /// The interface thread is panicking: applications waiting for a file from Oxyde get
+    /// the system's file chooser instead. Blocks until they are answered.
+    fn hand_off_file_choosers(&self) {}
+    /// Hands the desktop portal's calls to the system's file chooser, without a window,
+    /// until none came for a while. Blocking.
+    fn relay_file_chooser(&self) {}
     /// How releases reach this copy of Oxyde. Cheap: the About page asks at each render.
     fn installation(&self) -> Installation { Installation::Unmanaged }
     /// Window buttons that match the running desktop.
@@ -707,6 +846,23 @@ pub trait Platform: Send + Sync {
     fn open_with(&self, _id: &str, _paths: &[String], _remember: bool) -> Result<(), String> {
         Err("Open With is not available on this system".into())
     }
+    /// Whether other applications open folders with Oxyde; None when the system offers
+    /// no such choice, or names no installed Oxyde to choose. Reads files: off the UI thread.
+    fn opens_folders_by_default(&self) -> Option<bool> { None }
+    /// Makes Oxyde the default for folders and returns the application it replaces, or
+    /// gives folders back to `previous`, the system's default without it.
+    fn open_folders_by_default(&self, _enabled: bool, _previous: Option<&str>) -> Result<Option<String>, String> {
+        Err("Choosing the default for folders is not available on this system".into())
+    }
+    /// Whether applications choose their files with Oxyde through the desktop portal;
+    /// None when the system has no portal, or names no Oxyde it could start. Reads
+    /// files: off the UI thread.
+    fn chooses_files(&self) -> Option<bool> { None }
+    /// Makes Oxyde the portal's file chooser, or gives that back to the previous one.
+    /// Writes files and restarts the portal: off the UI thread.
+    fn choose_files(&self, _enabled: bool) -> Result<(), String> {
+        Err("Choosing files for other applications is not available on this system".into())
+    }
     /// Whether this system offers to open a folder in a terminal.
     fn offers_terminal(&self) -> bool { false }
     fn open_terminal(&self, _path: &str) -> Result<(), String> {
@@ -736,6 +892,15 @@ pub trait Platform: Send + Sync {
     /// Type and description from the system's MIME database; None on Windows.
     fn mime_type(&self, _path: &std::path::Path, _is_dir: bool, _language: &str) -> Option<crate::models::MimeType> {
         None
+    }
+    /// The MIME type's name alone, as `mime_type` finds it; None on Windows.
+    fn content_type(&self, _path: &std::path::Path, _is_dir: bool) -> Option<&'static str> {
+        None
+    }
+    /// Whether a MIME type answers a file chooser's type, such as `image/png` or
+    /// `image/*`, through the system's aliases and subclasses.
+    fn content_type_matches(&self, mime: &str, pattern: &str) -> bool {
+        mime.eq_ignore_ascii_case(pattern)
     }
     /// Stops between enclosed items once `cancel` is set.
     fn set_unix_permissions(
@@ -848,6 +1013,10 @@ mod linux_terminal;
 mod linux_window_controls;
 #[cfg(not(target_os = "windows"))]
 mod linux_startup;
+#[cfg(not(target_os = "windows"))]
+mod linux_instance;
+#[cfg(not(target_os = "windows"))]
+mod linux_portal;
 #[cfg(not(target_os = "windows"))]
 mod linux_gio;
 #[cfg(not(target_os = "windows"))]

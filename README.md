@@ -123,15 +123,20 @@ Options:
 | --- | --- |
 | `--version X.Y.Z` | Installs a given version |
 | `--archive FILE` | Installs a downloaded archive, offline |
-| `--set-default` | Makes Oxyde the default application for folders |
+| `--set-default` | Makes Oxyde the default application for folders, as its option in Settings does |
 | `--yes` | Answers yes to every question |
-| `--uninstall` | Removes the per-user installation and keeps your settings |
+| `--uninstall` | Removes the per-user installation, its cache and the associations naming it (folders and Open dialogs included), then asks whether to delete your settings |
+| `--purge` | With `--uninstall`, deletes your settings without asking |
 
 To pass options through the pipe, add `-s --` after `bash`:
 
 ```bash
-curl -fsSL https://github.com/Carlton2001/Oxyde_FM/releases/latest/download/install.sh | bash -s -- --set-default
+curl -fsSL https://github.com/Carlton2001/Oxyde_FM/releases/latest/download/install.sh | bash -s -- --uninstall
 ```
+
+To make Oxyde the file manager other applications open, turn on **Settings › Files › Default file manager**: folders and "Show in folder" from web browsers and other applications then open in Oxyde, in a new tab of the running window. Turning it off gives folders back to the application they opened with before. The dock's Files icon stays the desktop's.
+
+**Settings › Files › Open and Save dialogs**, off by default, makes Oxyde the file chooser of applications that ask the desktop portal, such as Firefox, Chrome and Flatpak applications: they open files from an Oxyde window. Choosing a folder and saving still use the desktop's dialog for now. Turning it off gives the dialogs back to the desktop.
 
 Running the script again updates Oxyde. Running the `install.sh` found in an extracted archive installs that archive.
 

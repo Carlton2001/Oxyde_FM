@@ -40,3 +40,14 @@ fn what_cannot_be_opened_is_left_out() {
     assert!(locations([not_utf8].into_iter(), Path::new("/")).is_empty());
     assert!(given(&["file:///tmp/%FF"], Path::new("/")).is_empty());
 }
+
+#[test]
+fn file_manager_items_are_existing_local_paths() {
+    let root = tempfile::tempdir().unwrap();
+    let base = root.path().to_str().unwrap();
+    std::fs::create_dir(root.path().join("a b")).unwrap();
+    std::fs::write(root.path().join("a b/note.txt"), b"").unwrap();
+    let uris = [format!("file://{base}/a%20b/note.txt"), format!("file://{base}/missing"), "smb://server/share/x".into()];
+    assert_eq!(items(&uris), [format!("{base}/a b/note.txt")]);
+    assert_eq!(folders(&uris), [format!("{base}/a b"), "smb://server/share/x".into()]);
+}

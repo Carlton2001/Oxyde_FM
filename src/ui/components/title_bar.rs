@@ -122,6 +122,10 @@ pub fn render_title_bar(
             h_menu.update(cx, |this, cx| {
                 this.context_menus.clear();
                 this.settings_open = !this.settings_open;
+                if this.settings_open {
+                    this.refresh_folder_handler(cx);
+                    this.refresh_file_chooser_setting(cx);
+                }
                 this.settings_about_open = false;
                 this.settings_picker = None;
                 this.settings_submenu_bounds = None;

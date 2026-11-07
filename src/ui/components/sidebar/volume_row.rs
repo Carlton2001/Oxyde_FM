@@ -10,7 +10,7 @@ use gpui::prelude::*;
 use gpui::*;
 use oxyde_lib::platform::UnmountedVolume;
 
-pub(super) fn name(volume: &UnmountedVolume, i18n: &crate::ui::i18n::I18n) -> String {
+pub(crate) fn name(volume: &UnmountedVolume, i18n: &crate::ui::i18n::I18n) -> String {
     if volume.label.is_empty() {
         crate::ui::format::unlabeled_volume(volume.size, i18n)
     } else {

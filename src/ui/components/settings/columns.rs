@@ -145,6 +145,15 @@ pub(super) fn left_column(view: &OxydeApp, handle: Entity<OxydeApp>, left_width:
             theme,
             |view, cx| view.toggle_network(cx),
         ))
+        .when(super::integration::available(view), |body| body.child(separator(theme)).child(picker(
+            view,
+            handle.clone(),
+            SettingsPicker::Integration,
+            "settings-integration-picker",
+            "icons/monitor.svg",
+            i18n.text(Message::SettingsSystemIntegration),
+            theme,
+        )))
 }
 
 pub(super) fn right_column(view: &OxydeApp, handle: Entity<OxydeApp>, right_width: f32, cx: &App) -> impl IntoElement {

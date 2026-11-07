@@ -26,6 +26,7 @@ use wayland_protocols::xdg::shell::client::xdg_toplevel::{self};
 use wayland_protocols::{
     wp::fractional_scale::v1::client::wp_fractional_scale_v1,
     xdg::dialog::v1::client::xdg_dialog_v1::XdgDialogV1,
+    xdg::foreign::{zv1::client::zxdg_imported_v1, zv2::client::zxdg_imported_v2},
 };
 use wayland_protocols_plasma::blur::client::org_kde_kwin_blur;
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1;
@@ -33,7 +34,7 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1;
 use crate::linux::wayland::{display::WaylandDisplay, serial::SerialKind};
 use crate::linux::{Globals, Output, WaylandClientStatePtr, get_window};
 use gpui::{
-    AnyWindowHandle, Bounds, Capslock, Decorations, DevicePixels, ExternalDragPayload, GpuSpecs,
+    AnyWindowHandle, Bounds, Capslock, Decorations, DevicePixels, ExternalDragPayload, ForeignWindow, GpuSpecs,
     Modifiers, Pixels, PlatformAtlas, PlatformDisplay, PlatformInput, PlatformInputHandler,
     PlatformWindow, Point, PromptButton, PromptLevel, RequestFrameOptions, ResizeEdge, Scene, Size,
     Tiling, WindowAppearance, WindowBackgroundAppearance, WindowBounds, WindowControlArea,
@@ -267,7 +268,24 @@ impl WaylandSurfaceState {
             toplevel.set_parent(xdg_parent.as_ref());
         }
 
-        let dialog = if params.kind == WindowKind::Dialog {
+        // Oxyde: another process's toplevel, after `set_parent` so that it wins.
+        let foreign_parent = match &params.foreign_parent {
+            Some(ForeignWindow::Wayland(handle)) => ForeignParent::import(globals, handle, &surface),
+            Some(ForeignWindow::X11(_)) => {
+                log::info!("An X11 window cannot parent a Wayland window");
+                None
+            }
+            None => None,
+        };
+
+        let dialog = if foreign_parent.is_some() {
+            // Modal to it, as the desktop's own file dialogs are.
+            globals.dialog.as_ref().map(|dialog| {
+                let xdg_dialog = dialog.get_xdg_dialog(&toplevel, &globals.qh, ());
+                xdg_dialog.set_modal();
+                xdg_dialog
+            })
+        } else if params.kind == WindowKind::Dialog {
             let dialog = globals.dialog.as_ref().map(|dialog| {
                 let xdg_dialog = dialog.get_xdg_dialog(&toplevel, &globals.qh, ());
                 xdg_dialog.set_modal();
@@ -300,7 +318,38 @@ impl WaylandSurfaceState {
             toplevel,
             decoration,
             dialog,
+            foreign_parent,
         }))
+    }
+}
+
+/// Oxyde: another process's toplevel, imported through xdg-foreign, which parents a window.
+enum ForeignParent {
+    V2(zxdg_imported_v2::ZxdgImportedV2),
+    V1(zxdg_imported_v1::ZxdgImportedV1),
+}
+
+impl ForeignParent {
+    fn import(globals: &Globals, handle: &str, surface: &wl_surface::WlSurface) -> Option<Self> {
+        if let Some(importer) = globals.foreign_importer.as_ref() {
+            let imported = importer.import_toplevel(handle.to_owned(), &globals.qh, ());
+            imported.set_parent_of(surface);
+            Some(Self::V2(imported))
+        } else if let Some(importer) = globals.foreign_importer_v1.as_ref() {
+            let imported = importer.import(handle.to_owned(), &globals.qh, ());
+            imported.set_parent_of(surface);
+            Some(Self::V1(imported))
+        } else {
+            log::info!("The compositor offers no xdg-foreign importer");
+            None
+        }
+    }
+
+    fn destroy(&self) {
+        match self {
+            Self::V2(imported) => imported.destroy(),
+            Self::V1(imported) => imported.destroy(),
+        }
     }
 }
 
@@ -309,6 +358,7 @@ pub struct WaylandXdgSurfaceState {
     toplevel: xdg_toplevel::XdgToplevel,
     decoration: Option<zxdg_toplevel_decoration_v1::ZxdgToplevelDecorationV1>,
     dialog: Option<XdgDialogV1>,
+    foreign_parent: Option<ForeignParent>,
 }
 
 pub struct WaylandLayerSurfaceState {
@@ -531,7 +581,12 @@ impl WaylandSurfaceState {
                 toplevel,
                 decoration: _decoration,
                 dialog,
+                foreign_parent,
             }) => {
+                // Oxyde: the import goes first, with the relationship it set up.
+                if let Some(foreign_parent) = foreign_parent.take() {
+                    foreign_parent.destroy();
+                }
                 // drop the dialog before toplevel so compositor can explicitly unapply it's effects
                 if let Some(dialog) = dialog {
                     dialog.destroy();
@@ -2186,6 +2241,22 @@ impl PlatformWindow for WaylandWindow {
     fn popup_offset(&self) -> Option<Rc<Cell<Point<Pixels>>>> {
         let state = self.borrow();
         matches!(state.surface_state, WaylandSurfaceState::Popup(_)).then(|| state.popup_offset.clone())
+    }
+
+    /// Oxyde: a token from another process is presented as is; the compositor decides.
+    fn activate_with_token(&self, token: Option<String>) {
+        let Some(token) = token.filter(|token| !token.is_empty()) else {
+            self.activate();
+            return;
+        };
+        let state = self.borrow();
+        match &state.globals.activation {
+            Some(activation) => activation.activate(token, &state.surface),
+            None => {
+                drop(state);
+                self.activate();
+            }
+        }
     }
 
     fn set_input_region(&self, region: Option<&[Bounds<Pixels>]>) {

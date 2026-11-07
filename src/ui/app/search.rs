@@ -14,11 +14,11 @@ pub struct SearchCancellation(pub Arc<AtomicBool>);
 
 #[derive(Clone)]
 pub struct SearchInputSlide {
-    expanded: bool,
-    hover_suppressed: bool,
-    from: f32,
-    started: std::time::Instant,
-    revision: u64,
+    pub(super) expanded: bool,
+    pub(super) hover_suppressed: bool,
+    pub(super) from: f32,
+    pub(super) started: std::time::Instant,
+    pub(super) revision: u64,
 }
 
 impl Default for SearchInputSlide {
@@ -33,14 +33,14 @@ impl Default for SearchInputSlide {
     }
 }
 
-fn slide_progress(from: f32, expanded: bool, elapsed: f32) -> f32 {
+pub(super) fn slide_progress(from: f32, expanded: bool, elapsed: f32) -> f32 {
     let t = elapsed.clamp(0.0, 1.0);
     let eased = t * t * (3.0 - 2.0 * t);
     from + (if expanded { 1.0 } else { 0.0 } - from) * eased
 }
 
 impl SearchInputSlide {
-    fn set_expanded(&mut self, expanded: bool) {
+    pub(super) fn set_expanded(&mut self, expanded: bool) {
         if self.expanded == expanded {
             return;
         }

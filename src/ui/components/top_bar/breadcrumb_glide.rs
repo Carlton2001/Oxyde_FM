@@ -7,15 +7,15 @@ const ENTER_DURATION: f32 = 0.22;
 /// Matches the tab strip's wheel scrolling.
 const WHEEL_DURATION: f32 = 0.18;
 
-type Glide = Cell<Option<(Instant, f32, Option<f32>)>>;
+pub(crate) type Glide = Cell<Option<(Instant, f32, Option<f32>)>>;
 
-pub(super) fn start(glide: &Glide, previous: &str, current: &str, scroll: &ScrollHandle) {
+pub(crate) fn start(glide: &Glide, previous: &str, current: &str, scroll: &ScrollHandle) {
     let entered = entered_child(previous, current);
     glide.set(entered.then(|| (Instant::now(), scroll.offset().x.as_f32(), None)));
 }
 
 /// Retargets the glide by `delta` from the pending wheel target, so fast wheel turns accumulate.
-pub(super) fn scroll_by(glide: &Glide, scroll: &ScrollHandle, delta: Pixels) {
+pub(crate) fn scroll_by(glide: &Glide, scroll: &ScrollHandle, delta: Pixels) {
     let current = scroll.offset().x.as_f32();
     let base = match glide.get() {
         Some((_, _, Some(target))) => target,
@@ -26,7 +26,7 @@ pub(super) fn scroll_by(glide: &Glide, scroll: &ScrollHandle, delta: Pixels) {
 }
 
 /// Moves the scroll offset one frame forward; returns whether a glide is running.
-pub(super) fn advance(glide: &Glide, scroll: &ScrollHandle, window: &Window) -> bool {
+pub(crate) fn advance(glide: &Glide, scroll: &ScrollHandle, window: &Window) -> bool {
     let Some((started, from, target)) = glide.get() else {
         return false;
     };
