@@ -17,7 +17,8 @@ pub const MAX_REPLY: usize = MAX_PIXELS + 16 * 1024;
 pub const VIEWER_MAX_REPLY: usize = VIEWER.pixels + 16 * 1024;
 /// Complete Viewer documents and PDF page lists; tooltips truncate earlier.
 pub const MAX_TEXT: usize = MAX_PIXELS;
-const MAX_FRAMES: usize = 256;
+/// The Viewer's frame count; the hover policy stops at 256.
+const MAX_FRAMES: usize = super::image_preview_decode::VIEWER_POLICY.frame_count;
 
 pub enum Reply {
     /// `natural_size` is the intrinsic display size of a vector source.

@@ -15,11 +15,13 @@ pub(super) struct ImageView {
     presentation: (bool, bool),
     /// Top of the label row, under the unzoomed image, from the last paint.
     labels_top: Pixels,
+    /// Clock of the animation shown, restarted when the image changes.
+    animation: Option<(ImageId, std::time::Instant)>,
 }
 const ZOOM_LABEL_TIME: std::time::Duration = std::time::Duration::from_millis(1200);
 impl Default for ImageView {
     fn default() -> Self {
-        Self { scale: 1.0, offset: Point::default(), target: Bounds::default(), drag: None, zooming_until: None, zoom_label: None, presentation: (false, false), labels_top: Pixels::ZERO }
+        Self { scale: 1.0, offset: Point::default(), target: Bounds::default(), drag: None, zooming_until: None, zoom_label: None, presentation: (false, false), labels_top: Pixels::ZERO, animation: None }
     }
 }
 impl Viewer {
@@ -77,6 +79,7 @@ impl Viewer {
         let dragging = self.image_view.drag.is_some();
         let reserve = labels.is_some();
         let labels_top = self.image_view.labels_top;
+        let animation = animation_clock(&mut self.image_view.animation, &image);
         let zooming = self.image_view.drag.is_none() && self.image_view.zooming_until.is_some_and(|until| until > std::time::Instant::now());
         div().id("viewer-image").size_full().relative().overflow_hidden()
             .when(self.image_view.drag.is_some(), |surface| surface.cursor(CursorStyle::ClosedHand))
@@ -157,8 +160,12 @@ impl Viewer {
                     }
                     this.set_overlay_media(target, cx);
                 });
+                let frame = animation.map_or(0, |started| animation_frame(&image, started.elapsed()));
+                if animation.is_some() && !cx.reduce_motion() {
+                    window.request_animation_frame();
+                }
                 window.with_content_mask(Some(ContentMask { bounds: available }), |window| {
-                    let _ = window.paint_image(available, target, Corners::default(), image.clone(), 0, false);
+                    let _ = window.paint_image(available, target, Corners::default(), image.clone(), frame, false);
                 });
             }).absolute().inset_0().size_full())
             .when_some(labels, |surface, labels| {
@@ -182,3 +189,33 @@ fn anchored_offset(offset: Point<Pixels>, cursor: Point<Pixels>, center: Point<P
 #[cfg(test)]
 #[path = "tests/image_interaction.rs"]
 mod tests;
+/// Start of the animation clock, kept while the same multi-frame image is shown.
+fn animation_clock(clock: &mut Option<(ImageId, std::time::Instant)>, image: &RenderImage) -> Option<std::time::Instant> {
+    if image.frame_count() < 2 {
+        *clock = None;
+        return None;
+    }
+    match clock {
+        Some((id, started)) if *id == image.id => Some(*started),
+        _ => {
+            let started = std::time::Instant::now();
+            *clock = Some((image.id, started));
+            Some(started)
+        }
+    }
+}
+
+/// The frame shown after `elapsed`, looping over the frames' own delays.
+fn animation_frame(image: &RenderImage, elapsed: std::time::Duration) -> usize {
+    let delays: Vec<u128> = (0..image.frame_count())
+        .map(|index| std::time::Duration::from(image.delay(index)).as_millis().max(1))
+        .collect();
+    let mut remaining = elapsed.as_millis() % delays.iter().sum::<u128>();
+    for (index, delay) in delays.iter().enumerate() {
+        if remaining < *delay {
+            return index;
+        }
+        remaining -= delay;
+    }
+    0
+}

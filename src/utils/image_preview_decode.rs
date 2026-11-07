@@ -200,7 +200,11 @@ fn collect_frames(
         {
             return Err(PreviewError::Limit("animation frame dimensions"));
         }
-        let delay = frame.delay();
+        // Like browsers, a delay under 20 ms means "unspecified": 100 ms.
+        let delay = match frame.delay().numer_denom_ms() {
+            (numer, denom) if u64::from(numer) < 20 * u64::from(denom) => image::Delay::from_numer_denom_ms(100, 1),
+            _ => frame.delay(),
+        };
         let buffer = fitted_bgra(DynamicImage::ImageRgba8(frame.into_buffer()), policy);
         let Some(total) = retained
             .checked_add(buffer.as_raw().len())
