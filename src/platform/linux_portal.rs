@@ -7,8 +7,13 @@
 //! turned off. The portal reads these files when it starts only: each change restarts it.
 mod chooser;
 mod conf;
+mod forward;
+mod guard;
+mod pending;
 
-pub(super) use chooser::{answering, wait_for_replies, FileChooser, PATH};
+pub(super) use chooser::{FileChooser, PATH};
+pub(super) use pending::answering;
+use pending::wait_for_replies;
 use std::path::{Path, PathBuf};
 
 /// Debug builds are a portal of their own, as they are an instance of their own.
@@ -26,6 +31,49 @@ const SERVICE: &str = "xdg-desktop-portal.service";
 
 pub(super) fn launched() -> bool {
     std::env::args_os().skip(1).any(|argument| argument == LAUNCH)
+}
+
+/// Whether this start for the portal is to show no window, its last ones having failed.
+pub(super) fn relays() -> bool {
+    guard::tripped()
+}
+
+/// A start for the portal that is to show windows.
+pub(super) fn starting() {
+    guard::starting();
+}
+
+/// Without a window: the portal's calls go to the portal after Oxyde's until none came
+/// for 30 seconds.
+pub(super) fn relay() {
+    log::warn!("Oxyde's last starts for the file chooser ended before a window showed: the portal after Oxyde's answers until one does");
+    pending::wait_until_idle(std::time::Duration::from_secs(30));
+    log::info!("No file chooser call for 30 seconds: the relay ends");
+}
+
+/// The interface thread is failing: applications waiting for one of its windows get
+/// the portal after Oxyde's instead, which this waits for, and a later launch starts
+/// a new Oxyde.
+pub(super) fn hand_off() {
+    if !answering() {
+        return;
+    }
+    log::error!("Oxyde's interface failed while applications waited for files: the portal after Oxyde's answers them");
+    log::logger().flush();
+    super::linux_instance::leave_session();
+    pending::fail_interface();
+}
+
+/// At exit: the last answers reach their applications, then Oxyde's starts count as
+/// working.
+pub(super) fn finish() {
+    if answering() {
+        // Calls left to the portal after Oxyde's may take the user's time; meanwhile a
+        // launch starts a new Oxyde.
+        super::linux_instance::leave_session();
+    }
+    wait_for_replies(std::time::Duration::from_secs(2));
+    guard::cleared();
 }
 
 /// Where xdg-desktop-portal reads its configuration and its portals, for one session.

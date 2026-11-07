@@ -211,7 +211,11 @@ pub struct FileChooserRequest {
     /// Receives the choice, or nothing when the user cancels.
     pub answer: futures::channel::oneshot::Sender<Option<FileChooserAnswer>>,
     /// Resolves when the application withdraws its request: the window closes unanswered.
+    /// Also ends when the request is given up, which leaves the window unopened.
     pub withdrawn: futures::channel::oneshot::Receiver<()>,
+    /// Told once the window is open; taken by the interface. A window that does not
+    /// open in time leaves the request to the system's file chooser.
+    pub shown: Option<futures::channel::oneshot::Sender<()>>,
 }
 
 /// An application's window, as the desktop portal names it.
@@ -236,6 +240,9 @@ pub enum InstanceClaim {
     First(futures::channel::mpsc::UnboundedReceiver<InstanceMessage>),
     /// Another Oxyde runs and received the locations: this process ends.
     Forwarded,
+    /// Started for the file chooser portal after starts that failed before showing a
+    /// window: this process shows none and only relays the portal's calls.
+    Relay,
     /// No session bus, or no single instance on this system: this process stands alone.
     Alone,
 }
@@ -351,6 +358,12 @@ pub trait Platform: Send + Sync {
     /// Whether an application still waits for a file chosen through Oxyde, which keeps
     /// Oxyde running after its last window.
     fn answering_file_chooser(&self) -> bool { false }
+    /// The interface thread is panicking: applications waiting for a file from Oxyde get
+    /// the system's file chooser instead. Blocks until they are answered.
+    fn hand_off_file_choosers(&self) {}
+    /// Hands the desktop portal's calls to the system's file chooser, without a window,
+    /// until none came for a while. Blocking.
+    fn relay_file_chooser(&self) {}
     /// How releases reach this copy of Oxyde. Cheap: the About page asks at each render.
     fn installation(&self) -> Installation { Installation::Unmanaged }
     /// Window buttons that match the running desktop.

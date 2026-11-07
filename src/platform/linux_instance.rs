@@ -91,11 +91,20 @@ pub(super) fn claim(locations: &[String]) -> InstanceClaim {
             return InstanceClaim::Alone;
         }
     };
+    let for_portal = super::linux_portal::launched();
+    if for_portal && super::linux_portal::relays() && !has_owner(&connection, NAME) {
+        // Without the session's name, which a later launch takes; the receiver goes, so
+        // every call is handed on.
+        let _ = CONNECTION.set(connection);
+        super::linux_portal::serve(true);
+        return InstanceClaim::Relay;
+    }
     match connection.request_name_with_flags(NAME, RequestNameFlags::DoNotQueue.into()) {
         Ok(RequestNameReply::PrimaryOwner | RequestNameReply::AlreadyOwner) => {
             let _ = CONNECTION.set(connection);
             // The bus holds the portal's call until this name has an owner.
-            if super::linux_portal::launched() {
+            if for_portal {
+                super::linux_portal::starting();
                 super::linux_portal::serve(true);
             }
             std::thread::Builder::new().name("file-manager-service".into())
@@ -106,7 +115,7 @@ pub(super) fn claim(locations: &[String]) -> InstanceClaim {
         }
         // zbus reports DoNotQueue's « exists » answer as NameTaken.
         Ok(RequestNameReply::Exists | RequestNameReply::InQueue) | Err(zbus::Error::NameTaken) => {
-            if super::linux_portal::launched() {
+            if for_portal {
                 if let Err(error) = connection.call_method(Some(NAME), PATH, Some(INTERFACE), "ServeFileChooser", &()) {
                     log::warn!("The running Oxyde does not answer for the file chooser portal: {error}");
                 }
@@ -126,6 +135,15 @@ pub(super) fn claim(locations: &[String]) -> InstanceClaim {
             InstanceClaim::Alone
         }
     }
+}
+
+fn has_owner(connection: &Connection, name: &str) -> bool {
+    let owned = zbus::blocking::fdo::DBusProxy::new(connection)
+        .and_then(|bus| Ok(bus.name_has_owner(zbus::names::BusName::try_from(name)?)?));
+    owned.unwrap_or_else(|error| {
+        log::warn!("Cannot tell whether {name} runs: {error}");
+        false
+    })
 }
 
 /// At startup, the services follow the folder default and the portal's configuration,
@@ -183,6 +201,17 @@ pub(super) fn reload_services() {
     let Some(connection) = CONNECTION.get() else { return };
     if let Err(error) = zbus::blocking::fdo::DBusProxy::new(connection).and_then(|bus| Ok(bus.reload_config()?)) {
         log::warn!("The session bus did not reload its services: {error}");
+    }
+}
+
+/// Lets a later launch and FileManager1's callers reach a new Oxyde while this one ends.
+/// The portal's name stays: it withdraws calls still in progress through it.
+pub(super) fn leave_session() {
+    let Some(connection) = CONNECTION.get() else { return };
+    for name in [NAME, FILE_MANAGER] {
+        if let Err(error) = connection.release_name(name) {
+            log::warn!("Cannot release {name}: {error}");
+        }
     }
 }
 

@@ -59,6 +59,11 @@ fn initialize_logging() {
     std::panic::set_hook(Box::new(move |info| {
         log::error!("panic: {info}");
         previous_hook(info);
+        // The interface thread takes the file choosers down with it: applications
+        // waiting on one get the system's instead, before the process ends.
+        if std::thread::current().name() == Some("main") {
+            oxyde_lib::platform::platform().hand_off_file_choosers();
+        }
     }));
 }
 
@@ -89,6 +94,11 @@ fn main() {
             } else {
                 log::info!("locations handed to the running Oxyde: {startup_locations:?}");
             }
+            log::logger().flush();
+            return;
+        }
+        oxyde_lib::platform::InstanceClaim::Relay => {
+            oxyde_lib::platform::platform().relay_file_chooser();
             log::logger().flush();
             return;
         }

@@ -201,7 +201,7 @@ struct Lent {
 
 impl OxydeApp {
     /// Opens a window for an application's request, where the last one ended.
-    pub(crate) fn open_file_chooser(&mut self, request: FileChooserRequest, cx: &mut Context<Self>) {
+    pub(crate) fn open_file_chooser(&mut self, mut request: FileChooserRequest, cx: &mut Context<Self>) {
         let owner = cx.entity().downgrade();
         let lent = Lent {
             places: Places::of(self),
@@ -219,6 +219,12 @@ impl OxydeApp {
         // GPUI draws a new window before open_window returns, and its render reads the
         // owner: the window opens once this update of the owner has ended.
         cx.defer(move |cx| {
+            // Withdrawn, or given to the system's file chooser while Oxyde was busy.
+            if !matches!(request.withdrawn.try_recv(), Ok(None)) {
+                log::info!("file chooser request given up before its window opened");
+                return;
+            }
+            let shown = request.shown.take();
             let title = Some(request.title.clone()).filter(|title| !title.is_empty())
                 .unwrap_or_else(|| crate::ui::i18n::I18nContext::i18n(cx).text(default_title(&request.purpose, request.directory)).to_string());
             let logical = crate::ui::scale::logical;
@@ -241,9 +247,12 @@ impl OxydeApp {
                     cx.new(|cx| FileChooserWindow::new(owner, request, lent, window, cx))
                 },
             );
-            if let Err(error) = opened {
-                // The request drops with the window, which tells the application.
-                log::error!("Cannot open the file chooser: {error}");
+            match opened {
+                Ok(_) => if let Some(shown) = shown {
+                    let _ = shown.send(());
+                },
+                // The request drops with the window: the system's file chooser answers.
+                Err(error) => log::error!("Cannot open the file chooser: {error}"),
             }
         });
     }
@@ -270,7 +279,7 @@ fn default_title(purpose: &FileChooserPurpose, directory: bool) -> crate::ui::i1
 
 impl FileChooserWindow {
     fn new(owner: WeakEntity<OxydeApp>, request: FileChooserRequest, lent: Lent, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let FileChooserRequest { purpose, title, accept_label, multiple, directory, filters, current_filter, current_folder, choices, parent: _, answer, withdrawn } = request;
+        let FileChooserRequest { purpose, title, accept_label, multiple, directory, filters, current_filter, current_folder, choices, parent: _, answer, withdrawn, shown: _ } = request;
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         crate::ui::components::tool_window::install_icon(ICON, window);

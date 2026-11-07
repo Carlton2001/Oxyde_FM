@@ -561,7 +561,7 @@ impl Platform for LinuxPlatform {
 
     fn finish_process_shutdown(&self) -> Result<(), String> {
         // An application waiting for its file gets the answer before the process ends.
-        super::linux_portal::wait_for_replies(std::time::Duration::from_secs(2));
+        super::linux_portal::finish();
         Ok(())
     }
 
@@ -788,6 +788,14 @@ impl Platform for LinuxPlatform {
 
     fn answering_file_chooser(&self) -> bool {
         super::linux_portal::answering()
+    }
+
+    fn hand_off_file_choosers(&self) {
+        super::linux_portal::hand_off();
+    }
+
+    fn relay_file_chooser(&self) {
+        super::linux_portal::relay();
     }
 
     fn regional_locale(&self) -> Option<String> {

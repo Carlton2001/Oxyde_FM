@@ -1,60 +1,29 @@
 //! `org.freedesktop.impl.portal.FileChooser`, as xdg-desktop-portal calls it for an
 //! application. Each call names a `Request` object the backend serves until it answers,
 //! so the portal can withdraw the request. Opening and saving are answered from Oxyde's
-//! window; when Oxyde's interface can no longer take a call, it goes to the portal that
-//! comes after Oxyde in `portals.conf`, with the same arguments, as if the portal had
-//! asked it.
-use crate::platform::{FileChooserChoice, FileChooserParent, FileChooserPurpose, FileChooserRequest, FileTypeFilter, FileTypePattern, InstanceMessage, InstanceRequest};
+//! window; when Oxyde's interface cannot show one, in time or at all, the call goes to
+//! the portal that comes after Oxyde in `portals.conf`, with the same arguments, as if
+//! the portal had asked it. The portal waits for its backends without a limit and
+//! applies its own fallback only to a backend that is missing: a failing Oxyde would
+//! otherwise leave the application without a file chooser.
+use super::pending::{self, Pending};
+use crate::platform::{FileChooserAnswer, FileChooserChoice, FileChooserParent, FileChooserPurpose, FileChooserRequest, FileTypeFilter, FileTypePattern, InstanceMessage, InstanceRequest};
 use futures::channel::{mpsc::UnboundedSender, oneshot};
+use futures::{FutureExt, StreamExt};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Condvar, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use zbus::object_server::ObjectServer;
 use zbus::zvariant::{OwnedObjectPath, OwnedValue, Signature, Type, Value};
 
 pub(in crate::platform) const PATH: &str = "/org/freedesktop/portal/desktop";
-const REQUEST: &str = "org.freedesktop.impl.portal.Request";
 const SUCCESS: u32 = 0;
 const CANCELLED: u32 = 1;
 /// Failed, or ended by the application.
-const ENDED: u32 = 2;
+pub(super) const ENDED: u32 = 2;
 
-type Options = HashMap<String, OwnedValue>;
-
-/// Calls not answered yet. The process waits for them before ending: an application
-/// would otherwise never learn the file the user chose as the last window closed.
-static PENDING: (Mutex<usize>, Condvar) = (Mutex::new(0), Condvar::new());
-
-struct Pending;
-
-impl Pending {
-    fn start() -> Self {
-        *PENDING.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) += 1;
-        Pending
-    }
-}
-
-impl Drop for Pending {
-    fn drop(&mut self) {
-        let mut count = PENDING.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        *count = count.saturating_sub(1);
-        PENDING.1.notify_all();
-    }
-}
-
-/// Whether an application waits for a file from Oxyde, or a portal Oxyde asked for it.
-pub(in crate::platform) fn answering() -> bool {
-    *PENDING.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) > 0
-}
-
-pub(in crate::platform) fn wait_for_replies(limit: std::time::Duration) {
-    let count = PENDING.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    let (count, timeout) = PENDING.1.wait_timeout_while(count, limit, |count| *count > 0)
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    if timeout.timed_out() {
-        log::warn!("{} file chooser requests were still unanswered at exit", *count);
-    }
-}
+pub(super) type Options = HashMap<String, OwnedValue>;
 
 /// A call's results, serialized as its `a{sv}`. zbus drops the reply's value once it
 /// has written it to the bus, which ends the call's `Pending`.
@@ -220,10 +189,29 @@ pub(super) fn uri(path: &Path) -> String {
     format!("file://{}", percent_encoding::percent_encode(path.as_os_str().as_bytes(), PATH_BYTES))
 }
 
+/// How long Oxyde's interface may take to show its window, a start for the call
+/// included, before the portal after Oxyde's answers instead.
+const SHOWING_LIMIT: Duration = Duration::from_secs(10);
+
+/// Closes Oxyde's window unanswered, once.
+struct Withdraw(Mutex<Option<oneshot::Sender<()>>>);
+
+impl Withdraw {
+    fn new(sender: oneshot::Sender<()>) -> Arc<Self> {
+        Arc::new(Self(Mutex::new(Some(sender))))
+    }
+
+    /// Whether the window was still to answer: false when already withdrawn.
+    fn withdraw(&self) -> bool {
+        let sender = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take();
+        sender.map(|sender| { let _ = sender.send(()); }).is_some()
+    }
+}
+
 /// The portal's call ended by the application, as the call that waits sees it.
 enum Withdrawal {
     /// Oxyde's own window, which closes.
-    Window(Mutex<Option<oneshot::Sender<()>>>),
+    Window(Arc<Withdraw>),
     /// The fallback portal's request, at the same path on that portal.
     Forwarded(String, OwnedObjectPath),
 }
@@ -234,82 +222,142 @@ struct Request(Withdrawal);
 impl Request {
     async fn close(&self) {
         match &self.0 {
-            Withdrawal::Window(sender) => {
-                if let Some(sender) = sender.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).take() {
-                    let _ = sender.send(());
-                }
+            Withdrawal::Window(withdraw) => {
+                withdraw.withdraw();
             }
-            Withdrawal::Forwarded(backend, path) => {
-                let result = match forwarding().await {
-                    Ok(connection) => connection.call_method(Some(backend.as_str()), path, Some(REQUEST), "Close", &()).await.map(drop),
-                    Err(error) => Err(error),
-                };
-                if let Err(error) = result {
-                    log::warn!("Cannot withdraw the request from {backend}: {error}");
-                }
-            }
+            Withdrawal::Forwarded(backend, path) => super::forward::close(backend, path).await,
         }
     }
 }
 
-/// A connection without Oxyde's own five-second limit: the fallback portal answers only
-/// once the user has chosen, however long that takes.
-async fn forwarding() -> zbus::Result<&'static zbus::Connection> {
-    static CONNECTION: OnceLock<zbus::Connection> = OnceLock::new();
-    if let Some(connection) = CONNECTION.get() {
-        return Ok(connection);
-    }
-    let connection = zbus::Connection::session().await?;
-    Ok(CONNECTION.get_or_init(|| connection))
+/// The call's arguments, as the portal sent them, and who sent it.
+pub(super) struct Call {
+    pub(super) handle: OwnedObjectPath,
+    pub(super) app_id: String,
+    pub(super) parent_window: String,
+    pub(super) title: String,
+    pub(super) options: Options,
+    /// The portal's unique name on the bus, which the call needs alive.
+    caller: Option<String>,
 }
 
-/// The call's arguments, as the portal sent them.
-struct Call {
-    handle: OwnedObjectPath,
-    app_id: String,
-    parent_window: String,
-    title: String,
-    options: Options,
+impl Call {
+    fn new(header: &zbus::message::Header<'_>, handle: OwnedObjectPath, app_id: String, parent_window: String, title: String, options: Options) -> Self {
+        let caller = header.sender().map(|sender| sender.to_string());
+        Self { handle, app_id, parent_window, title, options, caller }
+    }
+
+    /// Resolves once the portal that called has left the bus, as when it restarts:
+    /// nobody waits for the answer any more. Never when that cannot be watched.
+    pub(super) async fn abandoned(&self, connection: &zbus::Connection) {
+        let Some(caller) = self.caller.as_deref() else { return futures::future::pending().await };
+        let watched = async {
+            let bus = zbus::fdo::DBusProxy::builder(connection).cache_properties(zbus::proxy::CacheProperties::No).build().await?;
+            let mut changes = bus.receive_name_owner_changed_with_args(&[(0, caller)]).await?;
+            // Subscribed first, so that a departure in between is not missed.
+            if !bus.name_has_owner(zbus::names::BusName::try_from(caller)?).await? {
+                return Ok(true);
+            }
+            while let Some(change) = changes.next().await {
+                if change.args()?.new_owner().is_none() {
+                    return Ok(true);
+                }
+            }
+            Ok::<_, zbus::Error>(false)
+        };
+        match watched.await {
+            Ok(true) => log::info!("{caller} left the bus while waiting for a file"),
+            Ok(false) => futures::future::pending().await,
+            Err(error) => {
+                log::warn!("Cannot watch {caller} while it waits for a file: {error}");
+                futures::future::pending().await
+            }
+        }
+    }
 }
 
 /// Hands the call to the portal after Oxyde's, which answers it.
-async fn forward(method: &str, call: Call, server: &ObjectServer, pending: Pending) -> (u32, Results) {
+async fn forward(method: &str, call: &Call, server: &ObjectServer, connection: &zbus::Connection) -> (u32, Options) {
     let Some(backend) = super::fallback() else {
         log::warn!("No portal after Oxyde chooses files for {method}");
-        return reply(ENDED, Options::new(), pending);
+        return (ENDED, Options::new());
     };
-    let connection = match forwarding().await {
-        Ok(connection) => connection,
-        Err(error) => {
-            log::warn!("Cannot reach {backend} for {method}: {error}");
-            return reply(ENDED, Options::new(), pending);
-        }
-    };
-    let handle = call.handle.clone();
-    if let Err(error) = server.at(&handle, Request(Withdrawal::Forwarded(backend.clone(), handle.clone()))).await {
+    let handle = &call.handle;
+    if let Err(error) = server.at(handle, Request(Withdrawal::Forwarded(backend.clone(), handle.clone()))).await {
         log::warn!("Cannot serve the request of {method}: {error}");
     }
-    let arguments = (&call.handle, &call.app_id, &call.parent_window, &call.title, &call.options);
-    let answer = connection.call_method(Some(backend.as_str()), PATH, Some(super::INTERFACE), method, &arguments).await
-        .and_then(|message| Ok(message.body().deserialize::<(u32, Options)>()?));
-    let _ = server.remove::<Request, _>(&handle).await;
-    match answer {
-        Ok((response, values)) => reply(response, values, pending),
-        Err(error) => {
-            log::warn!("{backend} did not answer {method}: {error}");
-            reply(ENDED, Options::new(), pending)
+    let answer = super::forward::ask(&backend, method, call, connection).await;
+    let _ = server.remove::<Request, _>(handle).await;
+    answer
+}
+
+/// How a call to Oxyde's window ended.
+enum Outcome {
+    Answered(Option<FileChooserAnswer>),
+    /// The window closed unanswered: withdrawn, or Oxyde is ending.
+    Closed,
+    /// No window, in time or at all, or one the interface can no longer answer from.
+    Unserved(&'static str),
+    /// The portal that called has gone.
+    Abandoned,
+}
+
+/// Waits for the window's answer, its showing in time and the portal's presence.
+async fn outcome(shown: oneshot::Receiver<()>, answered: oneshot::Receiver<Option<FileChooserAnswer>>, abandoned: impl std::future::Future<Output = ()>) -> Outcome {
+    let mut shown = shown.fuse();
+    let mut answered = answered.fuse();
+    let mut late = FutureExt::fuse(async_io::Timer::after(SHOWING_LIMIT));
+    let mut failed = pending::interface_failure().fuse();
+    let mut abandoned = std::pin::pin!(abandoned.fuse());
+    let mut showing = true;
+    loop {
+        futures::select_biased! {
+            _ = failed => return Outcome::Unserved("Oxyde's interface failed"),
+            () = abandoned => return Outcome::Abandoned,
+            result = shown => match result {
+                Ok(()) => {
+                    showing = false;
+                    super::guard::cleared();
+                }
+                Err(oneshot::Canceled) => return Outcome::Unserved("Oxyde could not show its window"),
+            },
+            answer = answered => return answer.map_or(Outcome::Closed, Outcome::Answered),
+            _ = late => if showing {
+                return Outcome::Unserved("Oxyde's window did not show in time");
+            },
         }
     }
+}
+
+/// The values a choice answers with.
+fn chosen_values(chosen: FileChooserAnswer, filters: &[RawFilter], asked: bool) -> Options {
+    let uris: Vec<String> = chosen.paths.iter().map(|path| uri(path)).collect();
+    let mut values = Options::new();
+    if let Ok(uris) = OwnedValue::try_from(Value::from(uris)) {
+        values.insert("uris".into(), uris);
+    }
+    // The filter shown, which the application may keep for next time.
+    let shown = chosen.filter.and_then(|position| filters.get(position)).cloned();
+    if let Some(filter) = shown.and_then(|filter| OwnedValue::try_from(Value::from(filter)).ok()) {
+        values.insert("current_filter".into(), filter);
+    }
+    if let Some(choices) = asked.then(|| OwnedValue::try_from(Value::from(chosen.choices)).ok()).flatten() {
+        values.insert("choices".into(), choices);
+    }
+    values
 }
 
 pub(in crate::platform) struct FileChooser(pub(in crate::platform) UnboundedSender<InstanceMessage>);
 
 impl FileChooser {
     /// Asks Oxyde's interface for a window that answers `method`.
-    async fn open_in_window(&self, method: &str, call: Call, server: &ObjectServer, pending: Pending) -> (u32, Results) {
+    async fn open_in_window(&self, method: &str, call: Call, server: &ObjectServer, connection: &zbus::Connection) -> (u32, Results) {
+        let mut pending = Pending::start();
         let (answer, answered) = oneshot::channel();
         let (withdraw, withdrawn) = oneshot::channel();
-        if let Err(error) = server.at(&call.handle, Request(Withdrawal::Window(Mutex::new(Some(withdraw))))).await {
+        let (shown, showing) = oneshot::channel();
+        let withdraw = Withdraw::new(withdraw);
+        if let Err(error) = server.at(&call.handle, Request(Withdrawal::Window(withdraw.clone()))).await {
             log::warn!("Cannot serve the request of {method}: {error}");
         }
         log::info!("{method} for {:?}", call.app_id);
@@ -331,36 +379,33 @@ impl FileChooser {
             parent: parent_window(&call.parent_window),
             answer,
             withdrawn,
+            shown: Some(shown),
         };
         let asked = !request.choices.is_empty();
         let message = InstanceMessage { request: InstanceRequest::ChooseFile(request), activation_token: None };
-        if self.0.unbounded_send(message).is_err() {
-            // Oxyde's interface has gone: the portal after it answers instead.
-            let _ = server.remove::<Request, _>(&call.handle).await;
-            return forward(method, call, server, pending).await;
-        }
-        let answer = answered.await;
+        let outcome = if self.0.unbounded_send(message).is_err() {
+            Outcome::Unserved("Oxyde's interface has gone")
+        } else {
+            outcome(showing, answered, call.abandoned(connection)).await
+        };
         let _ = server.remove::<Request, _>(&call.handle).await;
-        match answer {
-            Ok(Some(chosen)) => {
-                let uris: Vec<String> = chosen.paths.iter().map(|path| uri(path)).collect();
-                let mut values = Options::new();
-                if let Ok(uris) = OwnedValue::try_from(Value::from(uris)) {
-                    values.insert("uris".into(), uris);
-                }
-                // The filter shown, which the application may keep for next time.
-                let shown = chosen.filter.and_then(|position| filters.get(position)).cloned();
-                if let Some(filter) = shown.and_then(|filter| OwnedValue::try_from(Value::from(filter)).ok()) {
-                    values.insert("current_filter".into(), filter);
-                }
-                if let Some(choices) = asked.then(|| OwnedValue::try_from(Value::from(chosen.choices)).ok()).flatten() {
-                    values.insert("choices".into(), choices);
-                }
-                reply(SUCCESS, values, pending)
+        match outcome {
+            Outcome::Answered(Some(chosen)) => reply(SUCCESS, chosen_values(chosen, &filters, asked), pending),
+            Outcome::Answered(None) => reply(CANCELLED, Options::new(), pending),
+            Outcome::Closed => reply(ENDED, Options::new(), pending),
+            Outcome::Abandoned => {
+                withdraw.withdraw();
+                reply(ENDED, Options::new(), pending)
             }
-            Ok(None) => reply(CANCELLED, Options::new(), pending),
-            // The window closed without an answer: withdrawn, or Oxyde is ending.
-            Err(oneshot::Canceled) => reply(ENDED, Options::new(), pending),
+            // Withdrawn meanwhile: nothing to hand on. Otherwise a window that would
+            // still come closes, and the portal after Oxyde's answers.
+            Outcome::Unserved(_) if !withdraw.withdraw() => reply(ENDED, Options::new(), pending),
+            Outcome::Unserved(reason) => {
+                log::warn!("{reason}: {method} goes to the portal after Oxyde's");
+                pending.forward();
+                let (response, values) = forward(method, &call, server, connection).await;
+                reply(response, values, pending)
+            }
         }
     }
 }
@@ -368,6 +413,7 @@ impl FileChooser {
 #[zbus::interface(name = "org.freedesktop.impl.portal.FileChooser")]
 impl FileChooser {
     #[zbus(out_args("response", "results"))]
+    #[allow(clippy::too_many_arguments)]
     async fn open_file(
         &self,
         handle: OwnedObjectPath,
@@ -375,13 +421,16 @@ impl FileChooser {
         parent_window: String,
         title: String,
         options: Options,
+        #[zbus(header)] header: zbus::message::Header<'_>,
         #[zbus(object_server)] server: &ObjectServer,
+        #[zbus(connection)] connection: &zbus::Connection,
     ) -> (u32, Results) {
-        let pending = Pending::start();
-        self.open_in_window("OpenFile", Call { handle, app_id, parent_window, title, options }, server, pending).await
+        let call = Call::new(&header, handle, app_id, parent_window, title, options);
+        self.open_in_window("OpenFile", call, server, connection).await
     }
 
     #[zbus(out_args("response", "results"))]
+    #[allow(clippy::too_many_arguments)]
     async fn save_file(
         &self,
         handle: OwnedObjectPath,
@@ -389,13 +438,16 @@ impl FileChooser {
         parent_window: String,
         title: String,
         options: Options,
+        #[zbus(header)] header: zbus::message::Header<'_>,
         #[zbus(object_server)] server: &ObjectServer,
+        #[zbus(connection)] connection: &zbus::Connection,
     ) -> (u32, Results) {
-        let pending = Pending::start();
-        self.open_in_window("SaveFile", Call { handle, app_id, parent_window, title, options }, server, pending).await
+        let call = Call::new(&header, handle, app_id, parent_window, title, options);
+        self.open_in_window("SaveFile", call, server, connection).await
     }
 
     #[zbus(out_args("response", "results"))]
+    #[allow(clippy::too_many_arguments)]
     async fn save_files(
         &self,
         handle: OwnedObjectPath,
@@ -403,10 +455,12 @@ impl FileChooser {
         parent_window: String,
         title: String,
         options: Options,
+        #[zbus(header)] header: zbus::message::Header<'_>,
         #[zbus(object_server)] server: &ObjectServer,
+        #[zbus(connection)] connection: &zbus::Connection,
     ) -> (u32, Results) {
-        let pending = Pending::start();
-        self.open_in_window("SaveFiles", Call { handle, app_id, parent_window, title, options }, server, pending).await
+        let call = Call::new(&header, handle, app_id, parent_window, title, options);
+        self.open_in_window("SaveFiles", call, server, connection).await
     }
 }
 
