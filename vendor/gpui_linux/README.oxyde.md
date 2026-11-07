@@ -33,6 +33,13 @@ Local source changes, all marked `Oxyde:`:
   scale: 2560x1600 at 125 % reported 1280x800 instead of 2048x1280. A roundtrip at startup
   makes them known before the first window opens.
 
+- `PlatformWindow::activate_with_token` (`gpui/src/platform.rs`, `activate` by default),
+  `Window::activate_window_with_token` (`gpui/src/window.rs`) and its Wayland version
+  (`gpui_linux/src/linux/wayland/window.rs`): presents an xdg-activation token that another
+  process received, so the running Oxyde comes forward when a second launch or a
+  FileManager1 call hands it a folder. Upstream only requests a new token, which Mutter and
+  KWin refuse without a recent input event.
+
 Reason: GPUI repositions a popup only when it resizes, so a tooltip could not follow the
 pointer. Windows and X11 reject anchored popups and are unchanged. When updating GPUI,
 compare both copies to the new upstream.

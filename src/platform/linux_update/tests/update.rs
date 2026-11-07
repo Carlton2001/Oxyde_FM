@@ -173,6 +173,68 @@ fn failed_installation_reports_the_script_message() {
     assert_eq!(error.to_string(), "no space left");
 }
 
+/// The cleaning `--uninstall --purge` adds to removing the files it installed:
+/// associations that would name a missing application, the cache and the settings.
+#[test]
+fn uninstall_forgets_associations_cache_and_settings() {
+    let home = tempfile::tempdir().unwrap();
+    let root = home.path().join(".local/lib/oxyde");
+    let folder = tempfile::tempdir().unwrap();
+    install_into(&release(folder.path(), "9.9.9", None), &root, None).unwrap();
+    let config = home.path().join(".config");
+    std::fs::create_dir_all(home.path().join(".cache/Oxyde/thumbnails")).unwrap();
+    std::fs::create_dir_all(config.join("Oxyde")).unwrap();
+    std::fs::write(config.join("Oxyde/config.json"), b"{}").unwrap();
+    let ours = format!("{APP_ID}.desktop");
+    std::fs::write(config.join("mimeapps.list"), format!("[Default Applications]\ninode/directory={ours}\n\
+        image/png={ours};org.gnome.Loupe.desktop;\ntext/markdown=dev.zed.Zed.desktop\n\n\
+        [Added Associations]\ninode/directory=org.gnome.Nautilus.desktop;{ours};\n")).unwrap();
+    std::fs::write(config.join("kde-mimeapps.list"), format!("[Default Applications]\ninode/directory={ours}\n")).unwrap();
+    let service = home.path().join(format!(".local/share/dbus-1/services/{APP_ID}.FileManager1.service"));
+    std::fs::create_dir_all(service.parent().unwrap()).unwrap();
+    std::fs::write(&service, b"[D-BUS Service]\n").unwrap();
+    let system = tempfile::tempdir().unwrap();
+    let output = Command::new("bash").arg(INSTALL_SCRIPT).args(["--uninstall", "--purge"])
+        .env("HOME", home.path()).env("XDG_DATA_DIRS", system.path())
+        .env_remove("XDG_DATA_HOME").env_remove("XDG_CONFIG_HOME").env_remove("XDG_CACHE_HOME")
+        .stdin(Stdio::null()).output().unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    assert!(stdout.contains("no longer the default application for folders"), "{stdout}");
+    assert_eq!(std::fs::read_to_string(config.join("mimeapps.list")).unwrap(), "[Default Applications]\n\
+        image/png=org.gnome.Loupe.desktop;\ntext/markdown=dev.zed.Zed.desktop\n\n\
+        [Added Associations]\ninode/directory=org.gnome.Nautilus.desktop;\n");
+    assert_eq!(std::fs::read_to_string(config.join("kde-mimeapps.list")).unwrap(), "[Default Applications]\n");
+    assert!(!root.exists() && !home.path().join(".local/bin/oxyde").exists());
+    assert!(!home.path().join(format!(".local/share/applications/{ours}")).exists());
+    assert!(!service.exists());
+    // A running Oxyde, the developer's included, keeps the cache and settings it uses.
+    let running = stderr.contains("Oxyde is running");
+    assert!(running || !home.path().join(".cache/Oxyde").exists(), "{stderr}");
+    assert!(running || !config.join("Oxyde").exists(), "{stderr}");
+}
+
+/// A system package still provides the entry: its associations stay valid.
+#[test]
+fn uninstall_keeps_associations_of_a_system_package() {
+    let home = tempfile::tempdir().unwrap();
+    let system = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(system.path().join("applications")).unwrap();
+    std::fs::write(system.path().join(format!("applications/{APP_ID}.desktop")), b"").unwrap();
+    let config = home.path().join(".config");
+    std::fs::create_dir_all(&config).unwrap();
+    let associations = format!("[Default Applications]\ninode/directory={APP_ID}.desktop\n");
+    std::fs::write(config.join("mimeapps.list"), &associations).unwrap();
+    let output = Command::new("bash").arg(INSTALL_SCRIPT).arg("--uninstall")
+        .env("HOME", home.path()).env("XDG_DATA_DIRS", system.path())
+        .env_remove("XDG_DATA_HOME").env_remove("XDG_CONFIG_HOME")
+        .stdin(Stdio::null()).output().unwrap();
+    assert!(output.status.success());
+    assert!(String::from_utf8_lossy(&output.stdout).contains("system package"));
+    assert_eq!(std::fs::read_to_string(config.join("mimeapps.list")).unwrap(), associations);
+}
+
 #[test]
 fn only_the_download_folder_is_removed() {
     let parent = tempfile::tempdir().unwrap();

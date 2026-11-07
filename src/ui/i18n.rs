@@ -216,6 +216,9 @@ pub enum Message {
     SettingsOnedriveDescription,
     SettingsNetwork,
     SettingsNetworkDescription,
+    SettingsDefaultFileManager,
+    SettingsDefaultFileManagerDescription,
+    SettingsDefaultFileManagerError,
 
     ThemeDark,
     ThemeLight,
@@ -905,6 +908,9 @@ impl Message {
             Self::SettingsOnedriveDescription => "settings-onedrive-description",
             Self::SettingsNetwork => "settings-network",
             Self::SettingsNetworkDescription => "settings-network-description",
+            Self::SettingsDefaultFileManager => "settings-default-file-manager",
+            Self::SettingsDefaultFileManagerDescription => "settings-default-file-manager-description",
+            Self::SettingsDefaultFileManagerError => "settings-default-file-manager-error",
 
             Self::ThemeDark => "theme-dark",
             Self::ThemeLight => "theme-light",
@@ -1899,6 +1905,9 @@ mod tests {
                 Message::SettingsOnedriveDescription,
                 Message::SettingsNetwork,
                 Message::SettingsNetworkDescription,
+                Message::SettingsDefaultFileManager,
+                Message::SettingsDefaultFileManagerDescription,
+                Message::SettingsDefaultFileManagerError,
 
                 Message::ThemeDark,
                 Message::ThemeLight,

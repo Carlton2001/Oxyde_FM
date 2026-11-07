@@ -263,6 +263,9 @@ date-format-european = European (DD/MM/YYYY)
 date-format-iso = ISO 8601 (YYYY-MM-DD)
 settings-network = Network neighborhood
 settings-network-description = Show the network neighborhood in the left panel.
+settings-default-file-manager = Default file manager
+settings-default-file-manager-description = Open folders and other applications’ “Show in folder” with Oxyde. The dock’s Files icon and Open and Save dialogs stay the system’s.
+settings-default-file-manager-error = Could not change the default file manager.
 
 settings-region-language = Region & language
 settings-performance = Performance

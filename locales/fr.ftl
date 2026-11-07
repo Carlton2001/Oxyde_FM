@@ -269,6 +269,9 @@ date-format-european = Européen (JJ/MM/AAAA)
 date-format-iso = ISO 8601 (AAAA-MM-JJ)
 settings-network = Voisinage réseau
 settings-network-description = Afficher le voisinage réseau dans le panneau gauche.
+settings-default-file-manager = Gestionnaire de fichiers par défaut
+settings-default-file-manager-description = Ouvrir avec Oxyde les dossiers et « Afficher dans le dossier » des autres applications. L’icône Fichiers du dock et les fenêtres Ouvrir et Enregistrer restent celles du système.
+settings-default-file-manager-error = Impossible de changer le gestionnaire de fichiers par défaut.
 
 settings-region-language = Région & langue
 settings-performance = Performances

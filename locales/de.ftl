@@ -425,6 +425,9 @@ date-format-iso = ISO 8601 (JJJJ-MM-TT)
 settings-network = Netzwerk
 
 settings-network-description = Netzwerkumgebung im linken Bereich anzeigen.
+settings-default-file-manager = Standard-Dateimanager
+settings-default-file-manager-description = Ordner und „Im Ordner anzeigen“ anderer Anwendungen mit Oxyde öffnen. Das Dateien-Symbol im Dock und die Dialoge zum Öffnen und Speichern bleiben die des Systems.
+settings-default-file-manager-error = Der Standard-Dateimanager konnte nicht geändert werden.
 
 settings-region-language = Region & Sprache
 

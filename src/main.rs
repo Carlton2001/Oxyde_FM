@@ -79,6 +79,17 @@ fn main() {
         return;
     }
     initialize_logging();
+    let startup_locations = oxyde_lib::platform::platform().startup_locations();
+    // A later launch hands its locations to the running Oxyde and opens no window.
+    let instance_requests = match oxyde_lib::platform::platform().claim_instance(&startup_locations) {
+        oxyde_lib::platform::InstanceClaim::Forwarded => {
+            log::info!("locations handed to the running Oxyde: {startup_locations:?}");
+            log::logger().flush();
+            return;
+        }
+        oxyde_lib::platform::InstanceClaim::First(requests) => Some(requests),
+        oxyde_lib::platform::InstanceClaim::Alone => None,
+    };
     if let Some(drivers) = idle_gpus {
         log::info!("Vulkan drivers of GPUs without a screen disabled: {drivers}");
     }
@@ -108,7 +119,6 @@ fn main() {
     // The shared native folder icons are ready before any file list is painted.
     // No file operation blocks navigation: the first window does not exist yet.
     let folder_icons = crate::ui::components::icons::prepare_system_folder_icons(config.use_system_icons);
-    let startup_locations = oxyde_lib::platform::platform().startup_locations();
     let asset_source = crate::ui::assets::EmbeddedAssetSource::new();
     gpui_platform::application()
         .with_assets(asset_source)
@@ -146,7 +156,15 @@ fn main() {
             app.update(cx, |this, cx| {
                 this.handle = Some(app.clone());
                 this.operations_panel_view = Some(operations_panel);
-                this.show_only_locations(&startup_locations);
+                match instance_requests {
+                    // The only Oxyde: its session stays, with the received locations added.
+                    Some(requests) => {
+                        this.add_startup_locations(&startup_locations);
+                        this.receive_instance_requests(requests, cx);
+                    }
+                    // Another process may own the session: show only what this one received.
+                    None => this.show_only_locations(&startup_locations),
+                }
                 if initialize_date_format && !load_failed { this.save_preferences(cx); }
                 this.start_watcher_task(cx);
                 this.reconcile_watchers(cx);

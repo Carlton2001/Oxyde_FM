@@ -47,7 +47,7 @@ The build writes the release version into the copy it publishes; run from a chec
 
 It then probes the runtime dependencies listed below and, when some are missing, prints the feature each one carries and the exact `dnf`, `rpm-ostree`, `pacman`, `zypper` or `apt-get` command, and offers to run it. Codecs are left to the user.
 
-Options: `--version X.Y.Z`, `--archive FILE|FOLDER` (offline, or `./install.sh` from an extracted archive), `--set-default` (default application for folders through `xdg-mime`), `--yes`, `--uninstall` (settings are kept), `--update` (what Oxyde runs, below). Running it again also updates. Concurrent runs wait on a `flock` of `~/.local/lib/oxyde/.lock`.
+Options: `--version X.Y.Z`, `--archive FILE|FOLDER` (offline, or `./install.sh` from an extracted archive), `--set-default` (default application for folders through `xdg-mime`), `--yes`, `--uninstall` (also removes `~/.cache/Oxyde`, kept while Oxyde runs, and Oxyde from every `mimeapps.list` unless a system package still provides its entry; then asks, `[y/N]`, whether to delete `~/.config/Oxyde`, which `--purge` does without asking; never while Oxyde runs or a system package shares the settings), `--update` (what Oxyde runs, below). Running it again also updates. Concurrent runs wait on a `flock` of `~/.local/lib/oxyde/.lock`.
 
 ## Updates
 
@@ -99,9 +99,28 @@ Without the profile the log shows `bwrap: loopback: Failed RTM_NEWADDR` and "Pre
 
 ## Opening a folder
 
-`Exec=oxyde %U` and `MimeType=inode/directory` put Oxyde in "Open With" without making it the default handler. Like a new Nautilus window, launching shows only the received locations, one tab each, and leaves saved tabs for the next launch (`platform/linux_startup.rs`).
+`Exec=oxyde %U` and `MimeType=inode/directory` put Oxyde in "Open With" without making it the default handler. Received locations are parsed in `platform/linux_startup.rs`: a file stands for its folder, `file://` URIs are decoded, other schemes stay URIs for GIO.
 
-Limits: each launch is a new process, with no single instance, and its preference save rewrites the session it read at startup; a received file opens its folder without selecting it; a non-UTF-8 name is ignored.
+**One instance per session** (`platform/linux_instance.rs`, `ui/app/instance.rs`). Before any window, Oxyde asks the session bus for `io.github.Carlton2001.Oxyde` (`.Devel` for debug builds, so a `cargo run` never talks to an installed copy) with `DoNotQueue`. The first process keeps it and serves `io.github.Carlton2001.Oxyde1.Open(as locations, s token)` at `/io/github/Carlton2001/Oxyde`; it restores the saved session and adds each received location as a new tab. A later launch calls `Open` with `XDG_ACTIVATION_TOKEN` (or `DESKTOP_STARTUP_ID`) and exits before GPUI starts; the running one adds the tabs and presents the token through `Window::activate_window_with_token`, a local GPUI patch (`vendor/gpui_linux/README.oxyde.md`), so Mutter and KWin bring it forward. Without a session bus, or if the running Oxyde does not answer within five seconds, the process runs alone as before: it shows only the received locations and leaves the saved session untouched.
+
+**Default file manager** (`ui/app/folder_handler.rs`, GIO in `platform/linux_gio/applications.rs`). On, the Settings switch:
+
+- makes Oxyde the default for `inode/directory` in the user's `mimeapps.list` and keeps the application it replaced in `folder_handler_before`; off, it gives folders back to that application, or resets the user's folder associations when it is gone;
+- writes `$XDG_DATA_HOME/dbus-1/services/io.github.Carlton2001.Oxyde.FileManager1.service`, whose `Exec` is the desktop entry's program, asks the bus to reload, and requests `org.freedesktop.FileManager1` with `AllowReplacement`. User service files take precedence over `/usr/share`, so the bus starts Oxyde rather than Nautilus; a program already holding the name keeps it, and Oxyde waits in the queue. Off, the file is removed and the name released.
+
+At each start, a thread makes the service file and the name follow the folder default, which `install.sh --set-default` or another program may have changed. `ShowFolders` opens tabs, `ShowItems` opens one tab per folder with its items selected, `ShowItemProperties` opens Properties. The switch is shown only when GIO finds the desktop entry. `install.sh --uninstall` removes the service file.
+
+Limits: another program's user service file for `org.freedesktop.FileManager1` (Strata writes one) competes with Oxyde's, and the bus keeps whichever it reads first; the dock's Files icon and the Open and Save dialogs stay the desktop's; a non-UTF-8 name is ignored.
+
+**TODO: Open and Save dialogs.** Applications that ask through `xdg-desktop-portal` (Flatpak, Firefox, Chrome, recent Electron) could get Oxyde as their file chooser, as Strata does: an `oxyde.portal` in `$XDG_DATA_HOME/xdg-desktop-portal/portals` declaring `org.freedesktop.impl.portal.FileChooser`, its D-Bus service file, and the `FileChooser` line of `~/.config/<desktop>-portals.conf`, edited alone and restored when turned off, then a restart of `xdg-desktop-portal`. Behind a Settings switch, off by default, cleaned by `install.sh --uninstall`. Steps, each shippable:
+
+1. The `OpenFile` backend and its `Request` object, served by the running instance or by an Oxyde started without a main window, with a minimal one-file picker.
+2. Several files, a folder, and type filters.
+3. `SaveFile` and `SaveFiles`: proposed name and folder, overwrite confirmation, extra `choices`.
+4. Parenting to the caller's window: `xdg-foreign` on Wayland needs a GPUI patch; without it the picker is an independent, non-modal window.
+5. Robustness: once chosen, every portal dialog depends on Oxyde, and the `gnome;gtk` fallback applies only when the backend is missing, not when it fails. Timeouts, cancellation, tests with Firefox, Chrome and a Flatpak.
+
+Applications that use their toolkit's own dialog without the portal keep it.
 
 ## Continuous integration
 

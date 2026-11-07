@@ -425,6 +425,9 @@ date-format-iso = ISO 8601 (AAAA-MM-GG)
 settings-network = Rete
 
 settings-network-description = Mostra le risorse di rete nel pannello sinistro.
+settings-default-file-manager = File manager predefinito
+settings-default-file-manager-description = Apri con Oxyde le cartelle e «Mostra nella cartella» delle altre applicazioni. L’icona File del dock e le finestre Apri e Salva restano quelle del sistema.
+settings-default-file-manager-error = Impossibile cambiare il file manager predefinito.
 
 settings-region-language = Regione e Lingua
 

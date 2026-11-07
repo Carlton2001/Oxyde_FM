@@ -123,6 +123,35 @@ impl ShellDeleteOutcome {
     }
 }
 
+/// What another process asks the running Oxyde to show: a second launch, or a program
+/// calling FileManager1 such as a browser's « Show in folder ».
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InstanceRequest {
+    /// Folders, each in a new tab; none only brings the window forward.
+    Folders(Vec<String>),
+    /// Items selected in their folder, one tab per folder.
+    Items(Vec<String>),
+    /// Items whose Properties window opens.
+    Properties(Vec<String>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstanceMessage {
+    pub request: InstanceRequest,
+    /// The token the sender's launcher gave it, which lets the window come forward.
+    pub activation_token: Option<String>,
+}
+
+/// Whether this process is the session's Oxyde.
+pub enum InstanceClaim {
+    /// The first one: requests from later launches and FileManager1 calls arrive here.
+    First(futures::channel::mpsc::UnboundedReceiver<InstanceMessage>),
+    /// Another Oxyde runs and received the locations: this process ends.
+    Forwarded,
+    /// No session bus, or no single instance on this system: this process stands alone.
+    Alone,
+}
+
 /// Parent of the WSL distributions, which Explorer calls "Linux".
 pub const WSL_ROOT: &str = r"\\wsl.localhost";
 
@@ -225,6 +254,9 @@ pub trait Platform: Send + Sync {
     fn prefer_display_gpu(&self) -> Option<String> { None }
     /// Locations the desktop asked this launch to open, instead of the saved tabs.
     fn startup_locations(&self) -> Vec<String> { Vec::new() }
+    /// Becomes the session's Oxyde, or hands `locations` to the one already running.
+    /// Runs before the first window, which the forwarding process never opens.
+    fn claim_instance(&self, _locations: &[String]) -> InstanceClaim { InstanceClaim::Alone }
     /// How releases reach this copy of Oxyde. Cheap: the About page asks at each render.
     fn installation(&self) -> Installation { Installation::Unmanaged }
     /// Window buttons that match the running desktop.
@@ -707,6 +739,14 @@ pub trait Platform: Send + Sync {
     fn open_with(&self, _id: &str, _paths: &[String], _remember: bool) -> Result<(), String> {
         Err("Open With is not available on this system".into())
     }
+    /// Whether other applications open folders with Oxyde; None when the system offers
+    /// no such choice, or names no installed Oxyde to choose. Reads files: off the UI thread.
+    fn opens_folders_by_default(&self) -> Option<bool> { None }
+    /// Makes Oxyde the default for folders and returns the application it replaces, or
+    /// gives folders back to `previous`, the system's default without it.
+    fn open_folders_by_default(&self, _enabled: bool, _previous: Option<&str>) -> Result<Option<String>, String> {
+        Err("Choosing the default for folders is not available on this system".into())
+    }
     /// Whether this system offers to open a folder in a terminal.
     fn offers_terminal(&self) -> bool { false }
     fn open_terminal(&self, _path: &str) -> Result<(), String> {
@@ -848,6 +888,8 @@ mod linux_terminal;
 mod linux_window_controls;
 #[cfg(not(target_os = "windows"))]
 mod linux_startup;
+#[cfg(not(target_os = "windows"))]
+mod linux_instance;
 #[cfg(not(target_os = "windows"))]
 mod linux_gio;
 #[cfg(not(target_os = "windows"))]

@@ -2394,6 +2394,12 @@ impl Window {
         self.platform_window.popup_offset()
     }
 
+    /// Oxyde: brings the window forward with an activation token received from another
+    /// process, such as `XDG_ACTIVATION_TOKEN` or a FileManager1 `StartupId`.
+    pub fn activate_window_with_token(&self, token: Option<String>) {
+        self.platform_window.activate_with_token(token);
+    }
+
     /// Linux (wayland) only: Set the window's input region, the area that receives pointer
     /// and touch input. Events outside it pass through to whatever is below the window.
     ///

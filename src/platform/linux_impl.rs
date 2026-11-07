@@ -767,6 +767,10 @@ impl Platform for LinuxPlatform {
         super::linux_startup::locations(std::env::args_os().skip(1), &current)
     }
 
+    fn claim_instance(&self, locations: &[String]) -> super::InstanceClaim {
+        super::linux_instance::claim(locations)
+    }
+
     fn regional_locale(&self) -> Option<String> {
         ["LC_ALL", "LC_TIME", "LANG"].into_iter().filter_map(|key| std::env::var(key).ok()).find(|value| !value.is_empty())
     }
@@ -822,6 +826,16 @@ impl Platform for LinuxPlatform {
     #[cfg(target_os = "linux")]
     fn open_with(&self, id: &str, paths: &[String], remember: bool) -> Result<(), String> {
         super::linux_gio::applications::launch(id, paths, remember)
+    }
+    #[cfg(target_os = "linux")]
+    fn opens_folders_by_default(&self) -> Option<bool> {
+        super::linux_gio::applications::opens_folders()
+    }
+    #[cfg(target_os = "linux")]
+    fn open_folders_by_default(&self, enabled: bool, previous: Option<&str>) -> Result<Option<String>, String> {
+        let replaced = super::linux_gio::applications::open_folders(enabled, previous)?;
+        super::linux_instance::serve_file_manager(enabled);
+        Ok(replaced)
     }
 
     fn offers_terminal(&self) -> bool { true }

@@ -16,30 +16,62 @@ pub(super) fn locations(arguments: impl Iterator<Item = OsString>, current: &Pat
     }).collect()
 }
 
-fn location(argument: &str, current: &Path) -> Option<String> {
+/// A named location: a local path, absolute or from `current`, or a URI for GIO.
+enum Named {
+    Path(PathBuf),
+    Uri(String),
+}
+
+fn named(argument: &str, current: &Path) -> Option<Named> {
     if argument.starts_with('-') {
         return None;
     }
-    let path = match argument.split_once("://") {
+    Some(match argument.split_once("://") {
         Some((scheme, rest)) if scheme.eq_ignore_ascii_case("file") => {
             let path = rest.strip_prefix("localhost").unwrap_or(rest);
             if !path.starts_with('/') {
                 return None;
             }
-            PathBuf::from(percent_decode_str(path).decode_utf8().ok()?.into_owned())
+            Named::Path(PathBuf::from(percent_decode_str(path).decode_utf8().ok()?.into_owned()))
         }
-        Some((scheme, _)) if is_scheme(scheme) => return Some(argument.to_owned()),
-        _ => current.join(argument),
+        Some((scheme, _)) if is_scheme(scheme) => Named::Uri(argument.to_owned()),
+        _ => Named::Path(current.join(argument)),
+    })
+}
+
+/// Without `..`, the path as named; otherwise resolved, as `..` after a link would not
+/// lead where it reads.
+fn plain(path: &Path) -> Option<String> {
+    let path = if path.components().any(|part| part == Component::ParentDir) {
+        std::fs::canonicalize(path).ok()?
+    } else {
+        path.components().collect()
+    };
+    path.into_os_string().into_string().ok()
+}
+
+fn location(argument: &str, current: &Path) -> Option<String> {
+    let path = match named(argument, current)? {
+        Named::Uri(uri) => return Some(uri),
+        Named::Path(path) => path,
     };
     // Before the first window: nothing is on screen yet that a slow mount could freeze.
     let metadata = std::fs::metadata(&path).ok()?;
-    let folder = if metadata.is_dir() { path.as_path() } else { path.parent()? };
-    let folder = if folder.components().any(|part| part == Component::ParentDir) {
-        std::fs::canonicalize(folder).ok()?
-    } else {
-        folder.components().collect()
-    };
-    folder.into_os_string().into_string().ok()
+    plain(if metadata.is_dir() { path.as_path() } else { path.parent()? })
+}
+
+/// Folders to show, as FileManager1's `ShowFolders` and a second launch name them.
+pub(super) fn folders(uris: &[String]) -> Vec<String> {
+    uris.iter().filter_map(|uri| location(uri, Path::new("/"))).collect()
+}
+
+/// Existing local items to select in their folder, as FileManager1's `ShowItems` and
+/// `ShowItemProperties` name them. Other schemes have no folder Oxyde can list here.
+pub(super) fn items(uris: &[String]) -> Vec<String> {
+    uris.iter().filter_map(|uri| match named(uri, Path::new("/"))? {
+        Named::Path(path) if path.is_absolute() && std::fs::symlink_metadata(&path).is_ok() => plain(&path),
+        _ => None,
+    }).collect()
 }
 
 fn is_scheme(scheme: &str) -> bool {

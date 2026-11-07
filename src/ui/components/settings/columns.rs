@@ -135,6 +135,16 @@ pub(super) fn left_column(view: &OxydeApp, handle: Entity<OxydeApp>, left_width:
             theme,
             |view, cx| view.toggle_onedrive(cx),
         )))
+        .when_some(view.opens_folders, |body, opens_folders| body.child(settings_row(
+            i18n.text(Message::SettingsDefaultFileManager),
+            i18n.text(Message::SettingsDefaultFileManagerDescription),
+            "icons/folder-check.svg",
+            opens_folders,
+            "toggle-default-file-manager",
+            handle.clone(),
+            theme,
+            |view, cx| view.toggle_folder_handler(cx),
+        )))
         .child(settings_row(
             i18n.text(Message::SettingsNetwork),
             i18n.text(Message::SettingsNetworkDescription),

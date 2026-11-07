@@ -52,6 +52,8 @@ pub(crate) mod network;
 pub(crate) mod remote;
 pub(crate) mod archive_password;
 pub(crate) mod open_with;
+mod folder_handler;
+mod instance;
 pub(crate) mod archive_protection;
 pub mod selection;
 mod item_pointer;
@@ -289,6 +291,10 @@ pub struct OxydeApp {
     calendar_task: Option<Task<()>>,
     pub(super) quick_access_request: u64,
     pub(crate) onedrive_installed: bool,
+    /// Whether other applications open folders with Oxyde; None until read, or when the
+    /// system offers no such choice.
+    pub(crate) opens_folders: Option<bool>,
+    pub(super) changing_folder_handler: bool,
     pub(crate) peek_status: oxyde_lib::platform::PeekStatus,
     pub _drive_refresh_task: Option<Task<()>>,
     pub(super) drive_details_task: Option<Task<()>>,
@@ -501,6 +507,8 @@ impl OxydeApp {
             calendar_task: None,
             quick_access_request: 0,
             onedrive_installed: false,
+            opens_folders: None,
+            changing_folder_handler: false,
             peek_status: Default::default(),
             _drive_refresh_task: None,
             drive_details_task: None,

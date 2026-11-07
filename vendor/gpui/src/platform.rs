@@ -1024,6 +1024,13 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     fn popup_offset(&self) -> Option<std::rc::Rc<std::cell::Cell<Point<Pixels>>>> {
         None
     }
+
+    /// Oxyde: brings the window forward with an activation token another process received,
+    /// as a second launch hands it to the running instance. Without the platform's support,
+    /// or without a token, this is `activate`.
+    fn activate_with_token(&self, _token: Option<String>) {
+        self.activate();
+    }
     fn window_decorations(&self) -> Decorations {
         Decorations::Server
     }

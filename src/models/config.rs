@@ -97,6 +97,10 @@ pub struct AppConfig {
     /// Last release version announced by the automatic update check.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_notified_update: Option<String>,
+    /// The application that opened folders before Oxyde was made their default, given
+    /// back when that choice is turned off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder_handler_before: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duplicate_search_options: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -156,6 +160,7 @@ impl Default for AppConfig {
             confirm_delete: true,
             workspace_state: None,
             last_notified_update: None,
+            folder_handler_before: None,
             duplicate_search_options: None,
             duplicate_search_window_size: None,
         }
@@ -182,8 +187,11 @@ impl AppConfig {
         let custom_themes = std::mem::take(&mut self.custom_themes);
         let color_vision = std::mem::take(&mut self.color_vision);
         let pinned_order = std::mem::take(&mut self.pinned_order);
+        // The system's setting outlives a reset: keep what turning it off gives back.
+        let folder_handler_before = self.folder_handler_before.take();
         *self = Self {
             pinned_order,
+            folder_handler_before,
             custom_themes,
             color_vision,
             workspace_state,

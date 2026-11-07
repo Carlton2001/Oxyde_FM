@@ -2188,6 +2188,22 @@ impl PlatformWindow for WaylandWindow {
         matches!(state.surface_state, WaylandSurfaceState::Popup(_)).then(|| state.popup_offset.clone())
     }
 
+    /// Oxyde: a token from another process is presented as is; the compositor decides.
+    fn activate_with_token(&self, token: Option<String>) {
+        let Some(token) = token.filter(|token| !token.is_empty()) else {
+            self.activate();
+            return;
+        };
+        let state = self.borrow();
+        match &state.globals.activation {
+            Some(activation) => activation.activate(token, &state.surface),
+            None => {
+                drop(state);
+                self.activate();
+            }
+        }
+    }
+
     fn set_input_region(&self, region: Option<&[Bounds<Pixels>]>) {
         let state = self.borrow();
         match region {
