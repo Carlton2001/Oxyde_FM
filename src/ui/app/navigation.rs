@@ -418,7 +418,7 @@ impl OxydeApp {
             let tab_idx = pane.active_tab_index;
             let active_tab = pane.active_tab_mut();
             active_tab.reset_folder_sizes();
-            active_tab.path = path.clone();
+            let previous = std::mem::replace(&mut active_tab.path, path.clone());
             active_tab.archive_root = None;
             active_tab.search_revision = active_tab.search_revision.wrapping_add(1);
             active_tab.search_input = None;
@@ -436,6 +436,13 @@ impl OxydeApp {
             active_tab.filter_dates.clear();
             active_tab.selected_paths.clear();
             active_tab.selection_anchor = None;
+            // Back in an ancestor, the folder just left is selected and shown.
+            if let Some(child) = child_toward(&path, &previous) {
+                active_tab.selected_paths.insert(child.clone());
+                active_tab.selection_anchor = Some(child.clone());
+                active_tab.keyboard_cursor = Some(child.clone());
+                active_tab.pending_reveal = Some(child);
+            }
             active_tab.load_status = crate::ui::workspace::TabLoadStatus::Loading;
             active_tab.list_scroll = UniformListScrollHandle::new();
             active_tab.list_scroll_h.set_offset(point(px(0.0), px(0.0)));
@@ -805,4 +812,12 @@ mod sidebar_tests {
         resize_sidebar_state(&mut width, &mut collapsed, 900.0);
         assert_eq!(width, 600.0);
     }
+}
+
+/// The entry of `ancestor` that leads to `descendant`, when `ancestor` contains it.
+fn child_toward(ancestor: &str, descendant: &str) -> Option<String> {
+    let ancestor_path = std::path::Path::new(ancestor);
+    let rest = std::path::Path::new(descendant).strip_prefix(ancestor_path).ok()?;
+    let first = rest.components().next()?;
+    Some(ancestor_path.join(first).to_string_lossy().into_owned())
 }
