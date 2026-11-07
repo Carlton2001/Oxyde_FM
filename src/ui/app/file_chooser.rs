@@ -1,19 +1,24 @@
 //! The window an application gets, through the desktop portal, to choose files or
-//! folders to open. It browses real folders only and answers the application once: with
-//! what was chosen and the type filter shown, or nothing when the user cancels. Its pieces are copies of the main window's
+//! folders to open, or where to save. It browses real folders only and answers the
+//! application once: with what was chosen, the type filter shown and the answers to its
+//! choices, or nothing when the user cancels. Its pieces are copies of the main window's
 //! (navigation bar, columns, grid, status bar, sidebar rows), adapted to choosing; the
 //! main window lends it its display choices, shares its places and volumes as they
 //! change, and keeps its view, sort, sidebar width and last folder for the next one.
 mod arrange;
 mod browse;
+mod choices;
 mod crumbs;
 mod details;
 mod filter;
 mod grid;
 mod keys;
 mod location;
+mod menus;
 mod navbar;
+mod overwrite;
 mod render;
+mod save;
 mod selection;
 mod setting;
 mod sidebar;
@@ -24,7 +29,7 @@ use super::OxydeApp;
 use futures::channel::oneshot;
 use gpui::*;
 use oxyde_lib::models::{DriveInfo, FileEntry};
-use oxyde_lib::platform::{FileChooserAnswer, FileChooserRequest, FileTypeFilter, UnmountedVolume};
+use oxyde_lib::platform::{FileChooserAnswer, FileChooserPurpose, FileChooserRequest, FileTypeFilter, UnmountedVolume};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -66,14 +71,23 @@ pub struct FileChooserWindow {
     /// The application's title, and its label for the button that accepts.
     title: Option<SharedString>,
     accept_label: Option<SharedString>,
+    /// Opening, saving one file or saving several.
+    purpose: FileChooserPurpose,
     /// Several entries may be chosen; folders are chosen instead of files.
     multiple: bool,
     directory: bool,
-    /// The application's type filters, the one shown, and whether their menu is open.
+    /// The application's type filters and the one shown.
     filters: Vec<FileTypeFilter>,
     type_filter: Option<usize>,
-    type_menu: bool,
-    type_menu_scroll: UniformListScrollHandle,
+    /// The application's questions beside the files, as answered so far.
+    choices: Vec<choices::Choice>,
+    /// The footer's menu that is open.
+    menu: Option<menus::FooterMenu>,
+    menu_scroll: UniformListScrollHandle,
+    /// The name to save under, when saving one file.
+    name: save::Name,
+    /// The prompt asking before files are replaced, and what its Replace answers.
+    overwrite: Option<(WindowHandle<overwrite::OverwritePrompt>, Vec<PathBuf>)>,
     /// What the request lets the list show.
     admission: arrange::Admission,
     folder: String,
@@ -205,7 +219,7 @@ impl OxydeApp {
         // owner: the window opens once this update of the owner has ended.
         cx.defer(move |cx| {
             let title = Some(request.title.clone()).filter(|title| !title.is_empty())
-                .unwrap_or_else(|| crate::ui::i18n::I18nContext::i18n(cx).text(FileChooserWindow::default_title(request.directory)).to_string());
+                .unwrap_or_else(|| crate::ui::i18n::I18nContext::i18n(cx).text(default_title(&request.purpose, request.directory)).to_string());
             let logical = crate::ui::scale::logical;
             let default = Bounds::new(point(px(200.0), px(160.0)), size(px(logical(1040.0)), px(logical(640.0))));
             let opened = cx.open_window(
@@ -231,9 +245,20 @@ impl OxydeApp {
     }
 }
 
+/// The window's title when the application gives none.
+fn default_title(purpose: &FileChooserPurpose, directory: bool) -> crate::ui::i18n::Message {
+    use crate::ui::i18n::Message;
+    match purpose {
+        FileChooserPurpose::Save { .. } => Message::FileChooserSaveTitle,
+        FileChooserPurpose::SaveFiles { .. } => Message::FileChooserSaveFilesTitle,
+        FileChooserPurpose::Open if directory => Message::FileChooserFolderTitle,
+        FileChooserPurpose::Open => Message::FileChooserTitle,
+    }
+}
+
 impl FileChooserWindow {
     fn new(owner: WeakEntity<OxydeApp>, request: FileChooserRequest, lent: Lent, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let FileChooserRequest { title, accept_label, multiple, directory, filters, current_filter, current_folder, answer, withdrawn } = request;
+        let FileChooserRequest { purpose, title, accept_label, multiple, directory, filters, current_filter, current_folder, choices, answer, withdrawn } = request;
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         crate::ui::components::tool_window::install_icon(ICON, window);
@@ -241,6 +266,7 @@ impl FileChooserWindow {
         let closing = cx.entity().downgrade();
         window.on_window_should_close(cx, move |window, cx| {
             let _ = closing.update(cx, |this, cx| {
+                this.close_overwrite(cx);
                 this.send(None);
                 this.remember(cx);
             });
@@ -250,7 +276,10 @@ impl FileChooserWindow {
         // The application withdrew its request: the window goes, unanswered.
         let withdrawal = cx.spawn_in(window, async move |this, cx| {
             if withdrawn.await.is_ok() {
-                let _ = this.update_in(cx, |_, window, _| window.remove_window());
+                let _ = this.update_in(cx, |this, window, cx| {
+                    this.close_overwrite(cx);
+                    window.remove_window();
+                });
             }
         });
         // A volume mounted or plugged in, a folder pinned: the sidebar follows the main one.
@@ -266,11 +295,16 @@ impl FileChooserWindow {
             .or_else(|| lent.options.folder.clone())
             .or_else(|| dirs::home_dir().map(|home| home.to_string_lossy().into_owned()))
             .unwrap_or_else(|| "/".into());
+        let proposed = match &purpose {
+            FileChooserPurpose::Save { name } => Some(name.clone()),
+            _ => None,
+        };
         let mut this = Self {
             owner,
             answer: Some(answer),
             title: Some(title).filter(|title| !title.is_empty()).map(SharedString::from),
             accept_label: accept_label.filter(|label| !label.is_empty()).map(SharedString::from),
+            purpose,
             multiple,
             directory,
             admission: arrange::Admission {
@@ -280,8 +314,11 @@ impl FileChooserWindow {
             },
             filters,
             type_filter: current_filter,
-            type_menu: false,
-            type_menu_scroll: UniformListScrollHandle::new(),
+            choices: choices.into_iter().map(choices::Choice::new).collect(),
+            menu: None,
+            menu_scroll: UniformListScrollHandle::new(),
+            name: Default::default(),
+            overwrite: None,
             folder: String::new(),
             back: Vec::new(),
             forward: Vec::new(),
@@ -327,20 +364,20 @@ impl FileChooserWindow {
             _owner_changes: owner_changes,
         };
         this.show_folder(folder, cx);
+        // Saving, the keyboard starts in the name, as other file choosers have it.
+        if let Some(name) = proposed {
+            this.open_name(name, window, cx);
+        }
         this
     }
 
-    /// The window's title when the application gives none.
-    fn default_title(directory: bool) -> crate::ui::i18n::Message {
-        if directory { crate::ui::i18n::Message::FileChooserFolderTitle } else { crate::ui::i18n::Message::FileChooserTitle }
-    }
-
-    /// Answers the application, once, with the type filter shown.
+    /// Answers the application, once, with the type filter shown and its choices.
     fn send(&mut self, chosen: Option<Vec<PathBuf>>) {
         let Some(answer) = self.answer.take() else { return };
         log::info!("file chooser answered: {chosen:?}");
         let filter = self.type_filter;
-        let _ = answer.send(chosen.map(|paths| FileChooserAnswer { paths, filter }));
+        let choices = self.choice_answers();
+        let _ = answer.send(chosen.map(|paths| FileChooserAnswer { paths, filter, choices }));
     }
 
     /// Keeps the view, the sort, the sidebar's width and this folder for the next window.
@@ -357,6 +394,7 @@ impl FileChooserWindow {
 
     /// Answers and closes.
     fn finish(&mut self, chosen: Option<Vec<PathBuf>>, window: &mut Window, cx: &mut Context<Self>) {
+        self.close_overwrite(cx);
         self.send(chosen);
         self.remember(cx);
         crate::ui::components::tool_window::close_transients(window, cx);

@@ -1,11 +1,12 @@
 //! Browsing in the file chooser: the history, listings read and arranged in the
 //! background, the selection, and what opening an entry does, entering a folder or
-//! choosing a file, and what the button that accepts chooses.
+//! choosing a file, and what the button that accepts chooses, or where it saves.
 use super::selection::{Kept, Selection};
 use super::{FileChooserWindow, Listing};
 use crate::ui::workspace::{SortColumn, SortDirection};
 use gpui::*;
 use oxyde_lib::models::FileEntry;
+use oxyde_lib::platform::FileChooserPurpose;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -278,17 +279,22 @@ impl FileChooserWindow {
     fn change_selection(&mut self, position: usize, cx: &mut Context<Self>, change: impl FnOnce(&mut Selection, usize)) {
         if position < self.shown.len() {
             change(&mut self.selection, position);
+            self.take_name_of(position, cx);
             self.reveal(position);
             cx.notify();
         }
     }
 
-    /// Enters a folder, or chooses a file; an archive is a file here.
+    /// Enters a folder, or chooses a file, or saves over it under its name; an archive
+    /// is a file here.
     pub(super) fn open_entry(&mut self, position: usize, window: &mut Window, cx: &mut Context<Self>) {
         let Some(entry) = self.shown_entry(position) else { return };
         if entry.is_dir {
             let path = entry.path.clone();
             self.show_folder(path, cx);
+        } else if self.saving() {
+            self.take_name_of(position, cx);
+            self.save(window, cx);
         } else {
             let path = oxyde_lib::utils::path_text::decode(&entry.path);
             self.finish(Some(vec![path]), window, cx);
@@ -303,14 +309,22 @@ impl FileChooserWindow {
         }
     }
 
-    /// Whether the button that accepts has something to choose.
-    pub(super) fn can_accept(&self) -> bool {
-        self.directory || !self.selection.is_empty()
+    /// Whether the button that accepts has something to choose, or a name to save under.
+    pub(super) fn can_accept(&self, cx: &App) -> bool {
+        match self.purpose {
+            FileChooserPurpose::Save { .. } => !self.typed_name(cx).is_empty() || self.selected_folder().is_some(),
+            _ => self.directory || !self.selection.is_empty(),
+        }
     }
 
-    /// The button that accepts. Folders: those selected, else the one open. Files: the
-    /// files selected; a single folder selected opens instead, as in GTK.
+    /// The button that accepts. Folders: those selected, else the one open; saving
+    /// several files, the one folder that holds them. Files: the files selected; a
+    /// single folder selected opens instead, as in GTK. Saving one file: the name typed.
     pub(super) fn accept(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if matches!(self.purpose, FileChooserPurpose::Save { .. }) {
+            self.save(window, cx);
+            return;
+        }
         let selected: Vec<&FileEntry> = self.selection.positions().filter_map(|position| self.shown_entry(position)).collect();
         let decode = |entry: &&FileEntry| oxyde_lib::utils::path_text::decode(&entry.path);
         if self.directory {
@@ -319,7 +333,11 @@ impl FileChooserWindow {
             } else {
                 selected.iter().map(decode).collect()
             };
-            self.finish(Some(chosen), window, cx);
+            match (&self.purpose, &chosen[..]) {
+                (FileChooserPurpose::SaveFiles { .. }, [folder]) => self.save_files(folder.clone(), window, cx),
+                (FileChooserPurpose::SaveFiles { .. }, _) => {}
+                _ => self.finish(Some(chosen), window, cx),
+            }
             return;
         }
         let files: Vec<PathBuf> = selected.iter().filter(|entry| !entry.is_dir).map(decode).collect();

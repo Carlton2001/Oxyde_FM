@@ -273,11 +273,32 @@ settings-default-file-manager = Gestionnaire de fichiers par défaut
 settings-default-file-manager-description = Ouvrir avec Oxyde les dossiers et « Afficher dans le dossier » des autres applications. L’icône Fichiers du dock reste celle du système.
 settings-default-file-manager-error = Impossible de changer le gestionnaire de fichiers par défaut.
 settings-file-chooser = Fenêtres Ouvrir et Enregistrer
-settings-file-chooser-description = Choisir avec Oxyde les fichiers et dossiers qu’ouvrent les autres applications, quand elles passent par le portail du bureau comme Firefox, Chrome et les applications Flatpak. L’enregistrement garde pour l’instant la fenêtre du système.
+settings-file-chooser-description = Choisir avec Oxyde les fichiers et dossiers qu’ouvrent les autres applications, et où elles enregistrent, quand elles passent par le portail du bureau comme Firefox, Chrome et les applications Flatpak.
 settings-file-chooser-error = Impossible de changer les fenêtres Ouvrir et Enregistrer.
 file-chooser-title = Ouvrir un fichier
 file-chooser-folder-title = Sélectionner un dossier
 file-chooser-select = Sélectionner
+file-chooser-save-title = Enregistrer un fichier
+file-chooser-save-files-title = Enregistrer des fichiers
+file-chooser-save = Enregistrer
+file-chooser-name = Nom
+file-chooser-name-placeholder = Nom du fichier
+file-chooser-replace-title = { $count ->
+    [one] Remplacer le fichier
+   *[other] Remplacer les fichiers
+}
+file-chooser-replace-prompt = { $count ->
+    [one] Un fichier nommé « { $name } » existe déjà. Voulez-vous le remplacer ?
+   *[other] { $number } fichiers existent déjà. Voulez-vous les remplacer ?
+}
+file-chooser-replace-location = { $count ->
+    [one] Il se trouve dans « { $folder } ».
+   *[other] Ils se trouvent dans « { $folder } ».
+}
+file-chooser-replace-warning = { $count ->
+    [one] Le remplacer écrase son contenu.
+   *[other] Les remplacer écrase leur contenu.
+}
 
 settings-region-language = Région & langue
 settings-performance = Performances

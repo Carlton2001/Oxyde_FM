@@ -1,12 +1,14 @@
 //! Editing the folder's path in place of its crumbs, as `begin_breadcrumb_edit` does in
 //! the main window: the whole path selected, suggestions, submitted by Enter or a click
 //! outside, cancelled by Escape, and shaken with an error border when it leads nowhere.
-//! Here a typed file is chosen, unless folders are, and `~` and relative paths are
-//! understood.
+//! Here a typed file is chosen, unless folders are, or saved to, and `~` and relative
+//! paths are understood.
+use super::save::{target, Target};
 use super::FileChooserWindow;
 use crate::ui::components::input::{InputAppearance, TextInput, TextInputOptions};
 use crate::ui::i18n::{I18nContext, Message};
 use gpui::*;
+use oxyde_lib::platform::FileChooserPurpose;
 use std::path::{Component, Path, PathBuf};
 
 #[derive(Default)]
@@ -101,17 +103,24 @@ impl FileChooserWindow {
         let path = typed_path(&text, &oxyde_lib::utils::path_text::decode(&self.folder), home.as_deref());
         self.location.task = Some(cx.spawn_in(window, async move |this, cx| {
             let checked = path.clone();
-            let folder = cx.background_spawn(async move { std::fs::metadata(&checked).map(|metadata| metadata.is_dir()) }).await;
+            let found = cx.background_spawn(async move { target(&checked) }).await;
             let _ = this.update_in(cx, |this, window, cx| {
                 this.location.task = None;
-                match folder {
-                    Ok(true) => {
+                let saving = matches!(this.purpose, FileChooserPurpose::Save { .. });
+                match found {
+                    Target::Folder => {
                         this.location.close();
                         window.focus(&this.focus, cx);
                         this.show_folder(path.to_string_lossy().into_owned(), cx);
                     }
+                    // Saving one file, a file is replaced once confirmed, a free name chosen.
+                    Target::File | Target::Free if saving => {
+                        this.location.close();
+                        window.focus(&this.focus, cx);
+                        this.save_at(path, found, window, cx);
+                    }
                     // A file is chosen, unless the application asks for folders.
-                    Ok(false) if !this.directory => this.finish(Some(vec![path]), window, cx),
+                    Target::File if !saving && !this.directory => this.finish(Some(vec![path]), window, cx),
                     _ => {
                         this.location.shake = this.location.shake.wrapping_add(1);
                         this.location.invalid = true;

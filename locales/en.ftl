@@ -267,11 +267,32 @@ settings-default-file-manager = Default file manager
 settings-default-file-manager-description = Open folders and other applications’ “Show in folder” with Oxyde. The dock’s Files icon stays the system’s.
 settings-default-file-manager-error = Could not change the default file manager.
 settings-file-chooser = Open and Save dialogs
-settings-file-chooser-description = Choose the files and folders other applications open with Oxyde, when they ask the desktop portal as Firefox, Chrome and Flatpak applications do. Saving keeps the system’s dialog for now.
+settings-file-chooser-description = Choose with Oxyde the files and folders other applications open, and where they save, when they ask the desktop portal as Firefox, Chrome and Flatpak applications do.
 settings-file-chooser-error = Could not change the Open and Save dialogs.
 file-chooser-title = Open File
 file-chooser-folder-title = Select Folder
 file-chooser-select = Select
+file-chooser-save-title = Save File
+file-chooser-save-files-title = Save Files
+file-chooser-save = Save
+file-chooser-name = Name
+file-chooser-name-placeholder = File name
+file-chooser-replace-title = { $count ->
+    [one] Replace File
+   *[other] Replace Files
+}
+file-chooser-replace-prompt = { $count ->
+    [one] A file named “{ $name }” already exists. Do you want to replace it?
+   *[other] { $number } files already exist. Do you want to replace them?
+}
+file-chooser-replace-location = { $count ->
+    [one] It is in “{ $folder }”.
+   *[other] They are in “{ $folder }”.
+}
+file-chooser-replace-warning = { $count ->
+    [one] Replacing it overwrites its contents.
+   *[other] Replacing them overwrites their contents.
+}
 
 settings-region-language = Region & language
 settings-performance = Performance

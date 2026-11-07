@@ -1,7 +1,7 @@
 //! The name filter at the end of the navigation bar, a copy of the main window's quick
 //! search control (`render_quick_search_control`): a separator, a field sliding out of
 //! the magnifier on hover, click or Ctrl+F, collapsing on a click elsewhere. Here it
-//! filters the folder's names as typed, and Enter chooses the selection.
+//! filters the folder's names as typed, and Enter opens or chooses the selection.
 use super::FileChooserWindow;
 use crate::ui::app::search::{slide_progress, SearchInputSlide};
 use crate::ui::components::input::{CompletionDown, CompletionUp, InputAppearance, TextInput, TextInputOptions};
@@ -42,7 +42,7 @@ impl FileChooserWindow {
             cx.i18n().text(Message::NameFilterPlaceholder),
             self.filter.text.clone(),
             move |text, _, cx| { let _ = change.update(cx, |this, cx| this.set_filter(text, cx)); },
-            move |window, cx| { let _ = enter.update(cx, |this, cx| this.accept(window, cx)); },
+            move |window, cx| { let _ = enter.update(cx, |this, cx| this.activate(window, cx)); },
             move |window, cx| {
                 let _ = escape.update(cx, |this, cx| {
                     this.clear_filter(cx);

@@ -75,3 +75,57 @@ fn the_current_filter_is_found_given_alone_or_added() {
     assert_eq!(offered_filters(vec![a.clone()], Some(b.clone())), (vec![a, b], Some(1)));
     assert_eq!(offered_filters(Vec::new(), None), (Vec::new(), None));
 }
+
+fn nul_terminated(path: &Path) -> Vec<u8> {
+    let mut bytes = path.as_os_str().as_bytes().to_vec();
+    bytes.push(0);
+    bytes
+}
+
+#[test]
+fn saving_reads_the_name_the_folder_and_the_names_of_several_files() {
+    let folder = std::env::temp_dir();
+    let mut values = Options::new();
+    values.insert("current_name".into(), owned("Untitled.txt"));
+    values.insert("current_folder".into(), owned(nul_terminated(Path::new("/no/such/folder"))));
+    let options = received(values);
+    assert_eq!(purpose("SaveFile", &options), FileChooserPurpose::Save { name: "Untitled.txt".into() });
+    assert_eq!(suggested_folder(&options), None);
+    // The file saved again gives its name and its folder.
+    let mut values = Options::new();
+    values.insert("current_name".into(), owned("Untitled.txt"));
+    values.insert("current_file".into(), owned(nul_terminated(&folder.join("report.odt"))));
+    let options = received(values);
+    assert_eq!(purpose("SaveFile", &options), FileChooserPurpose::Save { name: "report.odt".into() });
+    assert_eq!(suggested_folder(&options), Some(folder.clone()));
+    assert_eq!(purpose("SaveFile", &Options::new()), FileChooserPurpose::Save { name: String::new() });
+    // Several files keep their names' last component, whatever their bytes.
+    let mut values = Options::new();
+    values.insert("files".into(), owned(vec![b"a.png\0".to_vec(), b"sub/b.png\0".to_vec(), b"\xe9.txt\0".to_vec(), b"..\0".to_vec()]));
+    let names = match purpose("SaveFiles", &received(values)) {
+        FileChooserPurpose::SaveFiles { names } => names,
+        other => panic!("{other:?}"),
+    };
+    let latin1 = std::ffi::OsStr::from_bytes(b"\xe9.txt").to_owned();
+    assert_eq!(names, [std::ffi::OsString::from("a.png"), "b.png".into(), latin1]);
+    assert_eq!(purpose("OpenFile", &Options::new()), FileChooserPurpose::Open);
+}
+
+#[test]
+fn choices_are_read_and_their_first_answer_checked() {
+    let encoding: RawChoice = ("encoding".into(), "_Encoding".into(),
+        vec![("utf8".into(), "Unicode".into()), ("latin15".into(), "Western".into())], "latin15".into());
+    let mut values = Options::new();
+    values.insert("choices".into(), owned(vec![encoding.clone(), ("reencode".into(), "Re-encode".into(), Vec::new(), "true".into())]));
+    let choices: Vec<FileChooserChoice> = raw_choices(&received(values)).into_iter().map(choice).collect();
+    assert_eq!(choices[0], FileChooserChoice {
+        id: "encoding".into(),
+        label: "Encoding".into(),
+        options: vec![("utf8".into(), "Unicode".into()), ("latin15".into(), "Western".into())],
+        initial: "latin15".into(),
+    });
+    assert_eq!(choices[1].initial, "true");
+    let unknown = (encoding.0.clone(), encoding.1.clone(), encoding.2.clone(), "koi8".into());
+    assert_eq!(choice(unknown).initial, "utf8");
+    assert_eq!(choice(("box".into(), "Box".into(), Vec::new(), "yes".into())).initial, "false");
+}

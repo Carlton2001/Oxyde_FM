@@ -429,11 +429,32 @@ settings-default-file-manager = Gestor de archivos predeterminado
 settings-default-file-manager-description = Abrir con Oxyde las carpetas y «Mostrar en la carpeta» de otras aplicaciones. El icono Archivos del dock sigue siendo el del sistema.
 settings-default-file-manager-error = No se ha podido cambiar el gestor de archivos predeterminado.
 settings-file-chooser = Diálogos Abrir y Guardar
-settings-file-chooser-description = Elegir con Oxyde los archivos y carpetas que abren otras aplicaciones, cuando pasan por el portal del escritorio como Firefox, Chrome y las aplicaciones Flatpak. El guardado mantiene por ahora el diálogo del sistema.
+settings-file-chooser-description = Elegir con Oxyde los archivos y carpetas que abren otras aplicaciones, y dónde guardan, cuando pasan por el portal del escritorio como Firefox, Chrome y las aplicaciones Flatpak.
 settings-file-chooser-error = No se han podido cambiar los diálogos Abrir y Guardar.
 file-chooser-title = Abrir archivo
 file-chooser-folder-title = Seleccionar carpeta
 file-chooser-select = Seleccionar
+file-chooser-save-title = Guardar archivo
+file-chooser-save-files-title = Guardar archivos
+file-chooser-save = Guardar
+file-chooser-name = Nombre
+file-chooser-name-placeholder = Nombre del archivo
+file-chooser-replace-title = { $count ->
+    [one] Reemplazar archivo
+   *[other] Reemplazar archivos
+}
+file-chooser-replace-prompt = { $count ->
+    [one] Ya existe un archivo llamado «{ $name }». ¿Desea reemplazarlo?
+   *[other] Ya existen { $number } archivos. ¿Desea reemplazarlos?
+}
+file-chooser-replace-location = { $count ->
+    [one] Está en «{ $folder }».
+   *[other] Están en «{ $folder }».
+}
+file-chooser-replace-warning = { $count ->
+    [one] Reemplazarlo sobrescribe su contenido.
+   *[other] Reemplazarlos sobrescribe su contenido.
+}
 
 settings-region-language = Región e Idioma
 
