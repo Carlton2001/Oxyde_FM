@@ -131,7 +131,13 @@ pub static PREVIEWABLE_EXTENSIONS: Lazy<HashSet<&'static str>> =
     Lazy::new(|| ["png", "jpg", "jpeg", "gif", "bmp", "webp", "svg", "ico"].into());
 
 pub static PREVIEWABLE_VIDEO_EXTENSIONS: Lazy<HashSet<&'static str>> =
-    Lazy::new(|| ["mp4", "webm", "ogv", "mov", "m4v", "3gp", "mp4v", "avi"].into());
+    Lazy::new(|| {
+        [
+            "mp4", "webm", "ogv", "mov", "m4v", "3gp", "mp4v", "avi", "mkv", "wmv", "flv", "mpg",
+            "mpeg",
+        ]
+        .into()
+    });
 
 pub static PREVIEWABLE_OFFICE_EXTENSIONS: Lazy<HashSet<&'static str>> =
     Lazy::new(|| ["docx", "xlsx", "pptx", "odt", "ods", "odp"].into());
@@ -497,12 +503,18 @@ mod system_icon_tests {
     use super::rgba_to_bgra;
 
     #[test]
-    fn avi_and_mov_are_routed_to_the_video_preview() {
-        for name in ["09-video.avi", "MOVIE.AVI", "film.mov", "FILM.MOV"] {
+    fn every_video_container_is_routed_to_the_video_preview() {
+        for name in [
+            "09-video.avi", "MOVIE.AVI", "film.mov", "FILM.MOV", "film.mkv", "FILM.MKV", "clip.wmv",
+            "clip.flv", "dvd.mpg", "DVD.MPEG",
+        ] {
             assert!(matches!(
                 super::get_preview_type(name),
                 super::PreviewType::Video
             ));
+        }
+        for extension in super::VIDEO_EXTENSIONS.iter() {
+            assert!(super::PREVIEWABLE_VIDEO_EXTENSIONS.contains(extension), "{extension}");
         }
     }
 
