@@ -426,8 +426,13 @@ settings-network = Rete
 
 settings-network-description = Mostra le risorse di rete nel pannello sinistro.
 settings-default-file-manager = File manager predefinito
-settings-default-file-manager-description = Apri con Oxyde le cartelle e «Mostra nella cartella» delle altre applicazioni. L’icona File del dock e le finestre Apri e Salva restano quelle del sistema.
+settings-default-file-manager-description = Apri con Oxyde le cartelle e «Mostra nella cartella» delle altre applicazioni. L’icona File del dock resta quella del sistema.
 settings-default-file-manager-error = Impossibile cambiare il file manager predefinito.
+settings-file-chooser = Finestre Apri e Salva
+settings-file-chooser-description = Scegli con Oxyde i file che aprono le altre applicazioni, quando passano dal portale del desktop come Firefox, Chrome e le applicazioni Flatpak. Le cartelle e il salvataggio mantengono per ora la finestra del sistema.
+settings-file-chooser-error = Impossibile cambiare le finestre Apri e Salva.
+file-chooser-title = Apri file
+file-chooser-unreadable = Impossibile leggere questa cartella.
 
 settings-region-language = Regione e Lingua
 

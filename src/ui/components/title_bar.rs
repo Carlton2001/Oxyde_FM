@@ -124,6 +124,7 @@ pub fn render_title_bar(
                 this.settings_open = !this.settings_open;
                 if this.settings_open {
                     this.refresh_folder_handler(cx);
+                    this.refresh_file_chooser_setting(cx);
                 }
                 this.settings_about_open = false;
                 this.settings_picker = None;

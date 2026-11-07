@@ -123,9 +123,10 @@ impl ShellDeleteOutcome {
     }
 }
 
-/// What another process asks the running Oxyde to show: a second launch, or a program
-/// calling FileManager1 such as a browser's « Show in folder ».
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// What another process asks the running Oxyde to show: a second launch, a program
+/// calling FileManager1 such as a browser's « Show in folder », or the desktop portal
+/// asking for a file on behalf of an application.
+#[derive(Debug)]
 pub enum InstanceRequest {
     /// Folders, each in a new tab; none only brings the window forward.
     Folders(Vec<String>),
@@ -133,9 +134,24 @@ pub enum InstanceRequest {
     Items(Vec<String>),
     /// Items whose Properties window opens.
     Properties(Vec<String>),
+    /// A file to open, chosen in a window of its own.
+    ChooseFile(FileChooserRequest),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// An application's request, through the desktop portal, for a file to open.
+#[derive(Debug)]
+pub struct FileChooserRequest {
+    /// The application's title for the window; empty when it gives none.
+    pub title: String,
+    /// The application's label for the button that accepts, mnemonics removed.
+    pub accept_label: Option<String>,
+    /// Receives the chosen files, or nothing when the user cancels.
+    pub answer: futures::channel::oneshot::Sender<Option<Vec<std::path::PathBuf>>>,
+    /// Resolves when the application withdraws its request: the window closes unanswered.
+    pub withdrawn: futures::channel::oneshot::Receiver<()>,
+}
+
+#[derive(Debug)]
 pub struct InstanceMessage {
     pub request: InstanceRequest,
     /// The token the sender's launcher gave it, which lets the window come forward.
@@ -257,6 +273,12 @@ pub trait Platform: Send + Sync {
     /// Becomes the session's Oxyde, or hands `locations` to the one already running.
     /// Runs before the first window, which the forwarding process never opens.
     fn claim_instance(&self, _locations: &[String]) -> InstanceClaim { InstanceClaim::Alone }
+    /// Whether the session bus started this process to choose files for the desktop
+    /// portal: it opens no main window until a later launch asks for one.
+    fn started_for_file_chooser(&self) -> bool { false }
+    /// Whether an application still waits for a file chosen through Oxyde, which keeps
+    /// Oxyde running after its last window.
+    fn answering_file_chooser(&self) -> bool { false }
     /// How releases reach this copy of Oxyde. Cheap: the About page asks at each render.
     fn installation(&self) -> Installation { Installation::Unmanaged }
     /// Window buttons that match the running desktop.
@@ -747,6 +769,15 @@ pub trait Platform: Send + Sync {
     fn open_folders_by_default(&self, _enabled: bool, _previous: Option<&str>) -> Result<Option<String>, String> {
         Err("Choosing the default for folders is not available on this system".into())
     }
+    /// Whether applications choose their files with Oxyde through the desktop portal;
+    /// None when the system has no portal, or names no Oxyde it could start. Reads
+    /// files: off the UI thread.
+    fn chooses_files(&self) -> Option<bool> { None }
+    /// Makes Oxyde the portal's file chooser, or gives that back to the previous one.
+    /// Writes files and restarts the portal: off the UI thread.
+    fn choose_files(&self, _enabled: bool) -> Result<(), String> {
+        Err("Choosing files for other applications is not available on this system".into())
+    }
     /// Whether this system offers to open a folder in a terminal.
     fn offers_terminal(&self) -> bool { false }
     fn open_terminal(&self, _path: &str) -> Result<(), String> {
@@ -890,6 +921,8 @@ mod linux_window_controls;
 mod linux_startup;
 #[cfg(not(target_os = "windows"))]
 mod linux_instance;
+#[cfg(not(target_os = "windows"))]
+mod linux_portal;
 #[cfg(not(target_os = "windows"))]
 mod linux_gio;
 #[cfg(not(target_os = "windows"))]

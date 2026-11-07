@@ -264,8 +264,13 @@ date-format-iso = ISO 8601 (YYYY-MM-DD)
 settings-network = Network neighborhood
 settings-network-description = Show the network neighborhood in the left panel.
 settings-default-file-manager = Default file manager
-settings-default-file-manager-description = Open folders and other applications’ “Show in folder” with Oxyde. The dock’s Files icon and Open and Save dialogs stay the system’s.
+settings-default-file-manager-description = Open folders and other applications’ “Show in folder” with Oxyde. The dock’s Files icon stays the system’s.
 settings-default-file-manager-error = Could not change the default file manager.
+settings-file-chooser = Open and Save dialogs
+settings-file-chooser-description = Choose the files other applications open with Oxyde, when they ask the desktop portal as Firefox, Chrome and Flatpak applications do. Folders and saving keep the system’s dialog for now.
+settings-file-chooser-error = Could not change the Open and Save dialogs.
+file-chooser-title = Open File
+file-chooser-unreadable = This folder cannot be read.
 
 settings-region-language = Region & language
 settings-performance = Performance

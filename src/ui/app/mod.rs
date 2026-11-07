@@ -54,6 +54,8 @@ pub(crate) mod archive_password;
 pub(crate) mod open_with;
 mod folder_handler;
 mod instance;
+pub(crate) mod main_window;
+pub(crate) mod file_chooser;
 pub(crate) mod archive_protection;
 pub mod selection;
 mod item_pointer;
@@ -295,6 +297,14 @@ pub struct OxydeApp {
     /// system offers no such choice.
     pub(crate) opens_folders: Option<bool>,
     pub(super) changing_folder_handler: bool,
+    /// Whether applications choose their files with Oxyde through the desktop portal;
+    /// None until read, or without a portal.
+    pub(crate) chooses_files: Option<bool>,
+    pub(super) changing_file_chooser: bool,
+    /// The folder the last file chooser ended in, where the next one starts.
+    pub(super) file_chooser_folder: Option<String>,
+    /// Folder watching and listings started, which a file chooser alone does not need.
+    browsing: bool,
     pub(crate) peek_status: oxyde_lib::platform::PeekStatus,
     pub _drive_refresh_task: Option<Task<()>>,
     pub(super) drive_details_task: Option<Task<()>>,
@@ -509,6 +519,10 @@ impl OxydeApp {
             onedrive_installed: false,
             opens_folders: None,
             changing_folder_handler: false,
+            chooses_files: None,
+            changing_file_chooser: false,
+            file_chooser_folder: None,
+            browsing: false,
             peek_status: Default::default(),
             _drive_refresh_task: None,
             drive_details_task: None,

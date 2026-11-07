@@ -426,8 +426,13 @@ settings-network = Red
 
 settings-network-description = Mostrar el entorno de red en el panel izquierdo.
 settings-default-file-manager = Gestor de archivos predeterminado
-settings-default-file-manager-description = Abrir con Oxyde las carpetas y «Mostrar en la carpeta» de otras aplicaciones. El icono Archivos del dock y los diálogos Abrir y Guardar siguen siendo los del sistema.
+settings-default-file-manager-description = Abrir con Oxyde las carpetas y «Mostrar en la carpeta» de otras aplicaciones. El icono Archivos del dock sigue siendo el del sistema.
 settings-default-file-manager-error = No se ha podido cambiar el gestor de archivos predeterminado.
+settings-file-chooser = Diálogos Abrir y Guardar
+settings-file-chooser-description = Elegir con Oxyde los archivos que abren otras aplicaciones, cuando pasan por el portal del escritorio como Firefox, Chrome y las aplicaciones Flatpak. Las carpetas y el guardado mantienen por ahora el diálogo del sistema.
+settings-file-chooser-error = No se han podido cambiar los diálogos Abrir y Guardar.
+file-chooser-title = Abrir archivo
+file-chooser-unreadable = No se puede leer esta carpeta.
 
 settings-region-language = Región e Idioma
 

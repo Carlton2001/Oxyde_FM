@@ -145,6 +145,16 @@ pub(super) fn left_column(view: &OxydeApp, handle: Entity<OxydeApp>, left_width:
             theme,
             |view, cx| view.toggle_folder_handler(cx),
         )))
+        .when_some(view.chooses_files, |body, chooses_files| body.child(settings_row(
+            i18n.text(Message::SettingsFileChooser),
+            i18n.text(Message::SettingsFileChooserDescription),
+            "icons/app-window.svg",
+            chooses_files,
+            "toggle-file-chooser",
+            handle.clone(),
+            theme,
+            |view, cx| view.toggle_file_chooser_setting(cx),
+        )))
         .child(settings_row(
             i18n.text(Message::SettingsNetwork),
             i18n.text(Message::SettingsNetworkDescription),

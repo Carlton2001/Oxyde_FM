@@ -126,6 +126,7 @@ fn render_settings_surface(
         Message::SettingsCheckboxes, Message::SettingsPermissionsColumn, Message::SettingsPathTracking,
         Message::SettingsHidden, Message::SettingsSystem,
         Message::SettingsPreviews, Message::SettingsNetwork, Message::SettingsDefaultFileManager,
+        Message::SettingsFileChooser,
     ].into_iter().map(|message| label_width(message) + 5.0625)
         .fold(16.5_f32, f32::max)
         .max(label_width(Message::SettingsScale) + 9.6875);

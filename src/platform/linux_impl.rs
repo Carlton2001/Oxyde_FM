@@ -552,6 +552,8 @@ impl Platform for LinuxPlatform {
     }
 
     fn finish_process_shutdown(&self) -> Result<(), String> {
+        // An application waiting for its file gets the answer before the process ends.
+        super::linux_portal::wait_for_replies(std::time::Duration::from_secs(2));
         Ok(())
     }
 
@@ -764,11 +766,20 @@ impl Platform for LinuxPlatform {
 
     fn startup_locations(&self) -> Vec<String> {
         let current = std::env::current_dir().unwrap_or_default();
-        super::linux_startup::locations(std::env::args_os().skip(1), &current)
+        let arguments = std::env::args_os().skip(1).filter(|argument| argument != super::linux_portal::LAUNCH);
+        super::linux_startup::locations(arguments, &current)
     }
 
     fn claim_instance(&self, locations: &[String]) -> super::InstanceClaim {
         super::linux_instance::claim(locations)
+    }
+
+    fn started_for_file_chooser(&self) -> bool {
+        super::linux_portal::launched()
+    }
+
+    fn answering_file_chooser(&self) -> bool {
+        super::linux_portal::answering()
     }
 
     fn regional_locale(&self) -> Option<String> {
@@ -836,6 +847,12 @@ impl Platform for LinuxPlatform {
         let replaced = super::linux_gio::applications::open_folders(enabled, previous)?;
         super::linux_instance::serve_file_manager(enabled);
         Ok(replaced)
+    }
+    fn chooses_files(&self) -> Option<bool> {
+        super::linux_portal::state()
+    }
+    fn choose_files(&self, enabled: bool) -> Result<(), String> {
+        super::linux_portal::set(enabled)
     }
 
     fn offers_terminal(&self) -> bool { true }

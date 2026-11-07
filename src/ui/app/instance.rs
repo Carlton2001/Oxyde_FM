@@ -1,5 +1,6 @@
 //! What later launches and FileManager1 callers ask the running Oxyde to show: new tabs
-//! in the main window, items selected in their folder, or their Properties.
+//! in the main window, items selected in their folder, or their Properties; and what
+//! the desktop portal asks for: a file, in a window of its own.
 use super::OxydeApp;
 use futures::StreamExt;
 use gpui::Context;
@@ -38,10 +39,20 @@ impl OxydeApp {
         cx.spawn(async move |this, cx| {
             while let Some(message) = requests.next().await {
                 let token = message.activation_token.clone();
-                let Ok((window, properties)) = this.update(cx, |this, cx| this.show_instance_request(message.request, cx)) else {
+                let Ok(shown) = this.update(cx, |this, cx| this.show_instance_request(message.request, cx)) else {
                     break;
                 };
-                let Some(window) = window else { continue };
+                let Some((window, properties)) = shown else { continue };
+                // Oxyde started for a file chooser, or its main window closed while one
+                // stayed open: the window opens now, on the tabs just added.
+                let window = match window {
+                    Some(window) => window,
+                    None => {
+                        let Some(app) = this.upgrade() else { break };
+                        let Some(window) = cx.update(|cx| super::main_window::open(app, cx)) else { continue };
+                        window
+                    }
+                };
                 // Properties windows open from the main window, outside the update above.
                 let this = this.clone();
                 let _ = window.update(cx, move |_, window, cx| {
@@ -54,9 +65,10 @@ impl OxydeApp {
         }).detach();
     }
 
-    /// Opens the tabs a request names, and returns the main window to bring forward with
-    /// the items whose Properties open there.
-    fn show_instance_request(&mut self, request: InstanceRequest, cx: &mut Context<Self>) -> (Option<gpui::AnyWindowHandle>, Vec<String>) {
+    /// Opens the tabs a request names, and returns the main window to bring forward,
+    /// None when it is not open yet, with the items whose Properties open there. A
+    /// file chooser has a window of its own.
+    fn show_instance_request(&mut self, request: InstanceRequest, cx: &mut Context<Self>) -> Option<(Option<gpui::AnyWindowHandle>, Vec<String>)> {
         log::info!("received from another process: {request:?}");
         let pane = self.state.active_pane_id.clone();
         let properties = match request {
@@ -74,8 +86,12 @@ impl OxydeApp {
                 Vec::new()
             }
             InstanceRequest::Properties(items) => items,
+            InstanceRequest::ChooseFile(request) => {
+                self.open_file_chooser(request, cx);
+                return None;
+            }
         };
-        (self.main_window, properties)
+        Some((self.main_window, properties))
     }
 
     /// Selects `items` in the active tab, which just opened on their folder, and scrolls

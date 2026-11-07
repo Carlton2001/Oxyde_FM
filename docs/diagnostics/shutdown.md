@@ -7,7 +7,7 @@ Reference: `SHUTDOWN-PDF-INTEL-2026-10-04`. The Windows workaround was manually 
 1. Close windows and finish application cleanup: history, temporary files and last preferences, including the geometry debounce.
 2. Leave GPUI, then stop Tokio with a bound and flush logs.
 3. Call `Platform::finish_process_shutdown` at the very end.
-4. On Windows, stop the image then icon supervisors, then the icon persistence queue (bounded waits of two seconds each), then `TerminateProcess(GetCurrentProcess(), 0)`. The queue abandons pending requests; the active write can finish in that time. Linux returns normally.
+4. On Windows, stop the image then icon supervisors, then the icon persistence queue (bounded waits of two seconds each), then `TerminateProcess(GetCurrentProcess(), 0)`. The queue abandons pending requests; the active write can finish in that time. Linux waits up to two seconds for the file chooser portal's last replies, then returns normally.
 
 `TerminateProcess` avoids final DLL detach callbacks; `std::process::exit` is not equivalent. This workaround replaces no save or shutdown hook. Stateless workers serialize and flush their response before exiting.
 

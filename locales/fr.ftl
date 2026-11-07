@@ -270,8 +270,13 @@ date-format-iso = ISO 8601 (AAAA-MM-JJ)
 settings-network = Voisinage réseau
 settings-network-description = Afficher le voisinage réseau dans le panneau gauche.
 settings-default-file-manager = Gestionnaire de fichiers par défaut
-settings-default-file-manager-description = Ouvrir avec Oxyde les dossiers et « Afficher dans le dossier » des autres applications. L’icône Fichiers du dock et les fenêtres Ouvrir et Enregistrer restent celles du système.
+settings-default-file-manager-description = Ouvrir avec Oxyde les dossiers et « Afficher dans le dossier » des autres applications. L’icône Fichiers du dock reste celle du système.
 settings-default-file-manager-error = Impossible de changer le gestionnaire de fichiers par défaut.
+settings-file-chooser = Fenêtres Ouvrir et Enregistrer
+settings-file-chooser-description = Choisir avec Oxyde les fichiers qu’ouvrent les autres applications, quand elles passent par le portail du bureau comme Firefox, Chrome et les applications Flatpak. Les dossiers et l’enregistrement gardent pour l’instant la fenêtre du système.
+settings-file-chooser-error = Impossible de changer les fenêtres Ouvrir et Enregistrer.
+file-chooser-title = Ouvrir un fichier
+file-chooser-unreadable = Ce dossier ne peut pas être lu.
 
 settings-region-language = Région & langue
 settings-performance = Performances

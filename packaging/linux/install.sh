@@ -452,10 +452,61 @@ forget_associations() {
     done < <(association_files)
 }
 
+# Takes Oxyde out of the portal's FileChooser line, as turning its file chooser off in
+# Settings does: the portals after it remain, a line Oxyde added goes with its comment,
+# and a copy Oxyde wrote of the system's configuration goes when nothing else changed.
+forget_file_chooser() {
+    local folder=${XDG_CONFIG_HOME:-$HOME/.config}/xdg-desktop-portal file temporary first source
+    for file in "$folder"/*portals.conf; do
+        [[ -f $file ]] || continue
+        grep -qE '^[[:space:]]*org\.freedesktop\.impl\.portal\.FileChooser[[:space:]]*=(.*;)?[[:space:]]*oxyde[[:space:]]*(;|$)' "$file" || continue
+        temporary=$(mktemp)
+        cleanup+=("$temporary")
+        awk '
+            function trim(text) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", text); return text }
+            function release() { if (holding) { print held; holding = 0 } }
+            BEGIN { key = "org.freedesktop.impl.portal.FileChooser"; added = "# Added by Oxyde for its file chooser." }
+            {
+                line = $0
+                if (line ~ /^[[:space:]]*\[.*\][[:space:]]*$/) {
+                    release(); section = line
+                    gsub(/^[[:space:]]*\[[[:space:]]*|[[:space:]]*\][[:space:]]*$/, "", section)
+                    print line; next
+                }
+                split_at = index(line, "=")
+                if (section == "preferred" && split_at > 0 && trim(substr(line, 1, split_at - 1)) == key) {
+                    was_added = holding; holding = 0
+                    count = split(substr(line, split_at + 1), parts, ";")
+                    kept = ""; found = 0
+                    for (i = 1; i <= count; i++) {
+                        portal = trim(parts[i])
+                        if (portal == "oxyde") { found = 1; continue }
+                        if (portal != "") kept = kept portal ";"
+                    }
+                    if (!found) { print line; next }
+                    if (!was_added && kept != "") print key "=" kept
+                    next
+                }
+                release()
+                if (line == added) { held = line; holding = 1; next }
+                print line
+            }
+            END { release() }' "$file" > "$temporary" || continue
+        first=$(head -n 1 "$temporary")
+        source=${first#"# Written by Oxyde from "}
+        if [[ $source != "$first" && -f $source && $(tail -n +2 "$temporary") == "$(cat "$source")" ]]; then
+            rm -f "$file"
+        else
+            cat "$temporary" > "$file"
+        fi
+        portal_changed=true
+    done
+}
+
 is_running() { command -v pgrep >/dev/null && pgrep -u "$(id -u)" -x oxyde >/dev/null; }
 
 uninstall() {
-    local purge=$1 found=false shared=false
+    local purge=$1 found=false shared=false portal_changed=false file
     if [[ -f $entry ]]; then
         grep -qx "$marker" "$entry" || die "$entry was not written by this script; nothing is removed."
         found=true
@@ -474,6 +525,8 @@ uninstall() {
         fi
         forget_associations
         $was_default && say 'Oxyde is no longer the default application for folders.'
+        forget_file_chooser
+        $portal_changed && say 'Open dialogs are the system’s again.'
     fi
     local running=false
     is_running && running=true
@@ -483,8 +536,14 @@ uninstall() {
         fi
         rm -f "$entry" "$data/metainfo/$app_id.metainfo.xml"
         rm -f "$data"/icons/hicolor/*/apps/"$app_id".*
-        # Written by Oxyde for FileManager1; a remaining system copy writes its own again.
+        # Written by Oxyde for FileManager1 and the file chooser portal; a remaining
+        # system copy writes its own again.
         rm -f "$data/dbus-1/services/$app_id.FileManager1.service"
+        local portal_files=("$data/xdg-desktop-portal/portals/oxyde.portal"
+            "$data/dbus-1/services/org.freedesktop.impl.portal.desktop.oxyde.service")
+        for file in "${portal_files[@]}"; do
+            [[ -e $file ]] && { rm -f "$file"; portal_changed=true; }
+        done
         [[ -d $data/icons/hicolor ]] && touch "$data/icons/hicolor"
         update-desktop-database -q "$data/applications" 2>/dev/null || true
         rm -rf -- "$lib_root"
@@ -500,6 +559,10 @@ uninstall() {
         say 'Oxyde is uninstalled.'
     else
         say 'No per-user installation of Oxyde was found.'
+    fi
+    # The portal reads its portals and configuration only when it starts.
+    if $portal_changed; then
+        systemctl --user try-restart xdg-desktop-portal.service 2>/dev/null || true
     fi
 
     # Preferences, themes, session and log: kept unless the user asks.
