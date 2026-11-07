@@ -1,6 +1,7 @@
 //! The file chooser's entries as the main window arranges a folder: its name filter,
 //! its sort (`workspace::sort_files`, folders first), its type-to-select, and the
-//! choices kept between windows: view, sort and the folder the last one ended in.
+//! choices kept between windows: view, sort, the sidebar's width and the folder the
+//! last one ended in.
 use crate::ui::workspace::{SortColumn, SortDirection};
 use oxyde_lib::models::FileEntry;
 use std::collections::HashSet;
@@ -13,6 +14,8 @@ pub(super) struct Options {
     pub(super) sort: SortColumn,
     pub(super) direction: SortDirection,
     pub(super) folder: Option<String>,
+    /// The sidebar's width at the baseline scale, once resized here.
+    pub(super) sidebar: Option<f32>,
 }
 
 impl Options {
@@ -23,6 +26,19 @@ impl Options {
     pub(super) fn to_value(&self) -> Option<serde_json::Value> {
         serde_json::to_value(self).ok()
     }
+}
+
+/// The main sidebar's bounds, at the baseline scale.
+pub(super) const SIDEBAR_MIN: f32 = 150.0;
+const SIDEBAR_MAX: f32 = 600.0;
+/// What the pane keeps beside the sidebar: the name's minimum and the metadata columns.
+pub(super) const PANE_MIN: f32 = 700.0;
+
+/// The sidebar's width for a drag to `requested`, as the main window bounds it, while
+/// the pane keeps its minimum in a window `window` wide; both at the baseline scale.
+/// Without the main window's rail, a narrower drag stops at the minimum.
+pub(super) fn sidebar_width(requested: f32, window: f32) -> f32 {
+    requested.min(window - PANE_MIN).clamp(SIDEBAR_MIN, SIDEBAR_MAX)
 }
 
 /// What the list shows, and what its metadata columns are measured from.

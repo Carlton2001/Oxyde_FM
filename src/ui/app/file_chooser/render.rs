@@ -84,6 +84,12 @@ impl Render for FileChooserWindow {
         let title = self.title.clone().unwrap_or_else(|| cx.i18n().text(Message::FileChooserTitle));
         window.set_window_title(title.as_ref());
         self.measure_columns(window, cx);
+        self.window_width = window.viewport_size().width.as_f32() / logical(1.0);
+        // Another folder: its entries' tooltips go, as the main window's do with its path.
+        if self.tooltip_folder != self.folder {
+            self.tooltip_folder = self.folder.clone();
+            crate::ui::components::tooltip::hover::dismiss(window, cx);
+        }
         let closing = cx.entity().downgrade();
         // The header's own close button: the user cancels.
         let header = crate::ui::components::tool_window::header(ICON, title, window, true, cx,
@@ -91,8 +97,12 @@ impl Render for FileChooserWindow {
         let root = div()
             .id("file-chooser")
             .child(crate::ui::components::tool_window::pointer_drag(cx.entity(),
-                |this, event, cx| this.move_scrollbar(event, cx),
-                |this, cx| { this.scroll_drag = None; cx.notify(); }))
+                |this, event, cx| if this.resizing_sidebar { this.resize_sidebar(event, cx) } else { this.move_scrollbar(event, cx) },
+                |this, cx| {
+                    this.scroll_drag = None;
+                    this.end_sidebar_resize(cx);
+                    cx.notify();
+                }))
             .track_focus(&self.focus)
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| this.key_down(event, window, cx)))
             // The mouse's side buttons move through the history, as in the main window.
@@ -115,8 +125,7 @@ impl Render for FileChooserWindow {
                     .w_full()
                     .overflow_hidden()
                     .child(self.render_sidebar(theme, cx))
-                    // The main window's sidebar edge, which does not resize here.
-                    .child(div().w(rems(0.0625)).h_full().flex_none().bg(theme.border))
+                    .child(self.render_sidebar_edge(theme, cx))
                     .child(self.render_pane(theme, cx)),
             )
             .child(self.render_footer(theme, cx));

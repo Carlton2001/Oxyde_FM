@@ -170,7 +170,7 @@ impl FileChooserWindow {
 
     fn render_crumbs(&self, theme: OxydeTheme, cx: &mut Context<Self>) -> Div {
         let current_path = self.folder.clone();
-        let share = remote_share(&current_path, &self.drives);
+        let share = remote_share(&current_path, &self.places.drives);
         let path_parts: Vec<String> = match share {
             Some(share) => std::iter::once(share.path.clone())
                 .chain(current_path.get(share.path.len()..).unwrap_or_default().split(std::path::is_separator)
@@ -252,7 +252,7 @@ impl FileChooserWindow {
         div()
             .child(
                 div().w_4().h_4().mr_2().flex().items_center().justify_center().flex_none()
-                    .child(svg().path(root_icon(&current_path, &self.drives)).size_4().text_color(theme.text)),
+                    .child(svg().path(root_icon(&current_path, &self.places.drives)).size_4().text_color(theme.text)),
             )
             .child(div()
                 .relative()

@@ -1,4 +1,4 @@
-use super::{arrange, arrow_target, find_match, Options};
+use super::{arrange, arrow_target, find_match, sidebar_width, Options};
 use crate::ui::workspace::{SortColumn, SortDirection};
 use oxyde_lib::models::FileEntry;
 
@@ -64,10 +64,20 @@ fn arrows_follow_rows_and_start_at_the_first_entry() {
 
 #[test]
 fn options_survive_the_preferences_and_default_when_unreadable() {
-    let options = Options { grid: true, sort: SortColumn::Modified, direction: SortDirection::Descending, folder: Some("/home/a".into()) };
+    let options = Options { grid: true, sort: SortColumn::Modified, direction: SortDirection::Descending, folder: Some("/home/a".into()), sidebar: Some(212.5) };
     let value = options.to_value().unwrap();
     assert_eq!(value["sort"], "modified");
     assert_eq!(Options::from_value(Some(&value)), options);
     assert_eq!(Options::from_value(Some(&serde_json::json!({"sort": "nonsense"}))), Options::default());
     assert!(Options::from_value(Some(&serde_json::json!({"grid": true}))).grid);
+}
+
+#[test]
+fn the_sidebar_resizes_within_the_main_bounds_and_leaves_the_pane_its_minimum() {
+    assert_eq!(sidebar_width(300.0, 1200.0), 300.0);
+    assert_eq!(sidebar_width(40.0, 1200.0), 150.0);
+    assert_eq!(sidebar_width(900.0, 2000.0), 600.0);
+    assert_eq!(sidebar_width(450.0, 1000.0), 300.0);
+    // A window at its minimum keeps the smallest sidebar.
+    assert_eq!(sidebar_width(400.0, 800.0), 150.0);
 }

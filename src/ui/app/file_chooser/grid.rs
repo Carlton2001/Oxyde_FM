@@ -5,7 +5,8 @@
 use super::FileChooserWindow;
 use crate::ui::components::icons::render_file_icon;
 use crate::ui::components::scrollbar::{render_scrollbar_with_pointer, ScrollbarAxis};
-use crate::ui::components::tooltip::{NativeTooltipExt, Tooltip};
+use crate::ui::components::tooltip::hover::SharedTooltipExt;
+use crate::ui::components::tooltip::Tooltip;
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::scale::{logical, rem_pixels};
 use crate::ui::theme::{OxydeTheme, ThemeContext};
@@ -28,8 +29,12 @@ impl FileChooserWindow {
             crate::ui::components::file_list::file_type_display(file, cx.i18n())
         };
         let pane = format!("file-chooser-{}", cx.entity().entity_id());
-        div()
-            .id(("file-chooser-card", position))
+        let card = div().id(("file-chooser-card", position));
+        let card = match self.tooltip_owner() {
+            Some(owner) => card.shared_tooltip(owner, super::FILES_REGION, path.clone(), cx, Tooltip::for_item(file.clone(), false, self.media_previews, false)),
+            None => card,
+        };
+        card
             .relative()
             .w(px(card_width - logical(4.0)))
             .h(px(crate::ui::style::grid_card_row_height() - logical(4.0)))
@@ -45,7 +50,6 @@ impl FileChooserWindow {
             .border_color(if is_selected { theme.accent } else { theme.border.opacity(0.0) })
             .bg(if is_selected { theme.selected } else { theme.active_background })
             .when(!is_selected, |d| d.hover(|d| d.bg(theme.hover)))
-            .native_tooltip(Tooltip::for_item(file.clone(), false, false, false))
             .on_mouse_down(MouseButton::Left, press)
             .child(
                 div()
@@ -190,6 +194,9 @@ impl FileChooserWindow {
             .flex_col()
             .relative()
             .pb(px(status_bar_height))
+            .on_scroll_wheel(|_, window, cx| crate::ui::components::tooltip::hover::dismiss(window, cx))
+            .when_some(self.tooltip_owner(), |grid, owner| grid.child(crate::ui::components::tooltip::hover::region_container(
+                owner, super::FILES_REGION, px(0.0), px(status_bar_height), cx)))
             .overflow_hidden()
             .bg(theme.active_background)
             .child(contents)

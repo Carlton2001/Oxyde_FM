@@ -2,8 +2,8 @@
 //! open. It browses real folders only and answers the application once: with the file
 //! chosen, or nothing when the user cancels. Its pieces are copies of the main window's
 //! (navigation bar, columns, grid, status bar, sidebar rows), adapted to choosing; the
-//! main window lends it its places, volumes and display choices, and keeps its view,
-//! sort and last folder for the next one.
+//! main window lends it its display choices, shares its places and volumes as they
+//! change, and keeps its view, sort, sidebar width and last folder for the next one.
 mod arrange;
 mod browse;
 mod crumbs;
@@ -22,14 +22,18 @@ use super::OxydeApp;
 use futures::channel::oneshot;
 use gpui::*;
 use oxyde_lib::models::{DriveInfo, FileEntry};
-use oxyde_lib::platform::FileChooserRequest;
+use oxyde_lib::platform::{FileChooserRequest, UnmountedVolume};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
 const ICON: &str = "icons/folder-open.svg";
+/// One tooltip session for the entries, as the main window's file list has.
+const FILES_REGION: crate::ui::components::tooltip::hover::HoverRegion =
+    crate::ui::components::tooltip::hover::HoverRegion::Controls("file-chooser-files");
 
 /// A quick access folder the sidebar offers.
+#[derive(Clone, PartialEq)]
 struct Place {
     /// Empty for the home folder, which the sidebar names.
     label: String,
@@ -77,14 +81,24 @@ pub struct FileChooserWindow {
     /// A position in `shown`.
     selected: Option<usize>,
     listing: Listing,
-    places: Vec<Place>,
-    drives: Vec<DriveInfo>,
+    /// The main sidebar's places, followed while the window is open.
+    places: Places,
+    /// The volume being mounted from the sidebar.
+    mounting_volume: Option<String>,
     options: arrange::Options,
+    /// The sidebar's width at the baseline scale, and whether its edge is dragged.
+    sidebar_width: f32,
+    resizing_sidebar: bool,
+    /// The window's width at the baseline scale, as last laid out.
+    window_width: f32,
     show_hidden: bool,
     show_system: bool,
     show_permissions: bool,
     system_icons: bool,
     thumbnails: bool,
+    media_previews: bool,
+    /// The folder the tooltips were shown for: a new one dismisses them.
+    tooltip_folder: String,
     filter: filter::Filter,
     location: location::Location,
     typed: keys::TypeSelect,
@@ -104,6 +118,7 @@ pub struct FileChooserWindow {
     arrange_task: Option<Task<()>>,
     subfolder_task: Option<Task<()>>,
     _withdrawal: Task<()>,
+    _owner_changes: Option<Subscription>,
 }
 
 impl crate::ui::components::scrollbar::ScrollbarState for FileChooserWindow {
@@ -120,34 +135,42 @@ pub(crate) fn is_open(cx: &App) -> bool {
     cx.windows().iter().any(|window| window.downcast::<FileChooserWindow>().is_some())
 }
 
-/// The main window's quick access folders a file can be in, as its sidebar shows them.
-fn places(app: &OxydeApp) -> Vec<Place> {
-    let home = dirs::home_dir().map(|home| home.to_string_lossy().into_owned());
-    let mut places: Vec<Place> = app.state.pinned_items.iter()
-        .filter(|item| item.path.starts_with('/'))
-        .filter(|item| app.show_hidden || !item.name.starts_with('.'))
-        .map(|item| Place {
-            label: item.name.clone(),
-            path: item.path.clone(),
-            home: item.name.is_empty(),
-        })
-        .collect();
-    if let Some(home) = home.filter(|home| !places.iter().any(|place| place.path == *home)) {
-        places.insert(0, Place { label: String::new(), path: home, home: true });
+/// What the sidebar shows of the main one: its quick access folders a file can be in,
+/// then the mounted drives and the volumes still to mount.
+#[derive(Clone, Default, PartialEq)]
+struct Places {
+    folders: Vec<Place>,
+    drives: Vec<DriveInfo>,
+    volumes: Vec<UnmountedVolume>,
+}
+
+impl Places {
+    fn of(app: &OxydeApp) -> Self {
+        // As in Nautilus, the home folder heads the bookmarks without being one of them.
+        let home = dirs::home_dir().map(|home| Place { label: String::new(), path: home.to_string_lossy().into_owned(), home: true });
+        let pinned = app.state.pinned_items.iter()
+            .filter(|item| item.path.starts_with('/'))
+            .filter(|item| app.show_hidden || !item.name.starts_with('.'))
+            .map(|item| Place { label: item.name.clone(), path: item.path.clone(), home: item.name.is_empty() });
+        Self {
+            folders: home.into_iter().chain(pinned).collect(),
+            drives: app.state.drives.iter().filter(|drive| drive.path.starts_with('/')).cloned().collect(),
+            volumes: app.state.unmounted_volumes.clone(),
+        }
     }
-    places
 }
 
 /// What the window takes from the main one when it opens.
 struct Lent {
-    places: Vec<Place>,
-    drives: Vec<DriveInfo>,
+    places: Places,
     options: arrange::Options,
+    sidebar_width: f32,
     show_hidden: bool,
     show_system: bool,
     show_permissions: bool,
     system_icons: bool,
     thumbnails: bool,
+    media_previews: bool,
 }
 
 impl OxydeApp {
@@ -155,14 +178,15 @@ impl OxydeApp {
     pub(crate) fn open_file_chooser(&mut self, request: FileChooserRequest, cx: &mut Context<Self>) {
         let owner = cx.entity().downgrade();
         let lent = Lent {
-            places: places(self),
-            drives: self.state.drives.iter().filter(|drive| drive.path.starts_with('/')).cloned().collect(),
+            places: Places::of(self),
             options: arrange::Options::from_value(self.config.file_chooser_options.as_ref()),
+            sidebar_width: self.sidebar_width,
             show_hidden: self.show_hidden,
             show_system: self.show_system,
             show_permissions: self.show_permissions_column(),
             system_icons: cfg!(target_os = "windows") && self.use_system_icons(),
             thumbnails: self.show_grid_thumbnails,
+            media_previews: self.show_media_previews,
         };
         let rem_size = self.ui_rem_size();
         // GPUI draws a new window before open_window returns, and its render reads the
@@ -177,8 +201,8 @@ impl OxydeApp {
                     app_id: Some(crate::ui::APP_ID.into()),
                     window_decorations: crate::ui::window_decorations(),
                     window_bounds: Some(super::tool_geometry::restore(ICON, default, cx)),
-                    // The sidebar, the name's minimum and the metadata columns fit.
-                    window_min_size: Some(size(px(logical(960.0)), px(logical(420.0)))),
+                    // The narrowest sidebar, its edge and the pane's minimum fit.
+                    window_min_size: Some(size(px(logical(arrange::SIDEBAR_MIN + 1.0 + arrange::PANE_MIN)), px(logical(420.0)))),
                     titlebar: Some(TitlebarOptions { appears_transparent: true, title: Some(title.into()), ..Default::default() }),
                     ..Default::default()
                 },
@@ -217,6 +241,15 @@ impl FileChooserWindow {
                 let _ = this.update_in(cx, |_, window, _| window.remove_window());
             }
         });
+        // A volume mounted or plugged in, a folder pinned: the sidebar follows the main one.
+        let owner_changes = owner.upgrade().map(|app| cx.observe(&app, |this: &mut Self, app, cx| {
+            let places = Places::of(app.read(cx));
+            if places != this.places {
+                this.places = places;
+                cx.notify();
+            }
+        }));
+        let sidebar_width = lent.options.sidebar.unwrap_or(lent.sidebar_width);
         let folder = lent.options.folder.clone()
             .or_else(|| dirs::home_dir().map(|home| home.to_string_lossy().into_owned()))
             .unwrap_or_else(|| "/".into());
@@ -239,13 +272,18 @@ impl FileChooserWindow {
             selected: None,
             listing: Listing::Loading,
             places: lent.places,
-            drives: lent.drives,
+            mounting_volume: None,
             options: lent.options,
+            sidebar_width,
+            resizing_sidebar: false,
+            window_width: 0.0,
             show_hidden: lent.show_hidden,
             show_system: lent.show_system,
             show_permissions: lent.show_permissions,
             system_icons: lent.system_icons,
             thumbnails: lent.thumbnails,
+            media_previews: lent.media_previews,
+            tooltip_folder: String::new(),
             filter: Default::default(),
             location: Default::default(),
             typed: Default::default(),
@@ -262,6 +300,7 @@ impl FileChooserWindow {
             arrange_task: None,
             subfolder_task: None,
             _withdrawal: withdrawal,
+            _owner_changes: owner_changes,
         };
         this.show_folder(folder, cx);
         this
@@ -274,7 +313,7 @@ impl FileChooserWindow {
         let _ = answer.send(chosen);
     }
 
-    /// Keeps the view, the sort and this folder for the next window.
+    /// Keeps the view, the sort, the sidebar's width and this folder for the next window.
     fn remember(&mut self, cx: &mut Context<Self>) {
         self.options.folder = Some(self.folder.clone());
         let options = self.options.to_value();
@@ -292,6 +331,12 @@ impl FileChooserWindow {
         self.remember(cx);
         crate::ui::components::tool_window::close_transients(window, cx);
         window.remove_window();
+    }
+
+    /// The main window, which the shared tooltips follow; none while a crumb's menu
+    /// is open, as none shows over the main window's menus.
+    fn tooltip_owner(&self) -> Option<Entity<OxydeApp>> {
+        self.owner.upgrade().filter(|_| self.crumbs.menu.is_none())
     }
 
     /// The entry at a position of the list.

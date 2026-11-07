@@ -6,7 +6,8 @@
 use super::{ColumnWidths, FileChooserWindow};
 use crate::ui::components::icons::render_file_icon;
 use crate::ui::components::scrollbar::{render_scrollbar_with_pointer, ScrollbarAxis};
-use crate::ui::components::tooltip::{NativeTooltipExt, Tooltip};
+use crate::ui::components::tooltip::hover::SharedTooltipExt;
+use crate::ui::components::tooltip::Tooltip;
 use crate::ui::format::{format_date, format_size};
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::scale::{logical, rem_pixels};
@@ -133,6 +134,18 @@ impl FileChooserWindow {
         let i18n = cx.i18n();
         let language = i18n.language();
         let file_name = crate::ui::format::entry_name(file, i18n);
+        let file_type = crate::ui::components::file_list::file_type_display(file, i18n);
+        let size = if is_dir && file.is_calculated && file.size == 0 {
+            i18n.text(Message::FolderSizeEmpty).to_string()
+        } else {
+            format_size(file.size, is_dir, file.is_calculated, language)
+        };
+        let date = format_date(file.modified, crate::ui::format::date_format(cx));
+        let row = div().id(("file-chooser-row", position));
+        let row = match self.tooltip_owner() {
+            Some(owner) => row.shared_tooltip(owner, super::FILES_REGION, file.path.clone(), cx, Tooltip::for_item(file.clone(), false, self.media_previews, false)),
+            None => row,
+        };
         let name = div()
             .flex_shrink(1.0)
             .min_w_0()
@@ -140,8 +153,7 @@ impl FileChooserWindow {
             .font_weight(FontWeight::MEDIUM)
             .text_color(theme.text)
             .child(file_name);
-        div()
-            .id(("file-chooser-row", position))
+        row
             .relative()
             .when(is_selected, |d| d.child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent)))
             .flex()
@@ -150,7 +162,6 @@ impl FileChooserWindow {
             .w(px(widths.total))
             .bg(if is_selected { theme.selected } else { theme.active_background })
             .when(!is_selected, |s| s.hover(|s| s.bg(theme.hover)))
-            .native_tooltip(Tooltip::for_item(file.clone(), false, false, false))
             .on_mouse_down(MouseButton::Left, press)
             .child(
                 div()
@@ -186,17 +197,13 @@ impl FileChooserWindow {
                     ),
             )
             .child(div().w(px(widths.file_type)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5))
-                .child(crate::ui::components::file_list::file_type_display(file, i18n)))
+                .child(file_type))
             .child(div().w(px(widths.size)).flex_none().px(rems(0.5)).text_align(TextAlign::Right).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5))
-                .child(if is_dir && file.is_calculated && file.size == 0 {
-                    div().child(i18n.text(Message::FolderSizeEmpty))
-                } else {
-                    div().child(format_size(file.size, is_dir, file.is_calculated, language))
-                }))
+                .child(div().child(size)))
             .when(widths.permissions > 0.0, |row| row.child(div().w(px(widths.permissions)).flex_none().px(rems(0.5)).text_right().text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5))
                 .children(file.mode.map(crate::ui::format::permissions::octal))))
             .child(div().w(px(widths.date)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5))
-                .child(format_date(file.modified, crate::ui::format::date_format(cx))))
+                .child(date))
             .into_any_element()
     }
 
@@ -246,6 +253,9 @@ impl FileChooserWindow {
         let source = cx.entity();
         let entity_id = source.entity_id();
         let mut container = div()
+            .on_scroll_wheel(|_, window, cx| crate::ui::components::tooltip::hover::dismiss(window, cx))
+            .when_some(self.tooltip_owner(), |container, owner| container.child(crate::ui::components::tooltip::hover::region_container(
+                owner, super::FILES_REGION, px(crate::ui::style::column_header_height()), px(status_bar_height), cx)))
             .flex_1()
             .min_h_0()
             .flex()
