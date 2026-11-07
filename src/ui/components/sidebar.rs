@@ -2,6 +2,7 @@ mod linux_row;
 mod menus;
 mod pinned;
 mod rail;
+mod reorder;
 mod rows;
 mod toolbar;
 mod tree;

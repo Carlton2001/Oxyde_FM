@@ -22,6 +22,7 @@ pub(super) struct SidebarRowPresentation {
     pub(super) use_system_icons: bool,
     /// Rows render while the app is being updated: they cannot read it.
     pub(super) mounting_volume: Option<String>,
+    pub(super) pinned_reorder: Option<crate::ui::app::PinnedReorder>,
 }
 
 pub(super) fn render_sidebar_rows(
@@ -34,7 +35,7 @@ pub(super) fn render_sidebar_rows(
 ) -> Vec<AnyElement> {
     let SidebarRowPresentation {
         row_w, pinned_paths: pinned_paths_for_list, expandable_drives,
-        show_tooltips, use_system_icons, mounting_volume,
+        show_tooltips, use_system_icons, mounting_volume, pinned_reorder,
     } = presentation;
     let (row_w, show_tooltips, use_system_icons) = (*row_w, *show_tooltips, *use_system_icons);
     let items  = items_for_list.to_vec();
@@ -61,11 +62,15 @@ pub(super) fn render_sidebar_rows(
             // ── Quick-access (pinned) item ─────────────────
             SidebarItem::Pinned { item } | SidebarItem::OneDrive { item } => {
                 let path      = item.path.clone();
+                let is_home   = item.name.is_empty();
+                let reorderable = !is_onedrive && !is_home && pinned_paths_for_list.contains(&path);
+                let moving    = pinned_reorder.as_ref().is_some_and(|reorder| reorder.path == path);
+                let slot_after = pinned_reorder.as_ref().and_then(|reorder| reorder.target.as_ref())
+                    .filter(|(target, _)| *target == path).map(|(_, after)| *after);
                 let is_sel    = sel.as_deref().is_some_and(|selected| sidebar_paths_equal(selected, &path));
                 let sel_bg:   Hsla = theme.selected;
                 let hov_bg:   Hsla = if is_sel { theme.selection_hover } else { theme.hover };
                 let is_dimmed = item.name.starts_with('.');
-                let is_home   = item.name.is_empty();
 
                 div()
                     .id(SharedString::from(format!("sb-pin-{}", path)))
@@ -76,6 +81,7 @@ pub(super) fn render_sidebar_rows(
                     .items_center()
                     .when(is_dimmed, |d| d.opacity(0.5))
                     .relative().when(is_sel, |d| d.bg(sel_bg).child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent)))
+                    .when(moving, |d| d.opacity(0.1))
                     .hover(move |s| s.bg(hov_bg))
                     .when(show_tooltips, |d| {
                         let name = pinned_display_name(item, cx.i18n());
@@ -88,14 +94,20 @@ pub(super) fn render_sidebar_rows(
                     // Left click → select + navigate
                     .on_mouse_down(MouseButton::Left, {
                         let h = h.clone(); let p = path.clone();
-                        move |_, _, cx| {
+                        move |event: &MouseDownEvent, _, cx| {
+                            let pointer = event.position;
                             h.update(cx, |this, cx| {
                                 this.sidebar_selected_path = Some(p.clone());
                                 let id = this.state.active_pane_id.clone();
                                 this.navigate_to(&id, p.clone(), cx);
+                                if reorderable { this.press_pinned(p.clone(), pointer); }
                             });
                         }
                     })
+                    .when_some(slot_after, |d, after| d.child(
+                        div().absolute().left_0().right_0().h(rems(0.125)).bg(theme.accent)
+                            .when(after, |d| d.bottom_0()).when(!after, |d| d.top_0())
+                    ))
                     // Middle click → open in new tab
                     .on_mouse_down(MouseButton::Middle, {
                         let h = h.clone(); let p = path.clone();

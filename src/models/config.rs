@@ -82,6 +82,10 @@ pub struct AppConfig {
     pub show_network: bool,
     #[serde(default = "default_true")]
     pub show_onedrive: bool,
+    /// Pinned folder paths in the order chosen inside Oxyde. The system file
+    /// manager keeps its own order; folders missing here follow at the end.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pinned_order: Vec<String>,
     /// Window-local top-left coordinates for the operations panel.
     #[serde(default)]
     pub operations_panel_position: Option<[f32; 2]>,
@@ -147,6 +151,7 @@ impl Default for AppConfig {
             sync_sidebar_with_path: false,
             show_network: true,
             show_onedrive: true,
+            pinned_order: Vec::new(),
             operations_panel_position: None,
             confirm_delete: true,
             workspace_state: None,
@@ -176,7 +181,9 @@ impl AppConfig {
         let tool_window_placements = std::mem::take(&mut self.tool_window_placements);
         let custom_themes = std::mem::take(&mut self.custom_themes);
         let color_vision = std::mem::take(&mut self.color_vision);
+        let pinned_order = std::mem::take(&mut self.pinned_order);
         *self = Self {
+            pinned_order,
             custom_themes,
             color_vision,
             workspace_state,

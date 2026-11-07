@@ -26,6 +26,8 @@ mod toasts;
 mod updates;
 pub(crate) use updates::{receives_updates, updates_by_hand, UpdateStatus};
 mod shell_features;
+mod pinned_order;
+pub(crate) use pinned_order::PinnedReorder;
 mod calendar;
 mod clipboard;
 mod file_operations;
@@ -342,6 +344,9 @@ pub struct OxydeApp {
     pub(crate) clipboard_has_files: bool,
     pub breadcrumb_editing: bool,
     pub(crate) pinned_rail_open: bool,
+    /// Pressed pinned folder and press position, until it moves or is released.
+    pub(crate) pinned_press: Option<(String, Point<Pixels>)>,
+    pub(crate) pinned_reorder: Option<PinnedReorder>,
     pub breadcrumb_text: String,
     pub breadcrumb_pane_id: Option<String>,
     pub breadcrumb_shake_id: u64,
@@ -417,8 +422,10 @@ impl OxydeApp {
                     }
                 }
             });
-        let (state, sidebar_width) =
+        let (mut state, sidebar_width) =
             restored_workspace.unwrap_or_else(|| (WorkspaceState::new(), 260.0));
+        state.pinned_items = pinned_order::apply_order(std::mem::take(&mut state.pinned_items), &config.pinned_order);
+        state.refresh_sidebar();
         Self {
             state,
             viewers: Default::default(),
@@ -554,6 +561,8 @@ impl OxydeApp {
             clipboard_has_files: false,
             breadcrumb_editing: false,
             pinned_rail_open: false,
+            pinned_press: None,
+            pinned_reorder: None,
             breadcrumb_text: String::new(),
             breadcrumb_pane_id: None,
             breadcrumb_validation_revision: 0,

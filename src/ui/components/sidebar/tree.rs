@@ -1,4 +1,5 @@
 use super::rows::{render_sidebar_rows, SidebarRowPresentation};
+use super::reorder;
 use super::toolbar::sidebar_toolbar;
 use super::{pinned_display_name, sidebar_item_height, sidebar_item_visible, sidebar_row_h};
 use crate::ui::app::{DragTarget, OxydeApp};
@@ -98,7 +99,7 @@ pub(super) fn render_sidebar_tree(
         .layout
         .find_pane(&view.state.active_pane_id)
         .map(|pane| pane.active_tab().path.clone());
-    let show_tooltips = view.context_menus.is_empty();
+    let show_tooltips = view.context_menus.is_empty() && view.pinned_reorder.is_none();
     let mounting_volume = view.mounting_volume.clone();
 
     // Clamp before rendering the toolbar so its state matches the visible rows.
@@ -111,12 +112,31 @@ pub(super) fn render_sidebar_tree(
         scroll.set_offset(point(scroll.offset().x, px(-offset)));
     }
     let scrolled = offset >= 0.5;
+    let mut reorder_slots = Vec::new();
+    if view.pinned_reorder.is_some() {
+        let mut top = 0.0;
+        for item in &sidebar_items {
+            if let SidebarItem::Pinned { item: pinned } = item {
+                if !pinned.name.is_empty() && pinned_paths.contains(&pinned.path) {
+                    reorder_slots.push(reorder::Slot { top, height: sidebar_item_height(item), path: pinned.path.clone() });
+                }
+            }
+            top += sidebar_item_height(item);
+        }
+    }
 
     let mut container = div()
         .w_full()
         .h_full()
         .bg(theme.sidebar)
         .rounded_bl(view.window_corners.bottom_left)
+        // Moving a pressed pinned folder starts the reorder; releasing first keeps the order.
+        .when(view.pinned_reorder.is_none(), |d| d
+            .on_mouse_move(_cx.listener(|this, event: &MouseMoveEvent, _, cx| {
+                if event.pressed_button == Some(MouseButton::Left) { this.drag_pinned(event.position, cx); }
+            }))
+            .on_mouse_up(MouseButton::Left, _cx.listener(|this, _, _, cx| this.release_pinned(false, cx)))
+            .on_mouse_up_out(MouseButton::Left, _cx.listener(|this, _, _, cx| this.release_pinned(false, cx))))
         .on_scroll_wheel(_cx.listener(|_, _, window, cx| {
             crate::ui::components::tooltip::hover::dismiss(window, cx);
             cx.notify();
@@ -157,6 +177,7 @@ pub(super) fn render_sidebar_tree(
                                 show_tooltips,
                                 use_system_icons,
                                 mounting_volume: mounting_volume.clone(),
+                                pinned_reorder: view.pinned_reorder.clone(),
                             };
                             let render_rows = move |range: std::ops::Range<usize>, cx: &mut App| {
                                 render_sidebar_rows(range, cx, &items_for_list, &h, &sel, &presentation)
@@ -181,6 +202,7 @@ pub(super) fn render_sidebar_tree(
                                 .children(render_rows(start..end, _cx).into_iter().map(|row| div().flex_none().child(row)))
                                 .child(div().flex_none().h(px((content_h - bottom).max(0.0))))
                         }))
+                        .children(reorder::overlay(view, handle.clone(), reorder_slots, scroll.clone(), theme))
                 )
         );
 

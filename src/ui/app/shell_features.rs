@@ -133,6 +133,7 @@ impl OxydeApp {
                 });
                 match result {
                     Ok(Ok(items)) => {
+                        let items = super::pinned_order::apply_order(items, &this.config.pinned_order);
                         if !this
                             .state
                             .pinned_items
