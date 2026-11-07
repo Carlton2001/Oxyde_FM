@@ -57,6 +57,7 @@ pub struct TextInput {
     path_visibility: (bool, bool),
     completions: Vec<String>,
     completion_index: usize,
+    completion_chosen: bool,
     completion_task: Option<Task<()>>,
     completion_epoch: u64,
     completion_bounds: Option<Bounds<Pixels>>,
@@ -217,15 +218,17 @@ impl TextInput {
         })
         .detach();
 
-        cx.on_focus_out(&focus_handle, window, |this, _, _, _| {
+        cx.on_focus_out(&focus_handle, window, |this, _, _, cx| {
             this.blink_epoch += 1;
             this.cursor_visible = true;
+            this.dismiss_completions(cx);
         })
         .detach();
 
         Self {
             completions: Vec::new(),
             completion_index: 0,
+            completion_chosen: false,
             completion_task: None,
             completion_epoch: 0,
             completion_bounds: None,
@@ -545,18 +548,37 @@ impl TextInput {
     }
 
     fn enter(&mut self, _: &Enter, window: &mut Window, cx: &mut Context<Self>) {
+        if self.completion_chosen {
+            if let Some(path) = self.completions.get(self.completion_index).cloned() {
+                self.content = path;
+                let end = self.content.len();
+                self.selected_range = end..end;
+                self.selection_anchor = end;
+                self.selection_reversed = false;
+                self.last_layout = None;
+                (self.on_change)(&self.content, window, cx);
+            }
+        }
+        self.dismiss_completions(cx);
         (self.on_enter)(window, cx);
     }
 
     fn escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
         if !self.completions.is_empty() {
-            self.completions.clear();
-            self.completion_epoch += 1;
-            self.completion_task = None;
-            cx.notify();
+            self.dismiss_completions(cx);
             return;
         }
         (self.on_escape)(window, cx);
+    }
+
+    fn dismiss_completions(&mut self, cx: &mut Context<Self>) {
+        self.completion_epoch += 1;
+        self.completion_task = None;
+        self.completion_chosen = false;
+        if !self.completions.is_empty() {
+            self.completions.clear();
+            cx.notify();
+        }
     }
 
     fn refresh_completions(&mut self, cx: &mut Context<Self>) {
@@ -567,6 +589,7 @@ impl TextInput {
         self.completion_task = None;
         self.completions.clear();
         self.completion_index = 0;
+        self.completion_chosen = false;
         let text = self.content.clone();
         let Some((parent, prefix, separator)) = completion_parts(&text) else {
             return;
@@ -615,6 +638,7 @@ impl TextInput {
     fn completion_up(&mut self, _: &CompletionUp, _: &mut Window, cx: &mut Context<Self>) {
         if self.completions.is_empty() { cx.propagate(); return; }
         self.completion_index = (self.completion_index + self.completions.len() - 1) % self.completions.len();
+        self.completion_chosen = true;
         self.completion_scroll.scroll_to_item(self.completion_index, ScrollStrategy::Top);
         cx.notify();
     }
@@ -622,6 +646,7 @@ impl TextInput {
     fn completion_down(&mut self, _: &CompletionDown, _: &mut Window, cx: &mut Context<Self>) {
         if self.completions.is_empty() { cx.propagate(); return; }
         self.completion_index = (self.completion_index + 1) % self.completions.len();
+        self.completion_chosen = true;
         self.completion_scroll.scroll_to_item(self.completion_index, ScrollStrategy::Bottom);
         cx.notify();
     }
