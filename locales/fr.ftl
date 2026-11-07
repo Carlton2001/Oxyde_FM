@@ -276,7 +276,6 @@ settings-file-chooser = Fenêtres Ouvrir et Enregistrer
 settings-file-chooser-description = Choisir avec Oxyde les fichiers qu’ouvrent les autres applications, quand elles passent par le portail du bureau comme Firefox, Chrome et les applications Flatpak. Les dossiers et l’enregistrement gardent pour l’instant la fenêtre du système.
 settings-file-chooser-error = Impossible de changer les fenêtres Ouvrir et Enregistrer.
 file-chooser-title = Ouvrir un fichier
-file-chooser-unreadable = Ce dossier ne peut pas être lu.
 
 settings-region-language = Région & langue
 settings-performance = Performances

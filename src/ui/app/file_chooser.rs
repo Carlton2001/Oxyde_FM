@@ -1,40 +1,57 @@
 //! The window an application gets, through the desktop portal, to choose a file to
 //! open. It browses real folders only and answers the application once: with the file
-//! chosen, or nothing when the user cancels. Its state stays here; the main window
-//! lends it its places, volumes and display choices, and keeps its view, sort and last
-//! folder for the next one.
+//! chosen, or nothing when the user cancels. Its pieces are copies of the main window's
+//! (navigation bar, columns, grid, status bar, sidebar rows), adapted to choosing; the
+//! main window lends it its places, volumes and display choices, and keeps its view,
+//! sort and last folder for the next one.
 mod arrange;
 mod browse;
+mod crumbs;
+mod details;
+mod filter;
+mod grid;
 mod keys;
 mod location;
+mod navbar;
 mod render;
 mod setting;
-mod toolbar;
+mod sidebar;
+mod status;
 
 use super::OxydeApp;
-use crate::ui::components::input::{InputAppearance, TextInput, TextInputOptions};
-use crate::ui::i18n::I18nContext;
 use futures::channel::oneshot;
 use gpui::*;
-use oxyde_lib::models::FileEntry;
+use oxyde_lib::models::{DriveInfo, FileEntry};
 use oxyde_lib::platform::FileChooserRequest;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
 const ICON: &str = "icons/folder-open.svg";
 
-/// A folder the window offers beside the list.
+/// A quick access folder the sidebar offers.
 struct Place {
+    /// Empty for the home folder, which the sidebar names.
     label: String,
     path: String,
-    icon: &'static str,
+    home: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Listing {
     Loading,
     Ready,
-    Failed,
+    /// What the main window says of a folder it cannot list.
+    Failed(crate::ui::i18n::Message),
+}
+
+/// Baseline widths of the metadata columns, measured as the main window measures them.
+#[derive(Clone, Copy, Default)]
+struct ColumnWidths {
+    file_type: f32,
+    size: f32,
+    date: f32,
+    permissions: f32,
 }
 
 pub struct FileChooserWindow {
@@ -47,45 +64,50 @@ pub struct FileChooserWindow {
     back: Vec<String>,
     forward: Vec<String>,
     entries: Arc<Vec<FileEntry>>,
-    /// Positions in `entries` the list shows, in its order.
-    shown: Arc<Vec<usize>>,
+    /// The entries the list shows, filtered and sorted, and how many are folders.
+    shown: Arc<Vec<FileEntry>>,
+    folders: usize,
+    /// Type labels and sizes the metadata columns are measured from.
+    column_values: Arc<(HashSet<String>, HashSet<(u64, bool, bool)>)>,
+    column_revision: u64,
+    column_widths: ColumnWidths,
+    measured: Option<(u32, crate::ui::i18n::Language, crate::ui::format::DateFormat, u64)>,
+    /// Folders holding folders, which their row marks with a chevron.
+    subfolders: HashMap<String, bool>,
     /// A position in `shown`.
     selected: Option<usize>,
     listing: Listing,
     places: Vec<Place>,
-    volumes: Vec<Place>,
+    drives: Vec<DriveInfo>,
     options: arrange::Options,
     show_hidden: bool,
     show_system: bool,
+    show_permissions: bool,
     system_icons: bool,
     thumbnails: bool,
-    filter: Entity<TextInput>,
-    filter_text: String,
-    /// The path being typed in place of the folder's crumbs.
-    location: Option<Entity<TextInput>>,
-    location_missing: bool,
-    /// Letters typed in the list, and when the last one came.
-    typed: (String, std::time::Instant),
-    /// Cards per row of the grid, and the list's width they fill, as last laid out.
-    columns: usize,
-    grid_width: std::rc::Rc<std::cell::Cell<f32>>,
-    /// The folder's crumbs, scrolled to the last.
-    crumbs: ScrollHandle,
+    filter: filter::Filter,
+    location: location::Location,
+    typed: keys::TypeSelect,
+    crumbs: crumbs::Crumbs,
+    /// The details list; the grid scrolls its own handle.
     list: UniformListScrollHandle,
-    scroll: ScrollHandle,
-    scrollbar_origins: std::collections::HashMap<String, Point<f32>>,
+    grid_scroll: ScrollHandle,
+    sidebar_scroll: ScrollHandle,
+    /// The pane's width, as last laid out.
+    pane_width: std::rc::Rc<std::cell::Cell<f32>>,
+    scrollbar_origins: HashMap<String, Point<f32>>,
     grab_offset: f32,
     /// The scrollbar being dragged: its track, viewport and content heights.
     scroll_drag: Option<(String, f32, f32)>,
     focus: FocusHandle,
     listing_task: Option<Task<()>>,
     arrange_task: Option<Task<()>>,
-    location_task: Option<Task<()>>,
+    subfolder_task: Option<Task<()>>,
     _withdrawal: Task<()>,
 }
 
 impl crate::ui::components::scrollbar::ScrollbarState for FileChooserWindow {
-    fn scrollbar_origins(&mut self) -> &mut std::collections::HashMap<String, Point<f32>> {
+    fn scrollbar_origins(&mut self) -> &mut HashMap<String, Point<f32>> {
         &mut self.scrollbar_origins
     }
     fn set_grab_offset(&mut self, offset: f32) {
@@ -98,39 +120,32 @@ pub(crate) fn is_open(cx: &App) -> bool {
     cx.windows().iter().any(|window| window.downcast::<FileChooserWindow>().is_some())
 }
 
-/// The main window's places a file can be in, then its volumes.
-fn places(app: &OxydeApp, i18n: &crate::ui::i18n::I18n) -> (Vec<Place>, Vec<Place>) {
-    use crate::ui::i18n::Message;
+/// The main window's quick access folders a file can be in, as its sidebar shows them.
+fn places(app: &OxydeApp) -> Vec<Place> {
     let home = dirs::home_dir().map(|home| home.to_string_lossy().into_owned());
     let mut places: Vec<Place> = app.state.pinned_items.iter()
         .filter(|item| item.path.starts_with('/'))
         .filter(|item| app.show_hidden || !item.name.starts_with('.'))
-        .map(|item| {
-            let is_home = home.as_deref() == Some(item.path.as_str());
-            Place {
-                label: if item.name.is_empty() || is_home { i18n.text(Message::SidebarHome).to_string() } else { item.name.clone() },
-                path: item.path.clone(),
-                icon: if is_home { "icons/house.svg" } else { "icons/pin.svg" },
-            }
+        .map(|item| Place {
+            label: item.name.clone(),
+            path: item.path.clone(),
+            home: item.name.is_empty(),
         })
         .collect();
     if let Some(home) = home.filter(|home| !places.iter().any(|place| place.path == *home)) {
-        places.insert(0, Place { label: i18n.text(Message::SidebarHome).to_string(), path: home, icon: "icons/house.svg" });
+        places.insert(0, Place { label: String::new(), path: home, home: true });
     }
-    let volumes = app.state.drives.iter().filter(|drive| drive.path.starts_with('/')).map(|drive| Place {
-        label: crate::ui::format::drive_name(drive, i18n),
-        path: drive.path.clone(),
-        icon: crate::ui::components::icons::drive_icon_path(drive),
-    }).collect();
-    (places, volumes)
+    places
 }
 
 /// What the window takes from the main one when it opens.
 struct Lent {
-    places: (Vec<Place>, Vec<Place>),
+    places: Vec<Place>,
+    drives: Vec<DriveInfo>,
     options: arrange::Options,
     show_hidden: bool,
     show_system: bool,
+    show_permissions: bool,
     system_icons: bool,
     thumbnails: bool,
 }
@@ -140,11 +155,13 @@ impl OxydeApp {
     pub(crate) fn open_file_chooser(&mut self, request: FileChooserRequest, cx: &mut Context<Self>) {
         let owner = cx.entity().downgrade();
         let lent = Lent {
-            places: places(self, cx.i18n()),
+            places: places(self),
+            drives: self.state.drives.iter().filter(|drive| drive.path.starts_with('/')).cloned().collect(),
             options: arrange::Options::from_value(self.config.file_chooser_options.as_ref()),
             show_hidden: self.show_hidden,
             show_system: self.show_system,
-            system_icons: self.use_system_icons(),
+            show_permissions: self.show_permissions_column(),
+            system_icons: cfg!(target_os = "windows") && self.use_system_icons(),
             thumbnails: self.show_grid_thumbnails,
         };
         let rem_size = self.ui_rem_size();
@@ -152,14 +169,16 @@ impl OxydeApp {
         // owner: the window opens once this update of the owner has ended.
         cx.defer(move |cx| {
             let title = Some(request.title.clone()).filter(|title| !title.is_empty())
-                .unwrap_or_else(|| cx.i18n().text(crate::ui::i18n::Message::FileChooserTitle).to_string());
-            let default = Bounds::new(point(px(200.0), px(160.0)), size(px(crate::ui::scale::logical(960.0)), px(crate::ui::scale::logical(620.0))));
+                .unwrap_or_else(|| crate::ui::i18n::I18nContext::i18n(cx).text(crate::ui::i18n::Message::FileChooserTitle).to_string());
+            let logical = crate::ui::scale::logical;
+            let default = Bounds::new(point(px(200.0), px(160.0)), size(px(logical(1040.0)), px(logical(640.0))));
             let opened = cx.open_window(
                 WindowOptions {
                     app_id: Some(crate::ui::APP_ID.into()),
                     window_decorations: crate::ui::window_decorations(),
                     window_bounds: Some(super::tool_geometry::restore(ICON, default, cx)),
-                    window_min_size: Some(size(px(crate::ui::scale::logical(640.0)), px(crate::ui::scale::logical(400.0)))),
+                    // The sidebar, the name's minimum and the metadata columns fit.
+                    window_min_size: Some(size(px(logical(960.0)), px(logical(420.0)))),
                     titlebar: Some(TitlebarOptions { appears_transparent: true, title: Some(title.into()), ..Default::default() }),
                     ..Default::default()
                 },
@@ -198,13 +217,9 @@ impl FileChooserWindow {
                 let _ = this.update_in(cx, |_, window, _| window.remove_window());
             }
         });
-        let filter = Self::filter_input(cx.entity().downgrade(), window, cx);
-        let list = UniformListScrollHandle::new();
-        let scroll = list.0.borrow().base_handle.clone();
         let folder = lent.options.folder.clone()
             .or_else(|| dirs::home_dir().map(|home| home.to_string_lossy().into_owned()))
             .unwrap_or_else(|| "/".into());
-        let (places, volumes) = lent.places;
         let mut this = Self {
             owner,
             answer: Some(answer),
@@ -215,52 +230,41 @@ impl FileChooserWindow {
             forward: Vec::new(),
             entries: Arc::new(Vec::new()),
             shown: Arc::new(Vec::new()),
+            folders: 0,
+            column_values: Default::default(),
+            column_revision: 0,
+            column_widths: ColumnWidths::default(),
+            measured: None,
+            subfolders: HashMap::new(),
             selected: None,
             listing: Listing::Loading,
-            places,
-            volumes,
+            places: lent.places,
+            drives: lent.drives,
             options: lent.options,
             show_hidden: lent.show_hidden,
             show_system: lent.show_system,
+            show_permissions: lent.show_permissions,
             system_icons: lent.system_icons,
             thumbnails: lent.thumbnails,
-            filter,
-            filter_text: String::new(),
-            location: None,
-            location_missing: false,
-            typed: (String::new(), std::time::Instant::now()),
-            columns: 1,
-            grid_width: Default::default(),
-            crumbs: ScrollHandle::new(),
-            list,
-            scroll,
+            filter: Default::default(),
+            location: Default::default(),
+            typed: Default::default(),
+            crumbs: Default::default(),
+            list: UniformListScrollHandle::new(),
+            grid_scroll: ScrollHandle::new(),
+            sidebar_scroll: ScrollHandle::new(),
+            pane_width: Default::default(),
             scrollbar_origins: Default::default(),
             grab_offset: 0.0,
             scroll_drag: None,
             focus,
             listing_task: None,
             arrange_task: None,
-            location_task: None,
+            subfolder_task: None,
             _withdrawal: withdrawal,
         };
         this.show_folder(folder, cx);
         this
-    }
-
-    fn filter_input(this: WeakEntity<Self>, window: &mut Window, cx: &mut Context<Self>) -> Entity<TextInput> {
-        let placeholder = cx.i18n().text(crate::ui::i18n::Message::NameFilterPlaceholder);
-        let (changed, entered, escaped) = (this.clone(), this.clone(), this);
-        cx.new(|cx| TextInput::new(
-            cx,
-            placeholder,
-            String::new(),
-            move |value, _, cx| { let _ = changed.update(cx, |this, cx| this.set_filter(value, cx)); },
-            move |window, cx| { let _ = entered.update(cx, |this, cx| this.accept(window, cx)); },
-            move |window, cx| { let _ = escaped.update(cx, |this, cx| this.clear_filter(window, cx)); },
-            |_, _, _, _, _| {},
-            TextInputOptions { appearance: InputAppearance::Embedded, clearable: true, ..Default::default() },
-            window,
-        ))
     }
 
     /// Answers the application, once.
@@ -292,6 +296,6 @@ impl FileChooserWindow {
 
     /// The entry at a position of the list.
     fn shown_entry(&self, position: usize) -> Option<&FileEntry> {
-        self.entries.get(*self.shown.get(position)?)
+        self.shown.get(position)
     }
 }

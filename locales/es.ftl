@@ -432,7 +432,6 @@ settings-file-chooser = Diálogos Abrir y Guardar
 settings-file-chooser-description = Elegir con Oxyde los archivos que abren otras aplicaciones, cuando pasan por el portal del escritorio como Firefox, Chrome y las aplicaciones Flatpak. Las carpetas y el guardado mantienen por ahora el diálogo del sistema.
 settings-file-chooser-error = No se han podido cambiar los diálogos Abrir y Guardar.
 file-chooser-title = Abrir archivo
-file-chooser-unreadable = No se puede leer esta carpeta.
 
 settings-region-language = Región e Idioma
 

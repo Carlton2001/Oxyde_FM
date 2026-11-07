@@ -1,30 +1,5 @@
-use super::{crumbs, typed_path, Crumb, CrumbKind};
+use super::typed_path;
 use std::path::Path;
-
-fn paths(crumbs: &[Crumb]) -> Vec<(CrumbKind, &str, &str)> {
-    crumbs.iter().map(|crumb| (crumb.kind, crumb.path.as_str(), crumb.name.as_str())).collect()
-}
-
-#[test]
-fn crumbs_start_at_home_inside_it_and_at_the_root_elsewhere() {
-    assert_eq!(paths(&crumbs("/home/a/Documents/Notes", Some("/home/a"))), [
-        (CrumbKind::Home, "/home/a", ""),
-        (CrumbKind::Folder, "/home/a/Documents", "Documents"),
-        (CrumbKind::Folder, "/home/a/Documents/Notes", "Notes"),
-    ]);
-    assert_eq!(paths(&crumbs("/home/a", Some("/home/a/"))), [(CrumbKind::Home, "/home/a", "")]);
-    assert_eq!(paths(&crumbs("/home/ab", Some("/home/a"))), [
-        (CrumbKind::Root, "/", ""),
-        (CrumbKind::Folder, "/home", "home"),
-        (CrumbKind::Folder, "/home/ab", "ab"),
-    ]);
-    assert_eq!(paths(&crumbs("/", Some("/home/a"))), [(CrumbKind::Root, "/", "")]);
-    assert_eq!(paths(&crumbs("/mnt/usb", None)), [
-        (CrumbKind::Root, "/", ""),
-        (CrumbKind::Folder, "/mnt", "mnt"),
-        (CrumbKind::Folder, "/mnt/usb", "usb"),
-    ]);
-}
 
 #[test]
 fn typed_paths_resolve_home_relative_names_and_dots() {

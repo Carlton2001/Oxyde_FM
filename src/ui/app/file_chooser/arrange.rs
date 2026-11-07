@@ -1,25 +1,17 @@
-//! The order and filter of the file chooser's list, and the choices it remembers
-//! between windows: view, sort and the folder the last one ended in.
+//! The file chooser's entries as the main window arranges a folder: its name filter,
+//! its sort (`workspace::sort_files`, folders first), its type-to-select, and the
+//! choices kept between windows: view, sort and the folder the last one ended in.
+use crate::ui::workspace::{SortColumn, SortDirection};
 use oxyde_lib::models::FileEntry;
-use std::cmp::Ordering;
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub(super) enum SortKey {
-    #[default]
-    Name,
-    Type,
-    Size,
-    Modified,
-}
+use std::collections::HashSet;
 
 /// Kept in the preferences as `file_chooser_options`.
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub(super) struct Options {
     pub(super) grid: bool,
-    pub(super) sort: SortKey,
-    pub(super) descending: bool,
+    pub(super) sort: SortColumn,
+    pub(super) direction: SortDirection,
     pub(super) folder: Option<String>,
 }
 
@@ -33,47 +25,71 @@ impl Options {
     }
 }
 
-fn extension(entry: &FileEntry) -> String {
-    if entry.is_dir {
-        return String::new();
+/// What the list shows, and what its metadata columns are measured from.
+#[derive(Default)]
+pub(super) struct Arranged {
+    pub(super) shown: Vec<FileEntry>,
+    pub(super) folders: usize,
+    pub(super) types: HashSet<String>,
+    pub(super) sizes: HashSet<(u64, bool, bool)>,
+}
+
+/// The entries whose name holds `filter`, without regard to case, in the main
+/// window's order for `sort`.
+pub(super) fn arrange(entries: &[FileEntry], filter: &str, sort: SortColumn, direction: SortDirection) -> Arranged {
+    let filter = filter.to_lowercase();
+    let mut shown: Vec<FileEntry> = entries.iter()
+        .filter(|entry| filter.is_empty() || entry.name.to_lowercase().contains(&filter))
+        .cloned()
+        .collect();
+    crate::ui::workspace::sort_files(&mut shown, sort, direction);
+    let mut arranged = Arranged { folders: shown.iter().filter(|entry| entry.is_dir).count(), ..Default::default() };
+    for entry in entries {
+        arranged.types.insert(crate::ui::components::file_list::file_type_label(entry));
+        arranged.sizes.insert((entry.size, entry.is_dir, entry.is_calculated));
     }
-    entry.name.rsplit_once('.').filter(|(stem, _)| !stem.is_empty())
-        .map(|(_, extension)| extension.to_lowercase()).unwrap_or_default()
+    arranged.shown = shown;
+    arranged
 }
 
-fn compare(a: &FileEntry, b: &FileEntry, key: SortKey) -> Ordering {
-    let name = || oxyde_lib::utils::compare_natural(&a.name, &b.name);
-    match key {
-        SortKey::Name => name(),
-        SortKey::Type => extension(a).cmp(&extension(b)).then_with(name),
-        // Folder sizes are not counted here: folders keep their names' order.
-        SortKey::Size if a.is_dir => name(),
-        SortKey::Size => a.size.cmp(&b.size).then_with(name),
-        SortKey::Modified => a.modified.cmp(&b.modified).then_with(name),
-    }
+/// The main window's type-to-select: the name to select for a lowercase `prefix`, in
+/// display order. A repeated single letter cycles through the names starting with it;
+/// otherwise the current item stays selected while it still matches.
+pub(super) fn find_match(names: &[&str], current: Option<usize>, prefix: &str) -> Option<usize> {
+    let first = prefix.chars().next()?;
+    let count = names.len();
+    let starts = |i: usize, text: &str| names[i].to_lowercase().starts_with(text);
+    let search = |text: &str, include_current: bool| {
+        let (start, skip) = match current {
+            Some(current) => (current, usize::from(!include_current)),
+            None => (0, 0),
+        };
+        (skip..count + skip).map(|offset| (start + offset) % count).find(|&i| starts(i, text))
+    };
+    if prefix.chars().count() == 1 { return search(prefix, false); }
+    if let Some(found) = search(prefix, true) { return Some(found); }
+    if prefix.chars().all(|c| c == first) { return search(&first.to_string(), false); }
+    None
 }
 
-/// Whether `name` holds `filter`, without regard to case.
-pub(super) fn matches(name: &str, filter: &str) -> bool {
-    filter.is_empty() || name.to_lowercase().contains(filter)
-}
-
-/// Positions in `entries` the list shows, folders first, then in `key` order.
-pub(super) fn arrange(entries: &[FileEntry], filter: &str, key: SortKey, descending: bool) -> Vec<usize> {
-    let filter = filter.trim().to_lowercase();
-    let mut shown: Vec<usize> = (0..entries.len()).filter(|&index| matches(&entries[index].name, &filter)).collect();
-    shown.sort_by(|&a, &b| {
-        let (a, b) = (&entries[a], &entries[b]);
-        let order = compare(a, b, key);
-        b.is_dir.cmp(&a.is_dir).then(if descending { order.reverse() } else { order })
-    });
-    shown
-}
-
-/// The first of `shown` whose name starts with `prefix`, as typing in the list finds it.
-pub(super) fn find_prefix(entries: &[FileEntry], shown: &[usize], prefix: &str) -> Option<usize> {
-    let prefix = prefix.to_lowercase();
-    shown.iter().position(|&index| entries[index].name.to_lowercase().starts_with(&prefix))
+/// The main window's arrow keys over rows of positions: no selection starts at the
+/// first entry, and a short last grid row keeps the nearest column.
+pub(super) fn arrow_target(rows: &[&[usize]], current: Option<usize>, key: &str) -> Option<usize> {
+    let Some((row, column)) = current.and_then(|index| rows.iter().enumerate()
+        .find_map(|(row, indices)| indices.iter().position(|i| *i == index).map(|column| (row, column)))) else {
+        return rows.first().and_then(|row| row.first()).copied();
+    };
+    let target_row = match key {
+        "up" => row.saturating_sub(1),
+        "down" => (row + 1).min(rows.len() - 1),
+        _ => row,
+    };
+    let target_column = match key {
+        "left" => column.saturating_sub(1),
+        "right" => column + 1,
+        _ => column,
+    }.min(rows[target_row].len() - 1);
+    Some(rows[target_row][target_column])
 }
 
 #[cfg(test)]

@@ -432,7 +432,6 @@ settings-file-chooser = Finestre Apri e Salva
 settings-file-chooser-description = Scegli con Oxyde i file che aprono le altre applicazioni, quando passano dal portale del desktop come Firefox, Chrome e le applicazioni Flatpak. Le cartelle e il salvataggio mantengono per ora la finestra del sistema.
 settings-file-chooser-error = Impossibile cambiare le finestre Apri e Salva.
 file-chooser-title = Apri file
-file-chooser-unreadable = Impossibile leggere questa cartella.
 
 settings-region-language = Regione e Lingua
 

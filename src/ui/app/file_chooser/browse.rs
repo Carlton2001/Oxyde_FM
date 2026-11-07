@@ -1,8 +1,8 @@
 //! Browsing in the file chooser: the history, listings read and arranged in the
 //! background, the selection, and what opening an entry does, entering a folder or
 //! choosing a file.
-use super::arrange::{self, SortKey};
 use super::{FileChooserWindow, Listing};
+use crate::ui::workspace::{SortColumn, SortDirection};
 use gpui::*;
 use std::path::Path;
 use std::sync::Arc;
@@ -33,8 +33,10 @@ impl FileChooserWindow {
         }
     }
 
+    /// The parent folder, as the main window's Up button finds it.
     pub(super) fn parent(&self) -> Option<String> {
-        Path::new(&self.folder).parent().map(|parent| parent.to_string_lossy().into_owned())
+        Path::new(&self.folder).parent().filter(|parent| !parent.as_os_str().is_empty())
+            .map(|parent| parent.to_string_lossy().into_owned())
     }
 
     pub(super) fn go_up(&mut self, cx: &mut Context<Self>) {
@@ -55,32 +57,30 @@ impl FileChooserWindow {
                 Step::Forward => self.back.push(left.clone()),
             }
         }
-        // A new folder starts unfiltered, its path no longer typed.
-        self.location = None;
-        self.location_missing = false;
-        self.location_task = None;
-        if !self.filter_text.is_empty() {
-            self.filter_text.clear();
-            self.filter.update(cx, |input, cx| input.set_content(String::new(), cx));
-        }
+        // A new folder starts unfiltered, its path no longer edited.
+        self.location.close();
+        self.crumbs.menu = None;
+        self.filter.clear();
         self.entries = Arc::new(Vec::new());
         self.shown = Arc::new(Vec::new());
+        self.folders = 0;
+        self.subfolders.clear();
         self.selected = None;
-        self.scroll.set_offset(point(px(0.0), px(0.0)));
-        // Clamped once laid out: the last crumbs show.
-        self.crumbs.set_offset(point(px(-1.0e6), px(0.0)));
+        self.list.0.borrow().base_handle.set_offset(point(px(0.0), px(0.0)));
+        self.grid_scroll.set_offset(point(px(0.0), px(0.0)));
         // Back in a parent, the folder just left stays selected.
-        self.list(Some(left), cx);
+        self.list_folder(Some(left), cx);
     }
 
     /// Lists the folder again, the selection kept.
     pub(super) fn refresh(&mut self, cx: &mut Context<Self>) {
         let keep = self.selected_path();
-        self.list(keep, cx);
+        self.list_folder(keep, cx);
     }
 
-    /// Lists the folder off the UI thread; a later navigation drops this listing.
-    fn list(&mut self, keep: Option<String>, cx: &mut Context<Self>) {
+    /// Lists the folder off the UI thread; a later navigation drops this listing. Its
+    /// folders are then checked for subfolders, as the main window checks them.
+    fn list_folder(&mut self, keep: Option<String>, cx: &mut Context<Self>) {
         self.listing = Listing::Loading;
         self.arrange_task = None;
         let folder = self.folder.clone();
@@ -92,13 +92,15 @@ impl FileChooserWindow {
                     Ok(entries) => {
                         this.entries = Arc::new(entries);
                         this.arrange(keep, cx);
+                        this.check_subfolders(cx);
                     }
                     Err(error) => {
                         log::warn!("The file chooser cannot list {folder}: {error:?}");
                         this.entries = Arc::new(Vec::new());
                         this.shown = Arc::new(Vec::new());
+                        this.folders = 0;
                         this.selected = None;
-                        this.listing = Listing::Failed;
+                        this.listing = Listing::Failed(crate::ui::errors::path_load_message(&error));
                     }
                 }
                 cx.notify();
@@ -107,19 +109,37 @@ impl FileChooserWindow {
         cx.notify();
     }
 
+    fn check_subfolders(&mut self, cx: &mut Context<Self>) {
+        let folder = self.folder.clone();
+        self.subfolder_task = Some(cx.spawn(async move |this, cx| {
+            let Ok(nodes) = oxyde_lib::commands::sidebar::get_sidebar_nodes(folder.clone()).await else { return };
+            let _ = this.update(cx, |this, cx| {
+                if this.folder == folder {
+                    this.subfolders = nodes.into_iter().map(|node| (node.path, node.has_subdirs)).collect();
+                    cx.notify();
+                }
+            });
+        }));
+    }
+
     /// Filters and sorts the entries off the UI thread, then selects `keep` again.
     pub(super) fn arrange(&mut self, keep: Option<String>, cx: &mut Context<Self>) {
         let entries = self.entries.clone();
-        let filter = self.filter_text.clone();
-        let (key, descending) = (self.options.sort, self.options.descending);
+        let filter = self.filter.text.clone();
+        let (sort, direction) = (self.options.sort, self.options.direction);
         self.arrange_task = Some(cx.spawn(async move |this, cx| {
-            let shown = cx.background_spawn(async move { arrange::arrange(&entries, &filter, key, descending) }).await;
+            let arranged = cx.background_spawn(async move { super::arrange::arrange(&entries, &filter, sort, direction) }).await;
             let _ = this.update(cx, |this, cx| {
-                let filtered = !this.filter_text.trim().is_empty();
-                this.selected = keep.and_then(|path| shown.iter().position(|&index| this.entries[index].path == path))
+                let filtered = !this.filter.text.is_empty();
+                this.selected = keep.and_then(|path| arranged.shown.iter().position(|entry| entry.path == path))
                     // Filtering, the first match is ready for Enter.
-                    .or_else(|| (filtered && !shown.is_empty()).then_some(0));
-                this.shown = Arc::new(shown);
+                    .or_else(|| (filtered && !arranged.shown.is_empty()).then_some(0));
+                this.folders = arranged.folders;
+                this.shown = Arc::new(arranged.shown);
+                if this.column_values.0 != arranged.types || this.column_values.1 != arranged.sizes {
+                    this.column_values = Arc::new((arranged.types, arranged.sizes));
+                    this.column_revision += 1;
+                }
                 this.listing = Listing::Ready;
                 if let Some(position) = this.selected {
                     this.reveal(position);
@@ -134,32 +154,27 @@ impl FileChooserWindow {
     }
 
     pub(super) fn set_filter(&mut self, value: &str, cx: &mut Context<Self>) {
-        if self.filter_text != value {
-            self.filter_text = value.to_string();
+        if self.filter.text != value {
+            self.filter.text = value.to_string();
             let keep = self.selected_path();
             self.arrange(keep, cx);
         }
     }
 
-    /// Escape in the filter: empties it, then hands the keyboard back to the list.
-    pub(super) fn clear_filter(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.filter_text.is_empty() {
-            self.filter.update(cx, |input, cx| input.set_content(String::new(), cx));
-            self.set_filter("", cx);
-        }
-        window.focus(&self.focus, cx);
-    }
-
-    /// A header's click: its column sorts, or sorts the other way.
-    pub(super) fn sort_by(&mut self, key: SortKey, cx: &mut Context<Self>) {
-        if self.options.sort == key {
-            self.options.descending = !self.options.descending;
+    /// A header's press: its column sorts, or sorts the other way, as `toggle_sort`.
+    pub(super) fn toggle_sort(&mut self, column: SortColumn, cx: &mut Context<Self>) {
+        if self.options.sort == column {
+            self.options.direction = match self.options.direction {
+                SortDirection::Ascending => SortDirection::Descending,
+                SortDirection::Descending => SortDirection::Ascending,
+            };
         } else {
-            self.options.sort = key;
-            self.options.descending = false;
+            self.options.sort = column;
+            self.options.direction = SortDirection::Ascending;
         }
         let keep = self.selected_path();
         self.arrange(keep, cx);
+        cx.notify();
     }
 
     pub(super) fn toggle_hidden(&mut self, cx: &mut Context<Self>) {
@@ -167,23 +182,45 @@ impl FileChooserWindow {
         self.refresh(cx);
     }
 
-    pub(super) fn toggle_grid(&mut self, cx: &mut Context<Self>) {
-        self.options.grid = !self.options.grid;
-        self.scroll.set_offset(point(px(0.0), px(0.0)));
-        if let Some(position) = self.selected {
-            self.reveal(position);
+    pub(super) fn set_grid(&mut self, grid: bool, cx: &mut Context<Self>) {
+        if self.options.grid != grid {
+            self.options.grid = grid;
+            if let Some(position) = self.selected {
+                self.reveal(position);
+            }
+            cx.notify();
         }
-        cx.notify();
     }
 
-    /// The rows of the list: entries, or grid lines of cards.
-    pub(super) fn rows(&self) -> usize {
-        if self.options.grid { self.shown.len().div_ceil(self.columns.max(1)) } else { self.shown.len() }
+    /// Cards per grid row, from the pane's width as the main grid computes it.
+    pub(super) fn grid_geometry(&self) -> crate::ui::style::GridGeometry {
+        crate::ui::style::GridGeometry::for_viewport(self.pane_width.get().max(1.0), crate::ui::components::scrollbar::zed_track_width())
     }
 
+    /// Rows of positions as the arrows move through them: one entry per details row,
+    /// a line of cards in the grid.
+    pub(super) fn position_rows(&self) -> Vec<Vec<usize>> {
+        let columns = if self.options.grid { self.grid_geometry().columns.max(1) } else { 1 };
+        (0..self.shown.len()).collect::<Vec<_>>().chunks(columns).map(<[usize]>::to_vec).collect()
+    }
+
+    /// Scrolls the entry into view, as `scroll_row_into_view` does.
     fn reveal(&self, position: usize) {
-        let row = if self.options.grid { position / self.columns.max(1) } else { position };
-        self.list.scroll_to_item(row, ScrollStrategy::Nearest);
+        if !self.options.grid {
+            self.list.scroll_to_item(position, ScrollStrategy::Nearest);
+            return;
+        }
+        let row = position / self.grid_geometry().columns.max(1);
+        let height = crate::ui::style::grid_card_row_height();
+        // The grid's list starts below a 0.25 rem top padding.
+        let top = row as f32 * height + crate::ui::scale::rem_pixels(rems(0.25)).as_f32();
+        let handle = &self.grid_scroll;
+        let viewport = handle.bounds().size.height.as_f32().max(1.0);
+        let visible_top = -handle.offset().y.as_f32();
+        let target = if top < visible_top { top }
+            else if top + height > visible_top + viewport { (top + height - viewport).max(0.0) }
+            else { visible_top };
+        handle.set_offset(point(px(0.0), px(-target)));
     }
 
     pub(super) fn select(&mut self, position: usize, cx: &mut Context<Self>) {
@@ -192,17 +229,6 @@ impl FileChooserWindow {
             self.reveal(position);
             cx.notify();
         }
-    }
-
-    /// Moves the selection by `step` entries, from the first or last without one.
-    pub(super) fn move_selection(&mut self, step: isize, cx: &mut Context<Self>) {
-        let Some(last) = self.shown.len().checked_sub(1) else { return };
-        let position = match self.selected {
-            Some(position) => position.saturating_add_signed(step).min(last),
-            None if step < 0 => last,
-            None => 0,
-        };
-        self.select(position, cx);
     }
 
     /// Enters a folder, or chooses a file; an archive is a file here.

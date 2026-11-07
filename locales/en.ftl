@@ -270,7 +270,6 @@ settings-file-chooser = Open and Save dialogs
 settings-file-chooser-description = Choose the files other applications open with Oxyde, when they ask the desktop portal as Firefox, Chrome and Flatpak applications do. Folders and saving keep the system’s dialog for now.
 settings-file-chooser-error = Could not change the Open and Save dialogs.
 file-chooser-title = Open File
-file-chooser-unreadable = This folder cannot be read.
 
 settings-region-language = Region & language
 settings-performance = Performance
