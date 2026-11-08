@@ -87,7 +87,9 @@ pub(super) fn render_sidebar_tree(
     let list_top = crate::ui::scale::rem_pixels(list_top_rems()).as_f32();
     let list_bottom = if h_overflow { crate::ui::components::scrollbar::zed_track_width() } else { 0.0 };
     let viewport_h = (view.list_height - list_top - list_bottom).max(1.0);
-    let content_h = sidebar_items.iter().map(sidebar_item_height).sum::<f32>().max(1.0);
+    // The bottom padding belongs to the content, so the scrollbar covers it too.
+    let bottom_padding = crate::ui::scale::rem_pixels(rems(0.5)).as_f32();
+    let content_h = (sidebar_items.iter().map(sidebar_item_height).sum::<f32>() + bottom_padding).max(1.0);
     let list_right = if content_h > viewport_h { rems(1.125) } else { rems(0.5) };
     // Rows fill the list's visible width until the content itself overflows it.
     let visible_w = viewport_w - crate::ui::scale::rem_pixels(rems(0.5) + list_right).as_f32();
@@ -211,7 +213,8 @@ pub(super) fn render_sidebar_tree(
         container = container.child(
             div()
                 .absolute()
-                .top(list_top_rems() - rems(0.0625))
+                // Align with the tab bar separator.
+                .top(crate::ui::style::TAB_BAR_HEIGHT - rems(0.0625))
                 .left_0()
                 .right_0()
                 .h(rems(0.0625))
@@ -279,7 +282,7 @@ pub(super) fn render_sidebar_tree(
 }
 
 
-/// The toolbar height plus a gap, so the first entry does not touch the toolbar.
+/// The list starts right under the toolbar.
 fn list_top_rems() -> Rems {
-    crate::ui::style::TAB_BAR_HEIGHT + rems(0.375)
+    crate::ui::style::TAB_BAR_HEIGHT
 }

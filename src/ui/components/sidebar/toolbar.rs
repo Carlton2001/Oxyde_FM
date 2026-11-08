@@ -26,9 +26,26 @@ pub(super) fn sidebar_button_with_tooltip(
     enabled: bool,
     action: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
 ) -> Stateful<Div> {
-    crate::ui::elements::button::toolbar_button_with_tooltip(
-        id, tooltip, icon, text, theme, enabled, action,
-    )
+    use crate::ui::elements::button::{button_style, ButtonVariant};
+    use crate::ui::components::tooltip::NativeTooltipExt;
+    // Same footprint as the navbar buttons, so the toolbar keeps a margin around the hover.
+    button_style(div().id(id), theme, ButtonVariant::Ghost, enabled)
+        .size_6()
+        .flex_none()
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded_md()
+        .fixed_tooltip(tooltip)
+        .when(enabled, |d| d.on_mouse_down(MouseButton::Left, action))
+        .when_some(icon, |d, path| {
+            d.child(svg().path(path).size_4().text_color(if enabled {
+                theme.text
+            } else {
+                theme.icon_disabled
+            }))
+        })
+        .when_some(text, |d, text| d.child(text))
 }
 
 pub(super) fn sidebar_toolbar(
