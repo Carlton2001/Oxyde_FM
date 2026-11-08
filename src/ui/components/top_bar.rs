@@ -240,7 +240,7 @@ pub fn render_top_bar(
             let permanent_delete = view.shift_delete || view.pane_delete_is_permanent(&pane_id);
             let mut has_previous = false;
             for (visible, id, icon, label, tip, action) in [
-                (parent_path.is_some(), "up-btn", "icons/arrow-up.svg", Message::Up, "Alt+↑".into(), 0u8),
+                (true, "up-btn", "icons/arrow-up.svg", Message::Up, "Alt+↑".into(), 0u8),
                 (ordinary, "new-folder-btn", "icons/folder-plus.svg", Message::NewFolder, "Ctrl+Shift+N".into(), 11),
                 (!is_trash_path && has_undo_entry, "undo-btn", "icons/undo-2.svg", Message::Undo,
                     if undo_blocked_by_overwrite { _cx.i18n().text(Message::UndoOverwriteUnavailable).to_string() }
@@ -258,7 +258,8 @@ pub fn render_top_bar(
                 (is_trash_path, "trash-delete-all-btn", "icons/trash-2.svg", Message::TrashDeleteAll, String::new(), 10),
             ] {
                 if !visible { continue; }
-                let enabled = (action != 1 || can_undo)
+                let enabled = (action != 0 || parent_path.is_some())
+                    && (action != 1 || can_undo)
                     && (!matches!(action, 1 | 2) || !view.history_operation_in_progress)
                     && (!(7..=10).contains(&action) || (!view.trash_busy && (action < 9 || !active_tab.files.is_empty())));
                 let mut button = div().id(id).min_w(rems(1.5)).h_6().px(rems(0.125)).flex().items_center().justify_center().rounded_md()
