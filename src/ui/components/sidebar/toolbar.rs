@@ -60,6 +60,8 @@ pub(super) fn sidebar_toolbar(
         .flex_none()
         .flex()
         .items_center()
+        // In the rail, center the toggle on the same axis as the entries below.
+        .when(view.sidebar_collapsed, |d| d.justify_center())
         .px_2()
         .gap_1();
     if !view.sidebar_collapsed {
