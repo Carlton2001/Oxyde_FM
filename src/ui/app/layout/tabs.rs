@@ -267,7 +267,8 @@ impl OxydeApp {
             tab_bar = tab_bar.child(
                 div()
                     .relative()
-                    .flex_basis(rems(12.0))
+                    .max_w(crate::ui::style::TAB_MAX_WIDTH)
+                    .flex_basis(crate::ui::style::TAB_MAX_WIDTH)
                     .flex_shrink(1.0)
                     .child(tab)
                     // File Drop Zone (drop files onto tab to move them to that tab's directory)
