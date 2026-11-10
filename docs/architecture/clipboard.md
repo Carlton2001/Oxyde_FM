@@ -22,7 +22,7 @@ pub trait FileClipboard: Send + Sync {
 }
 ```
 
-- **Windows** (`windows_file_clipboard.rs`) delegates to `clipboard.rs` (`CF_HDROP`, `Preferred DropEffect`).
+- **Windows** (`windows_file_clipboard.rs`) delegates to `clipboard.rs` (`CF_HDROP`, `Preferred DropEffect`). When the clipboard offers only virtual files (`FileGroupDescriptorW`), or `CF_HDROP` paths that do not exist yet, paste falls back to the shell's own Paste verb on the target folder (`windows_system_paste.rs`): Windows then shows its progress and conflict dialogs. VMware Tools needs this: a host file arrives as virtual file, a host folder as a staging path (`%TEMP%\vmware-<user>\VMwareDnD\…`) that it fills only when the shell pastes; reading `CF_HDROP` or `IFileOperation::CopyItems` does not trigger it. Its drag and drop already gives real paths.
 - **Linux** (`linux_file_clipboard.rs`) keeps the selection in memory, for all the process's windows. A cut selection pastes only once: its sources have moved. When `wl-copy` is installed, a `wl-copy --foreground` process offers it in Nautilus's format and exits as soon as another selection replaces it, which makes the selection stale. On paste, a stale selection gives way to `wl-paste`, which reads files copied or cut elsewhere (`linux_file_clipboard/wayland.rs`).
 
 ## Behavior outside Windows

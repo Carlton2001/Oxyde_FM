@@ -990,6 +990,8 @@ pub mod clipboard;
 mod windows_clipboard_write;
 #[cfg(target_os = "windows")]
 mod windows_file_clipboard;
+#[cfg(target_os = "windows")]
+mod windows_system_paste;
 #[cfg(not(target_os = "windows"))]
 mod linux_file_clipboard;
 #[cfg(target_os = "windows")]

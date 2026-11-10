@@ -159,6 +159,11 @@ pub fn get_clipboard_files() -> Result<(Vec<String>, bool), CommandError> {
             is_cut = parse_drop_effect(data.bytes())?;
         }
     }
+    // A source may publish paths before writing them (VMware Tools stages host
+    // folders only when the shell pastes): leave those to the shell's Paste.
+    if files.iter().any(|path| std::fs::symlink_metadata(path).is_err()) {
+        return Ok((Vec::new(), false));
+    }
     Ok((files, is_cut))
 }
 

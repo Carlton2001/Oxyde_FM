@@ -67,7 +67,14 @@ impl OxydeApp {
             system.and_then(|item| item.text())
         };
         cx.spawn(async move |this, cx| {
-            let result = tokio::task::spawn_blocking(|| oxyde_lib::platform::platform().file_clipboard().get_files(text)).await;
+            let target = target_dir.clone();
+            let result = tokio::task::spawn_blocking(move || {
+                let clipboard = oxyde_lib::platform::platform().file_clipboard();
+                let files = clipboard.get_files(text)?;
+                // Files Oxyde cannot read go through the system's own Paste.
+                if files.0.is_empty() { clipboard.paste_with_system(&target)?; }
+                Ok::<_, String>(files)
+            }).await;
             let _ = this.update(cx, |this, cx| {
                 match result {
                     Ok(Ok((paths, is_cut))) if !paths.is_empty() => {
