@@ -254,6 +254,7 @@ impl OxydeApp {
         }
         self.item_press = None;
         self.item_selection_drag = false;
+        self.selection_scroll_y = None;
         self.file_drag_origin = None;
         self.set_file_drag_new_tab(false, cx);
         let mut needs_notify = false;

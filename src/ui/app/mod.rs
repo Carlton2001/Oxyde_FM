@@ -240,6 +240,8 @@ pub struct OxydeApp {
     pub drag_target: Option<DragTarget>,
     item_press: Option<item_pointer::ItemPress>,
     item_selection_drag: bool,
+    /// List scroll at the last rectangle update, to keep its start on the content.
+    selection_scroll_y: Option<f32>,
     type_select: type_select::TypeSelect,
     pub(crate) suppress_item_selection_click: bool,
     pub drop_target_idx: Option<usize>,
@@ -461,6 +463,7 @@ impl OxydeApp {
             drag_target: None,
             item_press: None,
             item_selection_drag: false,
+            selection_scroll_y: None,
             type_select: Default::default(),
             suppress_item_selection_click: false,
             drop_target_idx: None,

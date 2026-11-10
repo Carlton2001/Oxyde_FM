@@ -129,6 +129,8 @@ impl OxydeApp {
                 }
             }
             let scroll_y = new_scroll_y;
+            // Covers autoscroll and wheel scrolling alike.
+            let scroll_delta = scroll_y - self.selection_scroll_y.replace(scroll_y).unwrap_or(scroll_y);
 
             // --- Selection Logic ---
             if let Some(DragTarget::SelectionRectangle {
@@ -136,8 +138,10 @@ impl OxydeApp {
                 modifiers,
                 initial_selection,
                 ..
-            }) = &self.drag_target
+            }) = &mut self.drag_target
             {
+                // The start point is in window coordinates: keep it on the content it was pressed on.
+                start_pos.y += px(scroll_delta);
                 let start_pos = *start_pos;
                 let modifiers = *modifiers;
                 let initial_selection_cap = initial_selection.clone();
