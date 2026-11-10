@@ -779,7 +779,15 @@ history-delete-unverified = Oxyde ne dispose pas des informations nécessaires p
 preview-timed-out = Cet aperçu a dépassé le délai de 15 secondes. Le fichier reste accessible.
 copy-name-suffix = Copie
 shell-delete-completed-error = Windows a terminé la suppression de cet élément, puis a signalé une erreur. L’historique conserve l’opération terminée. Vérifiez le dossier et la corbeille avant de réessayer.
-shell-delete-unconfirmed = Windows n’a pas confirmé la suppression de cet élément. La suppression a pu être partielle. Vérifiez le dossier et la corbeille avant de réessayer.
+shell-delete-unconfirmed = Windows n’a pas confirmé la suppression de cet élément. La suppression a pu être partielle. Vérifiez le dossier et la corbeille avant de réessayer.
+shell-delete-in-use = Un fichier est utilisé par un autre programme. Fermez-le, puis réessayez.
+shell-delete-access-denied = Accès refusé. Vous n’avez pas les droits nécessaires pour supprimer cet élément.
+delete-batch-failed = { $failed } élément(s) sur { $total } n’ont pas pu être supprimés.
+delete-single-failed = L’élément n’a pas pu être supprimé.
+delete-batch-processed = Les autres éléments ont été supprimés. Ceux en échec sont signalés dans la liste de l’opération.
+delete-failure-cause = Cause
+delete-retry-hint = Fermez les programmes qui utilisent ces fichiers, puis cliquez sur Réessayer.
+delete-failed-title = Suppression incomplète
 
 archive-listing-metadata-limit = Impossible d’afficher le contenu : la liste des fichiers dépasse { $limit }. Cette limite concerne les noms et les informations des fichiers, pas leur taille décompressée. Vous pouvez essayer une extraction avec ses limites habituelles.
 archive-listing-worker-failed = Impossible de lire le contenu de cette archive : le processus de lecture a échoué ou sa réponse est invalide. L’archive n’a pas été modifiée. Vous pouvez réessayer ou tenter une extraction avec ses limites habituelles.
@@ -808,6 +816,7 @@ operations-item-done = Traité
 operations-item-not-processed = Non traité
 operations-item-skipped = Ignoré
 operations-item-partial = Partiellement traité
+operations-item-failed = Échec
 operations-item-unknown = État inconnu
 operations-item-interrupted = Interrompu
 

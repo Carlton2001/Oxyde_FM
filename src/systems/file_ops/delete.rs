@@ -72,6 +72,7 @@ impl FileOperationManager {
         let real_sources_arc = Arc::new(real_sources);
         let processed_files_atomic = Arc::new(AtomicUsize::new(0));
         let error_captured = Arc::new(Mutex::new(None));
+        let failures_captured: Arc<Mutex<Vec<(usize, String)>>> = Arc::new(Mutex::new(Vec::new()));
 
         {
             let mut locked = op.lock().unwrap();
@@ -90,7 +91,7 @@ impl FileOperationManager {
             let pause = pause_flag.clone();
             let turbo = turbo_flag.clone();
             let idx = current_index.clone();
-            let error_share = error_captured.clone();
+            let failures = failures_captured.clone();
             let operation = op.clone();
 
             let handle = std::thread::spawn(move || {
@@ -150,17 +151,17 @@ impl FileOperationManager {
                             return Ok(());
                         }
                         if e.kind() != std::io::ErrorKind::NotFound {
-                            let key = match e.kind() {
-                                std::io::ErrorKind::PermissionDenied => "error_access_denied",
-                                std::io::ErrorKind::StorageFull => "error_disk_full",
-                                _ => return Err(format!("Failed to delete {:?}: {}", src, e)),
-                            }
-                            .to_string();
-                            let mut share = error_share.lock().unwrap();
-                            if share.is_none() {
-                                *share = Some(key.clone());
-                            }
-                            return Err(key);
+                            // Keep going: one refused item must not leave the rest undeleted.
+                            log::warn!(target: super::FILE_OPS_LOG_TARGET, "delete_item_failed path={src:?} error={e}");
+                            let failure = match e.kind() {
+                                std::io::ErrorKind::PermissionDenied if total_items == 1 => "error_access_denied".to_string(),
+                                std::io::ErrorKind::StorageFull if total_items == 1 => "error_disk_full".to_string(),
+                                _ => format!("Failed to delete {:?}: {}", src, e),
+                            };
+                            failures.lock().unwrap().push((i, failure));
+                            operation.lock().unwrap().item_failed(src);
+                            processed_files.fetch_add(1, Ordering::Relaxed);
+                            continue;
                         }
                     }
 
@@ -209,8 +210,13 @@ impl FileOperationManager {
         if let Some(e) = error_captured.lock().unwrap().clone() {
             return Err(e);
         }
-
-        Ok(())
+        if cancel_flag.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+        // Report failures in selection order, whichever worker hit them first.
+        let mut failures = std::mem::take(&mut *failures_captured.lock().unwrap());
+        failures.sort_by_key(|(index, _)| *index);
+        crate::models::error::DeleteBatchFailure::summarize(total_items, failures.into_iter().map(|(_, failure)| failure).collect())
     }
 
     pub(super) fn perform_trash(op: &Arc<Mutex<FileOperation>>, sources: Vec<PathBuf>) -> Result<(), String> {

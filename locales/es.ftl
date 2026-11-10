@@ -1080,7 +1080,15 @@ history-delete-unverified = Oxyde no tiene la información necesaria para deshac
 preview-timed-out = Esta vista previa ha superado el límite de 15 segundos. El archivo sigue siendo accesible.
 copy-name-suffix = Copia
 shell-delete-completed-error = Windows terminó de eliminar este elemento y después notificó un error. La operación completada se conserva en el historial. Compruebe la carpeta y la papelera antes de intentarlo de nuevo.
-shell-delete-unconfirmed = Windows no confirmó la eliminación de este elemento. La eliminación puede haber sido parcial. Compruebe la carpeta y la papelera antes de intentarlo de nuevo.
+shell-delete-unconfirmed = Windows no confirmó la eliminación de este elemento. La eliminación puede haber sido parcial. Compruebe la carpeta y la papelera antes de intentarlo de nuevo.
+shell-delete-in-use = Otro programa está usando un archivo. Ciérrelo e inténtelo de nuevo.
+shell-delete-access-denied = Acceso denegado. No tiene permiso para eliminar este elemento.
+delete-batch-failed = No se pudieron eliminar { $failed } de { $total } elementos.
+delete-single-failed = No se pudo eliminar el elemento.
+delete-batch-processed = Los demás elementos se eliminaron. Los elementos con error están marcados en la lista de la operación.
+delete-failure-cause = Causa
+delete-retry-hint = Cierre los programas que usan estos archivos y haga clic en Reintentar.
+delete-failed-title = Eliminación incompleta
 
 archive-listing-metadata-limit = No se puede mostrar el contenido: la lista de archivos supera { $limit }. Este límite se aplica a los nombres y a la información de los archivos, no a su tamaño descomprimido. Puede intentar extraerlos con los límites habituales.
 archive-listing-worker-failed = No se puede leer el contenido de este archivo: el proceso de lectura ha fallado o su respuesta no es válida. El archivo no se ha modificado. Puede volver a intentarlo o extraerlo con los límites habituales.
@@ -1109,6 +1117,7 @@ operations-item-done = Procesado
 operations-item-not-processed = Sin procesar
 operations-item-skipped = Omitido
 operations-item-partial = Procesado parcialmente
+operations-item-failed = Error
 operations-item-unknown = Estado desconocido
 operations-item-interrupted = Interrumpido
 

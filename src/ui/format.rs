@@ -136,6 +136,30 @@ mod tests {
         }
     }
     #[test]
+    fn shell_delete_refusals_name_the_cause_in_all_languages() {
+        use crate::ui::i18n::{I18n, Message};
+        for language in [Language::French, Language::English, Language::German, Language::Spanish, Language::Italian] {
+            let i18n = I18n::for_language(language);
+            for (code, key) in [("80270027", Message::ShellDeleteInUse), ("80270028", Message::ShellDeleteInUse), ("80270021", Message::ShellDeleteAccessDenied), ("80123456", Message::ShellDeleteUnconfirmed)] {
+                let failure = oxyde_lib::models::error::ShellDeleteFailure { completed: false, path: "C:/tmp/a".into(), detail: format!("Windows did not confirm deletion of the selected item (0x{code})") };
+                assert_eq!(error_detail(&failure.to_string(), &i18n), i18n.text(key).to_string());
+            }
+        }
+    }
+    #[test]
+    fn delete_batch_failures_summarize_counts_and_translate_the_first_cause() {
+        use crate::ui::i18n::{I18n, Message};
+        for language in [Language::French, Language::English, Language::German, Language::Spanish, Language::Italian] {
+            let i18n = I18n::for_language(language);
+            let first = oxyde_lib::models::error::ShellDeleteFailure { completed: false, path: "C:/tmp/a".into(), detail: "locked".into() }.to_string();
+            let detail = oxyde_lib::models::error::DeleteBatchFailure::summarize(120, vec![first, "second".into(), "third".into()]).unwrap_err();
+            let displayed = error_detail(&detail, &i18n);
+            assert!(displayed.contains('3') && displayed.contains("120"), "{displayed}");
+            assert!(displayed.contains(&i18n.text(Message::ShellDeleteUnconfirmed).to_string()));
+            assert!(!displayed.contains("Delete batch [") && !displayed.contains("{$"));
+        }
+    }
+    #[test]
     fn archive_listing_failures_are_clear_and_distinct_from_file_size_in_all_languages() {
         use oxyde_lib::models::error::ArchiveListingFailure;
         use crate::ui::i18n::{I18n, Message};
@@ -396,6 +420,15 @@ pub fn entry_name(file: &oxyde_lib::models::FileEntry, i18n: &crate::ui::i18n::I
 pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
     use crate::ui::i18n::{FluentArgs, Message};
     use oxyde_lib::models::error::{ArchiveLimitFailure, ArchiveLimitKind};
+    if let Some(batch) = oxyde_lib::models::error::DeleteBatchFailure::from_message(detail) {
+        let mut args = FluentArgs::new();
+        args.set("failed", format_number(batch.failed as u64, i18n.language()));
+        args.set("total", format_number(batch.total as u64, i18n.language()));
+        let mut text = i18n.text_with_args(Message::DeleteBatchFailed, &args).to_string();
+        text.push('\n');
+        text.push_str(&error_detail(&batch.first, i18n));
+        return text;
+    }
     if let Some(recovery) = oxyde_lib::models::error::ArchiveRecoveryFailure::from_message(detail) {
         let mut args = FluentArgs::new();
         args.set("locations", recovery.locations.iter().map(|path| display_paths(path)).collect::<Vec<_>>().join("\n"));
@@ -425,6 +458,15 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
         };
     }
     if let Some(completed) = oxyde_lib::models::error::ShellDeleteFailure::from_message(detail) {
+        use oxyde_lib::models::error::{ShellDeleteCause, ShellDeleteFailure};
+        // A refusal Windows explains is actionable; only unexplained ones stay generic.
+        if !completed {
+            match ShellDeleteFailure::cause(detail) {
+                Some(ShellDeleteCause::InUse) => return i18n.text(Message::ShellDeleteInUse).to_string(),
+                Some(ShellDeleteCause::AccessDenied) => return i18n.text(Message::ShellDeleteAccessDenied).to_string(),
+                None => {}
+            }
+        }
         return i18n.text(if completed { Message::ShellDeleteCompletedError } else { Message::ShellDeleteUnconfirmed }).to_string();
     }
     if let Some(changed) = oxyde_lib::models::error::HistoryDeleteFailure::from_message(detail) {

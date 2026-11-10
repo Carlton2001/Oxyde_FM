@@ -773,7 +773,15 @@ history-delete-unverified = Oxyde does not have the information needed to undo o
 preview-timed-out = This preview exceeded the 15-second time limit. The file remains accessible.
 copy-name-suffix = Copy
 shell-delete-completed-error = Windows finished deleting this item, then reported an error. The completed operation remains in history. Check the folder and Recycle Bin before trying again.
-shell-delete-unconfirmed = Windows did not confirm deletion of this item. The deletion may have been partial. Check the folder and Recycle Bin before trying again.
+shell-delete-unconfirmed = Windows did not confirm deletion of this item. The deletion may have been partial. Check the folder and Recycle Bin before trying again.
+shell-delete-in-use = A file is in use by another program. Close it, then try again.
+shell-delete-access-denied = Access denied. You do not have permission to delete this item.
+delete-batch-failed = { $failed } of { $total } items could not be deleted.
+delete-single-failed = The item could not be deleted.
+delete-batch-processed = The other items were deleted. Failed items are marked in the operation’s list.
+delete-failure-cause = Cause
+delete-retry-hint = Close the programs using these files, then click Retry.
+delete-failed-title = Deletion incomplete
 
 archive-listing-metadata-limit = Cannot display the contents: the file list exceeds { $limit }. This limit applies to names and file information, not decompressed file sizes. You can try extracting with the usual limits.
 archive-listing-worker-failed = Cannot read this archive’s contents: the reading process failed or returned an invalid response. The archive has not been modified. You can retry or try extracting with the usual limits.
@@ -802,6 +810,7 @@ operations-item-done = Processed
 operations-item-not-processed = Not processed
 operations-item-skipped = Skipped
 operations-item-partial = Partially processed
+operations-item-failed = Failed
 operations-item-unknown = Unknown status
 operations-item-interrupted = Interrupted
 

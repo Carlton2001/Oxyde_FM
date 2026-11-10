@@ -1081,6 +1081,14 @@ preview-timed-out = Diese Vorschau hat das Zeitlimit von 15 Sekunden überschrit
 copy-name-suffix = Kopie
 shell-delete-completed-error = Windows hat dieses Element gelöscht und anschließend einen Fehler gemeldet. Der abgeschlossene Vorgang bleibt im Verlauf erhalten. Prüfen Sie den Ordner und den Papierkorb, bevor Sie es erneut versuchen.
 shell-delete-unconfirmed = Windows hat das Löschen dieses Elements nicht bestätigt. Der Löschvorgang wurde möglicherweise nur teilweise ausgeführt. Prüfen Sie den Ordner und den Papierkorb, bevor Sie es erneut versuchen.
+shell-delete-in-use = Eine Datei wird von einem anderen Programm verwendet. Schließen Sie es und versuchen Sie es erneut.
+shell-delete-access-denied = Zugriff verweigert. Sie haben keine Berechtigung, dieses Element zu löschen.
+delete-batch-failed = { $failed } von { $total } Elementen konnten nicht gelöscht werden.
+delete-single-failed = Das Element konnte nicht gelöscht werden.
+delete-batch-processed = Die übrigen Elemente wurden gelöscht. Fehlgeschlagene Elemente sind in der Liste des Vorgangs markiert.
+delete-failure-cause = Ursache
+delete-retry-hint = Schließen Sie die Programme, die diese Dateien verwenden, und klicken Sie dann auf „Erneut versuchen“.
+delete-failed-title = Löschen unvollständig
 
 archive-listing-metadata-limit = Der Inhalt kann nicht angezeigt werden: Die Dateiliste überschreitet { $limit }. Diese Grenze betrifft Namen und Dateiinformationen, nicht die entpackte Dateigröße. Sie können das Entpacken mit den üblichen Grenzen versuchen.
 archive-listing-worker-failed = Der Inhalt dieses Archivs kann nicht gelesen werden: Der Leseprozess ist fehlgeschlagen oder seine Antwort ist ungültig. Das Archiv wurde nicht verändert. Sie können es erneut versuchen oder mit den üblichen Grenzen entpacken.
@@ -1109,6 +1117,7 @@ operations-item-done = Bearbeitet
 operations-item-not-processed = Nicht bearbeitet
 operations-item-skipped = Übersprungen
 operations-item-partial = Teilweise bearbeitet
+operations-item-failed = Fehlgeschlagen
 operations-item-unknown = Status unbekannt
 operations-item-interrupted = Unterbrochen
 

@@ -48,7 +48,8 @@ fn execute(
         // Caller splits batches by recycle policy, never mixing permanent and recycled entries.
         if let Some((_, recycle, _)) = files.first() {
             unsafe {
-                operation.SetOperationFlags(flags(*recycle))?;
+                // Independent files: one refusal must not abort the rest of the batch.
+                operation.SetOperationFlags(base_flags(*recycle))?;
             }
         }
         let mut sinks = Vec::new();
@@ -94,15 +95,17 @@ fn execute(
     let outcomes: Vec<_> = receipts
         .iter()
         .map(|receipt| {
+            let mut receipt = receipt.lock().unwrap_or_else(|p| p.into_inner());
+            // A file confirmed without its own error is not tainted by a sibling's refusal.
+            if receipt.completed && receipt.error.is_none() {
+                return receipt.outcome(Ok(()), false);
+            }
             // Preserve every confirmed success even if a later item fails/cancels.
             let result = result
                 .as_ref()
                 .map(|_| ())
                 .map_err(|error| Error::from_hresult(error.code()));
-            receipt
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .outcome(result, aborted)
+            receipt.outcome(result, aborted)
         })
         .collect();
     let wall = started.elapsed();

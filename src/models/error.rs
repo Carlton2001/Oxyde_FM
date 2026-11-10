@@ -120,7 +120,29 @@ impl fmt::Display for ShellDeleteFailure {
     }
 }
 impl std::error::Error for ShellDeleteFailure {}
+/// Why Windows refused an item, recognized from the HRESULT in its message.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ShellDeleteCause {
+    InUse,
+    AccessDenied,
+}
+
 impl ShellDeleteFailure {
+    pub fn cause(message: &str) -> Option<ShellDeleteCause> {
+        let codes = message.match_indices("(0x").filter_map(|(at, _)| {
+            message.get(at + 3..at + 11).and_then(|hex| u32::from_str_radix(hex, 16).ok())
+        });
+        for code in codes {
+            match code {
+                // COPYENGINE_E_SHARING_VIOLATION_SRC/DEST, ERROR_SHARING_VIOLATION, ERROR_LOCK_VIOLATION.
+                0x8027_0027 | 0x8027_0028 | 0x8007_0020 | 0x8007_0021 => return Some(ShellDeleteCause::InUse),
+                // COPYENGINE_E_ACCESS_DENIED_SRC/DEST, E_ACCESSDENIED.
+                0x8027_0021 | 0x8027_0022 | 0x8007_0005 => return Some(ShellDeleteCause::AccessDenied),
+                _ => {}
+            }
+        }
+        None
+    }
     pub fn from_message(message: &str) -> Option<bool> {
         let (_, cause) = message.split_once("Shell deletion [")?;
         match cause.split_once("]: ")?.0 {
@@ -128,6 +150,37 @@ impl ShellDeleteFailure {
             "unconfirmed" => Some(false),
             _ => None,
         }
+    }
+}
+
+/// Summary of a multi-item deletion that kept going after some items were refused.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeleteBatchFailure {
+    pub failed: usize,
+    pub total: usize,
+    pub first: String,
+}
+impl fmt::Display for DeleteBatchFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Delete batch [{}/{}]: {}", self.failed, self.total, self.first)
+    }
+}
+impl std::error::Error for DeleteBatchFailure {}
+impl DeleteBatchFailure {
+    /// Single selections keep their precise error; larger ones get a summary.
+    pub fn summarize(total: usize, failures: Vec<String>) -> Result<(), String> {
+        let failed = failures.len();
+        let Some(first) = failures.into_iter().next() else { return Ok(()) };
+        if total <= 1 {
+            return Err(first);
+        }
+        Err(Self { failed, total, first }.to_string())
+    }
+    pub fn from_message(message: &str) -> Option<Self> {
+        let (_, value) = message.split_once("Delete batch [")?;
+        let (counts, first) = value.split_once("]: ")?;
+        let (failed, total) = counts.split_once('/')?;
+        Some(Self { failed: failed.parse().ok()?, total: total.parse().ok()?, first: first.into() })
     }
 }
 

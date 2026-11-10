@@ -13,6 +13,7 @@ pub(super) fn badge(outcome: ItemOutcome, cx: &App) -> Div {
         ItemOutcome::NotProcessed => (Message::OpsItemNotProcessed, theme.text_muted),
         ItemOutcome::Skipped => (Message::OpsItemSkipped, theme.text_muted),
         ItemOutcome::Partial => (Message::OpsItemPartial, theme.warning_text),
+        ItemOutcome::Failed => (Message::OpsItemFailed, theme.error),
         ItemOutcome::Interrupted => (Message::OpsItemInterrupted, theme.text_muted),
         ItemOutcome::Unknown => (Message::OpsItemUnknown, theme.text_muted),
     };

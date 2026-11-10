@@ -45,8 +45,10 @@ fn every_confirmed_success_is_journaled_despite_an_earlier_batch_error() {
         },
     ];
     let mut journal = Vec::new();
-    let error = record_batch_receipts(&selected, outcomes, &mut |entry| journal.push(entry));
-    assert!(error.is_some());
+    let failures = record_batch_receipts(&selected, outcomes, &mut |entry| journal.push(entry));
+    // Each refused root is reported on its own instead of hiding the others.
+    let failed: Vec<_> = failures.iter().map(|(path, _)| path.clone()).collect();
+    assert_eq!(failed, vec![selected[0].path().to_path_buf(), selected[2].path().to_path_buf()]);
     assert_eq!(journal.len(), 2);
     assert_eq!(journal[0].path, selected[1].path().to_string_lossy());
     assert_eq!(journal[1].path, selected[2].path().to_string_lossy());
@@ -58,12 +60,13 @@ fn missing_receipts_do_not_discard_the_confirmed_prefix() {
     let root = tempfile::tempdir().unwrap();
     let selected = selection(root.path());
     let mut journal = Vec::new();
-    let error = record_batch_receipts(
+    let failures = record_batch_receipts(
         &selected,
         vec![ShellDeleteOutcome::from_result(Ok(()))],
         &mut |entry| journal.push(entry),
     );
-    assert_eq!(error.as_deref(), Some("Missing batch deletion receipts"));
+    assert_eq!(failures.len(), 2);
+    assert!(failures.iter().all(|(_, error)| error == "Missing batch deletion receipts"));
     assert_eq!(journal.len(), 1);
 }
 

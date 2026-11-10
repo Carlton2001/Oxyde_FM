@@ -1080,7 +1080,15 @@ history-delete-unverified = Oxyde non dispone delle informazioni necessarie per 
 preview-timed-out = Questa anteprima ha superato il limite di 15 secondi. Il file rimane accessibile.
 copy-name-suffix = Copia
 shell-delete-completed-error = Windows ha eliminato questo elemento, poi ha segnalato un errore. L’operazione completata rimane nella cronologia. Controlla la cartella e il Cestino prima di riprovare.
-shell-delete-unconfirmed = Windows non ha confermato l’eliminazione di questo elemento. L’eliminazione potrebbe essere stata parziale. Controlla la cartella e il Cestino prima di riprovare.
+shell-delete-unconfirmed = Windows non ha confermato l’eliminazione di questo elemento. L’eliminazione potrebbe essere stata parziale. Controlla la cartella e il Cestino prima di riprovare.
+shell-delete-in-use = Un file è in uso da un altro programma. Chiudilo, poi riprova.
+shell-delete-access-denied = Accesso negato. Non hai i permessi per eliminare questo elemento.
+delete-batch-failed = Non è stato possibile eliminare { $failed } elementi su { $total }.
+delete-single-failed = Non è stato possibile eliminare l’elemento.
+delete-batch-processed = Gli altri elementi sono stati eliminati. Gli elementi non riusciti sono segnalati nell’elenco dell’operazione.
+delete-failure-cause = Causa
+delete-retry-hint = Chiudi i programmi che usano questi file, poi fai clic su Riprova.
+delete-failed-title = Eliminazione incompleta
 
 archive-listing-metadata-limit = Impossibile mostrare il contenuto: l’elenco dei file supera { $limit }. Questo limite riguarda nomi e informazioni dei file, non le dimensioni decompresse. È possibile tentare l’estrazione con i limiti abituali.
 archive-listing-worker-failed = Impossibile leggere il contenuto di questo archivio: il processo di lettura non è riuscito o la sua risposta non è valida. L’archivio non è stato modificato. È possibile riprovare o tentare l’estrazione con i limiti abituali.
@@ -1109,6 +1117,7 @@ operations-item-done = Elaborato
 operations-item-not-processed = Non elaborato
 operations-item-skipped = Ignorato
 operations-item-partial = Elaborato parzialmente
+operations-item-failed = Non riuscito
 operations-item-unknown = Stato sconosciuto
 operations-item-interrupted = Interrotto
 

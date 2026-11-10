@@ -2,6 +2,14 @@ use super::{Annuler, OxydeApp, PendingFileOperation, Refaire, ToastKind};
 use crate::ui::i18n::{I18nContext, Message};
 use gpui::*;
 
+/// What a failed deletion left behind, tied to the notice it was reported with.
+#[derive(Clone)]
+pub(crate) struct DeleteRetry {
+    pub(crate) detail: String,
+    pub(crate) paths: Vec<String>,
+    pub(crate) permanent: bool,
+}
+
 fn actionable_transfer_paths(paths: Vec<String>, resolutions: &std::collections::HashMap<String, oxyde_lib::models::ConflictAction>) -> Vec<String> {
     paths.into_iter().filter(|path| resolutions.get(path) != Some(&oxyde_lib::models::ConflictAction::Skip)).collect()
 }
@@ -254,6 +262,7 @@ impl OxydeApp {
                                     return;
                                 }
                                 let recovery = this.archive_recovery_notice(&error, cx);
+                                this.delete_retry = this.delete_retry_for(&op_id, &op_type, &error);
                                 this.file_operation_notice = Some((if recovery { Message::ArchiveRecoveryNotice } else { Message::TransferFailed }, error));
                                 cx.notify();
                             });
@@ -316,6 +325,41 @@ impl OxydeApp {
             pending.runtime,
             cx,
         );
+        cx.notify();
+    }
+}
+
+impl OxydeApp {
+    /// Selected items a Trash/Delete operation did not finish, still on disk.
+    fn delete_retry_for(
+        &self,
+        op_id: &str,
+        op_type: &oxyde_lib::systems::file_ops::FileOpType,
+        error: &str,
+    ) -> Option<DeleteRetry> {
+        use oxyde_lib::systems::file_ops::{FileOpType, ItemOutcome};
+        let permanent = match op_type {
+            FileOpType::Trash => false,
+            FileOpType::Delete => true,
+            _ => return None,
+        };
+        let mut paths: Vec<String> = self
+            .file_ops
+            .operation_item_outcomes(op_id)?
+            .into_iter()
+            .filter(|(path, outcome)| *outcome != ItemOutcome::Completed && path.exists())
+            .map(|(path, _)| path.to_string_lossy().into_owned())
+            .collect();
+        paths.sort();
+        (!paths.is_empty()).then(|| DeleteRetry { detail: error.to_string(), paths, permanent })
+    }
+
+    pub(crate) fn retry_failed_delete(&mut self, cx: &mut Context<Self>) {
+        let retry = self.delete_retry.take();
+        self.file_operation_notice = None;
+        if let Some(retry) = retry {
+            self.queue_trash_delete(retry.paths, retry.permanent, cx);
+        }
         cx.notify();
     }
 }

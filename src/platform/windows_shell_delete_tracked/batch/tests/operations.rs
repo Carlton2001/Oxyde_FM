@@ -108,3 +108,22 @@ fn callback_cancellation_keeps_an_earlier_success_receipt() {
     .join()
     .unwrap();
 }
+
+#[test]
+fn a_locked_file_does_not_stop_the_rest_of_the_batch() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let files = files_with_count(root.path(), 5);
+    // No sharing: Windows refuses to delete this fixture while it stays open.
+    let lock = fs::OpenOptions::new().read(true).share_mode(0).open(&files[1].0).unwrap();
+    let outcomes = run_files(files.clone(), control());
+    drop(lock);
+    assert_eq!(outcomes.len(), files.len());
+    assert!(!outcomes[1].completed && outcomes[1].error.is_some());
+    assert!(files[1].0.exists());
+    for index in [0, 2, 3, 4] {
+        assert!(outcomes[index].completed, "{index}: {:?}", outcomes[index].error);
+        assert!(outcomes[index].error.is_none(), "{index}: {:?}", outcomes[index].error);
+        assert!(!files[index].0.exists());
+    }
+}

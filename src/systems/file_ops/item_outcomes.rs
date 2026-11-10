@@ -10,6 +10,7 @@ pub enum ItemOutcome {
     NotProcessed,
     Skipped,
     Partial,
+    Failed,
     Interrupted,
     Unknown,
 }
@@ -22,6 +23,7 @@ pub(super) struct ItemProgress {
     started: bool,
     retained: bool,
     skipped: bool,
+    failed: bool,
     destination: Option<PathBuf>,
     requires_removal: bool,
     removed: bool,
@@ -81,6 +83,13 @@ impl FileOperation {
             progress.started = true;
             progress.removed = true;
             progress.retained = true;
+        }
+    }
+
+    pub(super) fn item_failed(&mut self, path: &Path) {
+        if let Some(progress) = self.item_progress.get_mut(path) {
+            progress.started = true;
+            progress.failed = true;
         }
     }
 
@@ -167,6 +176,8 @@ impl FileOperation {
                     } else if terminal {
                         if progress.retained {
                             ItemOutcome::Partial
+                        } else if progress.failed {
+                            ItemOutcome::Failed
                         } else if progress.started {
                             ItemOutcome::Interrupted
                         } else if progress.skipped {

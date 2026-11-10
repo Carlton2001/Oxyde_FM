@@ -22,19 +22,24 @@ fn diagnostic_batch_size() -> usize {
     })
 }
 
+/// Journals every receipt and returns each refused root with its cause.
 fn record_batch_receipts(
     selected: &[PreparedDelete],
     outcomes: Vec<crate::platform::ShellDeleteOutcome>,
     completed: &mut dyn FnMut(crate::models::transaction::HistoryDeletedItem),
-) -> Option<String> {
-    let mut error =
-        (outcomes.len() != selected.len()).then(|| "Missing batch deletion receipts".into());
-    for (item, outcome) in selected.iter().zip(outcomes) {
-        if let Err(failure) = item.record_outcome(outcome, completed) {
-            error.get_or_insert_with(|| failure.to_string());
+) -> Vec<(std::path::PathBuf, String)> {
+    let mut failures = Vec::new();
+    let mut outcomes = outcomes.into_iter();
+    for item in selected {
+        let failure = match outcomes.next() {
+            Some(outcome) => item.record_outcome(outcome, completed).err().map(|error| error.to_string()),
+            None => Some("Missing batch deletion receipts".into()),
+        };
+        if let Some(failure) = failure {
+            failures.push((item.path().to_path_buf(), failure));
         }
     }
-    error
+    failures
 }
 
 impl FileOperationManager {
@@ -49,6 +54,7 @@ impl FileOperationManager {
             op.lock().unwrap().id, selected.len(), batch_size, control.turbo.load(Ordering::Relaxed));
         let mut index = 0;
         let mut batches = 0;
+        let mut failures = Vec::new();
         while index < selected.len() {
             if control.cancel.load(Ordering::Relaxed) {
                 break;
@@ -88,32 +94,38 @@ impl FileOperationManager {
                 }
                 locked.deleted_items.push(deleted);
             };
-            let mut error = None;
-            if files.is_empty() {
-                if let Err(failure) =
-                    selected[index].recycle_controlled(control.clone(), &mut completed)
-                {
-                    error = Some(failure.to_string());
+            let batch_failures = if files.is_empty() {
+                match selected[index].recycle_controlled(control.clone(), &mut completed) {
+                    Ok(_) => Vec::new(),
+                    Err(failure) => vec![(selected[index].path().to_path_buf(), failure.to_string())],
                 }
             } else {
                 let outcomes = platform().shell_delete_files_tracked(&files, control.clone());
-                error = record_batch_receipts(&selected[index..end], outcomes, &mut completed);
-            }
+                record_batch_receipts(&selected[index..end], outcomes, &mut completed)
+            };
             batches += 1;
             index = end;
-            // Every returned receipt is journaled before honoring cancellation/error.
+            // Every returned receipt is journaled before honoring cancellation.
             if control.cancel.load(Ordering::Relaxed) {
                 break;
             }
-            if let Some(error) = error {
-                return Err(error);
+            // A refused item must not prevent the rest of the selection from being deleted.
+            let mut locked = op.lock().unwrap();
+            for (path, failure) in batch_failures {
+                log::warn!(target: FILE_OPS_LOG_TARGET, "trash_item_failed path={path:?} error={failure}");
+                locked.item_failed(&path);
+                locked.processed_files += 1;
+                failures.push(failure);
             }
         }
         log::info!(target: FILE_OPS_LOG_TARGET,
             "trash_batches op={} selected={} batches={} batch_size={} cancelled={} wall_s={:.6}",
             op.lock().unwrap().id, selected.len(), batches, batch_size,
             control.cancel.load(Ordering::Relaxed), started.elapsed().as_secs_f64());
-        Ok(())
+        if control.cancel.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+        crate::models::error::DeleteBatchFailure::summarize(selected.len(), failures)
     }
 }
 

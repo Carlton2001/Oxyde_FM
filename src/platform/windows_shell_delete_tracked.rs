@@ -295,10 +295,15 @@ impl IFileOperationProgressSink_Impl for DeleteSink_Impl {
     }
 }
 
-fn flags(recycle: bool) -> FILEOPERATION_FLAGS {
+fn base_flags(recycle: bool) -> FILEOPERATION_FLAGS {
     FILEOPERATION_FLAGS(u32::from(super::windows_shell_delete::operation_flags(
         recycle,
-    ))) | FOFX_EARLYFAILURE
+    )))
+}
+
+/// Directory trees stop at the first refusal so their descendant receipts stay exact.
+fn flags(recycle: bool) -> FILEOPERATION_FLAGS {
+    base_flags(recycle) | FOFX_EARLYFAILURE
 }
 
 fn delete(
