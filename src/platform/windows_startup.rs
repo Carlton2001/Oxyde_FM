@@ -46,6 +46,17 @@ pub(super) fn folders(locations: &[String]) -> Vec<String> {
     locations.iter().filter_map(|sent| location(sent, Path::new(r"C:\"))).collect()
 }
 
+/// Existing files and folders among the items a launcher sent to select, each with the
+/// folder it is in.
+pub(super) fn items(sent: &[String]) -> Vec<String> {
+    sent.iter().filter_map(|sent| {
+        let path = named(sent, Path::new(r"C:\"))?;
+        path.parent()?;
+        std::fs::symlink_metadata(&path).ok()?;
+        path.to_str().map(str::to_owned)
+    }).collect()
+}
+
 #[cfg(test)]
 #[path = "windows_startup/tests/locations.rs"]
 mod tests;

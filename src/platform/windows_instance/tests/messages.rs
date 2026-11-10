@@ -1,17 +1,18 @@
-use super::{create, decode, encode, forward, pipe_name, receive, serve, wake};
+use super::{create, decode, encode, forward, pipe_name, receive, serve, wake, OPEN, SELECT};
 use windows::Win32::System::Pipes::{ConnectNamedPipe, DisconnectNamedPipe};
 
 #[test]
 fn a_message_carries_its_locations_in_order() {
     let locations = vec![r"C:\Users".to_owned(), r"\\server\share\Été".to_owned()];
-    assert_eq!(decode(&encode(&locations)), Some(locations));
-    assert_eq!(decode(&encode(&[])), Some(Vec::new()));
+    assert_eq!(decode(&encode(OPEN, &locations)), Some((OPEN, locations.clone())));
+    assert_eq!(decode(&encode(SELECT, &locations)), Some((SELECT, locations)));
+    assert_eq!(decode(&encode(OPEN, &[])), Some((OPEN, Vec::new())));
 }
 
 #[test]
 fn a_location_cannot_add_a_line() {
     let locations = vec!["C:\\a\nC:\\b".to_owned(), r"C:\c".to_owned()];
-    assert_eq!(decode(&encode(&locations)), Some(vec![r"C:\c".to_owned()]));
+    assert_eq!(decode(&encode(OPEN, &locations)), Some((OPEN, vec![r"C:\c".to_owned()])));
 }
 
 #[test]
@@ -46,9 +47,9 @@ fn a_later_launch_reaches_the_first_and_only_owner_of_the_pipe() {
         }
         received
     });
-    forward(&name, &[r"C:\Users".to_owned()]).unwrap();
-    forward(&name, &[]).unwrap();
-    assert_eq!(reader.join().unwrap(), [Some(vec![r"C:\Users".to_owned()]), Some(Vec::new())]);
+    forward(&name, OPEN, &[r"C:\Users".to_owned()]).unwrap();
+    forward(&name, SELECT, &[]).unwrap();
+    assert_eq!(reader.join().unwrap(), [Some((OPEN, vec![r"C:\Users".to_owned()])), Some((SELECT, Vec::new()))]);
 }
 
 #[test]
@@ -62,11 +63,11 @@ fn a_released_pipe_is_closed_and_its_name_free_for_the_next_oxyde() {
         let released = released.clone();
         move || serve(pipe, sender, &released)
     });
-    forward(&name, &[]).unwrap();
+    forward(&name, OPEN, &[]).unwrap();
     assert!(futures::executor::block_on(receiver.next()).is_some());
     released.store(true, std::sync::atomic::Ordering::SeqCst);
     wake(&name);
     served.join().unwrap();
-    assert!(forward(&name, &[]).is_err());
+    assert!(forward(&name, OPEN, &[]).is_err());
     assert!(create(&name).is_some());
 }

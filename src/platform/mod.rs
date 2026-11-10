@@ -1262,6 +1262,8 @@ mod windows_folder_handler;
 #[cfg(target_os = "windows")]
 mod windows_explorer_browse;
 #[cfg(target_os = "windows")]
+mod windows_shell_window;
+#[cfg(target_os = "windows")]
 mod windows_folder_launcher;
 #[cfg(target_os = "windows")]
 pub use windows_folder_launcher::run as run_folder_launcher;

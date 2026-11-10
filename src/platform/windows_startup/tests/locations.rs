@@ -42,3 +42,13 @@ fn a_file_stands_for_its_folder_and_a_missing_location_is_left_out() {
     let arguments = [file.clone().into_os_string(), root.join("missing").into_os_string(), OsString::from("--flag")];
     assert_eq!(locations(arguments.into_iter(), current()), [expected]);
 }
+
+#[test]
+fn items_to_select_are_existing_paths_with_a_folder() {
+    let folder = tempfile::tempdir().unwrap();
+    let file = folder.path().join("report.txt");
+    std::fs::write(&file, b"").unwrap();
+    let file = file.to_str().unwrap().to_owned();
+    let missing = folder.path().join("missing.txt").to_str().unwrap().to_owned();
+    assert_eq!(super::items(&[file.clone(), missing, "report.txt".to_owned(), r"C:\".to_owned()]), [file]);
+}

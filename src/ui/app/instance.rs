@@ -21,6 +21,15 @@ pub(super) fn by_folder(items: Vec<String>) -> Vec<(String, Vec<String>)> {
     groups
 }
 
+/// Whether a tab on `shown` already shows `folder`, as the platform compares names.
+pub(super) fn shows(shown: &str, folder: &str) -> bool {
+    let plain = |path: &str| {
+        let path = if path.len() > 1 { path.trim_end_matches(['/', '\\']) } else { path };
+        if cfg!(target_os = "windows") { path.to_lowercase() } else { path.to_owned() }
+    };
+    plain(shown) == plain(folder)
+}
+
 impl OxydeApp {
     /// The session saved at the last exit, with each received location in a new tab
     /// after it, the last one active.
@@ -80,7 +89,12 @@ impl OxydeApp {
             }
             InstanceRequest::Items(items) => {
                 for (folder, members) in by_folder(items) {
-                    self.add_tab(&pane, folder, true, cx);
+                    // The folder often just opened for these items: the program that
+                    // shows a file in its folder opens the folder first.
+                    let shown = self.state.find_pane(&pane).is_some_and(|pane| shows(&pane.active_tab().path, &folder));
+                    if !shown {
+                        self.add_tab(&pane, folder, true, cx);
+                    }
                     self.select_received_items(members, cx);
                 }
                 Vec::new()
@@ -94,8 +108,8 @@ impl OxydeApp {
         Some((self.main_window, properties))
     }
 
-    /// Selects `items` in the active tab, which just opened on their folder, and scrolls
-    /// to the first once the listing is there.
+    /// Selects `items` in the active tab, which shows their folder, and scrolls to the
+    /// first once the listing is there.
     fn select_received_items(&mut self, items: Vec<String>, cx: &mut Context<Self>) {
         let pane_id = self.state.active_pane_id.clone();
         let width = self.pane_sizes.get(&pane_id).map_or(self.list_width, |size| size.width);

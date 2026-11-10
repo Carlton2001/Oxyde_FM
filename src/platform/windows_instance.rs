@@ -30,8 +30,10 @@ use windows::Win32::System::RemoteDesktop::ProcessIdToSessionId;
 use windows::Win32::System::Threading::{GetCurrentProcess, GetCurrentProcessId, OpenProcessToken};
 use windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow;
 
-/// First line of a message, which a later version may change.
-const HEADER: &str = "oxyde-open 1";
+/// First line of a message, which a later version may change: folders to open, or
+/// items to select in their folder.
+const OPEN: &str = "oxyde-open 1";
+const SELECT: &str = "oxyde-select 1";
 /// Well above any command line Windows accepts.
 const LIMIT: usize = 256 * 1024;
 /// How long a later launch waits for the running Oxyde to take its message.
@@ -44,8 +46,8 @@ fn pipe_name(session: u32, storage: &str, debug: bool, elevated: bool) -> String
     format!(r"\\.\pipe\Oxyde.Instance.{kind}{rights}.{session}.{}", &storage[..16])
 }
 
-fn encode(locations: &[String]) -> String {
-    let mut message = String::from(HEADER);
+fn encode(header: &str, locations: &[String]) -> String {
+    let mut message = String::from(header);
     for location in locations.iter().filter(|location| !location.contains(['\r', '\n'])) {
         message.push('\n');
         message.push_str(location);
@@ -53,9 +55,12 @@ fn encode(locations: &[String]) -> String {
     message
 }
 
-fn decode(message: &str) -> Option<Vec<String>> {
+/// The header of a message and its locations.
+fn decode(message: &str) -> Option<(&'static str, Vec<String>)> {
     let mut lines = message.lines();
-    (lines.next()? == HEADER).then(|| lines.filter(|line| !line.is_empty()).map(str::to_owned).collect())
+    let first = lines.next()?;
+    let header = [OPEN, SELECT].into_iter().find(|header| *header == first)?;
+    Some((header, lines.filter(|line| !line.is_empty()).map(str::to_owned).collect()))
 }
 
 /// The pipe this process serves, and whether it gave it up to quit.
@@ -167,11 +172,15 @@ fn serve(pipe: Pipe, sender: UnboundedSender<InstanceMessage>, released: &Atomic
         }
         let message = receive(&pipe);
         unsafe { let _ = DisconnectNamedPipe(pipe.0); }
-        let Some(locations) = message.as_deref().and_then(decode) else {
+        let Some((header, locations)) = message.as_deref().and_then(decode) else {
             log::warn!("Ignoring a message that is not a later launch's");
             continue;
         };
-        let request = InstanceRequest::Folders(super::windows_startup::folders(&locations));
+        let request = if header == SELECT {
+            InstanceRequest::Items(super::windows_startup::items(&locations))
+        } else {
+            InstanceRequest::Folders(super::windows_startup::folders(&locations))
+        };
         if sender.unbounded_send(InstanceMessage { request, activation_token: None }).is_err() {
             return;
         }
@@ -196,7 +205,7 @@ fn owned_by_this_user(pipe: HANDLE) -> bool {
 }
 
 /// Hands `locations` to the Oxyde that owns the pipe and lets it come forward.
-fn forward(name: &str, locations: &[String]) -> std::io::Result<()> {
+fn forward(name: &str, header: &str, locations: &[String]) -> std::io::Result<()> {
     let started = std::time::Instant::now();
     let mut pipe = loop {
         match std::fs::OpenOptions::new().write(true).open(name) {
@@ -217,7 +226,7 @@ fn forward(name: &str, locations: &[String]) -> std::io::Result<()> {
     if unsafe { GetNamedPipeServerProcessId(handle, &mut server) }.is_ok() {
         unsafe { let _ = AllowSetForegroundWindow(server); }
     }
-    pipe.write_all(encode(locations).as_bytes())?;
+    pipe.write_all(encode(header, locations).as_bytes())?;
     pipe.flush()
 }
 
@@ -230,11 +239,21 @@ fn own_pipe_name(elevated: bool) -> Option<String> {
     Some(pipe_name(session, &storage.to_string_lossy(), cfg!(debug_assertions), elevated))
 }
 
-/// Hands `locations` to the running Oxyde, the one with this process's rights before
+/// Hands a message to the running Oxyde, the one with this process's rights before
 /// the other; false when none runs, or none answers.
-pub(super) fn hand_over(locations: &[String]) -> bool {
+fn hand(header: &str, locations: &[String]) -> bool {
     let own = elevated();
-    [own, !own].into_iter().any(|elevated| own_pipe_name(elevated).is_some_and(|name| forward(&name, locations).is_ok()))
+    [own, !own].into_iter().any(|elevated| own_pipe_name(elevated).is_some_and(|name| forward(&name, header, locations).is_ok()))
+}
+
+/// Has the running Oxyde open `locations`, each in a tab.
+pub(super) fn hand_over(locations: &[String]) -> bool {
+    hand(OPEN, locations)
+}
+
+/// Has the running Oxyde select `items` in their folder.
+pub(super) fn hand_over_selection(items: &[String]) -> bool {
+    hand(SELECT, items)
 }
 
 /// Wakes the thread serving `name`, which waits for a launch: one that says nothing.
@@ -277,7 +296,7 @@ pub(super) fn claim(locations: &[String]) -> InstanceClaim {
                 }
             };
         }
-        match forward(&name, locations) {
+        match forward(&name, OPEN, locations) {
             Ok(()) => return InstanceClaim::Forwarded,
             Err(error) => log::warn!("Cannot reach the running Oxyde: {error}"),
         }
