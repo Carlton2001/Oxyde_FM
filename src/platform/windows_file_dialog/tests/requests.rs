@@ -1,5 +1,5 @@
 use super::{answer_text, asked, patterns, request, Asked};
-use crate::platform::{FileChooserAnswer, FileTypeFilter, FileTypePattern};
+use crate::platform::{FileChooserAnswer, FileChooserChoice, FileTypeFilter, FileTypePattern};
 use std::path::PathBuf;
 
 fn lines(text: &[&str]) -> Vec<String> {
@@ -52,4 +52,15 @@ fn an_answer_counts_filters_as_windows_does() {
 fn a_dialog_without_a_pipe_of_its_own_is_not_one() {
     assert!(request(&lines(&[r"\\.\pipe\Other", "purpose\topen"]), None).is_none());
     assert!(request(&[], None).is_none());
+}
+
+#[test]
+fn the_applications_controls_are_choices_and_answered_as_such() {
+    let read = asked(&lines(&["purpose\topen", "choice\t7\t2\tEncoding", "option\t7\t1\tUTF-8", "option\t7\t2\tANSI", "choice\t9\tfalse\tRead only", "option\t8\t1\tStray"]));
+    assert_eq!(read.choices, vec![
+        FileChooserChoice { id: "7".into(), label: "Encoding".into(), options: vec![("1".into(), "UTF-8".into()), ("2".into(), "ANSI".into())], initial: "2".into() },
+        FileChooserChoice { id: "9".into(), label: "Read only".into(), options: Vec::new(), initial: "false".into() },
+    ]);
+    let answer = FileChooserAnswer { paths: vec![PathBuf::from(r"C:\a.txt")], filter: None, choices: vec![("7".into(), "1".into()), ("9".into(), "true".into())] };
+    assert_eq!(answer_text(Some(&answer)), "ok\npath\tC:\\a.txt\nchoice\t7\t1\nchoice\t9\ttrue\n");
 }

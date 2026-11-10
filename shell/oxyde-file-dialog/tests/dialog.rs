@@ -12,7 +12,7 @@ use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 use windows::Win32::UI::Shell::Common::COMDLG_FILTERSPEC;
 use windows::Win32::UI::Shell::{
     IFileDialog, IFileDialog2, IFileDialogCustomize, IFileDialogEvents, IFileDialogEvents_Impl, IFileOpenDialog, IFileSaveDialog, IShellItem,
-    SHCreateItemFromParsingName, FDE_OVERWRITE_RESPONSE, FDE_SHAREVIOLATION_RESPONSE, FOS_ALLOWMULTISELECT, FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
+    SHCreateItemFromParsingName, CDCS_INACTIVE, FDE_OVERWRITE_RESPONSE, FDE_SHAREVIOLATION_RESPONSE, FOS_ALLOWMULTISELECT, FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
 };
 
 const OPEN: GUID = GUID::from_u128(0xDC1C5A9C_E88A_4DDE_A5A1_60F82A20AEF7);
@@ -189,6 +189,31 @@ fn a_refused_choice_is_asked_again(installed: &Installed, folder: &Path) {
     assert_eq!(installed.asked().len(), 2);
 }
 
+fn the_applications_controls_are_asked_and_answered(installed: &Installed, folder: &Path) {
+    let file = folder.join("encoded.txt");
+    std::fs::write(&file, b"").unwrap();
+    installed.answers(&[&format!("ok\npath\t{}\nchoice\t2\t11\nchoice\t3\ttrue\n", file.display())]);
+    let dialog: IFileOpenDialog = installed.dialog(&OPEN);
+    let controls: IFileDialogCustomize = dialog.cast().unwrap();
+    unsafe {
+        controls.StartVisualGroup(1, w!("&Encoding:")).unwrap();
+        controls.AddComboBox(2).unwrap();
+        controls.AddControlItem(2, 10, w!("UTF-8")).unwrap();
+        controls.AddControlItem(2, 11, w!("ANSI")).unwrap();
+        controls.AddControlItem(2, 12, w!("Hidden")).unwrap();
+        controls.SetControlItemState(2, 12, CDCS_INACTIVE).unwrap();
+        controls.SetSelectedControlItem(2, 10).unwrap();
+        controls.EndVisualGroup().unwrap();
+        controls.AddCheckButton(3, w!("Read only"), false).unwrap();
+        dialog.Show(None).unwrap();
+        assert_eq!(controls.GetSelectedControlItem(2).unwrap(), 11);
+        assert!(controls.GetCheckButtonState(3).unwrap().as_bool());
+    }
+    let asked = installed.asked();
+    let request = asked.last().unwrap();
+    assert!(request.ends_with("choice\t2\t10\tEncoding\noption\t2\t10\tUTF-8\noption\t2\t11\tANSI\nchoice\t3\tfalse\tRead only\n"), "{request}");
+}
+
 fn the_other_interfaces_are_there(installed: &Installed) {
     let dialog: IFileOpenDialog = installed.dialog(&OPEN);
     let second: IFileDialog2 = dialog.cast().unwrap();
@@ -217,5 +242,6 @@ fn the_dialog_applications_get_is_answered_by_the_launcher() {
     folders_are_asked_for_as_folders(&installed, &folder);
     saves_under_a_name_that_is_still_free(&installed, &folder);
     a_refused_choice_is_asked_again(&installed, &folder);
+    the_applications_controls_are_asked_and_answered(&installed, &folder);
     the_other_interfaces_are_there(&installed);
 }

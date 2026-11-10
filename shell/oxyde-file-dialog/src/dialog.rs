@@ -2,7 +2,7 @@
 //! sets goes on to the system's dialog, which stays ready to be shown; what Oxyde
 //! needs to stand for it is noted on the way. `Show` asks Oxyde when the dialog is a
 //! plain one, and the system's dialog otherwise: when the application added controls
-//! of its own, filters items itself, browses things that are not files, or took from
+//! Oxyde cannot show (`controls` says which it can), filters items itself, browses things that are not files, or took from
 //! the system's dialog an interface this one does not have.
 //!
 //! The object is written by hand rather than generated, to answer for interfaces it
@@ -11,6 +11,7 @@
 //! pointers at the head of the object; a method finds the object from the pointer it
 //! was called on, `N` pointers further.
 use crate::ask::{ask, close, top_level, Outcome};
+use crate::controls::Controls;
 use crate::items;
 use crate::request::{text, Answer, Asked};
 use core::ffi::c_void;
@@ -20,7 +21,7 @@ use windows::core::{IUnknown, IUnknown_Vtbl, Interface, BOOL, GUID, HRESULT, PCW
 use windows::Win32::Foundation::{ERROR_CANCELLED, E_NOINTERFACE, E_NOTIMPL, E_POINTER, HWND, S_FALSE, S_OK};
 use windows::Win32::UI::Shell::Common::COMDLG_FILTERSPEC;
 use windows::Win32::UI::Shell::{
-    IFileDialog, IFileDialog2, IFileDialog2_Vtbl, IFileDialogCustomize, IFileDialogCustomize_Vtbl, IFileDialogEvents, IFileDialog_Vtbl,
+    IFileDialog, IFileDialog2, IFileDialog2_Vtbl, IFileDialogControlEvents, IFileDialogCustomize, IFileDialogCustomize_Vtbl, IFileDialogEvents, IFileDialog_Vtbl,
     IFileOpenDialog, IFileOpenDialog_Vtbl, IFileSaveDialog, IFileSaveDialog_Vtbl, IModalWindow, IModalWindow_Vtbl, IShellItem,
     CDCONTROLSTATEF, FDAP, FILEOPENDIALOGOPTIONS, FOS_ALLNONSTORAGEITEMS, FOS_ALLOWMULTISELECT, FOS_NODEREFERENCELINKS, FOS_PICKFOLDERS,
 };
@@ -44,6 +45,8 @@ pub(crate) struct Dialog {
     inner_controls: Option<IFileDialogCustomize>,
     /// What makes the dialog one Oxyde does not stand for.
     special: Cell<bool>,
+    /// The application's controls Oxyde shows.
+    custom: RefCell<Controls>,
     filters: RefCell<Vec<(String, String)>>,
     title: RefCell<Option<String>>,
     accept: RefCell<Option<String>>,
@@ -86,6 +89,7 @@ impl Dialog {
             inner_controls: inner.cast().ok(),
             inner,
             special: Cell::new(false),
+            custom: RefCell::default(),
             filters: RefCell::default(),
             title: RefCell::default(),
             accept: RefCell::default(),
@@ -145,6 +149,32 @@ impl Dialog {
             filters: self.filters.borrow().clone(),
             // Until the application chooses one, the system's dialog counts none: the first is shown.
             filter: self.inner.GetFileTypeIndex().unwrap_or(1).max(1),
+            choices: self.inner_controls.as_ref().map(|inner| self.custom.borrow().asked(inner)).unwrap_or_default(),
+        }
+    }
+
+    /// Sets Oxyde's answers on the application's controls, and tells its listeners of
+    /// each one changed, as the system's dialog does when the user changes it.
+    unsafe fn set_choices(&self, choices: &[(u32, String)]) {
+        let Some(inner) = &self.inner_controls else { return };
+        let listeners: Vec<IFileDialogControlEvents> = self.events.borrow().iter().filter_map(|(_, listener)| listener.cast().ok()).collect();
+        for (id, value) in choices {
+            if self.custom.borrow().is_check(*id) {
+                let checked = value == "true";
+                if inner.GetCheckButtonState(*id).is_ok_and(|known| known.as_bool() == checked) || inner.SetCheckButtonState(*id, checked).is_err() {
+                    continue;
+                }
+                for listener in &listeners {
+                    let _ = (Interface::vtable(listener).OnCheckButtonToggled)(Interface::as_raw(listener), self.face(2), *id, checked.into());
+                }
+            } else if let Ok(item) = value.parse::<u32>() {
+                if inner.GetSelectedControlItem(*id).ok() == Some(item) || inner.SetSelectedControlItem(*id, item).is_err() {
+                    continue;
+                }
+                for listener in &listeners {
+                    let _ = (Interface::vtable(listener).OnItemSelected)(Interface::as_raw(listener), self.face(2), *id, item);
+                }
+            }
         }
     }
 
@@ -185,6 +215,7 @@ impl Dialog {
             if let Some(filter) = answer.filter {
                 let _ = self.inner.SetFileTypeIndex(filter);
             }
+            self.set_choices(&answer.choices);
             self.answer.replace(Some(answer));
             if self.accepted() {
                 return Some(S_OK);
@@ -527,46 +558,62 @@ unsafe extern "system" fn set_navigation_root(this: *mut c_void, root: *mut c_vo
 
 static SECOND: IFileDialog2_Vtbl = IFileDialog2_Vtbl { base__: file_dialog::<1>(), SetCancelButtonLabel: set_cancel_button_label, SetNavigationRoot: set_navigation_root };
 
-/// A method of the controls an application adds to its dialog: Oxyde has none of
-/// them, so a dialog whose controls are touched is the system's to show.
+/// A method of the controls an application adds to its dialog, answered by the
+/// system's dialog, which keeps their state; `$noted` notes what Oxyde shows of it.
 macro_rules! control {
     ($name:ident => $field:ident($($argument:ident: $kind:ty),*)) => {
+        control!($name => $field($($argument: $kind),*), |_dialog $(, $argument)*| { $(let _ = $argument;)* });
+    };
+    ($name:ident => $field:ident($($argument:ident: $kind:ty),*), $noted:expr) => {
         unsafe extern "system" fn $name(this: *mut c_void $(, $argument: $kind)*) -> HRESULT {
             let dialog = Dialog::of::<2>(this);
-            dialog.special.set(true);
             let Some(inner) = &dialog.inner_controls else { return E_NOTIMPL };
-            (Interface::vtable(inner).$field)(Interface::as_raw(inner) $(, $argument)*)
+            let done = (Interface::vtable(inner).$field)(Interface::as_raw(inner) $(, $argument)*);
+            if done == S_OK {
+                let noted: unsafe fn(&Dialog $(, $kind)*) = $noted;
+                noted(dialog $(, $argument)*);
+            }
+            done
         }
     };
 }
 
-control!(enable_open_drop_down => EnableOpenDropDown(control: u32));
-control!(add_menu => AddMenu(control: u32, label: PCWSTR));
-control!(add_push_button => AddPushButton(control: u32, label: PCWSTR));
-control!(add_combo_box => AddComboBox(control: u32));
-control!(add_radio_button_list => AddRadioButtonList(control: u32));
-control!(add_check_button => AddCheckButton(control: u32, label: PCWSTR, checked: BOOL));
-control!(add_edit_box => AddEditBox(control: u32, text: PCWSTR));
+/// A control Oxyde has nothing like: the dialog is the system's to show.
+fn unlike(dialog: &Dialog) {
+    dialog.special.set(true);
+}
+
+unsafe fn text_or_empty(text: PCWSTR) -> String {
+    text_of(text).unwrap_or_default()
+}
+
+control!(enable_open_drop_down => EnableOpenDropDown(control: u32), |dialog, _| unlike(dialog));
+control!(add_menu => AddMenu(control: u32, label: PCWSTR), |dialog, _, _| unlike(dialog));
+control!(add_push_button => AddPushButton(control: u32, label: PCWSTR), |dialog, _, _| unlike(dialog));
+control!(add_edit_box => AddEditBox(control: u32, text: PCWSTR), |dialog, _, _| unlike(dialog));
+control!(add_combo_box => AddComboBox(control: u32), |dialog, id| dialog.custom.borrow_mut().add_choice(id));
+control!(add_radio_button_list => AddRadioButtonList(control: u32), |dialog, id| dialog.custom.borrow_mut().add_choice(id));
+control!(add_check_button => AddCheckButton(control: u32, label: PCWSTR, checked: BOOL), |dialog, id, text, _| dialog.custom.borrow_mut().add_check(id, &text_or_empty(text)));
 control!(add_separator => AddSeparator(control: u32));
-control!(add_text => AddText(control: u32, text: PCWSTR));
-control!(set_control_label => SetControlLabel(control: u32, label: PCWSTR));
+control!(add_text => AddText(control: u32, text: PCWSTR), |dialog, id, text| dialog.custom.borrow_mut().add_text(id, &text_or_empty(text)));
+control!(set_control_label => SetControlLabel(control: u32, label: PCWSTR), |dialog, id, text| dialog.custom.borrow_mut().set_label(id, &text_or_empty(text)));
 control!(get_control_state => GetControlState(control: u32, state: *mut CDCONTROLSTATEF));
 control!(set_control_state => SetControlState(control: u32, state: CDCONTROLSTATEF));
 control!(get_edit_box_text => GetEditBoxText(control: u32, text: *mut *mut u16));
 control!(set_edit_box_text => SetEditBoxText(control: u32, text: PCWSTR));
 control!(get_check_button_state => GetCheckButtonState(control: u32, checked: *mut BOOL));
 control!(set_check_button_state => SetCheckButtonState(control: u32, checked: BOOL));
-control!(add_control_item => AddControlItem(control: u32, item: u32, label: PCWSTR));
-control!(remove_control_item => RemoveControlItem(control: u32, item: u32));
-control!(remove_all_control_items => RemoveAllControlItems(control: u32));
+control!(add_control_item => AddControlItem(control: u32, item: u32, label: PCWSTR), |dialog, id, item, text| dialog.custom.borrow_mut().add_item(id, item, &text_or_empty(text)));
+control!(remove_control_item => RemoveControlItem(control: u32, item: u32), |dialog, id, item| dialog.custom.borrow_mut().remove_item(id, item));
+control!(remove_all_control_items => RemoveAllControlItems(control: u32), |dialog, id| dialog.custom.borrow_mut().remove_items(id));
 control!(get_control_item_state => GetControlItemState(control: u32, item: u32, state: *mut CDCONTROLSTATEF));
 control!(set_control_item_state => SetControlItemState(control: u32, item: u32, state: CDCONTROLSTATEF));
 control!(get_selected_control_item => GetSelectedControlItem(control: u32, item: *mut u32));
 control!(set_selected_control_item => SetSelectedControlItem(control: u32, item: u32));
-control!(start_visual_group => StartVisualGroup(control: u32, label: PCWSTR));
-control!(end_visual_group => EndVisualGroup());
+control!(start_visual_group => StartVisualGroup(control: u32, label: PCWSTR), |dialog, id, text| dialog.custom.borrow_mut().start_group(id, &text_or_empty(text)));
+control!(end_visual_group => EndVisualGroup(), |dialog| dialog.custom.borrow_mut().end_group());
 control!(make_prominent => MakeProminent(control: u32));
-control!(set_control_item_text => SetControlItemText(control: u32, item: u32, label: PCWSTR));
+control!(set_control_item_text => SetControlItemText(control: u32, item: u32, label: PCWSTR), |dialog, id, item, text| dialog.custom.borrow_mut().set_item_text(id, item, &text_or_empty(text)));
 
 static CONTROLS: IFileDialogCustomize_Vtbl = IFileDialogCustomize_Vtbl {
     base__: IUnknown_Vtbl { QueryInterface: query::<2>, AddRef: add_reference::<2>, Release: release::<2> },

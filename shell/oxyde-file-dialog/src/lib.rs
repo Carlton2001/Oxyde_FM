@@ -15,6 +15,7 @@
 #![allow(non_snake_case)]
 
 mod ask;
+mod controls;
 mod dialog;
 mod items;
 mod request;

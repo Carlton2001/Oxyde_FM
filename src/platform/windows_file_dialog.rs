@@ -10,12 +10,16 @@
 //! `purpose` (`open`, `save` or `folder`), `multiple`, `title`, `accept`, `name`,
 //! `folder`, `extension`, `owner` (the application's window), `filter` (a name, a tab
 //! and its patterns, as often as there are filters) and `filter-index`, counted from 1
-//! as Windows does. The answer is `cancel`, or `ok` followed by `filter<TAB>index` and
-//! a `path<TAB>…` line for each item chosen.
+//! as Windows does, then the application's controls Oxyde shows: `choice` (an id, the
+//! answer given first and a label), each followed by its `option` lines (the choice's
+//! id, the item's id and its label); a choice without any is a checkbox, answered
+//! `true` or `false`. The answer is `cancel`, or `ok` followed by `filter<TAB>index`, a
+//! `path<TAB>…` line for each item chosen and a `choice<TAB>id<TAB>answer` line for
+//! each choice.
 pub(super) mod registration;
 pub(super) mod relay;
 
-use super::{FileChooserAnswer, FileChooserParent, FileChooserPurpose, FileChooserRequest, FileTypeFilter, FileTypePattern};
+use super::{FileChooserAnswer, FileChooserChoice, FileChooserParent, FileChooserPurpose, FileChooserRequest, FileTypeFilter, FileTypePattern};
 use futures::channel::oneshot;
 use std::io::Write;
 use std::os::windows::io::AsRawHandle;
@@ -43,6 +47,7 @@ struct Asked {
     filters: Vec<FileTypeFilter>,
     /// The filter shown first, counted from 1.
     filter: Option<usize>,
+    choices: Vec<FileChooserChoice>,
 }
 
 /// The patterns of a filter, written `*.png;*.jpg`. Windows reads `*.*` as every
@@ -69,6 +74,18 @@ fn asked(lines: &[String]) -> Asked {
             "extension" => asked.extension = Some(value.trim_start_matches('.').to_owned()).filter(|extension| !extension.is_empty()),
             "owner" => asked.owner = value.parse().ok().filter(|owner| *owner != 0),
             "filter-index" => asked.filter = value.parse().ok(),
+            "choice" => {
+                let mut parts = value.splitn(3, '\t');
+                let (Some(id), Some(initial), label) = (parts.next(), parts.next(), parts.next()) else { continue };
+                asked.choices.push(FileChooserChoice { id: id.to_owned(), label: label.unwrap_or_default().to_owned(), options: Vec::new(), initial: initial.to_owned() });
+            }
+            "option" => {
+                let mut parts = value.splitn(3, '\t');
+                let (Some(id), Some(item), label) = (parts.next(), parts.next(), parts.next()) else { continue };
+                if let Some(choice) = asked.choices.iter_mut().rev().find(|choice| choice.id == id) {
+                    choice.options.push((item.to_owned(), label.unwrap_or_default().to_owned()));
+                }
+            }
             "filter" => {
                 let (name, specification) = value.split_once('\t').unwrap_or((value, ""));
                 asked.filters.push(FileTypeFilter { name: name.to_owned(), patterns: patterns(specification) });
@@ -88,6 +105,9 @@ fn answer_text(answer: Option<&FileChooserAnswer>) -> String {
     }
     for path in answer.paths.iter().filter_map(|path| path.to_str()).filter(|path| !path.contains(['\r', '\n'])) {
         text.push_str(&format!("path\t{path}\n"));
+    }
+    for (id, value) in answer.choices.iter().filter(|(id, value)| !id.contains(['\t', '\r', '\n']) && !value.contains(['\t', '\r', '\n'])) {
+        text.push_str(&format!("choice\t{id}\t{value}\n"));
     }
     text
 }
@@ -193,7 +213,13 @@ pub(super) fn request(lines: &[String], launcher: Option<u32>) -> Option<FileCho
         // Read here, off the interface thread: a folder that is gone leaves the last one.
         current_folder: asked.folder.filter(|folder| folder.is_dir()),
         default_extension: asked.extension,
-        choices: Vec::new(),
+        // A menu whose answer given first is not offered starts on its first answer.
+        choices: asked.choices.into_iter().map(|mut choice| {
+            if !choice.options.is_empty() && !choice.options.iter().any(|(id, _)| *id == choice.initial) {
+                choice.initial = choice.options[0].0.clone();
+            }
+            choice
+        }).collect(),
         parent: asked.owner.map(FileChooserParent::Windows),
         answer,
         withdrawn,
