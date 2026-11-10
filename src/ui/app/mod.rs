@@ -550,6 +550,9 @@ impl OxydeApp {
             network_focus_restore: false,
             window_geometry_save_task: None,
             _subscriptions: vec![cx.on_app_quit(|this, cx| {
+                // Before the saves below: a folder another launch hands over from now
+                // on would never be shown.
+                oxyde_lib::platform::platform().release_instance();
                 this.flush_window_geometry(cx);
                 crate::trace_shutdown_request("GPUI quit hook");
                 // Undo history is session-only, so its replacement backups must

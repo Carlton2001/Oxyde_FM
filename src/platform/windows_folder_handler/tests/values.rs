@@ -1,4 +1,4 @@
-use super::{open_command, replaced, restored, values, Value};
+use super::{offered, open_command, program, replaced, restored, still_installed, values, Value};
 
 const PROGRAM: &str = r"C:\Programs\Oxyde\oxyde-folder-launcher.exe";
 
@@ -53,4 +53,31 @@ fn without_kept_values_turning_off_removes_every_value() {
         assert_eq!(restored.len(), wanted.len());
         assert!(restored.iter().all(|value| value.data.is_none()));
     }
+}
+
+#[test]
+fn a_portable_copy_is_only_offered_to_give_folders_back() {
+    assert_eq!(offered(false, false), Some(false));
+    assert_eq!(offered(true, false), Some(true));
+    assert_eq!(offered(false, true), None);
+    assert_eq!(offered(true, true), Some(true));
+}
+
+#[test]
+fn a_command_names_its_program_when_by_full_path() {
+    assert_eq!(program(r#""C:\Program Files\Files\Launcher.exe" "%1""#), Some(r"C:\Program Files\Files\Launcher.exe"));
+    assert_eq!(program(r"C:\Program Files\Files\Launcher.EXE %1"), Some(r"C:\Program Files\Files\Launcher.EXE"));
+    assert_eq!(program(r"explorer.exe /idlist,%I,%L"), None);
+    assert_eq!(program(r"%SystemRoot%\explorer.exe"), None);
+    assert_eq!(program("open"), None);
+}
+
+#[test]
+fn kept_values_stand_while_the_programs_their_commands_run_are_there() {
+    let kept = serde_json::to_string(&values(PROGRAM)).unwrap();
+    assert!(still_installed(&kept, |program| program == PROGRAM));
+    assert!(!still_installed(&kept, |_| false));
+    let none = serde_json::to_string(&values(PROGRAM).iter().map(absent).collect::<Vec<_>>()).unwrap();
+    assert!(still_installed(&none, |_| false));
+    assert!(still_installed("org.gnome.Nautilus.desktop", |_| false));
 }

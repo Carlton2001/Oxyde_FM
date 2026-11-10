@@ -1,4 +1,4 @@
-use super::{create, decode, encode, forward, pipe_name, receive};
+use super::{create, decode, encode, forward, pipe_name, receive, serve, wake};
 use windows::Win32::System::Pipes::{ConnectNamedPipe, DisconnectNamedPipe};
 
 #[test]
@@ -22,13 +22,14 @@ fn another_protocol_is_not_a_message() {
 }
 
 #[test]
-fn the_pipe_is_named_after_session_storage_and_build() {
-    let name = pipe_name(3, r"C:\Users\Me\AppData\Roaming\Oxyde", false);
+fn the_pipe_is_named_after_session_storage_build_and_rights() {
+    let name = pipe_name(3, r"C:\Users\Me\AppData\Roaming\Oxyde", false, false);
     assert!(name.starts_with(r"\\.\pipe\Oxyde.Instance.Release.3."));
-    assert_eq!(name, pipe_name(3, r"c:\users\me\appdata\roaming\OXYDE", false));
-    assert_ne!(name, pipe_name(4, r"C:\Users\Me\AppData\Roaming\Oxyde", false));
-    assert_ne!(name, pipe_name(3, r"D:\Portable\data", false));
-    assert_ne!(name, pipe_name(3, r"C:\Users\Me\AppData\Roaming\Oxyde", true));
+    assert_eq!(name, pipe_name(3, r"c:\users\me\appdata\roaming\OXYDE", false, false));
+    assert_ne!(name, pipe_name(4, r"C:\Users\Me\AppData\Roaming\Oxyde", false, false));
+    assert_ne!(name, pipe_name(3, r"D:\Portable\data", false, false));
+    assert_ne!(name, pipe_name(3, r"C:\Users\Me\AppData\Roaming\Oxyde", true, false));
+    assert_ne!(name, pipe_name(3, r"C:\Users\Me\AppData\Roaming\Oxyde", false, true));
 }
 
 #[test]
@@ -48,4 +49,24 @@ fn a_later_launch_reaches_the_first_and_only_owner_of_the_pipe() {
     forward(&name, &[r"C:\Users".to_owned()]).unwrap();
     forward(&name, &[]).unwrap();
     assert_eq!(reader.join().unwrap(), [Some(vec![r"C:\Users".to_owned()]), Some(Vec::new())]);
+}
+
+#[test]
+fn a_released_pipe_is_closed_and_its_name_free_for_the_next_oxyde() {
+    use futures::StreamExt;
+    let name = format!(r"\\.\pipe\Oxyde.Instance.Test.Release.{}", std::process::id());
+    let pipe = create(&name).expect("first owner");
+    let released = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (sender, mut receiver) = futures::channel::mpsc::unbounded();
+    let served = std::thread::spawn({
+        let released = released.clone();
+        move || serve(pipe, sender, &released)
+    });
+    forward(&name, &[]).unwrap();
+    assert!(futures::executor::block_on(receiver.next()).is_some());
+    released.store(true, std::sync::atomic::Ordering::SeqCst);
+    wake(&name);
+    served.join().unwrap();
+    assert!(forward(&name, &[]).is_err());
+    assert!(create(&name).is_some());
 }

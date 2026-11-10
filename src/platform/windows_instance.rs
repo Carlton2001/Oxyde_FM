@@ -2,16 +2,25 @@
 //! opening a folder with Oxyde, hands its locations to the running one over a named
 //! pipe and ends. The first process owns the pipe's only instance; the pipe is named
 //! after the session and the storage folder, so a portable copy and a debug build keep
-//! to themselves.
+//! to themselves. An Oxyde run as administrator has a pipe of its own, which the
+//! launcher of folders reaches too: a folder then opens in the Oxyde that runs, not in
+//! one more.
 use super::{InstanceClaim, InstanceMessage, InstanceRequest};
 use futures::channel::mpsc::{unbounded, UnboundedSender};
 use std::io::Write;
 use std::os::windows::io::AsRawHandle;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 use std::time::Duration;
-use windows::core::{HSTRING, PCWSTR};
+use windows::core::{HSTRING, PCWSTR, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, LocalFree, ERROR_NO_DATA, ERROR_PIPE_BUSY, ERROR_PIPE_CONNECTED, HANDLE, HLOCAL};
-use windows::Win32::Security::Authorization::{GetSecurityInfo, SE_KERNEL_OBJECT};
-use windows::Win32::Security::{EqualSid, GetTokenInformation, TokenOwner, OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, TOKEN_OWNER, TOKEN_QUERY};
+use windows::Win32::Security::Authorization::{
+    ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, GetSecurityInfo, SDDL_REVISION_1, SE_KERNEL_OBJECT,
+};
+use windows::Win32::Security::{
+    EqualSid, GetTokenInformation, TokenElevation, TokenUser, OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID,
+    SECURITY_ATTRIBUTES, TOKEN_ELEVATION, TOKEN_INFORMATION_CLASS, TOKEN_QUERY, TOKEN_USER,
+};
 use windows::Win32::Storage::FileSystem::{ReadFile, FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_ACCESS_INBOUND};
 use windows::Win32::System::Pipes::{
     ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, GetNamedPipeServerProcessId, PIPE_READMODE_BYTE,
@@ -28,10 +37,11 @@ const LIMIT: usize = 256 * 1024;
 /// How long a later launch waits for the running Oxyde to take its message.
 const PATIENCE: Duration = Duration::from_secs(5);
 
-fn pipe_name(session: u32, storage: &str, debug: bool) -> String {
+fn pipe_name(session: u32, storage: &str, debug: bool, elevated: bool) -> String {
     let storage = blake3::hash(storage.to_lowercase().as_bytes()).to_hex();
     let kind = if debug { "Devel" } else { "Release" };
-    format!(r"\\.\pipe\Oxyde.Instance.{kind}.{session}.{}", &storage[..16])
+    let rights = if elevated { ".Elevated" } else { "" };
+    format!(r"\\.\pipe\Oxyde.Instance.{kind}{rights}.{session}.{}", &storage[..16])
 }
 
 fn encode(locations: &[String]) -> String {
@@ -48,12 +58,69 @@ fn decode(message: &str) -> Option<Vec<String>> {
     (lines.next()? == HEADER).then(|| lines.filter(|line| !line.is_empty()).map(str::to_owned).collect())
 }
 
+/// The pipe this process serves, and whether it gave it up to quit.
+static CLAIMED: OnceLock<String> = OnceLock::new();
+static RELEASED: AtomicBool = AtomicBool::new(false);
+
 struct Pipe(HANDLE);
 // The handle is only used by the thread that serves it.
 unsafe impl Send for Pipe {}
+impl Drop for Pipe {
+    fn drop(&mut self) { unsafe { let _ = CloseHandle(self.0); } }
+}
+
+/// What this process's token says of `class`, in a buffer aligned for its structure.
+fn token_information(class: TOKEN_INFORMATION_CLASS) -> Option<Vec<u64>> {
+    unsafe {
+        let mut token = HANDLE::default();
+        OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).ok()?;
+        let mut size = 0u32;
+        let _ = GetTokenInformation(token, class, None, 0, &mut size);
+        let mut buffer = vec![0u64; (size as usize).div_ceil(8)];
+        let read = GetTokenInformation(token, class, Some(buffer.as_mut_ptr().cast()), size, &mut size);
+        let _ = CloseHandle(token);
+        read.ok().map(|()| buffer)
+    }
+}
+
+/// Whether this process runs as administrator.
+fn elevated() -> bool {
+    token_information(TokenElevation).is_some_and(|elevation| unsafe { (*elevation.as_ptr().cast::<TOKEN_ELEVATION>()).TokenIsElevated != 0 })
+}
+
+struct Descriptor(PSECURITY_DESCRIPTOR);
+impl Drop for Descriptor {
+    fn drop(&mut self) { unsafe { let _ = LocalFree(Some(HLOCAL(self.0 .0))); } }
+}
+
+/// The pipe is the user's and the user's processes write to it, whatever rights its
+/// creator runs with: run as administrator, Oxyde would otherwise own it as the
+/// Administrators group and be out of reach of the launcher, which is not.
+fn descriptor() -> Option<Descriptor> {
+    let user = token_information(TokenUser)?;
+    let user = unsafe {
+        let mut text = PWSTR::null();
+        ConvertSidToStringSidW((*user.as_ptr().cast::<TOKEN_USER>()).User.Sid, &mut text).ok()?;
+        let user = text.to_string();
+        let _ = LocalFree(Some(HLOCAL(text.0.cast())));
+        user.ok()?
+    };
+    // Medium integrity: what a pipe gets unlabelled, written here so that it does not
+    // depend on its creator's.
+    let text = HSTRING::from(format!("O:{user}D:(A;;GRGW;;;{user})(A;;GA;;;SY)S:(ML;;NW;;;ME)"));
+    let mut descriptor = PSECURITY_DESCRIPTOR::default();
+    unsafe { ConvertStringSecurityDescriptorToSecurityDescriptorW(&text, SDDL_REVISION_1, &mut descriptor, None) }.ok()?;
+    Some(Descriptor(descriptor))
+}
 
 /// The pipe's only instance, or None when another process already owns it.
 fn create(name: &str) -> Option<Pipe> {
+    let descriptor = descriptor()?;
+    let security = SECURITY_ATTRIBUTES {
+        nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+        lpSecurityDescriptor: descriptor.0 .0,
+        bInheritHandle: false.into(),
+    };
     let handle = unsafe {
         CreateNamedPipeW(
             PCWSTR(HSTRING::from(name).as_ptr()),
@@ -63,7 +130,7 @@ fn create(name: &str) -> Option<Pipe> {
             0,
             64 * 1024,
             0,
-            None,
+            Some(&security),
         )
     };
     (!handle.is_invalid()).then_some(Pipe(handle))
@@ -84,9 +151,15 @@ fn receive(pipe: &Pipe) -> Option<String> {
     String::from_utf8(message).ok()
 }
 
-fn serve(pipe: Pipe, sender: UnboundedSender<InstanceMessage>) {
-    loop {
+/// Serves later launches until the application quits. The pipe then closes at once,
+/// before anything is read: a launch that had reached it fails to write and starts an
+/// Oxyde of its own.
+fn serve(pipe: Pipe, sender: UnboundedSender<InstanceMessage>, released: &AtomicBool) {
+    while !released.load(Ordering::SeqCst) {
         let connected = unsafe { ConnectNamedPipe(pipe.0, None) };
+        if released.load(Ordering::SeqCst) {
+            return;
+        }
         // A sender may have connected, and even written and left, before this call.
         if connected.as_ref().is_err_and(|error| ![ERROR_PIPE_CONNECTED.to_hresult(), ERROR_NO_DATA.to_hresult()].contains(&error.code())) {
             log::warn!("Cannot wait for later launches: {connected:?}");
@@ -105,33 +178,18 @@ fn serve(pipe: Pipe, sender: UnboundedSender<InstanceMessage>) {
     }
 }
 
-/// The owner new objects of this process get, which is the pipe's when this user's
-/// Oxyde created it.
-fn own_owner() -> Option<Vec<u8>> {
-    unsafe {
-        let mut token = HANDLE::default();
-        OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).ok()?;
-        let mut size = 0u32;
-        let _ = GetTokenInformation(token, TokenOwner, None, 0, &mut size);
-        let mut buffer = vec![0u8; size as usize];
-        let read = GetTokenInformation(token, TokenOwner, Some(buffer.as_mut_ptr().cast()), size, &mut size);
-        let _ = CloseHandle(token);
-        read.ok().map(|()| buffer)
-    }
-}
-
 /// Whether the pipe is this user's: another account could have created the name first
 /// to read what is opened.
 fn owned_by_this_user(pipe: HANDLE) -> bool {
-    let Some(own) = own_owner() else { return false };
+    let Some(user) = token_information(TokenUser) else { return false };
     unsafe {
-        let own = (*own.as_ptr().cast::<TOKEN_OWNER>()).Owner;
+        let user = (*user.as_ptr().cast::<TOKEN_USER>()).User.Sid;
         let mut owner = PSID::default();
         let mut descriptor = PSECURITY_DESCRIPTOR::default();
         if GetSecurityInfo(pipe, SE_KERNEL_OBJECT, OWNER_SECURITY_INFORMATION, Some(&mut owner), None, None, None, Some(&mut descriptor)).is_err() {
             return false;
         }
-        let same = EqualSid(own, owner).is_ok();
+        let same = EqualSid(user, owner).is_ok();
         let _ = LocalFree(Some(HLOCAL(descriptor.0)));
         same
     }
@@ -163,28 +221,56 @@ fn forward(name: &str, locations: &[String]) -> std::io::Result<()> {
     pipe.flush()
 }
 
-/// The pipe of this session's Oxyde for this storage folder and build.
-fn own_pipe_name() -> Option<String> {
+/// The pipe of this session's Oxyde for this storage folder and build, run as
+/// administrator or not.
+fn own_pipe_name(elevated: bool) -> Option<String> {
     let storage = crate::app_paths::config_dir()?;
     let mut session = 0u32;
     unsafe { ProcessIdToSessionId(GetCurrentProcessId(), &mut session) }.ok()?;
-    Some(pipe_name(session, &storage.to_string_lossy(), cfg!(debug_assertions)))
+    Some(pipe_name(session, &storage.to_string_lossy(), cfg!(debug_assertions), elevated))
 }
 
-/// Hands `locations` to the running Oxyde; false when none runs, or none answers.
+/// Hands `locations` to the running Oxyde, the one with this process's rights before
+/// the other; false when none runs, or none answers.
 pub(super) fn hand_over(locations: &[String]) -> bool {
-    own_pipe_name().is_some_and(|name| forward(&name, locations).is_ok())
+    let own = elevated();
+    [own, !own].into_iter().any(|elevated| own_pipe_name(elevated).is_some_and(|name| forward(&name, locations).is_ok()))
+}
+
+/// Wakes the thread serving `name`, which waits for a launch: one that says nothing.
+fn wake(name: &str) {
+    for _ in 0..40 {
+        match std::fs::OpenOptions::new().write(true).open(name) {
+            // The thread is reading a launch's message and looks at the flag next.
+            Err(error) if error.raw_os_error() == Some(ERROR_PIPE_BUSY.0 as i32) => std::thread::sleep(Duration::from_millis(25)),
+            _ => return,
+        }
+    }
+}
+
+/// Gives the pipe up as the application quits. Its last saves can take seconds, during
+/// which a folder handed over would be taken and never shown; the next launch finds no
+/// pipe and starts an Oxyde of its own.
+pub(super) fn release() {
+    let Some(name) = CLAIMED.get() else { return };
+    if !RELEASED.swap(true, Ordering::SeqCst) {
+        let _ = std::thread::Builder::new().name("oxyde-instance-release".into()).spawn(move || wake(name));
+    }
 }
 
 pub(super) fn claim(locations: &[String]) -> InstanceClaim {
-    let Some(name) = own_pipe_name() else { return InstanceClaim::Alone };
+    // Run as administrator on purpose, Oxyde does not give way to one that is not.
+    let Some(name) = own_pipe_name(elevated()) else { return InstanceClaim::Alone };
     // A launch that loses the race for the pipe finds it owned at its second look.
     for _ in 0..2 {
         if let Some(pipe) = create(&name) {
             let (sender, receiver) = unbounded();
-            let served = std::thread::Builder::new().name("oxyde-instance".into()).spawn(move || serve(pipe, sender));
+            let served = std::thread::Builder::new().name("oxyde-instance".into()).spawn(move || serve(pipe, sender, &RELEASED));
             return match served {
-                Ok(_) => InstanceClaim::First(receiver),
+                Ok(_) => {
+                    let _ = CLAIMED.set(name);
+                    InstanceClaim::First(receiver)
+                }
                 Err(error) => {
                     log::warn!("Cannot listen for later launches: {error}");
                     InstanceClaim::Alone

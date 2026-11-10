@@ -2,9 +2,12 @@
 //! the `open` verb of folders, Explorer runs it for a double click in its own list too,
 //! instead of browsing in place; whoever uses Explorer would be sent to Oxyde at each
 //! folder. The launcher Explorer started therefore asks the Explorer tab the folder
-//! came from to browse to it: the active tab of the foreground window, or, when another
-//! window took the foreground meanwhile, the only active tab where the folder is
-//! selected.
+//! came from to browse to it. Opening a folder in a list selects it, so that tab is an
+//! active one where the folder is selected: the foreground window's, or the only one
+//! when another window took the foreground meanwhile. A folder Explorer opens for the
+//! Run dialog, the Start menu or a jump list is selected nowhere and is Oxyde's,
+//! whatever Explorer window is in the foreground. Opened among other selected items,
+//! the folder gets an Explorer window of its own, as Explorer gives each of them.
 use super::windows_com::ComApartment;
 use windows::core::{w, Interface, HSTRING, PCWSTR};
 use windows::Win32::Foundation::{CloseHandle, HWND};
@@ -13,15 +16,14 @@ use windows::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, Pr
 use windows::Win32::System::Variant::VARIANT;
 use windows::Win32::UI::Shell::Common::ITEMIDLIST;
 use windows::Win32::UI::Shell::{
-    IShellBrowser, IShellItemArray, IShellWindows, SHParseDisplayName, ShellWindows, SBSP_ABSOLUTE, SBSP_SAMEBROWSER, SID_STopLevelBrowser,
-    SIGDN_FILESYSPATH, SVGIO_SELECTION,
+    BHID_LinkTargetItem, IShellBrowser, IShellItem, IShellItemArray, IShellWindows, SHParseDisplayName, ShellWindows, SBSP_ABSOLUTE,
+    SBSP_SAMEBROWSER, SID_STopLevelBrowser, SIGDN_FILESYSPATH, SVGIO_SELECTION,
 };
 use windows::Win32::UI::WindowsAndMessaging::{FindWindowExW, GetAncestor, GetClassNameW, GetForegroundWindow, GA_ROOT};
 
-/// Explorer's file windows.
-const EXPLORER_WINDOW: &str = "CabinetWClass";
 const EXPLORER_TAB: PCWSTR = w!("ShellTabWindowClass");
-/// The desktop and the taskbar, which are Explorer's too: a folder opened there is Oxyde's.
+/// The desktop and the taskbar, which are Explorer's too: a folder opened there is
+/// Oxyde's, even when an Explorer window has it selected.
 const DESKTOP_WINDOWS: [&str; 4] = ["Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"];
 /// Selections longer than this are not searched; the Shell starts one launch per folder.
 const SELECTION_LIMIT: u32 = 256;
@@ -56,23 +58,38 @@ fn active_tabs() -> windows::core::Result<Vec<Tab>> {
     Ok(tabs)
 }
 
-/// Whether `folder` is among the items selected in the tab.
-fn selects(browser: &IShellBrowser, folder: &str) -> bool {
-    let selected = || -> windows::core::Result<bool> {
-        unsafe {
-            let items: IShellItemArray = browser.QueryActiveShellView()?.GetItemObject(SVGIO_SELECTION)?;
-            for index in 0..items.GetCount()?.min(SELECTION_LIMIT) {
-                let Ok(name) = items.GetItemAt(index)?.GetDisplayName(SIGDN_FILESYSPATH) else { continue };
-                let path = name.to_string();
-                CoTaskMemFree(Some(name.0.cast()));
-                if path.is_ok_and(|path| same_folder(&path, folder)) {
-                    return Ok(true);
-                }
-            }
-            Ok(false)
-        }
+/// How a tab has the folder selected.
+enum Selected {
+    Alone,
+    /// With other items, each opened with it.
+    Among,
+}
+
+/// The folder a selected item opens: itself, or the target of a shortcut.
+fn opened(item: &IShellItem) -> Option<String> {
+    let path = |item: &IShellItem| unsafe {
+        let name = item.GetDisplayName(SIGDN_FILESYSPATH).ok()?;
+        let path = name.to_string().ok();
+        CoTaskMemFree(Some(name.0.cast()));
+        path
     };
-    selected().unwrap_or(false)
+    let own = path(item)?;
+    if own.to_ascii_lowercase().ends_with(".lnk") {
+        return unsafe { item.BindToHandler::<_, IShellItem>(None, &BHID_LinkTargetItem) }.ok().and_then(|target| path(&target));
+    }
+    Some(own)
+}
+
+/// Whether `folder` is among the items selected in the tab, and whether alone.
+fn selects(browser: &IShellBrowser, folder: &str) -> Option<Selected> {
+    unsafe {
+        let items: IShellItemArray = browser.QueryActiveShellView().ok()?.GetItemObject(SVGIO_SELECTION).ok()?;
+        let count = items.GetCount().ok()?;
+        (0..count.min(SELECTION_LIMIT))
+            .filter_map(|index| items.GetItemAt(index).ok())
+            .any(|item| opened(&item).is_some_and(|path| same_folder(&path, folder)))
+            .then_some(if count == 1 { Selected::Alone } else { Selected::Among })
+    }
 }
 
 fn same_folder(left: &str, right: &str) -> bool {
@@ -107,40 +124,46 @@ fn browse(browser: &IShellBrowser, folder: &str) -> windows::core::Result<()> {
     }
 }
 
-/// The tab `folder` was opened from, if it was opened from one.
-fn origin(folder: &str, foreground: HWND, foreground_class: &str) -> windows::core::Result<Option<IShellBrowser>> {
-    // Another program opening a folder is its parent, whatever is in the foreground.
-    if !started_by_explorer() {
-        return Ok(None);
+/// Which of the windows whose active tab selects the folder it came from: the
+/// foreground one, else the only one.
+fn origin<T: PartialEq>(windows: &[T], foreground: &T) -> Option<usize> {
+    windows.iter().position(|window| window == foreground).or((windows.len() == 1).then_some(0))
+}
+
+/// A new Explorer window on `folder`. Named on Explorer's command line, a folder does
+/// not go through the verb Oxyde replaced.
+fn open_window(folder: &str) -> std::io::Result<()> {
+    let root = std::env::var_os("SystemRoot").ok_or_else(|| std::io::Error::other("SystemRoot is not set"))?;
+    std::process::Command::new(std::path::Path::new(&root).join("explorer.exe")).arg(folder).spawn().map(drop)
+}
+
+/// Keeps `folder` in Explorer when it was opened from one of its tabs.
+fn keep(folder: &str, foreground: HWND) -> Result<bool, Box<dyn std::error::Error>> {
+    let mut tabs: Vec<(Tab, Selected)> = active_tabs()?.into_iter()
+        .filter_map(|tab| { let selected = selects(&tab.browser, folder)?; Some((tab, selected)) })
+        .collect();
+    let windows: Vec<HWND> = tabs.iter().map(|(tab, _)| tab.window).collect();
+    let Some(index) = origin(&windows, &foreground) else { return Ok(false) };
+    match tabs.swap_remove(index) {
+        (tab, Selected::Alone) => browse(&tab.browser, folder)?,
+        (_, Selected::Among) => open_window(folder)?,
     }
-    let mut tabs = active_tabs()?.into_iter();
-    if foreground_class == EXPLORER_WINDOW {
-        return Ok(tabs.find(|tab| tab.window == foreground).map(|tab| tab.browser));
-    }
-    let mut selecting = tabs.filter(|tab| selects(&tab.browser, folder));
-    Ok(match (selecting.next(), selecting.next()) {
-        (Some(tab), None) => Some(tab.browser),
-        _ => None,
-    })
+    Ok(true)
 }
 
 /// Shows `folder` in the Explorer tab it was opened from; false when it was opened
 /// from anywhere else, or when Explorer does not answer, and the folder is then Oxyde's.
 pub(super) fn browse_where_opened(folder: &str) -> bool {
     let foreground = unsafe { GetForegroundWindow() };
-    let foreground_class = class_name(foreground);
-    if DESKTOP_WINDOWS.contains(&foreground_class.as_str()) {
+    // Another program opening a folder is its parent, whatever Explorer has selected.
+    if DESKTOP_WINDOWS.contains(&class_name(foreground).as_str()) || !started_by_explorer() {
         return false;
     }
     let Ok(_apartment) = ComApartment::sta() else { return false };
-    match origin(folder, foreground, &foreground_class).and_then(|browser| browser.map(|browser| browse(&browser, folder)).transpose()) {
-        Ok(Some(())) => true,
-        Ok(None) => false,
-        Err(error) => {
-            log::warn!("Cannot browse the Explorer window to {folder}: {error}");
-            false
-        }
-    }
+    keep(folder, foreground).unwrap_or_else(|error| {
+        log::warn!("Cannot keep {folder} in the Explorer window: {error}");
+        false
+    })
 }
 
 #[cfg(test)]

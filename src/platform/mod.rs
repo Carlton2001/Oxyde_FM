@@ -352,6 +352,9 @@ pub trait Platform: Send + Sync {
     /// Becomes the session's Oxyde, or hands `locations` to the one already running.
     /// Runs before the first window, which the forwarding process never opens.
     fn claim_instance(&self, _locations: &[String]) -> InstanceClaim { InstanceClaim::Alone }
+    /// Stops taking later launches, as the application starts to quit: one handed over
+    /// from then on would never be shown. Returns at once.
+    fn release_instance(&self) {}
     /// Whether the session bus started this process to choose files for the desktop
     /// portal: it opens no main window until a later launch asks for one.
     fn started_for_file_chooser(&self) -> bool { false }

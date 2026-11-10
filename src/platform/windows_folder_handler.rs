@@ -4,7 +4,9 @@
 //! `HKCU\Software\Classes`. `Folder` is left alone, so Control Panel, the Recycle Bin
 //! and the other namespace folders stay Explorer's. The values replaced are returned to
 //! the caller and written back when the choice is turned off; keys left empty are
-//! removed, which gives the system's values back.
+//! removed, which gives the system's values back. A portable copy is not offered the
+//! choice: deleted or moved, it would leave folders to a launcher that is gone, and
+//! nothing left to give them back.
 use serde::{Deserialize, Serialize};
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS, WIN32_ERROR};
@@ -68,6 +70,27 @@ fn replaced(kept: Option<&str>, wanted: &[Value], read: impl Fn(&Value) -> Value
 /// What turning the choice off writes: the kept values, or none of Oxyde's.
 fn restored(kept: Option<&str>, wanted: &[Value]) -> Vec<Value> {
     replaced(kept, wanted, |value| Value { data: None, expand: false, ..value.clone() })
+}
+
+/// The program a command runs, when the command names it by its full path.
+fn program(command: &str) -> Option<&str> {
+    let command = command.trim_start();
+    let program = match command.strip_prefix('"') {
+        Some(quoted) => quoted.split('"').next()?,
+        None => &command[..command.to_ascii_lowercase().find(".exe")? + 4],
+    };
+    (!program.contains('%') && std::path::Path::new(program).is_absolute()).then_some(program)
+}
+
+/// Whether the programs the kept commands run are still there. A file manager Oxyde
+/// replaced may have been uninstalled since: its command written back would leave
+/// folders to a program that is gone, where the system's values open them.
+fn still_installed(kept: &str, exists: impl Fn(&str) -> bool) -> bool {
+    let Ok(kept) = serde_json::from_str::<Vec<Value>>(kept) else { return true };
+    kept.iter()
+        .filter(|value| value.name.is_empty() && value.key.to_ascii_lowercase().ends_with(r"\command"))
+        .filter_map(|value| value.data.as_deref().and_then(program))
+        .all(exists)
 }
 
 struct Key(HKEY);
@@ -181,22 +204,30 @@ fn class_text(path: &str, name: &str) -> Option<String> {
     open(HKEY_CLASSES_ROOT, path, KEY_READ).and_then(|key| text(&key, name)).map(|(text, _)| text)
 }
 
+/// The choice as offered: a portable copy only has it to turn off, when an earlier
+/// version or an installed stay of the same folder turned it on.
+fn offered(enabled: bool, portable: bool) -> Option<bool> {
+    (enabled || !portable).then_some(enabled)
+}
+
 /// Whether the Shell opens folders with this Oxyde, read from the merged view the Shell
-/// itself reads. None when the launcher is missing or its path cannot be written in a
-/// command.
+/// itself reads. None when the choice is not offered: the launcher is missing, its path
+/// cannot be written in a command, or this copy is portable.
 pub(super) fn enabled() -> Option<bool> {
     let executable = executable()?;
-    Some(
-        class_text(r"Directory\shell", "").is_some_and(|verb| verb.eq_ignore_ascii_case("open"))
-            && class_text(r"Directory\shell\open\command", "").is_some_and(|command| command.eq_ignore_ascii_case(&open_command(&executable)))
-            && class_text(r"Directory\shell\open\command", DELEGATE).is_none_or(|delegate| delegate.is_empty()),
-    )
+    let enabled = class_text(r"Directory\shell", "").is_some_and(|verb| verb.eq_ignore_ascii_case("open"))
+        && class_text(r"Directory\shell\open\command", "").is_some_and(|command| command.eq_ignore_ascii_case(&open_command(&executable)))
+        && class_text(r"Directory\shell\open\command", DELEGATE).is_none_or(|delegate| delegate.is_empty());
+    offered(enabled, crate::app_paths::is_portable())
 }
 
 /// Makes this Oxyde open folders and returns the values it replaced, or writes `kept`
 /// back. The Shell is told, so the change applies to the next folder opened.
 pub(super) fn set(enabled: bool, kept: Option<&str>) -> Result<Option<String>, String> {
     let executable = executable().ok_or("The folder launcher is missing or its path cannot be written in a command")?;
+    if enabled && crate::app_paths::is_portable() {
+        return Err("A portable copy does not become the default for folders".into());
+    }
     let wanted = values(&executable);
     let result = if enabled {
         let before = replaced(kept, &wanted, read);
@@ -208,6 +239,7 @@ pub(super) fn set(enabled: bool, kept: Option<&str>) -> Result<Option<String>, S
         }
         written.and_then(|()| serde_json::to_string(&before).map(Some).map_err(|error| error.to_string()))
     } else {
+        let kept = kept.filter(|kept| still_installed(kept, |program| std::path::Path::new(program).is_file()));
         let before = restored(kept, &wanted);
         let written = before.iter().fold(Ok(()), |result, value| result.and(write(value)));
         before.iter().for_each(|value| remove_empty(&value.key));

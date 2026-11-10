@@ -96,6 +96,7 @@ impl Platform for WindowsPlatform {
     fn claim_instance(&self, locations: &[String]) -> super::InstanceClaim {
         super::windows_instance::claim(locations)
     }
+    fn release_instance(&self) { super::windows_instance::release() }
     fn opens_folders_by_default(&self) -> Option<bool> { super::windows_folder_handler::enabled() }
     fn open_folders_by_default(&self, enabled: bool, previous: Option<&str>) -> Result<Option<String>, String> {
         super::windows_folder_handler::set(enabled, previous)
