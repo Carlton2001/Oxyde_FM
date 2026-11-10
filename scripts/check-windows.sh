@@ -44,3 +44,6 @@ export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/oxy
 export RC="$project_root/scripts/llvm-rc-crate-root.sh"
 printf 'Windows build cache: %s\n' "$CARGO_TARGET_DIR"
 cargo xwin check "${cargo_arguments[@]}" --target x86_64-pc-windows-msvc --all-targets
+# The library shown in place of the dialogs of other applications, a package of its own.
+cargo xwin check "${cargo_arguments[@]}" --target x86_64-pc-windows-msvc --all-targets \
+    --manifest-path shell/oxyde-file-dialog/Cargo.toml

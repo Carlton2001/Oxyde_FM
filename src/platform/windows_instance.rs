@@ -23,17 +23,19 @@ use windows::Win32::Security::{
 };
 use windows::Win32::Storage::FileSystem::{ReadFile, FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_ACCESS_INBOUND};
 use windows::Win32::System::Pipes::{
-    ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, GetNamedPipeServerProcessId, PIPE_READMODE_BYTE,
+    ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, GetNamedPipeClientProcessId, GetNamedPipeServerProcessId, PIPE_READMODE_BYTE,
     PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT,
 };
 use windows::Win32::System::RemoteDesktop::ProcessIdToSessionId;
 use windows::Win32::System::Threading::{GetCurrentProcess, GetCurrentProcessId, OpenProcessToken};
 use windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow;
 
-/// First line of a message, which a later version may change: folders to open, or
-/// items to select in their folder.
+/// First line of a message, which a later version may change: folders to open, items
+/// to select in their folder, or the dialog of an application to answer
+/// (`windows_file_dialog`).
 const OPEN: &str = "oxyde-open 1";
 const SELECT: &str = "oxyde-select 1";
+const CHOOSE: &str = "oxyde-choose 1";
 /// Well above any command line Windows accepts.
 const LIMIT: usize = 256 * 1024;
 /// How long a later launch waits for the running Oxyde to take its message.
@@ -59,7 +61,7 @@ fn encode(header: &str, locations: &[String]) -> String {
 fn decode(message: &str) -> Option<(&'static str, Vec<String>)> {
     let mut lines = message.lines();
     let first = lines.next()?;
-    let header = [OPEN, SELECT].into_iter().find(|header| *header == first)?;
+    let header = [OPEN, SELECT, CHOOSE].into_iter().find(|header| *header == first)?;
     Some((header, lines.filter(|line| !line.is_empty()).map(str::to_owned).collect()))
 }
 
@@ -67,7 +69,7 @@ fn decode(message: &str) -> Option<(&'static str, Vec<String>)> {
 static CLAIMED: OnceLock<String> = OnceLock::new();
 static RELEASED: AtomicBool = AtomicBool::new(false);
 
-struct Pipe(HANDLE);
+pub(super) struct Pipe(pub(super) HANDLE);
 // The handle is only used by the thread that serves it.
 unsafe impl Send for Pipe {}
 impl Drop for Pipe {
@@ -119,7 +121,7 @@ fn descriptor() -> Option<Descriptor> {
 }
 
 /// The pipe's only instance, or None when another process already owns it.
-fn create(name: &str) -> Option<Pipe> {
+pub(super) fn create(name: &str) -> Option<Pipe> {
     let descriptor = descriptor()?;
     let security = SECURITY_ATTRIBUTES {
         nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
@@ -171,12 +173,22 @@ fn serve(pipe: Pipe, sender: UnboundedSender<InstanceMessage>, released: &Atomic
             return;
         }
         let message = receive(&pipe);
+        let mut sender_process = 0u32;
+        let sender_process = unsafe { GetNamedPipeClientProcessId(pipe.0, &mut sender_process) }.ok().map(|()| sender_process);
         unsafe { let _ = DisconnectNamedPipe(pipe.0); }
         let Some((header, locations)) = message.as_deref().and_then(decode) else {
             log::warn!("Ignoring a message that is not a later launch's");
             continue;
         };
-        let request = if header == SELECT {
+        let request = if header == CHOOSE {
+            match super::windows_file_dialog::request(&locations, sender_process) {
+                Some(request) => InstanceRequest::ChooseFile(request),
+                None => {
+                    log::warn!("Ignoring a dialog that names no pipe to answer on");
+                    continue;
+                }
+            }
+        } else if header == SELECT {
             InstanceRequest::Items(super::windows_startup::items(&locations))
         } else {
             InstanceRequest::Folders(super::windows_startup::folders(&locations))
@@ -189,7 +201,7 @@ fn serve(pipe: Pipe, sender: UnboundedSender<InstanceMessage>, released: &Atomic
 
 /// Whether the pipe is this user's: another account could have created the name first
 /// to read what is opened.
-fn owned_by_this_user(pipe: HANDLE) -> bool {
+pub(super) fn owned_by_this_user(pipe: HANDLE) -> bool {
     let Some(user) = token_information(TokenUser) else { return false };
     unsafe {
         let user = (*user.as_ptr().cast::<TOKEN_USER>()).User.Sid;
@@ -256,6 +268,11 @@ pub(super) fn hand_over_selection(items: &[String]) -> bool {
     hand(SELECT, items)
 }
 
+/// Has the running Oxyde answer the dialog these lines describe.
+pub(super) fn hand_over_dialog(lines: &[String]) -> bool {
+    hand(CHOOSE, lines)
+}
+
 /// Wakes the thread serving `name`, which waits for a launch: one that says nothing.
 fn wake(name: &str) {
     for _ in 0..40 {
@@ -295,6 +312,11 @@ pub(super) fn claim(locations: &[String]) -> InstanceClaim {
                     InstanceClaim::Alone
                 }
             };
+        }
+        // Started to answer a dialog, which the launcher hands to the Oxyde that runs:
+        // nothing is to be shown, and its window stays where it is.
+        if std::env::args_os().any(|argument| argument == super::windows_file_dialog::relay::FOR_DIALOG) {
+            return InstanceClaim::Forwarded;
         }
         match forward(&name, OPEN, locations) {
             Ok(()) => return InstanceClaim::Forwarded,

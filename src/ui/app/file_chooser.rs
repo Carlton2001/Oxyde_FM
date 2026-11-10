@@ -79,6 +79,9 @@ pub struct FileChooserWindow {
     /// The application's type filters and the one shown.
     filters: Vec<FileTypeFilter>,
     type_filter: Option<usize>,
+    /// The extension a name saved without one takes, when the application leaves it
+    /// to the dialog.
+    default_extension: Option<String>,
     /// The application's questions beside the files, as answered so far.
     choices: Vec<choices::Choice>,
     /// The footer's menu that is open.
@@ -175,12 +178,12 @@ impl Places {
         // As in Nautilus, the home folder heads the bookmarks without being one of them.
         let home = dirs::home_dir().map(|home| Place { label: String::new(), path: home.to_string_lossy().into_owned(), home: true });
         let pinned = app.state.pinned_items.iter()
-            .filter(|item| item.path.starts_with('/'))
+            .filter(|item| std::path::Path::new(&item.path).is_absolute())
             .filter(|item| app.show_hidden || !item.name.starts_with('.'))
             .map(|item| Place { label: item.name.clone(), path: item.path.clone(), home: item.name.is_empty() });
         Self {
             folders: home.into_iter().chain(pinned).collect(),
-            drives: app.state.drives.iter().filter(|drive| drive.path.starts_with('/')).cloned().collect(),
+            drives: app.state.drives.iter().filter(|drive| std::path::Path::new(&drive.path).is_absolute()).cloned().collect(),
             volumes: app.state.unmounted_volumes.clone(),
         }
     }
@@ -215,7 +218,8 @@ impl OxydeApp {
             media_previews: self.show_media_previews,
         };
         let rem_size = self.ui_rem_size();
-        let foreign_parent = request.parent.clone().map(foreign_window);
+        let foreign_parent = request.parent.clone().and_then(foreign_window);
+        let parent = request.parent.clone();
         // GPUI draws a new window before open_window returns, and its render reads the
         // owner: the window opens once this update of the owner has ended.
         cx.defer(move |cx| {
@@ -244,6 +248,7 @@ impl OxydeApp {
                 },
                 move |window, cx| {
                     window.set_rem_size(px(rem_size as f32));
+                    own_by(parent, window);
                     cx.new(|cx| FileChooserWindow::new(owner, request, lent, window, cx))
                 },
             );
@@ -259,12 +264,33 @@ impl OxydeApp {
 }
 
 /// The application's window, as GPUI parents a window to another process's.
-fn foreign_window(parent: FileChooserParent) -> ForeignWindow {
+fn foreign_window(parent: FileChooserParent) -> Option<ForeignWindow> {
     match parent {
-        FileChooserParent::X11(id) => ForeignWindow::X11(id),
-        FileChooserParent::Wayland(handle) => ForeignWindow::Wayland(handle),
+        FileChooserParent::X11(id) => Some(ForeignWindow::X11(id)),
+        FileChooserParent::Wayland(handle) => Some(ForeignWindow::Wayland(handle)),
+        #[cfg(target_os = "windows")]
+        FileChooserParent::Windows(_) => None,
     }
 }
+
+/// On Windows the application's window owns the chooser once it exists: it stays
+/// above it, as the system's dialog does, and shares its taskbar button.
+#[cfg(target_os = "windows")]
+fn own_by(parent: Option<FileChooserParent>, window: &Window) {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle, Win32WindowHandle};
+    // The application asking has the foreground and lets Oxyde take it.
+    window.activate_window();
+    let Some(FileChooserParent::Windows(owner)) = parent else { return };
+    let Some(owner) = std::num::NonZeroIsize::new(owner) else { return };
+    let Ok(handle) = HasWindowHandle::window_handle(window) else { return };
+    let owner = RawWindowHandle::Win32(Win32WindowHandle::new(owner));
+    if let Err(error) = oxyde_lib::platform::platform().set_window_owner(handle.as_raw(), owner) {
+        log::warn!("Cannot place the file chooser over the application's window: {error}");
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn own_by(_parent: Option<FileChooserParent>, _window: &Window) {}
 
 /// The window's title when the application gives none.
 fn default_title(purpose: &FileChooserPurpose, directory: bool) -> crate::ui::i18n::Message {
@@ -279,7 +305,7 @@ fn default_title(purpose: &FileChooserPurpose, directory: bool) -> crate::ui::i1
 
 impl FileChooserWindow {
     fn new(owner: WeakEntity<OxydeApp>, request: FileChooserRequest, lent: Lent, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let FileChooserRequest { purpose, title, accept_label, multiple, directory, filters, current_filter, current_folder, choices, parent: _, answer, withdrawn, shown: _ } = request;
+        let FileChooserRequest { purpose, title, accept_label, multiple, directory, filters, current_filter, current_folder, default_extension, choices, parent: _, answer, withdrawn, shown: _ } = request;
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         crate::ui::components::tool_window::install_icon(ICON, window);
@@ -315,7 +341,7 @@ impl FileChooserWindow {
         let folder = current_folder.map(|folder| oxyde_lib::utils::path_text::encode(&folder))
             .or_else(|| lent.options.folder.clone())
             .or_else(|| dirs::home_dir().map(|home| home.to_string_lossy().into_owned()))
-            .unwrap_or_else(|| "/".into());
+            .unwrap_or_else(|| if cfg!(target_os = "windows") { r"C:\".into() } else { "/".into() });
         let proposed = match &purpose {
             FileChooserPurpose::Save { name } => Some(name.clone()),
             _ => None,
@@ -335,6 +361,7 @@ impl FileChooserWindow {
             },
             filters,
             type_filter: current_filter,
+            default_extension,
             choices: choices.into_iter().map(choices::Choice::new).collect(),
             menu: None,
             menu_scroll: UniformListScrollHandle::new(),

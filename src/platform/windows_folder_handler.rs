@@ -27,12 +27,12 @@ const DELEGATE: &str = "DelegateExecute";
 
 /// A value under `HKCU\Software\Classes`; `data` None when it does not exist.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct Value {
-    key: String,
-    name: String,
-    data: Option<String>,
+pub(super) struct Value {
+    pub(super) key: String,
+    pub(super) name: String,
+    pub(super) data: Option<String>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    expand: bool,
+    pub(super) expand: bool,
 }
 
 fn open_command(executable: &str) -> String {
@@ -144,7 +144,7 @@ fn read(value: &Value) -> Value {
     }
 }
 
-fn write(value: &Value) -> Result<(), String> {
+pub(super) fn write(value: &Value) -> Result<(), String> {
     let path = user_path(&value.key);
     let name = wide(&value.name);
     let Some(data) = &value.data else {
@@ -168,7 +168,7 @@ fn write(value: &Value) -> Result<(), String> {
 
 /// Removes `key` and its parents up to the class while they hold nothing, so that the
 /// user's classes are left as they were found.
-fn remove_empty(key: &str) {
+pub(super) fn remove_empty(key: &str) {
     let mut key = key;
     loop {
         let path = user_path(key);
@@ -203,7 +203,7 @@ fn executable() -> Option<String> {
     (!path.contains(['"', '%'])).then(|| path.strip_prefix(r"\\?\").unwrap_or(&path).to_owned())
 }
 
-fn class_text(path: &str, name: &str) -> Option<String> {
+pub(super) fn class_text(path: &str, name: &str) -> Option<String> {
     open(HKEY_CLASSES_ROOT, path, KEY_READ).and_then(|key| text(&key, name)).map(|(text, _)| text)
 }
 

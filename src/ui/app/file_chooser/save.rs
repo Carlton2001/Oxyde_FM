@@ -10,7 +10,7 @@ use crate::ui::scale::logical;
 use crate::ui::theme::OxydeTheme;
 use gpui::prelude::*;
 use gpui::*;
-use oxyde_lib::platform::FileChooserPurpose;
+use oxyde_lib::platform::{FileChooserPurpose, FileTypeFilter, FileTypePattern};
 use oxyde_lib::utils::path_text;
 use std::path::{Path, PathBuf};
 
@@ -55,7 +55,37 @@ pub(super) fn stem_end(name: &str) -> usize {
     }
 }
 
+/// The extension a filter's first pattern names, as `*.txt` does: what a Windows
+/// dialog gives a name saved under that filter.
+fn pattern_extension(filter: &FileTypeFilter) -> Option<&str> {
+    match filter.patterns.first()? {
+        FileTypePattern::Glob(pattern) => pattern.strip_prefix("*.").filter(|extension| !extension.is_empty() && !extension.contains(['*', '?', '[', '.'])),
+        FileTypePattern::MimeType(_) => None,
+    }
+}
+
+/// `path` with `extension`, when it is a free name without one; a folder typed to be
+/// opened, or a file to be replaced, keeps its name.
+pub(super) fn extended(path: &Path, found: Target, extension: Option<&str>) -> Option<PathBuf> {
+    let extension = extension?;
+    if found != Target::Free || path.extension().is_some() {
+        return None;
+    }
+    let mut name = path.file_name()?.to_owned();
+    name.push(".");
+    name.push(extension);
+    Some(path.with_file_name(name))
+}
+
 impl FileChooserWindow {
+    /// The extension a name typed without one takes, when the application leaves it
+    /// to the dialog: the shown filter's, else the application's default.
+    fn save_extension(&self) -> Option<String> {
+        let default = self.default_extension.as_deref()?;
+        let shown = self.type_filter.and_then(|position| self.filters.get(position)).and_then(pattern_extension);
+        Some(shown.unwrap_or(default).to_owned())
+    }
+
     pub(super) fn saving(&self) -> bool {
         !matches!(self.purpose, FileChooserPurpose::Open)
     }
@@ -128,9 +158,18 @@ impl FileChooserWindow {
         }
         let home = dirs::home_dir();
         let path = super::location::typed_path(&text, &path_text::decode(&self.folder), home.as_deref());
+        let extension = self.save_extension();
         self.name.task = Some(cx.spawn_in(window, async move |this, cx| {
-            let checked = path.clone();
-            let found = cx.background_spawn(async move { target(&checked) }).await;
+            let (path, found) = cx.background_spawn(async move {
+                let found = target(&path);
+                match extended(&path, found, extension.as_deref()) {
+                    Some(named) => {
+                        let found = target(&named);
+                        (named, found)
+                    }
+                    None => (path, found),
+                }
+            }).await;
             let _ = this.update_in(cx, |this, window, cx| {
                 this.name.task = None;
                 if !this.save_at(path, found, window, cx) {

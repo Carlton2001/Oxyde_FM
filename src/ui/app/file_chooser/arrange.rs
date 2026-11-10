@@ -58,8 +58,8 @@ pub(super) fn names_mime_types(filter: &FileTypeFilter) -> bool {
     filter.patterns.iter().any(|pattern| matches!(pattern, FileTypePattern::MimeType(_)))
 }
 
-/// A type filter ready to test names: GTK's shell patterns keep case, and a filter
-/// without rules lets no file through.
+/// A type filter ready to test names: GTK's shell patterns keep case, those of Windows
+/// do not, and a filter without rules lets no file through.
 struct Types<'a> {
     globs: Vec<glob::Pattern>,
     mime_types: Vec<&'a str>,
@@ -78,7 +78,8 @@ impl<'a> Types<'a> {
     }
 
     fn admit(&self, entry: &FileEntry, admission: &Admission, mime_matches: &dyn Fn(&str, &str) -> bool) -> bool {
-        self.globs.iter().any(|glob| glob.matches(&entry.name))
+        let options = glob::MatchOptions { case_sensitive: !cfg!(target_os = "windows"), ..Default::default() };
+        self.globs.iter().any(|glob| glob.matches_with(&entry.name, options))
             || admission.content_types.get(&entry.path).is_some_and(|mime| self.mime_types.iter().any(|pattern| mime_matches(mime, pattern)))
     }
 }

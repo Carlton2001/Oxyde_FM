@@ -32,6 +32,14 @@ try {
     & cargo test @cargoArguments --all-targets -- --test-threads=1
     if ($LASTEXITCODE -ne 0) { throw 'Native tests failed.' }
     Write-Host ('Native timing: test compilation and execution {0:N1} s' -f $phaseTimer.Elapsed.TotalSeconds)
+    # The dialog library is a package of its own; its tests load the library built first.
+    $phaseTimer.Restart()
+    $dialogArguments = $cargoArguments + @('--manifest-path', 'shell/oxyde-file-dialog/Cargo.toml', '--target-dir', 'target')
+    & cargo build @dialogArguments --all-targets
+    if ($LASTEXITCODE -ne 0) { throw 'Dialog library build failed.' }
+    & cargo test @dialogArguments
+    if ($LASTEXITCODE -ne 0) { throw 'Dialog library tests failed.' }
+    Write-Host ('Native timing: dialog library {0:N1} s' -f $phaseTimer.Elapsed.TotalSeconds)
 } finally {
     $env:TEMP = $savedTemp
     $env:TMP = $savedTmp

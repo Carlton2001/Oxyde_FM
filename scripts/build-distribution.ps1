@@ -46,6 +46,11 @@ try {
             --bin oxyde-archive-io-worker --bin oxyde-archive-list-worker `
             --bin oxyde-folder-launcher
         if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
+        # The dialog library is a package of its own, built into the same target folder.
+        & cargo build --locked --release --target $target `
+            --manifest-path (Join-Path $projectRoot 'shell/oxyde-file-dialog/Cargo.toml') `
+            --target-dir (Join-Path $projectRoot 'target')
+        if ($LASTEXITCODE -ne 0) { throw 'Dialog library build failed.' }
         Write-Host ('Distribution timing: Rust build {0:N1} s' -f $phaseTimer.Elapsed.TotalSeconds)
     }
     $noticePath = Join-Path $projectRoot 'licenses/dependencies/THIRD-PARTY-NOTICES.md'
@@ -80,8 +85,12 @@ try {
     foreach ($worker in @('oxyde-image-worker', 'oxyde-archive-io-worker', 'oxyde-archive-list-worker', 'oxyde-folder-launcher')) {
         Copy-Item -LiteralPath (Join-Path $release "$worker.exe") -Destination $stage
     }
+    # Only the installed copy answers the dialogs of other applications: the library
+    # leaves the payload before the portable archive is made.
+    $dialogLibrary = Join-Path $stage 'oxyde_file_dialog.dll'
+    Copy-Item -LiteralPath (Join-Path $release 'oxyde_file_dialog.dll') -Destination $dialogLibrary
     # .cargo/config.toml links the C runtime statically; refuse a build that still imports it.
-    foreach ($binary in (Get-ChildItem -LiteralPath $stage -Filter '*.exe')) {
+    foreach ($binary in (Get-ChildItem -LiteralPath $stage -File | Where-Object Extension -in '.exe', '.dll')) {
         $imports = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($binary.FullName))
         if ($imports -match '(?i)(vcruntime|msvcp)140[_a-z0-9]*\.dll') { throw "$($binary.Name) still imports $($Matches[0])." }
     }
@@ -100,6 +109,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
         Write-Host ('Distribution timing: Inno Setup {0:N1} s' -f $phaseTimer.Elapsed.TotalSeconds)
     }
+    Remove-Item -LiteralPath $dialogLibrary
     $phaseTimer.Restart()
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $data = Join-Path $stage 'data'
@@ -125,7 +135,7 @@ try {
             $entry = $archive.GetEntry("Oxyde_FM/$relative")
             if (-not $entry -or $entry.Length -ne $licenseFile.Length) { throw "Portable archive has missing or truncated notice: $relative" }
         }
-        if ($archive.Entries | Where-Object { $_.Name -match 'Setup|launcher' }) { throw 'Unexpected installer or launcher in portable archive.' }
+        if ($archive.Entries | Where-Object { $_.Name -match 'Setup|\.dll$' }) { throw 'Unexpected installer or library in portable archive.' }
     } finally { $archive.Dispose() }
     $hash = (Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash.ToLowerInvariant()
     [IO.File]::WriteAllText("$download.sha256", "$hash  $([IO.Path]::GetFileName($download))`n")

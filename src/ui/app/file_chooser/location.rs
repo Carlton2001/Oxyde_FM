@@ -32,14 +32,16 @@ impl Location {
 pub(super) fn typed_path(text: &str, folder: &Path, home: Option<&Path>) -> PathBuf {
     let text = text.trim();
     let path = match (text.strip_prefix('~'), home) {
-        (Some(rest), Some(home)) if rest.is_empty() || rest.starts_with('/') => home.join(rest.trim_start_matches('/')),
+        (Some(rest), Some(home)) if rest.is_empty() || rest.starts_with(std::path::is_separator) => home.join(rest.trim_start_matches(std::path::is_separator)),
         _ => folder.join(text),
     };
-    let mut resolved = PathBuf::from("/");
+    // A Windows path starts at its drive or its share, which `..` does not leave.
+    let mut resolved = if cfg!(target_os = "windows") { PathBuf::new() } else { PathBuf::from("/") };
     for component in path.components() {
         match component {
             Component::Normal(name) => resolved.push(name),
             Component::ParentDir => { resolved.pop(); }
+            Component::Prefix(_) | Component::RootDir if cfg!(target_os = "windows") => resolved.push(component),
             Component::RootDir | Component::CurDir | Component::Prefix(_) => {}
         }
     }

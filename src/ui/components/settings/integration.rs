@@ -37,8 +37,14 @@ pub(super) fn integration_choices(view: &OxydeApp, handle: Entity<OxydeApp>, cx:
     if let Some(chooses_files) = view.chooses_files {
         rows.push(option_row(
             "settings-file-chooser",
-            i18n.text(Message::SettingsFileChooser),
-            i18n.text(Message::SettingsFileChooserDescription),
+            // On Windows the dialogs are replaced for each application that asks, and
+            // some keep the system's: the option says it is experimental.
+            i18n.text(if cfg!(target_os = "windows") { Message::SettingsFileChooserWindows } else { Message::SettingsFileChooser }),
+            i18n.text(if cfg!(target_os = "windows") {
+                Message::SettingsFileChooserDescriptionWindows
+            } else {
+                Message::SettingsFileChooserDescription
+            }),
             chooses_files,
             handle,
             theme,

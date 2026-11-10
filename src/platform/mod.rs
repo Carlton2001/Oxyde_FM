@@ -216,6 +216,9 @@ pub struct FileChooserRequest {
     pub current_filter: Option<usize>,
     /// The folder the application suggests, known to be one; else the last one.
     pub current_folder: Option<std::path::PathBuf>,
+    /// The extension a name saved without one takes, where applications leave that
+    /// to the dialog (Windows): the shown filter's when it names one, else this one.
+    pub default_extension: Option<String>,
     pub choices: Vec<FileChooserChoice>,
     /// The application's window, which the chooser opens over.
     pub parent: Option<FileChooserParent>,
@@ -236,6 +239,9 @@ pub enum FileChooserParent {
     X11(u32),
     /// A toplevel the application exported through xdg-foreign.
     Wayland(String),
+    /// A window handle.
+    #[cfg(target_os = "windows")]
+    Windows(isize),
 }
 
 #[derive(Debug)]
@@ -378,8 +384,9 @@ pub trait Platform: Send + Sync {
     /// Stops taking later launches, as the application starts to quit: one handed over
     /// from then on would never be shown. Returns at once.
     fn release_instance(&self) {}
-    /// Whether the session bus started this process to choose files for the desktop
-    /// portal: it opens no main window until a later launch asks for one.
+    /// Whether this process was started to choose files for an application, by the
+    /// session bus for the desktop portal or by the launcher of a Windows dialog: it
+    /// opens no main window until a later launch asks for one.
     fn started_for_file_chooser(&self) -> bool { false }
     /// Whether an application still waits for a file chosen through Oxyde, which keeps
     /// Oxyde running after its last window.
@@ -880,15 +887,18 @@ pub trait Platform: Send + Sync {
     fn open_folders_by_default(&self, _enabled: bool, _previous: Option<&str>) -> Result<Option<String>, String> {
         Err("Choosing the default for folders is not available on this system".into())
     }
-    /// Whether applications choose their files with Oxyde through the desktop portal;
-    /// None when the system has no portal, or names no Oxyde it could start. Reads
-    /// files: off the UI thread.
+    /// Whether applications choose their files with Oxyde, through the desktop portal
+    /// or in place of the Windows dialogs; None when the system has no portal, or names
+    /// no Oxyde it could start. Reads files: off the UI thread.
     fn chooses_files(&self) -> Option<bool> { None }
     /// Makes Oxyde the portal's file chooser, or gives that back to the previous one.
     /// Writes files and restarts the portal: off the UI thread.
     fn choose_files(&self, _enabled: bool) -> Result<(), String> {
         Err("Choosing files for other applications is not available on this system".into())
     }
+    /// Gives the dialogs of other applications back to the system, before Oxyde is
+    /// uninstalled.
+    fn withdraw_from_file_choosers(&self) {}
     /// Whether this system offers to open a folder in a terminal.
     fn offers_terminal(&self) -> bool { false }
     fn open_terminal(&self, _path: &str) -> Result<(), String> {
@@ -1295,6 +1305,8 @@ pub use windows_jump_list::AS_ADMINISTRATOR;
 mod windows_folder_launcher;
 #[cfg(target_os = "windows")]
 pub use windows_folder_launcher::run as run_folder_launcher;
+#[cfg(target_os = "windows")]
+mod windows_file_dialog;
 #[cfg(target_os = "windows")]
 mod windows_download;
 #[cfg(target_os = "windows")]

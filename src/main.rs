@@ -77,6 +77,7 @@ const RESTORE_FOLDER_HANDLER: &str = "--restore-folder-handler";
 fn restore_folder_handler() {
     let platform = oxyde_lib::platform::platform();
     platform.withdraw_from_folder_menus();
+    platform.withdraw_from_file_choosers();
     if platform.opens_folders_by_default() == Some(true) {
         let kept = oxyde_lib::models::ConfigManager::config_path().ok()
             .and_then(|path| oxyde_lib::models::ConfigManager::read_from_path(&path).ok())

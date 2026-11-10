@@ -11,7 +11,7 @@ Native file explorer in Rust, GPUI and Tokio. Documentation: [index](docs/README
 - Use the official Lucide SVGs from `lucide-icons/lucide/icons/<name>.svg`, with unmodified paths. If the source is unreachable, report it.
 - Do not add or change a cursor change unless the user explicitly asks. New interactions keep the default cursor.
 - Write commit messages in English. **Every push to GitHub requires an explicit request for that push**, branches and tags included, whatever the tool. A request to change, commit or merge does not authorize it, and an earlier approval does not cover the next push.
-- After changing workers or their shared code, say they must be rebuilt: close Oxyde, `cargo build --offline --bins`, then `cargo run --offline`. `cargo run` alone does not rebuild the helper executables.
+- After changing workers or their shared code, say they must be rebuilt: close Oxyde, `cargo build --offline --bins`, then `cargo run --offline`. `cargo run` alone does not rebuild the helper executables. The dialog library (`shell/oxyde-file-dialog`) is a package of its own, built with `cargo build --offline --manifest-path shell/oxyde-file-dialog/Cargo.toml --target-dir target`.
 
 ## Read before changing
 

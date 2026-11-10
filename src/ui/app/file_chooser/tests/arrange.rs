@@ -75,7 +75,8 @@ fn the_request_admits_folders_always_and_files_of_the_type_shown() {
     let folders = Admission { folders_only: true, ..Default::default() };
     let shown = arrange(&entries, "", &folders, &no_mime, SortColumn::Name, SortDirection::Ascending);
     assert_eq!(names(&shown.shown), ["archive", "Photos"]);
-    // Shell patterns keep case, as GTK's do; MIME types come from the files read.
+    // Shell patterns keep case, as GTK's do, except on Windows, where names have
+    // none; MIME types come from the files read.
     let filter = FileTypeFilter { name: "Text".into(), patterns: vec![
         FileTypePattern::Glob("*.txt".into()),
         FileTypePattern::MimeType("image/*".into()),
@@ -84,7 +85,11 @@ fn the_request_admits_folders_always_and_files_of_the_type_shown() {
     let typed = Admission { types: Some(filter), content_types, ..Default::default() };
     let media = |mime: &str, pattern: &str| pattern.strip_suffix("/*").is_some_and(|media| mime.starts_with(media));
     let shown = arrange(&entries, "", &typed, &media, SortColumn::Name, SortDirection::Ascending);
-    assert_eq!(names(&shown.shown), ["archive", "Photos", "b2.png", "b10.txt"]);
+    if cfg!(target_os = "windows") {
+        assert_eq!(names(&shown.shown), ["archive", "Photos", "a.TXT", "b2.png", "b10.txt"]);
+    } else {
+        assert_eq!(names(&shown.shown), ["archive", "Photos", "b2.png", "b10.txt"]);
+    }
     // A filter without rules lets no file through.
     let empty = Admission { types: Some(FileTypeFilter { name: "None".into(), patterns: Vec::new() }), ..Default::default() };
     assert_eq!(arrange(&entries, "", &empty, &no_mime, SortColumn::Name, SortDirection::Ascending).folders, 2);

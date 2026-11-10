@@ -1,0 +1,46 @@
+[package]
+name = "oxyde-file-dialog"
+version = "1.0.0"
+description = "Shows Oxyde in place of the Open and Save dialogs of Windows applications"
+authors = ["Carlton2001"]
+edition = "2021"
+license = "GPL-3.0-only"
+publish = false
+
+# A package of its own, outside Oxyde's: this library is loaded by other applications
+# and takes nothing from Oxyde but the launcher it runs. Built with
+# `cargo build --manifest-path shell/oxyde-file-dialog/Cargo.toml --target-dir target`.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+
+[dependencies.windows]
+version = "0.62.2"
+features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_IO",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Pipes",
+    "Win32_System_SystemInformation",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
+    "Win32_UI_Shell_PropertiesSystem",
+    "Win32_UI_WindowsAndMessaging",
+]
+
+# The tests implement a dialog's listener, which the `implement` macro writes against
+# this crate by name.
+[dev-dependencies]
+windows-core = "0.62.2"

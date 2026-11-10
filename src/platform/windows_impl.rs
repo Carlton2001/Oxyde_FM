@@ -97,6 +97,16 @@ impl Platform for WindowsPlatform {
         super::windows_instance::claim(locations)
     }
     fn release_instance(&self) { super::windows_instance::release() }
+    fn started_for_file_chooser(&self) -> bool {
+        std::env::args_os().any(|argument| argument == super::windows_file_dialog::relay::FOR_DIALOG)
+    }
+    fn answering_file_chooser(&self) -> bool { super::windows_file_dialog::answering() }
+    fn chooses_files(&self) -> Option<bool> {
+        super::windows_file_dialog::registration::repair();
+        super::windows_file_dialog::registration::enabled()
+    }
+    fn choose_files(&self, enabled: bool) -> Result<(), String> { super::windows_file_dialog::registration::set(enabled) }
+    fn withdraw_from_file_choosers(&self) { super::windows_file_dialog::registration::withdraw() }
     fn identify_process(&self) { super::windows_jump_list::identify() }
     fn set_taskbar_menu(&self, menu: &super::TaskbarMenu) {
         if let Err(error) = super::windows_jump_list::set(menu) {
@@ -403,6 +413,8 @@ impl Platform for WindowsPlatform {
     }
 
     fn finish_process_shutdown(&self) -> Result<(), String> {
+        // An answer given as the last window closed is still on its way to the application.
+        super::windows_file_dialog::finish_answers();
         super::windows_preview_worker::shutdown_image_session();
         super::windows_preview_worker::shutdown_icon_session();
         super::windows_icon_persistence::shutdown();

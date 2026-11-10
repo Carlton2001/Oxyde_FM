@@ -5,6 +5,9 @@
 //! folder to the Explorer tab it came from, hands it to the running Oxyde, or starts
 //! Oxyde on it; then it stays a while for the program that opened the folder to show a
 //! file in it (`windows_shell_window`), and hands that file to Oxyde to select.
+//!
+//! The same executable relays the dialogs of other applications to Oxyde
+//! (`windows_file_dialog::relay`), started by Oxyde's dialog library.
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -14,7 +17,7 @@ pub(super) const EXECUTABLE: &str = "oxyde-folder-launcher.exe";
 /// Cargo builds it.
 const PROGRAMS: [&str; 2] = ["Oxyde_FM.exe", "oxyde.exe"];
 
-fn program() -> Option<PathBuf> {
+pub(super) fn program() -> Option<PathBuf> {
     let launcher = std::env::current_exe().ok()?;
     PROGRAMS.iter().map(|name| launcher.with_file_name(name)).find(|program| program.is_file())
 }
@@ -42,6 +45,9 @@ fn select(items: &[String]) {
 }
 
 pub fn run() {
+    if std::env::args_os().nth(1).is_some_and(|argument| argument == super::windows_file_dialog::relay::SWITCH) {
+        std::process::exit(super::windows_file_dialog::relay::run());
+    }
     let current = std::env::current_dir().unwrap_or_default();
     let locations = super::windows_startup::locations(std::env::args_os().skip(1), &current);
     let [folder] = locations.as_slice() else { return open(&locations) };

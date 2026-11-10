@@ -375,6 +375,7 @@ impl FileChooser {
             filters: filters.iter().map(type_filter).collect(),
             current_filter,
             current_folder: suggested_folder(options),
+            default_extension: None,
             choices: raw_choices(options).into_iter().map(choice).collect(),
             parent: parent_window(&call.parent_window),
             answer,

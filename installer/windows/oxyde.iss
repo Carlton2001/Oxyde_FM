@@ -48,10 +48,15 @@ it.RemoveSettings=Rimuovere anche preferenze, sessione e log di Oxyde?
 [UninstallDelete]
 ; Caches are regenerated; preferences are removed only on request.
 Type: filesandordirs; Name: "{localappdata}\Oxyde"
+Type: files; Name: "{app}\oxyde_file_dialog.dll.old*"
+
+[InstallDelete]
+; Copies of the dialog library set aside by earlier updates, once no application holds them.
+Type: files; Name: "{app}\oxyde_file_dialog.dll.old*"
 
 [UninstallRun]
-; Oxyde leaves the menus of folders, and folders go back to the program it replaced,
-; while the executable is still there.
+; Oxyde leaves the menus of folders, folders go back to the program it replaced and
+; the Open and Save dialogs to Windows, while the executable is still there.
 Filename: "{app}\Oxyde_FM.exe"; Parameters: "--restore-folder-handler"; RunOnceId: "RestoreFolderHandler"; Flags: runhidden
 
 [Tasks]
@@ -63,6 +68,7 @@ Source: "{#PayloadDir}\oxyde-image-worker.exe"; DestDir: "{app}"; Flags: ignorev
 Source: "{#PayloadDir}\oxyde-archive-io-worker.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\oxyde-archive-list-worker.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\oxyde-folder-launcher.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#PayloadDir}\oxyde_file_dialog.dll"; DestDir: "{app}"; Flags: ignoreversion; BeforeInstall: SetAsideDialogLibrary
 Source: "{#PayloadDir}\oxyde.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion recursesubdirs createallsubdirs
 
@@ -108,6 +114,18 @@ begin
     CloseHandle(Process);
   end;
   Result := True;
+end;
+
+// Applications that showed a dialog through Oxyde keep its library loaded until they
+// end: it cannot be replaced meanwhile, but it can be renamed. The copy set aside is
+// deleted by a later setup.
+procedure SetAsideDialogLibrary;
+var
+  Current: String;
+begin
+  Current := ExpandConstant('{app}\oxyde_file_dialog.dll');
+  if FileExists(Current) and not DeleteFile(Current) then
+    RenameFile(Current, Current + '.old' + GetDateTimeString('yyyymmddhhnnss', #0, #0));
 end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;

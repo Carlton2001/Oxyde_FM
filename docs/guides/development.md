@@ -13,6 +13,15 @@ cargo run --offline
 
 `cargo run` alone does not rebuild workers. Keep the helper executables (the three workers and `oxyde-folder-launcher`) next to the main binary. To ship: [distribution](distribution.md).
 
+The library shown in place of the Open and Save dialogs of other applications (`shell/oxyde-file-dialog`) is a package of its own, with its own `Cargo.lock`: it is loaded by other applications and shares nothing with Oxyde's crate. Build it into the same target folder, and build before testing, since its tests load the library:
+
+```powershell
+cargo build --offline --manifest-path shell/oxyde-file-dialog/Cargo.toml --target-dir target
+cargo test --offline --manifest-path shell/oxyde-file-dialog/Cargo.toml --target-dir target
+```
+
+An application that showed a dialog through a registered debug build keeps `target/debug/oxyde_file_dialog.dll` loaded until it ends, and the build cannot replace it meanwhile. Uncheck the option before removing the `target` folder: a registration that points to a missing library leaves applications without a dialog until Oxyde next opens its settings, which removes it.
+
 ## Check a change
 
 ```powershell

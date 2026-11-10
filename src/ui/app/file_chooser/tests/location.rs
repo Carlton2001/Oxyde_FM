@@ -12,3 +12,14 @@ fn typed_paths_resolve_home_relative_names_and_dots() {
     assert_eq!(typed_path("/etc/../../usr", folder, home), Path::new("/usr"));
     assert_eq!(typed_path("~", folder, None), Path::new("/data/projects/~"));
 }
+
+#[cfg(target_os = "windows")]
+#[test]
+fn typed_windows_paths_keep_their_drive_or_share() {
+    let (folder, home) = (Path::new(r"D:\Data\Projects"), Some(Path::new(r"C:\Users\Me")));
+    assert_eq!(typed_path("notes.txt", folder, home), Path::new(r"D:\Data\Projects\notes.txt"));
+    assert_eq!(typed_path(r"..\..\..\Old", folder, home), Path::new(r"D:\Old"));
+    assert_eq!(typed_path(r"E:\Media\.\a.png", folder, home), Path::new(r"E:\Media\a.png"));
+    assert_eq!(typed_path(r"~\Music", folder, home), Path::new(r"C:\Users\Me\Music"));
+    assert_eq!(typed_path(r"\\server\share\a\..\b", folder, home), Path::new(r"\\server\share\b"));
+}
