@@ -49,6 +49,10 @@ it.RemoveSettings=Rimuovere anche preferenze, sessione e log di Oxyde?
 ; Caches are regenerated; preferences are removed only on request.
 Type: filesandordirs; Name: "{localappdata}\Oxyde"
 
+[UninstallRun]
+; Folders go back to the program Oxyde replaced, while the executable is still there.
+Filename: "{app}\Oxyde_FM.exe"; Parameters: "--restore-folder-handler"; RunOnceId: "RestoreFolderHandler"; Flags: runhidden
+
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
@@ -57,6 +61,7 @@ Source: "{#PayloadDir}\Oxyde_FM.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\oxyde-image-worker.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\oxyde-archive-io-worker.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\oxyde-archive-list-worker.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#PayloadDir}\oxyde-folder-launcher.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\oxyde.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PayloadDir}\licenses\*"; DestDir: "{app}\licenses"; Flags: ignoreversion recursesubdirs createallsubdirs
 

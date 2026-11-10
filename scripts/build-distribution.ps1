@@ -43,7 +43,8 @@ try {
         # Build only the shipped executables, excluding tools such as copy_benchmark.
         & cargo build --locked --release --target $target `
             --bin oxyde --bin oxyde-image-worker `
-            --bin oxyde-archive-io-worker --bin oxyde-archive-list-worker
+            --bin oxyde-archive-io-worker --bin oxyde-archive-list-worker `
+            --bin oxyde-folder-launcher
         if ($LASTEXITCODE -ne 0) { throw 'Release build failed.' }
         Write-Host ('Distribution timing: Rust build {0:N1} s' -f $phaseTimer.Elapsed.TotalSeconds)
     }
@@ -76,7 +77,7 @@ try {
         if (Test-Path -LiteralPath $obsoletePath) { Remove-Item -LiteralPath $obsoletePath }
     }
     Copy-Item -LiteralPath (Join-Path $release 'oxyde.exe') -Destination (Join-Path $stage 'Oxyde_FM.exe')
-    foreach ($worker in @('oxyde-image-worker', 'oxyde-archive-io-worker', 'oxyde-archive-list-worker')) {
+    foreach ($worker in @('oxyde-image-worker', 'oxyde-archive-io-worker', 'oxyde-archive-list-worker', 'oxyde-folder-launcher')) {
         Copy-Item -LiteralPath (Join-Path $release "$worker.exe") -Destination $stage
     }
     # .cargo/config.toml links the C runtime statically; refuse a build that still imports it.
@@ -116,7 +117,7 @@ try {
     } finally { $zip.Dispose() }
     $archive = [IO.Compression.ZipFile]::OpenRead($download)
     try {
-        foreach ($name in @('Oxyde_FM.exe', 'oxyde-image-worker.exe', 'oxyde-archive-io-worker.exe', 'oxyde-archive-list-worker.exe', 'data/README.txt', 'licenses/dependencies/README.md', 'licenses/dependencies/THIRD-PARTY-NOTICES.md', 'licenses/dependencies/LUCIDE-LICENSE.txt', 'licenses/syntaxes/PowerShell-LICENSE.txt', 'licenses/syntaxes/PowerShell-NOTICES.txt', 'licenses/syntaxes/SCSS-LICENSE.txt', 'licenses/syntaxes/bat-LICENSE-MIT.txt')) {
+        foreach ($name in @('Oxyde_FM.exe', 'oxyde-image-worker.exe', 'oxyde-archive-io-worker.exe', 'oxyde-archive-list-worker.exe', 'oxyde-folder-launcher.exe', 'data/README.txt', 'licenses/dependencies/README.md', 'licenses/dependencies/THIRD-PARTY-NOTICES.md', 'licenses/dependencies/LUCIDE-LICENSE.txt', 'licenses/syntaxes/PowerShell-LICENSE.txt', 'licenses/syntaxes/PowerShell-NOTICES.txt', 'licenses/syntaxes/SCSS-LICENSE.txt', 'licenses/syntaxes/bat-LICENSE-MIT.txt')) {
             if (-not $archive.GetEntry("Oxyde_FM/$name")) { throw "Portable archive is missing $name" }
         }
         foreach ($licenseFile in (Get-ChildItem -LiteralPath (Join-Path $stage 'licenses') -Recurse -File)) {

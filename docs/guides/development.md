@@ -11,7 +11,7 @@ cargo build --offline --bins
 cargo run --offline
 ```
 
-`cargo run` alone does not rebuild workers. Keep the three helper executables next to the main binary. To ship: [distribution](distribution.md).
+`cargo run` alone does not rebuild workers. Keep the helper executables (the three workers and `oxyde-folder-launcher`) next to the main binary. To ship: [distribution](distribution.md).
 
 ## Check a change
 

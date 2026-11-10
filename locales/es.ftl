@@ -432,6 +432,7 @@ settings-network-description = Mostrar el entorno de red en el panel izquierdo.
 settings-system-integration = Integración con el sistema
 settings-default-file-manager = Gestor de archivos predeterminado
 settings-default-file-manager-description = Cuando otra aplicación abre una carpeta, u ofrece «Mostrar en la carpeta», Oxyde la muestra. El icono del gestor de archivos en el dock sigue abriendo el del sistema.
+settings-default-file-manager-description-windows = Cuando otra aplicación abre una carpeta, Oxyde la muestra, igual que con el atajo Windows+E. «Mostrar en la carpeta» sigue abriendo el Explorador de archivos.
 settings-default-file-manager-error = No se ha podido cambiar el gestor de archivos predeterminado.
 settings-file-chooser = Diálogos Abrir y Guardar
 settings-file-chooser-description = Cuando otra aplicación pide un archivo para abrir o un lugar donde guardar, la ventana es la de Oxyde. Las aplicaciones que dibujan su propia ventana la conservan.

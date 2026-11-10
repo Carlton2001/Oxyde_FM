@@ -22,7 +22,12 @@ pub(super) fn integration_choices(view: &OxydeApp, handle: Entity<OxydeApp>, cx:
         rows.push(option_row(
             "settings-default-file-manager",
             i18n.text(Message::SettingsDefaultFileManager),
-            i18n.text(Message::SettingsDefaultFileManagerDescription),
+            // Windows has no dock, and leaves "Show in folder" to Explorer.
+            i18n.text(if cfg!(target_os = "windows") {
+                Message::SettingsDefaultFileManagerDescriptionWindows
+            } else {
+                Message::SettingsDefaultFileManagerDescription
+            }),
             opens_folders,
             handle.clone(),
             theme,

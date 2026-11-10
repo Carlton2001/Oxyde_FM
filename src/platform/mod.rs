@@ -1251,6 +1251,18 @@ mod windows_onedrive;
 #[cfg(target_os = "windows")]
 mod windows_wsl;
 #[cfg(target_os = "windows")]
+mod windows_startup;
+#[cfg(target_os = "windows")]
+mod windows_instance;
+#[cfg(target_os = "windows")]
+mod windows_folder_handler;
+#[cfg(target_os = "windows")]
+mod windows_explorer_browse;
+#[cfg(target_os = "windows")]
+mod windows_folder_launcher;
+#[cfg(target_os = "windows")]
+pub use windows_folder_launcher::run as run_folder_launcher;
+#[cfg(target_os = "windows")]
 mod windows_download;
 #[cfg(target_os = "windows")]
 mod windows_file_kind;

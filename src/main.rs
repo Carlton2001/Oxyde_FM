@@ -67,6 +67,26 @@ fn initialize_logging() {
     }));
 }
 
+/// What the uninstaller runs: folders go back to the program Oxyde replaced.
+#[cfg(target_os = "windows")]
+const RESTORE_FOLDER_HANDLER: &str = "--restore-folder-handler";
+
+/// Only when this copy is the one folders open with: another copy keeps its choice.
+#[cfg(target_os = "windows")]
+fn restore_folder_handler() {
+    let platform = oxyde_lib::platform::platform();
+    if platform.opens_folders_by_default() != Some(true) {
+        return;
+    }
+    let kept = oxyde_lib::models::ConfigManager::config_path().ok()
+        .and_then(|path| oxyde_lib::models::ConfigManager::read_from_path(&path).ok())
+        .and_then(|config| config.folder_handler_before);
+    if let Err(error) = platform.open_folders_by_default(false, kept.as_deref()) {
+        log::warn!("Cannot give folders back before uninstalling: {error}");
+    }
+    log::logger().flush();
+}
+
 fn main() {
     #[cfg(target_os = "windows")]
     if oxyde_lib::commands::icon_session_worker::run_if_requested() { return; }
@@ -84,6 +104,11 @@ fn main() {
         return;
     }
     initialize_logging();
+    #[cfg(target_os = "windows")]
+    if std::env::args_os().any(|argument| argument == RESTORE_FOLDER_HANDLER) {
+        restore_folder_handler();
+        return;
+    }
     let startup_locations = oxyde_lib::platform::platform().startup_locations();
     let for_file_chooser = oxyde_lib::platform::platform().started_for_file_chooser();
     // A later launch hands its locations to the running Oxyde and opens no window.
