@@ -316,7 +316,11 @@ sidebar-locations = ORTE
 sidebar-network = Netzwerk
 sidebar-linux = Linux
 
-sidebar-trash = Papierkorb
+# Platform name of the trash; `-trash` is aliased at load time.
+-trash-windows = Papierkorb
+-trash-linux = Papierkorb
+
+sidebar-trash = { -trash }
 sidebar-home = Persönlicher Ordner
 
 size-tiny = Winzig (< 10 KB)
@@ -469,7 +473,7 @@ settings-data = Anwendungsdaten
 
 settings-clear-cache = App-Cache leeren
 
-settings-reset-preferences = Optionen zurücksetzen
+settings-reset-preferences = Einstellungen zurücksetzen
 
 title-new-panel = Neuer Bereich rechts
 

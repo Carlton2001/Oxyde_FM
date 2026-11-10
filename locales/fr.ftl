@@ -199,7 +199,11 @@ sidebar-drives = LECTEURS
 sidebar-locations = EMPLACEMENTS
 sidebar-network = Réseau
 sidebar-linux = Linux
-sidebar-trash = Corbeille
+# Platform name of the trash; `-trash` is aliased at load time.
+-trash-windows = Corbeille
+-trash-linux = Corbeille
+
+sidebar-trash = { -trash }
 sidebar-home = Dossier personnel
 size-tiny = Minuscule (< 10 Ko)
 size-small = Petit (10 Ko - 1 Mo)
@@ -517,14 +521,14 @@ settings-cache-cleared = Cache effacé.
 settings-cache-error = Impossible d’effacer entièrement le cache. Réessayez.
 settings-preferences-reset = Préférences réinitialisées.
 
-settings-turbo-description = Mode Turbo par défaut des nouvelles copies, déplacements, suppressions, mises à la Corbeille, compressions et extractions. S’applique aussi aux calculs de tailles de dossiers, y compris en cours. Les opérations de fichiers en cours conservent leur réglage individuel.
+settings-turbo-description = Mode Turbo par défaut des nouvelles copies, déplacements, suppressions, mises à la { -trash }, compressions et extractions. S’applique aussi aux calculs de tailles de dossiers, y compris en cours. Les opérations de fichiers en cours conservent leur réglage individuel.
 settings-search-limit-description = Nombre maximal de résultats des nouvelles recherches rapides et avancées. Pas de 500, minimum 500.
 
 navigation-up = Haut
 
 about-repository = Dépôt GitHub
 about-main-tools = Outils principaux
-update-available-toast = Oxyde { $detail } est disponible. Installez-la depuis Paramètres › À propos.
+update-available-toast = Oxyde { $detail } est disponible. Installez-la depuis Préférences › À propos.
 update-failed-toast = Mise à jour impossible : { $detail }
 update-check = Rechercher des mises à jour
 update-checking = Recherche en cours…
@@ -541,7 +545,7 @@ menu-copy-name = Copier le nom
 trash-restore = Restaurer
 trash-restore-all = Tout restaurer
 trash-delete-permanent = Supprimer définitivement
-trash-delete-all = Vider la Corbeille
+trash-delete-all = Vider la { -trash }
 trash-original-location = Emplacement d’origine
 trash-deleted-at = Date de suppression
 
@@ -549,13 +553,13 @@ trash-restore-selection = Restaurer la sélection
 
 original-location-filter-placeholder = Filtrer par emplacement d’origine…
 
-trash-properties = Propriétés de : Corbeille
-trash-locations = Emplacement de la Corbeille
+trash-properties = Propriétés de : { -trash }
+trash-locations = Emplacement de la { -trash }
 trash-available-space = Espace disponible
 trash-selected-settings = Paramètres pour l’emplacement sélectionné
 trash-custom-size = Taille personnalisée
 trash-max-capacity = Taille maximale
-trash-dont-move = Ne pas déplacer les fichiers vers la Corbeille
+trash-dont-move = Ne pas déplacer les fichiers vers la { -trash }
 trash-delete-immediately = Supprimer immédiatement les fichiers lorsqu’ils sont effacés
 trash-confirm-delete = Afficher la confirmation de suppression
 trash-megabytes = Mo
@@ -624,7 +628,7 @@ toast-failed = Opération impossible : { $detail }
 
 toast-copy-completed = Copie terminée
 toast-move-completed = Déplacement terminé
-toast-trash-completed = Mise à la corbeille terminée
+toast-trash-completed = Mise à la { -trash } terminée
 toast-delete-completed = Suppression définitive terminée
 toast-compress-completed = Archive créée
 toast-extract-completed = Extraction terminée
@@ -732,7 +736,7 @@ redo-rename-unverified = Impossible de rétablir ce renommage en toute sécurit�
 transfer-source-changed = La source a été remplacée ou n’est plus un fichier ou dossier ordinaire. L’opération a été arrêtée ; les éléments déjà transférés sont conservés. Vérifiez la source puis réessayez.
 transfer-source-unverified = L’identité de la source ne peut pas être vérifiée sur cet emplacement. L’opération a été arrêtée ; les éléments déjà transférés sont conservés. Essayez depuis un dossier local compatible.
 
-trash-restore-ambiguous = Plusieurs éléments de la corbeille proviennent du même emplacement. Ouvrez la corbeille et sélectionnez précisément l’élément à restaurer. Les éléments déjà restaurés sont conservés.
+trash-restore-ambiguous = Plusieurs éléments de la { -trash } proviennent du même emplacement. Ouvrez la { -trash } et sélectionnez précisément l’élément à restaurer. Les éléments déjà restaurés sont conservés.
 invalid-encoding-name = { $name } (encodage non valide)
 unrepresentable-path = Le nom de « { $path } » n’est pas un texte UTF-8 valide. Renommez-le avant de le copier, déplacer, supprimer ou compresser ; aucun élément n’a été modifié.
 properties-permissions = Droits d’accès
@@ -769,17 +773,17 @@ permissions-short-read-write = Lecture-écriture
 permissions-short-list = Lister
 permissions-short-access = Accéder
 permissions-short-modify = Modifier
-trash-restore-changed = L’élément de la corbeille a changé depuis sa sélection. La restauration a été arrêtée. Actualisez la corbeille puis sélectionnez à nouveau l’élément. Les éléments déjà restaurés sont conservés.
-trash-restore-conflict = Un fichier ou un dossier existe déjà à l’emplacement de restauration. Il a été conservé et l’élément concerné reste dans la corbeille. Renommez ou déplacez la destination puis réessayez.
-trash-restore-unavailable = Cet élément n’a pas pu être restauré. Vérifiez qu’il est toujours dans la corbeille et que son dossier d’origine existe et est accessible, puis réessayez. Les éléments déjà restaurés sont conservés.
+trash-restore-changed = L’élément de la { -trash } a changé depuis sa sélection. La restauration a été arrêtée. Actualisez la { -trash } puis sélectionnez à nouveau l’élément. Les éléments déjà restaurés sont conservés.
+trash-restore-conflict = Un fichier ou un dossier existe déjà à l’emplacement de restauration. Il a été conservé et l’élément concerné reste dans la { -trash }. Renommez ou déplacez la destination puis réessayez.
+trash-restore-unavailable = Cet élément n’a pas pu être restauré. Vérifiez qu’il est toujours dans la { -trash } et que son dossier d’origine existe et est accessible, puis réessayez. Les éléments déjà restaurés sont conservés.
 
 history-delete-changed = L’élément ne correspond plus à celui enregistré lors de la suppression, ou il n’est plus disponible. Annuler ou Rétablir a été arrêté pour préserver les fichiers actuels. Les éléments déjà traités sont conservés.
-history-delete-unverified = Oxyde ne dispose pas des informations nécessaires pour annuler ou rétablir cette suppression en toute sécurité. L’action a été arrêtée. Vous pouvez vérifier la corbeille et restaurer manuellement l’élément voulu.
+history-delete-unverified = Oxyde ne dispose pas des informations nécessaires pour annuler ou rétablir cette suppression en toute sécurité. L’action a été arrêtée. Vous pouvez vérifier la { -trash } et restaurer manuellement l’élément voulu.
 
 preview-timed-out = Cet aperçu a dépassé le délai de 15 secondes. Le fichier reste accessible.
 copy-name-suffix = Copie
-shell-delete-completed-error = Windows a terminé la suppression de cet élément, puis a signalé une erreur. L’historique conserve l’opération terminée. Vérifiez le dossier et la corbeille avant de réessayer.
-shell-delete-unconfirmed = Windows n’a pas confirmé la suppression de cet élément. La suppression a pu être partielle. Vérifiez le dossier et la corbeille avant de réessayer.
+shell-delete-completed-error = Windows a terminé la suppression de cet élément, puis a signalé une erreur. L’historique conserve l’opération terminée. Vérifiez le dossier et la { -trash } avant de réessayer.
+shell-delete-unconfirmed = Windows n’a pas confirmé la suppression de cet élément. La suppression a pu être partielle. Vérifiez le dossier et la { -trash } avant de réessayer.
 shell-delete-in-use = Un fichier est utilisé par un autre programme. Fermez-le, puis réessayez.
 shell-delete-access-denied = Accès refusé. Vous n’avez pas les droits nécessaires pour supprimer cet élément.
 delete-batch-failed = { $failed } élément(s) sur { $total } n’ont pas pu être supprimés.
@@ -956,7 +960,7 @@ delete-more = { $count ->
     [one] et { $number } autre
    *[other] et { $number } autres
     }
-delete-restore-hint = Vous pourrez les restaurer depuis la corbeille.
+delete-restore-hint = Vous pourrez les restaurer depuis la { -trash }.
 delete-irreversible = Cette action est irréversible.
 rename-extension-changed = L’extension passe de .{ $from } à .{ $to }.
 rename-extension-removed = Le nom perd son extension .{ $from }.

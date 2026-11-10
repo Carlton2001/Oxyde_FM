@@ -193,7 +193,11 @@ sidebar-drives = DRIVES
 sidebar-locations = LOCATIONS
 sidebar-network = Network
 sidebar-linux = Linux
-sidebar-trash = Trash
+# Platform name of the trash; `-trash` is aliased at load time.
+-trash-windows = Recycle Bin
+-trash-linux = Trash
+
+sidebar-trash = { -trash }
 sidebar-home = Home
 size-tiny = Tiny (< 10 KB)
 size-small = Small (10 KB - 1 MB)
@@ -303,7 +307,7 @@ settings-data = Application data
 settings-clear-cache = Clear cache
 settings-reset-preferences = Reset preferences
 
-title-new-panel = New panel on the right
+title-new-panel = New pane on the right
 title-tools = Search
 tool-sizes = Calculate sizes
 tool-search = Advanced search
@@ -511,14 +515,14 @@ settings-cache-cleared = Cache cleared.
 settings-cache-error = Could not clear the entire cache. Try again.
 settings-preferences-reset = Preferences reset.
 
-settings-turbo-description = Default Turbo mode for new copies, moves, deletions, Trash moves, compressions and extractions. Also applies to folder size calculations, including those already running. Running file operations keep their individual setting.
+settings-turbo-description = Default Turbo mode for new copies, moves, deletions, moves to the { -trash }, compressions and extractions. Also applies to folder size calculations, including those already running. Running file operations keep their individual setting.
 settings-search-limit-description = Maximum results for new quick and advanced searches. Steps of 500, minimum 500.
 
 navigation-up = Up
 
 about-repository = GitHub repository
 about-main-tools = Main tools
-update-available-toast = Oxyde { $detail } is available. Install it from Settings › About.
+update-available-toast = Oxyde { $detail } is available. Install it from Preferences › About.
 update-failed-toast = Update failed: { $detail }
 update-check = Check for updates
 update-checking = Checking…
@@ -535,7 +539,7 @@ menu-copy-name = Copy name
 trash-restore = Restore
 trash-restore-all = Restore all
 trash-delete-permanent = Delete permanently
-trash-delete-all = Empty Recycle Bin
+trash-delete-all = Empty { -trash }
 trash-original-location = Original location
 trash-deleted-at = Date deleted
 
@@ -543,13 +547,13 @@ trash-restore-selection = Restore selection
 
 original-location-filter-placeholder = Filter by original location…
 
-trash-properties = Recycle Bin properties
-trash-locations = Recycle Bin location
+trash-properties = { -trash } properties
+trash-locations = { -trash } location
 trash-available-space = Available space
 trash-selected-settings = Settings for selected location
 trash-custom-size = Custom size
 trash-max-capacity = Maximum size
-trash-dont-move = Do not move files to the Recycle Bin
+trash-dont-move = Do not move files to the { -trash }
 trash-delete-immediately = Delete files immediately when removed
 trash-confirm-delete = Display delete confirmation
 trash-megabytes = MB
@@ -618,7 +622,7 @@ toast-failed = Operation failed: { $detail }
 
 toast-copy-completed = Copy completed
 toast-move-completed = Move completed
-toast-trash-completed = Moved to the recycle bin
+toast-trash-completed = Moved to the { -trash }
 toast-delete-completed = Permanent deletion completed
 toast-compress-completed = Archive created
 toast-extract-completed = Extraction completed
@@ -726,7 +730,7 @@ redo-rename-unverified = Cannot safely redo this rename: the file or folder’s 
 transfer-source-changed = The source was replaced or is no longer a regular file or folder. The operation stopped; items already transferred were kept. Check the source and try again.
 transfer-source-unverified = The source identity cannot be verified at this location. The operation stopped; items already transferred were kept. Try from a compatible local folder.
 
-trash-restore-ambiguous = Several Recycle Bin items came from the same location. Open the Recycle Bin and select the specific item to restore. Items already restored were kept.
+trash-restore-ambiguous = Several { -trash } items came from the same location. Open the { -trash } and select the specific item to restore. Items already restored were kept.
 invalid-encoding-name = { $name } (invalid encoding)
 unrepresentable-path = The name of “{ $path }” is not valid UTF-8 text. Rename it before copying, moving, deleting or compressing it; nothing was changed.
 properties-permissions = Permissions
@@ -763,17 +767,17 @@ permissions-short-read-write = Read-write
 permissions-short-list = List
 permissions-short-access = Access
 permissions-short-modify = Modify
-trash-restore-changed = The Recycle Bin item changed after selection. Restoration stopped. Refresh the Recycle Bin and select the item again. Items already restored were kept.
-trash-restore-conflict = A file or folder already exists at the restore location. It was kept, and the affected item remains in the Recycle Bin. Rename or move the destination and try again.
-trash-restore-unavailable = This item could not be restored. Check that it is still in the Recycle Bin and that its original folder exists and is accessible, then try again. Items already restored were kept.
+trash-restore-changed = The { -trash } item changed after selection. Restoration stopped. Refresh the { -trash } and select the item again. Items already restored were kept.
+trash-restore-conflict = A file or folder already exists at the restore location. It was kept, and the affected item remains in the { -trash }. Rename or move the destination and try again.
+trash-restore-unavailable = This item could not be restored. Check that it is still in the { -trash } and that its original folder exists and is accessible, then try again. Items already restored were kept.
 
 history-delete-changed = The item no longer matches the object recorded when it was deleted, or it is unavailable. Undo or Redo stopped to preserve current files. Items already processed were kept.
-history-delete-unverified = Oxyde does not have the information needed to undo or redo this deletion safely. The action stopped. You can check the Recycle Bin and manually restore the item you want.
+history-delete-unverified = Oxyde does not have the information needed to undo or redo this deletion safely. The action stopped. You can check the { -trash } and manually restore the item you want.
 
 preview-timed-out = This preview exceeded the 15-second time limit. The file remains accessible.
 copy-name-suffix = Copy
-shell-delete-completed-error = Windows finished deleting this item, then reported an error. The completed operation remains in history. Check the folder and Recycle Bin before trying again.
-shell-delete-unconfirmed = Windows did not confirm deletion of this item. The deletion may have been partial. Check the folder and Recycle Bin before trying again.
+shell-delete-completed-error = Windows finished deleting this item, then reported an error. The completed operation remains in history. Check the folder and { -trash } before trying again.
+shell-delete-unconfirmed = Windows did not confirm deletion of this item. The deletion may have been partial. Check the folder and { -trash } before trying again.
 shell-delete-in-use = A file is in use by another program. Close it, then try again.
 shell-delete-access-denied = Access denied. You do not have permission to delete this item.
 delete-batch-failed = { $failed } of { $total } items could not be deleted.
@@ -949,7 +953,7 @@ delete-more = { $count ->
     [one] and { $number } other
    *[other] and { $number } others
     }
-delete-restore-hint = You can restore them from the trash.
+delete-restore-hint = You can restore them from the { -trash }.
 delete-irreversible = This cannot be undone.
 rename-extension-changed = The extension changes from .{ $from } to .{ $to }.
 rename-extension-removed = The name loses its .{ $from } extension.

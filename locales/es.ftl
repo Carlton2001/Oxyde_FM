@@ -10,13 +10,13 @@ rename-error-already-exists = Ya existe aquí un archivo o una carpeta con este 
 
 rename-error-not-found = El elemento que se va a renombrar ya no existe o no está accesible.
 
-rename-error-access-denied = No se permite cambiar el nombre. Comprueba los permisos de este elemento.
+rename-error-access-denied = No se permite cambiar el nombre. Compruebe los permisos de este elemento.
 
-rename-error-invalid-name = No se pudo cambiar el nombre. Compruébalo e inténtalo de nuevo.
+rename-error-invalid-name = No se pudo cambiar el nombre. Compruébelo e inténtelo de nuevo.
 
 rename-error-unavailable = Este elemento no se puede renombrar ahora.
 
-rename-error-task-failed = No se pudo cambiar el nombre. Inténtalo de nuevo.
+rename-error-task-failed = No se pudo cambiar el nombre. Inténtelo de nuevo.
 
 conflict-skip-all = Omitir todos
 
@@ -100,7 +100,7 @@ settings-about = Acerca de
 settings-version = Versión { $version }
 
 
-settings-save-error = Las preferencias se han aplicado, pero no se han podido guardar. Inténtalo de nuevo.
+settings-save-error = Las preferencias se han aplicado, pero no se han podido guardar. Inténtelo de nuevo.
 
 settings-load-error = No se pudieron leer las preferencias guardadas. Los cambios no se guardarán para proteger ese archivo.
 
@@ -289,9 +289,9 @@ operations-resume = Reanudar
 
 operations-stop = Cancelar operación
 
-operations-fast = Modo rápido activo — haz clic para cambiar al modo normal
+operations-fast = Modo rápido activo — haga clic para cambiar al modo normal
 
-operations-normal = Modo normal activo — haz clic para cambiar al modo rápido
+operations-normal = Modo normal activo — haga clic para cambiar al modo rápido
 
 operations-dismiss = Quitar
 
@@ -316,7 +316,11 @@ sidebar-locations = UBICACIONES
 sidebar-network = Red
 sidebar-linux = Linux
 
-sidebar-trash = Papelera
+# Platform name of the trash; `-trash` is aliased at load time.
+-trash-windows = Papelera de reciclaje
+-trash-linux = Papelera
+
+sidebar-trash = { -trash }
 sidebar-home = Carpeta personal
 
 size-tiny = Minúsculo (< 10 KB)
@@ -343,7 +347,7 @@ path-error-not-found = No se encontró esta carpeta o ya no está disponible.
 
 path-error-access-denied = Carpeta protegida (Se requieren derechos de administrador)
 
-path-error-failed = No se pudo abrir esta carpeta. Comprueba la ruta e inténtalo de nuevo.
+path-error-failed = No se pudo abrir esta carpeta. Compruebe la ruta e inténtelo de nuevo.
 
 undo-failed = No se pudo deshacer: { $detail }
 undo-copy-identity-changed = Este elemento ya no corresponde al objeto copiado originalmente: { $detail }. Se detuvo Deshacer para conservar sus archivos.
@@ -558,9 +562,9 @@ open-item-failed = No se pudo abrir este elemento. { $detail }
 
 network-map-description = ¿Qué carpeta de red le gustaría conectar?
 
-network-map-hint = Indica la letra de unidad y la carpeta que quieres conectar.
+network-map-hint = Indique la letra de unidad y la carpeta que desea conectar.
 
-network-disconnect-description = Selecciona las unidades de red que quieres desconectar y haz clic en Desconectar.
+network-disconnect-description = Seleccione las unidades de red que desea desconectar y haga clic en Desconectar.
 
 network-letter = Unidad
 
@@ -747,7 +751,7 @@ advanced-min = Mín
 
 advanced-max = Máx
 
-advanced-invalid = Comprueba los patrones, tamaños y fechas (AAAA-MM-DD).
+advanced-invalid = Compruebe los patrones, tamaños y fechas (AAAA-MM-DD).
 
 advanced-date-placeholder = AAAA-MM-DD
 
@@ -769,7 +773,7 @@ duplicate-warning = Seleccionar varias ubicaciones puede ralentizar considerable
 
 duplicate-filter = Filtrar resultados...
 
-duplicate-idle = Configura la búsqueda y haz clic en Buscar.
+duplicate-idle = Configure la búsqueda y haga clic en Buscar.
 
 duplicate-empty = No se encontraron duplicados.
 
@@ -795,7 +799,7 @@ duplicate-size-range = { $min } – { $max }
 
 duplicate-disk = Disco n.º { $disk }
 
-duplicate-go-to-folder = Haz clic para ir a la carpeta
+duplicate-go-to-folder = Haga clic para ir a la carpeta
 
 folder-size-empty = Vacío
 folder-size-provisional-description =
@@ -807,17 +811,17 @@ quick-search-current-folder = Carpeta actual
 
 settings-clear-cache-confirm = ¿Eliminar las cachés de iconos y miniaturas? Se volverán a crear cuando sea necesario.
 
-settings-reset-confirm = ¿Restablecer las preferencias predeterminadas? Se conservarán las pestañas abiertas y tus temas personalizados.
+settings-reset-confirm = ¿Restablecer las preferencias predeterminadas? Se conservarán las pestañas abiertas y sus temas personalizados.
 
 settings-cache-clearing = Borrando caché…
 
 settings-cache-cleared = Caché borrada.
 
-settings-cache-error = No se pudo borrar toda la caché. Inténtalo de nuevo.
+settings-cache-error = No se pudo borrar toda la caché. Inténtelo de nuevo.
 
 settings-preferences-reset = Preferencias restablecidas.
 
-settings-turbo-description = Modo Turbo predeterminado para nuevas copias, movimientos, eliminaciones, envíos a la Papelera, compresiones y extracciones. También se aplica a los cálculos de tamaño de carpetas, incluidos los que están en curso. Las operaciones de archivos en curso mantienen su configuración individual.
+settings-turbo-description = Modo Turbo predeterminado para nuevas copias, movimientos, eliminaciones, envíos a la { -trash }, compresiones y extracciones. También se aplica a los cálculos de tamaño de carpetas, incluidos los que están en curso. Las operaciones de archivos en curso mantienen su configuración individual.
 
 settings-search-limit-description = Máximo de resultados para nuevas búsquedas rápidas y avanzadas. Pasos de 500, mínimo 500.
 
@@ -825,7 +829,7 @@ navigation-up = Subir
 
 about-repository = Repositorio de GitHub
 about-main-tools = Herramientas principales
-update-available-toast = Oxyde { $detail } está disponible. Instálala desde Ajustes › Acerca de.
+update-available-toast = Oxyde { $detail } está disponible. Instálela desde Preferencias › Acerca de.
 update-failed-toast = No se pudo actualizar: { $detail }
 update-check = Buscar actualizaciones
 update-checking = Buscando…
@@ -842,7 +846,7 @@ menu-copy-name = Copiar nombre
 trash-restore = Restaurar
 trash-restore-all = Restaurar todo
 trash-delete-permanent = Eliminar permanentemente
-trash-delete-all = Vaciar la papelera
+trash-delete-all = Vaciar la { -trash }
 trash-original-location = Ubicación original
 trash-deleted-at = Fecha de eliminación
 
@@ -850,13 +854,13 @@ trash-restore-selection = Restaurar la selección
 
 original-location-filter-placeholder = Filtrar por ubicación original…
 
-trash-properties = Propiedades de la Papelera
-trash-locations = Ubicación de la Papelera
+trash-properties = Propiedades de la { -trash }
+trash-locations = Ubicación de la { -trash }
 trash-available-space = Espacio disponible
 trash-selected-settings = Configuración de la ubicación seleccionada
 trash-custom-size = Tamaño personalizado
 trash-max-capacity = Tamaño máximo
-trash-dont-move = No mover archivos a la Papelera
+trash-dont-move = No mover archivos a la { -trash }
 trash-delete-immediately = Eliminar los archivos inmediatamente
 trash-confirm-delete = Mostrar confirmación de eliminación
 trash-megabytes = MB
@@ -925,7 +929,7 @@ toast-failed = La operación falló: { $detail }
 
 toast-copy-completed = Copia completada
 toast-move-completed = Movimiento completado
-toast-trash-completed = Enviado a la papelera
+toast-trash-completed = Enviado a la { -trash }
 toast-delete-completed = Eliminación permanente completada
 toast-compress-completed = Archivo comprimido creado
 toast-extract-completed = Extracción completada
@@ -1033,7 +1037,7 @@ redo-rename-unverified = No se puede rehacer este cambio de nombre de forma segu
 transfer-source-changed = El origen se ha sustituido o ya no es un archivo o carpeta normal. La operación se ha detenido; los elementos ya transferidos se conservan. Compruebe el origen e inténtelo de nuevo.
 transfer-source-unverified = No se puede verificar la identidad del origen en esta ubicación. La operación se ha detenido; los elementos ya transferidos se conservan. Pruebe desde una carpeta local compatible.
 
-trash-restore-ambiguous = Varios elementos de la papelera proceden de la misma ubicación. Abra la papelera y seleccione el elemento concreto que desea restaurar. Los elementos ya restaurados se conservan.
+trash-restore-ambiguous = Varios elementos de la { -trash } proceden de la misma ubicación. Abra la { -trash } y seleccione el elemento concreto que desea restaurar. Los elementos ya restaurados se conservan.
 invalid-encoding-name = { $name } (codificación no válida)
 unrepresentable-path = El nombre de «{ $path }» no es un texto UTF-8 válido. Cámbiele el nombre antes de copiarlo, moverlo, eliminarlo o comprimirlo; no se ha modificado nada.
 properties-permissions = Permisos
@@ -1070,17 +1074,17 @@ permissions-short-read-write = Lectura-escritura
 permissions-short-list = Listar
 permissions-short-access = Acceder
 permissions-short-modify = Modificar
-trash-restore-changed = El elemento de la papelera cambió después de seleccionarlo. Se detuvo la restauración. Actualice la papelera y vuelva a seleccionar el elemento. Los elementos ya restaurados se conservan.
-trash-restore-conflict = Ya existe un archivo o carpeta en la ubicación de restauración. Se conserva y el elemento afectado sigue en la papelera. Cambie el nombre o mueva el destino e inténtelo de nuevo.
-trash-restore-unavailable = No se pudo restaurar este elemento. Compruebe que sigue en la papelera y que su carpeta original existe y es accesible. Inténtelo de nuevo. Los elementos ya restaurados se conservan.
+trash-restore-changed = El elemento de la { -trash } cambió después de seleccionarlo. Se detuvo la restauración. Actualice la { -trash } y vuelva a seleccionar el elemento. Los elementos ya restaurados se conservan.
+trash-restore-conflict = Ya existe un archivo o carpeta en la ubicación de restauración. Se conserva y el elemento afectado sigue en la { -trash }. Cambie el nombre o mueva el destino e inténtelo de nuevo.
+trash-restore-unavailable = No se pudo restaurar este elemento. Compruebe que sigue en la { -trash } y que su carpeta original existe y es accesible. Inténtelo de nuevo. Los elementos ya restaurados se conservan.
 
 history-delete-changed = El elemento ya no coincide con el registrado al eliminarlo o no está disponible. Se detuvo Deshacer o Rehacer para conservar los archivos actuales. Los elementos ya procesados se conservan.
-history-delete-unverified = Oxyde no tiene la información necesaria para deshacer o rehacer esta eliminación de forma segura. Se detuvo la acción. Puede comprobar la papelera y restaurar manualmente el elemento deseado.
+history-delete-unverified = Oxyde no tiene la información necesaria para deshacer o rehacer esta eliminación de forma segura. Se detuvo la acción. Puede comprobar la { -trash } y restaurar manualmente el elemento deseado.
 
 preview-timed-out = Esta vista previa ha superado el límite de 15 segundos. El archivo sigue siendo accesible.
 copy-name-suffix = Copia
-shell-delete-completed-error = Windows terminó de eliminar este elemento y después notificó un error. La operación completada se conserva en el historial. Compruebe la carpeta y la papelera antes de intentarlo de nuevo.
-shell-delete-unconfirmed = Windows no confirmó la eliminación de este elemento. La eliminación puede haber sido parcial. Compruebe la carpeta y la papelera antes de intentarlo de nuevo.
+shell-delete-completed-error = Windows terminó de eliminar este elemento y después notificó un error. La operación completada se conserva en el historial. Compruebe la carpeta y la { -trash } antes de intentarlo de nuevo.
+shell-delete-unconfirmed = Windows no confirmó la eliminación de este elemento. La eliminación puede haber sido parcial. Compruebe la carpeta y la { -trash } antes de intentarlo de nuevo.
 shell-delete-in-use = Otro programa está usando un archivo. Ciérrelo e inténtelo de nuevo.
 shell-delete-access-denied = Acceso denegado. No tiene permiso para eliminar este elemento.
 delete-batch-failed = No se pudieron eliminar { $failed } de { $total } elementos.
@@ -1180,7 +1184,7 @@ viewer-audio-codec-missing = { $codec ->
     [unknown] Falta el códec de audio
    *[other] Falta el códec de audio { $codec }
 }
-viewer-codec-missing-hint = Instala el decodificador de GStreamer para este formato y reinicia Oxyde.
+viewer-codec-missing-hint = Instale el decodificador de GStreamer para este formato y reinicie Oxyde.
 viewer-tree-loading = Cargando…
 viewer-tree-empty = Carpeta vacía
 viewer-tree-failed = Este contenido no se puede leer.
@@ -1256,7 +1260,7 @@ delete-more = { $count ->
     [one] y { $number } más
    *[other] y { $number } más
     }
-delete-restore-hint = Podrá restaurarlos desde la papelera.
+delete-restore-hint = Podrá restaurarlos desde la { -trash }.
 delete-irreversible = Esta acción no se puede deshacer.
 rename-extension-changed = La extensión cambia de .{ $from } a .{ $to }.
 rename-extension-removed = El nombre pierde su extensión .{ $from }.

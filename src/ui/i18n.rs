@@ -1689,6 +1689,16 @@ impl I18n {
         bundle
             .add_resource(resource)
             .map_err(|errors| format!("Duplicate catalog messages: {errors:?}"))?;
+        // Each catalog names the trash per platform; `-trash` picks the native one.
+        #[cfg(target_os = "windows")]
+        const TRASH_TERM: &str = "-trash = { -trash-windows }\n";
+        #[cfg(not(target_os = "windows"))]
+        const TRASH_TERM: &str = "-trash = { -trash-linux }\n";
+        let term = FluentResource::try_new(TRASH_TERM.to_owned())
+            .map_err(|(_, errors)| format!("Invalid trash term: {errors:?}"))?;
+        bundle
+            .add_resource(term)
+            .map_err(|errors| format!("Duplicate trash term: {errors:?}"))?;
         Ok(bundle)
     }
 

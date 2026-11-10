@@ -316,7 +316,11 @@ sidebar-locations = POSIZIONI
 sidebar-network = Rete
 sidebar-linux = Linux
 
-sidebar-trash = Cestino
+# Platform name of the trash; `-trash` is aliased at load time.
+-trash-windows = Cestino
+-trash-linux = Cestino
+
+sidebar-trash = { -trash }
 sidebar-home = Cartella home
 
 size-tiny = Minuscolo (< 10 KB)
@@ -817,7 +821,7 @@ settings-cache-error = Impossibile svuotare l’intera cache. Riprova.
 
 settings-preferences-reset = Preferenze ripristinate.
 
-settings-turbo-description = Modalità Turbo predefinita per nuove copie, spostamenti, eliminazioni, spostamenti nel Cestino, compressioni ed estrazioni. Si applica anche ai calcoli delle dimensioni delle cartelle, inclusi quelli in corso. Le operazioni sui file in corso mantengono la propria impostazione individuale.
+settings-turbo-description = Modalità Turbo predefinita per nuove copie, spostamenti, eliminazioni, spostamenti nel { -trash }, compressioni ed estrazioni. Si applica anche ai calcoli delle dimensioni delle cartelle, inclusi quelli in corso. Le operazioni sui file in corso mantengono la propria impostazione individuale.
 
 settings-search-limit-description = Numero massimo di risultati per nuove ricerche rapide e avanzate. Incrementi di 500, minimo 500.
 
@@ -825,7 +829,7 @@ navigation-up = Su
 
 about-repository = Repository GitHub
 about-main-tools = Strumenti principali
-update-available-toast = Oxyde { $detail } è disponibile. Installala da Impostazioni › Informazioni.
+update-available-toast = Oxyde { $detail } è disponibile. Installala da Preferenze › Informazioni.
 update-failed-toast = Aggiornamento non riuscito: { $detail }
 update-check = Cerca aggiornamenti
 update-checking = Ricerca in corso…
@@ -842,7 +846,7 @@ menu-copy-name = Copia nome
 trash-restore = Ripristina
 trash-restore-all = Ripristina tutto
 trash-delete-permanent = Elimina definitivamente
-trash-delete-all = Svuota il cestino
+trash-delete-all = Svuota il { -trash }
 trash-original-location = Posizione originale
 trash-deleted-at = Data di eliminazione
 
@@ -850,13 +854,13 @@ trash-restore-selection = Ripristina la selezione
 
 original-location-filter-placeholder = Filtra per posizione originale…
 
-trash-properties = Proprietà del Cestino
-trash-locations = Posizione del Cestino
+trash-properties = Proprietà del { -trash }
+trash-locations = Posizione del { -trash }
 trash-available-space = Spazio disponibile
 trash-selected-settings = Impostazioni per la posizione selezionata
 trash-custom-size = Dimensione personalizzata
 trash-max-capacity = Dimensione massima
-trash-dont-move = Non spostare i file nel Cestino
+trash-dont-move = Non spostare i file nel { -trash }
 trash-delete-immediately = Elimina i file immediatamente
 trash-confirm-delete = Mostra conferma di eliminazione
 trash-megabytes = MB
@@ -925,7 +929,7 @@ toast-failed = Operazione non riuscita: { $detail }
 
 toast-copy-completed = Copia completata
 toast-move-completed = Spostamento completato
-toast-trash-completed = Spostato nel cestino
+toast-trash-completed = Spostato nel { -trash }
 toast-delete-completed = Eliminazione definitiva completata
 toast-compress-completed = Archivio creato
 toast-extract-completed = Estrazione completata
@@ -1033,7 +1037,7 @@ redo-rename-unverified = Impossibile ripetere questa rinomina in sicurezza: non 
 transfer-source-changed = L’origine è stata sostituita o non è più un file o una cartella normale. L’operazione è stata interrotta; gli elementi già trasferiti vengono conservati. Controlla l’origine e riprova.
 transfer-source-unverified = Non è possibile verificare l’identità dell’origine in questa posizione. L’operazione è stata interrotta; gli elementi già trasferiti vengono conservati. Prova da una cartella locale compatibile.
 
-trash-restore-ambiguous = Più elementi del cestino provengono dalla stessa posizione. Apri il cestino e seleziona l’elemento preciso da ripristinare. Gli elementi già ripristinati vengono conservati.
+trash-restore-ambiguous = Più elementi del { -trash } provengono dalla stessa posizione. Apri il { -trash } e seleziona l’elemento preciso da ripristinare. Gli elementi già ripristinati vengono conservati.
 invalid-encoding-name = { $name } (codifica non valida)
 unrepresentable-path = Il nome di «{ $path }» non è un testo UTF-8 valido. Rinominalo prima di copiarlo, spostarlo, eliminarlo o comprimerlo; non è stato modificato nulla.
 properties-permissions = Permessi
@@ -1070,17 +1074,17 @@ permissions-short-read-write = Lettura-scrittura
 permissions-short-list = Elencare
 permissions-short-access = Accedere
 permissions-short-modify = Modificare
-trash-restore-changed = L’elemento del cestino è cambiato dopo la selezione. Il ripristino è stato interrotto. Aggiorna il cestino e seleziona nuovamente l’elemento. Gli elementi già ripristinati vengono conservati.
-trash-restore-conflict = Un file o una cartella esiste già nella posizione di ripristino. Viene conservato e l’elemento interessato resta nel cestino. Rinomina o sposta la destinazione e riprova.
-trash-restore-unavailable = Impossibile ripristinare questo elemento. Verifica che sia ancora nel cestino e che la cartella originale esista e sia accessibile, poi riprova. Gli elementi già ripristinati vengono conservati.
+trash-restore-changed = L’elemento del { -trash } è cambiato dopo la selezione. Il ripristino è stato interrotto. Aggiorna il { -trash } e seleziona nuovamente l’elemento. Gli elementi già ripristinati vengono conservati.
+trash-restore-conflict = Un file o una cartella esiste già nella posizione di ripristino. Viene conservato e l’elemento interessato resta nel { -trash }. Rinomina o sposta la destinazione e riprova.
+trash-restore-unavailable = Impossibile ripristinare questo elemento. Verifica che sia ancora nel { -trash } e che la cartella originale esista e sia accessibile, poi riprova. Gli elementi già ripristinati vengono conservati.
 
 history-delete-changed = L’elemento non corrisponde più a quello registrato durante l’eliminazione o non è disponibile. Annulla o Ripeti è stato interrotto per preservare i file attuali. Gli elementi già elaborati vengono conservati.
-history-delete-unverified = Oxyde non dispone delle informazioni necessarie per annullare o ripetere questa eliminazione in modo sicuro. L’azione è stata interrotta. Puoi controllare il cestino e ripristinare manualmente l’elemento desiderato.
+history-delete-unverified = Oxyde non dispone delle informazioni necessarie per annullare o ripetere questa eliminazione in modo sicuro. L’azione è stata interrotta. Puoi controllare il { -trash } e ripristinare manualmente l’elemento desiderato.
 
 preview-timed-out = Questa anteprima ha superato il limite di 15 secondi. Il file rimane accessibile.
 copy-name-suffix = Copia
-shell-delete-completed-error = Windows ha eliminato questo elemento, poi ha segnalato un errore. L’operazione completata rimane nella cronologia. Controlla la cartella e il Cestino prima di riprovare.
-shell-delete-unconfirmed = Windows non ha confermato l’eliminazione di questo elemento. L’eliminazione potrebbe essere stata parziale. Controlla la cartella e il Cestino prima di riprovare.
+shell-delete-completed-error = Windows ha eliminato questo elemento, poi ha segnalato un errore. L’operazione completata rimane nella cronologia. Controlla la cartella e il { -trash } prima di riprovare.
+shell-delete-unconfirmed = Windows non ha confermato l’eliminazione di questo elemento. L’eliminazione potrebbe essere stata parziale. Controlla la cartella e il { -trash } prima di riprovare.
 shell-delete-in-use = Un file è in uso da un altro programma. Chiudilo, poi riprova.
 shell-delete-access-denied = Accesso negato. Non hai i permessi per eliminare questo elemento.
 delete-batch-failed = Non è stato possibile eliminare { $failed } elementi su { $total }.
@@ -1138,7 +1142,7 @@ default-archive-format = Formato archivio predefinito
 settings-onedrive = OneDrive
 settings-onedrive-description = Mostra OneDrive nella barra laterale quando è configurato.
 
-trash-restore-summary = Ripristino terminato: { $restored } elemento/i ripristinato/i, { $failed } non riuscito/i. Gli altri elementi sono stati elaborati. Consultare il registro per i dettagli.
+trash-restore-summary = Ripristino terminato: { $restored } elemento/i ripristinato/i, { $failed } non riuscito/i. Gli altri elementi sono stati elaborati. Consulta il registro per i dettagli.
 transfer-destination-collision = Più elementi selezionati avrebbero la stessa destinazione: { $path }. Rinominali o trasferiscili separatamente. Nessun file è stato trasferito.
 archive-link-refused = Un archivio non può contenere un link simbolico: { $path }. Oxyde rifiuta i link all’apertura e all’estrazione degli archivi, perché nessuna estrazione possa scrivere fuori dalla sua destinazione. Non è stato modificato nulla.
 
@@ -1256,7 +1260,7 @@ delete-more = { $count ->
     [one] e { $number } altro
    *[other] e altri { $number }
     }
-delete-restore-hint = Potrà ripristinarli dal cestino.
+delete-restore-hint = Potrai ripristinarli dal { -trash }.
 delete-irreversible = Questa azione non può essere annullata.
 rename-extension-changed = L’estensione passa da .{ $from } a .{ $to }.
 rename-extension-removed = Il nome perde l’estensione .{ $from }.
