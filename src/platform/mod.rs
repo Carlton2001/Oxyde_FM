@@ -123,6 +123,17 @@ impl ShellDeleteOutcome {
     }
 }
 
+/// What Oxyde lists in the menu of its taskbar button, in the user's language.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TaskbarMenu {
+    /// The title above the pinned folders.
+    pub category: String,
+    /// Name and path of each pinned folder.
+    pub pinned: Vec<(String, String)>,
+    /// The task that starts Oxyde as administrator.
+    pub administrator: String,
+}
+
 /// What another process asks the running Oxyde to show: a second launch, a program
 /// calling FileManager1 such as a browser's « Show in folder », or the desktop portal
 /// asking for a file on behalf of an application.
@@ -352,6 +363,18 @@ pub trait Platform: Send + Sync {
     /// Becomes the session's Oxyde, or hands `locations` to the one already running.
     /// Runs before the first window, which the forwarding process never opens.
     fn claim_instance(&self, _locations: &[String]) -> InstanceClaim { InstanceClaim::Alone }
+    /// Names the process for the taskbar, so that its button is the one of its
+    /// shortcuts. Before the first window.
+    fn identify_process(&self) {}
+    /// Lists `menu` under Oxyde's taskbar button. Blocking.
+    fn set_taskbar_menu(&self, _menu: &TaskbarMenu) {}
+    /// Starts Oxyde again as administrator, which the taskbar menu's task asks for.
+    fn start_as_administrator(&self) -> std::io::Result<()> { Err(std::io::Error::from(std::io::ErrorKind::Unsupported)) }
+    /// Lists Oxyde under `label` in the menus of the system's folders where this copy
+    /// should be, and removes it where it should not. Blocking.
+    fn refresh_folder_menus(&self, _label: &str) {}
+    /// Removes Oxyde from the menus of the system's folders, before it is uninstalled.
+    fn withdraw_from_folder_menus(&self) {}
     /// Stops taking later launches, as the application starts to quit: one handed over
     /// from then on would never be shown. Returns at once.
     fn release_instance(&self) {}
@@ -1263,6 +1286,11 @@ mod windows_folder_handler;
 mod windows_explorer_browse;
 #[cfg(target_os = "windows")]
 mod windows_shell_window;
+#[cfg(target_os = "windows")]
+mod windows_jump_list;
+/// The switch Oxyde's taskbar task runs it with, to start itself as administrator.
+#[cfg(target_os = "windows")]
+pub use windows_jump_list::AS_ADMINISTRATOR;
 #[cfg(target_os = "windows")]
 mod windows_folder_launcher;
 #[cfg(target_os = "windows")]

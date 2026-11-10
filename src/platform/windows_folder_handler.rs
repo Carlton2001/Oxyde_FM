@@ -7,6 +7,9 @@
 //! removed, which gives the system's values back. A portable copy is not offered the
 //! choice: deleted or moved, it would leave folders to a launcher that is gone, and
 //! nothing left to give them back.
+mod menu;
+pub(super) use menu::{refresh as refresh_menu, withdraw as withdraw_menu};
+
 use serde::{Deserialize, Serialize};
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS, WIN32_ERROR};

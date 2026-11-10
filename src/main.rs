@@ -71,18 +71,19 @@ fn initialize_logging() {
 #[cfg(target_os = "windows")]
 const RESTORE_FOLDER_HANDLER: &str = "--restore-folder-handler";
 
-/// Only when this copy is the one folders open with: another copy keeps its choice.
+/// Leaves the menus of folders, and gives folders back only when this copy is the one
+/// they open with: another copy keeps its choice.
 #[cfg(target_os = "windows")]
 fn restore_folder_handler() {
     let platform = oxyde_lib::platform::platform();
-    if platform.opens_folders_by_default() != Some(true) {
-        return;
-    }
-    let kept = oxyde_lib::models::ConfigManager::config_path().ok()
-        .and_then(|path| oxyde_lib::models::ConfigManager::read_from_path(&path).ok())
-        .and_then(|config| config.folder_handler_before);
-    if let Err(error) = platform.open_folders_by_default(false, kept.as_deref()) {
-        log::warn!("Cannot give folders back before uninstalling: {error}");
+    platform.withdraw_from_folder_menus();
+    if platform.opens_folders_by_default() == Some(true) {
+        let kept = oxyde_lib::models::ConfigManager::config_path().ok()
+            .and_then(|path| oxyde_lib::models::ConfigManager::read_from_path(&path).ok())
+            .and_then(|config| config.folder_handler_before);
+        if let Err(error) = platform.open_folders_by_default(false, kept.as_deref()) {
+            log::warn!("Cannot give folders back before uninstalling: {error}");
+        }
     }
     log::logger().flush();
 }
@@ -109,6 +110,15 @@ fn main() {
         restore_folder_handler();
         return;
     }
+    // The task of the taskbar menu: a shortcut cannot ask for elevation itself.
+    #[cfg(target_os = "windows")]
+    if std::env::args_os().any(|argument| argument == oxyde_lib::platform::AS_ADMINISTRATOR) {
+        if let Err(error) = oxyde_lib::platform::platform().start_as_administrator() {
+            log::warn!("Cannot start as administrator: {error}");
+        }
+        log::logger().flush();
+        return;
+    }
     let startup_locations = oxyde_lib::platform::platform().startup_locations();
     let for_file_chooser = oxyde_lib::platform::platform().started_for_file_chooser();
     // A later launch hands its locations to the running Oxyde and opens no window.
@@ -132,6 +142,7 @@ fn main() {
         oxyde_lib::platform::InstanceClaim::Alone if for_file_chooser => return,
         oxyde_lib::platform::InstanceClaim::Alone => None,
     };
+    oxyde_lib::platform::platform().identify_process();
     if let Some(drivers) = idle_gpus {
         log::info!("Vulkan drivers of GPUs without a screen disabled: {drivers}");
     }
@@ -189,6 +200,7 @@ fn main() {
             app.update(cx, |this, cx| {
                 this.handle = Some(app.clone());
                 this.operations_panel_view = Some(operations_panel);
+                this.refresh_system_menus(cx);
                 match instance_requests {
                     // The only Oxyde: its session stays, with the received locations added.
                     Some(requests) => {

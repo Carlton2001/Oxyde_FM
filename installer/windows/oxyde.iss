@@ -50,7 +50,8 @@ it.RemoveSettings=Rimuovere anche preferenze, sessione e log di Oxyde?
 Type: filesandordirs; Name: "{localappdata}\Oxyde"
 
 [UninstallRun]
-; Folders go back to the program Oxyde replaced, while the executable is still there.
+; Oxyde leaves the menus of folders, and folders go back to the program it replaced,
+; while the executable is still there.
 Filename: "{app}\Oxyde_FM.exe"; Parameters: "--restore-folder-handler"; RunOnceId: "RestoreFolderHandler"; Flags: runhidden
 
 [Tasks]

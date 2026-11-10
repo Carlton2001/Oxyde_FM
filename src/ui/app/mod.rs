@@ -53,6 +53,7 @@ pub(crate) mod remote;
 pub(crate) mod archive_password;
 pub(crate) mod open_with;
 mod folder_handler;
+mod system_menus;
 mod instance;
 pub(crate) mod main_window;
 pub(crate) mod file_chooser;

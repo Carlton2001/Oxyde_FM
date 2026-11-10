@@ -43,6 +43,8 @@ impl OxydeApp {
                         this.opens_folders = state;
                         this.config.folder_handler_before = if enabled { replaced } else { None };
                         this.save_preferences(cx);
+                        // Oxyde is in the menus of folders only while it is not their default.
+                        this.refresh_system_menus(cx);
                     }
                     Ok((Err(error), state)) => {
                         log::warn!("Cannot change the default application for folders: {error}");

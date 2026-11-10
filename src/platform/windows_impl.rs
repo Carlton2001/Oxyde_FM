@@ -97,6 +97,15 @@ impl Platform for WindowsPlatform {
         super::windows_instance::claim(locations)
     }
     fn release_instance(&self) { super::windows_instance::release() }
+    fn identify_process(&self) { super::windows_jump_list::identify() }
+    fn set_taskbar_menu(&self, menu: &super::TaskbarMenu) {
+        if let Err(error) = super::windows_jump_list::set(menu) {
+            log::warn!("Cannot list the taskbar menu: {error}");
+        }
+    }
+    fn start_as_administrator(&self) -> std::io::Result<()> { super::windows_jump_list::start_as_administrator() }
+    fn refresh_folder_menus(&self, label: &str) { super::windows_folder_handler::refresh_menu(label) }
+    fn withdraw_from_folder_menus(&self) { super::windows_folder_handler::withdraw_menu() }
     fn opens_folders_by_default(&self) -> Option<bool> { super::windows_folder_handler::enabled() }
     fn open_folders_by_default(&self, enabled: bool, previous: Option<&str>) -> Result<Option<String>, String> {
         super::windows_folder_handler::set(enabled, previous)

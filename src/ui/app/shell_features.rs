@@ -143,6 +143,7 @@ impl OxydeApp {
                         {
                             this.state.pinned_items = items;
                             this.state.refresh_sidebar();
+                            this.refresh_system_menus(cx);
                             cx.notify();
                         }
                     }

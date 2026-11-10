@@ -76,6 +76,7 @@ impl OxydeApp {
         self.config.pinned_order = items.iter().map(|item| item.path.clone()).collect();
         self.state.pinned_items = items;
         self.state.refresh_sidebar();
+        self.refresh_system_menus(cx);
         self.save_preferences(cx);
     }
 }
