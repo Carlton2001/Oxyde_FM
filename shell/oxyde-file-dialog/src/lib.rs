@@ -57,6 +57,32 @@ pub(crate) fn within_oxyde() -> bool {
     })
 }
 
+/// The user's registration of the Open dialog, which Oxyde writes and removes along
+/// with the Save one.
+const REGISTRATION: windows::core::PCWSTR = windows::core::w!(r"Software\Classes\CLSID\{DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7}\InprocServer32");
+
+/// Whether the user's registration names this library.
+fn registered_here() -> bool {
+    use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_SZ};
+    let mut text = vec![0u16; 32 * 1024];
+    let mut size = (text.len() * 2) as u32;
+    let read = unsafe { RegGetValueW(HKEY_CURRENT_USER, REGISTRATION, None, RRF_RT_REG_SZ, None, Some(text.as_mut_ptr().cast()), Some(&mut size)) };
+    if read.is_err() {
+        return false;
+    }
+    let registered = String::from_utf16_lossy(&text[..(size as usize / 2).saturating_sub(1)]);
+    module_path().is_some_and(|path| path.to_string_lossy().trim_start_matches(r"\\?\").eq_ignore_ascii_case(registered.trim_start_matches(r"\\?\")))
+}
+
+/// Whether the library was registered when the application loaded it.
+static LOADED_REGISTERED: OnceLock<bool> = OnceLock::new();
+
+/// Whether the user turned the option off since the application loaded the library:
+/// its dialogs go back to the system's at once, without restarting it.
+pub(crate) fn withdrawn() -> bool {
+    LOADED_REGISTERED.get().copied().unwrap_or(false) && !registered_here()
+}
+
 /// Appends a line to the log the environment names, if it names one.
 pub(crate) fn log(line: impl FnOnce() -> String) {
     static LOG: OnceLock<Option<std::path::PathBuf>> = OnceLock::new();
@@ -164,6 +190,7 @@ unsafe extern "system" fn DllGetClassObject(class: *const GUID, iid: *const GUID
     if class.is_null() || iid.is_null() || out.is_null() {
         return E_POINTER;
     }
+    LOADED_REGISTERED.get_or_init(registered_here);
     let factory = if *class == OPEN {
         &OPENS
     } else if *class == SAVE {

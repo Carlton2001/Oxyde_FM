@@ -156,7 +156,7 @@ impl Dialog {
 
     /// Shows Oxyde; None when the system's dialog is to be shown instead.
     unsafe fn show(&self, owner: HWND) -> Option<HRESULT> {
-        if self.special.get() || crate::within_oxyde() {
+        if self.special.get() || crate::within_oxyde() || crate::withdrawn() {
             return None;
         }
         let options = self.inner.GetOptions().ok()?;
