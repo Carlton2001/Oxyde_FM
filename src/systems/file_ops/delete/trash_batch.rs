@@ -46,6 +46,7 @@ impl FileOperationManager {
     pub(super) fn perform_selected_trash(
         op: &Arc<Mutex<FileOperation>>,
         selected: Vec<PreparedDelete>,
+        refused: Vec<String>,
         control: ShellDeleteControl,
     ) -> Result<(), String> {
         let started = std::time::Instant::now();
@@ -54,7 +55,9 @@ impl FileOperationManager {
             op.lock().unwrap().id, selected.len(), batch_size, control.turbo.load(Ordering::Relaxed));
         let mut index = 0;
         let mut batches = 0;
-        let mut failures = Vec::new();
+        let total = selected.len() + refused.len();
+        // Roots refused while preparing are reported alongside the batch failures.
+        let mut failures = refused;
         while index < selected.len() {
             if control.cancel.load(Ordering::Relaxed) {
                 break;
@@ -125,7 +128,7 @@ impl FileOperationManager {
         if control.cancel.load(Ordering::Relaxed) {
             return Ok(());
         }
-        crate::models::error::DeleteBatchFailure::summarize(selected.len(), failures)
+        crate::models::error::DeleteBatchFailure::summarize(total, failures)
     }
 }
 

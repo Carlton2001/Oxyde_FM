@@ -274,13 +274,25 @@ impl FileOperationManager {
         #[cfg(target_os = "windows")]
         let selection_started = std::time::Instant::now();
         #[cfg(target_os = "windows")]
-        let selected = real_sources
-            .iter()
-            .map(|path| {
+        let (selected, refused) = {
+            // A root that cannot be opened (access denied, in use) must not block the others.
+            let mut selected = Vec::new();
+            let mut refused = Vec::new();
+            for path in &real_sources {
                 Self::archive_checkpoint(op)?;
-                crate::systems::history_delete::PreparedDelete::new(path).map_err(|error| error.to_string())
-            })
-            .collect::<Result<Vec<_>, String>>()?;
+                match crate::systems::history_delete::PreparedDelete::new(path) {
+                    Ok(entry) => selected.push(entry),
+                    Err(error) => {
+                        log::warn!(target: super::FILE_OPS_LOG_TARGET, "trash_prepare_failed path={path:?} error={error}");
+                        let mut locked = op.lock().unwrap();
+                        locked.item_failed(path);
+                        locked.processed_files += 1;
+                        refused.push(error.to_string());
+                    }
+                }
+            }
+            (selected, refused)
+        };
         #[cfg(target_os = "windows")]
         let selected = crate::systems::history_delete::collapse_roots(selected);
         #[cfg(target_os = "windows")]
@@ -288,9 +300,13 @@ impl FileOperationManager {
             op.lock().unwrap().id, selected.len(), selection_started.elapsed().as_secs_f64());
         #[cfg(target_os = "windows")]
         let real_sources = selected.iter().map(|entry| entry.path().to_path_buf()).collect::<Vec<_>>();
-        op.lock().unwrap().total_files = real_sources.len();
         #[cfg(target_os = "windows")]
-        return Self::perform_selected_trash(op, selected, crate::platform::ShellDeleteControl {
+        let refused_count = refused.len();
+        #[cfg(not(target_os = "windows"))]
+        let refused_count = 0;
+        op.lock().unwrap().total_files = real_sources.len() + refused_count;
+        #[cfg(target_os = "windows")]
+        return Self::perform_selected_trash(op, selected, refused, crate::platform::ShellDeleteControl {
             cancel: cancel_flag, pause: pause_flag, turbo: turbo_flag,
         });
         #[cfg(not(target_os = "windows"))]
