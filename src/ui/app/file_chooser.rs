@@ -278,8 +278,9 @@ fn foreign_window(parent: FileChooserParent) -> Option<ForeignWindow> {
 #[cfg(target_os = "windows")]
 fn own_by(parent: Option<FileChooserParent>, window: &Window) {
     use raw_window_handle::{HasWindowHandle, RawWindowHandle, Win32WindowHandle};
-    // The application asking has the foreground and lets Oxyde take it.
-    window.activate_window();
+    // Owned before it is shown, the window opens above the application's. Once
+    // shown, it takes the foreground the application asking lets Oxyde take.
+    window.on_next_frame(|window, _| window.activate_window());
     let Some(FileChooserParent::Windows(owner)) = parent else { return };
     let Some(owner) = std::num::NonZeroIsize::new(owner) else { return };
     let Ok(handle) = HasWindowHandle::window_handle(window) else { return };

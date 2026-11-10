@@ -5,7 +5,7 @@
 use crate::request::{answer, Answer};
 use std::cell::Cell;
 use windows::core::{HSTRING, PCWSTR, PWSTR};
-use windows::Win32::Foundation::{CloseHandle, SetHandleInformation, HANDLE, HANDLE_FLAG_INHERIT, HWND, WAIT_OBJECT_0};
+use windows::Win32::Foundation::{CloseHandle, SetHandleInformation, HANDLE, HANDLE_FLAG_INHERIT, HWND, LPARAM, WAIT_OBJECT_0, WAIT_TIMEOUT};
 use windows::Win32::Security::SECURITY_ATTRIBUTES;
 use windows::Win32::Storage::FileSystem::{ReadFile, WriteFile};
 use windows::Win32::System::Pipes::CreatePipe;
@@ -16,8 +16,9 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{EnableWindow, IsWindowEnabled};
 use windows::Win32::UI::WindowsAndMessaging::{
-    AllowSetForegroundWindow, DispatchMessageW, GetAncestor, IsWindow, MsgWaitForMultipleObjects, PeekMessageW, PostQuitMessage,
-    SetForegroundWindow, TranslateMessage, ASFW_ANY, GA_ROOT, MSG, PM_REMOVE, QS_ALLINPUT, WM_QUIT,
+    AllowSetForegroundWindow, DispatchMessageW, EnumWindows, GetAncestor, GetWindow, GetWindowThreadProcessId, IsWindow,
+    IsWindowVisible, MsgWaitForMultipleObjects, PeekMessageW, PostQuitMessage, SetForegroundWindow, TranslateMessage, ASFW_ANY,
+    GA_ROOT, GW_OWNER, MSG, PM_REMOVE, QS_ALLINPUT, WM_QUIT,
 };
 
 /// The launcher, next to this library.
@@ -132,12 +133,24 @@ unsafe impl Send for Handle {}
 
 /// Dispatches the thread's messages until the launcher ends; false when the thread is
 /// told to quit meanwhile.
-fn wait(process: HANDLE) -> bool {
+fn wait(process: HANDLE, owner: HWND) -> bool {
+    // An Oxyde already running only gets the foreground if this process, which has it,
+    // gives it: its window is brought forward once it appears over the owner.
+    let mut looking = (!owner.0.is_null()).then_some(LOOKING);
     unsafe {
         loop {
-            let waited = MsgWaitForMultipleObjects(Some(&[process]), false, INFINITE, QS_ALLINPUT);
+            let timeout = if looking.is_some() { LOOK_EVERY } else { INFINITE };
+            let waited = MsgWaitForMultipleObjects(Some(&[process]), false, timeout, QS_ALLINPUT);
             if waited == WAIT_OBJECT_0 {
                 return true;
+            }
+            if waited == WAIT_TIMEOUT {
+                looking = looking.and_then(|left| left.checked_sub(1));
+                if let Some(window) = looking.and_then(|_| owned_by_another(owner)) {
+                    let _ = SetForegroundWindow(window);
+                    looking = None;
+                }
+                continue;
             }
             if waited.0 != WAIT_OBJECT_0.0 + 1 {
                 return false;
@@ -154,6 +167,29 @@ fn wait(process: HANDLE) -> bool {
             }
         }
     }
+}
+
+/// How often, in milliseconds, and how many times Oxyde's window is looked for.
+const LOOK_EVERY: u32 = 50;
+const LOOKING: u32 = 200;
+
+/// A visible window of another process that `owner` owns: Oxyde's.
+fn owned_by_another(owner: HWND) -> Option<HWND> {
+    struct Search { owner: HWND, process: u32, found: Option<HWND> }
+    unsafe extern "system" fn visit(window: HWND, search: LPARAM) -> windows::core::BOOL {
+        let search = unsafe { &mut *(search.0 as *mut Search) };
+        let mut process = 0u32;
+        unsafe { GetWindowThreadProcessId(window, Some(&mut process)) };
+        let owned = unsafe { GetWindow(window, GW_OWNER) }.ok() == Some(search.owner);
+        if owned && process != search.process && unsafe { IsWindowVisible(window) }.as_bool() {
+            search.found = Some(window);
+            return false.into();
+        }
+        true.into()
+    }
+    let mut search = Search { owner, process: std::process::id(), found: None };
+    unsafe { let _ = EnumWindows(Some(visit), LPARAM(&mut search as *mut Search as isize)); }
+    search.found
 }
 
 /// The top-level window a dialog over `owner` disables.
@@ -184,7 +220,7 @@ pub(crate) fn ask(request: &str, owner: HWND, showing: &Cell<isize>) -> Outcome 
         unsafe { let _ = EnableWindow(owner, false); }
     }
     showing.set(process.0 .0 as isize);
-    let waited = asked && wait(process.0);
+    let waited = asked && wait(process.0, owner);
     let closed = showing.replace(0) == 0;
     if !waited {
         unsafe { let _ = TerminateProcess(process.0, 1); }
