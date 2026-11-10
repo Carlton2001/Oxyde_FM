@@ -25,11 +25,17 @@ const TOAST_EXIT: std::time::Duration = std::time::Duration::from_millis(100);
 const TOAST_ENTER: std::time::Duration = std::time::Duration::from_millis(140);
 
 impl OxydeApp {
-    pub(crate) fn archive_recovery_notice(&mut self, detail: &str, cx: &mut Context<Self>) -> bool {
-        let Some(recovery) = oxyde_lib::models::error::ArchiveRecoveryFailure::from_message(detail) else { return false; };
+    /// Shows the kept files in the views; the caller chooses how to report them.
+    pub(crate) fn refresh_after_archive_recovery(&mut self, detail: &str, cx: &mut Context<Self>) -> Option<oxyde_lib::models::error::ArchiveRecoveryFailure> {
+        let recovery = oxyde_lib::models::error::ArchiveRecoveryFailure::from_message(detail)?;
         self.refresh_all_tabs(cx);
         self.state.refresh_sidebar();
         self.reconcile_watchers(cx);
+        Some(recovery)
+    }
+
+    pub(crate) fn archive_recovery_notice(&mut self, detail: &str, cx: &mut Context<Self>) -> bool {
+        let Some(recovery) = self.refresh_after_archive_recovery(detail, cx) else { return false; };
         self.toast(if recovery.completed { ToastKind::Info } else { ToastKind::Error }, Message::ArchiveRecoveryNotice, detail.into(), 0, cx);
         true
     }

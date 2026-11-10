@@ -174,7 +174,7 @@ impl OxydeApp {
                     }
                     Ok(Err(error)) => {
                         this.file_operation_notice =
-                            Some((Message::PrepareFailed, format!("{error:?}")));
+                            Some((Message::PrepareFailed, format!("{error}")));
                         cx.notify();
                     }
                     Err(error) => {
@@ -261,7 +261,8 @@ impl OxydeApp {
                                 if this.retry_operation_with_password(&op_id, &error, cx) {
                                     return;
                                 }
-                                let recovery = this.archive_recovery_notice(&error, cx);
+                                // The alert below reports the kept files; a toast would repeat it.
+                                let recovery = this.refresh_after_archive_recovery(&error, cx).is_some();
                                 this.delete_retry = this.delete_retry_for(&op_id, &op_type, &error);
                                 this.file_operation_notice = Some((if recovery { Message::ArchiveRecoveryNotice } else { Message::TransferFailed }, error));
                                 cx.notify();

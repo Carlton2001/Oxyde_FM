@@ -144,7 +144,7 @@ impl OxydeApp {
                 .unwrap_or_else(|error| Err(error.to_string()));
             if let Err(error) = result {
                 let _ = this.update(cx, |this, cx| {
-                    this.file_operation_notice = Some((Message::OperationFailed, error));
+                    this.file_operation_notice = Some((Message::OpenWithFailed, error));
                     cx.notify();
                 });
             }

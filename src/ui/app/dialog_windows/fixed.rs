@@ -2,11 +2,11 @@
 //! credentials, « Open With », confirmations and operation notices.
 use super::DialogKind;
 use crate::ui::app::OxydeApp;
-use crate::ui::components::modal::Modal;
-use crate::ui::i18n::{FluentArgs, I18nContext, Message};
-use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
+
+mod notice;
+use notice::render_notice;
 
 impl DialogKind {
     pub(super) fn is_fixed(self) -> bool {
@@ -122,120 +122,4 @@ impl DialogKind {
             Self::Trash | Self::Conflict => div().into_any_element(),
         }
     }
-}
-
-impl OxydeApp {
-    fn dismiss_notice(&mut self) {
-        self.file_operation_notice = None;
-        self.delete_retry = None;
-    }
-}
-
-/// The notice text; a deletion gets the same layout whether one or many items failed.
-fn notice_paragraphs(key: Message, detail: &str, retry: bool, theme: crate::ui::theme::OxydeTheme, cx: &App) -> Vec<AnyElement> {
-    use crate::ui::components::confirmation::detail as muted;
-    let i18n = cx.i18n();
-    let batch = oxyde_lib::models::error::DeleteBatchFailure::from_message(detail);
-    if batch.is_none() && !retry {
-        let mut args = FluentArgs::new();
-        args.set("detail", crate::ui::format::error_detail(detail, i18n));
-        return vec![div().child(i18n.text_with_args(key, &args)).into_any_element()];
-    }
-    let (heading, cause) = match &batch {
-        Some(batch) => {
-            let mut args = FluentArgs::new();
-            args.set("failed", crate::ui::format::format_number(batch.failed as u64, i18n.language()));
-            args.set("total", crate::ui::format::format_number(batch.total as u64, i18n.language()));
-            (i18n.text_with_args(Message::DeleteBatchFailed, &args), batch.first.as_str())
-        }
-        None => (i18n.text(Message::DeleteSingleFailed), detail),
-    };
-    let mut paragraphs = vec![div().font_weight(FontWeight::MEDIUM).child(heading).into_any_element()];
-    if batch.is_some() {
-        paragraphs.push(muted(i18n.text(Message::DeleteBatchProcessed), theme));
-    }
-    paragraphs.push(
-        div()
-            .mt(rems(0.5))
-            .flex()
-            .flex_col()
-            .gap(rems(0.25))
-            .px(rems(0.75))
-            .py(rems(0.5))
-            .rounded_md()
-            .bg(theme.error.opacity(0.08))
-            .child(div().text_size(rems(0.75)).text_color(theme.text_muted).child(i18n.text(Message::DeleteFailureCause)))
-            .child(div().text_color(theme.error).child(crate::ui::format::error_detail(cause, i18n)))
-            .into_any_element(),
-    );
-    if retry {
-        paragraphs.push(div().mt(rems(0.5)).child(muted(i18n.text(Message::DeleteRetryHint), theme)).into_any_element());
-    }
-    paragraphs
-}
-
-fn render_notice(
-    app: &OxydeApp,
-    owner: Entity<OxydeApp>,
-    focus: &FocusHandle,
-    cx: &mut Context<OxydeApp>,
-) -> impl IntoElement {
-    let Some((key, detail)) = app.file_operation_notice.clone() else {
-        return div();
-    };
-    let retry = app.delete_retry.as_ref().is_some_and(|retry| retry.detail == detail);
-    let deletion = retry || oxyde_lib::models::error::DeleteBatchFailure::from_message(&detail).is_some();
-    let theme = *cx.theme();
-    let paragraphs = notice_paragraphs(key, &detail, retry, theme, cx);
-    let title = cx.i18n().text(if deletion { Message::DeleteFailedTitle } else { Message::OperationFailed });
-    let keyboard = owner.clone();
-    let close = owner.clone();
-    let button = owner.clone();
-    let retry_button = owner;
-    let dismiss = |handle: &Entity<OxydeApp>, cx: &mut App| {
-        handle.update(cx, |app, cx| {
-            app.dismiss_notice();
-            cx.notify();
-        });
-    };
-    let modal = Modal::new(
-        "operation-notice",
-        title,
-        crate::ui::components::confirmation::body(
-            "icons/circle-x.svg",
-            crate::ui::components::confirmation::Tone::Danger,
-            SharedString::default(),
-            paragraphs,
-            None,
-            theme,
-        ),
-    )
-    .title_icon("icons/circle-x.svg")
-    .standalone(false)
-    .on_close(move |_, cx| dismiss(&close, cx))
-    .action(
-        crate::ui::components::confirmation::cancel_button("operation-notice-close", false, cx.i18n().text(Message::Close), theme)
-            .on_mouse_down(MouseButton::Left, move |_, _, cx| dismiss(&button, cx)),
-    );
-    let modal = if retry {
-        modal.action(
-            crate::ui::components::confirmation::confirm_button("operation-notice-retry", false, crate::ui::components::confirmation::Tone::Neutral, cx.i18n().text(Message::Retry), theme)
-                .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                    retry_button.update(cx, |app, cx| app.retry_failed_delete(cx));
-                }),
-        )
-    } else {
-        modal
-    };
-    div()
-        .absolute()
-        .inset_0()
-        .track_focus(focus)
-        .on_key_down(move |event, _, cx| {
-            if matches!(event.keystroke.key.as_str(), "escape" | "enter" | "space") {
-                dismiss(&keyboard, cx);
-            }
-            cx.stop_propagation();
-        })
-        .child(modal)
 }
