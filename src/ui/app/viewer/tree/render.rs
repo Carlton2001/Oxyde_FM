@@ -123,8 +123,8 @@ fn note(depth: usize, text: SharedString, cx: &App) -> Div {
         .child(div().min_w_0().truncate().child(text))
 }
 
-/// The sidebar tree's toggle, before the icon; it opens on press, like there.
-fn toggle(index: usize, path: String, state: Chevron, viewer: WeakEntity<Viewer>, cx: &App) -> AnyElement {
+/// The sidebar tree's toggle, before the icon; the row's click folds it.
+fn toggle(index: usize, state: Chevron, cx: &App) -> AnyElement {
     let theme = *cx.theme();
     let slot = div().id(("viewer-tree-toggle", index)).w_4().h_4().mr_1().flex_none().flex().items_center().justify_center();
     let icon = match state {
@@ -134,13 +134,6 @@ fn toggle(index: usize, path: String, state: Chevron, viewer: WeakEntity<Viewer>
     };
     let enabled = state != Chevron::Disabled;
     slot.child(svg().path(icon).size_full().text_color(theme.text).when(!enabled, |icon| icon.opacity(0.35)))
-        // Its presses never reach the row's double-click.
-        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-            cx.stop_propagation();
-            if enabled {
-                let _ = viewer.update(cx, |viewer, cx| viewer.toggle_tree_folder(path.clone(), cx));
-            }
-        })
         .when(!enabled, |slot| slot.fixed_tooltip(Tooltip::text(cx.i18n().text(Message::ViewerTreeRowLimit))))
         .into_any_element()
 }
@@ -183,8 +176,9 @@ fn entry_row(
         }
         icon => icon,
     };
-    let reveal = viewer.clone();
+    let reveal = viewer;
     let path = file.path.clone();
+    let toggles = matches!(state, Chevron::Expanded | Chevron::Collapsed);
     // The name and the pane's subfolder indicator share the flexible width.
     let name = div()
         .flex_1()
@@ -207,12 +201,19 @@ fn entry_row(
         .text_size(rems(0.8125))
         .hover(move |style| style.bg(theme.control_hover))
         .on_mouse_down(MouseButton::Left, move |event: &MouseDownEvent, _, cx| {
-            if event.click_count == 2 {
-                let path = path.clone();
-                let _ = reveal.update(cx, |viewer, cx| viewer.reveal_tree_item(path, cx));
+            let path = path.clone();
+            // A single click folds a folder; a double click reveals the item.
+            match event.click_count {
+                1 if toggles => {
+                    let _ = reveal.update(cx, |viewer, cx| viewer.toggle_tree_folder(path, cx));
+                }
+                2 => {
+                    let _ = reveal.update(cx, |viewer, cx| viewer.reveal_tree_item(path, cx));
+                }
+                _ => {}
             }
         })
-        .child(toggle(index, file.path.clone(), state, viewer, cx))
+        .child(toggle(index, state, cx))
         .child(div().flex_none().mr_2().child(crate::ui::components::icons::render_file_icon(
             file.path.clone(),
             icon,
