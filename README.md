@@ -1,7 +1,7 @@
 # Oxyde
 
 <p align="center">
-  <img src="screenshots/hero.webp" alt="Oxyde on Windows" width="100%" />
+  <img src="screenshots/win-dark-1920.webp" alt="Oxyde on Windows" width="100%" />
 </p>
 
 Oxyde is a native file manager built in **Rust**, with a **GPUI** interface and **Tokio** for background work. It combines flexible multipane browsing, an integrated viewer, advanced search, archives and tracked file operations in a customizable desktop workspace.
@@ -9,7 +9,7 @@ Oxyde is a native file manager built in **Rust**, with a **GPUI** interface and 
 Oxyde runs on **Windows 10 and 11** and, since version 2.1, on **Linux** (x86-64, Wayland or X11). Windows remains the reference platform; the Linux edition is new and some integrations are still Windows-only (see [Platform differences](#platform-differences)).
 
 <p align="center">
-  <img src="screenshots/linux-main.png" alt="Oxyde on Linux" width="100%" />
+  <img src="screenshots/linux-light-1920.webp" alt="Oxyde on Linux" width="100%" />
 </p>
 
 ## Features
