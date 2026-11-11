@@ -32,8 +32,6 @@ const IDENTITY: &str = if cfg!(debug_assertions) { "Oxyde.GPUI.Windows.Devel" } 
 const FOLDERS: usize = 20;
 /// The title a shortcut shows in the menu.
 const TITLE: PROPERTYKEY = PROPERTYKEY { fmtid: windows::core::GUID::from_u128(0xf29f85e0_4ff9_1068_ab91_08002b27b3d9), pid: 2 };
-/// What makes a shortcut a line between tasks.
-const SEPARATOR: PROPERTYKEY = PROPERTYKEY { fmtid: windows::core::GUID::from_u128(0x9f4c2855_9f79_4b39_a8d0_e1d42de1d5f3), pid: 6 };
 
 /// The command line that opens `folder`. A root ends with a separator, which would
 /// escape the closing quote: Oxyde reads `C:"` as the root it was.
@@ -70,16 +68,6 @@ impl Program {
             properties.Commit()?;
             Ok(link)
         }
-    }
-}
-
-fn separator() -> windows::core::Result<IShellLinkW> {
-    unsafe {
-        let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)?;
-        let properties: IPropertyStore = link.cast()?;
-        properties.SetValue(&SEPARATOR, &PROPVARIANT::from(true))?;
-        properties.Commit()?;
-        Ok(link)
     }
 }
 
@@ -132,10 +120,11 @@ fn write(menu: &TaskbarMenu, identity: &str) -> windows::core::Result<()> {
             if let Err(error) = list.AppendCategory(&HSTRING::from(menu.category.as_str()), &category.cast::<IObjectArray>()?) {
                 // Recently opened items are turned off: only tasks are listed.
                 log::info!("Pinned folders listed as taskbar tasks: {error}");
+                // No line under them: Windows 11 draws it from edge to edge, unlike
+                // its own, and the folder icons set them apart from the task already.
                 for folder in &folders {
                     tasks.AddObject(folder)?;
                 }
-                tasks.AddObject(&separator()?)?;
             }
         }
         tasks.AddObject(&program.shortcut(AS_ADMINISTRATOR, &menu.administrator, SIID_SHIELD)?)?;

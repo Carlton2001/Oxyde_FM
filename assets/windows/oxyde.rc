@@ -1,1 +1,27 @@
+#include <winver.h>
+
 1 ICON "../icons/oxyde.ico"
+
+// The name Windows shows for the program where no shortcut names it: the taskbar
+// menu of a build started without the Setup's shortcuts, the "Open with" lists.
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION OXYDE_VERSION_NUMBERS
+PRODUCTVERSION OXYDE_VERSION_NUMBERS
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "FileDescription", "Oxyde"
+            VALUE "ProductName", "Oxyde"
+            VALUE "FileVersion", OXYDE_VERSION_TEXT
+            VALUE "ProductVersion", OXYDE_VERSION_TEXT
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END
