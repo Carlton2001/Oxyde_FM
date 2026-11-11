@@ -74,12 +74,13 @@ pub(crate) fn render(
     let elements: Vec<AnyElement> = buttons
         .into_iter()
         .map(|button| {
+            let symbol = glyph(style, button, is_maximized, cx);
             let shell = match style {
                 WindowControlStyle::Windows => {
-                    windows_button(button, side, outermost == Some(button), corner, cx)
+                    windows_button(button, side, outermost == Some(button), corner, cx).child(symbol)
                 }
-                WindowControlStyle::Adwaita => adwaita_button(button, cx),
-                WindowControlStyle::Breeze => breeze_button(button, cx),
+                WindowControlStyle::Adwaita => hit_zone(button, ADWAITA_DISC, rems(0.75)).child(adwaita_disc(button, cx).child(symbol)),
+                WindowControlStyle::Breeze => hit_zone(button, BREEZE_DISC, rems(0.0625)).child(breeze_disc(button, cx).child(symbol)),
             };
             let on_close = on_close.clone();
             shell
@@ -93,12 +94,15 @@ pub(crate) fn render(
                     WindowButton::Maximize => window.zoom_window(),
                     WindowButton::Close => on_close(window, cx),
                 })
-                .child(glyph(style, button, is_maximized, cx))
                 .into_any_element()
         })
         .collect();
 
-    let edge = rems(0.5);
+    // Each hit zone already holds half the gap on each side of its disc.
+    let edge = match style {
+        WindowControlStyle::Adwaita => rems(0.5 - 0.75 / 2.0),
+        _ => rems(0.5 - 0.0625 / 2.0),
+    };
     div()
         .h_full()
         .flex()
@@ -108,12 +112,10 @@ pub(crate) fn render(
             Side::Left => row.pl(edge).pr(edge),
             Side::Right => row.pr(edge),
         })
-        .when(style == WindowControlStyle::Adwaita, |row| row.gap(rems(0.75)))
-        .when(style == WindowControlStyle::Breeze, |row| row.gap(rems(0.0625)))
         .children(elements)
 }
 
-const ADWAITA_DISC: Rems = rems(1.1875);
+const ADWAITA_DISC: Rems = rems(1.5);
 const BREEZE_DISC: Rems = rems(1.375);
 
 /// Disc size in an even number of pixels: centered in an even title bar, its edges
@@ -138,7 +140,7 @@ fn glyph(style: WindowControlStyle, button: WindowButton, is_maximized: bool, cx
         WindowControlStyle::Windows => symbol.size_3().when(button == WindowButton::Close, |symbol| {
             symbol.group_hover("window-close", move |s| s.text_color(theme.text_on_danger))
         }),
-        WindowControlStyle::Adwaita => symbol.size(centered(ADWAITA_DISC, rems(0.875))),
+        WindowControlStyle::Adwaita => symbol.size(centered(ADWAITA_DISC, rems(1.0))),
         WindowControlStyle::Breeze if button == WindowButton::Close => symbol
             .size(centered(BREEZE_DISC, rems(0.5625)))
             .group_hover("window-close", move |s| s.text_color(theme.text_on_danger)),
@@ -168,31 +170,51 @@ fn windows_button(button: WindowButton, side: Side, outermost: bool, corner: Pix
         })
 }
 
+fn group_name(button: WindowButton) -> &'static str {
+    match button {
+        WindowButton::Close => "window-close",
+        WindowButton::Minimize => "window-minimize",
+        WindowButton::Maximize => "window-maximize",
+    }
+}
+
+/// Full title bar height, the disc plus half the gap on each side: neighbouring
+/// zones touch, so every button gets the same width and nothing is dead space.
+fn hit_zone(button: WindowButton, disc: Rems, gap: Rems) -> Stateful<Div> {
+    div()
+        .id(button.id())
+        .group(group_name(button))
+        .w(disc_pixels(disc) + crate::ui::scale::rem_pixels(gap))
+        .h_full()
+        .flex()
+        .items_center()
+        .justify_center()
+        .flex_none()
+}
+
 /// A disc, faintly filled at rest, darker under the pointer and pressed.
-fn adwaita_button(button: WindowButton, cx: &App) -> Stateful<Div> {
+fn adwaita_disc(button: WindowButton, cx: &App) -> Stateful<Div> {
     let theme = *cx.theme();
-    round_button(button, ADWAITA_DISC)
+    let group = group_name(button);
+    disc(ADWAITA_DISC)
         .bg(theme.text.opacity(0.1))
-        .hover(move |s| s.bg(theme.text.opacity(0.15)))
-        .active(move |s| s.bg(theme.text.opacity(0.25)))
+        .group_hover(group, move |s| s.bg(theme.text.opacity(0.15)))
+        .group_active(group, move |s| s.bg(theme.text.opacity(0.25)))
 }
 
 /// A bare glyph; a disc appears under the pointer, red for close.
-fn breeze_button(button: WindowButton, cx: &App) -> Stateful<Div> {
+fn breeze_disc(button: WindowButton, cx: &App) -> Stateful<Div> {
     let theme = *cx.theme();
-    round_button(button, BREEZE_DISC)
-        .when(button == WindowButton::Close, |shell| shell.group("window-close"))
-        .hover(move |s| {
-            s.bg(if button == WindowButton::Close { theme.danger_hover } else { theme.text.opacity(0.15) })
-        })
-        .active(move |s| {
-            s.bg(if button == WindowButton::Close { theme.danger_background } else { theme.text.opacity(0.25) })
-        })
+    let group = group_name(button);
+    let close = button == WindowButton::Close;
+    disc(BREEZE_DISC)
+        .group_hover(group, move |s| s.bg(if close { theme.danger_hover } else { theme.text.opacity(0.15) }))
+        .group_active(group, move |s| s.bg(if close { theme.danger_background } else { theme.text.opacity(0.25) }))
 }
 
-fn round_button(button: WindowButton, size: Rems) -> Stateful<Div> {
+fn disc(size: Rems) -> Stateful<Div> {
     div()
-        .id(button.id())
+        .id("disc")
         .size(disc_pixels(size))
         .rounded_full()
         .flex()
