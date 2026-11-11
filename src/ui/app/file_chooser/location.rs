@@ -3,7 +3,7 @@
 //! outside, cancelled by Escape, and shaken with an error border when it leads nowhere.
 //! Here a typed file is chosen, unless folders are, or saved to, and `~` and relative
 //! paths are understood.
-use super::save::{target, Target};
+use super::save::{resolved, Target};
 use super::FileChooserWindow;
 use crate::ui::components::input::{InputAppearance, TextInput, TextInputOptions};
 use crate::ui::i18n::{I18nContext, Message};
@@ -103,9 +103,10 @@ impl FileChooserWindow {
         }
         let home = dirs::home_dir();
         let path = typed_path(&text, &oxyde_lib::utils::path_text::decode(&self.folder), home.as_deref());
+        // Saving one file, a free name without extension takes one, as in the name field.
+        let extension = matches!(self.purpose, FileChooserPurpose::Save { .. }).then(|| self.save_extension()).flatten();
         self.location.task = Some(cx.spawn_in(window, async move |this, cx| {
-            let checked = path.clone();
-            let found = cx.background_spawn(async move { target(&checked) }).await;
+            let (path, found) = cx.background_spawn(async move { resolved(path, extension.as_deref()) }).await;
             let _ = this.update_in(cx, |this, window, cx| {
                 this.location.task = None;
                 let saving = matches!(this.purpose, FileChooserPurpose::Save { .. });
@@ -113,7 +114,7 @@ impl FileChooserWindow {
                     Target::Folder => {
                         this.location.close();
                         window.focus(&this.focus, cx);
-                        this.show_folder(path.to_string_lossy().into_owned(), cx);
+                        this.show_folder(oxyde_lib::utils::path_text::encode(&path), cx);
                     }
                     // Saving one file, a file is replaced once confirmed, a free name chosen.
                     Target::File | Target::Free if saving => {

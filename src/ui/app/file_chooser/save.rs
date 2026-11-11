@@ -66,7 +66,7 @@ fn pattern_extension(filter: &FileTypeFilter) -> Option<&str> {
 
 /// `path` with `extension`, when it is a free name without one; a folder typed to be
 /// opened, or a file to be replaced, keeps its name.
-pub(super) fn extended(path: &Path, found: Target, extension: Option<&str>) -> Option<PathBuf> {
+fn extended(path: &Path, found: Target, extension: Option<&str>) -> Option<PathBuf> {
     let extension = extension?;
     if found != Target::Free || path.extension().is_some() {
         return None;
@@ -77,10 +77,23 @@ pub(super) fn extended(path: &Path, found: Target, extension: Option<&str>) -> O
     Some(path.with_file_name(name))
 }
 
+/// Where saving at `path` leads and what is there, `extension` added to a free name
+/// without one. Reads the disk: run it off the UI thread.
+pub(super) fn resolved(path: PathBuf, extension: Option<&str>) -> (PathBuf, Target) {
+    let found = target(&path);
+    match extended(&path, found, extension) {
+        Some(named) => {
+            let found = target(&named);
+            (named, found)
+        }
+        None => (path, found),
+    }
+}
+
 impl FileChooserWindow {
     /// The extension a name typed without one takes, when the application leaves it
     /// to the dialog: the shown filter's, else the application's default.
-    fn save_extension(&self) -> Option<String> {
+    pub(super) fn save_extension(&self) -> Option<String> {
         let default = self.default_extension.as_deref()?;
         let shown = self.type_filter.and_then(|position| self.filters.get(position)).and_then(pattern_extension);
         Some(shown.unwrap_or(default).to_owned())
@@ -160,16 +173,7 @@ impl FileChooserWindow {
         let path = super::location::typed_path(&text, &path_text::decode(&self.folder), home.as_deref());
         let extension = self.save_extension();
         self.name.task = Some(cx.spawn_in(window, async move |this, cx| {
-            let (path, found) = cx.background_spawn(async move {
-                let found = target(&path);
-                match extended(&path, found, extension.as_deref()) {
-                    Some(named) => {
-                        let found = target(&named);
-                        (named, found)
-                    }
-                    None => (path, found),
-                }
-            }).await;
+            let (path, found) = cx.background_spawn(async move { resolved(path, extension.as_deref()) }).await;
             let _ = this.update_in(cx, |this, window, cx| {
                 this.name.task = None;
                 if !this.save_at(path, found, window, cx) {
