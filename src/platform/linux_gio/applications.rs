@@ -260,8 +260,25 @@ pub(in crate::platform) fn oxyde_executable() -> Option<PathBuf> {
     let gio = gio()?;
     let app = desktop_entry(gio, OXYDE_ENTRY)?;
     // SAFETY: a live application; the string belongs to it.
-    let executable = PathBuf::from(unsafe { borrowed((gio.g_app_info_get_executable)(app.1)) });
+    let executable = PathBuf::from(unquoted(&unsafe { borrowed((gio.g_app_info_get_executable)(app.1)) }));
     executable.is_absolute().then_some(executable)
+}
+
+/// GIO gives the program as `Exec` wrote it: a quoted path, as `install.sh` writes for
+/// spaces, keeps its quotes. The Desktop Entry specification's quoting is undone here.
+fn unquoted(program: &str) -> String {
+    let Some(inner) = program.strip_prefix('"').and_then(|rest| rest.strip_suffix('"')) else {
+        return program.to_owned();
+    };
+    let mut text = String::with_capacity(inner.len());
+    let mut chars = inner.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => text.extend(chars.next()),
+            _ => text.push(c),
+        }
+    }
+    text
 }
 
 /// Whether other applications open folders with Oxyde; None without an entry to name.
@@ -301,3 +318,7 @@ pub(in crate::platform) fn open_folders(enabled: bool, previous: Option<&str>) -
 #[cfg(test)]
 #[path = "applications/tests/icons.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "applications/tests/executable.rs"]
+mod executable_tests;
