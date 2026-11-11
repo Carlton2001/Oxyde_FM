@@ -235,6 +235,15 @@ pub(crate) fn owner_point(window: &Window, cx: &App, position: Point<Pixels>) ->
         .unwrap_or(position)
 }
 
+/// Whether an interactive menu of this window is open: its grab takes the keyboard, yet the
+/// window still reads as the active one to the user.
+pub(crate) fn has_interactive_menu(window: &Window, cx: &App) -> bool {
+    let id = Window::window_handle(window).window_id();
+    cx.try_global::<Surfaces>().is_some_and(|state| state.windows.iter().any(|(key, handle)| {
+        key.0 == id && handle.read(cx).is_ok_and(|root| root.spec.interactive)
+    }))
+}
+
 pub(crate) fn close_for(window: &mut Window, cx: &mut App) {
     let id = Window::window_handle(window).window_id();
     let state = cx.default_global::<Surfaces>();

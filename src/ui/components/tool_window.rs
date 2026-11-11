@@ -171,6 +171,8 @@ fn header_frame(
         .bg(theme.surface)
         .border_b(rems(0.0625))
         .border_color(theme.border)
+        .child(div().size_full().flex().items_center()
+            .opacity(super::backdrop::content_opacity(window, cx))
         .child(window_controls(Side::Left, window.is_maximized(), allow_resize, corners.top_left, cx, on_close.clone()))
         .child(
             div().px(rems(0.75)).child(
@@ -197,7 +199,7 @@ fn header_frame(
                     .child(title)),
         )
         .when_some(actions, |header, actions| header.child(actions))
-        .child(window_controls(Side::Right, window.is_maximized(), allow_resize, corners.top_right, cx, on_close))
+        .child(window_controls(Side::Right, window.is_maximized(), allow_resize, corners.top_right, cx, on_close)))
 }
 
 /// Shared secondary-window footer, matching the recycle-bin properties modal.

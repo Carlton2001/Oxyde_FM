@@ -290,6 +290,17 @@ impl OxydeApp {
                         let released = cx.observe_release_in(&main, window, |_, _, window, cx| {
                             { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() }
                         });
+                        let mut subscriptions = vec![observed, released];
+                        if kind.is_fixed() {
+                            // A modal prompt is part of its owner: the owner header stays active
+                            // with it, and follows it when the user leaves for another application.
+                            let dialog_id = window.window_handle().window_id();
+                            crate::ui::components::backdrop::attach(dialog_id, owner_window.window_id());
+                            subscriptions.push(cx.observe_window_activation(window, move |_, _, cx| {
+                                let _ = owner_window.update(cx, |_, window, _| window.refresh());
+                            }));
+                            cx.on_release(move |_, _| crate::ui::components::backdrop::detach(dialog_id)).detach();
+                        }
                         let cleanup = owner.clone();
                         let dialog_focus = initial_focus.clone();
                         cx.on_release(move |_, cx| {
@@ -341,7 +352,7 @@ impl OxydeApp {
                             restoring_simple_width: None,
                             context_menus: Vec::new(),
                             focus,
-                            _subscriptions: vec![observed, released],
+                            _subscriptions: subscriptions,
                         }
                     })
                 },

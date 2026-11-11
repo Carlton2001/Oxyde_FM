@@ -3,7 +3,7 @@ use gpui::*;
 pub(crate) mod keyboard;
 
 mod window;
-pub(crate) use window::{close_all, show, show_passive, supported, supported_source};
+pub(crate) use window::{close_all, has_interactive_menu, show, show_passive, supported, supported_source};
 mod dropdown;
 pub(crate) use dropdown::text_menu;
 #[cfg(not(target_os = "windows"))]

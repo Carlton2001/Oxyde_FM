@@ -19,6 +19,7 @@ pub(crate) mod select_menu;
 pub mod settings;
 pub mod sidebar;
 pub mod tabs;
+pub(crate) mod backdrop;
 pub mod title_bar;
 pub mod tooltip;
 pub(crate) mod popup;

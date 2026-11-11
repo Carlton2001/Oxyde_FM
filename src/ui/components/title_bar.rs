@@ -19,6 +19,7 @@ pub fn render_title_bar(
     window: &Window,
     cx: &mut Context<OxydeApp>,
 ) -> impl IntoElement {
+    let content_opacity = crate::ui::components::backdrop::content_opacity(window, cx);
     let theme = *cx.theme();
 
     let btn_hover_bg: Hsla = theme.control_hover;
@@ -181,6 +182,8 @@ pub fn render_title_bar(
         .bg(theme.surface)
         .border_b(rems(0.0625))
         .border_color(theme.border)
+        .child(div().size_full().flex().items_center()
+            .opacity(content_opacity)
         .child(window_controls(Side::Left, is_maximized, true, corners.top_left, cx, on_close.clone()))
         .child(app_button)
         .child(drag_area)
@@ -190,7 +193,7 @@ pub fn render_title_bar(
         .child(tools)
         .child(crate::ui::components::operations::render_operations_footer(view, handle.clone(), cx))
         .child(div().w(rems(0.5)).h_full().flex_none())
-        .child(window_controls(Side::Right, is_maximized, true, corners.top_right, cx, on_close))
+        .child(window_controls(Side::Right, is_maximized, true, corners.top_right, cx, on_close)))
 }
 
 /// Close the main window the way its close button does, ending the application.
