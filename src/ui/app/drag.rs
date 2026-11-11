@@ -12,11 +12,11 @@ pub(super) mod native;
 pub(super) mod volumes;
 
 fn actionable_drop_paths(mut paths: Vec<String>, target: &str) -> Vec<String> {
-    use crate::ui::components::sidebar::sidebar_paths_equal;
+    use crate::ui::paths::paths_match;
     paths.retain(|path| {
-        !sidebar_paths_equal(path, target)
+        !paths_match(path, target)
             && !std::path::Path::new(path).parent().is_some_and(|parent| {
-                sidebar_paths_equal(&parent.to_string_lossy(), target)
+                paths_match(&parent.to_string_lossy(), target)
             })
     });
     paths

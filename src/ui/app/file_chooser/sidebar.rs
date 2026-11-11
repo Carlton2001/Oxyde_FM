@@ -4,7 +4,7 @@
 //! needs no menus, drops, reordering or folder tree.
 use super::{FileChooserWindow, Place};
 use crate::ui::components::scrollbar::{render_scrollbar_with_pointer, ScrollbarAxis};
-use crate::ui::components::sidebar::sidebar_paths_equal;
+use crate::ui::paths::paths_match;
 use crate::ui::components::sidebar::volume_row::name as volume_name;
 use crate::ui::components::tooltip::hover::{HoverRegion, SharedTooltipExt};
 use crate::ui::components::tooltip::Tooltip;
@@ -83,7 +83,7 @@ impl FileChooserWindow {
     fn render_place(&self, index: usize, place: &Place, owner: Option<&Entity<super::OxydeApp>>, theme: OxydeTheme, cx: &mut Context<Self>) -> AnyElement {
         let path = place.path.clone();
         let is_home = place.home;
-        let is_sel = sidebar_paths_equal(&self.folder, &path);
+        let is_sel = paths_match(&self.folder, &path);
         let hov_bg = if is_sel { theme.selection_hover } else { theme.hover };
         let is_dimmed = place.label.starts_with('.');
         let name = place_name(place, cx.i18n());
@@ -111,7 +111,7 @@ impl FileChooserWindow {
 
     fn render_drive(&self, index: usize, drive: &DriveInfo, owner: Option<&Entity<super::OxydeApp>>, theme: OxydeTheme, cx: &mut Context<Self>) -> AnyElement {
         let path = drive.path.clone();
-        let is_sel = sidebar_paths_equal(&self.folder, &path);
+        let is_sel = paths_match(&self.folder, &path);
         let hov_bg = if is_sel { theme.selection_hover } else { theme.hover };
         let label = crate::ui::format::drive_name(drive, cx.i18n());
         div()

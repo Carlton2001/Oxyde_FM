@@ -30,7 +30,7 @@ impl DeletePolicy {
         self.invalidate();
         for config in configs {
             if let Some((_, permanent)) = self.drives.iter_mut().find(|(root, _)| {
-                crate::ui::components::sidebar::sidebar_paths_equal(root, &config.drive_path)
+                crate::ui::paths::paths_match(root, &config.drive_path)
             }) {
                 *permanent = config.nuke_on_delete;
             } else {

@@ -59,7 +59,7 @@ impl OxydeApp {
             .state
             .drives
             .iter()
-            .find(|drive| crate::ui::components::sidebar::sidebar_paths_equal(&drive.path, &path))
+            .find(|drive| crate::ui::paths::paths_match(&drive.path, &path))
             .cloned();
         let title = cx.i18n().text(Message::Properties);
         let origin = window.bounds().origin + point(px(48.0), px(48.0));

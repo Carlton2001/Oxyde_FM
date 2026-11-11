@@ -1,7 +1,8 @@
 use super::presentation::{file_type_display, network_category, network_entry, selection_checkbox, size_loading};
 use super::thumbnails::render_grid_thumbnail;
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, FileDragData, FileDragPreview, FileDropTargetExt, OxydeApp};
-use crate::ui::components::{paths_match, with_grid_sort, oxyde_context_menu_items};
+use crate::ui::components::{with_grid_sort, oxyde_context_menu_items};
+use crate::ui::paths::paths_match;
 use crate::ui::components::icons::render_file_icon;
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::components::tooltip::hover::SharedTooltipExt;

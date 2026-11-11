@@ -17,18 +17,6 @@ use gpui::*;
 
 pub(crate) use pinned::render_pinned_menu;
 
-pub(crate) fn sidebar_paths_equal(left: &str, right: &str) -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        left.replace('/', "\\").trim_end_matches('\\').to_lowercase()
-            == right.replace('/', "\\").trim_end_matches('\\').to_lowercase()
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        std::path::Path::new(left) == std::path::Path::new(right)
-    }
-}
-
 const SIDEBAR_ROW_H: Rems = rems(1.75);
 fn sidebar_row_h() -> f32 { rem_pixels(SIDEBAR_ROW_H).as_f32() }
 

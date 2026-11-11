@@ -29,7 +29,7 @@ fn remote_share<'a>(path: &str, drives: &'a [DriveInfo]) -> Option<&'a DriveInfo
 fn root_icon(path: &str, drives: &[DriveInfo]) -> &'static str {
     drives.iter().filter(|drive| {
         std::path::Path::new(path).ancestors().any(|ancestor| {
-            crate::ui::components::sidebar::sidebar_paths_equal(&ancestor.to_string_lossy(), &drive.path)
+            crate::ui::paths::paths_match(&ancestor.to_string_lossy(), &drive.path)
         })
     }).max_by_key(|drive| drive.path.len())
         .map(crate::ui::components::icons::drive_icon_path)

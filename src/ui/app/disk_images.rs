@@ -1,5 +1,5 @@
 use super::OxydeApp;
-use crate::ui::components::paths_match;
+use crate::ui::paths::paths_match;
 use crate::ui::i18n::Message;
 use gpui::*;
 

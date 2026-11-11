@@ -90,7 +90,7 @@ impl WorkspaceState {
         self.refresh_sidebar();
     }
 
-    pub fn _collapse_all_sidebar_path(&mut self, path: String) {
+    pub fn collapse_all_sidebar_path(&mut self, path: String) {
         let norm_path = path.replace("\\", "/");
         let target_prefix = if norm_path.ends_with("/") {
             norm_path.clone()

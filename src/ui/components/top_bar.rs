@@ -62,7 +62,7 @@ fn breadcrumb_root_icon(path: &str, view: &OxydeApp) -> &'static str {
 
     if let Some(drive) = view.state.drives.iter().filter(|drive| {
         std::path::Path::new(path).ancestors().any(|ancestor| {
-            crate::ui::components::sidebar::sidebar_paths_equal(
+            crate::ui::paths::paths_match(
                 &ancestor.to_string_lossy(), &drive.path,
             )
         })

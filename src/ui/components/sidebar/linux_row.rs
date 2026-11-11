@@ -1,5 +1,6 @@
 use super::menus::linux_context_menu;
-use super::{sidebar_paths_equal, sidebar_row_h};
+use super::sidebar_row_h;
+use crate::ui::paths::paths_match;
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, OxydeApp};
 use crate::ui::components::tooltip::hover::{HoverRegion, SharedTooltipExt};
 use crate::ui::components::tooltip::Tooltip;
@@ -19,7 +20,7 @@ pub(super) fn render(
     theme: OxydeTheme,
     cx: &mut App,
 ) -> AnyElement {
-    let is_sel = selected.is_some_and(|path| sidebar_paths_equal(path, WSL_ROOT));
+    let is_sel = selected.is_some_and(|path| paths_match(path, WSL_ROOT));
     let hov_bg = if is_sel { theme.selection_hover } else { theme.hover };
     let name = cx.i18n().text(Message::SidebarLinux).to_string();
     let toggle = |h: &Entity<OxydeApp>, cx: &mut App| {

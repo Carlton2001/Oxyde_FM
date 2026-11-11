@@ -141,10 +141,10 @@ pub(super) fn render_sidebar_rail(
                     std::path::Path::new(current_path)
                         .ancestors()
                         .any(|ancestor| {
-                            super::super::paths_match(&ancestor.to_string_lossy(), &path)
+                            crate::ui::paths::paths_match(&ancestor.to_string_lossy(), &path)
                         })
                 } else {
-                    super::super::paths_match(current_path, &path)
+                    crate::ui::paths::paths_match(current_path, &path)
                 }
             });
         entries = entries.child(

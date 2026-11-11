@@ -278,7 +278,7 @@ pub(super) fn render(
         if let Some(target) = &p.link_target {
             details = details.child(row(cx.i18n().text(Message::PropertiesLinkTarget), target.clone()));
         }
-        details = details.child(row(cx.i18n().text(presentation.location_label), presentation.location.to_owned()));
+        details = details.child(row(cx.i18n().text(presentation.location_label), super::location_text(presentation.location, cx.i18n())));
         if let (Some(files), Some(folders)) = (p.files_count, p.folders_count) {
             let mut args = FluentArgs::new();
             args.set("files", crate::ui::format::format_number(files, cx.i18n().language()));

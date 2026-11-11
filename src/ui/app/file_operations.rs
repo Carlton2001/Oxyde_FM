@@ -255,6 +255,16 @@ impl OxydeApp {
                             });
                         }
                         OpStatus::Error(error) => {
+                            // What a deletion left on disk is read off the UI thread:
+                            // a share that stopped answering is what makes it fail.
+                            let outcomes = operations.operation_item_outcomes(&op_id);
+                            let retry = {
+                                let (op_type, error) = (op_type.clone(), error.clone());
+                                tokio::task::spawn_blocking(move || delete_retry(outcomes?, &op_type, &error))
+                                    .await
+                                    .ok()
+                                    .flatten()
+                            };
                             handle.update(&mut cx, |this, cx| {
                                 this.resume_viewers_after_deletion(&op_id, true, cx);
                                 log::warn!("File operation failed: {error}");
@@ -263,7 +273,7 @@ impl OxydeApp {
                                 }
                                 // The alert below reports the kept files; a toast would repeat it.
                                 let recovery = this.refresh_after_archive_recovery(&error, cx).is_some();
-                                this.delete_retry = this.delete_retry_for(&op_id, &op_type, &error);
+                                this.delete_retry = retry;
                                 this.file_operation_notice = Some((if recovery { Message::ArchiveRecoveryNotice } else { Message::TransferFailed }, error));
                                 cx.notify();
                             });
@@ -330,31 +340,28 @@ impl OxydeApp {
     }
 }
 
-impl OxydeApp {
-    /// Selected items a Trash/Delete operation did not finish, still on disk.
-    fn delete_retry_for(
-        &self,
-        op_id: &str,
-        op_type: &oxyde_lib::systems::file_ops::FileOpType,
-        error: &str,
-    ) -> Option<DeleteRetry> {
-        use oxyde_lib::systems::file_ops::{FileOpType, ItemOutcome};
-        let permanent = match op_type {
-            FileOpType::Trash => false,
-            FileOpType::Delete => true,
-            _ => return None,
-        };
-        let mut paths: Vec<String> = self
-            .file_ops
-            .operation_item_outcomes(op_id)?
-            .into_iter()
-            .filter(|(path, outcome)| *outcome != ItemOutcome::Completed && path.exists())
-            .map(|(path, _)| path.to_string_lossy().into_owned())
-            .collect();
-        paths.sort();
-        (!paths.is_empty()).then(|| DeleteRetry { detail: error.to_string(), paths, permanent })
-    }
+/// Selected items a Trash/Delete operation did not finish, still on disk. Blocking.
+fn delete_retry(
+    outcomes: std::collections::HashMap<std::path::PathBuf, oxyde_lib::systems::file_ops::ItemOutcome>,
+    op_type: &oxyde_lib::systems::file_ops::FileOpType,
+    error: &str,
+) -> Option<DeleteRetry> {
+    use oxyde_lib::systems::file_ops::{FileOpType, ItemOutcome};
+    let permanent = match op_type {
+        FileOpType::Trash => false,
+        FileOpType::Delete => true,
+        _ => return None,
+    };
+    let mut paths: Vec<String> = outcomes
+        .into_iter()
+        .filter(|(path, outcome)| *outcome != ItemOutcome::Completed && path.exists())
+        .map(|(path, _)| path.to_string_lossy().into_owned())
+        .collect();
+    paths.sort();
+    (!paths.is_empty()).then(|| DeleteRetry { detail: error.to_string(), paths, permanent })
+}
 
+impl OxydeApp {
     pub(crate) fn retry_failed_delete(&mut self, cx: &mut Context<Self>) {
         let retry = self.delete_retry.take();
         self.file_operation_notice = None;

@@ -78,6 +78,15 @@ struct PropertyPresentation<'a> {
     deleted_time: Option<u64>,
 }
 
+/// A location as shown: the network place by its translated name.
+fn location_text(location: &str, i18n: &crate::ui::i18n::I18n) -> String {
+    if location == "__network_vincinity__" {
+        i18n.text(Message::SidebarNetwork).to_string()
+    } else {
+        location.to_owned()
+    }
+}
+
 fn property_presentation(properties: &FileProperties) -> PropertyPresentation<'_> {
     let original_identity = properties
         .original_path

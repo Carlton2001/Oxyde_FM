@@ -1,4 +1,4 @@
-use crate::ui::components::sidebar::sidebar_paths_equal;
+use crate::ui::paths::paths_match;
 use crate::ui::scale::{logical};
 use crate::ui::app::OxydeApp;
 use crate::ui::components::input::{InputAppearance, TextInput, TextInputOptions};
@@ -37,7 +37,7 @@ impl OxydeApp {
             .filter(|p| !p.as_os_str().is_empty())
             .map(|p| p.to_string_lossy().into_owned()).collect();
         let Some((root, root_index)) = self.state.drives.iter().find_map(|drive| {
-            ancestors.iter().position(|ancestor| sidebar_paths_equal(ancestor, &drive.path))
+            ancestors.iter().position(|ancestor| paths_match(ancestor, &drive.path))
                 .map(|index| (drive.path.clone(), index))
         }) else { return; };
         let targets: Vec<String> = ancestors[..root_index].iter().rev().cloned().collect();
@@ -64,7 +64,7 @@ impl OxydeApp {
                         }
                     },
                 };
-                let next = nodes.iter().find(|node| sidebar_paths_equal(&node.path, target))
+                let next = nodes.iter().find(|node| paths_match(&node.path, target))
                     .map(|node| node.path.clone());
                 loaded.push((current.clone(), nodes));
                 let Some(next) = next else { break; };
@@ -729,8 +729,8 @@ fn sidebar_reveal_index(
     items.iter()
         .filter(|item| crate::ui::components::sidebar::sidebar_item_visible(item, show_hidden, show_system, show_network))
         .position(|item| match item {
-            SidebarItem::Drive { drive, .. } => sidebar_paths_equal(&drive.path, path),
-            SidebarItem::Directory { node, .. } => sidebar_paths_equal(&node.path, path),
+            SidebarItem::Drive { drive, .. } => paths_match(&drive.path, path),
+            SidebarItem::Directory { node, .. } => paths_match(&node.path, path),
             _ => false,
         })
 }
@@ -754,7 +754,7 @@ fn child_toward(ancestor: &str, descendant: &str) -> Option<String> {
 
 #[cfg(test)]
 mod sidebar_tests {
-    use super::{resize_sidebar_state, sidebar_paths_equal};
+    use super::resize_sidebar_state;
 
     #[test]
     fn reveal_uses_visible_rows_instead_of_unfiltered_tree_indices() {
@@ -795,19 +795,6 @@ mod sidebar_tests {
         ];
         assert_eq!(super::sidebar_reveal_index(&items, "/current", false, false, true), Some(1));
         assert_eq!(super::sidebar_reveal_index(&items, "/current", false, false, false), Some(0));
-    }
-
-    #[test]
-    fn sidebar_path_matching_respects_platform_case_and_separators() {
-        assert!(sidebar_paths_equal("/home/user/", "/home/user"));
-        assert!(!sidebar_paths_equal("/home/user", "/home/username"));
-        #[cfg(target_os = "windows")]
-        {
-            assert!(sidebar_paths_equal("D:/Music/", "d:\\music"));
-            assert!(sidebar_paths_equal("D:/", "d:\\"));
-        }
-        #[cfg(not(target_os = "windows"))]
-        assert!(!sidebar_paths_equal("/home/User", "/home/user"));
     }
 
     #[test]

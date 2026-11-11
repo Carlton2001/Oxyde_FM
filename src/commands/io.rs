@@ -445,7 +445,8 @@ pub fn get_file_properties(path: String) -> Result<FileProperties, CommandError>
         let mut props = FileProperties {
             name: path.split('\\').next_back().unwrap_or(&path).to_string(), // Best effort name
             path: path.clone(),
-            parent: "Réseau".to_string(),
+            // The network place; the interface shows it by its translated name.
+            parent: "__network_vincinity__".to_string(),
             is_dir: false,
             size: 0,
             is_calculated: true,

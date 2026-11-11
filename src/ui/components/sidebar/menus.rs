@@ -284,7 +284,7 @@ fn sidebar_tree_actions(
                     if expand {
                         this.expand_all_sidebar_path(path_action.clone(), cx);
                     } else {
-                        this.state._collapse_all_sidebar_path(path_action.clone());
+                        this.state.collapse_all_sidebar_path(path_action.clone());
                         this.reconcile_watchers(cx);
                         cx.notify();
                     }

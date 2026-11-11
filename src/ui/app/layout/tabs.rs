@@ -158,7 +158,7 @@ impl OxydeApp {
                 oxyde_lib::platform::WSL_ROOT => TabIcon::Svg("icons/box.svg"),
                 _ => {
                     if let Some(drive) = self.state.drives.iter().find(|drive| {
-                        crate::ui::components::sidebar::sidebar_paths_equal(&drive.path, &tab_data.path)
+                        crate::ui::paths::paths_match(&drive.path, &tab_data.path)
                     }) {
                         TabIcon::Svg(crate::ui::components::icons::drive_icon_path(drive))
                     } else {

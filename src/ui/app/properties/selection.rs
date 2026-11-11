@@ -35,7 +35,7 @@ fn inspect_selection(
             properties.iter().all(|p| {
                 let other = super::property_presentation(p).location;
                 if cfg!(target_os = "windows") {
-                    crate::ui::components::paths_match(location, other)
+                    crate::ui::paths::paths_match(location, other)
                 } else {
                     location == other
                 }
@@ -196,7 +196,8 @@ pub(super) fn render(
                 cx.i18n().text(Message::ColumnLocation),
                 summary
                     .location
-                    .clone()
+                    .as_deref()
+                    .map(|location| super::location_text(location, cx.i18n()))
                     .unwrap_or_else(|| cx.i18n().text(Message::PropertiesMultipleLocations).to_string()),
             ))
             .child(row(

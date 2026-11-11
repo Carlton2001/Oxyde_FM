@@ -1,7 +1,8 @@
 //! The Menu key and Shift+F10 open at the selection, where a right click on it would.
 use super::selection::scroll_row_into_view;
 use super::{ContextMenuContent, ContextMenuInstance, OxydeApp};
-use crate::ui::components::{oxyde_context_menu_items, pane_context_menu_items, paths_match, with_grid_sort};
+use crate::ui::components::{oxyde_context_menu_items, pane_context_menu_items, with_grid_sort};
+use crate::ui::paths::paths_match;
 use crate::ui::date_groups::{display_rows, row_height, DisplayRow};
 use crate::ui::i18n::I18nContext;
 use crate::ui::scale::logical;

@@ -302,7 +302,7 @@ impl OxydeApp {
                         dialog.selected.retain(|path| {
                             dialog.drives.iter().any(|drive| {
                                 network_drive(drive)
-                                    && crate::ui::components::sidebar::sidebar_paths_equal(
+                                    && crate::ui::paths::paths_match(
                                         path,
                                         &drive.path,
                                     )
@@ -311,7 +311,7 @@ impl OxydeApp {
                         if let Some(path) = &dialog.preferred_drive {
                             if let Some(drive) = dialog.drives.iter().find(|drive| {
                                 network_drive(drive)
-                                    && crate::ui::components::sidebar::sidebar_paths_equal(
+                                    && crate::ui::paths::paths_match(
                                         path,
                                         &drive.path,
                                     )
@@ -405,11 +405,7 @@ impl OxydeApp {
         }
         let Some(drive) = self.state.drives.iter().find(|drive| {
             network_drive(drive)
-                && (crate::ui::components::sidebar::sidebar_paths_equal(&drive.path, path)
-                    || path.replace('/', "\\").to_lowercase().starts_with(&format!(
-                        "{}\\",
-                        drive.path.trim_end_matches(['/', '\\']).to_lowercase()
-                    )))
+                && crate::ui::paths::path_within(std::path::Path::new(path), std::path::Path::new(&drive.path))
         }) else {
             cx.notify();
             return;
@@ -488,7 +484,7 @@ impl OxydeApp {
                                     .drives
                                     .iter()
                                     .find(|drive| {
-                                        crate::ui::components::sidebar::sidebar_paths_equal(
+                                        crate::ui::paths::paths_match(
                                             &drive.path,
                                             &root.path,
                                         )

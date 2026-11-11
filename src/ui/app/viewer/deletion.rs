@@ -40,15 +40,7 @@ impl Jobs {
 }
 
 fn contains(paths: &[PathBuf], path: &str) -> bool {
-    // Path components keep a sibling such as `folder-other` out of the match.
-    // Windows explorer paths may differ in case or separator spelling.
-    #[cfg(target_os = "windows")]
-    let normalize =
-        |path: &Path| PathBuf::from(path.to_string_lossy().replace('/', "\\").to_lowercase());
-    #[cfg(not(target_os = "windows"))]
-    let normalize = |path: &Path| path.to_path_buf();
-    let path = normalize(Path::new(path));
-    paths.iter().any(|root| path.starts_with(normalize(root)))
+    paths.iter().any(|root| crate::ui::paths::path_within(Path::new(path), root))
 }
 
 impl Viewer {

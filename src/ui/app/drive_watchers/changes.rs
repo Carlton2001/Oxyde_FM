@@ -1,4 +1,4 @@
-use crate::ui::components::sidebar::sidebar_paths_equal;
+use crate::ui::paths::paths_match;
 use oxyde_lib::utils::path_text::{decode, encode};
 use notify::{Config, Event, EventKind, PollWatcher, RecommendedWatcher, RecursiveMode, Watcher};
 use std::{
@@ -63,7 +63,7 @@ impl DirectoryChanges {
             return;
         }
         for path in &event.paths {
-            if sidebar_paths_equal(&encode(path), root) {
+            if paths_match(&encode(path), root) {
                 self.rescan();
                 continue;
             }
@@ -72,7 +72,7 @@ impl DirectoryChanges {
             let child = path.ancestors().find(|ancestor| {
                 ancestor
                     .parent()
-                    .is_some_and(|parent| sidebar_paths_equal(&encode(parent), root))
+                    .is_some_and(|parent| paths_match(&encode(parent), root))
             });
             let Some(child) = child else {
                 self.rescan();

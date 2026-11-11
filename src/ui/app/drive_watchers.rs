@@ -1,6 +1,6 @@
 use super::{drive_watchers, OxydeApp, ToastKind};
 use crate::ui::i18n::{I18nContext, Message};
-use crate::ui::components::sidebar::sidebar_paths_equal;
+use crate::ui::paths::paths_match;
 use gpui::*;
 mod changes;
 pub use changes::{DirectoryWatcher, WatcherChanges};
@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 pub(super) fn path_on_drive(path: &str, root: &str) -> bool {
     std::path::Path::new(path)
         .ancestors()
-        .any(|ancestor| sidebar_paths_equal(&ancestor.to_string_lossy(), root))
+        .any(|ancestor| paths_match(&ancestor.to_string_lossy(), root))
 }
 
 /// The innermost drive holding `path`: under Linux, `/` holds every other mount.
@@ -78,7 +78,7 @@ fn merge_drive_roots(
             current
                 .iter()
                 .find(|old| {
-                    sidebar_paths_equal(&old.path, &root.path) && old.drive_type == root.drive_type
+                    paths_match(&old.path, &root.path) && old.drive_type == root.drive_type
                 })
                 .cloned()
                 .unwrap_or(root)
@@ -364,7 +364,7 @@ impl OxydeApp {
                         .map(|current| {
                             details
                                 .iter()
-                                .find(|detail| sidebar_paths_equal(&current.path, &detail.path))
+                                .find(|detail| paths_match(&current.path, &detail.path))
                                 .cloned()
                                 .unwrap_or_else(|| current.clone())
                         })
@@ -392,7 +392,7 @@ impl OxydeApp {
             .filter(|old| {
                 !drives
                     .iter()
-                    .any(|new| sidebar_paths_equal(&new.path, &old.path))
+                    .any(|new| paths_match(&new.path, &old.path))
             })
             .map(|drive| drive.path.clone())
             .collect();

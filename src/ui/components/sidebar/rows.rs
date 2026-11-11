@@ -1,7 +1,8 @@
 use crate::ui::app::FileDropTargetExt;
 use crate::ui::components::dropdown::{DropdownItem, IconName};
 use super::menus::{directory_context_menu, drive_context_menu, location_context_menu, pinned_context_menu};
-use super::{pinned_display_name, sidebar_paths_equal, sidebar_item_height, sidebar_row_h};
+use super::{pinned_display_name, sidebar_item_height, sidebar_row_h};
+use crate::ui::paths::paths_match;
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, FileDragData, FileDragPreview, OxydeApp};
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::components::tooltip::hover::{HoverRegion, SharedTooltipExt};
@@ -73,7 +74,7 @@ pub(super) fn render_sidebar_rows(
                 let moving    = pinned_reorder.as_ref().is_some_and(|reorder| reorder.path == path);
                 let slot_after = pinned_reorder.as_ref().and_then(|reorder| reorder.target.as_ref())
                     .filter(|(target, _)| *target == path).map(|(_, after)| *after);
-                let is_sel    = sel.as_deref().is_some_and(|selected| sidebar_paths_equal(selected, &path));
+                let is_sel    = sel.as_deref().is_some_and(|selected| paths_match(selected, &path));
                 let sel_bg:   Hsla = theme.selected;
                 let hov_bg:   Hsla = if is_sel { theme.selection_hover } else { theme.hover };
                 let is_dimmed = item.name.starts_with('.');
@@ -127,7 +128,7 @@ pub(super) fn render_sidebar_rows(
                     // Right click → select + context menu
                     .on_mouse_down(MouseButton::Right, {
                         let h = h.clone(); let p = path.clone();
-                        let is_qa = pinned_paths_for_list.iter().any(|pinned| super::super::paths_match(pinned, &path));
+                        let is_qa = pinned_paths_for_list.iter().any(|pinned| crate::ui::paths::paths_match(pinned, &path));
                         move |e, _, cx| {
                             let pos   = e.position;
                             let items = if is_qa {
@@ -204,7 +205,7 @@ pub(super) fn render_sidebar_rows(
                 let actions = oxyde_lib::platform::platform().volumes().actions(drive);
                 let is_remote = drive.drive_type == "remote";
                 let has_subs = expandable_drives.contains(&path);
-                let is_sel     = sel.as_deref().is_some_and(|selected| sidebar_paths_equal(selected, &path));
+                let is_sel     = sel.as_deref().is_some_and(|selected| paths_match(selected, &path));
                 let is_exp     = *is_expanded;
                 let sel_bg:    Hsla = theme.selected;
                 let hov_bg:    Hsla = if is_sel { theme.selection_hover } else { theme.hover };
@@ -348,7 +349,7 @@ pub(super) fn render_sidebar_rows(
             // ── Directory item ─────────────────────────────
             SidebarItem::Directory { node, depth, is_expanded } => {
                 let path       = node.path.clone();
-                let is_sel     = sel.as_deref().is_some_and(|selected| sidebar_paths_equal(selected, &path));
+                let is_sel     = sel.as_deref().is_some_and(|selected| paths_match(selected, &path));
                 let is_exp     = *is_expanded;
                 let has_subs   = node.has_subdirs;
                 let depth_px   = logical(8.0) + (*depth as f32 * logical(12.0));
