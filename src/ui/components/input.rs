@@ -100,8 +100,24 @@ pub(crate) fn native_path_text(path: &str) -> String {
     }
 }
 
+/// `~` alone or followed by a separator names the home folder, as in Nautilus.
+fn expand_home(text: &str, home: Option<&std::path::Path>) -> String {
+    match (text.strip_prefix('~'), home) {
+        (Some(rest), Some(home)) if rest.is_empty() || rest.starts_with(std::path::is_separator) => {
+            let rest = rest.trim_start_matches(std::path::is_separator);
+            let home = home.to_string_lossy();
+            if rest.is_empty() {
+                home.into_owned()
+            } else {
+                format!("{}{}{rest}", home.trim_end_matches(std::path::is_separator), std::path::MAIN_SEPARATOR)
+            }
+        }
+        _ => text.to_string(),
+    }
+}
+
 pub(crate) fn navigation_path_text(text: &str) -> String {
-    let path = native_path_text(text.trim());
+    let path = native_path_text(&expand_home(text.trim(), dirs::home_dir().as_deref()));
     if path == NETWORK_TEXT { "__network_vincinity__".to_string() } else { path }
 }
 
@@ -603,8 +619,9 @@ impl TextInput {
                 cx.background_executor()
                     .timer(std::time::Duration::from_millis(150))
                     .await;
+                let listed = expand_home(&parent, dirs::home_dir().as_deref());
                 let result = oxyde_lib::commands::io::list_dir(
-                    parent.clone(),
+                    listed,
                     Some(show_hidden),
                     Some(show_system),
                 )
@@ -1090,6 +1107,18 @@ mod completion_tests {
         for text in ["", "C:", "search://query", "trash://", "::{shell}"] {
             assert!(completion_parts(text).is_none());
         }
+    }
+
+    #[::core::prelude::v1::test]
+    fn tilde_names_home_only_before_a_separator() {
+        let home = std::path::Path::new(if cfg!(target_os = "windows") { r"C:\Users\a" } else { "/home/a" });
+        let sep = std::path::MAIN_SEPARATOR;
+        assert_eq!(super::expand_home("~", Some(home)), home.to_string_lossy());
+        assert_eq!(super::expand_home("~/Docs", Some(home)), format!("{}{sep}Docs", home.display()));
+        assert_eq!(super::expand_home(&format!("~{sep}"), Some(home)), home.to_string_lossy());
+        assert_eq!(super::expand_home("~bob", Some(home)), "~bob");
+        assert_eq!(super::expand_home("/x/~", Some(home)), "/x/~");
+        assert_eq!(super::expand_home("~", None), "~");
     }
 
     #[::core::prelude::v1::test]
