@@ -211,6 +211,11 @@ pub(crate) fn ask(request: &str, owner: HWND, showing: &Cell<isize>) -> Outcome 
     let Some(Launched { process, input, output }) = launch() else { return Outcome::Unavailable };
     let asked = write_all(input.0, request.as_bytes());
     drop(input);
+    // A launcher that cannot take the request, having ended already, shows nothing.
+    if !asked {
+        unsafe { let _ = TerminateProcess(process.0, 1); }
+        return Outcome::Unavailable;
+    }
     let Ok(reader) = std::thread::Builder::new().name("oxyde-file-dialog".into()).spawn(move || read_all(output)) else {
         unsafe { let _ = TerminateProcess(process.0, 1); }
         return Outcome::Unavailable;
@@ -220,7 +225,7 @@ pub(crate) fn ask(request: &str, owner: HWND, showing: &Cell<isize>) -> Outcome 
         unsafe { let _ = EnableWindow(owner, false); }
     }
     showing.set(process.0 .0 as isize);
-    let waited = asked && wait(process.0, owner);
+    let waited = wait(process.0, owner);
     let closed = showing.replace(0) == 0;
     if !waited {
         unsafe { let _ = TerminateProcess(process.0, 1); }
