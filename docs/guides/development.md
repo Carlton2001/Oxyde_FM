@@ -13,14 +13,16 @@ cargo run --offline
 
 `cargo run` alone does not rebuild workers. Keep the helper executables (the three workers and `oxyde-folder-launcher`) next to the main binary. To ship: [distribution](distribution.md).
 
-The library shown in place of the Open and Save dialogs of other applications (`shell/oxyde-file-dialog`) is a package of its own, with its own `Cargo.lock`: it is loaded by other applications and shares nothing with Oxyde's crate. Build it into the same target folder, and build before testing, since its tests load the library:
+### Dialog library (Windows)
+
+`cargo build --bins` does not build the library shown in place of the Open and Save dialogs of other applications (`shell/oxyde-file-dialog`, `oxyde_file_dialog.dll`). It is a package of its own, with its own `Cargo.lock`: it is loaded by other applications and shares nothing with Oxyde's crate. Build it into the same target folder, next to `oxyde.exe` and the launcher, after any change to it, and before testing, since its tests load the library:
 
 ```powershell
 cargo build --offline --manifest-path shell/oxyde-file-dialog/Cargo.toml --target-dir target
 cargo test --offline --manifest-path shell/oxyde-file-dialog/Cargo.toml --target-dir target
 ```
 
-An application that showed a dialog through a registered debug build keeps `target/debug/oxyde_file_dialog.dll` loaded until it ends, and the build cannot replace it meanwhile. Uncheck the option before removing the `target` folder: a registration that points to a missing library leaves applications without a dialog until Oxyde next opens its settings, which removes it.
+An application that showed a dialog through a registered debug build keeps `target/debug/oxyde_file_dialog.dll` loaded until it ends, and the build cannot replace it meanwhile (`failed to remove file …oxyde_file_dialog.dll`): close those applications first. Uncheck the option before removing the `target` folder: a registration that points to a missing library leaves applications without a dialog until Oxyde next starts, which removes it.
 
 ## Check a change
 
