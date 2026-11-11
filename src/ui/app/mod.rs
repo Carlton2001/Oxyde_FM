@@ -264,6 +264,10 @@ pub struct OxydeApp {
     /// Radii of the main window's corners, for what reaches them.
     pub(crate) window_corners: Corners<Pixels>,
     pub sidebar_content_width: f32,
+    /// The sidebar width that fits its widest row, in display pixels.
+    pub sidebar_fit_width: f32,
+    /// The resize separator under the pointer, whose line shows the accent.
+    pub hovered_separator: Option<SharedString>,
     pub sidebar_selected_path: Option<String>,
     pub(crate) sidebar_follow_path: Option<String>,
     pub(crate) sidebar_follow_task: Option<Task<()>>,
@@ -489,6 +493,8 @@ impl OxydeApp {
                 .and_then(serde_json::Value::as_bool)
                 .unwrap_or(false),
             sidebar_content_width: 260.0,
+            sidebar_fit_width: 0.0,
+            hovered_separator: None,
             sidebar_selected_path: None,
             sidebar_follow_path: None,
             sidebar_follow_task: None,

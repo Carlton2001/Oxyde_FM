@@ -42,58 +42,79 @@ pub(super) fn render_sidebar_tree(
     let theme = *_cx.theme();
     let use_system_icons = cfg!(target_os = "windows") && view.use_system_icons();
 
-    // Dynamic content width (minimum = sidebar width), from the shaped names.
-    let font = window.text_style().font();
+    // Each row's exact width from its shaped name, its weight and its fixed chrome.
+    // At render time the window's text style is not yet the root's: name the family it sets.
+    let mut font = window.text_style().font();
+    font.family = "Inter".into();
     let font_size = crate::ui::scale::rem_pixels(rems(0.8125));
-    let measure = |text: String| {
-        let len = text.len();
-        window.text_system().shape_line(text.into(), font_size, &[TextRun {
-            len, font: font.clone(), color: theme.text, background_color: None, underline: None, strikethrough: None,
-        }], None).width.as_f32()
+    // The labels truncate on the sum of their characters' own widths, without kerning:
+    // measure the same way, or a label that shapes narrower would still be cut.
+    let text_system = window.text_system();
+    let regular = text_system.resolve_font(&Font { weight: crate::ui::style::DEFAULT_FONT_WEIGHT, ..font.clone() });
+    let semibold = text_system.resolve_font(&Font { weight: FontWeight::SEMIBOLD, ..font.clone() });
+    let mut char_widths = std::collections::HashMap::<(bool, char), f32>::new();
+    let mut measure = |text: String, bold: bool| {
+        let width: f32 = text.chars().map(|c| *char_widths.entry((bold, c)).or_insert_with(|| {
+            text_system.layout_width(if bold { semibold } else { regular }, font_size, c).as_f32()
+        })).sum();
+        width.ceil() + 1.0
     };
-    let calculated_content_w = sidebar_items
+    let rem = |value: f32| crate::ui::scale::rem_pixels(rems(value)).as_f32();
+    // Side padding, icon and gap; rows with a chevron add its slot.
+    let place_chrome = rem(0.75 + 1.0 + 0.5 + 0.75);
+    let device_chrome = place_chrome + rem(1.0 + 0.25);
+    let natural_row_w = sidebar_items
         .iter()
         .map(|item| match item {
             SidebarItem::Header(_) => 0.0,
             SidebarItem::Pinned { item } | SidebarItem::OneDrive { item } => {
-                measure(pinned_display_name(item, _cx.i18n()).to_string()) + logical(60.0)
+                let bold = item.path == "__network_vincinity__" || item.path == "trash://";
+                measure(pinned_display_name(item, _cx.i18n()).to_string(), bold) + place_chrome
             }
             SidebarItem::Linux { .. } => {
-                measure(_cx.i18n().text(crate::ui::i18n::Message::SidebarLinux).to_string()) + logical(60.0)
+                measure(_cx.i18n().text(crate::ui::i18n::Message::SidebarLinux).to_string(), true) + device_chrome
             }
             SidebarItem::Drive { drive, .. } => {
-                measure(crate::ui::format::drive_name(drive, _cx.i18n())) + logical(60.0)
+                measure(crate::ui::format::drive_name(drive, _cx.i18n()), true) + device_chrome
             }
-            SidebarItem::Volume { volume } => measure(super::volume_row::name(volume, _cx.i18n())) + logical(60.0),
+            SidebarItem::Volume { volume } => measure(super::volume_row::name(volume, _cx.i18n()), false) + device_chrome,
             SidebarItem::Directory { node, depth, .. } => {
-                (*depth as f32 * logical(12.0)) + measure(node.name.clone()) + logical(60.0)
+                logical(8.0) + (*depth as f32 * logical(12.0)) + rem(1.0 + 0.25 + 1.0 + 0.5 + 0.75)
+                    + measure(node.name.clone(), false)
             }
         })
-        .fold(view.sidebar_display_width(), |a, b| a.max(b));
+        .fold(0.0_f32, f32::max);
+    let viewport_w = view.sidebar_display_width();
+    let list_top = crate::ui::scale::rem_pixels(list_top_rems()).as_f32();
+    // The bottom padding belongs to the content, so the scrollbar covers it too.
+    let bottom_padding = crate::ui::scale::rem_pixels(rems(0.5)).as_f32();
+    let content_h = (sidebar_items.iter().map(sidebar_item_height).sum::<f32>() + bottom_padding).max(1.0);
+    // The list's side insets: a left margin, and on the right the vertical scrollbar's
+    // gutter when the rows overflow even without a horizontal scrollbar.
+    let gutter = |vertical: bool| crate::ui::scale::rem_pixels(rems(0.5) + if vertical { rems(1.125) } else { rems(0.5) }).as_f32();
+    let natural_gutter = gutter(content_h > (view.list_height - list_top).max(1.0));
+    // The width that shows the widest row exactly, for the edge's double click.
+    let fit_w = natural_row_w + natural_gutter;
+    let calculated_content_w = fit_w.max(viewport_w);
+    let content_w = calculated_content_w;
+    // Reserve scrollbar gutters only when their axis actually overflows.
+    let h_overflow = content_w > viewport_w + 1.0;
+    let list_bottom = if h_overflow { crate::ui::components::scrollbar::zed_track_width() } else { 0.0 };
+    let viewport_h = (view.list_height - list_top - list_bottom).max(1.0);
+    let list_right = if content_h > viewport_h { rems(1.125) } else { rems(0.5) };
+    // Rows fill the list's visible width until the content itself overflows it.
+    let visible_w = viewport_w - crate::ui::scale::rem_pixels(rems(0.5) + list_right).as_f32();
+    let row_w = natural_row_w.max(visible_w).max(1.0);
 
-    if (calculated_content_w - view.sidebar_content_width).abs() > 1.0 {
+    if (calculated_content_w - view.sidebar_content_width).abs() > 1.0 || (fit_w - view.sidebar_fit_width).abs() > 0.5 {
         let h = handle.clone();
         _cx.defer(move |cx| {
             h.update(cx, |this, _| {
                 this.sidebar_content_width = calculated_content_w;
+                this.sidebar_fit_width = fit_w;
             });
         });
     }
-
-    let viewport_w = view.sidebar_display_width();
-    let content_w = calculated_content_w.max(viewport_w);
-    // Reserve scrollbar gutters only when their axis actually overflows.
-    let h_overflow = content_w > viewport_w + 1.0;
-    let list_top = crate::ui::scale::rem_pixels(list_top_rems()).as_f32();
-    let list_bottom = if h_overflow { crate::ui::components::scrollbar::zed_track_width() } else { 0.0 };
-    let viewport_h = (view.list_height - list_top - list_bottom).max(1.0);
-    // The bottom padding belongs to the content, so the scrollbar covers it too.
-    let bottom_padding = crate::ui::scale::rem_pixels(rems(0.5)).as_f32();
-    let content_h = (sidebar_items.iter().map(sidebar_item_height).sum::<f32>() + bottom_padding).max(1.0);
-    let list_right = if content_h > viewport_h { rems(1.125) } else { rems(0.5) };
-    // Rows fill the list's visible width until the content itself overflows it.
-    let visible_w = viewport_w - crate::ui::scale::rem_pixels(rems(0.5) + list_right).as_f32();
-    let row_w = (content_w - logical(26.0)).max(visible_w).max(1.0);
 
     // Highlight only the folder currently open in the active pane's active tab.
     let selected_path = view

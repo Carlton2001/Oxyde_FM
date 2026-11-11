@@ -1,4 +1,5 @@
 use crate::ui::app::{DragTarget, OxydeApp};
+use crate::ui::elements::resize_highlight::resize_highlight;
 use super::ThemeContext;
 use super::{InteractiveElement, IntoElement, ParentElement, Styled};
 use gpui::*;
@@ -63,10 +64,14 @@ impl OxydeApp {
 
                 for (i, child) in children.iter().enumerate() {
                     if i > 0 {
+                        let key = format!("pane-resize-{id}-{}", i - 1);
+                        let highlighted = self.hovered_separator.as_deref() == Some(key.as_str())
+                            || matches!(&self.drag_target, Some(DragTarget::PaneResize { split_id, child_idx, .. }) if split_id == id && *child_idx == i - 1);
                         let separator = match axis {
                             crate::ui::workspace::LayoutAxis::Horizontal => {
                                 div()
-                                    .group("pane-resize-handle")
+                                    .id(SharedString::from(key.clone()))
+                                    .on_hover({ let h = handle.clone(); let key = key.clone(); move |hovered, _, cx| h.update(cx, |this, cx| this.hover_separator(&key, *hovered, cx)) })
                                     .w(rems(0.25))
                                     .mx(rems(-0.125))
                                     .flex_none()
@@ -80,10 +85,11 @@ impl OxydeApp {
                                     .occlude()
                                     .child(
                                         div()
+                                            .relative()
                                             .w(rems(0.0625))
                                             .h_full()
                                             .bg(cx.theme().border)
-                                            .group_hover("pane-resize-handle", |s| s.bg(cx.theme().accent.opacity(0.6))),
+                                            .child(resize_highlight(format!("{key}-highlight"), highlighted, cx.theme().accent.opacity(0.6))),
                                     )
                                     .on_mouse_down(MouseButton::Left, {
                                         let h = handle.clone();
@@ -92,11 +98,12 @@ impl OxydeApp {
                                         let idx = i - 1;
                                         move |e, _, cx| {
                                             cx.stop_propagation();
-                                            h.update(cx, |this, _| {
+                                            h.update(cx, |this, cx| {
+                                                let weights = if e.click_count == 2 { this.equalize_split(&s_id, idx, cx) } else { None };
                                                 this.drag_target = Some(DragTarget::PaneResize {
                                                     split_id: s_id.clone(),
                                                     child_idx: idx,
-                                                    initial_weights: w_copy.clone(),
+                                                    initial_weights: weights.unwrap_or_else(|| w_copy.clone()),
                                                 });
                                                 this.grab_offset = e.position.x.as_f32();
                                             });
@@ -104,7 +111,8 @@ impl OxydeApp {
                                     })
                             }
                             crate::ui::workspace::LayoutAxis::Vertical => div()
-                                .group("pane-resize-handle")
+                                .id(SharedString::from(key.clone()))
+                                    .on_hover({ let h = handle.clone(); let key = key.clone(); move |hovered, _, cx| h.update(cx, |this, cx| this.hover_separator(&key, *hovered, cx)) })
                                 .h(rems(0.25))
                                 .my(rems(-0.125))
                                 .occlude()
@@ -116,10 +124,11 @@ impl OxydeApp {
                                 .pb(rems(0.125))
                                 .child(
                                     div()
+                                        .relative()
                                         .h(rems(0.0625))
                                         .w_full()
                                         .bg(cx.theme().border)
-                                        .group_hover("pane-resize-handle", |s| s.bg(cx.theme().accent.opacity(0.6))),
+                                        .child(resize_highlight(format!("{key}-highlight"), highlighted, cx.theme().accent.opacity(0.6))),
                                 )
                                 .on_mouse_down(MouseButton::Left, {
                                     let h = handle.clone();
@@ -128,11 +137,12 @@ impl OxydeApp {
                                     let idx = i - 1;
                                     move |e, _, cx| {
                                         cx.stop_propagation();
-                                        h.update(cx, |this, _| {
+                                        h.update(cx, |this, cx| {
+                                            let weights = if e.click_count == 2 { this.equalize_split(&s_id, idx, cx) } else { None };
                                             this.drag_target = Some(DragTarget::PaneResize {
                                                 split_id: s_id.clone(),
                                                 child_idx: idx,
-                                                initial_weights: w_copy.clone(),
+                                                initial_weights: weights.unwrap_or_else(|| w_copy.clone()),
                                             });
                                             this.grab_offset = e.position.y.as_f32();
                                         });
@@ -157,8 +167,27 @@ impl OxydeApp {
         }
     }
 
-}
+    /// Records the separator under the pointer, or forgets it when the pointer leaves.
+    pub(crate) fn hover_separator(&mut self, key: &str, hovered: bool, cx: &mut Context<Self>) {
+        if hovered {
+            self.hovered_separator = Some(SharedString::from(key.to_string()));
+        } else if self.hovered_separator.as_deref() == Some(key) {
+            self.hovered_separator = None;
+        } else {
+            return;
+        }
+        cx.notify();
+    }
 
-#[cfg(test)]
-#[path = "tests/tree.rs"]
-mod tests;
+    /// Double click on a split's handle: share the two neighbouring panes' space equally.
+    fn equalize_split(&mut self, split_id: &str, index: usize, cx: &mut Context<Self>) -> Option<Vec<f32>> {
+        let (_, weights) = self.state.layout.find_split_mut(split_id)?;
+        if index + 1 >= weights.len() { return None; }
+        let half = (weights[index] + weights[index + 1]) / 2.0;
+        weights[index] = half;
+        weights[index + 1] = half;
+        let weights = weights.clone();
+        cx.notify();
+        Some(weights)
+    }
+}

@@ -120,6 +120,12 @@ impl OxydeApp {
         resize_sidebar_state(&mut self.sidebar_width, &mut self.sidebar_collapsed, baseline_width);
     }
 
+    /// Double click on the sidebar's edge: the width of its widest row.
+    pub(crate) fn fit_sidebar(&mut self) {
+        if self.sidebar_collapsed || self.sidebar_fit_width <= 0.0 { return; }
+        self.resize_sidebar(self.sidebar_fit_width.max(logical(150.0)));
+    }
+
     pub(crate) fn expand_all_sidebar_path(&mut self, path: String, cx: &mut Context<Self>) {
         let Some(handle) = self.handle.clone() else {
             return;

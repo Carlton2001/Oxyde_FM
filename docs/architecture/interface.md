@@ -69,4 +69,6 @@ An animation is never in the way of an action: clicks, navigation and drops stay
 
 `elements/motion.rs` provides critically damped springs (`presence`, `glide`, `slide`) that redirect without a jump. Do not animate owned windows appearing (menus, tooltips): Windows overlays its own opening animation. Remove a repeating animation from rendering once it has no purpose.
 
+A resize separator's accent fades in over its line while it is hovered or dragged (`elements/resize_highlight.rs`); the separator itself and the resizing stay immediate.
+
 A computed folder size that changes signals the update with an accent background fading over 300 ms in the Size cell, an exception to the appearance duration. The initial calculation and identical results stay unanimated; an offscreen cell does not replay the flash when it appears.

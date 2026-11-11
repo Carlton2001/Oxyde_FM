@@ -3,6 +3,7 @@ pub(crate) mod checkbox;
 pub(crate) mod radio;
 pub(crate) mod toggle;
 pub(crate) mod motion;
+pub(crate) mod resize_highlight;
 pub mod stepper;
 pub(crate) mod segmented;
 pub(crate) mod rounded_fill;
