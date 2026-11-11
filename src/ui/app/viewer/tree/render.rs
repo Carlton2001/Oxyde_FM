@@ -320,3 +320,7 @@ impl Viewer {
             .into_any_element()
     }
 }
+
+#[cfg(test)]
+#[path = "tests/columns.rs"]
+mod columns_tests;

@@ -11,6 +11,21 @@ const AUTOSCROLL_RATE: f32 = 60.0;
 /// Depth beyond which the speed stops growing.
 const AUTOSCROLL_MAX_DEPTH: f32 = 150.0;
 
+/// How deep the pointer is in the band along the list's top (negative) or bottom
+/// (positive) edge, up to the depth beyond which the speed stops growing; zero
+/// between the bands.
+fn autoscroll_depth(y: f32, top: f32, bottom: f32) -> f32 {
+    let edge = logical(AUTOSCROLL_EDGE);
+    let depth = if y < top + edge {
+        y - (top + edge)
+    } else if y > bottom - edge {
+        y - (bottom - edge)
+    } else {
+        0.0
+    };
+    depth.clamp(-logical(AUTOSCROLL_MAX_DEPTH), logical(AUTOSCROLL_MAX_DEPTH))
+}
+
 impl OxydeApp {
     pub fn on_action_tout_selectionner(
         &mut self,
@@ -112,21 +127,13 @@ impl OxydeApp {
             let mut new_scroll_y = scroll_y;
             let mut scrolled = false;
 
-            let edge = logical(AUTOSCROLL_EDGE);
-            let depth = if current_pos.y.as_f32() < list_top + edge {
-                -(list_top + edge - current_pos.y.as_f32())
-            } else if current_pos.y.as_f32() > list_bottom - edge {
-                current_pos.y.as_f32() - (list_bottom - edge)
-            } else {
-                0.0
-            };
+            let depth = autoscroll_depth(current_pos.y.as_f32(), list_top, list_bottom);
             let now = std::time::Instant::now();
             if depth == 0.0 {
                 self.selection_autoscroll_at = None;
             } else {
                 let elapsed = self.selection_autoscroll_at.replace(now)
                     .map_or(1.0 / 60.0, |last| now.duration_since(last).as_secs_f32().min(0.1));
-                let depth = depth.clamp(-logical(AUTOSCROLL_MAX_DEPTH), logical(AUTOSCROLL_MAX_DEPTH));
                 new_scroll_y -= depth * AUTOSCROLL_RATE * elapsed;
                 // A still pointer sends no events: a ticker keeps redrawing, and each
                 // redraw runs this step again, until the pointer leaves the band.

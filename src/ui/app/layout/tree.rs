@@ -112,7 +112,7 @@ impl OxydeApp {
                             }
                             crate::ui::workspace::LayoutAxis::Vertical => div()
                                 .id(SharedString::from(key.clone()))
-                                    .on_hover({ let h = handle.clone(); let key = key.clone(); move |hovered, _, cx| h.update(cx, |this, cx| this.hover_separator(&key, *hovered, cx)) })
+                                .on_hover({ let h = handle.clone(); let key = key.clone(); move |hovered, _, cx| h.update(cx, |this, cx| this.hover_separator(&key, *hovered, cx)) })
                                 .h(rems(0.25))
                                 .my(rems(-0.125))
                                 .occlude()
@@ -182,12 +182,23 @@ impl OxydeApp {
     /// Double click on a split's handle: share the two neighbouring panes' space equally.
     fn equalize_split(&mut self, split_id: &str, index: usize, cx: &mut Context<Self>) -> Option<Vec<f32>> {
         let (_, weights) = self.state.layout.find_split_mut(split_id)?;
-        if index + 1 >= weights.len() { return None; }
-        let half = (weights[index] + weights[index + 1]) / 2.0;
-        weights[index] = half;
-        weights[index + 1] = half;
+        if !equalize_pair(weights, index) { return None; }
         let weights = weights.clone();
         cx.notify();
         Some(weights)
     }
 }
+
+/// Shares the space of the panes on each side of separator `index` equally,
+/// leaving the others as they are; false when there is no such separator.
+fn equalize_pair(weights: &mut [f32], index: usize) -> bool {
+    if index + 1 >= weights.len() { return false; }
+    let half = (weights[index] + weights[index + 1]) / 2.0;
+    weights[index] = half;
+    weights[index + 1] = half;
+    true
+}
+
+#[cfg(test)]
+#[path = "tests/tree.rs"]
+mod tests;
