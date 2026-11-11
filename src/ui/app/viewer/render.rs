@@ -296,7 +296,8 @@ impl Viewer {
                     .items_center()
                     .justify_center()
                     .gap(rems(0.5))
-                    .child(cx.i18n().text(Message::ViewerDetached))
+                    .p(rems(1.0))
+                    .child(super::content_render::wrapping(cx.i18n().text(Message::ViewerDetached)))
                     .child(
                         icon_button(
                             "viewer-show-window",

@@ -1,5 +1,6 @@
 //! Presentation of the Viewer's tree: a summary above a virtualized list of
-//! rows with name, file size and date, and the chevron on the right.
+//! rows with name, file size and date, and the chevron on the right. The
+//! size and date columns give way to the name when the Viewer is narrow.
 use super::{ArchiveInfo, Chevron, Count, Failure, Folder, Level, Row, Totals, Tree};
 use crate::ui::{
     app::viewer::Viewer,
@@ -9,6 +10,7 @@ use crate::ui::{
     theme::ThemeContext,
 };
 use gpui::{prelude::*, *};
+use std::{cell::Cell, rc::Rc};
 
 pub(super) const ROW_HEIGHT: Rems = crate::ui::style::ROW_HEIGHT;
 const INDENT: Rems = rems(1.25);
@@ -25,7 +27,7 @@ fn centered(text: SharedString, cx: &App) -> AnyElement {
         .justify_center()
         .p(PADDING)
         .text_color(cx.theme().text_muted)
-        .child(text)
+        .child(super::super::content_render::wrapping(text))
         .into_any_element()
 }
 
@@ -151,6 +153,31 @@ fn column(text: String, min_width: Rems, right: bool, cx: &App) -> Div {
         .child(text)
 }
 
+/// Which secondary columns the rows show. In the Viewer the name comes
+/// first: the date gives way, then the size, before the name is cut short.
+#[derive(Clone, Copy, PartialEq)]
+struct Columns {
+    size: bool,
+    date: bool,
+}
+
+impl Columns {
+    /// Name room kept before a column is shown, on top of the toggle and icon.
+    const NAME: f32 = 12.0;
+    const SIZE: f32 = 6.5;
+    const DATE: f32 = 10.0;
+
+    fn for_width(width: Pixels, rem: Pixels) -> Self {
+        // Zero before the first layout: show everything, as in a wide Viewer.
+        if width <= px(0.0) {
+            return Self { size: true, date: true };
+        }
+        let fixed = PADDING.to_pixels(rem) + rems(0.5 + 1.25 + 1.5).to_pixels(rem);
+        let room = (width - fixed) / rem;
+        Self { size: room >= Self::NAME + Self::SIZE, date: room >= Self::NAME + Self::SIZE + Self::DATE }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn entry_row(
     index: usize,
@@ -159,6 +186,7 @@ fn entry_row(
     state: Chevron,
     subfolders: bool,
     system_icons: bool,
+    columns: Columns,
     viewer: WeakEntity<Viewer>,
     cx: &App,
 ) -> AnyElement {
@@ -223,8 +251,8 @@ fn entry_row(
             false,
         )))
         .child(name)
-        .child(column(size, rems(5.5), true, cx))
-        .child(column(date, rems(8.0), false, cx))
+        .when(columns.size, |row| row.child(column(size, rems(5.5), true, cx)))
+        .when(columns.date, |row| row.child(column(date, rems(8.0), false, cx)))
         .into_any_element()
 }
 
@@ -258,10 +286,20 @@ impl Viewer {
         let rows = tree.rows.clone();
         let viewer = cx.entity().downgrade();
         let system_icons = self.owner.upgrade().is_some_and(|owner| owner.read(cx).use_system_icons());
-        let body = list(tree.list.clone(), move |index, _, cx| {
+        // Measured by a canvas laid out before the list in the same frame.
+        let width = Rc::new(Cell::new(px(0.0)));
+        let measured = width.clone();
+        let measure = canvas(
+            move |bounds, _, _| measured.set(bounds.size.width),
+            |_, _, _, _| {},
+        )
+        .absolute()
+        .size_full();
+        let body = list(tree.list.clone(), move |index, window, cx| {
             let viewer = viewer.clone();
+            let columns = Columns::for_width(width.get(), window.rem_size());
             match rows.get(index) {
-                Some(Row::Entry { file, depth, chevron, subfolders }) => entry_row(index, file, *depth, *chevron, *subfolders, system_icons, viewer, cx),
+                Some(Row::Entry { file, depth, chevron, subfolders }) => entry_row(index, file, *depth, *chevron, *subfolders, system_icons, columns, viewer, cx),
                 Some(Row::Loading { depth }) => note(*depth, cx.i18n().text(Message::ViewerTreeLoading), cx).into_any_element(),
                 Some(Row::Failed { depth }) => note(*depth, cx.i18n().text(Message::ViewerTreeFailed), cx).into_any_element(),
                 Some(Row::Empty { depth }) => note(*depth, cx.i18n().text(Message::ViewerTreeEmpty), cx).into_any_element(),
@@ -276,7 +314,7 @@ impl Viewer {
             .flex()
             .flex_col()
             .child(header)
-            .child(div().flex_1().min_h_0().child(self.with_scrollbar(body.into_any_element(), cx)))
+            .child(div().relative().flex_1().min_h_0().child(measure).child(self.with_scrollbar(body.into_any_element(), cx)))
             .into_any_element()
     }
 }

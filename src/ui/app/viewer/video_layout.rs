@@ -78,7 +78,7 @@ impl Viewer {
                     .text_center()
                     .map(|placeholder| match missing.filter(|_| !self.blocked) {
                         Some(info) => placeholder.child(super::media_labels::missing_codec_notice(&info, cx)),
-                        None => placeholder.child(cx.i18n().text(Message::ViewerVisualPaused)),
+                        None => placeholder.child(super::content_render::wrapping(cx.i18n().text(Message::ViewerVisualPaused))),
                     })
                     .into_any_element())
             },

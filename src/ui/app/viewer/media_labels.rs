@@ -60,8 +60,10 @@ pub(super) fn missing_codec_notice(info: &MediaInfo, cx: &App) -> Div {
         .items_center()
         .gap(rems(0.5))
         .text_center()
-        .children(lines.into_iter().filter(|(missing, _)| *missing).map(|(_, video)| missing_codec(video, info, cx)))
-        .child(div().text_size(rems(0.75)).opacity(0.75).child(cx.i18n().text(Message::ViewerCodecMissingHint)))
+        .min_w_0()
+        .max_w_full()
+        .children(lines.into_iter().filter(|(missing, _)| *missing).map(|(_, video)| super::content_render::wrapping(missing_codec(video, info, cx))))
+        .child(super::content_render::wrapping(cx.i18n().text(Message::ViewerCodecMissingHint)).text_size(rems(0.75)).opacity(0.75))
 }
 
 /// `value` with at most `decimals` digits, trailing zeros removed, in the UI's notation.

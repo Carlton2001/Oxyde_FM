@@ -10,14 +10,21 @@ use crate::ui::{
 };
 use gpui::{prelude::*, *};
 
+/// A centered message that wraps in a narrow Viewer instead of overflowing:
+/// a flex item otherwise keeps the width of its unbroken text.
+pub(super) fn wrapping(text: SharedString) -> Div {
+    div().min_w_0().max_w_full().text_center().child(text)
+}
+
 fn message(text: SharedString, cx: &App) -> AnyElement {
     div()
         .size_full()
         .flex()
         .items_center()
         .justify_center()
+        .p(rems(1.0))
         .text_color(cx.theme().text_muted)
-        .child(text)
+        .child(wrapping(text))
         .into_any_element()
 }
 
@@ -93,7 +100,7 @@ impl Viewer {
             .text_color(cx.theme().text_muted)
             .map(|body| match missing {
                 Some(info) => body.child(super::media_labels::missing_codec_notice(&info, cx)),
-                None => body.child(cx.i18n().text(Message::ViewerFileUnavailable)),
+                None => body.child(wrapping(cx.i18n().text(Message::ViewerFileUnavailable))),
             })
             .when_some(file, |body, file| body.child(
                 crate::ui::elements::button::Button::new("viewer-open-file")
@@ -262,7 +269,8 @@ impl Viewer {
                             .items_center()
                             .justify_center()
                             .text_color(theme.text_muted)
-                            .child(cx.i18n().text(Message::PreviewUnavailable)),
+                            .p(rems(1.0))
+                            .child(wrapping(cx.i18n().text(Message::PreviewUnavailable))),
                         (None, false) => page,
                     };
                     div()
