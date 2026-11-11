@@ -72,6 +72,11 @@ fn hand_over(lines: &[String], until: Instant) -> bool {
 }
 
 fn relay() -> Option<String> {
+    // Started by a sandboxed application, the launcher could reach no Oxyde and would
+    // keep it waiting until the time runs out: the system's dialog shows at once.
+    if super::super::windows_instance::below_medium_integrity() {
+        return None;
+    }
     keep_handles();
     let mut asked = String::new();
     std::io::stdin().take(LIMIT).read_to_string(&mut asked).ok()?;

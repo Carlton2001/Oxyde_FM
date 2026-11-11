@@ -18,8 +18,9 @@ use windows::Win32::Security::Authorization::{
     ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, GetSecurityInfo, SDDL_REVISION_1, SE_KERNEL_OBJECT,
 };
 use windows::Win32::Security::{
-    EqualSid, GetTokenInformation, TokenElevation, TokenUser, OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID,
-    SECURITY_ATTRIBUTES, TOKEN_ELEVATION, TOKEN_INFORMATION_CLASS, TOKEN_QUERY, TOKEN_USER,
+    EqualSid, GetSidSubAuthority, GetSidSubAuthorityCount, GetTokenInformation, TokenElevation, TokenIntegrityLevel, TokenUser,
+    OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, SECURITY_ATTRIBUTES, TOKEN_ELEVATION, TOKEN_INFORMATION_CLASS,
+    TOKEN_MANDATORY_LABEL, TOKEN_QUERY, TOKEN_USER,
 };
 use windows::Win32::Storage::FileSystem::{ReadFile, FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_ACCESS_INBOUND};
 use windows::Win32::System::Pipes::{
@@ -93,6 +94,19 @@ fn token_information(class: TOKEN_INFORMATION_CLASS) -> Option<Vec<u64>> {
 /// Whether this process runs as administrator.
 fn elevated() -> bool {
     token_information(TokenElevation).is_some_and(|elevation| unsafe { (*elevation.as_ptr().cast::<TOKEN_ELEVATION>()).TokenIsElevated != 0 })
+}
+
+/// `SECURITY_MANDATORY_MEDIUM_RID`, the integrity of the user's programs.
+const MEDIUM_INTEGRITY: u32 = 0x2000;
+
+/// Whether this process runs below medium integrity, as sandboxed programs do: the
+/// pipes it would write to are labelled medium, and refuse it.
+pub(super) fn below_medium_integrity() -> bool {
+    token_information(TokenIntegrityLevel).is_some_and(|label| unsafe {
+        let sid = (*label.as_ptr().cast::<TOKEN_MANDATORY_LABEL>()).Label.Sid;
+        let count = *GetSidSubAuthorityCount(sid);
+        count > 0 && *GetSidSubAuthority(sid, u32::from(count - 1)) < MEDIUM_INTEGRITY
+    })
 }
 
 struct Descriptor(PSECURITY_DESCRIPTOR);
