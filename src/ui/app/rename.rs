@@ -324,7 +324,7 @@ impl OxydeApp {
                         old_path.clone(), new_path.clone(), quality, cancel,
                     ));
                     if let Ok(Some(identity)) = &result {
-                        oxyde_lib::commands::io::record_captured_folder_rename(&rename_history, &old_path, &new_path, *identity);
+                        oxyde_lib::commands::io::record_captured_rename(&rename_history, &old_path, &new_path, *identity);
                     }
                     result.map(|_| ())
                 })

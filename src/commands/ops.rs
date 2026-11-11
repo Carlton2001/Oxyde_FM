@@ -635,3 +635,7 @@ mod new_folder_history_tests;
 #[cfg(all(test, target_os = "windows"))]
 #[path = "ops/tests/restoration_selection_tests.rs"]
 mod restoration_selection_tests;
+
+#[cfg(test)]
+#[path = "ops/tests/rename_history_tests.rs"]
+mod rename_history_tests;

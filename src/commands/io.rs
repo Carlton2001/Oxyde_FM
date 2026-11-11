@@ -310,6 +310,46 @@ pub fn record_captured_folder_rename(
     history.relocate_created_folder(old, new, identity)
 }
 
+/// Records a local rename for Undo, with the proof captured on its handle. Naming a
+/// folder just created belongs to its creation: its New folder entry follows the name
+/// instead, and undoing removes it.
+pub fn record_captured_rename(
+    history: &crate::models::HistoryManager,
+    old: &str,
+    new: &str,
+    identity: crate::models::transaction::HistoryFileIdentity,
+) {
+    if history.relocate_created_folder(old, new, identity) {
+        return;
+    }
+    use crate::models::transaction::{Transaction, TransactionDetails, TransactionType};
+    history.push(Transaction::new(TransactionType::Rename, TransactionDetails {
+        paths: vec![new.to_owned()],
+        deleted_items: None,
+        target_dir: None,
+        old_path: Some(old.to_owned()),
+        new_path: Some(new.to_owned()),
+        created_files: None,
+        created_dirs: None,
+        overwritten_files: None,
+        moved_files: None,
+        moved_file_identities: None,
+        trash_metadata_backups: None,
+        renamed_item_identity: Some(identity),
+        moved_directory_identities: None,
+        moved_dirs: None,
+        copied_files: None,
+        copied_file_hashes: None,
+        copied_file_identities: None,
+        copied_directory_identities: None,
+        created_links: None,
+        moved_links: None,
+        directory_attributes: None,
+        renamed_dirs: None,
+        new_folder_identity: None,
+    }));
+}
+
 /// Worker-only journal relocation; an independently replaced destination is never adopted.
 pub fn record_created_folder_rename(
     history: &crate::models::HistoryManager,

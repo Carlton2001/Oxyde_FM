@@ -11,9 +11,10 @@ Ctrl + Z undoes the last recorded operation, Ctrl + Y or Ctrl + Shift + Z redoes
 | Copy | `systems/file_ops/execution.rs` | Removes what the copy created, each file checked against its hash and identity |
 | Move | same | Moves items back, folders and links included |
 | Move to the trash | same, and `history_delete.rs` on Windows | Restores the items ([trash](trash.md#restoring)) |
-| New folder | `app/rename.rs` | Removes the folder while it is still empty |
+| Rename | `app/rename.rs`, `commands::io::record_captured_rename` | Gives the item its old name back, checked against the identity captured on its handle |
+| New folder | `app/rename.rs` | Removes the folder while it is still empty; naming it right after creation belongs to the creation, not a separate rename |
 
-Not recorded: permanent deletions, renames, archive operations, permission and property changes.
+Not recorded: permanent deletions, renames inside archives, archive operations, permission and property changes.
 
 ## Guarantees
 
