@@ -21,7 +21,7 @@ fn acl(mode: u32) -> Vec<u8> {
 }
 
 fn attribute(path: &Path, name: &str) -> Vec<u8> {
-    let size = rustix::fs::getxattr(path, name, &mut [0_u8; 0][..]).unwrap();
+    let size = rustix::fs::getxattr_query(path, name).unwrap();
     let mut value = vec![0; size];
     let size = rustix::fs::getxattr(path, name, &mut value[..]).unwrap();
     value.truncate(size);

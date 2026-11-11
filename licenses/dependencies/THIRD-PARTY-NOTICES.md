@@ -4538,7 +4538,7 @@ DEALINGS IN THE SOFTWARE.
 ## MIT License
 
 - tempfile 3.27.0
-- xattr 1.6.1
+- xattr 1.7.0
 
 ```text
 Copyright (c) 2015 Steven Allen
@@ -10096,7 +10096,7 @@ DEALINGS IN THE SOFTWARE.
 - ref-cast-impl 1.0.27
 - ref-cast 1.0.27
 - rustc-hash 1.1.0
-- rustix 1.1.5
+- rustix 1.1.6
 - rustversion 1.0.23
 - semver 1.0.28
 - serde 1.0.229
@@ -13452,7 +13452,7 @@ Umio Yasuno <53935716+Umio-Yasuno@users.noreply.github.com>
 Matt Keeter <matt.j.keeter@gmail.com>
 ~~~
 
-## rustix 1.1.5 — COPYRIGHT
+## rustix 1.1.6 — COPYRIGHT
 
 Source: registry+https://github.com/rust-lang/crates.io-index
 

@@ -15,10 +15,17 @@ fn kept(name: &[u8]) -> bool {
 }
 
 /// Reads through `read` until the buffer holds the current value, which may grow
-/// between the size query and the read.
-fn sized(mut read: impl FnMut(&mut [u8]) -> rustix::io::Result<usize>) -> rustix::io::Result<Vec<u8>> {
+/// between the size query and the read. A zero-length buffer is not a size query
+/// in rustix, so the size comes from `query`.
+fn sized(
+    mut query: impl FnMut() -> rustix::io::Result<usize>,
+    mut read: impl FnMut(&mut [u8]) -> rustix::io::Result<usize>,
+) -> rustix::io::Result<Vec<u8>> {
     loop {
-        let size = read(&mut [])?;
+        let size = query()?;
+        if size == 0 {
+            return Ok(Vec::new());
+        }
         let mut buffer = vec![0_u8; size];
         match read(&mut buffer) {
             Ok(length) => {
@@ -32,7 +39,7 @@ fn sized(mut read: impl FnMut(&mut [u8]) -> rustix::io::Result<usize>) -> rustix
 }
 
 pub(super) fn read(file: &File) -> io::Result<ExtendedAttributes> {
-    let names = match sized(|buffer| rustix::fs::flistxattr(file, buffer)) {
+    let names = match sized(|| rustix::fs::flistxattr_query(file), |buffer| rustix::fs::flistxattr(file, buffer)) {
         Ok(names) => names,
         // A file system without extended attributes has nothing to keep.
         Err(Errno::OPNOTSUPP) => return Ok(ExtendedAttributes::default()),
@@ -41,7 +48,7 @@ pub(super) fn read(file: &File) -> io::Result<ExtendedAttributes> {
     let mut attributes = Vec::new();
     for name in names.split(|byte| *byte == 0).filter(|name| kept(name)) {
         let name = OsStr::from_bytes(name);
-        match sized(|buffer| rustix::fs::fgetxattr(file, name, buffer)) {
+        match sized(|| rustix::fs::fgetxattr_query(file, name), |buffer| rustix::fs::fgetxattr(file, name, buffer)) {
             Ok(value) => attributes.push((name.to_os_string(), value)),
             // Removed since the listing.
             Err(Errno::NODATA) => {}

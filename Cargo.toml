@@ -104,7 +104,7 @@ rars = { version = "0.12.3", default-features = false, features = ["encryption",
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 libc = "0.2"
 libloading = "0.8"
-rustix = { version = "1.1", default-features = false, features = ["event", "fs", "pipe", "process", "std"] }
+rustix = { version = "1.1.6", default-features = false, features = ["event", "fs", "pipe", "process", "std"] }
 zbus = { version = "5.19", default-features = false, features = ["async-io", "blocking-api"] }
 # zbus's own executor: timers for the portal's calls, which run there.
 async-io = "2.6"
