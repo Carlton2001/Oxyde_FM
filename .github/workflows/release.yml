@@ -74,8 +74,6 @@ jobs:
         env:
           RELEASE_VERSION: ${{ needs.version.outputs.version }}
         run: |
-          # The runner's Azure mirror often fails to resolve; use the official archive.
-          echo http://archive.ubuntu.com/ubuntu/ | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends minisign
           bash scripts/check-updater-signature.sh "target/distribution/output/Oxyde_FM_${RELEASE_VERSION}_x64-setup.exe"

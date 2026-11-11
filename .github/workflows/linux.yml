@@ -43,8 +43,6 @@ jobs:
           persist-credentials: false
       - name: Install build and runtime dependencies
         run: |
-          # The runner's Azure mirror often fails to resolve; use the official archive.
-          echo http://archive.ubuntu.com/ubuntu/ | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             gcc g++ make pkg-config libfontconfig-dev libfreetype-dev libxkbcommon-dev \
