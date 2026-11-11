@@ -244,7 +244,11 @@ pub(super) fn set(enabled: bool, kept: Option<&str>) -> Result<Option<String>, S
     } else {
         let kept = kept.filter(|kept| still_installed(kept, |program| std::path::Path::new(program).is_file()));
         let before = restored(kept, &wanted);
-        let written = before.iter().fold(Ok(()), |result, value| result.and(write(value)));
+        // Every value is written back, even after a failure; the first error is kept.
+        let mut written = Ok(());
+        for value in &before {
+            written = written.and(write(value));
+        }
         before.iter().for_each(|value| remove_empty(&value.key));
         written.map(|()| None)
     };

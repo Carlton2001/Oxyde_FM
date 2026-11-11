@@ -118,7 +118,7 @@ fn browse(browser: &IShellBrowser, folder: &str) -> windows::core::Result<()> {
     let mut item: *mut ITEMIDLIST = std::ptr::null_mut();
     unsafe {
         SHParseDisplayName(PCWSTR(HSTRING::from(folder).as_ptr()), None, &mut item, 0, None)?;
-        let browsed = browser.BrowseObject(item, (SBSP_SAMEBROWSER | SBSP_ABSOLUTE) as u32);
+        let browsed = browser.BrowseObject(item, SBSP_SAMEBROWSER | SBSP_ABSOLUTE);
         CoTaskMemFree(Some(item.cast()));
         browsed
     }

@@ -146,7 +146,7 @@ pub enum InstanceRequest {
     /// Items whose Properties window opens.
     Properties(Vec<String>),
     /// Files to open, or where to save, chosen in a window of its own.
-    ChooseFile(FileChooserRequest),
+    ChooseFile(Box<FileChooserRequest>),
 }
 
 /// One rule of a file chooser's type filter.

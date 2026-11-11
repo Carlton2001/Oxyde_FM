@@ -738,6 +738,14 @@ fn resize_sidebar_state(saved_width: &mut f32, collapsed: &mut bool, requested_w
     }
 }
 
+/// The entry of `ancestor` that leads to `descendant`, when `ancestor` contains it.
+fn child_toward(ancestor: &str, descendant: &str) -> Option<String> {
+    let ancestor_path = std::path::Path::new(ancestor);
+    let rest = std::path::Path::new(descendant).strip_prefix(ancestor_path).ok()?;
+    let first = rest.components().next()?;
+    Some(ancestor_path.join(first).to_string_lossy().into_owned())
+}
+
 #[cfg(test)]
 mod sidebar_tests {
     use super::{resize_sidebar_state, sidebar_paths_equal};
@@ -812,12 +820,4 @@ mod sidebar_tests {
         resize_sidebar_state(&mut width, &mut collapsed, 900.0);
         assert_eq!(width, 600.0);
     }
-}
-
-/// The entry of `ancestor` that leads to `descendant`, when `ancestor` contains it.
-fn child_toward(ancestor: &str, descendant: &str) -> Option<String> {
-    let ancestor_path = std::path::Path::new(ancestor);
-    let rest = std::path::Path::new(descendant).strip_prefix(ancestor_path).ok()?;
-    let first = rest.components().next()?;
-    Some(ancestor_path.join(first).to_string_lossy().into_owned())
 }

@@ -27,11 +27,9 @@ pub(crate) fn mount_format(path: &Path) -> bool {
 /// Images this system mounts: all four on Windows; ISO and IMG through a loop device
 /// on Linux.
 pub(crate) fn mountable(path: &Path) -> bool {
-    match extension(path).as_deref() {
-        Some("iso" | "img") => true,
-        Some("vhd" | "vhdx") => cfg!(target_os = "windows"),
-        _ => false,
-    }
+    let extension = extension(path);
+    matches!(extension.as_deref(), Some("iso" | "img"))
+        || cfg!(target_os = "windows") && matches!(extension.as_deref(), Some("vhd" | "vhdx"))
 }
 
 fn extension(path: &Path) -> Option<String> {

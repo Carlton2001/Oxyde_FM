@@ -391,7 +391,7 @@ impl FileChooser {
             shown: Some(shown),
         };
         let asked = !request.choices.is_empty();
-        let message = InstanceMessage { request: InstanceRequest::ChooseFile(request), activation_token: None };
+        let message = InstanceMessage { request: InstanceRequest::ChooseFile(Box::new(request)), activation_token: None };
         let outcome = if self.0.unbounded_send(message).is_err() {
             Outcome::Unserved("Oxyde's interface has gone")
         } else {

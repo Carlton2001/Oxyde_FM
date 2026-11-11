@@ -101,7 +101,7 @@ impl OxydeApp {
             }
             InstanceRequest::Properties(items) => items,
             InstanceRequest::ChooseFile(request) => {
-                self.open_file_chooser(request, cx);
+                self.open_file_chooser(*request, cx);
                 return None;
             }
         };

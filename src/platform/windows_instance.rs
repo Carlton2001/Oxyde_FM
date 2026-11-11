@@ -196,7 +196,7 @@ fn serve(pipe: Pipe, sender: UnboundedSender<InstanceMessage>, released: &Atomic
         };
         let request = if header == CHOOSE {
             match super::windows_file_dialog::request(&locations, sender_process) {
-                Some(request) => InstanceRequest::ChooseFile(request),
+                Some(request) => InstanceRequest::ChooseFile(Box::new(request)),
                 None => {
                     log::warn!("Ignoring a dialog that names no pipe to answer on");
                     continue;
