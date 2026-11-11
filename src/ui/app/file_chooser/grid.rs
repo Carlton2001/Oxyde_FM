@@ -56,7 +56,7 @@ impl FileChooserWindow {
                     .relative()
                     .w_full()
                     .h(rems(4.25))
-                    .when(file.is_hidden || file.is_system, |d| d.opacity(0.5))
+                    .when(file.is_hidden || file.is_system, |d| d.opacity(0.75))
                     .child(
                         div()
                             .absolute()
@@ -93,7 +93,7 @@ impl FileChooserWindow {
                     .h(rems(1.125))
                     .text_ellipsis()
                     .overflow_hidden()
-                    .when(file.is_hidden || file.is_system, |d| d.opacity(0.5))
+                    .when(file.is_hidden || file.is_system, |d| d.opacity(0.75))
                     .child(div().font_weight(FontWeight::MEDIUM).child(name)),
             )
             .child(
@@ -101,7 +101,7 @@ impl FileChooserWindow {
                     .text_size(rems(0.625))
                     .text_color(theme.text_muted)
                     .text_ellipsis()
-                    .when(file.is_hidden || file.is_system, |d| d.opacity(0.5))
+                    .when(file.is_hidden || file.is_system, |d| d.opacity(0.75))
                     .child(kind),
             )
             .into_any_element()

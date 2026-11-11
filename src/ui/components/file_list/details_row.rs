@@ -259,7 +259,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                     .flex()
                     .items_center()
                     .overflow_hidden()
-                    .when(is_dimmed, |d| d.opacity(0.5))
+                    .when(is_dimmed, |d| d.opacity(0.75))
                     .when(show_checkboxes, |d| d.child(
                         div().ml(rems(0.5)).flex_none()
                             .child(selection_checkbox(is_selected, path.clone(), p_id.clone(), h.clone(), theme))
@@ -352,7 +352,8 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                                                         svg()
                                                             .path("icons/chevron-right.svg")
                                                             .size_3()
-                                                            .text_color(theme.text),
+                                                            .text_color(theme.text)
+                                                            .opacity(0.5),
                                                     ),
                                             )
                                             .into_any_element()
@@ -371,9 +372,9 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                 row.children(super::headers::network_columns((type_w, category), (size_w, workgroup), (date_w, location)).into_iter().map(|(_, (width, value))| div().w(px(width)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).child(value)))
             })
             .when(location_w > 0.0, |row| row.child(div().w(px(location_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).child(std::path::Path::new(file.original_path.as_deref().unwrap_or(&file.path)).parent().map(|parent| parent.to_string_lossy().into_owned()).unwrap_or_default())))
-            .when(!network_panel, |row| row.child(div().w(px(type_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(file_type_display(file, cx.i18n()))))
+            .when(!network_panel, |row| row.child(div().w(px(type_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.75)).child(file_type_display(file, cx.i18n()))))
             .when(!network_panel, |row| row
-                .child(flash_size_cell(div().w(px(size_w)).flex_none().px(rems(0.5)).text_align(TextAlign::Right).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(if calculating_sizes && is_dir && !file.is_calculated {
+                .child(flash_size_cell(div().w(px(size_w)).flex_none().px(rems(0.5)).text_align(TextAlign::Right).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.75)).child(if calculating_sizes && is_dir && !file.is_calculated {
                     size_loading(&path, theme.accent)
                 } else if provisional_size {
                     div().id(SharedString::from(format!("size-provisional-details-{path}")))
@@ -385,8 +386,8 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                 } else {
                     div().child(format_size(file.size, is_dir, file.is_calculated, language)).into_any_element()
                 }), &path, size_flash, theme.accent))
-                .when(permissions_w > 0.0, |row| row.child(div().w(px(permissions_w)).flex_none().px(rems(0.5)).text_right().text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).children(file.mode.map(crate::ui::format::permissions::octal))))
-                .child(div().w(px(date_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5)).child(format_date(file.modified, crate::ui::format::date_format(cx)))))
+                .when(permissions_w > 0.0, |row| row.child(div().w(px(permissions_w)).flex_none().px(rems(0.5)).text_right().text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.75)).children(file.mode.map(crate::ui::format::permissions::octal))))
+                .child(div().w(px(date_w)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.75)).child(format_date(file.modified, crate::ui::format::date_format(cx)))))
             .when(trash_panel, |row| row.child(div().w(px(logical(active_deleted_width))).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).child(format_date(file.deleted_time.and_then(|date| u64::try_from(date).ok()).unwrap_or(0), crate::ui::format::date_format(cx)))))
             .into_any_element()
     }

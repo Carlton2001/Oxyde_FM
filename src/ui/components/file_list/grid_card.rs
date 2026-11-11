@@ -246,7 +246,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                 .relative()
                 .w_full()
                 .h(rems(4.25))
-                .when(file.is_hidden || file.is_system, |d| d.opacity(0.5))
+                .when(file.is_hidden || file.is_system, |d| d.opacity(0.75))
                 .child(
                     div()
                         .absolute()
@@ -284,7 +284,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                             .h_full()
                             .flex()
                             .items_center()
-                            .child(svg().path("icons/chevron-right.svg").size_3().text_color(theme.text)),
+                            .child(svg().path("icons/chevron-right.svg").size_3().text_color(theme.text).opacity(0.5)),
                     )
                 }),
         )
@@ -298,7 +298,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                 .h(rems(1.125))
                 .text_ellipsis()
                 .overflow_hidden()
-                .when(file.is_hidden || file.is_system, |d| d.opacity(0.5))
+                .when(file.is_hidden || file.is_system, |d| d.opacity(0.75))
                 .child(match editing_view {
                     Some(editing_view) => {
                         editing_view.into_any_element()
@@ -331,7 +331,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                 .text_size(rems(0.625))
                 .text_color(if provisional_size { theme.accent } else { theme.text_muted })
                 .text_ellipsis()
-                .when(file.is_hidden || file.is_system, |d| d.opacity(0.5))
+                .when(file.is_hidden || file.is_system, |d| d.opacity(0.75))
                 .child(if network_entry(file) {
                     network_category(file, cx.i18n())
                 } else if file.is_dir {

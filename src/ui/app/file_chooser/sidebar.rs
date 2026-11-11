@@ -88,7 +88,7 @@ impl FileChooserWindow {
             .px_3()
             .flex()
             .items_center()
-            .when(is_dimmed, |d| d.opacity(0.5))
+            .when(is_dimmed, |d| d.opacity(0.75))
             .relative()
             .when(is_sel, |d| d.bg(theme.selected).child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent)))
             .hover(move |s| s.bg(hov_bg))

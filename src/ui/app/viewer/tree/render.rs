@@ -207,6 +207,8 @@ fn entry_row(
     let reveal = viewer;
     let path = file.path.clone();
     let toggles = matches!(state, Chevron::Expanded | Chevron::Collapsed);
+    // Hidden and system items are dimmed as in the pane; the toggle keeps full strength.
+    let dimmed = file.is_hidden || file.is_system;
     // The name and the pane's subfolder indicator share the flexible width.
     let name = div()
         .flex_1()
@@ -216,7 +218,7 @@ fn entry_row(
         .overflow_hidden()
         .child(div().flex_shrink(1.0).min_w_0().truncate().font_weight(FontWeight::MEDIUM).text_color(theme.text).child(file.name.clone()))
         .when(subfolders, |name| {
-            name.child(div().ml_2().flex_none().child(svg().path("icons/chevron-right.svg").size_3().text_color(theme.text)))
+            name.child(div().ml_2().flex_none().child(svg().path("icons/chevron-right.svg").size_3().text_color(theme.text).opacity(0.5)))
         });
     div()
         .id(("viewer-tree-row", index))
@@ -242,7 +244,7 @@ fn entry_row(
             }
         })
         .child(toggle(index, state, cx))
-        .child(div().flex_none().mr_2().child(crate::ui::components::icons::render_file_icon(
+        .child(div().flex_none().mr_2().when(dimmed, |d| d.opacity(0.75)).child(crate::ui::components::icons::render_file_icon(
             file.path.clone(),
             icon,
             rems(1.0),
@@ -250,9 +252,9 @@ fn entry_row(
             system_icons,
             false,
         )))
-        .child(name)
-        .when(columns.size, |row| row.child(column(size, rems(5.5), true, cx)))
-        .when(columns.date, |row| row.child(column(date, rems(8.0), false, cx)))
+        .child(name.when(dimmed, |d| d.opacity(0.75)))
+        .when(columns.size, |row| row.child(column(size, rems(5.5), true, cx).when(dimmed, |d| d.opacity(0.75))))
+        .when(columns.date, |row| row.child(column(date, rems(8.0), false, cx).when(dimmed, |d| d.opacity(0.75))))
         .into_any_element()
 }
 

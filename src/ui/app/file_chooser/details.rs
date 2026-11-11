@@ -152,7 +152,7 @@ impl FileChooserWindow {
                     .flex()
                     .items_center()
                     .overflow_hidden()
-                    .when(is_dimmed, |d| d.opacity(0.5))
+                    .when(is_dimmed, |d| d.opacity(0.75))
                     .child(
                         div()
                             .flex_1()
@@ -177,13 +177,13 @@ impl FileChooserWindow {
                             }),
                     ),
             )
-            .child(div().w(px(widths.file_type)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5))
+            .child(div().w(px(widths.file_type)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.75))
                 .child(file_type))
-            .child(div().w(px(widths.size)).flex_none().px(rems(0.5)).text_align(TextAlign::Right).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5))
+            .child(div().w(px(widths.size)).flex_none().px(rems(0.5)).text_align(TextAlign::Right).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.75))
                 .child(div().child(size)))
-            .when(widths.permissions > 0.0, |row| row.child(div().w(px(widths.permissions)).flex_none().px(rems(0.5)).text_right().text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5))
+            .when(widths.permissions > 0.0, |row| row.child(div().w(px(widths.permissions)).flex_none().px(rems(0.5)).text_right().text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.75))
                 .children(file.mode.map(crate::ui::format::permissions::octal))))
-            .child(div().w(px(widths.date)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.5))
+            .child(div().w(px(widths.date)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.75))
                 .child(date))
             .into_any_element()
     }
