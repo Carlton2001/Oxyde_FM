@@ -10,6 +10,11 @@ Business state and actions belong to `src/ui/app/`. Components receive data and 
 - Coordinates from GPUI are already in pixels: do not convert twice. Content zoom does not resize the native window.
 - The default weight is Regular (400), from `ui/style.rs`. Separately rendered roots apply it too. Another weight must be an intentional variation. On Linux, GPUI ignores the variable font's weight axis, so Inter Medium, SemiBold and Bold are embedded as static fonts (`assets_linux/fonts`, `ui/assets.rs`).
 
+## Shell shortcuts
+
+- **Terminal** (Linux, Ctrl + . or the folder menu): opens the folder selected alone, else the folder shown, in `xdg-terminal-exec` when present, then the desktop's own terminal (Konsole on KDE, Xfce or MATE's), then Ptyxis, GNOME Console, GNOME Terminal and other common terminals (`platform/linux_terminal.rs`). Not offered in the trash or inside archives.
+- **PowerToys Peek** (Windows): when Peek is installed and enabled, its own shortcut (Ctrl + Space by default, or Space when Peek allows it) read from PowerToys' settings opens the selected file in Peek (`platform/windows_peek.rs`, `app/shell_features.rs`). Oxyde's own previews do not need it.
+
 ## Window buttons
 
 - `components/window_controls.rs` draws minimize, maximize and close for every Oxyde title bar, in the style `Platform::window_control_style` picks: Windows captions, Adwaita discs under GNOME and other Linux desktops, bare Breeze glyphs (Lucide chevrons and diamond) under KDE.

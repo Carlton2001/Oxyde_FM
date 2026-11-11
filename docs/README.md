@@ -19,6 +19,8 @@ Shared:
 [previews](architecture/previews.md),
 [archives](architecture/archives.md),
 [operations and Turbo](architecture/operations.md),
+[Undo and Redo](architecture/undo.md),
+[trash](architecture/trash.md),
 [navigation and search](architecture/search.md),
 [volumes](architecture/volumes.md),
 [file clipboard](architecture/clipboard.md),
