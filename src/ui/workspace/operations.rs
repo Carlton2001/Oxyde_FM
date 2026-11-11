@@ -1,4 +1,4 @@
-use super::{LayoutAxis, LayoutNode, PaneState, TabState, WorkspaceState};
+use super::{LayoutAxis, LayoutNode, PaneState, SortColumn, TabState, WorkspaceState};
 use oxyde_lib::commands::system::{get_drives, get_quick_access_items};
 
 impl WorkspaceState {
@@ -134,7 +134,20 @@ impl WorkspaceState {
 
         if let Some(pane) = self.find_pane_mut(pane_id) {
             let mut new_tab = new_tab;
-            new_tab.view_mode = pane.active_tab().view_mode;
+            let current = pane.active_tab();
+            new_tab.view_mode = current.view_mode;
+            // The sort follows the tab it opens from, unless its column is missing here:
+            // the Trash's own columns, or a search's Location.
+            let column = current.sort_column;
+            let available = match column {
+                SortColumn::DeletedAt | SortColumn::OriginalLocation => new_tab.path == "trash://",
+                SortColumn::Location => false,
+                _ => true,
+            };
+            if available {
+                new_tab.sort_column = column;
+                new_tab.sort_direction = current.sort_direction;
+            }
             let insertion_index = (pane.active_tab_index + 1).min(pane.tabs.len());
             pane.tabs.insert(insertion_index, new_tab);
 
