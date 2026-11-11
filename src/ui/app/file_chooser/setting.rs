@@ -1,5 +1,5 @@
 //! Oxyde as the file chooser of other applications: a choice of the system's portal,
-//! read each time the settings open, never stored as a preference.
+//! read at start and each time the settings open, never stored as a preference.
 use super::super::OxydeApp;
 use crate::ui::i18n::Message;
 use gpui::Context;

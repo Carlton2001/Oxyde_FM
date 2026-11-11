@@ -202,6 +202,9 @@ fn main() {
                 this.handle = Some(app.clone());
                 this.operations_panel_view = Some(operations_panel);
                 this.refresh_system_menus(cx);
+                // Also removes a dialog registration whose library is gone, which would
+                // leave other applications without Open and Save dialogs.
+                this.refresh_file_chooser_setting(cx);
                 match instance_requests {
                     // The only Oxyde: its session stays, with the received locations added.
                     Some(requests) => {

@@ -8,8 +8,9 @@
 //!
 //! A registration pointing to a library that is gone would leave applications without
 //! any dialog: only a copy that stays in place is offered the option (not a portable
-//! one), the uninstaller withdraws it, and an Oxyde that finds its registration
-//! pointing nowhere removes it.
+//! one), the uninstaller withdraws it, an update keeps a library at its path
+//! throughout, and an Oxyde that finds its registration pointing nowhere removes it as
+//! it starts.
 use super::super::windows_folder_handler::{class_text, remove_empty, write, Value};
 
 /// The library, next to the main executable.

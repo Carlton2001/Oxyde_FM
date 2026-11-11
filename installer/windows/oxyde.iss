@@ -117,15 +117,17 @@ begin
 end;
 
 // Applications that showed a dialog through Oxyde keep its library loaded until they
-// end: it cannot be replaced meanwhile, but it can be renamed. The copy set aside is
-// deleted by a later setup.
+// end: it cannot be replaced meanwhile, but it can be renamed. A copy takes its place
+// at once, so that the registered path never leads nowhere, even if the setup stops
+// before the new library is in place. The copy set aside is deleted by a later setup.
 procedure SetAsideDialogLibrary;
 var
-  Current: String;
+  Current, Aside: String;
 begin
   Current := ExpandConstant('{app}\oxyde_file_dialog.dll');
-  if FileExists(Current) and not DeleteFile(Current) then
-    RenameFile(Current, Current + '.old' + GetDateTimeString('yyyymmddhhnnss', #0, #0));
+  Aside := Current + '.old' + GetDateTimeString('yyyymmddhhnnss', #0, #0);
+  if FileExists(Current) and not DeleteFile(Current) and RenameFile(Current, Aside) then
+    CopyFile(Aside, Current, False);
 end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;
