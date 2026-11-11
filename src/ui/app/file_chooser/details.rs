@@ -170,7 +170,7 @@ impl FileChooserWindow {
                                     .items_center()
                                     .overflow_hidden()
                                     .child(name)
-                                    .child(div().ml_2().flex_none().child(svg().path("icons/chevron-right.svg").size_3().text_color(theme.text)))
+                                    .child(div().ml_2().flex_none().child(svg().path("icons/chevron-right.svg").size_3().text_color(theme.text).opacity(0.5)))
                                     .into_any_element()
                             } else {
                                 name.into_any_element()

@@ -42,45 +42,27 @@ pub(super) fn render_sidebar_tree(
     let theme = *_cx.theme();
     let use_system_icons = cfg!(target_os = "windows") && view.use_system_icons();
 
-    // Each row's exact width from its shaped name, its weight and its fixed chrome.
-    // At render time the window's text style is not yet the root's: name the family it sets.
-    let mut font = window.text_style().font();
-    font.family = "Inter".into();
-    let font_size = crate::ui::scale::rem_pixels(rems(0.8125));
-    // The labels truncate on the sum of their characters' own widths, without kerning:
-    // measure the same way, or a label that shapes narrower would still be cut.
-    let text_system = window.text_system();
-    let regular = text_system.resolve_font(&Font { weight: crate::ui::style::DEFAULT_FONT_WEIGHT, ..font.clone() });
-    let semibold = text_system.resolve_font(&Font { weight: FontWeight::SEMIBOLD, ..font.clone() });
-    let mut char_widths = std::collections::HashMap::<(bool, char), f32>::new();
-    let mut measure = |text: String, bold: bool| {
-        let width: f32 = text.chars().map(|c| *char_widths.entry((bold, c)).or_insert_with(|| {
-            text_system.layout_width(if bold { semibold } else { regular }, font_size, c).as_f32()
-        })).sum();
-        width.ceil() + 1.0
-    };
-    let rem = |value: f32| crate::ui::scale::rem_pixels(rems(value)).as_f32();
-    // Side padding, icon and gap; rows with a chevron add its slot.
-    let place_chrome = rem(0.75 + 1.0 + 0.5 + 0.75);
-    let device_chrome = place_chrome + rem(1.0 + 0.25);
+    // Each row's exact width from its measured name, its weight and its fixed chrome.
+    use super::measure::{list_margins, LabelWidths, DEVICE_CHROME, PLACE_CHROME};
+    let mut labels = LabelWidths::new(window);
+    let rem = |value: Rems| crate::ui::scale::rem_pixels(value).as_f32();
     let natural_row_w = sidebar_items
         .iter()
         .map(|item| match item {
             SidebarItem::Header(_) => 0.0,
             SidebarItem::Pinned { item } | SidebarItem::OneDrive { item } => {
-                let bold = item.path == "__network_vincinity__" || item.path == "trash://";
-                measure(pinned_display_name(item, _cx.i18n()).to_string(), bold) + place_chrome
+                labels.width(&pinned_display_name(item, _cx.i18n()), super::rows::is_virtual_place(&item.path)) + rem(PLACE_CHROME)
             }
             SidebarItem::Linux { .. } => {
-                measure(_cx.i18n().text(crate::ui::i18n::Message::SidebarLinux).to_string(), true) + device_chrome
+                labels.width(&_cx.i18n().text(crate::ui::i18n::Message::SidebarLinux), true) + rem(DEVICE_CHROME)
             }
             SidebarItem::Drive { drive, .. } => {
-                measure(crate::ui::format::drive_name(drive, _cx.i18n()), true) + device_chrome
+                labels.width(&crate::ui::format::drive_name(drive, _cx.i18n()), true) + rem(DEVICE_CHROME)
             }
-            SidebarItem::Volume { volume } => measure(super::volume_row::name(volume, _cx.i18n()), false) + device_chrome,
+            SidebarItem::Volume { volume } => labels.width(&super::volume_row::name(volume, _cx.i18n()), false) + rem(DEVICE_CHROME),
             SidebarItem::Directory { node, depth, .. } => {
-                logical(8.0) + (*depth as f32 * logical(12.0)) + rem(1.0 + 0.25 + 1.0 + 0.5 + 0.75)
-                    + measure(node.name.clone(), false)
+                logical(8.0) + (*depth as f32 * logical(12.0)) + rem(rems(1.0 + 0.25 + 1.0 + 0.5 + 0.75))
+                    + labels.width(&node.name, false)
             }
         })
         .fold(0.0_f32, f32::max);
@@ -91,8 +73,7 @@ pub(super) fn render_sidebar_tree(
     let content_h = (sidebar_items.iter().map(sidebar_item_height).sum::<f32>() + bottom_padding).max(1.0);
     // The list's side insets: a left margin, and on the right the vertical scrollbar's
     // gutter when the rows overflow even without a horizontal scrollbar.
-    let gutter = |vertical: bool| crate::ui::scale::rem_pixels(rems(0.5) + if vertical { rems(1.125) } else { rems(0.5) }).as_f32();
-    let natural_gutter = gutter(content_h > (view.list_height - list_top).max(1.0));
+    let natural_gutter = list_margins(content_h > (view.list_height - list_top).max(1.0));
     // The width that shows the widest row exactly, for the edge's double click.
     let fit_w = natural_row_w + natural_gutter;
     let calculated_content_w = fit_w.max(viewport_w);

@@ -1,4 +1,5 @@
 mod linux_row;
+pub(crate) mod measure;
 mod menus;
 mod pinned;
 mod rail;

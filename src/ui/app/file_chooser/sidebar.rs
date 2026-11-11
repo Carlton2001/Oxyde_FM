@@ -8,6 +8,7 @@ use crate::ui::components::sidebar::sidebar_paths_equal;
 use crate::ui::components::sidebar::volume_row::name as volume_name;
 use crate::ui::components::tooltip::hover::{HoverRegion, SharedTooltipExt};
 use crate::ui::components::tooltip::Tooltip;
+use crate::ui::elements::resize_highlight::resize_highlight;
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::scale::{logical, rem_pixels};
 use crate::ui::theme::OxydeTheme;
@@ -22,6 +23,11 @@ const DRIVE_HEIGHT: Rems = rems(2.25);
 const LIST_TOP: Rems = rems(0.375);
 /// One tooltip session for the whole list, as the main sidebar's.
 const REGION: HoverRegion = HoverRegion::Controls("file-chooser-places");
+
+/// A place's label: the home folder's is translated.
+fn place_name(place: &Place, i18n: &crate::ui::i18n::I18n) -> String {
+    if place.label.is_empty() { i18n.text(Message::SidebarHome).to_string() } else { place.label.clone() }
+}
 
 impl FileChooserWindow {
     /// The sidebar's width now: as dragged, within what the window leaves it.
@@ -80,7 +86,7 @@ impl FileChooserWindow {
         let is_sel = sidebar_paths_equal(&self.folder, &path);
         let hov_bg = if is_sel { theme.selection_hover } else { theme.hover };
         let is_dimmed = place.label.starts_with('.');
-        let name = if place.label.is_empty() { cx.i18n().text(Message::SidebarHome).to_string() } else { place.label.clone() };
+        let name = place_name(place, cx.i18n());
         div()
             .id(("file-chooser-place", index))
             .w_full()
@@ -182,11 +188,10 @@ impl FileChooserWindow {
         }
         rows.extend(places.drives.iter().enumerate().map(|(index, drive)| self.render_drive(index, drive, owner.as_ref(), theme, cx)));
         rows.extend(places.volumes.iter().map(|volume| self.render_volume(volume, owner.as_ref(), theme, cx)));
-        let content_h = rem_pixels(ROW_HEIGHT).as_f32() * (places.folders.len() + usize::from(volumes)) as f32
-            + rem_pixels(DRIVE_HEIGHT).as_f32() * (places.drives.len() + places.volumes.len()) as f32;
+        let content_h = self.sidebar_content_height();
         let scroll = self.sidebar_scroll.clone();
         let viewport_h = scroll.bounds().size.height.as_f32();
-        let overflows = viewport_h > 0.0 && content_h > viewport_h + 1.0;
+        let overflows = self.sidebar_overflows();
         let entity_id = cx.entity().entity_id();
         let dragging = self.scroll_drag.as_ref().is_some_and(|(track, _, _)| track.ends_with("file-chooser-sidebar"));
         div()
@@ -225,17 +230,57 @@ impl FileChooserWindow {
             )
     }
 
+    /// The height of the places' rows.
+    fn sidebar_content_height(&self) -> f32 {
+        let places = &self.places;
+        let section = !places.drives.is_empty() || !places.volumes.is_empty();
+        rem_pixels(ROW_HEIGHT).as_f32() * (places.folders.len() + usize::from(section)) as f32
+            + rem_pixels(DRIVE_HEIGHT).as_f32() * (places.drives.len() + places.volumes.len()) as f32
+    }
+
+    /// Whether the places overflow their list, which then shows a vertical scrollbar.
+    fn sidebar_overflows(&self) -> bool {
+        let viewport_h = self.sidebar_scroll.bounds().size.height.as_f32();
+        viewport_h > 0.0 && self.sidebar_content_height() > viewport_h + 1.0
+    }
+
+    /// Double click on the edge: the width of the widest row, as the main sidebar's.
+    fn fit_sidebar(&mut self, window: &Window, cx: &mut Context<Self>) {
+        use crate::ui::components::sidebar::measure::{list_margins, LabelWidths, DEVICE_CHROME, PLACE_CHROME};
+        let mut labels = LabelWidths::new(window);
+        let i18n = cx.i18n();
+        let (place_chrome, device_chrome) = (rem_pixels(PLACE_CHROME).as_f32(), rem_pixels(DEVICE_CHROME).as_f32());
+        let mut widest = 0.0_f32;
+        for place in &self.places.folders {
+            widest = widest.max(labels.width(&place_name(place, i18n), false) + place_chrome);
+        }
+        for drive in &self.places.drives {
+            widest = widest.max(labels.width(&crate::ui::format::drive_name(drive, i18n), true) + device_chrome);
+        }
+        for volume in &self.places.volumes {
+            widest = widest.max(labels.width(&volume_name(volume, i18n), false) + device_chrome);
+        }
+        if widest <= 0.0 {
+            return;
+        }
+        let requested = (widest + list_margins(self.sidebar_overflows())) / logical(1.0);
+        self.sidebar_width = super::arrange::sidebar_width(requested, self.window_width);
+        self.options.sidebar = Some(self.sidebar_width);
+    }
+
     /// The sidebar's edge, a copy of the main window's resize handle.
     pub(super) fn render_sidebar_edge(&self, theme: OxydeTheme, cx: &mut Context<Self>) -> impl IntoElement {
-        let width = self.sidebar_display_width();
-        let start = move |this: &mut Self, event: &MouseDownEvent, cx: &mut Context<Self>| {
+        let start = move |this: &mut Self, event: &MouseDownEvent, window: &Window, cx: &mut Context<Self>| {
+            if event.click_count == 2 {
+                this.fit_sidebar(window, cx);
+            }
             this.resizing_sidebar = true;
-            this.grab_offset = event.position.x.as_f32() - width;
+            this.grab_offset = event.position.x.as_f32() - this.sidebar_display_width();
             cx.notify();
         };
+        let highlighted = self.sidebar_edge_hovered || self.resizing_sidebar;
         div()
             .id("file-chooser-sidebar-edge")
-            .group("file-chooser-sidebar-edge")
             .relative()
             .w(rems(0.0625))
             .bg(theme.border)
@@ -246,7 +291,7 @@ impl FileChooserWindow {
             .justify_center()
             .child(
                 deferred(div()
-                    .group("file-chooser-sidebar-edge-hit-area")
+                    .id("file-chooser-sidebar-edge-hit-area")
                     .absolute()
                     .left(rems(-0.0625))
                     .w(rems(0.1875))
@@ -260,21 +305,26 @@ impl FileChooserWindow {
                             .top_0()
                             .bottom_0()
                             .w(rems(0.0625))
-                            .group_hover("file-chooser-sidebar-edge-hit-area", |s| s.bg(theme.accent.opacity(0.6))),
+                            .child(resize_highlight("file-chooser-sidebar-edge-highlight", highlighted, theme.accent.opacity(0.6))),
                     )
-                    .on_mouse_down(MouseButton::Left, cx.listener(move |this, event, _, cx| {
+                    .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
+                        if this.sidebar_edge_hovered != *hovered {
+                            this.sidebar_edge_hovered = *hovered;
+                            cx.notify();
+                        }
+                    }))
+                    .on_mouse_down(MouseButton::Left, cx.listener(move |this, event, window, cx| {
                         cx.stop_propagation();
-                        start(this, event, cx);
+                        start(this, event, window, cx);
                     }))),
             )
             .child(
                 div()
                     .w(rems(0.0625))
                     .h_full()
-                    .bg(theme.border)
-                    .group_hover("file-chooser-sidebar-edge", |s| s.bg(theme.accent.opacity(0.6))),
+                    .bg(theme.border),
             )
-            .on_mouse_down(MouseButton::Left, cx.listener(move |this, event, _, cx| start(this, event, cx)))
+            .on_mouse_down(MouseButton::Left, cx.listener(move |this, event, window, cx| start(this, event, window, cx)))
     }
 
     /// The edge's drag, as the main window's `SidebarResize`.

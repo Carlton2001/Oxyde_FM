@@ -79,7 +79,7 @@ impl FileChooserWindow {
                                 .h_full()
                                 .flex()
                                 .items_center()
-                                .child(svg().path("icons/chevron-right.svg").size_3().text_color(theme.text)),
+                                .child(svg().path("icons/chevron-right.svg").size_3().text_color(theme.text).opacity(0.5)),
                         )
                     }),
             )

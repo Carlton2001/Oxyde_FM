@@ -13,6 +13,12 @@ use gpui::prelude::*;
 use gpui::*;
 use std::collections::HashSet;
 
+/// Network and the trash: places without a path, whose label is semibold, whose
+/// icon keeps the text color and whose tooltip names no path.
+pub(super) fn is_virtual_place(path: &str) -> bool {
+    path == "__network_vincinity__" || path == "trash://"
+}
+
 pub(super) struct SidebarRowPresentation {
     /// Row width: the list's visible width, or the content width when it overflows.
     pub(super) row_w: f32,
@@ -85,7 +91,7 @@ pub(super) fn render_sidebar_rows(
                     .hover(move |s| s.bg(hov_bg))
                     .when(show_tooltips, |d| {
                         let name = pinned_display_name(item, cx.i18n());
-                        if path == "__network_vincinity__" || path == "trash://" {
+                        if is_virtual_place(&path) {
                             d.shared_tooltip(h.clone(), HoverRegion::DirectoryTree, format!("pinned:{path}"), cx, Tooltip::text(name))
                         } else {
                             d.shared_tooltip(h.clone(), HoverRegion::DirectoryTree, format!("pinned:{path}"), cx, Tooltip::with_meta(name, path.clone()))
@@ -155,13 +161,13 @@ pub(super) fn render_sidebar_rows(
                                     _ if is_home => "icons/house.svg",
                                     _ => "icons/pin.svg",
                                 }};
-                                svg().path(icon_path).size_4().text_color(if is_home || path == "__network_vincinity__" || path == "trash://" { theme.text } else { theme.accent })
+                                svg().path(icon_path).size_4().text_color(if is_home || is_virtual_place(&path) { theme.text } else { theme.accent })
                             })
                     )
                     .child(
                         div().flex_1().min_w_0().truncate()
                             .text_color(theme.text)
-                            .when(item.path == "__network_vincinity__" || item.path == "trash://", |d| d.font_weight(FontWeight::SEMIBOLD))
+                            .when(is_virtual_place(&item.path), |d| d.font_weight(FontWeight::SEMIBOLD))
                             .child(pinned_display_name(item, cx.i18n()))
                     )
                     .external_file_drop(h.clone(), path.clone())
