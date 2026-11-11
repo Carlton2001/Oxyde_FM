@@ -65,6 +65,9 @@ pub(crate) fn content_opacity(window: &Window, cx: &App) -> f32 {
         let current = fades.get(&id).map_or((1.0, false), |fade| fade.opacity(now));
         let previous = fades.get(&id).map_or(false, |fade| fade.dimmed);
         if previous != dimmed {
+            // Forget the windows closed meanwhile, which may have closed dimmed.
+            let open = cx.windows();
+            fades.retain(|window, _| open.iter().any(|handle| handle.window_id() == *window));
             fades.insert(id, Fade { dimmed, from: current.0, started: now });
         }
         let result = fades.get(&id).map_or((1.0, false), |fade| fade.opacity(now));
@@ -78,3 +81,7 @@ pub(crate) fn content_opacity(window: &Window, cx: &App) -> f32 {
     }
     opacity
 }
+
+#[cfg(test)]
+#[path = "backdrop/tests/fade.rs"]
+mod tests;
