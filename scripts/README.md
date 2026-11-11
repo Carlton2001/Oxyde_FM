@@ -13,7 +13,7 @@
 | `install-cargo-about.ps1`, `update-third-party-licenses.ps1`, `third-party-notices.hbs` | License notices |
 | `audit-security.ps1`, `install-cargo-audit.ps1` | RustSec audit |
 
-`tests/` holds PowerShell tests of these scripts.
+`tests/` holds PowerShell tests of these scripts, and `tests/install-sim/` simulates `packaging/linux/install.sh` on chosen systems.
 
 Guides: [development](../docs/guides/development.md), [Linux development](../docs/guides/linux-development.md), [Windows distribution](../docs/guides/distribution.md), [Linux distribution](../docs/guides/linux-distribution.md), [audit](../docs/security/dependencies.md).
 
