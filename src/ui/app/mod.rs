@@ -243,6 +243,10 @@ pub struct OxydeApp {
     item_selection_drag: bool,
     /// List scroll at the last rectangle update, to keep its start on the content.
     selection_scroll_y: Option<f32>,
+    /// Time of the last rectangle autoscroll step.
+    selection_autoscroll_at: Option<std::time::Instant>,
+    /// Redraws while the rectangle autoscrolls under a still pointer.
+    selection_autoscroll_task: Option<Task<()>>,
     type_select: type_select::TypeSelect,
     pub(crate) suppress_item_selection_click: bool,
     pub drop_target_idx: Option<usize>,
@@ -471,6 +475,8 @@ impl OxydeApp {
             item_press: None,
             item_selection_drag: false,
             selection_scroll_y: None,
+            selection_autoscroll_at: None,
+            selection_autoscroll_task: None,
             type_select: Default::default(),
             suppress_item_selection_click: false,
             drop_target_idx: None,

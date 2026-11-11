@@ -4,6 +4,13 @@ use crate::ui::scale::logical;
 use crate::ui::workspace::ViewMode;
 use gpui::*;
 
+/// Height of the band near each edge where rectangle selection starts scrolling.
+const AUTOSCROLL_EDGE: f32 = 30.0;
+/// Scroll speed per pixel of depth into the band, per second (GTK adds the depth each frame).
+const AUTOSCROLL_RATE: f32 = 60.0;
+/// Depth beyond which the speed stops growing.
+const AUTOSCROLL_MAX_DEPTH: f32 = 150.0;
+
 impl OxydeApp {
     pub fn on_action_tout_selectionner(
         &mut self,
@@ -95,20 +102,46 @@ impl OxydeApp {
             let grid_columns = grid.columns;
             let rows = crate::ui::date_groups::display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, if grid_mode { grid_columns } else { 1 });
 
-            // --- Auto-Scroll (Intuitive & Proportional) ---
-            let list_top = bounds.origin.y;
+            // --- Auto-scroll, modelled on GTK list views (Nautilus) ---
+            // Starts inside an edge band and grows linearly with the pointer's depth
+            // into it, integrated over elapsed time so the speed ignores the frame
+            // rate and extra mouse-move updates.
+            let header = if grid_mode { 0.0 } else { crate::ui::style::column_header_height() };
+            let list_top = bounds.origin.y + header;
             let list_bottom = bounds.origin.y + bounds.size.height;
             let mut new_scroll_y = scroll_y;
             let mut scrolled = false;
 
-            if current_pos.y.as_f32() < list_top {
-                let dist = (list_top - current_pos.y.as_f32()).max(1.0);
-                let speed = (dist / logical(10.0)).powf(1.2).min(logical(40.0));
-                new_scroll_y += speed;
-            } else if current_pos.y.as_f32() > list_bottom {
-                let dist = (current_pos.y.as_f32() - list_bottom).max(1.0);
-                let speed = (dist / logical(10.0)).powf(1.2).min(logical(40.0));
-                new_scroll_y -= speed;
+            let edge = logical(AUTOSCROLL_EDGE);
+            let depth = if current_pos.y.as_f32() < list_top + edge {
+                -(list_top + edge - current_pos.y.as_f32())
+            } else if current_pos.y.as_f32() > list_bottom - edge {
+                current_pos.y.as_f32() - (list_bottom - edge)
+            } else {
+                0.0
+            };
+            let now = std::time::Instant::now();
+            if depth == 0.0 {
+                self.selection_autoscroll_at = None;
+            } else {
+                let elapsed = self.selection_autoscroll_at.replace(now)
+                    .map_or(1.0 / 60.0, |last| now.duration_since(last).as_secs_f32().min(0.1));
+                let depth = depth.clamp(-logical(AUTOSCROLL_MAX_DEPTH), logical(AUTOSCROLL_MAX_DEPTH));
+                new_scroll_y -= depth * AUTOSCROLL_RATE * elapsed;
+                // A still pointer sends no events: a ticker keeps redrawing, and each
+                // redraw runs this step again, until the pointer leaves the band.
+                if self.selection_autoscroll_task.is_none() {
+                    self.selection_autoscroll_task = Some(cx.spawn(async move |this, cx| loop {
+                        cx.background_executor().timer(std::time::Duration::from_millis(16)).await;
+                        let keep = this.update(cx, |this, cx| {
+                            let active = this.selection_autoscroll_at.is_some()
+                                && matches!(this.drag_target, Some(DragTarget::SelectionRectangle { .. }));
+                            if active { cx.notify(); } else { this.selection_autoscroll_task = None; }
+                            active
+                        });
+                        if !matches!(keep, Ok(true)) { break; }
+                    }));
+                }
             }
 
             if new_scroll_y != scroll_y {
