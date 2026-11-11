@@ -285,6 +285,10 @@ pub(super) fn get_native_context_menu_items(
 
                     // Filter standard verbs
                     let verb = canonical_verb(context_menu, id);
+                    // "Open in Oxyde" (`windows_folder_handler/menu.rs`) means nothing inside Oxyde.
+                    if verb.as_deref().is_some_and(|verb| verb.eq_ignore_ascii_case("Oxyde")) {
+                        continue;
+                    }
                     if !is_new_menu {
                         if let Some(verb) = &verb {
                             let verb = verb.to_lowercase();
