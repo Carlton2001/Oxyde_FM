@@ -1,4 +1,4 @@
-use super::{Side, buttons};
+use super::{Side, buttons, zone_pixels, ADWAITA_DISC, ADWAITA_GAP, BREEZE_DISC, BREEZE_GAP};
 use gpui::{WindowButton, WindowButtonLayout};
 
 const MIN: Option<WindowButton> = Some(WindowButton::Minimize);
@@ -22,4 +22,16 @@ fn each_side_keeps_the_desktop_choice() {
 fn fixed_windows_only_keep_close() {
     let layout = WindowButtonLayout { left: [None; 3], right: [MIN, MAX, CLOSE] };
     assert_eq!(buttons(Some(layout), Side::Right, false), [WindowButton::Close]);
+}
+
+#[test]
+fn hit_zones_stay_even_so_their_discs_fall_on_whole_pixels() {
+    for rem in [12, 15, 16, 18, 20, 24] {
+        crate::ui::scale::set_reference(rem);
+        for (disc, gap) in [(ADWAITA_DISC, ADWAITA_GAP), (BREEZE_DISC, BREEZE_GAP)] {
+            let zone = zone_pixels(disc, gap).as_f32();
+            assert_eq!(zone % 2.0, 0.0, "{zone} px at {rem} px/rem");
+        }
+    }
+    crate::ui::scale::set_reference(crate::ui::scale::BASE_REM_SIZE);
 }

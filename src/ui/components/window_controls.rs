@@ -79,8 +79,8 @@ pub(crate) fn render(
                 WindowControlStyle::Windows => {
                     windows_button(button, side, outermost == Some(button), corner, cx).child(symbol)
                 }
-                WindowControlStyle::Adwaita => hit_zone(button, ADWAITA_DISC, rems(0.75)).child(adwaita_disc(button, cx).child(symbol)),
-                WindowControlStyle::Breeze => hit_zone(button, BREEZE_DISC, rems(0.0625)).child(breeze_disc(button, cx).child(symbol)),
+                WindowControlStyle::Adwaita => hit_zone(button, ADWAITA_DISC, ADWAITA_GAP).child(adwaita_disc(button, cx).child(symbol)),
+                WindowControlStyle::Breeze => hit_zone(button, BREEZE_DISC, BREEZE_GAP).child(breeze_disc(button, cx).child(symbol)),
             };
             let on_close = on_close.clone();
             shell
@@ -99,10 +99,8 @@ pub(crate) fn render(
         .collect();
 
     // Each hit zone already holds half the gap on each side of its disc.
-    let edge = match style {
-        WindowControlStyle::Adwaita => rems(0.5 - 0.75 / 2.0),
-        _ => rems(0.5 - 0.0625 / 2.0),
-    };
+    let gap = if style == WindowControlStyle::Adwaita { ADWAITA_GAP } else { BREEZE_GAP };
+    let edge = (crate::ui::scale::rem_pixels(rems(0.5)) - gap_pixels(gap) / 2.0).round();
     div()
         .h_full()
         .flex()
@@ -117,11 +115,24 @@ pub(crate) fn render(
 
 const ADWAITA_DISC: Rems = rems(1.5);
 const BREEZE_DISC: Rems = rems(1.375);
+const ADWAITA_GAP: Rems = rems(0.75);
+const BREEZE_GAP: Rems = rems(0.0625);
 
 /// Disc size in an even number of pixels: centered in an even title bar, its edges
 /// and center fall on whole pixels instead of being snapped half a pixel aside.
 fn disc_pixels(disc: Rems) -> Pixels {
     (crate::ui::scale::rem_pixels(disc) / 2.0).round() * 2.0
+}
+
+/// Gap between discs in an even number of pixels: each hit zone holds half of it on
+/// each side, and an odd zone would center its even disc half a pixel aside.
+fn gap_pixels(gap: Rems) -> Pixels {
+    (crate::ui::scale::rem_pixels(gap) / 2.0).round() * 2.0
+}
+
+/// Width of a hit zone: its disc and half the gap on each side.
+fn zone_pixels(disc: Rems, gap: Rems) -> Pixels {
+    disc_pixels(disc) + gap_pixels(gap)
 }
 
 /// Glyph size leaving the same whole margin on each side of its disc: an odd
@@ -184,7 +195,7 @@ fn hit_zone(button: WindowButton, disc: Rems, gap: Rems) -> Stateful<Div> {
     div()
         .id(button.id())
         .group(group_name(button))
-        .w(disc_pixels(disc) + crate::ui::scale::rem_pixels(gap))
+        .w(zone_pixels(disc, gap))
         .h_full()
         .flex()
         .items_center()
