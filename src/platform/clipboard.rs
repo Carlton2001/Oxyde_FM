@@ -160,8 +160,9 @@ pub fn get_clipboard_files() -> Result<(Vec<String>, bool), CommandError> {
         }
     }
     // A source may publish paths before writing them (VMware Tools stages host
-    // folders only when the shell pastes): leave those to the shell's Paste.
-    if files.iter().any(|path| std::fs::symlink_metadata(path).is_err()) {
+    // folders only when the shell pastes): leave those to the shell's Paste. Some
+    // missing among existing ones is a stale selection, which Oxyde's paste reports.
+    if files.iter().all(|path| std::fs::symlink_metadata(path).is_err()) {
         return Ok((Vec::new(), false));
     }
     Ok((files, is_cut))
