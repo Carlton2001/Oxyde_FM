@@ -160,7 +160,8 @@ usage() {
     say '  --purge        with --uninstall, delete the settings without asking'
     say '  --update       with --archive, as Oxyde runs it: no dependency check or question'
     say ''
-    say 'Without options on a terminal, it shows a menu: install, update or uninstall.'
+    say 'On a terminal, without --yes, --set-default or --update, it shows a menu:'
+    say 'install, update or uninstall.'
     say 'Oxyde becomes the default file manager in Preferences, System integration.'
     say 'Running it again installs the newer release and keeps the previous one.'
 }
@@ -698,19 +699,7 @@ uninstall() {
         shared=true
     fi
     step 'Uninstalling Oxyde'
-    if ! $shared; then
-        # Without any copy left, associations naming Oxyde lead nowhere.
-        local was_default=false line=inode/directory=$app_id.desktop
-        local -a files
-        mapfile -t files < <(association_files)
-        if ((${#files[@]})) && grep -qxF -e "$line" -e "$line;" "${files[@]}"; then
-            was_default=true
-        fi
-        forget_associations
-        $was_default && ok 'Oxyde is no longer the default application for folders.'
-        forget_file_chooser
-        $portal_changed && ok "Open and save dialogs are the system's again."
-    fi
+    $shared || forget_integration
     local running=false
     is_running && running=true
     if $found; then
@@ -730,30 +719,53 @@ uninstall() {
         [[ -d $data/icons/hicolor ]] && touch "$data/icons/hicolor"
         update-desktop-database -q "$data/applications" 2>/dev/null || true
         rm -rf -- "$lib_root"
-        # Thumbnails, the GStreamer registry and copies of files opened from archives.
-        local cache=${XDG_CACHE_HOME:-$HOME/.cache}/Oxyde
-        if [[ -d $cache ]]; then
-            if $running; then
-                warn "Oxyde is running: its cache in $(tilde "$cache") is kept;"
-                info 'delete it once Oxyde is closed.'
-            else
-                rm -rf -- "$cache"
-            fi
-        fi
+        remove_cache "$running"
         ok 'Oxyde is uninstalled.'
     else
         say '  No per-user installation of Oxyde was found.'
     fi
-    # The portal reads its portals and configuration only when it starts.
-    if $portal_changed; then
-        systemctl --user try-restart xdg-desktop-portal.service 2>/dev/null || true
-    fi
+    restart_portal
     if $shared; then
         local settings=${XDG_CONFIG_HOME:-$HOME/.config}/Oxyde
         [[ ! -d $settings ]] || info "Settings remain in $(tilde "$settings"), where the system package still uses them."
     else
         handle_settings "$purge" "$keep" "$running"
     fi
+}
+
+# Without any copy of Oxyde left, the associations and the file chooser naming it
+# lead nowhere: they go back to the system. Sets portal_changed, which the caller
+# declares.
+forget_integration() {
+    local was_default=false line=inode/directory=$app_id.desktop
+    local -a files
+    mapfile -t files < <(association_files)
+    if ((${#files[@]})) && grep -qxF -e "$line" -e "$line;" "${files[@]}"; then
+        was_default=true
+    fi
+    forget_associations
+    $was_default && ok 'Oxyde is no longer the default application for folders.'
+    forget_file_chooser
+    $portal_changed && ok "Open and save dialogs are the system's again."
+    return 0
+}
+
+# Thumbnails, the GStreamer registry and copies of files opened from archives.
+remove_cache() {
+    local running=$1 cache=${XDG_CACHE_HOME:-$HOME/.cache}/Oxyde
+    [[ -d $cache ]] || return 0
+    if $running; then
+        warn "Oxyde is running: its cache in $(tilde "$cache") is kept;"
+        info 'delete it once Oxyde is closed.'
+    else
+        rm -rf -- "$cache"
+    fi
+}
+
+# The portal reads its portals and configuration only when it starts.
+restart_portal() {
+    $portal_changed || return 0
+    systemctl --user try-restart xdg-desktop-portal.service 2>/dev/null || true
 }
 
 # Preferences, themes, session and log: kept unless the user asks.
@@ -792,13 +804,17 @@ install_deb() {
     ok "Oxyde $version installed"
 }
 
+# Offered only without a per-user installation: nothing of Oxyde remains after it.
 remove_deb() {
+    local portal_changed=false running=false
     step 'Uninstalling Oxyde'
     info 'apt asks for your password.'
     sudo apt-get remove -y oxyde
-    ok 'Oxyde is uninstalled.'
-    local running=false
+    forget_integration
     is_running && running=true
+    remove_cache "$running"
+    ok 'Oxyde is uninstalled.'
+    restart_portal
     handle_settings false false "$running"
 }
 
@@ -973,7 +989,8 @@ main() {
         fi
     fi
 
-    # Without options, a person chooses; options act directly, as scripts expect.
+    # On a terminal a person chooses; --yes, --set-default and --update act directly,
+    # as scripts expect.
     if $menu; then
         local action
         local choosing_format=false
