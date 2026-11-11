@@ -9,6 +9,7 @@
 | `build-distribution.ps1` | Windows portable ZIP and installer |
 | `build-linux-packages.sh`, `linux-third-party-notices.py`, `rpm-license.py` | RPM and DEB packages |
 | `bump-version.ps1`, `detect-release-commit.ps1`, `write-update-manifest.ps1` | Version commit and tag, CI detection, updater manifest |
+| `sign-linux-release.sh`, `check-updater-signature.sh` | Release job: GPG signatures of Linux files and `SHA256SUMS`, check of the Setup's minisign signature |
 | `distribution-icon.ps1`, `generate-viewer-cursors.cjs` | Regenerate icons and cursors kept in Git |
 | `install-cargo-about.ps1`, `update-third-party-licenses.ps1`, `third-party-notices.hbs` | License notices |
 | `audit-security.ps1`, `install-cargo-audit.ps1` | RustSec audit |

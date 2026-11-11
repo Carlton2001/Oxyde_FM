@@ -1,6 +1,6 @@
 # Developing and checking Oxyde
 
-On Windows, use Rust MSVC x64 and the Visual C++ Build Tools. `--offline` commands need dependencies already downloaded; drop the flag the first time.
+On Windows, use Rust MSVC x64 and the Visual C++ Build Tools; on Linux, see [Linux development](linux-development.md) for packages, an isolated profile and checking Windows from Linux. `--offline` commands need dependencies already downloaded; drop the flag the first time.
 
 ## Build and run
 
@@ -11,11 +11,11 @@ cargo build --offline --bins
 cargo run --offline
 ```
 
-`cargo run` alone does not rebuild workers. Keep the helper executables (the three workers and `oxyde-folder-launcher`) next to the main binary. To ship: [distribution](distribution.md).
+`cargo run` alone does not rebuild workers. Keep the helper executables (the three workers and `oxyde-folder-launcher`) next to the main binary. On Linux, `oxyde-image-worker` and `oxyde-folder-launcher` are empty programs: previews run in a worker of `oxyde` itself. To ship: [distribution](distribution.md).
 
 ### Dialog library (Windows)
 
-`cargo build --bins` does not build the library shown in place of the Open and Save dialogs of other applications (`shell/oxyde-file-dialog`, `oxyde_file_dialog.dll`). It is a package of its own, with its own `Cargo.lock`: it is loaded by other applications and shares nothing with Oxyde's crate. Build it into the same target folder, next to `oxyde.exe` and the launcher, after any change to it, and before testing, since its tests load the library:
+`cargo build --bins` does not build the library shown in place of the Open and Save dialogs of other applications (`shell/oxyde-file-dialog`, `oxyde_file_dialog.dll`, see [system integration](../architecture/system-integration.md#windows-dialogs-experimental)). It is a package of its own, with its own `Cargo.lock`: it is loaded by other applications and shares nothing with Oxyde's crate. Build it into the same target folder, next to `oxyde.exe` and the launcher, after any change to it, and before testing, since its tests load the library:
 
 ```powershell
 cargo build --offline --manifest-path shell/oxyde-file-dialog/Cargo.toml --target-dir target

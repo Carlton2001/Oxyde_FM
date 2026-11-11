@@ -18,6 +18,10 @@ pub trait QuickAccess: Send + Sync {
 - **Windows** (`windows_quick_access.rs`) delegates to `windows_shell` (verbs `pintohome`, `unpinfromhome`) and watches `Recent`.
 - **Linux** (`linux_quick_access/`) reads and rewrites `$XDG_CONFIG_HOME/gtk-3.0/bookmarks`, the file Nautilus shares: local folders only, order and names kept, undisplayed lines (network locations) preserved, atomic rewrite like GTK. It watches the `gtk-3.0` folder, since GTK replaces the file at each change.
 
+## Order
+
+Dragging a pinned folder in the sidebar reorders it (`components/sidebar/reorder.rs`, `app/pinned_order.rs`). The order is Oxyde's own, kept in `AppConfig::pinned_order`; the system file manager keeps its order, and folders missing from Oxyde's list follow at the end in the system's order. The Windows taskbar menu lists the pinned folders.
+
 ## Behavior outside Windows
 
 - The home folder opens the Quick Access section, above bookmarks, as in Nautilus, with the Lucide `house` icon; it cannot be unpinned. An item with no name designates it, and the interface names it in the chosen language (`sidebar-home`).

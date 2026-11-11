@@ -1,6 +1,6 @@
 # Linux previews and decoders
 
-Windows is unchanged.
+Windows previews: [previews](previews.md).
 
 ## Principle: like Nautilus
 

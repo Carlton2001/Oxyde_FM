@@ -18,11 +18,16 @@ The operation list stays in memory for the session only. No operation history is
 | --- | --- |
 | Processed | Confirmed kept result |
 | Not processed / skipped | No processing, or a decision to skip |
+| Failed | Refused by the system (in use, access denied…) while the operation went on with the others |
 | Interrupted | Started, with no confirmed kept effect |
 | Partially processed | Confirmed kept effects: published file or created folder |
 | Unknown | Insufficient proof, old result or uncovered virtual path |
 
 Real receipts take priority over progress. Transfers track descendants and removal of the moved root; deletions track actual confirmation. Old non-discriminating Partial results load as unknown, with JSON versioning. A final error does not remove confirmed receipts.
+
+### Partial deletions
+
+A permanent deletion or a move to the trash goes on after an item the system refuses: the item is marked Failed, the others are processed. At the end, `DeleteBatchFailure` summarizes them in a fixed notice (`app/dialog_windows/fixed/notice.rs`): how many items failed out of how many, the cause when the system named one (file in use, access denied), the paths concerned and a Retry button that runs the same deletion again on the selected items still on disk. Operation notices share this layout: a heading, the cause set apart, kept locations in their own panel, then a hint.
 
 ## Turbo contract
 

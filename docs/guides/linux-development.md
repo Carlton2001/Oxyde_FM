@@ -1,10 +1,10 @@
 # Developing the Linux version
 
-The Linux port is experimental and lives in `main` alongside the published Windows versions. **Windows remains the reference platform and must not be altered**: a Linux change goes through the `Platform` trait or a `cfg(not(target_os = "windows"))` module. Touching a shared file requires checking Windows (see below).
+Linux and Windows share `main` and are released together. System calls go through the `Platform` trait, and code for one system lives in a module gated by target, so that a change for one leaves the other's behavior intact. Touching a shared file requires checking that Windows still compiles (see below).
 
 ## Setup on Fedora Workstation
 
-Recent Linux Rust (validated with Rust 1.99.1, Fedora 44), then:
+Recent Linux Rust (CI pins 1.99.1; Fedora 44 and later), then:
 
 ```bash
 sudo dnf install gcc gcc-c++ make pkgconf-pkg-config \
@@ -38,7 +38,7 @@ The log goes to `$P/config/Oxyde/oxyde.log` (chosen GPU adapter, decorations). A
 
 Root permission tests run in a user namespace: `unshare --map-auto --map-root-user <test binary> linux_permissions`.
 
-## Preserving Windows
+## Checking Windows from Linux
 
 After any shared-file change, check from Linux that Windows compiles:
 
@@ -59,18 +59,17 @@ Tests still run on Windows: `./scripts/test-windows.ps1 -Offline`, or without re
 - Drag and drop: an incoming drop is always a copy, since GPUI only negotiates Copy on Wayland and X11; Ctrl and Shift stay with the source. Volumes are told apart by the deepest mount point (`/proc/self/mountinfo`, reread in the background), without resolving symlinks.
 - Trash: `trash_transfer_entries` (`linux_trash/transfer.rs`) handles cut, paste and drag out of the trash. The `.trashinfo` record is set aside in `$trash/.oxyde-trash-*.tmp` only once the item has left, and Undo restores it. Other applications do not receive these items, as they would split content from its record. Contents of a trashed folder stay refused. Restoring to another filesystem goes through a move. KDE's `ktrashrc` limits and GNOME's cleanup stay theirs; Oxyde sets them and never purges on its own.
 
-## Remaining work
+## Open points
 
 Not yet verified:
 
-- Vulkan on a physical Intel then NVIDIA GPU: backend obtained, shadows, resizing. External screen plugged into the NVIDIA card with Oxyde already running.
-- A real external screen with mixed scales. Nested KWin ignores fractional scale.
-- An X11/Xwayland session separately from Wayland.
+- An external screen plugged into the NVIDIA card of a hybrid laptop while Oxyde runs, and a real external screen with mixed scales (nested KWin ignores fractional scale).
 - A real KDE Plasma session: shadows, secondary windows, trash limits.
+- A real X11 session: X11 is kept working on a best-effort basis.
 
 Known gaps:
 
-- X11 tooltips are still bounded by the window size and can bite a few pixels into the shadow margin (`tooltip/position.rs`).
+- X11 tooltips are bounded by the window size and can bite a few pixels into the shadow margin (`tooltip/position.rs`).
 - Undoing a deletion across filesystems, with no operation to show, is still refused.
 - Dragging files to other applications is impossible on X11: GPUI does not offer files there.
 - "More options" (Shell menu) is hidden outside Windows.

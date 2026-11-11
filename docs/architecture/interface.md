@@ -8,7 +8,7 @@ Business state and actions belong to `src/ui/app/`. Components receive data and 
 - The thirteen built-in themes are declared by `ThemeId::ALL`, each by six seed colors (`theme/seed.rs`); every other token derives from them. User themes (`AppConfig::custom_themes`, `models/custom_theme.rs`), saved in `themes.json` beside `config.json` so a preferences reset keeps them, store the same six seeds and the built-in theme they started from. The theme window (`app/theme_window`) applies a theme on selection and previews a draft in every window through `OxydeApp::preview_theme` until it is saved or dropped. File icon colors are computed from each theme's seeds in `theme/file_colors.rs` (fixed hue per category, lightness for 3:1 contrast on the panes, chroma from the accent, folders on the accent), mapped by `components/icons/colors.rs` and applied by `render_file_icon`. The color vision setting (`AppConfig::color_vision`: typical, red-green, blue-yellow) swaps the category table for one searched to stay distinct under the matching deficiency simulation, and moves success off green for red-green; it applies to every theme.
 - Express dimensions in `rems()`, initial reference 16 logical pixels. Use `ui::scale::rem_pixels` for a `Pixels` API, `logical` for older values at scale 16. These conversions stay on the UI thread.
 - Coordinates from GPUI are already in pixels: do not convert twice. Content zoom does not resize the native window.
-- The default weight is Regular (400), from `ui/style.rs`. Separately rendered roots apply it too. Another weight must be an intentional variation.
+- The default weight is Regular (400), from `ui/style.rs`. Separately rendered roots apply it too. Another weight must be an intentional variation. On Linux, GPUI ignores the variable font's weight axis, so Inter Medium, SemiBold and Bold are embedded as static fonts (`assets_linux/fonts`, `ui/assets.rs`).
 
 ## Window buttons
 
@@ -38,6 +38,7 @@ Toggles use `elements::toggle::toggle`, including in trash settings: slightly ti
 | Button | `elements/button/style.rs`: `button_style`, `ButtonVariant` |
 | Single choice among a few options | `elements/segmented.rs`: `segmented`, `segment` |
 | Form or modal | `components/modal.rs`: `Modal`, `form_row`, `action_button` |
+| Operation failure notice | `app/dialog_windows/fixed/notice.rs`: heading, cause panel, kept locations, hint, optional Retry |
 | Confirmation or notice | `components/confirmation.rs`: `body` (icon in a tinted disc, question, details, irreversibility warning), `cancel_button`, `confirm_button` with `Tone::Danger` for destructive actions |
 | Secondary window and footer | `components/tool_window`; [window contracts](windows.md) |
 | Plain field | `TextInput::new` with `TextInputOptions::default()` |
@@ -69,6 +70,8 @@ An animation is never in the way of an action: clicks, navigation and drops stay
 
 `elements/motion.rs` provides critically damped springs (`presence`, `glide`, `slide`) that redirect without a jump. Do not animate owned windows appearing (menus, tooltips): Windows overlays its own opening animation. Remove a repeating animation from rendering once it has no purpose.
 
-A resize separator's accent fades in over its line while it is hovered or dragged (`elements/resize_highlight.rs`); the separator itself and the resizing stay immediate.
+A resize separator's accent fades in over its line while it is hovered or dragged (`elements/resize_highlight.rs`); the separator itself and the resizing stay immediate. Double-clicking a split's separator shares the two neighbouring panes equally; double-clicking the sidebar's edge fits it to its widest row, as rows truncate.
+
+On Linux, an inactive window fades its title bar content to half opacity over 200 ms, as GNOME headers do (`components/backdrop.rs`). Open menus and modal prompts count as part of their owner, which keeps an active header while they hold the keyboard.
 
 A computed folder size that changes signals the update with an accent background fading over 300 ms in the Size cell, an exception to the appearance duration. The initial calculation and identical results stay unanimated; an offscreen cell does not replay the flash when it appears.

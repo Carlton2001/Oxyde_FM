@@ -5,7 +5,7 @@ Code paths in backticks start at `src/` or the repository root.
 ## Guides
 
 - [Development](guides/development.md): build, test, split modules
-- [Linux development](guides/linux-development.md): setup, Windows guard, remaining work
+- [Linux development](guides/linux-development.md): setup, checking Windows from Linux, open points
 - [Windows distribution](guides/distribution.md): portable, installer, updates, CI and release
 - [Linux distribution](guides/linux-distribution.md): RPM, DEB, CI
 - [Copy engine benchmark](guides/copy-benchmark.md)
@@ -23,7 +23,8 @@ Shared:
 [volumes](architecture/volumes.md),
 [file clipboard](architecture/clipboard.md),
 [folder watching](architecture/watchers.md),
-[quick access](architecture/quick-access.md).
+[quick access](architecture/quick-access.md),
+[system integration](architecture/system-integration.md): default file manager, Open and Save dialogs, single instance.
 
 Linux:
 [previews and sandbox](architecture/linux-previews.md),

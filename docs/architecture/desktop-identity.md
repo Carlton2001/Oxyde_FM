@@ -1,6 +1,6 @@
 # Linux desktop identity
 
-What makes GNOME and other freedesktop desktops recognize Oxyde: application identifier, desktop entry and icon. Opening a folder passed as an argument and AppStream metadata come with [the packages](../guides/linux-distribution.md). Windows keeps its identity (`com.oxyde.desktop`, the binary's `.ico`).
+What makes GNOME and other freedesktop desktops recognize Oxyde: application identifier, desktop entry and icon. Opening a folder passed as an argument and AppStream metadata come with [the packages](../guides/linux-distribution.md). Windows has its own: the application identity `Oxyde.GPUI.Windows` of the Setup's shortcuts and taskbar ([system integration](system-integration.md#menus-of-folders-and-of-the-taskbar-windows)) and the binary's `.ico`.
 
 ## Rules
 

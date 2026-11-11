@@ -1,6 +1,6 @@
 # Archive paths
 
-In Windows production, codecs run in workers; the parent owns the files and decides effects. A worker failure must never trigger less restricted local parsing.
+In production, codecs run in workers on both systems; the parent owns the files and decides effects. Linux specifics: [Linux previews](linux-previews.md#archives). A worker failure must never trigger less restricted local parsing.
 
 ## Paths and responsibilities
 
@@ -11,7 +11,7 @@ In Windows production, codecs run in workers; the parent owns the files and deci
 | Creation and rebuild | `systems/archive_encode.rs`, `archive_encode::run` | Same encoder via `Platform::run_archive_io_worker` |
 | Modifying an archive | `archive_workspace/native_commit.rs` | Preparation, checks of the original, publication with backup and recovery |
 
-Decode/Encode and listing/index workers run in capability-less LPAC. The parent validates paths, types, sizes and sequences, and holds sources and outputs. Typed errors are translated at render time, without exposing internal codes.
+Decode/Encode and listing/index workers run in capability-less LPAC on Windows, under bubblewrap and seccomp on Linux. The parent validates paths, types, sizes and sequences, and holds sources and outputs. Typed errors are translated at render time, without exposing internal codes.
 
 The Decode/Encode transport wakes the supervisor on receipt or write completion, with capacity-one queues and one credit per frame read. Helpers may block on pipes; the supervisor keeps its pause, cancel and timeout checks. Its idle wait asks for at most 5 ms before rechecking, with no absolute guarantee on scheduling or native callbacks. A partial frame does not block this monitoring. Helpers are never joined without a bound at shutdown.
 

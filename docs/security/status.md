@@ -16,9 +16,11 @@ PDF thumbnails and previews reuse a native session outside LPAC, separate from t
 
 PDF, video, the Viewer's audio/video player and native Shell/thumbnail/icon services stay outside LPAC. Their jobs and timeouts do not remove ordinary permissions. The Viewer uses system codecs in a separate self-worker, with no media decoding in the parent; its heartbeat watches the IPC response, not codec progress. Reusable image and audio cover sessions may keep a compromised decoder's state between requests; their sessions are distinct: [previews](../architecture/previews.md).
 
-## Code loaded by other applications (Windows, optional)
+## Answering other applications' dialogs (optional)
 
-The experimental **Open and Save dialogs** option registers `oxyde_file_dialog.dll` for the user in place of the system's dialog classes: the library then runs inside every application of the user that shows a dialog, outside any confinement, with that application's rights. It is off by default and only wraps the system's dialog, asking Oxyde through its launcher. This is the registration security products know as COM hijacking; consequences, limits and how to undo it by hand: [distribution](../guides/distribution.md#open-and-save-dialogs-experimental).
+The experimental **Open and Save dialogs** option registers `oxyde_file_dialog.dll` for the user in place of the system's dialog classes: the library then runs inside every application of the user that shows a dialog, outside any confinement, with that application's rights. It is off by default and only wraps the system's dialog, asking Oxyde through its launcher. This is the registration security products know as COM hijacking; consequences, limits and how to undo it by hand: [system integration](../architecture/system-integration.md#windows-dialogs-experimental).
+
+On Linux, the **Open and Save dialogs** option makes Oxyde the file chooser of the desktop portal: what Oxyde answers is what the portal grants a sandboxed application, which only reaches the files the user chose in Oxyde's window. Nothing is loaded into other applications; contract: [system integration](../architecture/system-integration.md#the-linux-portal).
 
 ## Tracking R1–R9
 

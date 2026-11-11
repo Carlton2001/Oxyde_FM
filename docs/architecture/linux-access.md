@@ -1,6 +1,6 @@
 # Access without read, and Linux deletion
 
-The rights an operation really needs on Linux. Moving or renaming an item changes an entry in its folder: it takes writing to the folder, not reading the item. Traversing a folder takes `x`, not `r`. A recursive deletion must be able to pause or cancel between items. Windows is unchanged.
+The rights an operation really needs on Linux. Moving or renaming an item changes an entry in its folder: it takes writing to the folder, not reading the item. Traversing a folder takes `x`, not `r`. A recursive deletion must be able to pause or cancel between items.
 
 ## Rules
 
@@ -10,7 +10,7 @@ The rights an operation really needs on Linux. Moving or renaming an item change
   - Pause and cancel are checked before each item.
   - Each folder is removed after its content, through its held parent.
   - Another filesystem mounted inside is not visited: its removal fails and nothing is deleted there, like `rm -r --one-file-system`. Unmount it first.
-  - The first failure stops the selected item and is reported.
+  - The first failure stops that selected item; the other selected items are still deleted, or moved to the trash, and every refused item is reported ([operations](operations.md#partial-deletions)).
   - An unreadable subfolder is not forced open: failure, like `rm -r` and Nautilus.
 
 The result matches `mv`, `cp` and Nautilus: an unreadable file moves and renames on its disk; a `-wx` folder moves but does not copy (that would need listing); a `--x` folder gives access to what it contains; copying into a `-wx` folder works. Moving a folder takes writing into it (its `..` entry changes), so `mv` also fails on a `000` folder.

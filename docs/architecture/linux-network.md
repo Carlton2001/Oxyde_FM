@@ -1,6 +1,6 @@
 # Linux network (SMB and GVfs)
 
-Windows is unchanged.
+Windows maps network drives through its own paths (`map_network_drive`, `is_network_path`).
 
 ## Principle: like Nautilus
 

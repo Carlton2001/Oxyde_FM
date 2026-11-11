@@ -9,11 +9,11 @@ User decision: keep `paste 1.0.15`, `rustybuzz 0.20.1`, `ttf-parser 0.25.1`, `bi
 | `ttf-parser` | GPUI glyph checks and SVG dependencies | Fontations/`skrifa`, checking API and rendering changes |
 | `bincode` | Syntect's bundled syntax and theme dumps (`default-syntaxes`) | A Syntect release that drops it; Oxyde does not call it directly |
 | `yaml-rust` | Syntect's `yaml-load`, which compiles the vendored Sass, SCSS and PowerShell grammars at run time (`ui/app/viewer/text/syntax.rs`) | Precompile these grammars into a dump at build time and drop `yaml-load`, or a Syntect release on a maintained YAML parser |
-| `zvariant`, `zvariant_derive`, `zbus_names` | zbus 5 on Linux only: Oxyde's UDisks2 calls and GPUI's Linux backend (ashpd, AccessKit, oo7) | zbus 6, which merges them as its `wire` module, once GPUI's Linux backend adopts it; moving Oxyde alone would add a second zbus |
+| `zvariant`, `zvariant_derive`, `zbus_names` | zbus 5 on Linux only: Oxyde's D-Bus calls (UDisks2, single instance, FileManager1, the portal's file chooser) and GPUI's Linux backend (ashpd, AccessKit, oo7) | zbus 6, which merges them as its `wire` module, once GPUI's Linux backend adopts it; moving Oxyde alone would add a second zbus |
 
 Adding an alternative to the manifest does not replace an indirect dependency. Do not implicitly introduce a GPUI fork or Git source to clear advisories. The lockfile may contain packages absent from the active graph: do not confuse the two inventories.
 
-[`rustsec-windows-2026-10-09.json`](rustsec-windows-2026-10-09.json) is the historical report behind this decision: three maintenance advisories, no published vulnerability for the Windows x86_64 filters. It is not a current analysis.
+The decision rests on the RustSec report of 2026-10-09: three maintenance advisories, no published vulnerability for the Windows x86_64 filters. That report stays in Git history (`docs/security/rustsec-windows-2026-10-09.json`, removed after commit `afa2999f`); the audit workflow keeps the current one as an artifact.
 
 ## When to reconsider
 

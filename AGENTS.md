@@ -21,6 +21,7 @@ Native file explorer in Rust, GPUI and Tokio. Documentation: [index](docs/README
 | Menus, tooltips, secondary windows | [Windows](docs/architecture/windows.md) |
 | Previews, thumbnails, sessions | [Previews](docs/architecture/previews.md) |
 | Archives, confinement, guarantees | [Archives](docs/architecture/archives.md), [security limits](docs/security/status.md) |
+| Default file manager, Open and Save dialogs, single instance | [System integration](docs/architecture/system-integration.md) |
 | Final process exit | [Shutdown](docs/diagnostics/shutdown.md) |
 | Module splitting and tests | [Development](docs/guides/development.md) |
 
@@ -33,4 +34,4 @@ Native file explorer in Rust, GPUI and Tokio. Documentation: [index](docs/README
 - New unit tests go in the module's `tests/` folder, without changing their Rust parent or widening visibility: see the development guide.
 - Use semantic colors and the catalogs of all five languages.
 
-`reference_zed/` and the partial Zed `v1.21.0` checkout in `C:\Users\Biluf\Downloads\zed-1.21.0` are GPUI references for rendering and style; do not take their dependencies.
+GPUI is vendored at a fixed pin in `vendor/gpui`, `vendor/gpui_linux` and `vendor/gpui_windows`, with Oxyde's patches listed in their `README.oxyde.md`. A Zed checkout, when one is at hand (`reference_zed/`, ignored by Git), is a reference for rendering and style; do not take its dependencies.

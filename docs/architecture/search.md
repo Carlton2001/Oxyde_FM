@@ -10,7 +10,7 @@ Folders stay first in ascending and descending order. The UI sorts names in natu
 
 Name and location use a case-insensitive, accent-sensitive substring. Prepare the query once per traversal. Hidden/system visibility must stay consistent between listing and search.
 
-Date grouping belongs to the tab and is persisted; collapsing stays temporary. The six calendar periods are shared by filters and groups. A day/timezone change invalidates caches in the background, inactive tabs included, without rereading files. Groups use the same geometry for rendering and selection.
+Going back up to an ancestor selects and reveals the folder just left. Date grouping belongs to the tab and is persisted; collapsing stays temporary. The six calendar periods are shared by filters and groups. A day/timezone change invalidates caches in the background, inactive tabs included, without rereading files. Groups use the same geometry for rendering and selection.
 
 ## Folder sizes
 
@@ -36,7 +36,7 @@ Each result checks tab identity, path, mode generation and folder revision befor
 
 | Path | Contract |
 | --- | --- |
-| Path completion | Up to twelve folders, read deferred by 150 ms; Up/Down, Tab and click keep editing active; no virtual completion |
+| Path completion | Up to twelve folders, read deferred by 150 ms; Up/Down, Tab and click keep editing active, Enter submits the completion chosen with the arrows; leaving the field or submitting closes the list; no virtual completion |
 | Quick search | Recursive names, case-insensitive, `*`/`?` patterns, starts after 350 ms or Enter; neither content nor archives |
 | Advanced search | Criteria kept in its window; runs in the originating panel without closing the form |
 | Archive search | Names/metadata via a dedicated worker; unsupported criteria flagged, without publishing misleading matches |
