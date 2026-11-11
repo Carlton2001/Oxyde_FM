@@ -311,6 +311,8 @@ impl FileOperationManager {
         });
         #[cfg(not(target_os = "windows"))]
         {
+            // A refused item must not prevent the rest of the selection from being trashed.
+            let mut failures = Vec::new();
             for source in &real_sources {
                 if cancel_flag.load(Ordering::Relaxed) {
                     return Ok(());
@@ -324,11 +326,26 @@ impl FileOperationManager {
                 follow_turbo_priority(turbo_flag.load(Ordering::Relaxed), ThreadPriority::Normal);
                 op.lock().unwrap().current_file = Some(source.to_string_lossy().into_owned());
                 op.lock().unwrap().item_started(source);
-                platform().shell_delete(std::slice::from_ref(source), true)?;
-                op.lock().unwrap().item_complete(source);
-                op.lock().unwrap().processed_files += 1;
+                let mut locked = match platform().shell_delete(std::slice::from_ref(source), true) {
+                    Ok(()) => {
+                        let mut locked = op.lock().unwrap();
+                        locked.item_complete(source);
+                        locked
+                    }
+                    Err(failure) => {
+                        log::warn!(target: super::FILE_OPS_LOG_TARGET, "trash_item_failed path={source:?} error={failure}");
+                        let mut locked = op.lock().unwrap();
+                        locked.item_failed(source);
+                        failures.push(failure);
+                        locked
+                    }
+                };
+                locked.processed_files += 1;
             }
-            Ok(())
+            if cancel_flag.load(Ordering::Relaxed) {
+                return Ok(());
+            }
+            crate::models::error::DeleteBatchFailure::summarize(real_sources.len(), failures)
         }
     }
 }
