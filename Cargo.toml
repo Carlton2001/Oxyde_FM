@@ -108,6 +108,8 @@ rustix = { version = "1.1", default-features = false, features = ["event", "fs",
 zbus = { version = "5.19", default-features = false, features = ["async-io", "blocking-api"] }
 # zbus's own executor: timers for the portal's calls, which run there.
 async-io = "2.6"
+# Already locked through zbus: disk checks of bus calls, off its executor.
+blocking = "1.6"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # Required by the official COM implementation macro; already used by windows.

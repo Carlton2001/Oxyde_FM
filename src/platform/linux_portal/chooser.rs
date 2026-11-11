@@ -106,11 +106,16 @@ fn path(options: &Options, name: &str) -> Option<PathBuf> {
     path.is_absolute().then_some(path)
 }
 
-/// The folder to open first: that of `current_file`, the file saved again, else
-/// `current_folder`, when it is a folder.
-fn suggested_folder(options: &Options) -> Option<PathBuf> {
+/// The folders to open first, in order: that of `current_file`, the file saved again,
+/// then `current_folder`.
+fn suggestions(options: &Options) -> Vec<PathBuf> {
     let saved = path(options, "current_file").and_then(|file| file.parent().map(Path::to_path_buf));
-    saved.into_iter().chain(path(options, "current_folder")).find(|folder| folder.is_dir())
+    saved.into_iter().chain(path(options, "current_folder")).collect()
+}
+
+/// The first suggestion that is a folder. Reads the disk: off the bus's executor.
+fn first_folder(suggestions: Vec<PathBuf>) -> Option<PathBuf> {
+    suggestions.into_iter().find(|folder| folder.is_dir())
 }
 
 /// What the call asks for: the name to save under is `current_file`'s, else
@@ -362,6 +367,9 @@ impl FileChooser {
         }
         log::info!("{method} for {:?}", call.app_id);
         let options = &call.options;
+        // A slow mount must not hold the other calls the connection serves.
+        let suggested = suggestions(options);
+        let current_folder = blocking::unblock(move || first_folder(suggested)).await;
         let opening = method == "OpenFile";
         // Saving several files chooses their folder, without type filters.
         let (filters, current_filter) = if method == "SaveFiles" { (Vec::new(), None) }
@@ -374,7 +382,7 @@ impl FileChooser {
             directory: method == "SaveFiles" || (opening && flag(options, "directory")),
             filters: filters.iter().map(type_filter).collect(),
             current_filter,
-            current_folder: suggested_folder(options),
+            current_folder,
             default_extension: None,
             choices: raw_choices(options).into_iter().map(choice).collect(),
             parent: parent_window(&call.parent_window),

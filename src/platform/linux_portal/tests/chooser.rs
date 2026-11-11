@@ -56,13 +56,13 @@ fn filters_and_the_suggested_folder_are_read_from_the_options() {
     let filters = raw_filters(&options);
     assert_eq!(filters, [images.clone(), text.clone()]);
     assert_eq!(options.get("current_filter").and_then(raw_filter), Some(text.clone()));
-    assert_eq!(suggested_folder(&options), Some(folder));
+    assert_eq!(first_folder(suggestions(&options)), Some(folder));
     assert_eq!(type_filter(&text), FileTypeFilter { name: "Text".into(), patterns: vec![FileTypePattern::MimeType("text/plain".into())] });
     assert_eq!(type_filter(&images).patterns[0], FileTypePattern::Glob("*.png".into()));
     // A folder that does not exist is no suggestion.
     let mut missing = Options::new();
     missing.insert("current_folder".into(), owned(b"/no/such/folder\0".to_vec()));
-    assert_eq!(suggested_folder(&received(missing)), None);
+    assert_eq!(first_folder(suggestions(&received(missing))), None);
 }
 
 #[test]
@@ -90,14 +90,14 @@ fn saving_reads_the_name_the_folder_and_the_names_of_several_files() {
     values.insert("current_folder".into(), owned(nul_terminated(Path::new("/no/such/folder"))));
     let options = received(values);
     assert_eq!(purpose("SaveFile", &options), FileChooserPurpose::Save { name: "Untitled.txt".into() });
-    assert_eq!(suggested_folder(&options), None);
+    assert_eq!(first_folder(suggestions(&options)), None);
     // The file saved again gives its name and its folder.
     let mut values = Options::new();
     values.insert("current_name".into(), owned("Untitled.txt"));
     values.insert("current_file".into(), owned(nul_terminated(&folder.join("report.odt"))));
     let options = received(values);
     assert_eq!(purpose("SaveFile", &options), FileChooserPurpose::Save { name: "report.odt".into() });
-    assert_eq!(suggested_folder(&options), Some(folder.clone()));
+    assert_eq!(first_folder(suggestions(&options)), Some(folder.clone()));
     assert_eq!(purpose("SaveFile", &Options::new()), FileChooserPurpose::Save { name: String::new() });
     // Several files keep their names' last component, whatever their bytes.
     let mut values = Options::new();

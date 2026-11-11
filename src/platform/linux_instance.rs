@@ -30,13 +30,20 @@ fn send(sender: &UnboundedSender<InstanceMessage>, request: InstanceRequest, tok
     }
 }
 
+/// Checks what a caller names on the disk, off the bus's executor: a slow mount must not
+/// hold the other calls the connection serves, the portal's among them.
+async fn checked<T: Send + 'static>(names: Vec<String>, check: fn(&[String]) -> Vec<T>) -> Vec<T> {
+    blocking::unblock(move || check(&names)).await
+}
+
 struct Instance(UnboundedSender<InstanceMessage>);
 
 #[zbus::interface(name = "io.github.Carlton2001.Oxyde1")]
 impl Instance {
     /// Locations a later launch received; none brings the window forward.
-    fn open(&self, locations: Vec<String>, activation_token: String) {
-        send(&self.0, InstanceRequest::Folders(super::linux_startup::folders(&locations)), activation_token);
+    async fn open(&self, locations: Vec<String>, activation_token: String) {
+        let folders = checked(locations, super::linux_startup::folders).await;
+        send(&self.0, InstanceRequest::Folders(folders), activation_token);
     }
 
     /// The bus started a second Oxyde for the file chooser portal: this one answers instead.
@@ -54,16 +61,19 @@ struct FileManager(UnboundedSender<InstanceMessage>);
 
 #[zbus::interface(name = "org.freedesktop.FileManager1")]
 impl FileManager {
-    fn show_folders(&self, uris: Vec<String>, startup_id: String) {
-        send(&self.0, InstanceRequest::Folders(super::linux_startup::folders(&uris)), startup_id);
+    async fn show_folders(&self, uris: Vec<String>, startup_id: String) {
+        let folders = checked(uris, super::linux_startup::folders).await;
+        send(&self.0, InstanceRequest::Folders(folders), startup_id);
     }
 
-    fn show_items(&self, uris: Vec<String>, startup_id: String) {
-        send(&self.0, InstanceRequest::Items(super::linux_startup::items(&uris)), startup_id);
+    async fn show_items(&self, uris: Vec<String>, startup_id: String) {
+        let items = checked(uris, super::linux_startup::items).await;
+        send(&self.0, InstanceRequest::Items(items), startup_id);
     }
 
-    fn show_item_properties(&self, uris: Vec<String>, startup_id: String) {
-        send(&self.0, InstanceRequest::Properties(super::linux_startup::items(&uris)), startup_id);
+    async fn show_item_properties(&self, uris: Vec<String>, startup_id: String) {
+        let items = checked(uris, super::linux_startup::items).await;
+        send(&self.0, InstanceRequest::Properties(items), startup_id);
     }
 }
 

@@ -4441,6 +4441,7 @@ dependencies = [
  "async-io",
  "base64",
  "blake3",
+ "blocking",
  "bzip2",
  "chrono",
  "dashmap",
