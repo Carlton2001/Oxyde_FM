@@ -6,6 +6,14 @@ use std::borrow::Cow;
 #[folder = "assets/"]
 struct Assets;
 
+// GPUI's Linux text system loads every face at its default instance and
+// ignores the variable `wght` axis, so bold Inter would render as Regular.
+// Static instances of the weights the interface uses restore them there.
+#[cfg(target_os = "linux")]
+#[derive(RustEmbed)]
+#[folder = "assets_linux/fonts/"]
+struct LinuxStaticFonts;
+
 // SVG units in Lucide's 24 × 24 viewBox; scales with the rendered icon size.
 const ICON_STROKE_WIDTH: &str = "1.5";
 
@@ -26,6 +34,8 @@ impl EmbeddedAssetSource {
                 }
             }
         }
+        #[cfg(target_os = "linux")]
+        embedded_fonts.extend(LinuxStaticFonts::iter().filter(|path| path.ends_with(".ttf")).filter_map(|path| LinuxStaticFonts::get(&path)).map(|file| file.data));
         cx.text_system().add_fonts(embedded_fonts)?;
         Ok(())
     }
