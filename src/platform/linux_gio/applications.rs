@@ -260,8 +260,22 @@ pub(in crate::platform) fn oxyde_executable() -> Option<PathBuf> {
     let gio = gio()?;
     let app = desktop_entry(gio, OXYDE_ENTRY)?;
     // SAFETY: a live application; the string belongs to it.
-    let executable = PathBuf::from(unquoted(&unsafe { borrowed((gio.g_app_info_get_executable)(app.1)) }));
-    executable.is_absolute().then_some(executable)
+    let program = unquoted(&unsafe { borrowed((gio.g_app_info_get_executable)(app.1)) });
+    in_path(&program, std::env::var_os("PATH").as_deref())
+}
+
+/// The program as an absolute path: packages write `Exec=oxyde`, which the session
+/// finds in `PATH`, and a D-Bus service file needs the full path.
+fn in_path(program: &str, path: Option<&std::ffi::OsStr>) -> Option<PathBuf> {
+    let program = PathBuf::from(program);
+    if program.is_absolute() {
+        return Some(program);
+    }
+    if program.components().count() != 1 {
+        return None;
+    }
+    std::env::split_paths(path?).filter(|folder| folder.is_absolute())
+        .map(|folder| folder.join(&program)).find(|candidate| candidate.is_file())
 }
 
 /// GIO gives the program as `Exec` wrote it: a quoted path, as `install.sh` writes for
