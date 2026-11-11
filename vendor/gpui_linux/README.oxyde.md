@@ -13,6 +13,7 @@ Local source changes, all marked `Oxyde:`:
 
 - `gpui/src/elements/img.rs`: animated images advance in inactive windows too. A Wayland
   hover popup never becomes active, so GIF and WebP previews stayed on their first frame.
+  They stop while the window's frames are not shown (covered, minimized).
 
 - `gpui/src/platform.rs`: `PlatformWindow::reposition_popup`, false by default.
 - `gpui/src/window.rs`: `Window::reposition_popup`, which forwards to it.

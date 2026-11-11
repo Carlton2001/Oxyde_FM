@@ -161,7 +161,7 @@ impl Viewer {
                     this.set_overlay_media(target, cx);
                 });
                 let frame = animation.map_or(0, |started| animation_frame(&image, started.elapsed()));
-                if animation.is_some() && !cx.reduce_motion() {
+                if animation.is_some() && !cx.reduce_motion() && window.is_visible() {
                     window.request_animation_frame();
                 }
                 window.with_content_mask(Some(ContentMask { bounds: available }), |window| {

@@ -319,8 +319,9 @@ impl Element for Img {
                             if let Some(state) = &mut state {
                                 state.frame_index = state.frame_index.min(max_frame_index);
                                 if frame_count > 1 && !cx.reduce_motion() {
-                                    // Oxyde: animate in inactive windows too, such as hover popups.
-                                    if true {
+                                    // Oxyde: animate in inactive windows too, such as hover popups,
+                                    // but not in a window whose frames are not shown.
+                                    if window.is_visible() {
                                         let current_time = Instant::now();
                                         if let Some(last_frame_time) = state.last_frame_time {
                                             let elapsed = current_time - last_frame_time;
@@ -382,7 +383,8 @@ impl Element for Img {
 
                             if global_id.is_some()
                                 && data.frame_count() > 1
-                                // Oxyde: no window activity condition, as above.
+                                // Oxyde: visibility rather than activity, as above.
+                                && window.is_visible()
                                 && !cx.reduce_motion()
                             {
                                 window.request_animation_frame();
