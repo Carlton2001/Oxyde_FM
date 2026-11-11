@@ -147,6 +147,19 @@ mod tests {
         }
     }
     #[test]
+    fn system_delete_refusals_for_lack_of_rights_are_named_in_all_languages() {
+        use crate::ui::i18n::{I18n, Message};
+        for language in [Language::French, Language::English, Language::German, Language::Spanish, Language::Italian] {
+            let i18n = I18n::for_language(language);
+            let first = oxyde_lib::models::error::DeleteAccessDenied { path: "/srv/a".into() }.to_string();
+            let expected = i18n.text(Message::ShellDeleteAccessDenied).to_string();
+            assert_eq!(error_detail(&first, &i18n), expected);
+            let batch = oxyde_lib::models::error::DeleteBatchFailure::summarize(5, vec![first, "second".into()]).unwrap_err();
+            let displayed = error_detail(&batch, &i18n);
+            assert!(displayed.ends_with(&expected) && !displayed.contains("Delete refused ["), "{displayed}");
+        }
+    }
+    #[test]
     fn delete_batch_failures_summarize_counts_and_translate_the_first_cause() {
         use crate::ui::i18n::{I18n, Message};
         for language in [Language::French, Language::English, Language::German, Language::Spanish, Language::Italian] {
@@ -462,6 +475,9 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
             }
             oxyde_lib::models::error::ArchiveListingFailure::WorkerFailed => i18n.text(Message::ArchiveListingWorkerFailed).to_string(),
         };
+    }
+    if oxyde_lib::models::error::DeleteAccessDenied::from_message(detail) {
+        return i18n.text(Message::ShellDeleteAccessDenied).to_string();
     }
     if let Some(completed) = oxyde_lib::models::error::ShellDeleteFailure::from_message(detail) {
         use oxyde_lib::models::error::{ShellDeleteCause, ShellDeleteFailure};

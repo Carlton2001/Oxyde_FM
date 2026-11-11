@@ -154,7 +154,7 @@ impl FileOperationManager {
                             // Keep going: one refused item must not leave the rest undeleted.
                             log::warn!(target: super::FILE_OPS_LOG_TARGET, "delete_item_failed path={src:?} error={e}");
                             let failure = match e.kind() {
-                                std::io::ErrorKind::PermissionDenied if total_items == 1 => "error_access_denied".to_string(),
+                                std::io::ErrorKind::PermissionDenied => crate::models::error::DeleteAccessDenied { path: src.to_string_lossy().into_owned() }.to_string(),
                                 std::io::ErrorKind::StorageFull if total_items == 1 => "error_disk_full".to_string(),
                                 _ => format!("Failed to delete {:?}: {}", src, e),
                             };

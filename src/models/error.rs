@@ -153,6 +153,23 @@ impl ShellDeleteFailure {
     }
 }
 
+/// A deletion the system refused for lack of rights, such as EACCES or EPERM on Linux.
+#[derive(Clone, Debug)]
+pub struct DeleteAccessDenied {
+    pub path: String,
+}
+impl fmt::Display for DeleteAccessDenied {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Delete refused [access denied]: {}", self.path)
+    }
+}
+impl std::error::Error for DeleteAccessDenied {}
+impl DeleteAccessDenied {
+    pub fn from_message(message: &str) -> bool {
+        message.contains("Delete refused [access denied]: ")
+    }
+}
+
 /// Summary of a multi-item deletion that kept going after some items were refused.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeleteBatchFailure {

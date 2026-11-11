@@ -722,17 +722,24 @@ impl Platform for LinuxPlatform {
 
     fn shell_delete(&self, paths: &[std::path::PathBuf], recycle: bool) -> Result<(), String> {
         if recycle {
-            return trash::delete_all(paths).map_err(|error| error.to_string());
+            return trash::delete_all(paths).map_err(|error| match error {
+                trash::Error::FileSystem { path, source } if source.kind() == std::io::ErrorKind::PermissionDenied => {
+                    crate::models::error::DeleteAccessDenied { path: path.to_string_lossy().into_owned() }.to_string()
+                }
+                error => error.to_string(),
+            });
         }
         for path in paths {
             let kind = std::fs::symlink_metadata(path)
                 .map_err(|error| error.to_string())?
                 .file_type();
-            if kind.is_dir() {
-                std::fs::remove_dir_all(path).map_err(|error| error.to_string())?;
-            } else {
-                std::fs::remove_file(path).map_err(|error| error.to_string())?;
-            }
+            let removed = if kind.is_dir() { std::fs::remove_dir_all(path) } else { std::fs::remove_file(path) };
+            removed.map_err(|error| match error.kind() {
+                std::io::ErrorKind::PermissionDenied => {
+                    crate::models::error::DeleteAccessDenied { path: path.to_string_lossy().into_owned() }.to_string()
+                }
+                _ => error.to_string(),
+            })?;
         }
         Ok(())
     }
