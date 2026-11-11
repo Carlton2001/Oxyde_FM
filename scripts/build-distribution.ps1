@@ -105,7 +105,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $projectRoot 'assets/icons/oxyde.ico') -Destination (Join-Path $stage 'oxyde.ico')
     if (-not $PortableOnly) {
         $phaseTimer.Restart()
-        & $IsccPath "/DAppVersion=$version" "/DPayloadDir=$stage" "/O$output" (Join-Path $projectRoot 'installer/windows/oxyde.iss')
+        & $IsccPath "/DAppVersion=$version" "/DPayloadDir=$stage" "/O$output" (Join-Path $projectRoot 'packaging/windows/oxyde.iss')
         if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
         Write-Host ('Distribution timing: Inno Setup {0:N1} s' -f $phaseTimer.Elapsed.TotalSeconds)
     }

@@ -34,7 +34,7 @@ Then build:
 ./scripts/build-distribution.ps1 -PortableOnly
 ```
 
-The script also builds the dialog library (`shell/oxyde-file-dialog`), which goes into the installer only. Without `-PortableOnly` it builds the installer with Inno Setup 6.3+. `-SkipBuild` reuses existing release executables; `-IsccPath` locates Inno Setup. The C runtime is statically linked (`.cargo/config.toml`): no Microsoft DLL ships, and the script refuses an executable that still imports one. Executables are not signed.
+The script also builds the dialog library (`shell/oxyde-file-dialog`), which goes into the installer only. Without `-PortableOnly` it builds the installer with Inno Setup 6.3+, from [`packaging/windows/oxyde.iss`](../../packaging/README.md). `-SkipBuild` reuses existing release executables; `-IsccPath` locates Inno Setup. The C runtime is statically linked (`.cargo/config.toml`): no Microsoft DLL ships, and the script refuses an executable that still imports one. Executables are not signed.
 
 Each run regenerates crate licenses from `Cargo.lock` before compiling, even with `-SkipBuild`, and includes the report in both packages; a generation failure stops the build, and network access is needed for missing upstream notices. To generate them separately: [notices guide](../../licenses/dependencies/README.md). The script prints separate timings for licenses, Rust, Inno Setup and ZIP, and verifies required files in the ZIP.
 

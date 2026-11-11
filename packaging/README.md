@@ -1,6 +1,14 @@
 # Packaging
 
-Linux package sources, used by `scripts/build-linux-packages.sh`. Procedure, dependencies and CI: [Linux distribution](../docs/guides/linux-distribution.md). The Windows installer is in [`installer/`](../installer/README.md).
+Installer and package sources, one folder per system.
+
+## Windows
+
+`windows/oxyde.iss` is the Inno Setup script of the Windows installer, used by `scripts/build-distribution.ps1`. Building, installing and portable use: [Windows distribution](../docs/guides/distribution.md).
+
+## Linux
+
+Linux package sources, used by `scripts/build-linux-packages.sh`. Procedure, dependencies and CI: [Linux distribution](../docs/guides/linux-distribution.md).
 
 | Path in `linux/` | Purpose |
 | --- | --- |
