@@ -268,6 +268,7 @@ impl OxydeApp {
                 div()
                     .relative()
                     .max_w(crate::ui::style::TAB_MAX_WIDTH)
+                    .min_w(crate::ui::style::TAB_MIN_WIDTH)
                     .flex_basis(crate::ui::style::TAB_MAX_WIDTH)
                     .flex_shrink(1.0)
                     .child(tab)
