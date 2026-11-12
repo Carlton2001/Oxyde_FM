@@ -507,14 +507,21 @@ install_entry() {
     update-desktop-database -q "$data/applications" 2>/dev/null || true
 }
 
-# Keeps the new version and the one it replaces, which a running Oxyde may still use.
+# Keeps the new version, the one it replaces and every folder an Oxyde still runs
+# from; a version reinstalled over a running one left it aside as .retired-*.
 prune_versions() {
-    local keep_new=$1 keep_old=$2 directory
-    for directory in "$lib_root"/*/; do
+    local keep_new=$1 keep_old=$2 directory name
+    local in_use
+    in_use=$'\n'$(versions_in_use)$'\n'
+    for directory in "$lib_root"/*/ "$lib_root"/.retired-*/; do
         directory=${directory%/}
-        [[ -L $directory ]] && continue
-        case $(basename "$directory") in
-            "$keep_new"|"$keep_old"|.*) ;;
+        [[ -d $directory && ! -L $directory ]] || continue
+        name=$(basename "$directory")
+        [[ $in_use == *$'\n'"$name"$'\n'* ]] && continue
+        case $name in
+            "$keep_new"|"$keep_old") ;;
+            .retired-*) rm -rf -- "$directory" ;;
+            .*) ;;
             *) rm -rf -- "$directory" ;;
         esac
     done
@@ -550,8 +557,14 @@ install_archive() {
     fi
     rm -rf -- "${lib_root:?}/$version.new"
     mv -T "$tree" "$lib_root/$version.new"
-    # A running Oxyde of the same version keeps its open files after the swap.
-    rm -rf -- "${lib_root:?}/$version"
+    # The same version, reinstalled, moves aside rather than away: an Oxyde running from
+    # it finds its workers at their new path, and prune_versions removes it once unused.
+    # Two renames also leave no moment without the version should the script stop.
+    if [[ -e $lib_root/$version ]]; then
+        local retired
+        retired=$(mktemp -d "$lib_root/.retired-XXXXXX")
+        mv -T "$lib_root/$version" "$retired"
+    fi
     mv -T "$lib_root/$version.new" "$lib_root/$version"
     ln -sfn "$version" "$lib_root/.current"
     mv -T "$lib_root/.current" "$lib_root/current"
@@ -684,7 +697,74 @@ forget_file_chooser() {
     done
 }
 
-is_running() { command -v pgrep >/dev/null && pgrep -u "$(id -u)" -x oxyde >/dev/null; }
+# The user's processes named oxyde, workers included, from /proc: pgrep is not
+# everywhere. A process another user runs, or that hides its details, is left out.
+oxyde_pids() {
+    local directory name
+    for directory in /proc/[0-9]*; do
+        [[ -O $directory ]] || continue
+        { IFS= read -r name < "$directory/comm"; } 2>/dev/null || continue
+        [[ $name == oxyde ]] && printf '%s\n' "${directory#/proc/}"
+    done
+    return 0
+}
+
+is_running() { [[ -n $(oxyde_pids) ]]; }
+
+# The folders of $lib_root that running Oxyde processes were started from, a version
+# or a .retired-* folder, one per line. The kernel reports resolved paths.
+versions_in_use() {
+    local root pid executable
+    root=$(realpath -- "$lib_root" 2>/dev/null) || return 0
+    for pid in $(oxyde_pids); do
+        executable=$(readlink "/proc/$pid/exe" 2>/dev/null) || continue
+        executable=${executable% (deleted)}
+        [[ $executable == "$root"/*/bin/oxyde ]] || continue
+        executable=${executable#"$root"/}
+        printf '%s\n' "${executable%%/*}"
+    done | sort -u
+}
+
+# Waits on an update in progress, as installations wait on each other; the lock goes
+# with the folder.
+lock_installation() {
+    [[ -d $lib_root ]] && command -v flock >/dev/null || return 0
+    exec 9> "$lib_root/.lock"
+    flock 9
+}
+
+# An Oxyde left running would lose its previews and archive workers with its files,
+# and write its cache and settings again as it quits: it closes first, by the user's
+# hand, so that it saves its session and finishes its operations. Fails if the user
+# cancels; without a terminal, stops the script.
+wait_until_closed() {
+    is_running || return 0
+    interactive || die 'Oxyde is running: close it, then run the uninstallation again.'
+    say ''
+    warn 'Oxyde is running: close its windows, Open and Save dialogs included.'
+    info 'The uninstallation continues once it has quit. Press q to cancel.'
+    local key waited=0 pids
+    while :; do
+        while pids=$(oxyde_pids); [[ -n $pids ]]; do
+            if ((waited++ == 15)); then
+                # Frozen, in another session, or a worker left behind.
+                warn "Oxyde still runs (process $(printf '%s' "$pids" | tr '\n' ' ' | sed 's/ $//'))."
+                info 'If it does not respond, or runs in another session, end it with: pkill -x oxyde'
+            fi
+            IFS= read -rsn1 -t 1 key < /dev/tty || continue
+            [[ $key == q || $key == $'\e' ]] && return 1
+        done
+        # After an update, Oxyde starts its new version as it quits.
+        if IFS= read -rsn1 -t 1 key < /dev/tty; then
+            [[ $key == q || $key == $'\e' ]] && return 1
+            sleep 1
+        fi
+        is_running || break
+    done
+    ok 'Oxyde is closed.'
+}
+
+nothing_changed() { say ''; say '  Nothing was changed.'; }
 
 # purge deletes the settings without asking, keep keeps them without asking.
 uninstall() {
@@ -698,10 +778,12 @@ uninstall() {
         $found || { say 'Oxyde is installed by a system package: remove it with your package manager.'; return 0; }
         shared=true
     fi
+    wait_until_closed || { nothing_changed; return 0; }
+    lock_installation
+    # An update that held the lock may have started its new version.
+    wait_until_closed || { nothing_changed; return 0; }
     step 'Uninstalling Oxyde'
     $shared || forget_integration
-    local running=false
-    is_running && running=true
     if $found; then
         if [[ -L $bin_link && $(readlink "$bin_link") == "$lib_root"/* ]]; then
             rm -f "$bin_link"
@@ -719,7 +801,7 @@ uninstall() {
         [[ -d $data/icons/hicolor ]] && touch "$data/icons/hicolor"
         update-desktop-database -q "$data/applications" 2>/dev/null || true
         rm -rf -- "$lib_root"
-        remove_cache "$running"
+        remove_cache
         ok 'Oxyde is uninstalled.'
     else
         say '  No per-user installation of Oxyde was found.'
@@ -729,7 +811,7 @@ uninstall() {
         local settings=${XDG_CONFIG_HOME:-$HOME/.config}/Oxyde
         [[ ! -d $settings ]] || info "Settings remain in $(tilde "$settings"), where the system package still uses them."
     else
-        handle_settings "$purge" "$keep" "$running"
+        handle_settings "$purge" "$keep"
     fi
 }
 
@@ -752,14 +834,7 @@ forget_integration() {
 
 # Thumbnails, the GStreamer registry and copies of files opened from archives.
 remove_cache() {
-    local running=$1 cache=${XDG_CACHE_HOME:-$HOME/.cache}/Oxyde
-    [[ -d $cache ]] || return 0
-    if $running; then
-        warn "Oxyde is running: its cache in $(tilde "$cache") is kept;"
-        info 'delete it once Oxyde is closed.'
-    else
-        rm -rf -- "$cache"
-    fi
+    rm -rf -- "${XDG_CACHE_HOME:-$HOME/.cache}/Oxyde"
 }
 
 # The portal reads its portals and configuration only when it starts.
@@ -770,14 +845,9 @@ restart_portal() {
 
 # Preferences, themes, session and log: kept unless the user asks.
 handle_settings() {
-    local purge=$1 keep=$2 running=$3
+    local purge=$1 keep=$2
     local settings=${XDG_CONFIG_HOME:-$HOME/.config}/Oxyde
     [[ -d $settings ]] || return 0
-    if $running; then
-        warn "Oxyde is running and would write its settings again:"
-        info "they remain in $(tilde "$settings")."
-        return 0
-    fi
     if ! $purge && ! $keep && interactive; then
         choose "Your settings, themes and session are in $(tilde "$settings")." 1 \
             'Delete them' 'Keep them, for a later installation'
@@ -806,16 +876,16 @@ install_deb() {
 
 # Offered only without a per-user installation: nothing of Oxyde remains after it.
 remove_deb() {
-    local portal_changed=false running=false
+    local portal_changed=false
+    wait_until_closed || { nothing_changed; return 0; }
     step 'Uninstalling Oxyde'
     info 'apt asks for your password.'
     sudo apt-get remove -y oxyde
     forget_integration
-    is_running && running=true
-    remove_cache "$running"
+    remove_cache
     ok 'Oxyde is uninstalled.'
     restart_portal
-    handle_settings false false "$running"
+    handle_settings false false
 }
 
 # The version of a DEB package installed, without its revision.
@@ -997,7 +1067,7 @@ main() {
         [[ -n $archive ]] && is_ubuntu && choosing_format=true
         main_menu "$version" "$with_deb" "$choosing_format" "$release_ok"
         case $action in
-            quit) say ''; say '  Nothing was changed.'; return 0 ;;
+            quit) nothing_changed; return 0 ;;
             uninstall) uninstall false; return 0 ;;
             remove_deb) remove_deb; return 0 ;;
         esac

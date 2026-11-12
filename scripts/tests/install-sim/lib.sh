@@ -3,8 +3,10 @@
 # outside the sandbox is touched. Variables a scenario may set before sourcing:
 #   SIM_TITLE, SIM_OS (fedora|silverblue|ubuntu|debian|arch|opensuse|void),
 #   SIM_MISSING (probes from install.sh's dependency table, one per line, e.g. "cmd bwrap"),
-#   SIM_ARCH, SIM_GLIBC, SIM_UID, SIM_GPG (ok|bad), SIM_CORRUPT=1, SIM_RUNNING=1,
-#   SIM_PREINSTALL=VERSION, SIM_SETTINGS=1, SIM_DEFAULT=1, SIM_PORTAL=1,
+#   SIM_ARCH, SIM_GLIBC, SIM_UID, SIM_GPG (ok|bad), SIM_CORRUPT=1,
+#   SIM_RUNNING=SECONDS (Oxyde runs, from the first version preinstalled, and quits after
+#   that time; 0 never quits), SIM_RELAUNCH=1 (quitting starts it again for 3 s, as after
+#   an update), SIM_PREINSTALL="VERSION..." (installed in turn), SIM_SETTINGS=1, SIM_DEFAULT=1, SIM_PORTAL=1,
 #   SIM_SYSTEM_PKG=1, SIM_DEV_ENTRY=1, SIM_VERSION (release published, default 0.9.0),
 #   SIM_LOCAL_ARCHIVE=1 (puts an archive in ~/Downloads for --archive).
 sim_here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -65,7 +67,16 @@ is_atomic() { [[ $SIM_OS == silverblue ]]; }
 uname() { printf '%s\n' "${SIM_ARCH:-x86_64}"; }
 getconf() { printf 'glibc %s\n' "${SIM_GLIBC:-2.41}"; }
 id() { if [[ ${1:-} == -u ]]; then printf '%s\n' "${SIM_UID:-1000}"; else builtin command id "$@"; fi; }
-pgrep() { [[ -n ${SIM_RUNNING:-} ]]; }
+# A running Oxyde: $sandbox/running exists while it runs, and the folder it was started
+# from holds .sim-running, which follows the folder as its inode would.
+oxyde_pids() { [[ ! -e $sandbox/running ]] || printf '4242\n'; }
+versions_in_use() {
+    [[ -e $sandbox/running ]] || return 0
+    local marker
+    for marker in "$lib_root"/*/.sim-running "$lib_root"/.retired-*/.sim-running; do
+        [[ ! -e $marker ]] || basename "$(dirname "$marker")"
+    done
+}
 gpgv() { [[ ${SIM_GPG:-ok} == ok ]]; }
 download() {
     command -v curl >/dev/null || command -v wget >/dev/null || return 1
@@ -91,9 +102,20 @@ xdg-mime() {
 }
 
 # --- Initial state -------------------------------------------------------------
-if [[ -n ${SIM_PREINSTALL:-} ]]; then
-    mkdir -p "$sandbox/old"; make_archive "$SIM_PREINSTALL" "$sandbox/old"
-    ( install_archive "$sandbox/old/oxyde-$SIM_PREINSTALL-x86_64-linux.tar.gz" ) >/dev/null 2>&1
+for sim_version in ${SIM_PREINSTALL:-}; do
+    mkdir -p "$sandbox/old"; make_archive "$sim_version" "$sandbox/old"
+    ( install_archive "$sandbox/old/oxyde-$sim_version-x86_64-linux.tar.gz" ) >/dev/null 2>&1
+done
+if [[ -n ${SIM_RUNNING:-} ]]; then
+    : > "$sandbox/running"
+    sim_version=${SIM_PREINSTALL%% *}
+    [[ -z $sim_version ]] || : > "$HOME/.local/lib/oxyde/$sim_version/.sim-running"
+    if ((SIM_RUNNING > 0)); then
+        {
+            sleep "$SIM_RUNNING"; rm -f "$sandbox/running"
+            [[ -z ${SIM_RELAUNCH:-} ]] || { sleep 0.3; : > "$sandbox/running"; sleep 3; rm -f "$sandbox/running"; }
+        } &
+    fi
 fi
 if [[ -n ${SIM_SETTINGS:-} ]]; then
     mkdir -p "$HOME/.config/Oxyde" "$HOME/.cache/Oxyde/thumbnails"
