@@ -1,4 +1,4 @@
-use crate::ui::elements::button::{button_style, ButtonVariant};
+use crate::ui::elements::bar_button;
 use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::scale::rem_pixels;
 use crate::ui::style::h_flex;
@@ -7,23 +7,14 @@ use crate::ui::i18n::{I18nContext, Message};
 use gpui::prelude::*;
 use gpui::*;
 
-fn tab_bar_button(id: impl Into<ElementId>, theme: &crate::ui::theme::OxydeTheme) -> Stateful<Div> {
-    button_style(div().id(id), *theme, ButtonVariant::Ghost, true)
-        .flex_none()
-        .size(rems(1.5))
-        .mx(rems(0.25))
-        .my_auto()
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded_md()
-}
 
 pub struct TabBar {
     id: ElementId,
     children: Vec<AnyElement>,
     scroll_state: crate::ui::workspace::TabStripState,
     on_new_tab: Option<Box<dyn Fn(&mut Window, &mut App) + 'static>>,
+    /// Offset of the + button following the tabs, while a dragged tab opens or leaves room.
+    new_tab_shift: f32,
 }
 
 impl TabBar {
@@ -33,7 +24,13 @@ impl TabBar {
             children: Vec::new(),
             scroll_state: Default::default(),
             on_new_tab: None,
+            new_tab_shift: 0.0,
         }
+    }
+
+    pub fn new_tab_shift(mut self, shift: f32) -> Self {
+        self.new_tab_shift = shift;
+        self
     }
 
     pub fn on_new_tab(mut self, f: impl Fn(&mut Window, &mut App) + 'static) -> Self {
@@ -87,30 +84,28 @@ impl RenderOnce for TabBar {
         let overflow_state = self.scroll_state.overflow;
         let active_index = self.scroll_state.active_index.get();
         let new_tab_button = self.on_new_tab.map(|on_new_tab| {
-            div()
-            .id(SharedString::from(format!("new-tab-btn-{:?}", self.id)))
-            .flex_none()
-            // Square, as the bar is high.
-            .w(crate::ui::style::TAB_BAR_HEIGHT)
-            .h_full()
-            .flex()
-            .items_center()
-            .justify_center()
+            bar_button::fill(
+                bar_button::cell(SharedString::from(format!("new-tab-btn-{:?}", self.id)), crate::ui::style::TAB_BAR_HEIGHT),
+                true, false, *theme,
+            )
             .bg(theme.header)
             .border_b(rems(0.0625))
             .border_color(theme.border)
-            .hover(|s| s.bg(theme.hover))
             .fixed_tooltip(Tooltip::text(cx.i18n().text(Message::NewTab)))
             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                 on_new_tab(window, cx);
             })
-            .child(svg().path("icons/plus.svg").size_4().text_color(theme.text))
+            .child(bar_button::icon("icons/plus.svg", theme.text))
             .into_any_element()
         });
         let (inline_button, fixed_button) = if overflow {
             (None, new_tab_button)
         } else {
-            (new_tab_button, None)
+            let shift = self.new_tab_shift;
+            let id = SharedString::from(format!("new-tab-shift-{:?}", self.id));
+            (new_tab_button.map(|button| div().relative().flex_none().h_full().child(button)
+                .with_spring(id, crate::ui::elements::motion::glide(shift), |button, x| button.left(px(x)))
+                .into_any_element()), None)
         };
         let scroll_button = |id: &'static str, icon: &'static str, direction: f32| {
             let scroll = scroll.clone();
@@ -120,19 +115,15 @@ impl RenderOnce for TabBar {
             } else {
                 scroll.offset().x <= -scroll.max_offset().x + rem_pixels(rems(0.0625))
             };
-            tab_bar_button(id, theme)
-                .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            bar_button::fill(bar_button::cell(id, crate::ui::style::TAB_BAR_HEIGHT), !at_edge, false, *theme)
+                .border_b(rems(0.0625))
+                .border_color(theme.border)
+                .when(!at_edge, |button| button.on_mouse_down(MouseButton::Left, move |_, window, cx| {
                     cx.stop_propagation();
                     let step = (scroll.bounds().size.width * 0.75).max(rem_pixels(rems(5.0)));
                     super::scroll::smooth_scroll(animation.clone(), step * direction, window, cx);
-                })
-                .child(
-                    svg()
-                        .path(icon)
-                        .size_4()
-                        .text_color(theme.text)
-                        .when(at_edge, |s| s.opacity(0.4)),
-                )
+                }))
+                .child(bar_button::icon(icon, bar_button::icon_color(!at_edge, false, *theme)))
         };
 
         div()
@@ -155,7 +146,7 @@ impl RenderOnce for TabBar {
                     .bg(theme.border),
             )
             .when(overflow, |d| {
-                d.child(scroll_button("tabs-left", "icons/arrow-left.svg", 1.0))
+                d.child(scroll_button("tabs-left", "icons/chevron-left.svg", 1.0))
             })
             .child(
                 div()
@@ -218,7 +209,7 @@ impl RenderOnce for TabBar {
                     ),
             )
             .when(overflow, |d| {
-                d.child(scroll_button("tabs-right", "icons/arrow-right.svg", -1.0))
+                d.child(scroll_button("tabs-right", "icons/chevron-right.svg", -1.0))
             })
             // Reserve a fixed button only while the tabs overflow.
             .children(fixed_button)

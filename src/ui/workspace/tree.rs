@@ -10,9 +10,8 @@ impl Default for TabStripState {
             overflow: Default::default(),
             active_id: Default::default(),
             active_index: Default::default(),
-            drop_slots: Default::default(),
-            drop_origin: Default::default(),
-            drop_marker_x: Default::default(),
+            tab_widths: Default::default(),
+            drag_scroll: Default::default(),
         }
     }
 }

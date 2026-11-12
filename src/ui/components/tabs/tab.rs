@@ -4,6 +4,12 @@ use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
 
+/// The size of the same icons in the list and the sidebar.
+const ICON_SIZE: Rems = rems(1.0);
+/// Space between the icon, the label and the close button.
+const GAP: Rems = rems(0.5);
+const LEADING_PADDING: Rems = rems(0.75);
+
 #[derive(Clone)]
 pub enum TabIcon {
     Svg(&'static str),
@@ -19,13 +25,13 @@ impl TabIcon {
         match self {
             Self::Svg(path) => svg()
                 .path(*path)
-                .size(rems(0.875))
+                .size(ICON_SIZE)
                 .text_color(color)
                 .into_any_element(),
             Self::Item { path, icon, system } => crate::ui::components::icons::render_file_icon(
                 path.clone(),
                 *icon,
-                rems(0.875), theme,
+                ICON_SIZE, theme,
                 *system,
                 false,
             ),
@@ -43,27 +49,36 @@ pub enum TabPosition {
 pub struct TabDragPreview {
     pub label: String,
     pub icon: TabIcon,
+    /// The dragged tab's width, kept so the ghost does not change size when lifted.
+    pub width: Option<Pixels>,
 }
 
 impl Render for TabDragPreview {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // The active tab lifted from the strip: same height, margins, text and icon.
         let theme = *cx.theme();
         div()
-            .px_4()
+            .pl(LEADING_PADDING)
+            .pr(rems(1.25))
             .h(crate::ui::style::TAB_BAR_HEIGHT)
+            .map(|ghost| match self.width {
+                Some(width) => ghost.w(width),
+                None => ghost.max_w(crate::ui::style::TAB_MAX_WIDTH),
+            })
             .bg(theme.tab_active)
-            .rounded_sm()
+            .rounded(rems(0.25))
             .border(rems(0.0625))
             .border_color(theme.menu_border)
             .text_color(theme.text)
-            .text_sm()
+            .text_size(rems(0.8125))
+            .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
             .opacity(0.95)
             .shadow(crate::ui::style::rem_shadow(true))
             .flex()
             .items_center()
-            .gap_2()
-            .child(self.icon.render(theme.accent, &theme))
-            .child(self.label.clone())
+            .gap(GAP)
+            .child(self.icon.render(theme.text, &theme))
+            .child(div().flex_1().min_w_0().truncate().child(self.label.clone()))
     }
 }
 
@@ -212,9 +227,12 @@ impl RenderOnce for Tab {
                 .on_mouse_down(MouseButton::Left, move |_, window, cx| on_click(window, cx));
         }
 
+        // Closing waits for the release on the same tab, so dragging away cancels it.
         if let Some(on_middle_click) = self.on_middle_click {
-            container = container.on_mouse_down(MouseButton::Middle, move |_, window, cx| {
-                on_middle_click(window, cx)
+            container = container.on_aux_click(move |event, window, cx| {
+                if event.is_middle_click() {
+                    on_middle_click(window, cx)
+                }
             });
         }
 
@@ -228,7 +246,8 @@ impl RenderOnce for Tab {
             container = refinement(container);
         }
 
-        container = container.when(self.is_dragging, |s| s.opacity(0.1));
+        // The ghost carries the tab; its slot stays empty for the others to fill.
+        container = container.when(self.is_dragging, |s| s.opacity(0.0));
 
         container = match self.position {
             TabPosition::First => {
@@ -256,15 +275,15 @@ impl RenderOnce for Tab {
                 .flex()
                 .w_full()
                 .items_center()
-                .pl_3()
+                .pl(LEADING_PADDING)
                 .pr(if self.on_close.is_some() {
                     rem_pixels(rems(0.25))
                 } else {
                     rem_pixels(rems(1.25))
                 })
-                .gap_2()
+                .gap(GAP)
                 .when_some(self.icon, |s, icon| s.child(icon.render(theme.text, &theme)))
-                .child(div().flex_1().min_w_0().text_ellipsis().child(self.label.clone()))
+                .child(div().flex_1().min_w_0().truncate().child(self.label.clone()))
                 .when_some(self.on_close, |s, on_close| {
                     s.child(
                         div()
@@ -277,16 +296,18 @@ impl RenderOnce for Tab {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .rounded_sm()
+                            .rounded(rems(0.25))
                             .hover(|st: StyleRefinement| st.bg(theme.tab_close_hover))
-                            .on_mouse_down(MouseButton::Left, move |_, _window, cx| {
+                            // The press stays on the button: it neither selects nor drags the tab.
+                            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                            .on_click(move |_, window, cx| {
                                 cx.stop_propagation();
-                                (on_close)(_window, cx);
+                                (on_close)(window, cx);
                             })
                             .child(
                                 svg()
                                     .path("icons/x.svg")
-                                    .size_3()
+                                    .size(rems(0.875))
                                     .text_color(theme.text)
                                     .group_hover("tab", |st| st.text_color(theme.text)),
                             ),

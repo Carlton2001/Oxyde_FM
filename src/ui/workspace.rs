@@ -238,11 +238,11 @@ pub struct TabStripState {
     pub overflow: std::rc::Rc<std::cell::Cell<bool>>,
     pub active_id: std::rc::Rc<std::cell::RefCell<String>>,
     pub active_index: std::rc::Rc<std::cell::Cell<usize>>,
-    /// Window x of each tab insertion slot and of the strip, measured at paint.
-    pub drop_slots: std::rc::Rc<std::cell::RefCell<Vec<f32>>>,
-    pub drop_origin: std::rc::Rc<std::cell::Cell<f32>>,
-    /// Marker position kept while it fades out.
-    pub drop_marker_x: std::rc::Rc<std::cell::Cell<f32>>,
+    /// Width of each tab, measured at paint: the room a dragged tab opens or leaves.
+    pub tab_widths: std::rc::Rc<std::cell::RefCell<Vec<f32>>>,
+    /// While something is dragged near an edge of an overflowing strip: how deep the
+    /// pointer is in the edge band (negative on the left), and the last scroll step.
+    pub drag_scroll: std::rc::Rc<std::cell::Cell<Option<(f32, std::time::Instant)>>>,
 }
 
 #[derive(Clone)]

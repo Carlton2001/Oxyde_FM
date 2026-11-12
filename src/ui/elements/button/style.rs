@@ -5,7 +5,6 @@ use gpui::*;
 /// Visual role, independent of whether the content is an icon, text, or both.
 #[derive(Clone, Copy)]
 pub enum ButtonVariant {
-    Ghost,
     Secondary,
     Primary,
     Danger,
@@ -20,7 +19,6 @@ pub fn button_style(
     enabled: bool,
 ) -> Stateful<Div> {
     let (background, foreground, hover) = match variant {
-        ButtonVariant::Ghost => (transparent_black(), theme.text, theme.control_hover),
         ButtonVariant::Secondary => (theme.control_hover, theme.text, theme.selected),
         ButtonVariant::Primary => (theme.accent, theme.text_on_accent, theme.accent),
         ButtonVariant::Danger => (theme.danger_background, theme.text_on_danger, theme.danger_hover),
@@ -29,7 +27,7 @@ pub fn button_style(
     let secondary = matches!(variant, ButtonVariant::Secondary);
     button
         .bg(background)
-        // Reserve the focus stroke in every variant, including borderless ghosts.
+        // Reserve the focus stroke in every variant.
         .border(rems(0.0625))
         .border_color(if secondary { theme.border } else { transparent_black() })
         .text_color(if enabled {
@@ -53,7 +51,6 @@ pub fn button_style(
                 let pressed = match variant {
                     ButtonVariant::Primary | ButtonVariant::Danger => background,
                     ButtonVariant::Secondary => theme.selection_hover,
-                    ButtonVariant::Ghost => theme.selected,
                 };
                 let s = s.bg(pressed);
                 if filled {

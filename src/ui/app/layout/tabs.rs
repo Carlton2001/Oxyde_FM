@@ -15,16 +15,47 @@ fn update_tab_drop_target(
     target_pane: &str,
     target_index: usize,
 ) -> bool {
+    // Either side of the source tab leaves it in place: the target is its own slot,
+    // which keeps the room it left open while the pointer stays over its strip.
     let is_noop = source_pane == target_pane
         && (source_index == target_index || source_index.checked_add(1) == Some(target_index));
-    let next_index = (!is_noop).then_some(target_index);
-    let next_pane = (!is_noop).then_some(target_pane);
+    let next_index = Some(if is_noop { source_index } else { target_index });
+    let next_pane = Some(target_pane);
     let changed = *drop_target_idx != next_index || drop_target_pane.as_deref() != next_pane;
     *drop_target_idx = next_index;
     if drop_target_pane.as_deref() != next_pane {
         *drop_target_pane = next_pane.map(str::to_owned);
     }
     changed
+}
+
+/// How far tab `index` of `pane` moves aside while a tab is dragged, so the others
+/// open the slot it would land in: within its own strip they close the place it left
+/// and open the target; another strip only opens the target, and the source closes
+/// its hole once the tab targets elsewhere or leaves every strip.
+fn tab_shift(
+    pane: &str,
+    index: usize,
+    source: (&str, usize),
+    target: Option<(&str, usize)>,
+    width: f32,
+) -> f32 {
+    let (source_pane, source_index) = source;
+    match target {
+        Some((target_pane, target_index)) if target_pane == pane => {
+            if source_pane != pane {
+                if index >= target_index { width } else { 0.0 }
+            } else if target_index > source_index && index > source_index && index < target_index {
+                -width
+            } else if target_index < source_index && index >= target_index && index < source_index {
+                width
+            } else {
+                0.0
+            }
+        }
+        _ if source_pane == pane && index > source_index => -width,
+        _ => 0.0,
+    }
 }
 
 fn tab_drop_zone_contains_pointer(
@@ -85,8 +116,20 @@ impl OxydeApp {
         self.state.layout.visit_panes(&mut |_| pane_count += 1);
         let can_close_tab = pane.active_tab().is_viewer() || pane_count > 1 || tabs_count > 1;
         let can_close_other_tabs = tabs_count > 1;
+        // The dragged tab, the slot it targets and the room it takes.
+        let dragged = self.dragging_tab.clone();
+        let target = self.drop_target_pane.clone().zip(self.drop_target_idx);
+        let dragged_width = dragged.as_ref().and_then(|(pane, index)| {
+            self.state.layout.find_pane(pane)?.tab_strip.tab_widths.borrow().get(*index).copied()
+        }).unwrap_or(0.0);
+        let new_tab_shift = dragged.as_ref().map_or(0.0, |(pane, index)| tab_shift(
+            &p_id, tabs_count, (pane, *index),
+            target.as_ref().map(|(pane, index)| (pane.as_str(), *index)),
+            dragged_width,
+        ));
         let mut tab_bar = TabBar::new(SharedString::from(format!("tab-bar-{}", p_id)))
             .scroll_state(pane.tab_strip.clone(), pane.active_tab().id.clone(), active_idx)
+            .new_tab_shift(new_tab_shift)
             .when(!pane.active_tab().is_viewer(), |bar| bar.on_new_tab({
                 let h = h.clone();
                 let p_id_cap = p_id.clone();
@@ -256,13 +299,30 @@ impl OxydeApp {
                 let h = h.clone();
                 let p_id_cap = p_id.clone();
                 move |_window, cx| {
-                    h.update(cx, |this, _| {
+                    let width = h.update(cx, |this, _| {
                         this.dragging_tab = Some((p_id_cap.clone(), t_ix));
+                        // Lifted over its own slot: its room stays open.
+                        this.drop_target_pane = Some(p_id_cap.clone());
+                        this.drop_target_idx = Some(t_ix);
+                        this.state.layout.find_pane(&p_id_cap)
+                            .and_then(|pane| pane.tab_strip.tab_widths.borrow().get(t_ix).copied())
                     });
-                    cx.new(|_| TabDragPreview { label: lbl.clone(), icon: tab_icon.clone() })
+                    cx.new(|_| TabDragPreview { label: lbl.clone(), icon: tab_icon.clone(), width: width.map(px) })
                 }
             })
             .with_dragging(is_dragging);
+            let shift = dragged.as_ref().map_or(0.0, |(pane, index)| tab_shift(
+                &p_id, t_ix, (pane, *index),
+                target.as_ref().map(|(pane, index)| (pane.as_str(), *index)),
+                dragged_width,
+            ));
+            // Keyed by position too: after a drop, a tab at a new index starts settled
+            // instead of gliding back from the offset its layout now includes.
+            let tab = div().relative().w_full().child(tab).with_spring(
+                SharedString::from(format!("tab-shift-{}-{t_ix}", tab_data.id)),
+                motion::glide(shift),
+                |tab, x| tab.left(px(x)),
+            );
 
             tab_bar = tab_bar.child(
                 div()
@@ -483,9 +543,7 @@ impl OxydeApp {
                                 }
                             }),
                     )
-                    // Insertion slots measured for the gliding drop marker.
-                    .child(slot_probe(&pane.tab_strip, t_ix, false))
-                    .when(t_ix == tabs_count - 1, |s| s.child(slot_probe(&pane.tab_strip, tabs_count, true))),
+                    .child(width_probe(&pane.tab_strip, t_ix)),
             );
         }
 
@@ -496,20 +554,42 @@ impl OxydeApp {
             .external_tab_drop(h.clone(), p_id.clone())
             .on_drag_move::<FileDragData>({
                 let h = h.clone();
-                move |event, _, cx| {
+                let strip_pane = p_id.clone();
+                move |event, window, cx| {
+                    let strip = h.read(cx).state.layout.find_pane(&strip_pane).map(|pane| pane.tab_strip.clone());
                     if event.bounds.contains(&event.event.position) {
+                        if let Some(strip) = &strip {
+                            crate::ui::components::tabs::scroll::drag_scroll(strip, event.event.position.x, window);
+                        }
                         h.update(cx, |this, cx| {
                             let value = !this.tab_drop_directories(event.drag(cx)).is_empty();
                             this.set_file_drag_new_tab(value, cx);
                         });
+                    } else if let Some(strip) = &strip {
+                        crate::ui::components::tabs::scroll::stop_drag_scroll(strip);
                     }
                 }
             })
             .on_drag_move::<(String, usize)>({
                 let h = h.clone();
                 let p_id_cap = p_id.clone();
-                move |event, _, app| {
+                move |event, window, app| {
+                    if let Some(strip) = h.read(app).state.layout.find_pane(&p_id_cap).map(|pane| pane.tab_strip.clone()) {
+                        if event.bounds.contains(&event.event.position) {
+                            crate::ui::components::tabs::scroll::drag_scroll(&strip, event.event.position.x, window);
+                        } else {
+                            crate::ui::components::tabs::scroll::stop_drag_scroll(&strip);
+                        }
+                    }
                     if !event.bounds.contains(&event.event.position) {
+                        // Leaving the strip gives its room back.
+                        h.update(app, |v, cx| {
+                            if v.drop_target_pane.as_deref() == Some(p_id_cap.as_str()) {
+                                v.drop_target_pane = None;
+                                v.drop_target_idx = None;
+                                cx.notify();
+                            }
+                        });
                         return;
                     }
                     let (source_pane, source_index) = event.drag(app).clone();
@@ -572,67 +652,48 @@ impl OxydeApp {
                 }
             })
             .child(tab_bar)
-            .child({
-                let origin = pane.tab_strip.drop_origin.clone();
-                canvas(|_, _, _| (), move |bounds, _, _, _| origin.set(bounds.left().as_f32()))
-                    .absolute()
-                    .inset_0()
-            })
-            .when(self.dragging_tab.is_some(), |bar| {
-                let target = (self.drop_target_pane.as_ref() == Some(&p_id))
-                    .then_some(self.drop_target_idx)
-                    .flatten();
-                bar.child(drop_marker(&pane.tab_strip, &p_id, target, theme))
-            })
     }
 }
 
-/// Records where a marker for `slot` would sit: a tab's left edge, or the last tab's right edge.
-fn slot_probe(strip: &crate::ui::workspace::TabStripState, slot: usize, end: bool) -> impl IntoElement {
-    let slots = strip.drop_slots.clone();
+/// Records the width of tab `index`, the room it takes when dragged.
+fn width_probe(strip: &crate::ui::workspace::TabStripState, index: usize) -> impl IntoElement {
+    let widths = strip.tab_widths.clone();
     canvas(|_, _, _| (), move |bounds, _, _, _| {
-        let x = if end {
-            (bounds.right() - crate::ui::scale::rem_pixels(rems(0.125))).as_f32()
-        } else {
-            bounds.left().as_f32()
-        };
-        let mut slots = slots.borrow_mut();
-        if slots.len() <= slot {
-            slots.resize(slot + 1, x);
+        let mut widths = widths.borrow_mut();
+        if widths.len() <= index {
+            widths.resize(index + 1, 0.0);
         }
-        slots[slot] = x;
+        widths[index] = bounds.size.width.as_f32();
     })
     .absolute()
     .inset_0()
 }
 
-/// One marker per strip, gliding between insertion slots and fading when no slot is targeted.
-fn drop_marker(
-    strip: &crate::ui::workspace::TabStripState,
-    pane_id: &str,
-    target: Option<usize>,
-    theme: crate::ui::theme::OxydeTheme,
-) -> impl IntoElement {
-    let slot_x = target.and_then(|slot| strip.drop_slots.borrow().get(slot).copied());
-    if let Some(x) = slot_x {
-        strip.drop_marker_x.set(x - strip.drop_origin.get());
-    }
-    let id = |part: &str| SharedString::from(format!("tab-drop-marker-{part}-{pane_id}"));
-    div()
-        .absolute()
-        .top_0()
-        .w(rems(0.125))
-        .h_full()
-        .bg(theme.accent)
-        .with_spring(id("x"), motion::glide(strip.drop_marker_x.get()), |marker, x| marker.left(px(x)))
-        .with_spring(id("presence"), motion::presence(slot_x.is_some()).from(0.0), |marker, v| {
-            marker.map_element(|marker| marker.opacity(v))
-        })
-}
-
 #[cfg(test)]
 mod tab_drop_tests {
     use super::update_tab_drop_target;
+
+    #[test]
+    fn tabs_between_the_source_and_the_target_make_room_in_one_strip() {
+        use super::tab_shift;
+        let shift = |index, target| tab_shift("a", index, ("a", 1), Some(("a", target)), 10.0);
+        // Dragged right to the end of four tabs: the next two close the source's place.
+        assert_eq!([0, 1, 2, 3].map(|index| shift(index, 4)), [0.0, 0.0, -10.0, -10.0]);
+        // Dragged left before the first tab: it moves right.
+        assert_eq!([0, 1, 2, 3].map(|index| shift(index, 0)), [10.0, 0.0, 0.0, 0.0]);
+        // Over its own slot: nothing moves.
+        assert_eq!([0, 1, 2, 3].map(|index| shift(index, 1)), [0.0; 4]);
+        // Out of every strip: the source closes its hole.
+        assert_eq!([0, 1, 2, 3].map(|index| tab_shift("a", index, ("a", 1), None, 10.0)), [0.0, 0.0, -10.0, -10.0]);
+    }
+
+    #[test]
+    fn another_strip_opens_the_target_while_the_source_closes_its_hole() {
+        use super::tab_shift;
+        let target = Some(("b", 1));
+        assert_eq!([0, 1, 2].map(|index| tab_shift("b", index, ("a", 0), target, 10.0)), [0.0, 10.0, 10.0]);
+        assert_eq!([0, 1, 2].map(|index| tab_shift("a", index, ("a", 0), target, 10.0)), [0.0, -10.0, -10.0]);
+    }
     use crate::ui::workspace::WorkspaceState;
 
     #[test]
@@ -693,7 +754,7 @@ mod tab_drop_tests {
     }
 
     #[test]
-    fn tab_half_refines_wrapper_target_and_noop_clears_both_fields() {
+    fn tab_half_refines_wrapper_target_and_noop_targets_the_source_slot() {
         let mut target_pane = None;
         let mut target_index = None;
         // Mouse capture handles the wrapper, then the half of the hovered tab.
@@ -725,7 +786,7 @@ mod tab_drop_tests {
             4,
         );
         assert_eq!(target_index, Some(4));
-        // Moving the last source tab to its own pane's end has no effect.
+        // Moving the last source tab to its own pane's end leaves it in its slot.
         update_tab_drop_target(
             &mut target_pane,
             &mut target_index,
@@ -734,8 +795,8 @@ mod tab_drop_tests {
             "source",
             4,
         );
-        assert!(target_pane.is_none());
-        assert!(target_index.is_none());
+        assert_eq!(target_pane.as_deref(), Some("source"));
+        assert_eq!(target_index, Some(3));
         // Both adjacent boundaries around the source tab are also no-ops.
         for slot in [1, 2] {
             update_tab_drop_target(&mut target_pane, &mut target_index, "other", 0, "source", 4);
@@ -747,8 +808,8 @@ mod tab_drop_tests {
                 "source",
                 slot,
             );
-            assert!(target_pane.is_none());
-            assert!(target_index.is_none());
+            assert_eq!(target_pane.as_deref(), Some("source"));
+            assert_eq!(target_index, Some(1));
         }
     }
 
