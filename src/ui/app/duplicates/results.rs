@@ -5,6 +5,11 @@ use crate::ui::style::TabularFigures;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
 
+/// Space above each group card, and above the list's first and below its last row.
+const CARD_GAP: Rems = rems(0.5);
+/// Corner radius of a group card.
+const CARD_RADIUS: Rems = rems(0.5625);
+
 impl DuplicateWindow {
     pub(super) fn render_results(
         &self,
@@ -18,8 +23,7 @@ impl DuplicateWindow {
             .min_h_0()
             .px(rems(1.0))
             .flex()
-            .flex_col()
-            .gap(rems(0.5));
+            .flex_col();
         if self.running {
             let progress = self.cancellation.1.lock().unwrap().clone();
             let mut a = FluentArgs::new();
@@ -31,7 +35,8 @@ impl DuplicateWindow {
                 "total",
                 crate::ui::format::format_number(progress.total as u64, cx.i18n().language()),
             );
-            results = results.child(div().tabular_figures().child(cx.i18n().text_with_args(
+            // Messages keep the space the cards leave above them.
+            results = results.child(div().pt(CARD_GAP).tabular_figures().child(cx.i18n().text_with_args(
                 if progress.stage == "Scanning" {
                     Message::DuplicateScanning
                 } else {
@@ -45,6 +50,7 @@ impl DuplicateWindow {
             a.set("error", error.as_str());
             results = results.child(
                 div()
+                    .pt(CARD_GAP)
                     .text_color(theme.error)
                     .child(cx.i18n().text_with_args(Message::DuplicateFailed, &a)),
             );
@@ -107,6 +113,8 @@ impl DuplicateWindow {
             .flex_1()
             .min_h_0()
             .w_full()
+            // The last row keeps the space each card leaves above it.
+            .pb(CARD_GAP)
             .track_scroll(&self.result_list),
         )
     }
@@ -151,8 +159,8 @@ impl DuplicateWindow {
             .focus_visible(move |s| s.border(rems(0.0625)).border_color(theme.accent))
             .px(rems(0.75))
             .bg(theme.header)
-            .rounded_t(rems(0.5625))
-            .when(!expanded, |header| header.rounded_b(rems(0.5625)))
+            .rounded_t(CARD_RADIUS)
+            .when(!expanded, |header| header.rounded_b(CARD_RADIUS))
             .border(rems(0.0625))
             .border_color(theme.border)
             .hover(move |s| s.bg(theme.hover))
@@ -224,8 +232,9 @@ impl DuplicateWindow {
                     .tabular_figures()
                     .child(size),
             );
-        // Every row keeps the uniform 4rem slot; the card fills its lower part so an
-        // expanded header stays attached to its files and collapsed cards stay spaced.
+        // Every row keeps the uniform 4rem slot; the card fills its lower part, folded
+        // or not, so the space above it stays the same and an expanded header stays
+        // attached to its files.
         div()
             .id(("group-row", index))
             .h(rems(4.0))
@@ -234,7 +243,6 @@ impl DuplicateWindow {
             .flex()
             .flex_col()
             .justify_end()
-            .when(!expanded, |row| row.justify_center())
             .child(card)
     }
 
@@ -246,7 +254,9 @@ impl DuplicateWindow {
         system_icons: bool,
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
-        let file = &self.groups[index].files[file_index];
+        let files = &self.groups[index].files;
+        let last = file_index + 1 == files.len();
+        let file = &files[file_index];
         let target = file.path.clone();
         let parent = std::path::Path::new(&target)
             .parent()
@@ -326,7 +336,8 @@ impl DuplicateWindow {
             .focus_visible(move |s| s.border(rems(0.0625)).border_color(theme.accent))
             .px(rems(1.0))
             .py(rems(0.75))
-            .rounded(rems(0.625))
+            // Rows of a group join without notches; the last one closes the card.
+            .when(last, |row| row.rounded_b(CARD_RADIUS))
             .flex()
             .items_center()
             .gap(rems(0.75))
