@@ -333,8 +333,6 @@ pub struct Output {
 }
 
 pub(crate) struct WaylandClientState {
-    /// Oxyde: read by `run` to end the loop once the compositor closed the connection.
-    connection: Connection,
     serial_tracker: SerialTracker,
     globals: Globals,
     pub gpu_context: GpuContext,
@@ -1023,7 +1021,6 @@ impl WaylandClient {
             .unwrap();
 
         let state = Rc::new(RefCell::new(WaylandClientState {
-            connection: conn.clone(),
             serial_tracker: SerialTracker::new(),
             globals,
             gpu_context,
@@ -1342,21 +1339,11 @@ impl LinuxClient for WaylandClient {
             .take()
             .expect("App is already running");
 
-        // Oxyde: after a protocol error the socket stays readable while
-        // calloop-wayland-source drops the error, so the loop spun at full speed and
-        // logged every failed read (gigabytes of log). Nothing can be shown any more.
-        let connection = self.0.borrow().connection.clone();
-        let signal = event_loop.get_signal();
         event_loop
             .run(
                 None,
                 &mut WaylandClientStatePtr(Rc::downgrade(&self.0)),
-                |_| {
-                    if let Some(error) = connection.backend().last_error() {
-                        log::error!("Wayland connection lost, leaving the event loop: {error}");
-                        signal.stop();
-                    }
-                },
+                |_| {},
             )
             .log_err();
     }

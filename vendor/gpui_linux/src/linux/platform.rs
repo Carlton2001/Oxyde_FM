@@ -145,8 +145,6 @@ pub(crate) struct LinuxCommon {
     pub(crate) button_layout: WindowButtonLayout,
     pub(crate) callbacks: PlatformHandlers,
     pub(crate) signal: LoopSignal,
-    /// Oxyde: a quit asked before the loop runs, which `signal` alone would lose.
-    quit_requested: bool,
     pub(crate) menus: Vec<OwnedMenu>,
     app_name: Option<String>,
     system_notifications: crate::linux::system_notifications::SystemNotificationState,
@@ -189,7 +187,6 @@ impl LinuxCommon {
             button_layout: WindowButtonLayout::linux_default(),
             callbacks,
             signal,
-            quit_requested: false,
             menus: Vec::new(),
             app_name: None,
             system_notifications: crate::linux::system_notifications::SystemNotificationState::new(
@@ -325,12 +322,7 @@ impl<P: LinuxClient + 'static> Platform for LinuxPlatform<P> {
     fn run(&self, on_finish_launching: Box<dyn FnOnce()>) {
         on_finish_launching();
 
-        // Oxyde: calloop's `run` clears a stop requested before it, so a quit from the
-        // launch callback (a first window that cannot open) kept a process without any
-        // window running.
-        if !self.inner.with_common(|common| common.quit_requested) {
-            LinuxClient::run(&self.inner);
-        }
+        LinuxClient::run(&self.inner);
 
         let quit = self
             .inner
@@ -341,10 +333,7 @@ impl<P: LinuxClient + 'static> Platform for LinuxPlatform<P> {
     }
 
     fn quit(&self) {
-        self.inner.with_common(|common| {
-            common.quit_requested = true;
-            common.signal.stop();
-        });
+        self.inner.with_common(|common| common.signal.stop());
     }
 
     fn compositor_name(&self) -> &'static str {

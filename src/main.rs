@@ -255,7 +255,9 @@ fn main() {
                     });
                 }).detach();
             } else if crate::ui::app::main_window::open(app, cx).is_none() {
-                cx.quit();
+                // Once the event loop runs: on Linux, starting it forgets an earlier quit,
+                // which left a process without a window holding the instance name.
+                cx.spawn(async move |cx| cx.update(|cx| cx.quit())).detach();
             }
         });
     trace_shutdown_stage("GPUI event loop returned");
