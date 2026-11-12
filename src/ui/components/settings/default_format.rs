@@ -66,7 +66,7 @@ pub(super) fn render(
     )
     .relative()
     .w(rems(5.0))
-    .h(rems(1.75))
+    .h(crate::ui::style::MENU_ITEM_HEIGHT)
     .px(rems(0.5))
     .flex()
     .items_center()

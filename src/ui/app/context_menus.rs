@@ -6,7 +6,7 @@ use gpui::*;
 
 pub(super) fn native_menu_max_height(viewport_height: Pixels) -> f32 {
     // Leave 8 px on each side, in addition to the menu's 6 px of chrome.
-    (viewport_height.as_f32() - logical(22.0)).max(logical(26.0))
+    (viewport_height.as_f32() - logical(22.0)).max(crate::ui::style::menu_item_height())
 }
 
 pub(super) fn context_menu_contains_point(
@@ -44,7 +44,7 @@ pub(super) fn context_menu_height(menu: &ContextMenuInstance, viewport_height: P
         ContextMenuContent::Items(items, _) => items.iter().filter(|item| matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count() as f32 * logical(9.0),
         _ => 0.0,
     };
-    px((item_count as f32 * logical(26.0) + separator_height).min(max_height) + header_height + logical(4.0))
+    px((item_count as f32 * crate::ui::style::menu_item_height() + separator_height).min(max_height) + header_height + logical(4.0))
 }
 
 pub(super) fn context_menu_visible_top(

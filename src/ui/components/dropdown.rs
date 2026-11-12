@@ -298,7 +298,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
         let is_dragging = self.is_dragging;
         let on_drag = self.on_drag.clone();
 
-        let item_h: f32 = crate::ui::scale::device_snapped(logical(26.0), window.scale_factor());
+        let item_h: f32 = crate::ui::scale::device_snapped(crate::ui::style::menu_item_height(), window.scale_factor());
         // Draw separators between action rows rather than reserving a full row.
         let mut separator_before = Vec::new();
         let mut original_indices = Vec::new();

@@ -1,7 +1,7 @@
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, DragTarget, OxydeApp};
 use crate::ui::app::context_menus::{context_menu_contains_point, context_menu_height, context_menu_visible_top, native_menu_max_height};
 use crate::ui::components::dropdown::GenericDropdown;
-use crate::ui::scale::{logical, rem_pixels};
+use crate::ui::scale::rem_pixels;
 use gpui::*;
 
 impl OxydeApp {
@@ -235,7 +235,7 @@ impl OxydeApp {
                                                             } else {
                                                                 parent_right - rem_pixels(rems(0.125)) // TopLeft: left edge at parent right
                                                             };
-                                                            new_pos.y = parent_visible_y + px(ix_cap as f32 * logical(26.0));
+                                                            new_pos.y = parent_visible_y + px(ix_cap as f32 * crate::ui::style::menu_item_height());
 
                                                             this.context_menus.push(ContextMenuInstance {
             native_bounds: None,

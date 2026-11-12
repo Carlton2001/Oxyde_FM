@@ -60,7 +60,7 @@ pub(super) fn picker(
     let row = div()
         .id(id)
         .relative()
-        .h(rems(2.0))
+        .h(crate::ui::style::MENU_ITEM_HEIGHT)
         .px(rems(0.375))
         .flex()
         .items_center()
@@ -108,7 +108,7 @@ pub(super) fn window_row(
     let key_open = open.clone();
     let row = div()
         .id(id)
-        .h(rems(2.0))
+        .h(crate::ui::style::MENU_ITEM_HEIGHT)
         .px(rems(0.375))
         .flex()
         .items_center()
@@ -138,7 +138,7 @@ pub(super) fn scale_row(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &App) -> 
             cx.stop_propagation();
             crate::ui::components::popup::with_owner(window, cx, |window, cx| reset.update(cx, |view, cx| view.set_ui_rem_size(BASE_REM_SIZE, window, cx)));
         });
-    div().min_h(rems(2.0)).px(rems(0.375)).gap(rems(0.5)).flex().items_center()
+    div().min_h(crate::ui::style::MENU_ITEM_HEIGHT).px(rems(0.375)).gap(rems(0.5)).flex().items_center()
         .child(icon("icons/type.svg", theme))
         .child(div().flex_1().flex_shrink_0().whitespace_nowrap().child(cx.i18n().text(Message::SettingsScale)))
         .child(crate::ui::elements::stepper::stepper(
@@ -168,7 +168,7 @@ pub(super) fn search_limit_row(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &A
             cx.stop_propagation();
             reset.update(cx, |view, cx| view.reset_search_limit(cx));
         });
-    div().id("settings-search-limit-row").min_h(rems(2.0)).px(rems(0.375)).gap(rems(0.5)).flex().items_center()
+    div().id("settings-search-limit-row").min_h(crate::ui::style::MENU_ITEM_HEIGHT).px(rems(0.375)).gap(rems(0.5)).flex().items_center()
         .native_tooltip(Tooltip::text(cx.i18n().text(Message::SettingsSearchLimitDescription)))
         .child(icon("icons/zap.svg", theme))
         .child(div().flex_1().flex_shrink_0().whitespace_nowrap().child(cx.i18n().text(Message::SettingsSearchLimit)))
@@ -210,7 +210,7 @@ pub(super) fn submenu_choice(
     let select = Rc::new(on_select);
     let key_select = select.clone();
     let row = div().id(id)
-        .h(rems(1.75)).flex_none().px(rems(0.5))
+        .h(crate::ui::style::MENU_ITEM_HEIGHT).flex_none().px(rems(0.5))
         .flex().items_center().gap(rems(0.5))
         .rounded(rems(0.3125))
         .hover(|s| s.bg(theme.menu_hover))
@@ -254,7 +254,7 @@ pub(super) fn settings_row(
     let key_action = action.clone();
     let row = div()
         .id(id)
-        .min_h(rems(2.0))
+        .min_h(crate::ui::style::MENU_ITEM_HEIGHT)
         .px(rems(0.375))
         .flex()
         .items_center()

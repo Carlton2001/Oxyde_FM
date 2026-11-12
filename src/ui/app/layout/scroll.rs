@@ -53,7 +53,7 @@ impl OxydeApp {
         // Clamp Breadcrumb scroll
         if let Some((_, _, _, dirs)) = &self.breadcrumb_menu {
             let item_count = dirs.len();
-            let content_h = item_count as f32 * logical(28.0);
+            let content_h = item_count as f32 * crate::ui::style::menu_item_height();
             let viewport_h = content_h.min(logical(360.0));
             let max_v_offset = (content_h - viewport_h).max(0.0);
             let current_v_offset = self
@@ -87,8 +87,12 @@ impl OxydeApp {
                 crate::ui::app::ContextMenuContent::NativeItems { items, .. } => items.len(),
                 crate::ui::app::ContextMenuContent::NameFilter { .. } => 0,
             };
+            let separators = match &instance.content {
+                crate::ui::app::ContextMenuContent::Items(items, _) => items.iter().filter(|item| matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count(),
+                _ => 0,
+            };
             if item_count > 0 {
-                let content_h = item_count as f32 * logical(28.0);
+                let content_h = item_count as f32 * crate::ui::style::menu_item_height() + separators as f32 * logical(9.0);
                 let viewport_h = content_h.min(logical(480.0));
                 let max_v_offset = (content_h - viewport_h).max(0.0);
                 let current_v_offset = instance

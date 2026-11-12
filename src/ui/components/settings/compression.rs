@@ -59,7 +59,7 @@ pub(super) fn compression_table(view: &OxydeApp, handle: Entity<OxydeApp>, windo
                     .id(format!("compression-{format}-{quality}"))
                     .flex_1()
                     .min_w_0()
-                    .h(rems(1.75))
+                    .h(crate::ui::style::MENU_ITEM_HEIGHT)
                     .flex()
                     .items_center()
                     .justify_center()

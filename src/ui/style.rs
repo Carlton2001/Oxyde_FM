@@ -58,9 +58,15 @@ pub fn details_horizontal_padding() -> f32 {
     rem_pixels(DETAILS_HORIZONTAL_PADDING).as_f32()
 }
 
+/// Height of a menu entry, as the bars and the settings rows.
+pub const MENU_ITEM_HEIGHT: Rems = rems(2.25);
+pub fn menu_item_height() -> f32 {
+    rem_pixels(MENU_ITEM_HEIGHT).as_f32()
+}
+
 pub fn menu_list_max_height(viewport: f32, header: bool, maximum: f32) -> f32 {
     let chrome = logical(if header { 42.0 } else { 6.0 }) + logical(4.0);
-    maximum.min((viewport - chrome - logical(16.0)).max(logical(26.0)))
+    maximum.min((viewport - chrome - logical(16.0)).max(menu_item_height()))
 }
 
 /// Gives file names priority over metadata while keeping every column usable.

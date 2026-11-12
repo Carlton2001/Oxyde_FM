@@ -97,7 +97,7 @@ pub(super) fn data_action_row(
 ) -> impl IntoElement {
     let action = std::rc::Rc::new(move |window: &mut Window, cx: &mut App| { if enabled { crate::ui::components::popup::with_owner(window, cx, |window, cx| handle.update(cx, |view, cx| view.open_settings_confirmation(action, window, cx))); } });
     let pointer = action.clone();
-    let row = div().id(id).min_h(rems(2.0)).px(rems(0.375))
+    let row = div().id(id).min_h(crate::ui::style::MENU_ITEM_HEIGHT).px(rems(0.375))
         .flex().items_center().gap(rems(0.5)).rounded_md()
         .when(enabled, |row| row.hover(|s| s.bg(theme.menu_hover)))
         .when(!enabled, |row| row.opacity(0.5))
