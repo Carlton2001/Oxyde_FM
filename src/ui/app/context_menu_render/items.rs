@@ -242,6 +242,7 @@ impl OxydeApp {
                     stay_open: it.stay_open,
                     has_submenu: it.has_submenu,
                     is_dimmed: it.is_dimmed,
+                    is_faded: false,
                     on_click: std::rc::Rc::new(move |window, app| {
                         (on_click)(window, app);
                     }),

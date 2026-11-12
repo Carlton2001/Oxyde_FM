@@ -196,6 +196,7 @@ fn pane_context_menu_items_raw(
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new({
                 let h = h_app.clone();
                 let p_id = pane_id.clone();
@@ -226,6 +227,7 @@ fn pane_context_menu_items_raw(
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new({
                 let h = h_app.clone();
                 let p_id = pane_id.clone();
@@ -240,6 +242,7 @@ fn pane_context_menu_items_raw(
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new({
                 let h = h_app.clone();
                 move |_, app| {
@@ -258,6 +261,7 @@ fn pane_context_menu_items_raw(
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new({
                 let h = h_app.clone();
                 let p_id = pane_id.clone();
@@ -281,6 +285,7 @@ fn pane_context_menu_items_raw(
             stay_open: true,
             has_submenu: true,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new(|_, _| {}),
             on_hover: Some(std::rc::Rc::new({
                 let h = h_app.clone();
@@ -316,6 +321,7 @@ pub fn tab_context_menu_items(
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new({
                 let h = h_app.clone();
                 let p_id = pane_id.clone();
@@ -336,6 +342,7 @@ pub fn tab_context_menu_items(
             stay_open: false,
             has_submenu: false,
             is_dimmed: !can_close_tab,
+            is_faded: false,
             on_click: std::rc::Rc::new({
                 let h = h_app.clone();
                 let p_id = pane_id.clone();
@@ -355,6 +362,7 @@ pub fn tab_context_menu_items(
             stay_open: false,
             has_submenu: false,
             is_dimmed: !can_close_other_tabs,
+            is_faded: false,
             on_click: std::rc::Rc::new({
                 let h = h_app.clone();
                 let p_id = pane_id.clone();

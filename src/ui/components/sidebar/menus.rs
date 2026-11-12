@@ -15,6 +15,7 @@ fn pinned_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Ve
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new({
                 let h = h.clone();
                 let p = path.clone();
@@ -35,6 +36,7 @@ fn pinned_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Ve
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new({
                 let h = h.clone();
                 let p = path.clone();
@@ -55,6 +57,7 @@ fn pinned_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Ve
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new({
                 let h = h.clone();
                 let p = path.clone();
@@ -75,6 +78,7 @@ fn pinned_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Ve
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new({
                 let h = h.clone();
                 let p = path.clone();
@@ -100,6 +104,7 @@ fn location_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> 
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new({
                 let h = h.clone();
                 let p = path.clone();
@@ -120,6 +125,7 @@ fn location_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> 
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new({
                 let h = h.clone();
                 let p = path.clone();
@@ -145,6 +151,7 @@ fn drive_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String, action
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new({
                 let h = h.clone();
                 let p = path.clone();
@@ -165,6 +172,7 @@ fn drive_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String, action
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new({
                 let h = h.clone();
                 let p = path.clone();
@@ -190,6 +198,7 @@ fn drive_context_menu_raw(i18n: &I18n, h: Entity<OxydeApp>, path: String, action
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new(move |_, app| {
                 h.update(app, |this, cx| this.release_drive(path.clone(), eject, cx));
             }),
@@ -222,6 +231,7 @@ fn open_items(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownIte
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new({
                 let h = h.clone();
                 let p = path.clone();
@@ -242,6 +252,7 @@ fn open_items(i18n: &I18n, h: Entity<OxydeApp>, path: String) -> Vec<DropdownIte
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new({
                 let h = h.clone();
                 let p = path.clone();
@@ -278,6 +289,7 @@ fn sidebar_tree_actions(
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new(move |_, app| {
                 h_action.update(app, |this, cx| {
                     this.context_menus.clear();
@@ -303,6 +315,7 @@ fn sidebar_tree_actions(
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new(move |_, app| {
                 h_pin.update(app, |this, cx| {
                     this.context_menus.clear();
@@ -322,6 +335,7 @@ fn sidebar_tree_actions(
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
+        is_faded: false,
         on_click: std::rc::Rc::new(move |window, app| {
             h_prop.update(app, |this, cx| {
                 this.context_menus.clear();
@@ -339,6 +353,7 @@ fn sidebar_tree_actions(
         stay_open: true,
         has_submenu: true,
         is_dimmed: false,
+        is_faded: false,
         on_click: std::rc::Rc::new(|_, _| {}),
         on_hover: Some(std::rc::Rc::new(move |pos, left, app| {
             h.update(app, |this, cx| {

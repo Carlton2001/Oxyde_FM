@@ -43,6 +43,7 @@ pub fn get_type_filter_items(
             stay_open: true,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new(move |_, app| {
                 let pid_cap = pid_ext.clone();
                 let e_inner = e_cap.clone();
@@ -82,6 +83,7 @@ pub fn get_permissions_filter_items(
             stay_open: true,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new(move |_, app| {
                 handle.update(app, |this, cx| {
                     this.set_filter_permissions(&pane_id, crate::ui::app::filters::PermissionFilterChange::Toggle(mode), cx);
@@ -130,6 +132,7 @@ pub fn get_date_filter_items(
             stay_open: true,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: Rc::new(move |_, cx| {
                 let pid_inner = pid.clone();
                 h.update(cx, |this, cx| {
@@ -193,6 +196,7 @@ pub fn get_size_filter_items(
             stay_open: true,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: Rc::new(move |_, cx| {
                 let pid_inner = pid.clone();
                 h.update(cx, |this, cx| {

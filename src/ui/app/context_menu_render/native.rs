@@ -49,6 +49,7 @@ impl OxydeApp {
                     // That is not a disabled command; only dim actual leaf entries
                     // whose IDs are invalid.
                     is_dimmed: id < 0 && !has_sub,
+                    is_faded: false,
                     on_click: std::rc::Rc::new({
                         move |_, app| {
                             let h_inner = h.clone();

@@ -58,6 +58,7 @@ impl FileChooserWindow {
                 stay_open: false,
                 has_submenu: false,
                 is_dimmed: false,
+                is_faded: false,
                 on_click: Rc::new(move |_, cx| {
                     let _ = choose.update(cx, |this, cx| this.choose_in_menu(menu, position, cx));
                 }),

@@ -435,7 +435,7 @@ pub fn render_top_bar(
                                                         let h = handle.clone();
                                                         let p_id = p_id.clone();
                                                         let entry_path = entry.path.clone();
-                                                        let is_dimmed = entry.is_hidden || entry.is_system;
+                                                        let is_faded = entry.is_hidden || entry.is_system;
                                                         crate::ui::components::dropdown::DropdownItem {
                                                             label: entry.name.clone(),
                                                             icon: Some(if cfg!(target_os = "windows") && view.use_system_icons() {
@@ -444,7 +444,8 @@ pub fn render_top_bar(
                                                             badge: None,
                                                             stay_open: false,
                                                             has_submenu: false,
-                                                            is_dimmed,
+                                                            is_dimmed: false,
+                                                            is_faded,
                                                             on_click: std::rc::Rc::new(move |_, app| {
                                                                 h.update(app, |this, cx| {
                                                                     this.navigate_to(&p_id, entry_path.clone(), cx);
@@ -605,6 +606,7 @@ pub fn render_top_bar(
                                         stay_open: false,
                                         has_submenu: false,
                                         is_dimmed: false,
+                                        is_faded: false,
                                         on_click: std::rc::Rc::new({
                                             let h = h.clone();
                                             let path = path.clone();
@@ -627,6 +629,7 @@ pub fn render_top_bar(
                                             stay_open: false,
                                             has_submenu: false,
                                             is_dimmed: false,
+                                            is_faded: false,
                                             on_click: std::rc::Rc::new({
                                                 let h = h.clone();
                                                 let path = path.clone();

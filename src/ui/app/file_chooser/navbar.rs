@@ -67,7 +67,8 @@ impl FileChooserWindow {
                 icon: Some(if self.system_icons { IconName::NativeFolder(entry.path.clone()) } else { IconName::FolderOpen }),
                 stay_open: false,
                 has_submenu: false,
-                is_dimmed: entry.is_hidden || entry.is_system,
+                is_dimmed: false,
+                is_faded: entry.is_hidden || entry.is_system,
                 on_click: Rc::new(move |_, cx| {
                     let _ = choose.update(cx, |this, cx| {
                         this.crumbs.menu = None;

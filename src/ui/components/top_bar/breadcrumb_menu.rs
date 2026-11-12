@@ -36,7 +36,8 @@ pub(super) fn render(
                 }),
                 stay_open: false,
                 has_submenu: false,
-                is_dimmed: entry.is_hidden || entry.is_system,
+                is_dimmed: false,
+                is_faded: entry.is_hidden || entry.is_system,
                 on_click: Rc::new(move |_, cx| {
                     choose.update(cx, |view, cx| {
                         view.navigate_to(&pane, path.clone(), cx);

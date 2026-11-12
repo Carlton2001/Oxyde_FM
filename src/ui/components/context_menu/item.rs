@@ -29,7 +29,7 @@ pub(super) fn oxyde_context_menu_items_raw(
         let handle = h_app.clone();
         items.push(crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::OpenFileLocation).to_string(),
-            icon: Some(IconName::ExternalLink), badge: None, stay_open: false, has_submenu: false, is_dimmed: false,
+            icon: Some(IconName::ExternalLink), badge: None, stay_open: false, has_submenu: false, is_dimmed: false, is_faded: false,
             on_click: std::rc::Rc::new(move |_, app| { handle.update(app, |this, cx| {
                 this.context_menus.clear();
                 let pane = this.state.active_pane_id.clone();
@@ -45,6 +45,7 @@ pub(super) fn oxyde_context_menu_items_raw(
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
+        is_faded: false,
         on_click: std::rc::Rc::new({
             let h = h_app.clone();
             let p = path.clone();
@@ -76,6 +77,7 @@ pub(super) fn oxyde_context_menu_items_raw(
             stay_open: true,
             has_submenu: true,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new(move |_, app| {
                 prompt.update(app, |this, cx| {
                     this.context_menus.clear();
@@ -103,6 +105,7 @@ pub(super) fn oxyde_context_menu_items_raw(
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new({
                 let h = h_app.clone();
                 let p = path.clone();
@@ -169,6 +172,7 @@ pub(super) fn oxyde_context_menu_items_raw(
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new({
                 let h = h_app.clone();
                 let p = path.clone();
@@ -198,6 +202,7 @@ pub(super) fn oxyde_context_menu_items_raw(
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
+        is_faded: false,
         on_click: std::rc::Rc::new({
             let h = h_app.clone();
             move |_, app| {
@@ -217,6 +222,7 @@ pub(super) fn oxyde_context_menu_items_raw(
         stay_open: false,
         has_submenu: true,
         is_dimmed: false,
+        is_faded: false,
         on_click: std::rc::Rc::new({
             let h = h_app.clone();
             move |_, app| {
@@ -264,6 +270,7 @@ pub(super) fn oxyde_context_menu_items_raw(
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
+        is_faded: false,
         on_click: std::rc::Rc::new({
             let h = h_app.clone();
             move |_, app| {
@@ -295,6 +302,7 @@ pub(super) fn oxyde_context_menu_items_raw(
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: std::rc::Rc::new({
                 let h = h_app.clone();
                 let p = path.clone();
@@ -316,6 +324,7 @@ pub(super) fn oxyde_context_menu_items_raw(
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
+        is_faded: false,
         on_click: std::rc::Rc::new({
             let h = h_app.clone();
             let p = path.clone();
@@ -337,6 +346,7 @@ pub(super) fn oxyde_context_menu_items_raw(
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
+        is_faded: false,
         on_click: std::rc::Rc::new({
             let h = h_app.clone();
             move |event, app| {
@@ -357,6 +367,7 @@ pub(super) fn oxyde_context_menu_items_raw(
         stay_open: false,
         has_submenu: false,
         is_dimmed: false,
+        is_faded: false,
         on_click: std::rc::Rc::new({
             let h = h_app.clone();
             let p = path.clone();
@@ -376,6 +387,7 @@ pub(super) fn oxyde_context_menu_items_raw(
         stay_open: true,
         has_submenu: true,
         is_dimmed: false,
+        is_faded: false,
         on_click: std::rc::Rc::new(|_, _| {}),
         on_hover: Some(std::rc::Rc::new({
             let h = h_app.clone();

@@ -142,7 +142,10 @@ pub struct DropdownItem {
     pub icon: Option<IconName>,
     pub stay_open: bool,
     pub has_submenu: bool,
+    /// Disabled: no hover, click or keyboard focus.
     pub is_dimmed: bool,
+    /// Hidden or system entry: drawn faded like in the file list, still actionable.
+    pub is_faded: bool,
     pub on_click: Rc<dyn Fn(&mut Window, &mut App)>,
     pub on_hover: Option<Rc<dyn Fn(Point<Pixels>, bool, &mut App)>>,
 }
@@ -162,6 +165,7 @@ impl DropdownItem {
             stay_open: false,
             has_submenu: false,
             is_dimmed: false,
+            is_faded: false,
             on_click: Rc::new(on_click),
             on_hover: None,
         }
@@ -401,6 +405,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                         .relative()
                                         .rounded(rems(0.3125))
                                         .when(item.is_dimmed, |d| d.opacity(0.42))
+                                        .when(item.is_faded && !item.is_dimmed, |d| d.opacity(0.75))
                                         .when(!item.is_dimmed, |d| d.hover(|s| s.bg(item_hover)))
                                         .child(canvas(|bounds, _, _| bounds, move |bounds, _, window, cx| { measured_row.set(Some(bounds)); crate::ui::components::popup::record_row(window, cx, original_ix, bounds); }).absolute().size_full())
                                         .on_mouse_move(move |event, window, cx| {
