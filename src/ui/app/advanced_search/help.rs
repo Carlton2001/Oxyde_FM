@@ -18,11 +18,8 @@ impl AdvancedSearchWindow {
         let Some(origin) = self.scrollbar_origins.get(track) else {
             return;
         };
-        let thumb =
-            (viewport * viewport / content).max(crate::ui::scale::rem_pixels(rems(2.5)).as_f32());
-        let travel = (viewport - thumb).max(1.0);
-        let offset = ((position.y.as_f32() - origin.y - self.grab_offset) / travel).clamp(0.0, 1.0)
-            * (content - viewport);
+        let offset = crate::ui::components::scrollbar::drag_scrolled(
+            *viewport, *content, *viewport, position.y.as_f32() - origin.y, self.grab_offset);
         d.help_scroll.set_offset(point(px(0.0), px(-offset)));
         if let Some(handle) = self.handle.upgrade() {
             cx.notify(handle.entity_id());
@@ -184,6 +181,7 @@ impl AdvancedSearchWindow {
                     d.help_drag.is_some(),
                     "advanced-help".into(),
                     None,
+                    d.help_scroll.clone(),
                     |this, track, viewport, content, position, cx| {
                         if let Some(d) = &mut this.advanced_search {
                             d.help_drag = Some((track, viewport, content));

@@ -1,8 +1,7 @@
 use super::DuplicateWindow;
 use crate::ui::components::scrollbar::{
-    render_scrollbar_with_pointer, ScrollbarAxis, ScrollbarState,
+    drag_scrolled, render_scrollbar_with_pointer, ScrollbarAxis, ScrollbarState,
 };
-use crate::ui::scale::rem_pixels;
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
@@ -31,6 +30,7 @@ impl DuplicateWindow {
             self.scroll_drag.is_some(),
             id.into(),
             None,
+            scroll.clone(),
             move |this, track, viewport, content, position, cx| {
                 this.scroll_drag = Some((track, viewport, content, scroll.clone()));
                 this.move_scrollbar_to(position.y.as_f32());
@@ -46,14 +46,8 @@ impl DuplicateWindow {
         let Some(origin) = self.scrollbar_origins.get(track) else {
             return;
         };
-        let thumb =
-            (viewport * (viewport / content.max(1.0)).min(1.0)).max(rem_pixels(rems(2.5)).as_f32());
-        let travel = (viewport - thumb).max(1.0);
-        let position = (y - origin.y - self.grab_offset).clamp(0.0, travel);
-        scroll.set_offset(point(
-            px(0.0),
-            px(-position / travel * (content - viewport).max(0.0)),
-        ));
+        let scrolled = drag_scrolled(*viewport, *content, *viewport, y - origin.y, self.grab_offset);
+        scroll.set_offset(point(px(0.0), px(-scrolled)));
     }
 
     pub(super) fn move_scrollbar(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {

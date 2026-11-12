@@ -326,7 +326,7 @@ impl FileChooserWindow {
                 .right_0()
                 .w(rems(3.625))
                 .child(render_scrollbar_with_pointer(theme, cx.entity(), ScrollbarAxis::Vertical, v_v_h, content_h, v_offset, dragging,
-                    "file-chooser-details".into(), None,
+                    "file-chooser-details".into(), None, self.list.0.borrow().base_handle.clone(),
                     move |this: &mut Self, track, viewport, content, _, cx| {
                         this.scroll_drag = Some((track, viewport, content));
                         cx.notify(entity_id);

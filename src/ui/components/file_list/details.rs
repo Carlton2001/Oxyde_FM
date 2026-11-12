@@ -75,7 +75,7 @@ pub(super) fn render_details_file_list(
         search_results || trash_panel,
     );
     // Reserve the horizontal track only when the columns overflow the pane.
-    let h_track = if columns.content_width() + fixed_w > pane_viewport_w + 1.0 { crate::ui::components::scrollbar::zed_track_width() } else { 0.0 };
+    let h_track = if columns.content_width() + fixed_w > pane_viewport_w + 1.0 { crate::ui::components::scrollbar::track_width() } else { 0.0 };
     let estimated_v_h =
         (pane_size.height - rem_pixels(crate::ui::style::TAB_BAR_HEIGHT).as_f32() - rem_pixels(crate::ui::style::NAV_BAR_HEIGHT).as_f32() - if active_tab.quick_search_query().is_some() { logical(32.0) } else { 0.0 } - crate::ui::style::column_header_height() - status_bar_height() - h_track).max(1.0);
     let content_h = (count * crate::ui::style::row_height()).max(1.0);
@@ -400,7 +400,7 @@ pub(super) fn render_details_file_list(
             div()
                 .absolute()
                 .top(px(crate::ui::style::column_header_height()))
-                .right(px(crate::ui::components::scrollbar::zed_track_width()))
+                .right(px(crate::ui::components::scrollbar::track_width()))
                 .bottom_0()
                 .w(rems(0.5))
                 .on_mouse_down(MouseButton::Right, background_menu(handle.clone(), pane_id.clone()))
@@ -503,6 +503,7 @@ pub(super) fn render_details_file_list(
             is_dragging_v,
             format!("v-{}", pane_suffix),
             None,
+            active_tab.list_scroll.0.borrow().base_handle.clone(),
             {
                 let p_id = p_id_cap.clone();
                 move |this, track_id, v_h, c_h, _| {
@@ -521,8 +522,8 @@ pub(super) fn render_details_file_list(
 
     // Horizontal scrollbar overlay
     container = container.child(
-        div().absolute().left_0().bottom(px(status_bar_height())).right(px(crate::ui::components::scrollbar::zed_track_width())).h(px(crate::ui::components::scrollbar::zed_track_width()))
-            .child(render_scrollbar(theme, handle.clone(), ScrollbarAxis::Horizontal, pane_viewport_w, columns.content_width() + fixed_w, -active_tab.list_scroll_h.offset().x.as_f32(), matches!(view.drag_target, Some(DragTarget::FileListH { ref pane_id, .. }) if pane_id == &p_id_cap), format!("h-{}", pane_suffix), None, {
+        div().absolute().left_0().bottom(px(status_bar_height())).right(px(crate::ui::components::scrollbar::track_width())).h(px(crate::ui::components::scrollbar::track_width()))
+            .child(render_scrollbar(theme, handle.clone(), ScrollbarAxis::Horizontal, pane_viewport_w, columns.content_width() + fixed_w, -active_tab.list_scroll_h.offset().x.as_f32(), matches!(view.drag_target, Some(DragTarget::FileListH { ref pane_id, .. }) if pane_id == &p_id_cap), format!("h-{}", pane_suffix), None, active_tab.list_scroll_h.clone(), {
                 let p_id = p_id_cap.clone();
                 move |this, track_id, v_w, c_w, _| {
                     this.drag_target = Some(DragTarget::FileListH { pane_id: p_id.clone(), viewport_w: v_w, content_w: c_w, track_id });

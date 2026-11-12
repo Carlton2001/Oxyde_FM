@@ -57,6 +57,17 @@ Local source changes, all marked `Oxyde:`:
 Reason: GPUI repositions a popup only when it resizes, so a tooltip could not follow the
 pointer. Windows and X11 reject anchored popups and are unchanged. When updating GPUI,
 compare both copies to the new upstream.
+- `gpui_linux/src/linux/wayland/client.rs`: while one of the client's popups holds a grab, a
+  held button survives a Leave followed by an Enter on another of its surfaces, and the
+  MouseMove synthesized at Enter carries it. Mutter then moves the pointer from the popup to
+  its parent with the button still down (Leave and Enter in separate frames) and delivers the
+  release to the client; upstream forgot the press, so a menu's scrollbar stopped following
+  the pointer as soon as it reached the window beneath. Without a grab, as upstream.
+- `gpui/src/window.rs`: a window the pointer leaves (hover status false, from Wayland's Leave
+  or Windows' `WM_MOUSELEAVE`) moves its mouse position out of its bounds, so its next frame
+  hovers nothing. Upstream kept the last position: a menu left by the pointer, or whose
+  scrollbar was released over the window beneath, kept a highlighted row. A GPUI drag in
+  progress keeps the position, its preview being drawn there.
 - `gpui_linux/src/linux/wayland/{client,window}.rs`: a window's mouse position is the pointer's
   only while the pointer is over it. Upstream gives every window the last location in the
   hovered surface's coordinates, so a submenu opened beside its parent showed a hovered row.

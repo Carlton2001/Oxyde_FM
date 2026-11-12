@@ -27,7 +27,7 @@ impl TabState {
         let columns = if grid {
             crate::ui::style::GridGeometry::for_viewport(
                 pane_size.width,
-                crate::ui::components::scrollbar::zed_track_width(),
+                crate::ui::components::scrollbar::track_width(),
             )
             .columns
         } else {
@@ -52,7 +52,7 @@ impl TabState {
                 0.0
             } else {
                 crate::ui::style::column_header_height()
-                    + crate::ui::components::scrollbar::zed_track_width()
+                    + crate::ui::components::scrollbar::track_width()
             })
         .max(1.0);
         let mut top = 0.0;

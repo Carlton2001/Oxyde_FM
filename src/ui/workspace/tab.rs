@@ -66,7 +66,7 @@ impl TabState {
         let group = crate::ui::date_groups::group_for_file(&self.filtered_files()[index], self.grouping(), chrono::Local::now().date_naive());
         self.collapsed_groups.remove(&group);
         let grid = self.view_mode == ViewMode::Grid;
-        let columns = if grid { crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::zed_track_width()).columns } else { 1 };
+        let columns = if grid { crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::track_width()).columns } else { 1 };
         let rows = crate::ui::date_groups::display_rows(self.filtered_files(), self.grouping(), &self.collapsed_groups, columns);
         if let Some(row) = rows.iter().position(|row| matches!(row, crate::ui::date_groups::DisplayRow::Files(indices) if indices.contains(&index))) {
             if grid {

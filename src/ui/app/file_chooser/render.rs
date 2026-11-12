@@ -58,12 +58,8 @@ impl FileChooserWindow {
             return;
         }
         let Some(origin) = self.scrollbar_origins.get(&track) else { return };
-        let mouse_pos_in_track = event.position.y.as_f32() - origin.y;
-        let thumb_size = (viewport_h * (viewport_h / content_h.max(1.0)).min(1.0)).max(logical(40.0));
-        let travel_distance = (viewport_h - thumb_size).max(1.0);
-        let content_range = content_h - viewport_h;
-        let target_thumb_pos = (mouse_pos_in_track - self.grab_offset).clamp(0.0, travel_distance);
-        let target_px = (target_thumb_pos / travel_distance) * content_range;
+        let target_px = crate::ui::components::scrollbar::drag_scrolled(
+            viewport_h, content_h, viewport_h, event.position.y.as_f32() - origin.y, self.grab_offset);
         self.dragged_scroll(&track).set_offset(point(px(0.0), px(-target_px)));
         cx.notify();
     }

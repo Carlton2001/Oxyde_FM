@@ -222,7 +222,7 @@ impl FileChooserWindow {
             .child(
                 div().absolute().top_0().bottom_0().right_0().w(rems(0.75))
                     .child(render_scrollbar_with_pointer(theme, cx.entity(), ScrollbarAxis::Vertical, viewport_h.max(1.0), if viewport_h > 0.0 { content_h } else { 1.0 },
-                        -scroll.offset().y.as_f32(), dragging, "file-chooser-sidebar".into(), None,
+                        -scroll.offset().y.as_f32(), dragging, "file-chooser-sidebar".into(), None, scroll.clone(),
                         move |this: &mut Self, track, viewport, content, _, cx| {
                             this.scroll_drag = Some((track, viewport, content));
                             cx.notify(entity_id);

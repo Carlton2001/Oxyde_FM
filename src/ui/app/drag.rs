@@ -1,6 +1,7 @@
 use super::{DragTarget, FileDragPreview, OxydeApp, OxydeTheme, ThemeContext};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
-use crate::ui::scale::{logical, rem_pixels};
+use crate::ui::scale::rem_pixels;
+use crate::ui::components::scrollbar::drag_scrolled;
 use gpui::prelude::*;
 use gpui::*;
 mod popup;
@@ -346,6 +347,126 @@ impl OxydeApp {
         }
     }
 
+    /// Moves the list whose thumb `target` drags so the thumb follows `pos`, in owner
+    /// coordinates. Shared by pointer moves and the press that starts the drag.
+    pub(crate) fn move_scrollbar_thumb(&mut self, target: &DragTarget, pos: Point<Pixels>) -> bool {
+        match target.clone() {
+        DragTarget::SidebarV {
+            viewport_h,
+            content_h,
+            track_id,
+        } => {
+            if let Some(origin) = self.scrollbar_origins.get(&track_id) {
+                let target_px = drag_scrolled(viewport_h, content_h, viewport_h, pos.y.as_f32() - origin.y, self.grab_offset);
+                self.sidebar_scroll
+                    .0
+                    .borrow()
+                    .base_handle
+                    .set_offset(Point::new(px(0.0), px(-target_px)));
+                return true;
+            }
+        }
+        DragTarget::SidebarH {
+            viewport_w,
+            content_w,
+            track_id,
+        } => {
+            if let Some(origin) = self.scrollbar_origins.get(&track_id) {
+                let target_px = drag_scrolled(viewport_w, content_w, viewport_w, pos.x.as_f32() - origin.x, self.grab_offset);
+                self.sidebar_scroll_h
+                    .set_offset(Point::new(px(-target_px), px(0.0)));
+                return true;
+            }
+        }
+        DragTarget::FileListV {
+            pane_id,
+            viewport_h,
+            content_h,
+            track_id,
+        } => {
+            if let Some(origin) = self.scrollbar_origins.get(&track_id) {
+                if let Some(pane) =
+                    self.state.layout.find_pane_mut(&pane_id)
+                {
+                    let target_px = drag_scrolled(viewport_h, content_h, viewport_h, pos.y.as_f32() - origin.y, self.grab_offset);
+                    pane.active_tab_mut()
+                        .list_scroll
+                        .0
+                        .borrow()
+                        .base_handle
+                        .set_offset(Point::new(px(0.0), px(-target_px)));
+                    return true;
+                }
+            }
+        }
+        DragTarget::FileListH {
+            pane_id,
+            viewport_w,
+            content_w,
+            track_id,
+        } => {
+            if let Some(origin) = self.scrollbar_origins.get(&track_id) {
+                if let Some(pane) =
+                    self.state.layout.find_pane_mut(&pane_id)
+                {
+                    let target_px = drag_scrolled(viewport_w, content_w, viewport_w, pos.x.as_f32() - origin.x, self.grab_offset);
+                    pane.active_tab_mut()
+                        .list_scroll_h
+                        .set_offset(Point::new(px(-target_px), px(0.0)));
+                    return true;
+                }
+            }
+        }
+        DragTarget::BreadcrumbV {
+            viewport_h,
+            content_h,
+            track_id,
+        } => {
+            if let Some(origin) = self.scrollbar_origins.get(&track_id) {
+                let target_px = drag_scrolled(viewport_h, content_h, viewport_h, pos.y.as_f32() - origin.y, self.grab_offset);
+                self.breadcrumb_scroll
+                    .0
+                    .borrow()
+                    .base_handle
+                    .set_offset(Point::new(px(0.0), px(-target_px)));
+                return true;
+            }
+        }
+        DragTarget::ContextMenuV {
+            menu_idx,
+            viewport_h,
+            content_h,
+            track_id,
+        } => {
+            if let Some(origin) = self.scrollbar_origins.get(&track_id) {
+                if let Some(menu) = self.context_menus.get(menu_idx) {
+                    let target_px = drag_scrolled(viewport_h, content_h, viewport_h, pos.y.as_f32() - origin.y, self.grab_offset);
+                    menu.scroll_handle
+                        .0
+                        .borrow()
+                        .base_handle
+                        .set_offset(Point::new(px(0.0), px(-target_px)));
+                    return true;
+                }
+            }
+        }
+        DragTarget::OperationsPanelV {
+            viewport_h,
+            content_h,
+            track_id,
+        } => {
+            if let Some(origin) = self.scrollbar_origins.get(&track_id) {
+                let target_px = drag_scrolled(viewport_h, content_h, viewport_h, pos.y.as_f32() - origin.y, self.grab_offset);
+                self.operations_panel_scroll
+                    .set_offset(point(px(0.0), px(-target_px)));
+                return true;
+            }
+        }
+            _ => {}
+        }
+        false
+    }
+
     pub(super) fn handle_pointer_move(&mut self, e: &MouseMoveEvent, _window: &mut Window, cx: &mut Context<Self>) {
         // Mouse events also carry current modifiers when a key event was missed.
         self.sync_pointer_modifiers(e.modifiers, cx);
@@ -359,191 +480,14 @@ impl OxydeApp {
         if let Some(target) = self.drag_target.clone() {
             let pos = e.position;
             match target {
-                DragTarget::SidebarV {
-                    viewport_h,
-                    content_h,
-                    track_id,
-                } => {
-                    if let Some(origin) = self.scrollbar_origins.get(&track_id) {
-                        let mouse_pos_in_track = pos.y.as_f32() - origin.y;
-                        let thumb_size = (viewport_h
-                            * (viewport_h / content_h.max(1.0)).min(1.0))
-                        .max(logical(40.0));
-                        let travel_distance = (viewport_h - thumb_size).max(1.0);
-                        let content_range = content_h - viewport_h;
-                        let target_thumb_pos = (mouse_pos_in_track
-                            - self.grab_offset)
-                            .clamp(0.0, travel_distance);
-                        let target_px =
-                            (target_thumb_pos / travel_distance) * content_range;
-                        self.sidebar_scroll
-                            .0
-                            .borrow()
-                            .base_handle
-                            .set_offset(Point::new(px(0.0), px(-target_px)));
-                        cx.notify();
-                    }
-                }
-                DragTarget::SidebarH {
-                    viewport_w,
-                    content_w,
-                    track_id,
-                } => {
-                    if let Some(origin) = self.scrollbar_origins.get(&track_id) {
-                        let mouse_pos_in_track = pos.x.as_f32() - origin.x;
-                        let thumb_size = (viewport_w
-                            * (viewport_w / content_w.max(1.0)).min(1.0))
-                        .max(logical(40.0));
-                        let travel_distance = (viewport_w - thumb_size).max(1.0);
-                        let content_range = content_w - viewport_w;
-                        let target_thumb_pos = (mouse_pos_in_track
-                            - self.grab_offset)
-                            .clamp(0.0, travel_distance);
-                        let target_px =
-                            (target_thumb_pos / travel_distance) * content_range;
-                        self.sidebar_scroll_h
-                            .set_offset(Point::new(px(-target_px), px(0.0)));
-                        cx.notify();
-                    }
-                }
                 DragTarget::SidebarResize => {
                     self.resize_sidebar(pos.x.as_f32() - self.grab_offset);
                     cx.notify();
                 }
-                DragTarget::FileListV {
-                    pane_id,
-                    viewport_h,
-                    content_h,
-                    track_id,
-                } => {
-                    if let Some(origin) = self.scrollbar_origins.get(&track_id) {
-                        if let Some(pane) =
-                            self.state.layout.find_pane_mut(&pane_id)
-                        {
-                            let mouse_pos_in_track = pos.y.as_f32() - origin.y;
-                            let thumb_size = (viewport_h
-                                * (viewport_h / content_h.max(1.0)).min(1.0))
-                            .max(logical(40.0));
-                            let travel_distance =
-                                (viewport_h - thumb_size).max(1.0);
-                            let content_range = content_h - viewport_h;
-                            let target_thumb_pos = (mouse_pos_in_track
-                                - self.grab_offset)
-                                .clamp(0.0, travel_distance);
-                            let target_px = (target_thumb_pos / travel_distance)
-                                * content_range;
-                            pane.active_tab_mut()
-                                .list_scroll
-                                .0
-                                .borrow()
-                                .base_handle
-                                .set_offset(Point::new(px(0.0), px(-target_px)));
-                            cx.notify();
-                        }
-                    }
-                }
-                DragTarget::FileListH {
-                    pane_id,
-                    viewport_w,
-                    content_w,
-                    track_id,
-                } => {
-                    if let Some(origin) = self.scrollbar_origins.get(&track_id) {
-                        if let Some(pane) =
-                            self.state.layout.find_pane_mut(&pane_id)
-                        {
-                            let mouse_pos_in_track = pos.x.as_f32() - origin.x;
-                            let thumb_size = (viewport_w
-                                * (viewport_w / content_w.max(1.0)).min(1.0))
-                            .max(logical(40.0));
-                            let travel_distance =
-                                (viewport_w - thumb_size).max(1.0);
-                            let content_range = content_w - viewport_w;
-                            let target_thumb_pos = (mouse_pos_in_track
-                                - self.grab_offset)
-                                .clamp(0.0, travel_distance);
-                            let target_px = (target_thumb_pos / travel_distance)
-                                * content_range;
-                            pane.active_tab_mut()
-                                .list_scroll_h
-                                .set_offset(Point::new(px(-target_px), px(0.0)));
-                            cx.notify();
-                        }
-                    }
-                }
-                DragTarget::BreadcrumbV {
-                    viewport_h,
-                    content_h,
-                    track_id,
-                } => {
-                    if let Some(origin) = self.scrollbar_origins.get(&track_id) {
-                        let mouse_pos_in_track = pos.y.as_f32() - origin.y;
-                        let thumb_size = (viewport_h
-                            * (viewport_h / content_h.max(1.0)).min(1.0))
-                        .max(logical(40.0));
-                        let travel_distance = (viewport_h - thumb_size).max(1.0);
-                        let content_range = content_h - viewport_h;
-                        let target_thumb_pos = (mouse_pos_in_track
-                            - self.grab_offset)
-                            .clamp(0.0, travel_distance);
-                        let target_px =
-                            (target_thumb_pos / travel_distance) * content_range;
-                        self.breadcrumb_scroll
-                            .0
-                            .borrow()
-                            .base_handle
-                            .set_offset(Point::new(px(0.0), px(-target_px)));
-                        cx.notify();
-                    }
-                }
-                DragTarget::ContextMenuV {
-                    menu_idx,
-                    viewport_h,
-                    content_h,
-                    track_id,
-                } => {
-                    if let Some(origin) = self.scrollbar_origins.get(&track_id) {
-                        if let Some(menu) = self.context_menus.get(menu_idx) {
-                            let mouse_pos_in_track = pos.y.as_f32() - origin.y;
-                            let thumb_size = (viewport_h
-                                * (viewport_h / content_h.max(1.0)).min(1.0))
-                            .max(logical(40.0));
-                            let travel_distance =
-                                (viewport_h - thumb_size).max(1.0);
-                            let content_range = content_h - viewport_h;
-                            let target_thumb_pos = (mouse_pos_in_track
-                                - self.grab_offset)
-                                .clamp(0.0, travel_distance);
-                            let target_px = (target_thumb_pos / travel_distance)
-                                * content_range;
-                            menu.scroll_handle
-                                .0
-                                .borrow()
-                                .base_handle
-                                .set_offset(Point::new(px(0.0), px(-target_px)));
-                            cx.notify();
-                        }
-                    }
-                }
-                DragTarget::OperationsPanelV {
-                    viewport_h,
-                    content_h,
-                    track_id,
-                } => {
-                    if let Some(origin) = self.scrollbar_origins.get(&track_id) {
-                        let mouse_pos_in_track = pos.y.as_f32() - origin.y;
-                        let thumb_size = (viewport_h
-                            * (viewport_h / content_h.max(1.0)).min(1.0))
-                        .max(logical(40.0));
-                        let travel_distance = (viewport_h - thumb_size).max(1.0);
-                        let content_range = content_h - viewport_h;
-                        let target_thumb_pos = (mouse_pos_in_track
-                            - self.grab_offset)
-                            .clamp(0.0, travel_distance);
-                        let target_px =
-                            (target_thumb_pos / travel_distance) * content_range;
-                        self.operations_panel_scroll
-                            .set_offset(point(px(0.0), px(-target_px)));
+                DragTarget::SidebarV { .. } | DragTarget::SidebarH { .. } | DragTarget::FileListV { .. }
+                | DragTarget::FileListH { .. } | DragTarget::BreadcrumbV { .. }
+                | DragTarget::ContextMenuV { .. } | DragTarget::OperationsPanelV { .. } => {
+                    if self.move_scrollbar_thumb(&target, pos) {
                         cx.notify();
                     }
                 }

@@ -50,7 +50,7 @@ impl OxydeApp {
         let grid = tab.view_mode == ViewMode::Grid;
         if !grid && matches!(key, "left" | "right") { return; }
         let columns = if grid {
-            crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::zed_track_width()).columns
+            crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::track_width()).columns
         } else { 1 };
         let rows = display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, columns);
         let file_rows: Vec<_> = rows.iter().filter_map(|row| match row {
@@ -85,7 +85,7 @@ impl OxydeApp {
             let tab = pane.active_tab();
             let Some(index) = tab.filtered_files().iter().position(|file| file.path == path) else { return; };
             let columns = if tab.view_mode == ViewMode::Grid {
-                crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::zed_track_width()).columns
+                crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::track_width()).columns
             } else { 1 };
             let rows = display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, columns);
             scroll_row_into_view(tab, &rows, index);
@@ -111,7 +111,7 @@ impl OxydeApp {
             let grid_mode = tab.view_mode == ViewMode::Grid;
             let grid = crate::ui::style::GridGeometry::for_viewport(
                 bounds.size.width,
-                crate::ui::components::scrollbar::zed_track_width(),
+                crate::ui::components::scrollbar::track_width(),
             );
             let grid_width = grid.content_width;
             let grid_columns = grid.columns;

@@ -3,7 +3,7 @@
 //! rail keeps its size.
 use super::{content::Content, Viewer};
 use crate::ui::components::scrollbar::{
-    render_scrollbar_with_pointer, ScrollbarAxis, ScrollbarState, ZED_TRACK_WIDTH,
+    render_scrollbar_with_pointer, ScrollbarAxis, ScrollbarState, TRACK_WIDTH,
 };
 use crate::ui::theme::ThemeContext;
 use gpui::{prelude::*, *};
@@ -26,14 +26,6 @@ impl ScrollbarState for Viewer {
     fn set_grab_offset(&mut self, offset: f32) {
         self.scroll.grab = offset;
     }
-}
-
-fn thumb_offset(viewport: f32, content: f32, position: f32, grab: f32) -> f32 {
-    let thumb = (viewport * viewport / content.max(1.0))
-        .max(crate::ui::scale::rem_pixels(rems(2.5)).as_f32())
-        .min(viewport);
-    let travel = (viewport - thumb).max(1.0);
-    ((position - grab) / travel).clamp(0.0, 1.0) * (content - viewport).max(0.0)
 }
 
 impl Viewer {
@@ -69,7 +61,7 @@ impl Viewer {
         let Some(origin) = self.scroll.origins.get(&track).copied() else { return };
         match axis {
             ScrollbarAxis::Vertical => {
-                let offset = thumb_offset(viewport, content, position.y.as_f32() - origin.y, self.scroll.grab);
+                let offset = crate::ui::components::scrollbar::drag_scrolled(viewport, content, viewport, position.y.as_f32() - origin.y, self.scroll.grab);
                 if let Some(list) = self.list_state() {
                     list.set_offset_from_scrollbar(point(px(0.0), px(-offset)));
                 }
@@ -94,6 +86,7 @@ impl Viewer {
         viewport: f32,
         content: f32,
         scrolled: f32,
+        list: ListState,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let handle = cx.entity();
@@ -109,6 +102,7 @@ impl Viewer {
             dragging,
             format!("viewer-{:?}", handle.entity_id()),
             None,
+            list,
             move |this, track, viewport, content, position, cx| {
                 if axis == ScrollbarAxis::Vertical {
                     if let Some(list) = this.list_state() {
@@ -129,7 +123,7 @@ impl Viewer {
         let viewport = bounds.size.height.as_f32();
         let maximum = self.list_scroll_maximum();
         let scrolled = -list.scroll_px_offset_for_scrollbar().y.as_f32();
-        let vertical = self.rail(ScrollbarAxis::Vertical, viewport, viewport + maximum, scrolled, cx);
+        let vertical = self.rail(ScrollbarAxis::Vertical, viewport, viewport + maximum, scrolled, list.clone(), cx);
         let handle = cx.entity();
         let movement = handle.clone();
         let wheel = handle.clone();
@@ -166,7 +160,7 @@ impl Viewer {
             .relative()
             // The rails are drawn by this view; repaint them as the list scrolls.
             .on_scroll_wheel(move |_, _, cx| wheel.update(cx, |_, cx| cx.notify()))
-            .child(div().size_full().pr(ZED_TRACK_WIDTH).child(content))
+            .child(div().size_full().pr(TRACK_WIDTH).child(content))
             .child(scroll_zone)
             .child(
                 canvas(|_, _, _| (), move |_, _, window, _| {

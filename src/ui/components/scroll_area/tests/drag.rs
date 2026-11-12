@@ -1,23 +1,6 @@
-use super::drag_offset;
 use crate::ui::scale::set_reference;
 use super::{ScrollAreaState, ScrollbarAxis};
 use gpui::{point, px};
-
-#[test]
-fn grip_drag_reaches_both_ends_at_each_scale() {
-    for reference in [10, 16, 24, 32] {
-        set_reference(reference);
-        let factor = reference as f32 / 16.0;
-        let viewport = 200.0 * factor;
-        let content = 800.0 * factor;
-        let grab = 10.0 * factor;
-        assert_eq!(drag_offset(viewport, content, -100.0, grab), 0.0);
-        assert_eq!(drag_offset(viewport, content, grab, grab), 0.0);
-        assert_eq!(drag_offset(viewport, content, 160.0 * factor, grab), -600.0 * factor);
-        assert_eq!(drag_offset(viewport, content, 1000.0 * factor, grab), -600.0 * factor);
-    }
-    set_reference(16);
-}
 
 #[test]
 fn dragging_uses_the_owner_origin_and_preserves_the_other_axis() {

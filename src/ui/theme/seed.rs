@@ -78,7 +78,10 @@ pub(super) fn derive(seed: ThemeSeed, light: bool, file_icons: FileIconPalette, 
     let panes = [background, active_background, sidebar, surface];
     // Secondary text: a step from text toward the background, kept legible on every pane.
     let text_muted = reach(text.blend(background.opacity(TEXT_MUTED_FADE)), text, &panes, 4.5);
-    let thumb_hover = reach(surface, text, &panes, 1.8);
+    // Scrollbar thumbs sit on their rail, a faint tint over each pane; three lightness
+    // steps keep rest, hover and drag apart without relying on hue.
+    let scrollbar_track = text_muted.opacity(0.094);
+    let rails = panes.map(|pane| pane.blend(scrollbar_track));
     let (on_dark, on_light): (Hsla, Hsla) = (c(0x0e0c15), c(0xffffff));
     let text_on_accent = if legibility::contrast(on_dark, accent) >= legibility::contrast(on_light, accent) {
         on_dark
@@ -125,10 +128,10 @@ pub(super) fn derive(seed: ThemeSeed, light: bool, file_icons: FileIconPalette, 
         tab_close_hover: reach(surface, text, &[surface], 1.45),
         selection_hover: accent.opacity(0.3),
         drag_hover: accent.opacity(0.15),
-        scrollbar_thumb: reach(surface, text, &panes, 1.3),
-        scrollbar_thumb_hover: thumb_hover,
-        scrollbar_thumb_drag: thumb_hover,
-        scrollbar_track: text_muted.opacity(0.094),
+        scrollbar_thumb: reach(surface, text, &rails, 1.6),
+        scrollbar_thumb_hover: reach(surface, text, &rails, 2.2),
+        scrollbar_thumb_drag: reach(surface, text, &rails, 2.8),
+        scrollbar_track,
         danger_background: c(0xb42335),
         danger_hover: c(0xc42b1c),
         text_on_danger: c(0xffffff),

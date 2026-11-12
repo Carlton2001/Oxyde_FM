@@ -201,6 +201,11 @@ impl Render for OxydeApp {
                     });
                 }
             }).absolute().size_full())
+            // A menu's thumb dragged over this window: nothing here reacts to the pointer.
+            .when(self.popup_scroll_dragging(), |root| root.child(deferred(canvas(
+                |_, window, _| window.insert_hitbox(Bounds::new(Point::default(), window.viewport_size()), HitboxBehavior::BlockMouse),
+                |_, _, _, _| {},
+            ).absolute().size_0()).with_priority(100)))
             .on_mouse_up_out(MouseButton::Left, {
                 let h = handle.clone();
                 move |_, _, cx| h.update(cx, |this, cx| this.finish_pointer_drag(cx))

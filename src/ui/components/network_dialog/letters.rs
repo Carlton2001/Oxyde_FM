@@ -114,6 +114,7 @@ pub(super) fn render(
         None,
         crate::ui::components::select_menu::scrollbar_track_size(viewport_h),
         crate::ui::components::select_menu::scrollbar_track_shape(),
+        dialog.letter_scroll.clone(),
         |view, track, viewport, content, position, cx| {
             if let Some(dialog) = &mut view.network_dialog {
                 dialog.letter_scroll_drag = Some((track, viewport, content));

@@ -30,6 +30,7 @@ pub(super) fn render_operations_panel(
         ),
         "operations-window".into(),
         None,
+        scroll.clone(),
         |app, track_id, viewport_h, content_h, _| {
             app.drag_target = Some(crate::ui::app::DragTarget::OperationsPanelV {
                 track_id,
@@ -80,7 +81,7 @@ pub(super) fn render_operations_panel(
                         .right_0()
                         .top_0()
                         .bottom_0()
-                        .w(px(super::super::scrollbar::zed_track_width()))
+                        .w(px(super::super::scrollbar::track_width()))
                         .child(scrollbar),
                 ),
         )

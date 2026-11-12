@@ -90,3 +90,20 @@ fn structural_borders_and_control_states_stay_perceptible_in_every_palette() {
         assert!(contrast(hover, pressed) >= 1.05, "{id:?} secondary press");
     }
 }
+
+#[test]
+fn scrollbar_thumbs_stand_out_from_their_rail_in_lightness_steps() {
+    for id in ThemeId::ALL {
+        let t = OxydeTheme::for_id(id);
+        for pane in [t.background, t.active_background, t.sidebar, t.surface, t.menu_surface] {
+            let rail = pane.blend(t.scrollbar_track);
+            let steps = [(t.scrollbar_thumb, 1.6), (t.scrollbar_thumb_hover, 2.2), (t.scrollbar_thumb_drag, 2.8)];
+            for (label, (thumb, min)) in ["rest", "hover", "drag"].into_iter().zip(steps) {
+                let ratio = contrast(thumb, rail);
+                assert!(ratio >= min - 0.01, "{id:?} {label} thumb: {ratio:.2}");
+            }
+            assert!(contrast(t.scrollbar_thumb_hover, rail) > contrast(t.scrollbar_thumb, rail), "{id:?} hover step");
+            assert!(contrast(t.scrollbar_thumb_drag, rail) > contrast(t.scrollbar_thumb_hover, rail), "{id:?} drag step");
+        }
+    }
+}

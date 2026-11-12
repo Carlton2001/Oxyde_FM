@@ -29,7 +29,7 @@ fn shrinking_details_pane_keeps_focused_row_above_status_bar() {
         - rem_pixels(crate::ui::style::NAV_BAR_HEIGHT).as_f32()
         - rem_pixels(rems(2.0)).as_f32()
         - crate::ui::style::column_header_height()
-        - crate::ui::components::scrollbar::zed_track_width();
+        - crate::ui::components::scrollbar::track_width();
     let visible_top = -tab.list_scroll.0.borrow().base_handle.offset().y.as_f32();
     assert!((visible_top + visible_height - bottom).abs() < 0.1);
 }
@@ -57,7 +57,7 @@ fn shrinking_grouped_grid_reveals_focus_with_variable_row_heights() {
     tab.keep_cursor_visible(size(800.0, 300.0));
     let columns = crate::ui::style::GridGeometry::for_viewport(
         800.0,
-        crate::ui::components::scrollbar::zed_track_width(),
+        crate::ui::components::scrollbar::track_width(),
     )
     .columns;
     let rows = display_rows(

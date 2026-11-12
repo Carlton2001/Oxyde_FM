@@ -31,7 +31,7 @@ pub(crate) fn scrollbar_track_shape() -> super::scrollbar::TrackShape {
 }
 
 pub(crate) fn scrollbar_content_inset() -> Rems {
-    rems(super::scrollbar::ZED_TRACK_WIDTH.0 - INNER_PADDING.0)
+    rems(super::scrollbar::TRACK_WIDTH.0 - INNER_PADDING.0)
 }
 
 /// Narrowest button opening a list.

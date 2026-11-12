@@ -31,20 +31,15 @@ fn update_drag(input: &mut TextInput, position: Point<Pixels>) {
     let Some(origin) = state.origins.get(track) else {
         return;
     };
-    let minimum = crate::ui::scale::rem_pixels(rems(2.5))
-        .as_f32()
-        .min(*viewport);
     let track_size = crate::ui::components::select_menu::scrollbar_track_size(*viewport);
-    let usable_track = track_size.max(0.0);
-    let thumb = (usable_track * viewport / content).max(minimum).min(usable_track);
-    let travel = (usable_track - thumb).max(1.0);
-    let ratio = ((position.y.as_f32() - origin.y - state.grab_offset) / travel).clamp(0.0, 1.0);
+    let scrolled = crate::ui::components::scrollbar::drag_scrolled(
+        *viewport, *content, track_size, position.y.as_f32() - origin.y, state.grab_offset);
     input
         .completion_scroll
         .0
         .borrow()
         .base_handle
-        .set_offset(point(px(0.0), px(-ratio * (content - viewport))));
+        .set_offset(point(px(0.0), px(-scrolled)));
 }
 
 pub(super) fn render(
@@ -69,13 +64,10 @@ pub(super) fn render(
             scroll.offset().y.as_f32().abs(),
             input.completion_pointer.drag.is_some(),
             "path-completion".into(),
-            Some(
-                crate::ui::scale::rem_pixels(rems(2.5))
-                    .as_f32()
-                    .min(viewport),
-            ),
+            None,
             crate::ui::components::select_menu::scrollbar_track_size(viewport),
             crate::ui::components::select_menu::scrollbar_track_shape(),
+            scroll.clone(),
             move |input, track, viewport, content, position, cx| {
                 input.completion_pointer.drag = Some((track, viewport, content));
                 update_drag(input, position);

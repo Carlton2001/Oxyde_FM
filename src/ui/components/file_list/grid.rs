@@ -54,7 +54,7 @@ pub(super) fn render_grid_file_list(
         .max(1.0);
     // Keep the grid inside the panel's padded viewport and leave a clear lane
     // for the overlay scrollbar, especially in the rightmost split pane.
-    let grid = crate::ui::style::GridGeometry::for_viewport(pane_width, crate::ui::components::scrollbar::zed_track_width());
+    let grid = crate::ui::style::GridGeometry::for_viewport(pane_width, crate::ui::components::scrollbar::track_width());
     let columns = grid.columns;
     let card_width = grid.cell_width - logical(4.0);
     let presentation = tab.presentation(true, columns);
@@ -284,7 +284,7 @@ pub(super) fn render_grid_file_list(
             .flex_col()
             .overflow_hidden()
             .px_2()
-            .pr(px(crate::ui::components::scrollbar::zed_track_width()))
+            .pr(px(crate::ui::components::scrollbar::track_width()))
             .child(
                 canvas(|bounds, _, _| bounds, {
                     let h = handle.clone();
@@ -325,6 +325,7 @@ pub(super) fn render_grid_file_list(
                 is_dragging,
                 format!("grid-{pane_id}"),
                 None,
+                tab.list_scroll.0.borrow().base_handle.clone(),
                 {
                     let pid = pane_id.clone();
                     move |this, track_id, viewport_h, content_h, _| {

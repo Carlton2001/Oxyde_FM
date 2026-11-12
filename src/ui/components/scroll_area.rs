@@ -1,6 +1,6 @@
 //! Locally owned scrolling for forms and menus, using the shared scrollbar skin.
-use super::scrollbar::{render_scrollbar_with_pointer, ScrollbarAxis, ScrollbarState, ZED_TRACK_WIDTH};
-use crate::ui::{scale::rem_pixels, theme::ThemeContext};
+use super::scrollbar::{drag_scrolled, render_scrollbar_with_pointer, ScrollbarAxis, ScrollbarState, TRACK_WIDTH};
+use crate::ui::theme::ThemeContext;
 use gpui::{prelude::*, *};
 use std::collections::HashMap;
 
@@ -20,21 +20,14 @@ impl ScrollbarState for ScrollAreaState {
     fn set_grab_offset(&mut self, offset: f32) { self.grab = offset; }
 }
 
-fn drag_offset(viewport: f32, content: f32, position: f32, grab: f32) -> f32 {
-    let thumb = (viewport * viewport / content.max(1.0))
-        .max(rem_pixels(rems(2.5)).as_f32()).min(viewport);
-    let travel = (viewport - thumb).max(1.0);
-    -((position - grab) / travel).clamp(0.0, 1.0) * (content - viewport).max(0.0)
-}
-
 impl ScrollAreaState {
     fn move_drag(&mut self, position: Point<Pixels>) {
         let Some((axis, track, viewport, content)) = &self.drag else { return; };
         let Some(origin) = self.origins.get(track) else { return; };
         let mut offset = self.scroll.offset();
         match axis {
-            ScrollbarAxis::Vertical => offset.y = px(drag_offset(*viewport, *content, position.y.as_f32() - origin.y, self.grab)),
-            ScrollbarAxis::Horizontal => offset.x = px(drag_offset(*viewport, *content, position.x.as_f32() - origin.x, self.grab)),
+            ScrollbarAxis::Vertical => offset.y = px(-drag_scrolled(*viewport, *content, *viewport, position.y.as_f32() - origin.y, self.grab)),
+            ScrollbarAxis::Horizontal => offset.x = px(-drag_scrolled(*viewport, *content, *viewport, position.x.as_f32() - origin.x, self.grab)),
         }
         self.scroll.set_offset(offset);
     }
@@ -64,8 +57,8 @@ pub(crate) fn scroll_area(
     let mut frame = frame.relative().flex().flex_col().min_h_0().min_w_0()
         .child(viewport.min_h_0().min_w_0().flex_shrink(1.0).overflow_y_scroll().track_scroll(&scroll)
             .when(horizontal, |viewport| viewport.overflow_x_scroll())
-            .when(overflow_v, |viewport| viewport.mr(ZED_TRACK_WIDTH))
-            .when(overflow_h, |viewport| viewport.mb(ZED_TRACK_WIDTH))
+            .when(overflow_v, |viewport| viewport.mr(TRACK_WIDTH))
+            .when(overflow_h, |viewport| viewport.mb(TRACK_WIDTH))
             .on_scroll_wheel(|_, window, _| window.refresh()));
     for axis in [ScrollbarAxis::Vertical, ScrollbarAxis::Horizontal] {
         if axis == ScrollbarAxis::Horizontal && !horizontal { continue; }
@@ -75,15 +68,15 @@ pub(crate) fn scroll_area(
         let owner = window.window_handle();
         let rail = render_scrollbar_with_pointer(theme, state.clone(), axis,
             viewport.as_f32(), (viewport + maximum).as_f32(), -offset.as_f32(),
-            dragging == Some(axis), suffix.clone(), None,
+            dragging == Some(axis), suffix.clone(), None, scroll.clone(),
             move |state, track, viewport, content, position, cx| {
                 state.drag = Some((axis, track, viewport, content));
                 state.move_drag(position);
                 cx.defer(move |cx| { let _ = owner.update(cx, |_, window, _| window.refresh()); });
             });
         frame = frame.child(div().absolute().inset_0()
-            .when(axis == ScrollbarAxis::Vertical && overflow_h, |rail| rail.bottom(ZED_TRACK_WIDTH))
-            .when(axis == ScrollbarAxis::Horizontal && overflow_v, |rail| rail.right(ZED_TRACK_WIDTH))
+            .when(axis == ScrollbarAxis::Vertical && overflow_h, |rail| rail.bottom(TRACK_WIDTH))
+            .when(axis == ScrollbarAxis::Horizontal && overflow_v, |rail| rail.right(TRACK_WIDTH))
             .child(rail));
     }
     let measure = state.clone();

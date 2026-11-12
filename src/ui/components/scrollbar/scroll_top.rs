@@ -25,9 +25,8 @@ pub(crate) fn button(
         return div().absolute().size_0().into_any_element();
     }
     let shown = hovered && offset > crate::ui::style::row_height() * 2.0;
-    let thumb = (viewport * (viewport / content.max(1.0)).min(1.0))
-        .max(logical(40.0)).min(viewport);
-    let thumb_top = (offset / (content - viewport).max(1.0)).clamp(0.0, 1.0) * (viewport - thumb);
+    let geometry = super::Thumb::new(viewport, content, viewport, None);
+    let (thumb, thumb_top) = (geometry.size, geometry.position(offset));
     let top = (thumb_top + thumb / 2.0 - logical(16.0))
         .clamp(logical(4.0), (viewport - logical(36.0)).max(logical(4.0)));
     let top = if shown { anchor.set(top); top } else { anchor.get() };

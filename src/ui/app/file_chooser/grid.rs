@@ -174,11 +174,11 @@ impl FileChooserWindow {
                 .flex_col()
                 .overflow_hidden()
                 .px_2()
-                .pr(px(crate::ui::components::scrollbar::zed_track_width()))
+                .pr(px(crate::ui::components::scrollbar::track_width()))
                 .child(list)
                 .child(div().absolute().top_0().bottom_0().right_0().w(rems(3.625))
                     .child(render_scrollbar_with_pointer(theme, cx.entity(), ScrollbarAxis::Vertical, actual_viewport.max(1.0), content_height, -scroll.offset().y.as_f32(), dragging,
-                        "file-chooser-grid".into(), None,
+                        "file-chooser-grid".into(), None, scroll.clone(),
                         move |this: &mut Self, track, viewport, content, _, cx| {
                             this.scroll_drag = Some((track, viewport, content));
                             cx.notify(entity_id);

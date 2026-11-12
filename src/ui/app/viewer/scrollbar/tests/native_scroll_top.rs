@@ -19,7 +19,7 @@ fn stage(handle: WindowHandle<Probe>, step: usize, failures: Rc<RefCell<Vec<Stri
         let viewer = root.downcast::<Probe>().unwrap().read(cx).viewer.clone();
         let bounds = viewer.read(cx).list_state().unwrap().viewport_bounds();
         let center = point(bounds.origin.x + bounds.size.width / 2.0, bounds.origin.y + bounds.size.height / 2.0);
-        let near = point(bounds.origin.x + bounds.size.width + ZED_TRACK_WIDTH.to_pixels(window.rem_size()) / 2.0, center.y);
+        let near = point(bounds.origin.x + bounds.size.width + TRACK_WIDTH.to_pixels(window.rem_size()) / 2.0, center.y);
         if step == 0 {
             window.dispatch_event(MouseMoveEvent { position: center, ..Default::default() }.to_platform_input(), cx);
             viewer.update(cx, |viewer, cx| {
@@ -43,7 +43,7 @@ fn stage(handle: WindowHandle<Probe>, step: usize, failures: Rc<RefCell<Vec<Stri
             window.dispatch_event(MouseMoveEvent { position: near, ..Default::default() }.to_platform_input(), cx);
         } else if step == 4 {
             let top = viewer.read(cx).scroll.top_anchor.get();
-            let position = point(bounds.origin.x + bounds.size.width + ZED_TRACK_WIDTH.to_pixels(window.rem_size()) - rems(2.0).to_pixels(window.rem_size()),
+            let position = point(bounds.origin.x + bounds.size.width + TRACK_WIDTH.to_pixels(window.rem_size()) - rems(2.0).to_pixels(window.rem_size()),
                 bounds.origin.y + px(top) + rems(1.0).to_pixels(window.rem_size()));
             window.dispatch_event(MouseDownEvent { button: MouseButton::Left, position, click_count: 1, ..Default::default() }.to_platform_input(), cx);
         } else {

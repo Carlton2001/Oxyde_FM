@@ -37,15 +37,9 @@ impl OperationsPanelView {
             let Some(origin) = app.scrollbar_origins.get(track_id) else {
                 return;
             };
-            let thumb = (viewport_h * (viewport_h / content_h.max(1.0)).min(1.0))
-                .max(crate::ui::scale::logical(40.0));
-            let travel = (viewport_h - thumb).max(1.0);
-            let position =
-                (event.position.y.as_f32() - origin.y - app.grab_offset).clamp(0.0, travel);
-            app.operations_panel_scroll.set_offset(point(
-                px(0.0),
-                px(-position / travel * (content_h - viewport_h).max(0.0)),
-            ));
+            let scrolled = crate::ui::components::scrollbar::drag_scrolled(
+                *viewport_h, *content_h, *viewport_h, event.position.y.as_f32() - origin.y, app.grab_offset);
+            app.operations_panel_scroll.set_offset(point(px(0.0), px(-scrolled)));
             cx.notify();
         });
     }

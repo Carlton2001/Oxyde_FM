@@ -376,6 +376,9 @@ pub(crate) struct WaylandClientState {
     scroll_event_received: bool,
     enter_token: Option<()>,
     button_pressed: Option<MouseButton>,
+    // Oxyde: the button held when the pointer left one of our surfaces under a popup grab,
+    // which keeps delivering the pointer to this client until the button is released.
+    button_across_leave: Option<MouseButton>,
     // Oxyde: read by `WaylandWindow::mouse_position`.
     pub(crate) mouse_focused_window: Option<WaylandWindowStatePtr>,
     keyboard_focused_window: Option<WaylandWindowStatePtr>,
@@ -1082,6 +1085,7 @@ impl WaylandClient {
             vertical_modifier: -1.0,
             horizontal_modifier: -1.0,
             button_pressed: None,
+            button_across_leave: None,
             mouse_focused_window: None,
             keyboard_focused_window: None,
             loop_handle: handle.clone(),
@@ -2268,7 +2272,15 @@ impl Dispatch<wl_pointer::WlPointer, ()> for WaylandClientStatePtr {
                 let position = point(px(surface_x as f32), px(surface_y as f32));
                 state.serial_tracker.update(SerialKind::MouseEnter, serial);
                 state.mouse_location = Some(position);
-                state.button_pressed = None;
+                // Oxyde: a popup grab hands the pointer from the popup to its parent while a
+                // button is held. Upstream forgets the press, so a scrollbar dragged out of a
+                // menu stopped as the pointer reached the window beneath.
+                let across = state.button_across_leave.take();
+                if state.windows.values().any(|window| window.has_popup_grab()) {
+                    state.button_pressed = across;
+                } else {
+                    state.button_pressed = None;
+                }
 
                 if let Some(window) = get_window(&mut state, &surface.id()) {
                     state.mouse_focused_window = Some(window.clone());
@@ -2291,13 +2303,14 @@ impl Dispatch<wl_pointer::WlPointer, ()> for WaylandClientStatePtr {
                         }
                     }
                     let modifiers = state.modifiers;
+                    let pressed_button = state.button_pressed;
                     drop(state);
                     window.set_hovered(true);
                     // No Motion follows Enter unless the pointer keeps moving, so synthesize
                     // a MouseMove to establish hover at the entry position.
                     window.handle_input(PlatformInput::MouseMove(MouseMoveEvent {
                         position,
-                        pressed_button: None,
+                        pressed_button,
                         modifiers,
                     }));
                 }
@@ -2311,6 +2324,12 @@ impl Dispatch<wl_pointer::WlPointer, ()> for WaylandClientStatePtr {
                     });
                     state.mouse_focused_window = None;
                     state.mouse_location = None;
+                    state.button_across_leave = state
+                        .windows
+                        .values()
+                        .any(|window| window.has_popup_grab())
+                        .then_some(state.button_pressed)
+                        .flatten();
                     state.button_pressed = None;
                     state.cursor_hidden_window = None;
 

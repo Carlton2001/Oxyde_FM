@@ -80,7 +80,7 @@ pub(super) fn render_sidebar_tree(
     let content_w = calculated_content_w;
     // Reserve scrollbar gutters only when their axis actually overflows.
     let h_overflow = content_w > viewport_w + 1.0;
-    let list_bottom = if h_overflow { crate::ui::components::scrollbar::zed_track_width() } else { 0.0 };
+    let list_bottom = if h_overflow { crate::ui::components::scrollbar::track_width() } else { 0.0 };
     let viewport_h = (view.list_height - list_top - list_bottom).max(1.0);
     let list_right = if content_h > viewport_h { rems(1.125) } else { rems(0.5) };
     // Rows fill the list's visible width until the content itself overflows it.
@@ -250,6 +250,7 @@ pub(super) fn render_sidebar_tree(
                 matches!(view.drag_target, Some(DragTarget::SidebarV { .. })),
                 "sidebar-v".to_string(),
                 None,
+                view.sidebar_scroll.0.borrow().base_handle.clone(),
                 |this, track_id, v_h, c_h, _| {
                     this.drag_target = Some(DragTarget::SidebarV {
                         viewport_h: v_h,
@@ -271,6 +272,7 @@ pub(super) fn render_sidebar_tree(
         matches!(view.drag_target, Some(DragTarget::SidebarH { .. })),
         "sidebar-h".to_string(),
         None,
+        view.sidebar_scroll_h.clone(),
         |this, track_id, v_w, c_w, _| {
             this.drag_target = Some(DragTarget::SidebarH {
                 viewport_w: v_w,

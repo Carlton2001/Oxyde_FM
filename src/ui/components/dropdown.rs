@@ -333,7 +333,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
         let has_scrollbar = content_h > viewport_h;
 
         let list_w = if has_scrollbar {
-            width - crate::ui::components::scrollbar::zed_track_width()
+            width - crate::ui::components::scrollbar::track_width()
         } else {
             width
         };
@@ -673,6 +673,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                         is_dragging,
                         format!("context-menu-scrollbar-{:?}", window.window_handle().window_id()),
                         None,
+                        base_scroll_handle.clone(),
                         move |this, tid, vh, ch, _, cx| {
                             (on_drag)(this, tid, vh, ch, cx);
                         },

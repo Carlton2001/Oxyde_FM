@@ -33,7 +33,7 @@ impl OxydeApp {
         let Some(pane) = self.state.find_pane(&pane_id) else { return };
         let tab = pane.active_tab();
         let grid = tab.view_mode == ViewMode::Grid;
-        let geometry = GridGeometry::for_viewport(width, crate::ui::components::scrollbar::zed_track_width());
+        let geometry = GridGeometry::for_viewport(width, crate::ui::components::scrollbar::track_width());
         let rows = display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, if grid { geometry.columns } else { 1 });
         let target = tab.keyboard_cursor.as_ref().filter(|path| tab.selected_paths.contains(*path))
             .or(tab.selection_anchor.as_ref().filter(|path| tab.selected_paths.contains(*path)))

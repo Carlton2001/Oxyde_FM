@@ -1922,8 +1922,15 @@ impl Window {
             let mut cx = cx.to_async();
             move |active| {
                 handle
-                    .update(&mut cx, |_, window, _| {
+                    .update(&mut cx, |_, window, cx| {
                         window.hovered.set(active);
+                        // Oxyde: once the pointer has left, nothing in this window is hovered.
+                        // Upstream keeps the last position, and a menu left by the pointer, or
+                        // whose scrollbar was released over the window beneath, kept a
+                        // highlighted row. A GPUI drag keeps it, its preview being drawn there.
+                        if !active && cx.active_drag.is_none() {
+                            window.mouse_position = point(px(-1.0e4), px(-1.0e4));
+                        }
                         window.refresh();
                     })
                     .log_err();

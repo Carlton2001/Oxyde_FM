@@ -1,8 +1,10 @@
 use crate::ui::app::OxydeApp;
+use crate::ui::elements::motion;
 use crate::ui::scale::rem_pixels;
 use crate::ui::theme::OxydeTheme;
 use gpui::prelude::*;
 use gpui::*;
+use std::cell::RefCell;
 pub(crate) mod scroll_top;
 
 /// Pointer state owned by the view using a shared scrollbar.
@@ -29,31 +31,96 @@ pub(crate) enum TrackShape {
     RoundedRight(Rems),
 }
 
-const ZED_THUMB_MIN_SIZE: Rems = rems(2.5);
-const THUMB_END_INSET: Rems = rems(0.1875);
-fn zed_thumb_min_size() -> f32 {
-    rem_pixels(ZED_THUMB_MIN_SIZE).as_f32()
+/// What the wheel scrolls while the pointer is over a rail, which lies beside
+/// the content rather than inside its scrolling hitbox.
+#[derive(Clone)]
+pub(crate) enum WheelTarget {
+    Handle(ScrollHandle),
+    List(ListState),
 }
+impl From<ScrollHandle> for WheelTarget {
+    fn from(handle: ScrollHandle) -> Self { Self::Handle(handle) }
+}
+impl From<ListState> for WheelTarget {
+    fn from(list: ListState) -> Self { Self::List(list) }
+}
+impl WheelTarget {
+    /// Moves by a wheel step as GPUI's scroll containers do, bounded by the rail's overflow.
+    fn scroll(&self, axis: ScrollbarAxis, step: Pixels, maximum: f32) {
+        match self {
+            Self::Handle(handle) => {
+                let mut offset = handle.offset();
+                let along = if axis == ScrollbarAxis::Vertical { &mut offset.y } else { &mut offset.x };
+                *along = (*along + step).clamp(px(-maximum), px(0.0));
+                handle.set_offset(offset);
+            }
+            Self::List(list) => list.scroll_by(-step),
+        }
+    }
+}
+
+pub const TRACK_WIDTH: Rems = rems(0.75);
+pub fn track_width() -> f32 {
+    rem_pixels(TRACK_WIDTH).as_f32()
+}
+const THUMB_MIN_SIZE: Rems = rems(2.5);
+/// Gap between the painted thumb and the rail's ends.
+const THUMB_END_INSET: Rems = rems(0.1875);
+/// Thumb thickness and its gap to the rail's outer edge, both centered in the rail.
+const THUMB_REST: (Rems, Rems) = (rems(0.375), rems(0.1875));
+const THUMB_ACTIVE: (Rems, Rems) = (rems(0.625), rems(0.0625));
+
 /// Wheel deltas reach the handle before GPUI clamps them at prepaint, so bound
 /// the raw offset by the last measured overflow.
 pub(crate) fn scrolled_from_top(handle: &ScrollHandle) -> bool {
     (-handle.offset().y).min(handle.max_offset().y) >= px(0.5)
 }
 
-pub const ZED_TRACK_WIDTH: Rems = rems(0.75);
-pub fn zed_track_width() -> f32 {
-    rem_pixels(ZED_TRACK_WIDTH).as_f32()
-}
-const ZED_THUMB_WIDTH_NORMAL: Rems = rems(0.3125);
-fn zed_thumb_width_normal() -> f32 {
-    rem_pixels(ZED_THUMB_WIDTH_NORMAL).as_f32()
-}
-const ZED_THUMB_WIDTH_HOVER: Rems = rems(0.625);
-fn zed_thumb_width_hover() -> f32 {
-    rem_pixels(ZED_THUMB_WIDTH_HOVER).as_f32()
+/// Thumb length and travel along a rail, shared by painting, hit testing and dragging.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Thumb {
+    pub(crate) size: f32,
+    pub(crate) travel: f32,
+    range: f32,
 }
 
-/// Composant Scrollbar Visuel Réutilisable "Zed-like"
+impl Thumb {
+    /// `track` is the rail's length, which select menus extend past the viewport.
+    pub(crate) fn new(viewport: f32, content: f32, track: f32, minimum: Option<f32>) -> Self {
+        let track = track.max(0.0);
+        let ratio = (viewport / content.max(1.0)).min(1.0);
+        let minimum = minimum.unwrap_or_else(|| rem_pixels(THUMB_MIN_SIZE).as_f32());
+        let size = (track * ratio).max(minimum).min(track);
+        Self { size, travel: track - size, range: (content - viewport).max(0.0) }
+    }
+
+    /// Start of the thumb along the rail for a distance scrolled from the content's start.
+    pub(crate) fn position(&self, scrolled: f32) -> f32 {
+        (scrolled.max(0.0) / self.range.max(1.0)).clamp(0.0, 1.0) * self.travel
+    }
+
+    /// Distance scrolled from the content's start that puts the thumb's start at `position`.
+    pub(crate) fn scrolled_at(&self, position: f32) -> f32 {
+        (position / self.travel.max(1.0)).clamp(0.0, 1.0) * self.range
+    }
+}
+
+/// Distance scrolled while a thumb grabbed `grab` from its start is held `along`
+/// the rail from its origin. Every drag owner goes through this one conversion.
+pub(crate) fn drag_scrolled(viewport: f32, content: f32, track: f32, along: f32, grab: f32) -> f32 {
+    Thumb::new(viewport, content, track, None).scrolled_at(along - grab)
+}
+
+thread_local! {
+    /// One pointer hovers at most one rail at a time, in any window.
+    static HOVERED_TRACK: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+fn hovered(track_id: &str) -> bool {
+    HOVERED_TRACK.with(|hovered| hovered.borrow().as_deref() == Some(track_id))
+}
+
+/// Shared scrollbar for `OxydeApp`, whose drags carry no pointer position.
 pub fn render_scrollbar(
     theme: OxydeTheme,
     handle: Entity<OxydeApp>,
@@ -64,8 +131,10 @@ pub fn render_scrollbar(
     is_dragging: bool,
     id_suffix: String,
     min_thumb_size: Option<f32>,
+    wheel: impl Into<WheelTarget>,
     on_drag: impl Fn(&mut OxydeApp, String, f32, f32, &mut App) + 'static,
 ) -> AnyElement {
+    let owner = handle.entity_id();
     render_scrollbar_with_pointer(
         theme,
         handle,
@@ -76,7 +145,16 @@ pub fn render_scrollbar(
         is_dragging,
         id_suffix,
         min_thumb_size,
-        move |view, track, viewport, content, _, cx| on_drag(view, track, viewport, content, cx),
+        wheel,
+        move |view, track, viewport, content, position, cx| {
+            on_drag(view, track, viewport, content, cx);
+            // A press beside the thumb moves it there at once, before any pointer move.
+            if let Some(target) = view.drag_target.clone() {
+                if view.move_scrollbar_thumb(&target, position) {
+                    cx.notify(owner);
+                }
+            }
+        },
     )
 }
 pub fn render_scrollbar_with_pointer<T: ScrollbarState + 'static>(
@@ -89,9 +167,10 @@ pub fn render_scrollbar_with_pointer<T: ScrollbarState + 'static>(
     is_dragging: bool,
     id_suffix: String,
     min_thumb_size: Option<f32>,
+    wheel: impl Into<WheelTarget>,
     on_drag: impl Fn(&mut T, String, f32, f32, Point<Pixels>, &mut App) + 'static,
 ) -> AnyElement {
-    render_scrollbar_on_track(theme, handle, axis, viewport_size, content_size, current_scroll, is_dragging, id_suffix, min_thumb_size, viewport_size, TrackShape::Square, on_drag)
+    render_scrollbar_on_track(theme, handle, axis, viewport_size, content_size, current_scroll, is_dragging, id_suffix, min_thumb_size, viewport_size, TrackShape::Square, wheel, on_drag)
 }
 
 /// Separate the physical rail length from the scrollable content viewport.
@@ -107,82 +186,58 @@ pub(crate) fn render_scrollbar_on_track<T: ScrollbarState + 'static>(
     min_thumb_size: Option<f32>,
     track_size: f32,
     shape: TrackShape,
+    wheel: impl Into<WheelTarget>,
     on_drag: impl Fn(&mut T, String, f32, f32, Point<Pixels>, &mut App) + 'static,
 ) -> AnyElement {
     let is_v = axis == ScrollbarAxis::Vertical;
 
-    // Proportions
-    let ratio = (viewport_size / content_size.max(1.0)).min(1.0);
-
     // Don't render scrollbar if content fits
-    if ratio >= 1.0 {
+    if viewport_size >= content_size.max(1.0) {
         return div().into_any_element();
     }
 
-    let m_thumb_size = min_thumb_size.unwrap_or(zed_thumb_min_size());
     let usable_track = track_size.max(0.0);
-    let thumb_size = (usable_track * ratio).max(m_thumb_size).min(usable_track);
-    let max_offset = (content_size - viewport_size).max(1.0);
-    let scroll_ratio = (current_scroll.max(0.0) / max_offset).clamp(0.0, 1.0);
-    let thumb_pos = scroll_ratio * (usable_track - thumb_size);
+    let geometry = Thumb::new(viewport_size, content_size, usable_track, min_thumb_size);
+    let thumb_pos = geometry.position(current_scroll);
     // Inset only the painted grip. Keep its logical bounds for hit testing and
     // dragging so existing viewport/offset calculations retain their behavior.
-    let grip_inset = rem_pixels(THUMB_END_INSET).as_f32().min(thumb_size / 2.0);
-    let grip_size = (thumb_size - grip_inset * 2.0).max(0.0);
+    let grip_inset = rem_pixels(THUMB_END_INSET).as_f32().min(geometry.size / 2.0);
+    let grip_size = (geometry.size - grip_inset * 2.0).max(0.0);
 
-    let mut thumb = div()
-        .absolute()
-        .bg(theme.scrollbar_thumb) // Plus subtil par défaut
-        .rounded_md();
-
-    if is_v {
-        thumb = thumb
-            .right(rems(0.1875))
-            .top(px(thumb_pos + grip_inset))
-            .h(px(grip_size))
-            .w(px(zed_thumb_width_normal()))
-            .group_hover("scroll-track", |s| {
-                s.w(px(zed_thumb_width_hover()))
-                    .right(rems(0.0625))
-                    .bg(theme.scrollbar_thumb_hover)
-            });
-        if is_dragging {
-            thumb = thumb
-                .w(px(zed_thumb_width_hover()))
-                .right(rems(0.0625))
-                .bg(theme.scrollbar_thumb_drag);
-        }
-    } else {
-        thumb = thumb
-            .bottom(rems(0.1875))
-            .left(px(thumb_pos + grip_inset))
-            .w(px(grip_size))
-            .h(px(zed_thumb_width_normal()))
-            .group_hover("scroll-track", |s| {
-                s.h(px(zed_thumb_width_hover()))
-                    .bottom(rems(0.0625))
-                    .bg(theme.scrollbar_thumb_hover)
-            });
-        if is_dragging {
-            thumb = thumb
-                .h(px(zed_thumb_width_hover()))
-                .bottom(rems(0.0625))
-                .bg(theme.scrollbar_thumb_drag);
-        }
-    }
-
-    let is_v = axis == ScrollbarAxis::Vertical;
     let track_id = format!(
         "scrollbar-track-{}-{}",
         if is_v { "v" } else { "h" },
         id_suffix
     );
+    let active = is_dragging || hovered(&track_id);
+    let (rest_width, rest_edge) = (rem_pixels(THUMB_REST.0).as_f32(), rem_pixels(THUMB_REST.1).as_f32());
+    let (active_width, active_edge) = (rem_pixels(THUMB_ACTIVE.0).as_f32(), rem_pixels(THUMB_ACTIVE.1).as_f32());
+    let rest_color = theme.scrollbar_thumb;
+    let active_color = if is_dragging { theme.scrollbar_thumb_drag } else { theme.scrollbar_thumb_hover };
+    // Widening follows the pointer at the margin; the drag itself stays immediate.
+    let thumb = div()
+        .absolute()
+        .rounded_full()
+        .map(|thumb| if is_v {
+            thumb.top(px(thumb_pos + grip_inset)).h(px(grip_size))
+        } else {
+            thumb.left(px(thumb_pos + grip_inset)).w(px(grip_size))
+        })
+        .with_spring(SharedString::from(format!("{track_id}-active")), motion::presence(active), move |thumb, progress| {
+            let width = px(rest_width + (active_width - rest_width) * progress);
+            let edge = px(rest_edge + (active_edge - rest_edge) * progress);
+            let thumb = thumb.bg(rest_color.blend(active_color.opacity(progress)));
+            if is_v { thumb.w(width).right(edge) } else { thumb.h(width).bottom(edge) }
+        });
+
     let track_id_cap = track_id.clone();
     let handle_cap = handle.clone();
+    let owner = handle.entity_id();
+    let wheel = wheel.into();
+    let overflow = (content_size - viewport_size).max(0.0);
 
     let track_container = div()
         .id(SharedString::from(track_id.clone()))
-        .group("scroll-track")
         .absolute()
         .bg(theme.scrollbar_track)
         .map(|track| match shape {
@@ -190,15 +245,48 @@ pub(crate) fn render_scrollbar_on_track<T: ScrollbarState + 'static>(
             TrackShape::RoundedRight(radius) => track.rounded_r(radius),
         })
         .when(is_v, |s: Stateful<Div>| {
-            s.top_0().right_0().bottom_0().w(px(zed_track_width()))
+            s.top_0().right_0().bottom_0().w(px(track_width()))
         })
         .when(!is_v, |s: Stateful<Div>| {
-            s.left_0().bottom_0().right_0().h(px(zed_track_width()))
+            s.left_0().bottom_0().right_0().h(px(track_width()))
+        })
+        .on_hover({
+            let track_id = track_id.clone();
+            move |entered, window, _| {
+                HOVERED_TRACK.with(|hovered| {
+                    let mut hovered = hovered.borrow_mut();
+                    if *entered {
+                        *hovered = Some(track_id.clone());
+                    } else if hovered.as_deref() == Some(track_id.as_str()) {
+                        *hovered = None;
+                    }
+                });
+                window.refresh();
+            }
+        })
+        .on_scroll_wheel(move |event, window, cx| {
+            // The content's own scrolling never sees this pointer position.
+            cx.stop_propagation();
+            let delta = event.delta.pixel_delta(window.line_height());
+            // A vertical wheel also moves a horizontal rail, as GTK and Windows do.
+            let step = if is_v { delta.y } else if delta.x.is_zero() { delta.y } else { delta.x };
+            if step.is_zero() {
+                return;
+            }
+            crate::ui::components::tooltip::hover::dismiss(window, cx);
+            wheel.scroll(axis, step, overflow);
+            cx.notify(owner);
+            window.refresh();
         })
         .child(
             canvas(
                 |bounds, _, _| bounds,
                 move |bounds, _, window, cx| {
+                    // A rail removed while hovered, such as a closed menu's, gets no leave event.
+                    if hovered(&track_id_cap) && !bounds.contains(&window.mouse_position()) {
+                        HOVERED_TRACK.with(|hovered| hovered.borrow_mut().take());
+                        window.refresh();
+                    }
                     let origin = crate::ui::components::popup::owner_point(window, cx, bounds.origin);
                     handle_cap.update(cx, |this, _| {
                         this.scrollbar_origins().insert(
@@ -228,19 +316,15 @@ pub(crate) fn render_scrollbar_on_track<T: ScrollbarState + 'static>(
                     if let Some(origin) = this.scrollbar_origins().get(&track_id_for_drag) {
                         let track_origin_coord = if is_v { origin.y } else { origin.x };
                         let mouse_in_track = mouse_pos - track_origin_coord;
+                        let t_pos = geometry.position(current_scroll);
 
-                        let max_offset = (content_size - viewport_size).max(1.0);
-                        let ratio = (viewport_size / content_size.max(1.0)).min(1.0);
-                        let m_thumb_size = min_thumb_size.unwrap_or(zed_thumb_min_size());
-                        let t_size = (usable_track * ratio).max(m_thumb_size).min(usable_track);
-                        let scroll_ratio = (current_scroll.max(0.0) / max_offset).clamp(0.0, 1.0);
-                        let t_pos = scroll_ratio * (usable_track - t_size);
-
+                        // A press on the thumb keeps its grip; elsewhere the thumb
+                        // centers under the pointer, as GTK warps it.
                         let grab_offset =
-                            if mouse_in_track >= t_pos && mouse_in_track <= t_pos + t_size {
+                            if mouse_in_track >= t_pos && mouse_in_track <= t_pos + geometry.size {
                                 mouse_in_track - t_pos
                             } else {
-                                t_size / 2.0
+                                geometry.size / 2.0
                             };
 
                         this.set_grab_offset(grab_offset);
@@ -266,3 +350,7 @@ pub(crate) fn render_scrollbar_on_track<T: ScrollbarState + 'static>(
         ).absolute().size_0()).with_priority(100)))
         .into_any_element()
 }
+
+#[cfg(test)]
+#[path = "scrollbar/tests/thumb.rs"]
+mod tests;

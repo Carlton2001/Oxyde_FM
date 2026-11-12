@@ -125,11 +125,8 @@ fn update_letter_scroll(view: &mut OxydeApp, position: Point<Pixels>, cx: &mut A
         return;
     };
     let track_size = crate::ui::components::select_menu::scrollbar_track_size(*viewport);
-    let usable_track = track_size.max(0.0);
-    let thumb = (usable_track * viewport / content).max(rem_pixels(rems(2.5)).as_f32()).min(usable_track);
-    let travel = (usable_track - thumb).max(1.0);
-    let position = position.y.as_f32() - origin.y - view.grab_offset;
-    let offset = (position / travel).clamp(0.0, 1.0) * (content - viewport);
+    let offset = crate::ui::components::scrollbar::drag_scrolled(
+        *viewport, *content, track_size, position.y.as_f32() - origin.y, view.grab_offset);
     dialog.letter_scroll.set_offset(point(px(0.0), px(-offset)));
     if let Some(handle) = &view.handle {
         cx.notify(handle.entity_id());

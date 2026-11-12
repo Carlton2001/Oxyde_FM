@@ -580,7 +580,7 @@ impl OxydeApp {
                         .position(|file| file.path == path)
                     {
                         let grid = matches!(tab.view_mode, crate::ui::workspace::ViewMode::Grid);
-                        let columns = if grid { crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::zed_track_width()).columns } else { 1 };
+                        let columns = if grid { crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::track_width()).columns } else { 1 };
                         let file = &tab.filtered_files()[index];
                         tab.collapsed_groups.remove(&crate::ui::date_groups::group_for_file(file, tab.grouping(), chrono::Local::now().date_naive()));
                         let rows = crate::ui::date_groups::display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, columns);
@@ -610,7 +610,7 @@ pub(super) fn reveal_renamed_item(tab: &mut crate::ui::workspace::TabState, widt
     let group = crate::ui::date_groups::group_for_file(&tab.filtered_files()[index], tab.grouping(), chrono::Local::now().date_naive());
     tab.collapsed_groups.remove(&group);
     let columns = if tab.view_mode == crate::ui::workspace::ViewMode::Grid {
-        crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::zed_track_width()).columns
+        crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::track_width()).columns
     } else { 1 };
     let rows = crate::ui::date_groups::display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, columns);
     super::selection::scroll_row_into_view(tab, &rows, index);
