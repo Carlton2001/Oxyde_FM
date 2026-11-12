@@ -14,7 +14,7 @@ pub(super) fn sidebar_button(
     enabled: bool,
     action: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
 ) -> Stateful<Div> {
-    sidebar_button_with_tooltip(id, Tooltip::text(label), icon, text, theme, enabled, action)
+    sidebar_button_with_tooltip(id, Tooltip::text(label), icon, text, theme, enabled, false, action)
 }
 
 pub(super) fn sidebar_button_with_tooltip(
@@ -24,26 +24,19 @@ pub(super) fn sidebar_button_with_tooltip(
     text: Option<String>,
     theme: OxydeTheme,
     enabled: bool,
+    active: bool,
     action: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
 ) -> Stateful<Div> {
-    use crate::ui::elements::button::{button_style, ButtonVariant};
+    use crate::ui::elements::bar_button;
     use crate::ui::components::tooltip::NativeTooltipExt;
-    // Same footprint as the navbar buttons, so the toolbar keeps a margin around the hover.
-    button_style(div().id(id), theme, ButtonVariant::Ghost, enabled)
-        .size_6()
-        .flex_none()
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded_md()
+    // A full-height cell of the toolbar, as the navigation bar's buttons; the rail
+    // stretches it across its width.
+    bar_button::fill(bar_button::cell(id, crate::ui::style::TAB_BAR_HEIGHT), enabled, active, theme)
+        .text_color(bar_button::icon_color(enabled, active, theme))
         .fixed_tooltip(tooltip)
         .when(enabled, |d| d.on_mouse_down(MouseButton::Left, action))
         .when_some(icon, |d, path| {
-            d.child(svg().path(path).size_4().text_color(if enabled {
-                theme.text
-            } else {
-                theme.icon_disabled
-            }))
+            d.child(bar_button::icon(path, bar_button::icon_color(enabled, active, theme)))
         })
         .when_some(text, |d, text| d.child(text))
 }
@@ -60,10 +53,8 @@ pub(super) fn sidebar_toolbar(
         .flex_none()
         .flex()
         .items_center()
-        // In the rail, center the toggle on the same axis as the entries below.
-        .when(view.sidebar_collapsed, |d| d.justify_center())
-        .px_2()
-        .gap_1();
+        // In the rail, the toggle spans its width as the entries below.
+        .when(view.sidebar_collapsed, |d| d.justify_center());
     if !view.sidebar_collapsed {
         let h = handle.clone();
         toolbar = toolbar.child(sidebar_button(
@@ -126,5 +117,6 @@ pub(super) fn sidebar_toolbar(
         move |_, _, cx| {
             handle.update(cx, |this, cx| this.toggle_sidebar_panel(cx));
         },
-    ))
+    )
+    .when(view.sidebar_collapsed, |button| button.w_full()))
 }

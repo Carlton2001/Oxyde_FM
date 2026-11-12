@@ -38,7 +38,7 @@ pub fn stepper(
         .child(
             div()
                 .min_w(rems(3.25))
-                .h(rems(1.5))
+                .h(super::segmented::SEGMENT_HEIGHT)
                 .flex()
                 .items_center()
                 .justify_center()

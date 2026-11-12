@@ -3,10 +3,10 @@
 //! their chevron menus, fades and glide, the path being edited in their place, and
 //! the name filter where the quick search sits.
 use crate::ui::components::top_bar::{breadcrumb_fades, breadcrumb_glide};
+use crate::ui::elements::bar_button;
 use super::FileChooserWindow;
 use crate::ui::components::dropdown::{DropdownItem, GenericDropdown, IconName};
 use crate::ui::components::tooltip::{NativeTooltipExt, Tooltip};
-use crate::ui::elements::button::{button_style, ButtonVariant};
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::scale::logical;
 use crate::ui::theme::OxydeTheme;
@@ -305,8 +305,8 @@ impl FileChooserWindow {
         let i18n = cx.i18n();
         let (back_label, forward_label, up_label) = (i18n.text(Message::Back), i18n.text(Message::Forward), i18n.text(Message::Up));
         let history_button = |id: &'static str, icon: &'static str, enabled: bool| {
-            button_style(div().id(id).w_6().h_6().flex().items_center().justify_center().rounded_md(), theme, ButtonVariant::Ghost, enabled)
-                .child(svg().path(icon).text_color(if enabled { theme.text } else { theme.icon_disabled }).size_4())
+            bar_button::fill(bar_button::cell(id, crate::ui::style::NAV_BAR_HEIGHT), enabled, false, theme)
+                .child(bar_button::icon(icon, bar_button::icon_color(enabled, false, theme)))
         };
         div()
             .h(crate::ui::style::NAV_BAR_HEIGHT)
@@ -316,17 +316,15 @@ impl FileChooserWindow {
             .w_full()
             .flex()
             .items_center()
-            .pl(rems(0.5))
-            .pr(rems(0.25))
-            .when(editing.is_some(), |bar| bar.pr(rems(0.5)))
+            // The filter's cell closes the bar at its right edge.
             .bg(theme.surface)
             .border_b(rems(0.0625))
             .border_color(theme.border)
             .child(
                 div()
+                    .h_full()
                     .flex()
                     .items_center()
-                    .gap_1()
                     .child(history_button("file-chooser-back", "icons/arrow-left.svg", can_go_back)
                         .when(can_go_back, |button| button
                             .fixed_tooltip(Tooltip::with_shortcut(back_label, Some("Alt+←".into())))
@@ -337,17 +335,16 @@ impl FileChooserWindow {
                             .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.go_forward(cx))))),
             )
             .child(
-                div().flex().items_center().gap_1().ml_1().flex_shrink_0()
+                div().h_full().flex().items_center().flex_shrink_0()
                     .when(parent, |actions| actions.child(
-                        div().id("file-chooser-up").min_w(rems(1.5)).h_6().px(rems(0.125)).flex().items_center().justify_center().rounded_md()
+                        bar_button::fill(bar_button::cell("file-chooser-up", crate::ui::style::NAV_BAR_HEIGHT), true, false, theme)
                             .fixed_tooltip(Tooltip::with_shortcut(up_label, Some("Alt+↑".into())))
-                            .hover(move |style| style.bg(theme.control_hover))
                             .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.go_up(cx)))
-                            .child(svg().path("icons/arrow-up.svg").size_4().text_color(theme.text)),
+                            .child(bar_button::icon("icons/arrow-up.svg", theme.text)),
                     )),
             )
             // The only separator divides the actions from the crumbs.
-            .child(div().w(rems(0.0625)).h(rems(1.0)).mx_3().flex_shrink_0().bg(theme.border))
+            .child(div().w(rems(0.0625)).h(rems(1.0)).mx_2().flex_shrink_0().bg(theme.border))
             .child(
                 div()
                     .flex()

@@ -85,10 +85,11 @@ impl FileChooserWindow {
         let (from, revision) = (self.filter.slide.from, self.filter.slide.revision);
         div()
             .id("file-chooser-filter-control")
+            .h_full()
             .flex()
             .flex_none()
             .items_center()
-            .child(div().flex_none().w(rems(0.0625)).h(rems(1.0)).mr(rems(0.25)).bg(theme.border))
+            .child(div().flex_none().w(rems(0.0625)).h(rems(1.0)).mr(rems(0.5)).bg(theme.border))
             .when_some(self.filter.input.clone(), |bar, input| {
                 let field = div()
                     .flex_none()
@@ -108,18 +109,13 @@ impl FileChooserWindow {
                 ))
             })
             .child(
-                div()
-                    .id("file-chooser-filter")
-                    .size(rems(1.5))
-                    .flex_none()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded_sm()
-                    .hover(move |style| style.bg(theme.control_hover))
+                crate::ui::elements::bar_button::fill(
+                    crate::ui::elements::bar_button::cell("file-chooser-filter", crate::ui::style::NAV_BAR_HEIGHT),
+                    true, false, theme,
+                )
                     // The field's placeholder names the action; a tooltip has no trailing ellipsis.
                     .fixed_tooltip(Tooltip::with_shortcut(cx.i18n().text(Message::NameFilterPlaceholder).trim_end_matches(['…', '.']).to_string(), Some("Ctrl+F".into())))
-                    .child(svg().path("icons/search.svg").size(rems(1.0)).text_color(theme.text))
+                    .child(crate::ui::elements::bar_button::icon("icons/search.svg", theme.text))
                     .on_hover(cx.listener(|this, hovered: &bool, window, cx| {
                         if !*hovered {
                             this.filter.slide.hover_suppressed = false;

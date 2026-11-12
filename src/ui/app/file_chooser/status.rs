@@ -26,7 +26,7 @@ impl FileChooserWindow {
     }
 
     fn view_mode_switch(&self, theme: OxydeTheme, cx: &mut Context<Self>) -> impl IntoElement {
-        let mut switch = crate::ui::elements::segmented::segmented("file-chooser-view-mode", None, theme).p(rems(0.0625));
+        let mut switch = crate::ui::elements::segmented::segmented("file-chooser-view-mode", None, theme);
         for (grid, name, icon, tooltip) in [
             (false, "file-chooser-view-details", "icons/list.svg", Message::ViewDetails),
             (true, "file-chooser-view-grid", "icons/layout-grid.svg", Message::ViewGrid),
@@ -34,8 +34,7 @@ impl FileChooserWindow {
             let selected = grid == self.options.grid;
             switch = switch.child(
                 crate::ui::elements::segmented::segment(name, selected, true, theme)
-                    .h(rems(1.25))
-                    .w(rems(1.5))
+                    .w(rems(1.75))
                     .px_0()
                     .fixed_tooltip(Tooltip::text(cx.i18n().text(tooltip)))
                     .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, _, cx| {

@@ -1,4 +1,4 @@
-use crate::ui::elements::button::{button_style, ButtonVariant};
+use crate::ui::elements::bar_button;
 use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::app::OxydeApp;
 use crate::ui::components::tooltip::Tooltip;
@@ -9,7 +9,7 @@ use gpui::prelude::*;
 use gpui::*;
 use oxyde_lib::models::FileEntry;
 
-pub(super) fn grouping_button(pane_id: &str, enabled: bool, handle: Entity<OxydeApp>, theme: OxydeTheme) -> impl IntoElement {
+fn grouping_button(pane_id: &str, enabled: bool, handle: Entity<OxydeApp>, theme: OxydeTheme) -> impl IntoElement {
     let pane_id = pane_id.to_string();
     let tooltip_handle = handle.clone();
     let tooltip_pane = pane_id.clone();
@@ -17,12 +17,9 @@ pub(super) fn grouping_button(pane_id: &str, enabled: bool, handle: Entity<Oxyde
     let reset_pane = pane_id.clone();
     let anchor_handle = handle.clone();
     let anchor_key = format!("grouping-{pane_id}");
-    button_style(
-        div().id(SharedString::from(format!("grouping-{pane_id}"))),
-        theme, ButtonVariant::Ghost, true,
-    )
-        .relative().h(rems(1.5)).px(rems(0.25)).gap(rems(0.125)).flex_none().flex().items_center().justify_center().rounded_md()
-        .bg(if enabled { theme.selected } else { theme.header })
+    let cell = bar_button::cell(SharedString::from(format!("grouping-{pane_id}")), crate::ui::style::STATUS_BAR_HEIGHT);
+    bar_button::fill(bar_button::labelled(cell, rems(0.125)), true, enabled, theme)
+        .relative()
         .fixed_tooltip(move |window, cx| {
             use crate::ui::date_groups::GroupMode;
             let mode = tooltip_handle.read(cx).state.find_pane(&tooltip_pane)
@@ -61,18 +58,13 @@ pub(super) fn grouping_button(pane_id: &str, enabled: bool, handle: Entity<Oxyde
                 view.context_anchor_points.insert(anchor_key.clone(), point(bounds.left(), bounds.top()));
             });
         }).absolute().left_0().top_0().size_full())
-        .child(svg().path("icons/layers.svg").size(rems(1.0)).text_color(if enabled { theme.accent } else { theme.text }))
+        .child(bar_button::icon("icons/layers.svg", bar_button::icon_color(true, enabled, theme)))
         .child(crate::ui::elements::button::menu_chevron(true, if enabled { theme.accent } else { theme.text_muted }))
 }
 
-pub(super) fn sizes_button(pane_id: &str, active: bool, handle: Entity<OxydeApp>, theme: OxydeTheme, cx: &mut Context<OxydeApp>) -> impl IntoElement {
+fn sizes_button(pane_id: &str, active: bool, handle: Entity<OxydeApp>, theme: OxydeTheme, cx: &mut Context<OxydeApp>) -> impl IntoElement {
     let pane_id = pane_id.to_string();
-    button_style(
-        div().id(SharedString::from(format!("sizes-{pane_id}"))),
-        theme, ButtonVariant::Ghost, true,
-    )
-        .size(rems(1.5)).flex_none().flex().items_center().justify_center().rounded_md()
-        .bg(if active { theme.selected } else { theme.header })
+    bar_button::fill(bar_button::cell(SharedString::from(format!("sizes-{pane_id}")), crate::ui::style::STATUS_BAR_HEIGHT), true, active, theme)
         .fixed_tooltip(Tooltip::with_shortcut(cx.i18n().text(Message::ToolSizes), Some("Alt+Shift+S".into())))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             cx.stop_propagation();
@@ -81,7 +73,7 @@ pub(super) fn sizes_button(pane_id: &str, active: bool, handle: Entity<OxydeApp>
                 view.calculate_sizes(cx);
             });
         })
-        .child(svg().path("icons/chart-bar.svg").size(rems(1.0)).text_color(if active { theme.accent } else { theme.text }))
+        .child(bar_button::icon("icons/chart-bar.svg", bar_button::icon_color(true, active, theme)))
 }
 
 /// Returns the display type label for a file entry.
@@ -189,8 +181,31 @@ pub(super) fn selection_checkbox(
         )
 }
 
+/// The buttons closing the status bar: the size bars and grouping toggles as
+/// full-height cells, then, past a separator, the switch between details and grid.
+pub(super) fn status_actions(
+    pane_id: &str,
+    sizes_active: bool,
+    grouped: bool,
+    active_mode: ViewMode,
+    handle: Entity<OxydeApp>,
+    theme: OxydeTheme,
+    cx: &mut Context<OxydeApp>,
+) -> impl IntoElement {
+    div()
+        .h_full()
+        .flex()
+        .flex_none()
+        .items_center()
+        .pr(rems(0.5))
+        .child(sizes_button(pane_id, sizes_active, handle.clone(), theme, cx))
+        .child(grouping_button(pane_id, grouped, handle.clone(), theme))
+        .child(div().flex_none().w(rems(0.0625)).h(rems(1.0)).mx_2().bg(theme.border))
+        .child(view_mode_switch(pane_id, active_mode, handle, theme, cx))
+}
+
 /// Details and grid as one segmented switch in the status bar.
-pub(super) fn view_mode_switch(
+fn view_mode_switch(
     pane_id: &str,
     active_mode: ViewMode,
     handle: Entity<OxydeApp>,
@@ -201,8 +216,7 @@ pub(super) fn view_mode_switch(
         SharedString::from(format!("view-mode-{pane_id}")),
         None,
         theme,
-    )
-    .p(rems(0.0625));
+    );
     for (mode, name, icon, tooltip) in [
         (ViewMode::Details, "details", "icons/list.svg", Message::ViewDetails),
         (ViewMode::Grid, "grid", "icons/layout-grid.svg", Message::ViewGrid),
@@ -217,8 +231,7 @@ pub(super) fn view_mode_switch(
                 true,
                 theme,
             )
-            .h(rems(1.25))
-            .w(rems(1.5))
+            .w(rems(1.75))
             .px_0()
             .fixed_tooltip(Tooltip::text(cx.i18n().text(tooltip)))
             .on_mouse_down(MouseButton::Left, move |_, _, cx| {

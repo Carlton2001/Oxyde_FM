@@ -4,7 +4,7 @@ use crate::ui::app::GroupSelection;
 use crate::ui::components::tooltip::NativeTooltipExt;
 use super::details_row::{render_details_row, DetailsRowParams};
 use super::headers::render_headers;
-use super::presentation::{grouping_button, sizes_button, view_mode_switch};
+use super::presentation::status_actions;
 use super::status_bar_height;
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, DragTarget, FileDragData, OxydeApp};
 use crate::ui::components::{with_grid_sort, pane_context_menu_items};
@@ -567,8 +567,8 @@ pub(super) fn render_details_file_list(
             .items_center()
             .gap_3()
             .px_3()
-            .pr(rems(0.5))
-            .py(rems(0.25))
+            // The action cells span the bar's height.
+            .pr_0()
             .bg(theme.header)
             .rounded_br(status_corner)
             .border_t(rems(0.0625))
@@ -592,11 +592,7 @@ pub(super) fn render_details_file_list(
                     )
             })
             .child(div().flex_1())
-            .child(sizes_button(&pane_id, active_tab.show_size_histogram, handle.clone(), theme, cx))
-            .child(div().flex_none().w(rems(0.0625)).h(rems(1.0)).bg(theme.border))
-            .child(grouping_button(&pane_id, active_tab.is_grouped(), handle.clone(), theme))
-            .child(div().flex_none().w(rems(0.0625)).h(rems(1.0)).bg(theme.border))
-            .child(view_mode_switch(&pane_id, ViewMode::Details, handle.clone(), theme, cx)),
+            .child(status_actions(&pane_id, active_tab.show_size_histogram, active_tab.is_grouped(), ViewMode::Details, handle.clone(), theme, cx)),
     );
 
     container.into_any_element()

@@ -8,6 +8,10 @@ use crate::ui::workspace::SidebarItem;
 use gpui::prelude::*;
 use gpui::*;
 
+/// Height of a rail entry: square cells that touch, as the bars' buttons, as wide
+/// as the rail.
+const RAIL_ROW: Rems = super::RAIL_WIDTH;
+
 pub(super) fn render_sidebar_rail(
     view: &OxydeApp,
     handle: Entity<OxydeApp>,
@@ -23,7 +27,7 @@ pub(super) fn render_sidebar_rail(
         .child(sidebar_toolbar(view, handle.clone(), false, cx));
     let h = handle.clone();
     let mut pinned = Some(
-        div().child(
+        div().w_full().child(
             sidebar_button(
                 "sidebar-pinned".into(),
                 cx.i18n().text(Message::SidebarQuickAccess),
@@ -39,6 +43,8 @@ pub(super) fn render_sidebar_rail(
                     })
                 },
             )
+            .w_full()
+            .h(RAIL_ROW)
             .relative()
             .child(
                 canvas(|bounds, _, _| bounds, {
@@ -66,10 +72,7 @@ pub(super) fn render_sidebar_rail(
         .overflow_y_scroll()
         .flex()
         .flex_col()
-        .items_center()
-        .pt(rems(0.375))
-        .pb_2()
-        .gap_2();
+        .pb_2();
     for item in &view.state.sidebar_items {
         if !super::sidebar_item_visible(
             item,
@@ -153,12 +156,9 @@ pub(super) fn render_sidebar_rail(
                 tooltip,
                 icon,
                 text,
-                crate::ui::theme::OxydeTheme {
-                    control_hover: if selected { theme.selection_hover } else { theme.control_hover },
-                    text: if selected { theme.accent } else { theme.text },
-                    ..theme
-                },
+                theme,
                 true,
+                selected,
                 move |_, _, cx| {
                     h.update(cx, |this, cx| {
                         this.context_menus.clear();
@@ -167,6 +167,8 @@ pub(super) fn render_sidebar_rail(
                     });
                 },
             )
+            .w_full()
+            .h(RAIL_ROW)
             .on_mouse_down(MouseButton::Middle, move |_, _, cx| {
                 cx.stop_propagation();
                 middle.update(cx, |this, cx| {
@@ -218,10 +220,6 @@ pub(super) fn render_sidebar_rail(
             })
             .when(is_drive && icon.is_none(), |d| {
                 d.font_weight(FontWeight::BOLD).text_size(rems(0.75))
-            })
-            .when(selected, |d| {
-                d.bg(theme.selected)
-                    .text_color(theme.accent)
             }),
         );
     }

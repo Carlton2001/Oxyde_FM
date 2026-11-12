@@ -17,6 +17,9 @@ use gpui::*;
 
 pub(crate) use pinned::render_pinned_menu;
 
+/// Width of the collapsed sidebar, the rail: its entries are square cells.
+pub(crate) const RAIL_WIDTH: Rems = rems(2.25);
+
 const SIDEBAR_ROW_H: Rems = rems(1.75);
 fn sidebar_row_h() -> f32 { rem_pixels(SIDEBAR_ROW_H).as_f32() }
 

@@ -361,6 +361,7 @@ impl OxydeApp {
         let hover_pane = pane_id.clone();
         div()
             .id(SharedString::from(format!("quick-search-control-{id}")))
+            .h_full()
             .flex()
             .flex_none()
             .items_center()
@@ -369,7 +370,7 @@ impl OxydeApp {
                     .flex_none()
                     .w(rems(0.0625))
                     .h(rems(1.0))
-                    .mr(rems(0.25))
+                    .mr(rems(0.5))
                     .bg(theme.border),
             )
             .when_some(tab.search_input.clone(), |bar, input| {
@@ -388,25 +389,15 @@ impl OxydeApp {
                 ))
             })
             .child(
-                div()
-                    .id(SharedString::from(format!("quick-search-{id}")))
-                    .size(rems(1.5))
-                    .flex_none()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded_sm()
-                    .hover(move |style| style.bg(theme.control_hover))
+                crate::ui::elements::bar_button::fill(
+                    crate::ui::elements::bar_button::cell(SharedString::from(format!("quick-search-{id}")), crate::ui::style::NAV_BAR_HEIGHT),
+                    true, false, theme,
+                )
                     .fixed_tooltip(crate::ui::components::tooltip::Tooltip::with_shortcut(
                         format!("{} — {}", cx.i18n().text(Message::QuickSearch), cx.i18n().text(Message::QuickSearchCurrentFolder)),
                         Some("Ctrl+F".into()),
                     ))
-                    .child(
-                        svg()
-                            .path("icons/search.svg")
-                            .size(rems(1.0))
-                            .text_color(theme.text),
-                    )
+                    .child(crate::ui::elements::bar_button::icon("icons/search.svg", theme.text))
                     .on_hover(move |hovered, window, cx| {
                         hover_handle.update(cx, |this, cx| {
                             let Some(tab) = this.state.find_tab_mut(&hover_id) else {

@@ -1,8 +1,8 @@
-use crate::ui::elements::button::{button_style, ButtonVariant};
 pub(crate) mod breadcrumb_fades;
 pub(crate) mod breadcrumb_glide;
 mod breadcrumb_menu;
 use crate::ui::components::tooltip::NativeTooltipExt;
+use crate::ui::elements::bar_button;
 use crate::ui::scale::{logical};
 use crate::ui::app::{FileDragData, OxydeApp};
 use crate::ui::components::dropdown::IconName;
@@ -149,6 +149,7 @@ pub fn render_top_bar(
     let redo_tooltip = history_state.redo.map(|operation| {
         super::history_actions::operation_label(_cx.i18n(), Message::RedoOperation, operation)
     });
+    let shows_quick_search = !is_network_neighborhood && !current_path.starts_with("::{");
     // Shared constants for consistent look
     let icon_active = theme.text;
     let icon_disabled = theme.icon_disabled;
@@ -165,28 +166,20 @@ pub fn render_top_bar(
         .w_full()
         .flex()
         .items_center()
-        .pl(rems(0.5))
-        .pr(rems(0.25))
-        .when(view.breadcrumb_editing && view.breadcrumb_pane_id.as_deref() == Some(pane_id.as_str()), |bar| bar.pr(rems(0.5)))
+        // The quick search's cell closes the bar at its right edge.
+        .when(!shows_quick_search, |bar| bar
+            .pr(rems(0.25))
+            .when(view.breadcrumb_editing && view.breadcrumb_pane_id.as_deref() == Some(pane_id.as_str()), |bar| bar.pr(rems(0.5))))
         .bg(theme.surface)
         .border_b(rems(0.0625))
         .border_color(theme.border)
         .child(
             div()
+                .h_full()
                 .flex()
                 .items_center()
-                .gap_1()
                 .child({
-                    let mut btn = div()
-                        .id("back-btn")
-                        .w_6()
-                        .h_6()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .rounded_md();
-
-                    btn = button_style(btn, theme, ButtonVariant::Ghost, can_go_back);
+                    let mut btn = bar_button::fill(bar_button::cell("back-btn", crate::ui::style::NAV_BAR_HEIGHT), can_go_back, false, theme);
 
                     if can_go_back {
                         let p_id = pane_id.clone();
@@ -198,24 +191,10 @@ pub fn render_top_bar(
                             });
                     }
 
-                    btn.child(
-                        svg()
-                            .path("icons/arrow-left.svg")
-                            .text_color(if can_go_back { icon_active } else { icon_disabled })
-                            .size_4()
-                    )
+                    btn.child(bar_button::icon("icons/arrow-left.svg", bar_button::icon_color(can_go_back, false, theme)))
                 })
                 .child({
-                    let mut btn = div()
-                        .id("forward-btn")
-                        .w_6()
-                        .h_6()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .rounded_md();
-
-                    btn = button_style(btn, theme, ButtonVariant::Ghost, can_go_forward);
+                    let mut btn = bar_button::fill(bar_button::cell("forward-btn", crate::ui::style::NAV_BAR_HEIGHT), can_go_forward, false, theme);
 
                     if can_go_forward {
                         let p_id = pane_id.clone();
@@ -227,16 +206,11 @@ pub fn render_top_bar(
                             });
                     }
 
-                    btn.child(
-                        svg()
-                            .path("icons/arrow-right.svg")
-                            .text_color(if can_go_forward { icon_active } else { icon_disabled })
-                            .size_4()
-                    )
+                    btn.child(bar_button::icon("icons/arrow-right.svg", bar_button::icon_color(can_go_forward, false, theme)))
                 })
         )
         .child({
-            let mut actions = div().flex().items_center().gap_1().ml_1().flex_shrink_0();
+            let mut actions = div().h_full().flex().items_center().flex_shrink_0();
             let permanent_delete = view.shift_delete || view.pane_delete_is_permanent(&pane_id);
             let mut has_previous = false;
             for (visible, id, icon, label, tip, action) in [
@@ -262,7 +236,7 @@ pub fn render_top_bar(
                     && (action != 1 || can_undo)
                     && (!matches!(action, 1 | 2) || !view.history_operation_in_progress)
                     && (!(7..=10).contains(&action) || (!view.trash_busy && (action < 9 || !active_tab.files.is_empty())));
-                let mut button = div().id(id).min_w(rems(1.5)).h_6().px(rems(0.125)).flex().items_center().justify_center().rounded_md()
+                let mut button = bar_button::cell(id, crate::ui::style::NAV_BAR_HEIGHT)
                     .when(show_tooltips && (action == 1 || action == 2), |d| d.fixed_tooltip(Tooltip::with_meta(_cx.i18n().text(label), tip.clone())))
                     .when(show_tooltips && action == 6, |d| d.fixed_tooltip(Tooltip::for_delete(handle.clone(), pane_id.clone())))
                     .when(show_tooltips && !matches!(action, 1 | 2 | 6 | 9 | 10), |d| d.fixed_tooltip(Tooltip::with_shortcut(_cx.i18n().text(label),
@@ -271,7 +245,7 @@ pub fn render_top_bar(
                     let h = handle.clone();
                     let p = pane_id.clone();
                     let parent = parent_path.clone();
-                    button = button.hover(move |s| s.bg(hover_bg))
+                    button = bar_button::fill(button, true, false, theme)
                         .on_mouse_down(MouseButton::Left, move |event, _, cx| {
                             h.update(cx, |this, cx| {
                                 this.shift_delete = event.modifiers.shift;
@@ -301,8 +275,8 @@ pub fn render_top_bar(
                 }
                 let labelled = matches!(action, 9 | 10);
                 has_previous = true;
-                actions = actions.child(button.child(svg().path(icon).size_4().text_color(color))
-                    .when(labelled, |button| button.px(rems(0.375)).gap(rems(0.375)).text_size(rems(0.8125)).text_color(color)
+                actions = actions.child(button.child(bar_button::icon(icon, color))
+                    .when(labelled, |button| bar_button::labelled(button, rems(0.375)).text_size(rems(0.8125)).text_color(color)
                         .child(_cx.i18n().text(label))));
             }
             actions
@@ -310,7 +284,7 @@ pub fn render_top_bar(
         // The Recycle Bin shows its actions instead of a breadcrumb.
         .when(!is_trash_path, |bar| bar
         // The only separator divides the actions from the breadcrumb.
-        .child(div().w(rems(0.0625)).h(rems(1.0)).mx_3().flex_shrink_0().bg(theme.border))
+        .child(div().w(rems(0.0625)).h(rems(1.0)).mx_2().flex_shrink_0().bg(theme.border))
         .child(
             div()
                 .flex()
@@ -789,7 +763,7 @@ pub fn render_top_bar(
                 )
         ))
         .when(is_trash_path, |bar| bar.child(div().flex_1().min_w_0()))
-        .when(!is_network_neighborhood && !current_path.starts_with("::{"), |bar| {
+        .when(shows_quick_search, |bar| {
             bar.child(view.render_quick_search_control(&pane_id, _cx))
         })
 }

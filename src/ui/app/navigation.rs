@@ -101,7 +101,8 @@ impl OxydeApp {
 
     pub(crate) fn sidebar_display_width(&self) -> f32 {
         if self.sidebar_collapsed {
-            logical(48.0)
+            // The rail is as wide as its square cells.
+            crate::ui::scale::rem_pixels(crate::ui::components::sidebar::RAIL_WIDTH).as_f32()
         } else {
             logical(self.sidebar_width)
         }

@@ -34,13 +34,16 @@ Checkboxes use `elements::checkbox::checkbox`: 1 rem square, 1/16 rem outline, 1
 
 Theme palettes pass through `theme/legibility.rs`: pane borders, menu outlines, secondary button fills, ghost and row hovers are pulled toward the text until they reach a minimum contrast against their surfaces (1.18, 1.3, 1.2, 1.15). Add a palette by its original colors; do not hand-tune these tokens per theme, raise the floor instead.
 
-Single choices with few, short options (archive format and protection, view mode) use `elements::segmented`: one frame, shared with the − value + stepper, filled with the text color at 5% and outlined at 16% so it contrasts on every theme; the chosen option sits on `selected` in accent text. The outline turns into the accent focus ring only when the group was reached by the keyboard, never after a click. Longer lists stay in menus.
+Single choices with few, short options (archive format and protection, view mode, tabs of a secondary window) use `elements::segmented`: one frame, shared with the − value + stepper, 2.25 rem high as the bars and fields, of which 0.125 rem above and below is an outer margin keeping it off its parent (options 1.625 rem, inside a 0.125 rem padding), square as the bars' buttons (`SQUARE` in `segmented.rs` rounds the frame and its options), filled with the text color at 5% and outlined at 16% so it contrasts on every theme; the chosen option sits on `selected` in accent text. The outline turns into the accent focus ring only when the group was reached by the keyboard, never after a click. Longer lists stay in menus.
+
+Buttons of the bars framing a pane (navigation bar, quick search, status bar, Viewer bar, sidebar toolbar and rail) use `elements::bar_button`, as the title bar's actions: full-height cells as wide as the bar is high, 1 rem icons, the bar's edge holding the last cell, so the whole cell is the click target. Their fill spans the cell, square: `control_hover` under the pointer, `selected` with an accent icon for an active toggle. `SQUARE_FILL` in `bar_button.rs` switches the fill to a `rounded_md` shape inset 0.25 rem in the cell, as Adwaita's window buttons draw a disc in a full-height zone, with the same click target. Groups are divided by a 1 rem separator spaced 0.5 rem from their cells. A single choice in a bar (the status bar's details and grid) stays `elements::segmented`, which says only one option holds. The rail, 2.25 rem wide as every bar is high, stacks square cells.
 
 Toggles use `elements::toggle::toggle`, including in trash settings: slightly tinted neutral track and thin outline when off, with a stronger knob; accent track and `text_on_accent` knob when on. Keep the knob's movement as an extra state cue.
 
 | Need | Reference |
 | --- | --- |
 | Button | `elements/button/style.rs`: `button_style`, `ButtonVariant` |
+| Bar button (navigation, status, Viewer) | `elements/bar_button.rs`: `cell`, `labelled`, `fill`, `icon` |
 | Single choice among a few options | `elements/segmented.rs`: `segmented`, `segment` |
 | Form or modal | `components/modal.rs`: `Modal`, `form_row`, `action_button` |
 | Operation failure notice | `app/dialog_windows/fixed/notice.rs`: heading, cause panel, kept locations, hint, optional Retry |

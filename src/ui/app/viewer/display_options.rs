@@ -79,7 +79,7 @@ impl Viewer {
 
     pub(super) fn render_display_options(&self, cx: &mut Context<Self>) -> Div {
         let markdown = self.file.as_ref().is_some_and(|file| is_markdown(&file.path));
-        div().flex().flex_none().items_center().gap_1()
+        div().h_full().flex().flex_none().items_center()
             .when(self.native_media, |bar| {
                 bar.child(bar_button(
                     "viewer-autoplay",

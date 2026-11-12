@@ -90,7 +90,8 @@ impl RenderOnce for TabBar {
             div()
             .id(SharedString::from(format!("new-tab-btn-{:?}", self.id)))
             .flex_none()
-            .w(rems(2.0))
+            // Square, as the bar is high.
+            .w(crate::ui::style::TAB_BAR_HEIGHT)
             .h_full()
             .flex()
             .items_center()

@@ -45,24 +45,14 @@ pub(super) fn bar_button(
     active: bool,
     cx: &App,
 ) -> Stateful<Div> {
+    use crate::ui::elements::bar_button;
     let theme = *cx.theme();
-    div()
-        .id(id)
-        .flex_none()
-        .min_w(rems(1.5))
-        .h_6()
-        .px(rems(0.125))
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded_md()
+    bar_button::fill(bar_button::cell(id, crate::ui::style::NAV_BAR_HEIGHT), true, active, theme)
         .text_color(theme.text)
-        .when(active, |button| button.bg(theme.control_hover))
-        .hover(move |style| style.bg(theme.control_hover))
         .fixed_tooltip(Tooltip::text(tooltip))
-        .child(svg().path(icon).size_4().text_color(theme.text))
+        .child(bar_button::icon(icon, bar_button::icon_color(true, active, theme)))
         .when_some(label, |button, label| {
-            button.px(rems(0.375)).gap(rems(0.375)).text_size(rems(0.8125)).child(label)
+            bar_button::labelled(button, rems(0.375)).text_size(rems(0.8125)).child(label)
         })
 }
 
@@ -252,12 +242,11 @@ impl Viewer {
             .flex()
             .items_center()
             .pl(rems(0.5))
-            .pr(rems(0.5))
-            .gap_1()
             .bg(theme.surface)
             .border_b(rems(0.0625))
             .border_color(theme.border)
-            .child(self.render_file_title(title, cx))
+            // The buttons' cells close the bar at its right edge.
+            .child(self.render_file_title(title, cx).mr(rems(0.5)))
             .child(self.render_display_options(cx))
             // A folder or archive overview has nothing to gain from its own window.
             .when(!self.detached && !matches!(self.content, super::content::Content::Tree(_)), |bar| {

@@ -6,5 +6,6 @@ pub(crate) mod motion;
 pub(crate) mod resize_highlight;
 pub mod stepper;
 pub(crate) mod segmented;
+pub(crate) mod bar_button;
 pub(crate) mod rounded_fill;
 pub(crate) mod color_picker;
