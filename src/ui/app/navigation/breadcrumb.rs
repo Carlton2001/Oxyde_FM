@@ -111,6 +111,9 @@ impl OxydeApp {
                     if !valid {
                         this.breadcrumb_shake_id = this.breadcrumb_shake_id.wrapping_add(1);
                         this.breadcrumb_invalid = true;
+                        if let Some(input) = this.editing_view.clone() {
+                            input.update(cx, |input, cx| input.mark_invalid(cx));
+                        }
                     } else {
                         this.breadcrumb_pane_id = None;
                         this.breadcrumb_editing = false;

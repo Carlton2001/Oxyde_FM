@@ -222,13 +222,11 @@ impl Render for FilesWindow {
                     .border_color(theme.border)
                     .child(
                         crate::ui::components::input::field_frame(&self.input, window, cx)
-                            .child(
-                                svg()
-                                    .path("icons/search.svg")
-                                    .size(rems(1.0))
-                                    .ml(rems(0.625))
-                                    .text_color(theme.text),
-                            )
+                            .child(crate::ui::components::input::field_icon(
+                                "icons/search.svg",
+                                crate::ui::components::input::FieldEdge::Leading,
+                                &theme,
+                            ))
                             .child(div().flex_1().min_w_0().h_full().child(self.input.clone())),
                     ),
             )

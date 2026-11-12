@@ -124,14 +124,11 @@ impl Render for DuplicateWindow {
                                 .child(
                                     crate::ui::components::input::field_frame(&self.filter, window, cx)
                                         .flex_1()
-                                        .pl(rems(0.75))
-                                        .child(
-                                            svg()
-                                                .path("icons/search.svg")
-                                                .size(rems(0.875))
-                                                .flex_none()
-                                                .text_color(theme.text),
-                                        )
+                                        .child(crate::ui::components::input::field_icon(
+                                            "icons/search.svg",
+                                            crate::ui::components::input::FieldEdge::Leading,
+                                            &theme,
+                                        ))
                                         .child(
                                             div()
                                                 .flex_1()

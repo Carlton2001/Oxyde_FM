@@ -200,7 +200,7 @@ pub(super) fn status_actions(
         .pr(rems(0.5))
         .child(sizes_button(pane_id, sizes_active, handle.clone(), theme, cx))
         .child(grouping_button(pane_id, grouped, handle.clone(), theme))
-        .child(div().flex_none().w(rems(0.0625)).h(rems(1.0)).mx_2().bg(theme.border))
+        .child(crate::ui::elements::separator::vertical(theme.border))
         .child(view_mode_switch(pane_id, active_mode, handle, theme, cx))
 }
 

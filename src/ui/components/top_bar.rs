@@ -271,7 +271,7 @@ pub fn render_top_bar(
                 let color = if !enabled { icon_disabled } else if matches!(action, 7 | 10) || (action == 6 && permanent_delete) { theme.error } else { icon_active };
                 // Whole-bin actions carry their label and sit after a separator.
                 if action == 9 && has_previous {
-                    actions = actions.child(div().w(rems(0.0625)).h(rems(1.0)).mx_2().flex_shrink_0().bg(theme.border));
+                    actions = actions.child(crate::ui::elements::separator::vertical(theme.border));
                 }
                 let labelled = matches!(action, 9 | 10);
                 has_previous = true;
@@ -284,7 +284,7 @@ pub fn render_top_bar(
         // The Recycle Bin shows its actions instead of a breadcrumb.
         .when(!is_trash_path, |bar| bar
         // The only separator divides the actions from the breadcrumb.
-        .child(div().w(rems(0.0625)).h(rems(1.0)).mx_2().flex_shrink_0().bg(theme.border))
+        .child(crate::ui::elements::separator::vertical(theme.border))
         .child(
             div()
                 .flex()
@@ -294,22 +294,14 @@ pub fn render_top_bar(
                 .overflow_hidden()
                 .when(view.breadcrumb_editing && view.editing_view.is_some() && view.breadcrumb_pane_id.as_deref() == Some(pane_id.as_str()), |bar| {
                     if let Some(input) = view.editing_view.clone() {
-                        let field = div()
-                            .flex_1()
-                            .min_w_0()
-                            .h_full()
-                            .when(view.breadcrumb_invalid, |field| {
-                                field.border(rems(0.0625)).border_color(theme.error).rounded_sm()
-                            })
-                            .child(input.clone());
+                        // The input draws its own frame, red while the path is refused.
                         let field_shell = div()
                             .flex_1()
                             .min_w_0()
-                            .h(px(crate::ui::style::row_height()))
-                            .when(view.breadcrumb_invalid, |shell| shell.px(rems(0.5)))
+                            .h(crate::ui::components::input::BAR_FIELD_HEIGHT)
                             .flex()
                             .items_center()
-                            .child(field);
+                            .child(input.clone());
                         if view.breadcrumb_invalid {
                             let animation_id = SharedString::from(format!("breadcrumb-shake-{}", view.breadcrumb_shake_id));
                             bar.child(field_shell.with_animation(

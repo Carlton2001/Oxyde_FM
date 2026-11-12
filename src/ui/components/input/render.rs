@@ -8,6 +8,9 @@ impl Render for TextInput {
         if !is_focused || self.completions.is_empty() {
             self.completion_anchor = None;
         }
+        let clear = self.options.clearable && !self.content.is_empty();
+        let trailing_button = clear || self.path_submit;
+        let invalid = self.invalid_text.as_deref() == Some(self.content.as_str());
 
         div()
             .relative()
@@ -39,11 +42,9 @@ impl Render for TextInput {
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_move(cx.listener(Self::on_mouse_move))
-            .map(|input| field::input_surface(input, self.options.appearance, is_focused, &theme))
-            .when(self.options.clearable && !self.content.is_empty(), |s| {
-                s.pr(rems(0.125))
-            })
-            .when(self.path_submit, |s| s.pr(rems(0.0625)))
+            .map(|input| field::input_surface(input, self.options.appearance, is_focused, invalid, &theme))
+            // A trailing button cell replaces the right text margin and meets the frame edge.
+            .when(trailing_button, |input| input.pr_0())
             .w_full()
             .when(is_focused && !self.completions.is_empty(), |input| {
                 if crate::ui::components::popup::supported(window, cx) {
@@ -67,20 +68,27 @@ impl Render for TextInput {
                     .items_center()
                     .child(TextInputElement { input: cx.entity() }),
             )
+            .when(clear, |input| {
+                let h_clear = cx.entity().clone();
+                input.child(
+                    field::field_button("input-clear", FieldEdge::Trailing, false, &theme)
+                        .cursor(CursorStyle::Arrow)
+                        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                            cx.stop_propagation();
+                            h_clear.update(cx, |this, cx| {
+                                this.content.clear();
+                                this.selected_range = 0..0;
+                                (this.on_change)("", window, cx);
+                                cx.notify();
+                            });
+                        })
+                        .child(field::field_button_icon("icons/x.svg", false, &theme)),
+                )
+            })
             .when(self.path_submit, |input| {
                 input.child(
-                    div()
-                        .id("path-submit")
-                        .size_6()
-                        .ml_2()
-                        .flex_none()
-                        .flex()
-                        .occlude()
+                    field::field_button("path-submit", FieldEdge::Trailing, false, &theme)
                         .cursor(CursorStyle::Arrow)
-                        .items_center()
-                        .justify_center()
-                        .rounded_sm()
-                        .hover(|style| style.bg(theme.control_hover))
                         .on_mouse_down(
                             MouseButton::Left,
                             cx.listener(|this, _, window, cx| {
@@ -88,42 +96,8 @@ impl Render for TextInput {
                                 (this.on_enter)(window, cx);
                             }),
                         )
-                        .child(
-                            svg()
-                                .path("icons/arrow-right.svg")
-                                .size_4()
-                                .text_color(theme.text),
-                        ),
+                        .child(field::field_button_icon("icons/arrow-right.svg", false, &theme)),
                 )
             })
-            .when(
-                self.options.clearable && !self.content.is_empty(),
-                |s: Div| {
-                    let h_clear = cx.entity().clone();
-                    s.child(
-                        div().flex().items_center().child(
-                            div()
-                                .p_1()
-                                .rounded_md()
-                                .cursor(CursorStyle::Arrow)
-                                .hover(|s| s.bg(theme.control_hover))
-                                .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                                    h_clear.update(cx, |this, cx| {
-                                        this.content.clear();
-                                        this.selected_range = 0..0;
-                                        (this.on_change)("", window, cx);
-                                        cx.notify();
-                                    });
-                                })
-                                .child(
-                                    svg()
-                                        .path("icons/x.svg")
-                                        .size_3()
-                                        .text_color(theme.text),
-                                ),
-                        ),
-                    )
-                },
-            )
     }
 }

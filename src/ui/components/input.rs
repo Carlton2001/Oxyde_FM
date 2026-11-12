@@ -2,7 +2,10 @@ mod completion_menu;
 mod field;
 mod options;
 mod render;
-pub(crate) use field::{control_frame, field_frame, password_field, read_only_field};
+pub(crate) use field::{
+    BAR_FIELD_HEIGHT, FIELD_PADDING, FIELD_RADIUS, FieldEdge, control_frame, field_button, field_button_icon, field_option,
+    field_frame, field_icon, password_field, read_only_field,
+};
 pub(crate) use options::{InputAppearance, TextInputOptions};
 use crate::ui::scale::rem_pixels;
 use crate::ui::theme::ThemeContext;
@@ -55,6 +58,8 @@ pub struct TextInput {
     password: bool,
     path_submit: bool,
     path_visibility: (bool, bool),
+    /// Text refused by the owner (an unknown path); the frame shows the error until it changes.
+    invalid_text: Option<String>,
     completions: Vec<String>,
     completion_index: usize,
     completion_chosen: bool,
@@ -168,6 +173,12 @@ impl TextInput {
         &self.content
     }
 
+    /// Marks the current text as refused: the frame takes the error color until it is edited.
+    pub fn mark_invalid(&mut self, cx: &mut Context<Self>) {
+        self.invalid_text = Some(self.content.clone());
+        cx.notify();
+    }
+
     pub fn set_content(&mut self, content: String, cx: &mut Context<Self>) {
         self.content = content;
         self.selected_range = self.content.len()..self.content.len();
@@ -253,6 +264,7 @@ impl TextInput {
             completion_pointer: Default::default(),
             path_submit: false,
             path_visibility: (false, false),
+            invalid_text: None,
             password: false,
             focus_handle,
             content: initial_text,

@@ -366,19 +366,15 @@ impl OxydeApp {
             .flex_none()
             .items_center()
             .child(
-                div()
-                    .flex_none()
-                    .w(rems(0.0625))
-                    .h(rems(1.0))
-                    .mr(rems(0.5))
-                    .bg(theme.border),
+                crate::ui::elements::separator::vertical(theme.border),
             )
             .when_some(tab.search_input.clone(), |bar, input| {
                 let field = div()
                     .flex_none()
                     .overflow_hidden()
-                    .h(rems(1.5))
-                    .child(div().w(rems(10.0)).h_full().pl(rems(0.25)).child(input));
+                    .h(crate::ui::components::input::BAR_FIELD_HEIGHT)
+                    // The one borderless field: the surface alone sets it off in the bar.
+                    .child(div().w(rems(10.0)).h_full().rounded(crate::ui::components::input::FIELD_RADIUS).bg(theme.surface).child(input));
                 bar.child(field.with_animation(
                     SharedString::from(format!("search-slide-{id}-{slide_revision}")),
                     Animation::new(std::time::Duration::from_millis(250)),
@@ -659,7 +655,7 @@ impl OxydeApp {
                     });
                 },
                 TextInputOptions {
-                    appearance: InputAppearance::Bare,
+                    appearance: InputAppearance::Embedded,
                     ..Default::default()
                 },
                 window,

@@ -4,6 +4,7 @@ use super::AdvancedSearchWindow;
 use crate::ui::{
     components::{
         dropdown::DropdownItem,
+        input::{self, FieldEdge},
         modal::responsive_form_row,
     },
     i18n::{I18nContext, Message},
@@ -44,7 +45,7 @@ impl AdvancedSearchWindow {
             d.inputs[index].update(cx, |input, cx| {
                 input.set_placeholder(cx.i18n().text(placeholder), cx)
             });
-            let mut field = crate::ui::components::input::field_frame(&d.inputs[index], window, cx);
+            let mut field = input::field_frame(&d.inputs[index], window, cx);
             if index != 1 {
                 field = field.child(self.advanced_toggle(
                     if index == 0 { 0 } else { 1 },
@@ -54,13 +55,7 @@ impl AdvancedSearchWindow {
                     cx,
                 ));
             } else {
-                field = field.child(
-                    svg()
-                        .path("icons/folder.svg")
-                        .size(rems(1.0))
-                        .ml(rems(0.625))
-                        .text_color(theme.text),
-                );
+                field = field.child(input::field_icon("icons/folder.svg", FieldEdge::Leading, &theme));
             }
             let regex_enabled = match index {
                 0 => d.flags[0],
@@ -177,7 +172,7 @@ impl AdvancedSearchWindow {
                 if index != start && !compact {
                     fields = fields.child("—");
                 }
-                let mut field = crate::ui::components::input::field_frame(&d.inputs[index], window, cx)
+                let mut field = input::field_frame(&d.inputs[index], window, cx)
                     .flex_1()
                     .when(compact, |field| field.flex_none().w_full())
                     .min_w_0()
@@ -191,24 +186,14 @@ impl AdvancedSearchWindow {
                 if start == 5 {
                     let h = handle.clone();
                     field = field.child(
-                        div()
-                            .id(SharedString::from(format!("advanced-calendar-{index}")))
-                            .size(rems(1.5))
-                            .flex()
-                            .items_center()
-                            .justify_center()
+                        input::field_button(
+                            SharedString::from(format!("advanced-calendar-{index}")),
+                            FieldEdge::Trailing,
+                            false,
+                            &theme,
+                        )
                             .track_focus(&d.controls[if index == 5 { 9 } else { 10 }])
-                            .flex_none()
-                            .rounded_sm()
-                            .border(rems(0.0625))
-                            .border_color(transparent_black())
-                            .focus(move |style| style.border_color(theme.accent).bg(theme.control_hover))
-                            .child(
-                                svg()
-                                    .path("icons/calendar-days.svg")
-                                    .size(rems(1.0))
-                                    .text_color(theme.text),
-                            )
+                            .child(input::field_button_icon("icons/calendar-days.svg", false, &theme))
                             .on_click(move |_, window, cx| {
                                 h.update(cx, |this, cx| {
                                     if let Some(d) = &mut this.advanced_search {
@@ -275,29 +260,14 @@ impl AdvancedSearchWindow {
         let theme = *cx.theme();
         let checked = self.advanced_search.as_ref().unwrap().flags[index];
         if regex {
-            return div()
-                .id(SharedString::from(format!("advanced-flag-{index}")))
+            return input::field_option(
+                SharedString::from(format!("advanced-flag-{index}")),
+                FieldEdge::Leading,
+                checked,
+                &theme,
+            )
                 .track_focus(&self.advanced_search.as_ref().unwrap().controls[index])
-                .flex_none()
-                .w(rems(2.375))
-                .h_full()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(if checked { theme.accent } else { theme.header })
-                .border_r(rems(0.0625))
-                .border_color(theme.border)
-                .focus(move |style| style.border_color(theme.accent))
-                .child(
-                    svg()
-                        .path("icons/regex.svg")
-                        .size(rems(0.875))
-                        .text_color(if checked {
-                            theme.text_on_accent
-                        } else {
-                            theme.text
-                        }),
-                )
+                .child(input::field_button_icon("icons/regex.svg", checked, &theme))
                 .native_tooltip(crate::ui::components::tooltip::Tooltip::text(
                     cx.i18n().text(message),
                 ))

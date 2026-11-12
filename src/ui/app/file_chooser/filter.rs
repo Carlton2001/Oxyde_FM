@@ -50,7 +50,7 @@ impl FileChooserWindow {
                 });
             },
             |_, _, _, _, _| {},
-            TextInputOptions { appearance: InputAppearance::Bare, ..Default::default() },
+            TextInputOptions { appearance: InputAppearance::Embedded, ..Default::default() },
             window,
         ));
         let focus = input.read(cx).focus_handle.clone();
@@ -89,16 +89,17 @@ impl FileChooserWindow {
             .flex()
             .flex_none()
             .items_center()
-            .child(div().flex_none().w(rems(0.0625)).h(rems(1.0)).mr(rems(0.5)).bg(theme.border))
+            .child(crate::ui::elements::separator::vertical(theme.border))
             .when_some(self.filter.input.clone(), |bar, input| {
                 let field = div()
                     .flex_none()
                     .overflow_hidden()
-                    .h(rems(1.5))
+                    .h(crate::ui::components::input::BAR_FIELD_HEIGHT)
                     // Its arrows move the list's selection, so Enter chooses what they reach.
                     .on_action(cx.listener(|this, _: &CompletionUp, _, cx| this.move_selection("up", false, cx)))
                     .on_action(cx.listener(|this, _: &CompletionDown, _, cx| this.move_selection("down", false, cx)))
-                    .child(div().w(rems(10.0)).h_full().pl(rems(0.25)).child(input));
+                    // The one borderless field: the surface alone sets it off in the bar.
+                    .child(div().w(rems(10.0)).h_full().rounded(crate::ui::components::input::FIELD_RADIUS).bg(theme.surface).child(input));
                 bar.child(field.with_animation(
                     SharedString::from(format!("file-chooser-filter-slide-{revision}")),
                     Animation::new(std::time::Duration::from_millis(250)),

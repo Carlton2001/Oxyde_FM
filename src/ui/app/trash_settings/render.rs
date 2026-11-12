@@ -350,7 +350,7 @@ fn render_body(
                                 div()
                                     .w(rems(5.5))
                                     .h_full()
-                                    .px(rems(0.625))
+                                    .px(crate::ui::components::input::FIELD_PADDING)
                                     .when(!disabled && !config.nuke_on_delete, |d| {
                                         d.child(dialog.input.clone())
                                     })

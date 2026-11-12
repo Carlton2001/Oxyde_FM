@@ -139,22 +139,16 @@ impl FileChooserWindow {
             .into_any_element()
     }
 
-    fn render_edit_field(&self, input: Entity<crate::ui::components::input::TextInput>, theme: OxydeTheme) -> AnyElement {
+    fn render_edit_field(&self, input: Entity<crate::ui::components::input::TextInput>) -> AnyElement {
         let invalid = self.location.invalid;
-        let field = div()
-            .flex_1()
-            .min_w_0()
-            .h_full()
-            .when(invalid, |field| field.border(rems(0.0625)).border_color(theme.error).rounded_sm())
-            .child(input);
+        // The input draws its own frame, red while the path is refused.
         let shell = div()
             .flex_1()
             .min_w_0()
-            .h(px(crate::ui::style::row_height()))
-            .when(invalid, |shell| shell.px(rems(0.5)))
+            .h(crate::ui::components::input::BAR_FIELD_HEIGHT)
             .flex()
             .items_center()
-            .child(field);
+            .child(input);
         if !invalid {
             return shell.into_any_element();
         }
@@ -345,7 +339,7 @@ impl FileChooserWindow {
                     )),
             )
             // The only separator divides the actions from the crumbs.
-            .child(div().w(rems(0.0625)).h(rems(1.0)).mx_2().flex_shrink_0().bg(theme.border))
+            .child(crate::ui::elements::separator::vertical(theme.border))
             .child(
                 div()
                     .flex()
@@ -354,7 +348,7 @@ impl FileChooserWindow {
                     .min_w_0()
                     .overflow_hidden()
                     .map(|bar| match editing {
-                        Some(input) => bar.child(self.render_edit_field(input, theme)),
+                        Some(input) => bar.child(self.render_edit_field(input)),
                         None => bar.child(self.render_crumbs(theme, cx).flex().items_center().flex_1().min_w_0().h_full()),
                     }),
             )

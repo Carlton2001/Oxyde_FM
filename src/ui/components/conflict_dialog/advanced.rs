@@ -94,19 +94,14 @@ pub(super) fn render_advanced_body(
         });
         tabs = tabs.child(div().flex_1()).child(
             crate::ui::components::input::field_frame(&input, window, cx)
-                .relative()
                 .w(rems(15.0))
                 .flex_none()
-                .child(div().flex_1().min_w_0().h_full().pr(rems(1.5)).child(input))
-                .child(
-                    div().absolute().right(rems(0.75)).top(rems(0.625)).child(
-                        svg()
-                            .path("icons/search.svg")
-                            .size(rems(0.875))
-                            .flex_none()
-                            .text_color(t.text),
-                    ),
-                ),
+                .child(crate::ui::components::input::field_icon(
+                    "icons/search.svg",
+                    crate::ui::components::input::FieldEdge::Leading,
+                    &t,
+                ))
+                .child(div().flex_1().min_w_0().h_full().child(input)),
         );
     }
     let mut list = div()

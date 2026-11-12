@@ -127,6 +127,9 @@ impl FileChooserWindow {
                     _ => {
                         this.location.shake = this.location.shake.wrapping_add(1);
                         this.location.invalid = true;
+                        if let Some(input) = this.location.input.clone() {
+                            input.update(cx, |input, cx| input.mark_invalid(cx));
+                        }
                     }
                 }
                 cx.notify();

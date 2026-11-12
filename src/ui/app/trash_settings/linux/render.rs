@@ -195,7 +195,7 @@ fn number_row(
                     div()
                         .w(rems(4.5))
                         .h_full()
-                        .px(rems(0.625))
+                        .px(crate::ui::components::input::FIELD_PADDING)
                         .when(enabled, |field| field.child(input.clone()))
                         .when(!enabled, |field| field.flex().items_center().child(value.to_string())),
                 ),
