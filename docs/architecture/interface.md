@@ -9,6 +9,7 @@ Business state and actions belong to `src/ui/app/`. Components receive data and 
 - Express dimensions in `rems()`, initial reference 16 logical pixels. Use `ui::scale::rem_pixels` for a `Pixels` API, `logical` for older values at scale 16. These conversions stay on the UI thread.
 - Coordinates from GPUI are already in pixels: do not convert twice. Content zoom does not resize the native window.
 - The default weight is Regular (400), from `ui/style.rs`. Separately rendered roots apply it too. Another weight must be an intentional variation. On Linux, GPUI ignores the variable font's weight axis, so Inter Medium, SemiBold and Bold are embedded as static fonts (`assets_linux/fonts`, `ui/assets.rs`).
+- Figures are proportional by default, as in names, paths and prose. Tabular figures (`TabularFigures::tabular_figures`, `ui/style.rs`) go only on numbers that line up in a column or change in place: metadata columns and their measurement, status bars, count badges, progress, clocks, zoom, steppers. Inter's tabular 1 has a foot, which reads as a monospaced 1 inside a word.
 
 ## Shell shortcuts
 

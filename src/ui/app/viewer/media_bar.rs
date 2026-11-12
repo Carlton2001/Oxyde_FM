@@ -2,6 +2,7 @@
 //! duration. Seeking follows the pointer while the left button is held.
 use super::{render::icon_button, Viewer};
 use crate::ui::{i18n::Message, theme::ThemeContext};
+use crate::ui::style::TabularFigures;
 use gpui::{prelude::*, *};
 
 pub(super) fn clock(milliseconds: u64) -> String {
@@ -108,9 +109,9 @@ impl Viewer {
                 )
                 .on_click(cx.listener(|this, _, _, cx| this.toggle_media(cx))),
             )
-            .child(div().flex_none().child(clock(position)))
+            .child(div().flex_none().tabular_figures().child(clock(position)))
             .child(track)
-            .child(div().flex_none().child(if duration > 0 { clock(duration) } else { "--:--".into() }))
+            .child(div().flex_none().tabular_figures().child(if duration > 0 { clock(duration) } else { "--:--".into() }))
     }
 }
 

@@ -7,6 +7,7 @@ use crate::ui::app::OxydeApp;
 use crate::ui::format::format_number;
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::{OxydeTheme, ThemeContext};
+use crate::ui::style::TabularFigures;
 use gpui::prelude::*;
 use gpui::*;
 use oxyde_lib::systems::file_ops::{FileOpType, FileOperation, OpStatus};
@@ -164,6 +165,7 @@ pub(super) fn render_operation_card(
                     div()
                         .text_size(rems(0.75))
                         .text_color(theme.text_muted)
+                        .tabular_figures()
                         .child(items),
                 ),
         )

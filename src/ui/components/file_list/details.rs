@@ -17,6 +17,7 @@ use crate::ui::scale::{logical, rem_pixels};
 use crate::ui::style::DetailsColumnWidths;
 use crate::ui::theme::OxydeTheme;
 use crate::ui::workspace::{PaneState, TabLoadStatus, ViewMode};
+use crate::ui::style::TabularFigures;
 use gpui::prelude::*;
 use gpui::*;
 use oxyde_lib::models::FileEntry;
@@ -576,6 +577,7 @@ pub(super) fn render_details_file_list(
             .text_size(rems(0.75))
             .text_color(theme.text)
             .font_weight(FontWeight::MEDIUM)
+            .tabular_figures()
             .child(folders_label)
             .child(files_label)
             .when_some(selection_summary, |bar, summary| {

@@ -1,5 +1,6 @@
 use super::Viewer;
 use crate::ui::theme::ThemeContext;
+use crate::ui::style::TabularFigures;
 use gpui::{prelude::*, *};
 use std::sync::Arc;
 
@@ -176,7 +177,7 @@ impl Viewer {
                 surface.child(div().absolute().bottom(rems(if reserve { 3.0 } else { 1.0 })).left_0().right_0().flex().justify_center()
                     .child(div().px(rems(0.625)).py(rems(0.25)).rounded_md().bg(theme.surface)
                         .border(rems(0.0625)).border_color(theme.border).text_color(theme.text)
-                        .text_size(rems(0.8125)).child(format!("{percent}%"))))
+                        .text_size(rems(0.8125)).tabular_figures().child(format!("{percent}%"))))
             })
             .into_any_element()
     }

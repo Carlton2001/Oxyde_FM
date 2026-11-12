@@ -2,6 +2,7 @@ use super::{graph, status_color};
 use crate::ui::format::{format_number, format_size};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::ThemeContext;
+use crate::ui::style::TabularFigures;
 use gpui::prelude::*;
 use gpui::*;
 use oxyde_lib::systems::file_ops::{FileOperation, OpStatus};
@@ -81,6 +82,7 @@ pub(super) fn render(operation: &FileOperation, cx: &App) -> Div {
         .flex()
         .flex_col()
         .gap(rems(0.625))
+        .tabular_figures()
         .child(
             div()
                 .flex()

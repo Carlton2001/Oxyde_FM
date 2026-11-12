@@ -9,6 +9,7 @@ use crate::ui::{
     i18n::{FluentArgs, I18nContext, Message},
     theme::ThemeContext,
 };
+use crate::ui::style::TabularFigures;
 use gpui::{prelude::*, *};
 use std::{cell::Cell, rc::Rc};
 
@@ -97,6 +98,7 @@ fn summary_element(summary: &Summary, cx: &App) -> Div {
         .border_color(theme.border)
         .text_size(rems(0.75))
         .text_color(theme.text_muted)
+        .tabular_figures()
         .children(summary.lines.iter().cloned().map(item))
         .when_some(summary.password.clone(), |element, text| {
             element.child(
@@ -150,6 +152,7 @@ fn column(text: String, min_width: Rems, right: bool, cx: &App) -> Div {
         .when(right, |cell| cell.text_right())
         .text_size(rems(0.75))
         .text_color(cx.theme().text_muted)
+        .tabular_figures()
         .child(text)
 }
 

@@ -15,6 +15,7 @@ use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::scale::logical;
 use crate::ui::theme::{OxydeTheme, ThemeContext};
 use crate::ui::workspace::{TabLoadStatus, ViewMode};
+use crate::ui::style::TabularFigures;
 use gpui::prelude::*;
 use gpui::*;
 use oxyde_lib::models::FileEntry;
@@ -486,6 +487,7 @@ pub(super) fn render_grid_file_list(
                 .text_size(rems(0.75))
                 .text_color(theme.text)
                 .font_weight(FontWeight::MEDIUM)
+                .tabular_figures()
                 .child(
                     cx.i18n()
                         .text_with_args(Message::StatusFolders, &folder_args),

@@ -2,6 +2,7 @@ use crate::ui::scale::{logical, rem_pixels};
 use crate::ui::app::OxydeApp;
 use crate::ui::i18n::{I18n, I18nContext, Message};
 use crate::ui::components::scrollbar::{render_scrollbar_with_pointer, ScrollbarAxis};
+use crate::ui::style::TabularFigures;
 use gpui::prelude::*;
 use gpui::*;
 use std::rc::Rc;
@@ -274,7 +275,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                 let line = text_system.shape_line(
                     badge.clone().into(), rem_pixels(rems(0.6875)),
                     &[TextRun {
-                        len: badge.len(), font: font.clone(), color: theme.text_muted,
+                        len: badge.len(), font: Font { features: crate::ui::style::TNUM.clone(), ..font.clone() }, color: theme.text_muted,
                         background_color: None, underline: None, strikethrough: None,
                     }], None,
                 );
@@ -613,6 +614,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                 .text_color(theme.text_muted)
                                                 .text_size(rems(0.6875))
                                                 .text_center()
+                                                .tabular_figures()
                                                 .child(badge))
                                         })
                                         .when_some(shortcut, |row, shortcut| row.child(

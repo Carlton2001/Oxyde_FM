@@ -8,7 +8,6 @@ impl Render for OxydeApp {
         let zoom_handle = cx.entity();
         let theme = *cx.theme();
         use crate::ui::components::sidebar::render_sidebar;
-        use crate::ui::style::TNUM;
         use crate::ui::elements::resize_highlight::resize_highlight;
 
         let handle = self.handle.clone().expect("handle set");
@@ -143,8 +142,6 @@ impl Render for OxydeApp {
                 }
             }
         });
-
-        root.text_style().font_features = Some(TNUM.clone());
 
         root = root
             .on_drag_move::<ExternalPaths>({

@@ -7,6 +7,7 @@ use crate::ui::components::tooltip::{NativeTooltipExt, Tooltip};
 use crate::ui::format::{format_number, format_size};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::OxydeTheme;
+use crate::ui::style::TabularFigures;
 use gpui::prelude::*;
 use gpui::*;
 
@@ -102,6 +103,7 @@ impl FileChooserWindow {
             .text_size(rems(0.75))
             .text_color(theme.text)
             .font_weight(FontWeight::MEDIUM)
+            .tabular_figures()
             .child(folders_label)
             .child(files_label)
             .when_some(selection_summary, |bar, summary| {

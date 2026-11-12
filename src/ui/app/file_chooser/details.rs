@@ -15,6 +15,7 @@ use crate::ui::scale::{logical, rem_pixels};
 use crate::ui::style::DetailsColumnWidths;
 use crate::ui::theme::{OxydeTheme, ThemeContext};
 use crate::ui::workspace::{SortColumn, SortDirection};
+use crate::ui::style::TabularFigures;
 use gpui::prelude::*;
 use gpui::*;
 
@@ -40,17 +41,17 @@ impl FileChooserWindow {
         if self.measured == Some(key) { return; }
         // Every format has the same number of tabular digits. One sample suffices.
         let date_sample = crate::ui::format::format_date(1_760_000_000_000, date_format);
-        let measure = |text: &str, bold: bool| measurements::column_text_width(window, cx, text, bold);
+        let measure = |text: &str, bold: bool, tabular: bool| measurements::column_text_width(window, cx, text, bold, tabular);
         let (types, sizes) = &*self.column_values;
-        let type_width = types.iter().map(|label| measure(&measurements::type_column_text(label, i18n), false)).fold(0.0_f32, f32::max);
-        let size_width = sizes.iter().map(|&(size, directory, calculated)| measure(&measurements::size_column_text(size, directory, calculated, i18n), false)).fold(0.0_f32, f32::max);
+        let type_width = types.iter().map(|label| measure(&measurements::type_column_text(label, i18n), false, false)).fold(0.0_f32, f32::max);
+        let size_width = sizes.iter().map(|&(size, directory, calculated)| measure(&measurements::size_column_text(size, directory, calculated, i18n), false, true)).fold(0.0_f32, f32::max);
         // The chooser filters no column: no header reserves a filter mark.
         self.column_widths = ColumnWidths {
-            file_type: crate::ui::style::metadata_column_width(type_width, measure(i18n.text(Message::ColumnType).as_ref(), true), false),
-            size: crate::ui::style::metadata_column_width(size_width, measure(i18n.text(Message::ColumnSize).as_ref(), true), false),
-            date: crate::ui::style::metadata_column_width(measure(&date_sample, false), measure(i18n.text(Message::ColumnModified).as_ref(), true), false),
+            file_type: crate::ui::style::metadata_column_width(type_width, measure(i18n.text(Message::ColumnType).as_ref(), true, false), false),
+            size: crate::ui::style::metadata_column_width(size_width, measure(i18n.text(Message::ColumnSize).as_ref(), true, false), false),
+            date: crate::ui::style::metadata_column_width(measure(&date_sample, false, true), measure(i18n.text(Message::ColumnModified).as_ref(), true, false), false),
             // Fixed width: four tabular digits, the most the column ever shows.
-            permissions: crate::ui::style::metadata_column_width(measure("0000", false), measure(i18n.text(Message::ColumnPermissions).as_ref(), true), false),
+            permissions: crate::ui::style::metadata_column_width(measure("0000", false, true), measure(i18n.text(Message::ColumnPermissions).as_ref(), true, false), false),
         };
         self.measured = Some(key);
     }
@@ -179,11 +180,11 @@ impl FileChooserWindow {
             )
             .child(div().w(px(widths.file_type)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.75))
                 .child(file_type))
-            .child(div().w(px(widths.size)).flex_none().px(rems(0.5)).text_align(TextAlign::Right).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.75))
+            .child(div().w(px(widths.size)).flex_none().px(rems(0.5)).text_align(TextAlign::Right).text_color(theme.text_muted).truncate().text_size(rems(0.75)).tabular_figures().when(is_dimmed, |d| d.opacity(0.75))
                 .child(div().child(size)))
-            .when(widths.permissions > 0.0, |row| row.child(div().w(px(widths.permissions)).flex_none().px(rems(0.5)).text_right().text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.75))
+            .when(widths.permissions > 0.0, |row| row.child(div().w(px(widths.permissions)).flex_none().px(rems(0.5)).text_right().text_color(theme.text_muted).truncate().text_size(rems(0.75)).tabular_figures().when(is_dimmed, |d| d.opacity(0.75))
                 .children(file.mode.map(crate::ui::format::permissions::octal))))
-            .child(div().w(px(widths.date)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).when(is_dimmed, |d| d.opacity(0.75))
+            .child(div().w(px(widths.date)).flex_none().px(rems(0.5)).text_color(theme.text_muted).truncate().text_size(rems(0.75)).tabular_figures().when(is_dimmed, |d| d.opacity(0.75))
                 .child(date))
             .into_any_element()
     }

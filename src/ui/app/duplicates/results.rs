@@ -1,6 +1,7 @@
 use super::{presentation::Row, DuplicateWindow};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::OxydeTheme;
+use crate::ui::style::TabularFigures;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
 
@@ -30,14 +31,14 @@ impl DuplicateWindow {
                 "total",
                 crate::ui::format::format_number(progress.total as u64, cx.i18n().language()),
             );
-            results = results.child(cx.i18n().text_with_args(
+            results = results.child(div().tabular_figures().child(cx.i18n().text_with_args(
                 if progress.stage == "Scanning" {
                     Message::DuplicateScanning
                 } else {
                     Message::DuplicateHashing
                 },
                 &a,
-            ));
+            )));
         }
         if let Some(error) = &self.error {
             let mut a = FluentArgs::new();
@@ -196,6 +197,7 @@ impl DuplicateWindow {
                     .text_color(theme.text_on_accent)
                     .text_size(rems(0.75))
                     .font_weight(FontWeight::MEDIUM)
+                    .tabular_figures()
                     .child(crate::ui::format::format_number(
                         group.files.len() as u64,
                         cx.i18n().language(),
@@ -219,6 +221,7 @@ impl DuplicateWindow {
                     .border_color(theme.border)
                     .bg(theme.active_background)
                     .text_size(rems(0.75))
+                    .tabular_figures()
                     .child(size),
             );
         // Every row keeps the uniform 4rem slot; the card fills its lower part so an

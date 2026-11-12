@@ -4,7 +4,6 @@ use super::{DriveTooltip, DuplicateResultTooltip, Tooltip};
 use crate::ui::format::{format_date, format_size};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::scale::rem_pixels;
-use crate::ui::style::TNUM;
 use crate::ui::theme::OxydeTheme;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
@@ -260,7 +259,7 @@ impl Render for Tooltip {
             // within [14rem, 30rem]; a line wider than that wraps, never truncates.
             let shape = |text: &SharedString, size: Rems, weight: FontWeight| {
                 let mut font = window.text_style().font();
-                font.family = "Inter".into(); font.weight = weight; font.features = TNUM.clone();
+                font.family = "Inter".into(); font.weight = weight;
                 window.text_system().shape_line(text.clone(), rem_pixels(size), &[TextRun {
                     len: text.len(), font, color: theme.text, background_color: None, underline: None, strikethrough: None,
                 }], None)
@@ -294,7 +293,7 @@ impl Render for Tooltip {
             let mut font = window.text_style().font();
             font.family = "Inter".into();
             font.weight = FontWeight::MEDIUM;
-            font.features = TNUM.clone();
+           
             let line = window.text_system().shape_line(self.title.clone(), rem_pixels(rems(0.75)), &[TextRun {
                 len: self.title.len(), font, color: theme.text, background_color: None,
                 underline: None, strikethrough: None,
@@ -305,7 +304,7 @@ impl Render for Tooltip {
         } else if let Some((label, shortcut)) = &self.secondary_action {
             let shape = |text: &SharedString, size: Rems, weight: FontWeight| {
                 let mut font = window.text_style().font();
-                font.family = "Inter".into(); font.weight = weight; font.features = TNUM.clone();
+                font.family = "Inter".into(); font.weight = weight;
                 window.text_system().shape_line(text.clone(), rem_pixels(size), &[TextRun {
                     len: text.len(), font, color: theme.text, background_color: None, underline: None, strikethrough: None,
                 }], None).width
@@ -320,7 +319,7 @@ impl Render for Tooltip {
             // Standalone tooltips must not inherit a host row's line height.
             let shape = |text: SharedString, font_size: Rems, weight: FontWeight| {
                 let mut font = window.text_style().font();
-                font.family = "Inter".into(); font.weight = weight; font.features = TNUM.clone();
+                font.family = "Inter".into(); font.weight = weight;
                 window.text_system().shape_line(text.clone(), rem_pixels(font_size), &[TextRun {
                     len: text.len(), font, color: theme.text, background_color: None, underline: None, strikethrough: None,
                 }], None)
@@ -340,7 +339,7 @@ impl Render for Tooltip {
             vec![self.title.clone()]
         };
 
-        let mut box_div = div()
+        let box_div = div()
             .max_w(tooltip_width)
             .when(self.file_info.is_some() || self.wrap_title || self.meta.is_some() || self.secondary_action.is_some(), |tooltip| tooltip.w(tooltip_width))
             .border(rems(0.0625))
@@ -414,8 +413,6 @@ impl Render for Tooltip {
                     .text_size(rems(0.6875)).text_color(theme.accent)
                     .children(notice_lines.into_iter().map(|line| div().whitespace_nowrap().child(line))))
             });
-
-        box_div.text_style().font_features = Some(TNUM.clone());
 
         if self.native_presentation {
             if let Some(preview) = self.preview_view.clone() {

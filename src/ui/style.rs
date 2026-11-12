@@ -7,6 +7,17 @@ lazy_static! {
     pub static ref TNUM: FontFeatures = FontFeatures(Arc::new(vec![("tnum".to_string(), 1)]));
 }
 
+/// Tabular figures, for numbers that line up in a column or change in place:
+/// metadata columns, counters, progress, clocks. Names and prose keep Inter's
+/// proportional figures, whose 1 has no foot.
+pub trait TabularFigures: Styled + Sized {
+    fn tabular_figures(self) -> Self {
+        self.font_features(TNUM.clone())
+    }
+}
+
+impl<E: Styled> TabularFigures for E {}
+
 pub const DEFAULT_FONT_WEIGHT: FontWeight = FontWeight::NORMAL;
 
 /// GPUI's shadow presets use pixels; retain their colors and proportions while

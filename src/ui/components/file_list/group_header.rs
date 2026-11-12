@@ -4,6 +4,7 @@ use crate::ui::date_groups::GroupKey;
 use crate::ui::format::format_number;
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::OxydeTheme;
+use crate::ui::style::TabularFigures;
 use gpui::{prelude::*, *};
 
 pub(super) fn render(
@@ -81,6 +82,7 @@ pub(super) fn render(
                 .px(rems(0.375))
                 .text_size(rems(0.75))
                 .text_color(theme.text_muted)
+                .tabular_figures()
                 .child(cx.i18n().text_with_args(Message::DateGroupCount, &args)),
         )
         .into_any_element()

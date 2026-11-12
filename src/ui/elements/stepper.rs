@@ -1,4 +1,5 @@
 use crate::ui::theme::OxydeTheme;
+use crate::ui::style::TabularFigures;
 use gpui::prelude::*;
 use gpui::*;
 use std::rc::Rc;
@@ -43,7 +44,7 @@ pub fn stepper(
                 .items_center()
                 .justify_center()
                 .text_color(theme.accent)
-                .font_features(crate::ui::style::TNUM.clone())
+                .tabular_figures()
                 .child(value),
         )
         .child(button(true, can_increase))
