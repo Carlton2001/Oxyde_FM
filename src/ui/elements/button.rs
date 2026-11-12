@@ -1,6 +1,4 @@
 mod style;
-mod toolbar;
-pub(crate) use toolbar::toolbar_button_with_tooltip;
 pub use style::{button_style, ButtonVariant};
 
 /// Corner of text action buttons, matching the fields they sit beside.

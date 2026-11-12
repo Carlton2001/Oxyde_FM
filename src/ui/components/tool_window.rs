@@ -198,8 +198,27 @@ fn header_frame(
                     })
                     .child(title)),
         )
-        .when_some(actions, |header, actions| header.child(actions))
+        // Buttons touch each other, then leave the main title bar's space before the window controls.
+        .when_some(actions, |header, actions| header.child(actions).child(div().w(rems(0.5)).h_full().flex_none()))
         .child(window_controls(Side::Right, window.is_maximized(), allow_resize, corners.top_right, cx, on_close)))
+}
+
+/// A button of a secondary window's title bar, drawn as those of the main title
+/// bar: a full-height square cell with a square hover fill.
+pub(crate) fn title_button(
+    id: impl Into<ElementId>,
+    icon: &'static str,
+    tooltip: SharedString,
+    enabled: bool,
+    cx: &App,
+    action: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
+) -> Stateful<Div> {
+    use crate::ui::elements::bar_button;
+    let theme = *cx.theme();
+    bar_button::fill(bar_button::cell(id, super::title_bar::TITLEBAR_H), enabled, false, theme)
+        .fixed_tooltip(crate::ui::components::tooltip::Tooltip::text(tooltip))
+        .when(enabled, |button| button.on_mouse_down(MouseButton::Left, action))
+        .child(bar_button::icon(icon, bar_button::icon_color(enabled, false, theme)))
 }
 
 /// Shared secondary-window footer, matching the recycle-bin properties modal.

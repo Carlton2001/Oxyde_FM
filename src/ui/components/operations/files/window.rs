@@ -169,9 +169,7 @@ impl Render for FilesWindow {
             scroll.base_handle.set_offset(point(offset.x, px(0.0)));
             cx.notify();
         });
-        let header_actions = div().flex().flex_none().mr(rems(0.375)).child(
-            super::super::title_actions::scroll_top(can_top, cx, top_action),
-        );
+        let header_actions = super::super::title_actions::scroll_top(can_top, cx, top_action);
         let root = div()
             .size_full()
             .flex()

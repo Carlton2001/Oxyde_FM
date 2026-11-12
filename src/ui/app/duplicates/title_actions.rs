@@ -1,8 +1,6 @@
 use super::DuplicateWindow;
-use crate::ui::components::tooltip::Tooltip;
-use crate::ui::elements::button::toolbar_button_with_tooltip;
+use crate::ui::components::tool_window::title_button;
 use crate::ui::i18n::{I18nContext, Message};
-use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
 
@@ -12,26 +10,23 @@ impl DuplicateWindow {
         let top = cx.entity();
         let can_collapse = self.result_rows.has_expanded;
         div()
+            .h_full()
             .flex()
             .flex_none()
-            .items_center()
-            .gap(rems(0.25))
-            .mr(rems(0.375))
-            .child(toolbar_button_with_tooltip(
-                "duplicates-collapse-all".into(),
-                Tooltip::text(cx.i18n().text(if can_collapse {
-                    Message::SidebarCollapseAll
-                } else {
-                    Message::ExpandAll
-                })),
-                Some(if can_collapse {
+            .child(title_button(
+                "duplicates-collapse-all",
+                if can_collapse {
                     "icons/chevrons-up.svg"
                 } else {
                     "icons/chevrons-down.svg"
+                },
+                cx.i18n().text(if can_collapse {
+                    Message::SidebarCollapseAll
+                } else {
+                    Message::ExpandAll
                 }),
-                None,
-                *cx.theme(),
                 !self.filtered.is_empty(),
+                cx,
                 move |_, _, cx| {
                     collapse.update(cx, |this, cx| {
                         if can_collapse {
@@ -44,13 +39,12 @@ impl DuplicateWindow {
                     });
                 },
             ))
-            .child(toolbar_button_with_tooltip(
-                "duplicates-top".into(),
-                Tooltip::text(cx.i18n().text(Message::SidebarScrollTop)),
-                Some("icons/arrow-up-to-line.svg"),
-                None,
-                *cx.theme(),
+            .child(title_button(
+                "duplicates-top",
+                "icons/arrow-up-to-line.svg",
+                cx.i18n().text(Message::SidebarScrollTop),
                 crate::ui::components::scrollbar::scrolled_from_top(&self.results_scroll),
+                cx,
                 move |_, _, cx| {
                     top.update(cx, |this, cx| {
                         let offset = this.results_scroll.offset();

@@ -1,8 +1,6 @@
 use crate::ui::app::OxydeApp;
-use crate::ui::components::tooltip::Tooltip;
-use crate::ui::elements::button::toolbar_button_with_tooltip;
+use crate::ui::components::tool_window::title_button;
 use crate::ui::i18n::{I18nContext, Message};
-use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
 
@@ -11,13 +9,12 @@ pub(super) fn scroll_top(
     cx: &App,
     action: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
 ) -> Stateful<Div> {
-    toolbar_button_with_tooltip(
-        "operations-top".into(),
-        Tooltip::text(cx.i18n().text(Message::SidebarScrollTop)),
-        Some("icons/arrow-up-to-line.svg"),
-        None,
-        *cx.theme(),
+    title_button(
+        "operations-top",
+        "icons/arrow-up-to-line.svg",
+        cx.i18n().text(Message::SidebarScrollTop),
         enabled,
+        cx,
         action,
     )
 }
@@ -28,18 +25,15 @@ pub(super) fn panel(app: Entity<OxydeApp>, cx: &App) -> Div {
     let can_top = crate::ui::components::scrollbar::scrolled_from_top(&owner.operations_panel_scroll);
     let collapse = app.clone();
     div()
+        .h_full()
         .flex()
         .flex_none()
-        .items_center()
-        .gap(rems(0.25))
-        .mr(rems(0.375))
-        .child(toolbar_button_with_tooltip(
-            "operations-collapse-all".into(),
-            Tooltip::text(cx.i18n().text(Message::SidebarCollapseAll)),
-            Some("icons/chevrons-up.svg"),
-            None,
-            *cx.theme(),
+        .child(title_button(
+            "operations-collapse-all",
+            "icons/chevrons-up.svg",
+            cx.i18n().text(Message::SidebarCollapseAll),
             can_collapse,
+            cx,
             move |_, _, cx| {
                 collapse.update(cx, |app, cx| {
                     app.expanded_operations.clear();

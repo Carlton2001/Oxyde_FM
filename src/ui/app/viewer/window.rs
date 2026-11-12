@@ -150,7 +150,7 @@ impl Render for ViewerWindow {
             .unwrap_or_else(|| cx.i18n().text(Message::ViewerTitle));
         window.set_window_title(title.as_ref());
         // The title bar carries the display options; no action bar remains.
-        let options = self.viewer.update(cx, |viewer, cx| viewer.render_display_options(cx).mr(rems(0.5)));
+        let options = self.viewer.update(cx, |viewer, cx| viewer.render_display_options(cx));
         let root = div()
             .size_full()
             .flex()

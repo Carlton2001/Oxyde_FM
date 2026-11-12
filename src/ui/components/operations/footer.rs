@@ -46,20 +46,14 @@ pub fn render_operations_footer(
         .flex()
         .items_center()
         .justify_center()
-        .gap(rems(0.375))
-        .px(rems(0.5))
-        .rounded_sm()
-        .text_color(theme.text_muted)
         .occlude()
         .native_tooltip(Tooltip::text(tooltip))
-        .when(!enabled, |button| button.opacity(0.4))
-        .when(enabled, |button| {
-            button.hover(|style| style.bg(theme.control_hover).text_color(theme.text))
-        })
+        // Square fill and disabled icon color, as the other title bar buttons.
+        .when(enabled, |button| button.hover(|style| style.bg(theme.control_hover)))
         .child({
             let icon = div().size_4().rounded_full().child(svg()
                 .path("icons/download.svg")
-                .text_color(if active > 0 { theme.accent } else { theme.text })
+                .text_color(if !enabled { theme.icon_disabled } else if active > 0 { theme.accent } else { theme.text })
                 .size_4());
             let halo = move |breath: f32| vec![BoxShadow {
                 inset: false,
