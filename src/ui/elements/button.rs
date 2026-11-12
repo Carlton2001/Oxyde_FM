@@ -3,6 +3,9 @@ mod toolbar;
 pub(crate) use toolbar::toolbar_button_with_tooltip;
 pub use style::{button_style, ButtonVariant};
 
+/// Corner of text action buttons, matching the fields they sit beside.
+pub(crate) const ACTION_BUTTON_RADIUS: gpui::Rems = gpui::rems(0.25);
+
 /// Mini chevron signalant qu’un bouton icône ouvre un menu, orienté vers son ouverture.
 pub(crate) fn menu_chevron(up: bool, color: gpui::Hsla) -> gpui::Svg {
     use gpui::{rems, svg, Styled};
@@ -66,7 +69,7 @@ impl RenderOnce for Button {
             .px_3()
             .py_1()
             .h(rems(1.5))
-            .rounded_md()
+            .rounded(ACTION_BUTTON_RADIUS)
             .border(rems(0.0625))
             .border_color(theme.border)
             .when_some(self.on_click, |container, on_click| {

@@ -20,7 +20,7 @@ impl ThemeWindow {
         let handle = cx.entity().downgrade();
         button_style(div().id(id), *cx.theme(), variant, enabled)
             .flex_none().whitespace_nowrap().flex().items_center().justify_center()
-            .px(rems(0.75)).py(rems(0.375)).text_size(rems(0.8125)).rounded(rems(0.375))
+            .px(rems(0.75)).py(rems(0.375)).text_size(rems(0.8125)).rounded(crate::ui::elements::button::ACTION_BUTTON_RADIUS)
             .child(cx.i18n().text(message))
             .when(enabled, |button| button.tab_index(0).on_click(move |_, window, cx| {
                 let _ = handle.update(cx, |this, cx| action(this, window, cx));

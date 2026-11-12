@@ -120,7 +120,6 @@ pub(crate) fn render_remote_login_dialog(
         .action(
             button_style(action_button("remote-cancel"), theme, ButtonVariant::Secondary, true)
                 .track_focus(&login.controls[CANCEL])
-                .rounded_md()
                 .border(rems(0.0625))
                 .border_color(if focused(CANCEL) { theme.accent } else { theme.border })
                 .child(cx.i18n().text(Message::Cancel))
@@ -129,7 +128,6 @@ pub(crate) fn render_remote_login_dialog(
         .action(
             button_style(action_button("remote-connect"), theme, ButtonVariant::Primary, true)
                 .track_focus(&login.controls[CONNECT])
-                .rounded_md()
                 .border(rems(0.0625))
                 .border_color(if focused(CONNECT) { theme.text_on_accent } else { theme.accent })
                 .child(cx.i18n().text(Message::RemoteConnect))
@@ -225,7 +223,6 @@ fn render_question(
         modal = modal.action(
             button_style(action_button(("remote-choice", index)), theme, ButtonVariant::Secondary, true)
                 .track_focus(focus)
-                .rounded_md()
                 .border(rems(0.0625))
                 .border_color(if focus.is_focused(window) { theme.accent } else { theme.border })
                 .child(choice.clone())

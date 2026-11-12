@@ -106,7 +106,7 @@ pub(super) fn button_with_label(
     .tab_index(0)
     .flex_none()
     .whitespace_nowrap()
-    .rounded_sm()
+    .rounded(crate::ui::elements::button::ACTION_BUTTON_RADIUS)
     .border(rems(0.0625))
     .when(primary, |d| d.border_color(gpui::transparent_black()))
     .focus(|d| d.border_color(t.accent))

@@ -68,7 +68,7 @@ pub fn action_button(id: impl Into<ElementId>) -> Stateful<Div> {
         .px(rems(0.75))
         .py(rems(0.375))
         .text_size(rems(0.8125))
-        .rounded_md()
+        .rounded(crate::ui::elements::button::ACTION_BUTTON_RADIUS)
 }
 #[derive(Default)]
 struct ModalPlacement {

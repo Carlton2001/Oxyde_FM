@@ -22,7 +22,7 @@ impl FileChooserWindow {
             .on_click(cx.listener(|this, _, window, cx| this.finish(None, window, cx)));
         let open = button_style(div().id("file-chooser-open"), theme, ButtonVariant::Primary, enabled)
             .flex_none().whitespace_nowrap().flex().items_center().justify_center()
-            .px(rems(0.75)).py(rems(0.375)).text_size(rems(0.8125)).rounded(rems(0.375))
+            .px(rems(0.75)).py(rems(0.375)).text_size(rems(0.8125)).rounded(crate::ui::elements::button::ACTION_BUTTON_RADIUS)
             .child(accept)
             .when(enabled, |button| button.tab_index(0).on_click(cx.listener(|this, _, window, cx| this.accept(window, cx))));
         let name = self.render_name_field(theme, cx);

@@ -467,7 +467,6 @@ pub(crate) fn render_network_dialog(
         .action(
             button_style(action_button("network-cancel"), theme, ButtonVariant::Secondary, !busy)
                 .track_focus(&dialog.controls[2])
-                .rounded_md()
                 .border(rems(0.0625))
                 .border_color(if dialog.controls[2].is_focused(window) {
                     theme.accent
@@ -483,7 +482,6 @@ pub(crate) fn render_network_dialog(
         .action(
             button_style(action_button("network-submit"), theme, ButtonVariant::Primary, !disabled)
                 .track_focus(&dialog.controls[3])
-                .rounded_md()
                 .border(rems(0.0625))
                 .border_color(if dialog.controls[3].is_focused(window) {
                     theme.text_on_accent

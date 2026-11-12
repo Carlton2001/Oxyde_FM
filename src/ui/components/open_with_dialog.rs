@@ -155,7 +155,6 @@ pub(crate) fn render_open_with_dialog(
         .width(rems(30.0))
         .action(
             button_style(action_button("open-with-cancel"), theme, ButtonVariant::Secondary, true)
-                .rounded_md()
                 .border(rems(0.0625))
                 .border_color(theme.border)
                 .child(i18n.text(Message::Cancel))
@@ -163,7 +162,6 @@ pub(crate) fn render_open_with_dialog(
         )
         .action(
             button_style(action_button("open-with-open"), theme, ButtonVariant::Primary, can_open)
-                .rounded_md()
                 .border(rems(0.0625))
                 .border_color(theme.accent)
                 .child(i18n.text(Message::Open))

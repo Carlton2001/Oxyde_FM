@@ -73,7 +73,6 @@ pub(crate) fn render_archive_password_dialog(
         .action(
             button_style(action_button("archive-password-cancel"), theme, ButtonVariant::Secondary, true)
                 .track_focus(&prompt.controls[CANCEL])
-                .rounded_md()
                 .border(rems(0.0625))
                 .border_color(if focused(CANCEL) { theme.accent } else { theme.border })
                 .child(cx.i18n().text(Message::Cancel))
@@ -82,7 +81,6 @@ pub(crate) fn render_archive_password_dialog(
         .action(
             button_style(action_button("archive-password-unlock"), theme, ButtonVariant::Primary, !prompt.value.is_empty() && !prompt.checking)
                 .track_focus(&prompt.controls[UNLOCK])
-                .rounded_md()
                 .border(rems(0.0625))
                 .border_color(if focused(UNLOCK) { theme.text_on_accent } else { theme.accent })
                 .child(cx.i18n().text(Message::ArchivePasswordUnlock))
