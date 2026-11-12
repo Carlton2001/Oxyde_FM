@@ -64,7 +64,7 @@ pub fn render_title_bar(
         .relative()
         .child(canvas(|bounds, _, _| bounds, move |_, bounds, _, cx| {
             tools_measure_handle.update(cx, |view, _| view.tools_button_bounds = Some(bounds));
-        }).absolute().size_full())
+        }).absolute().left_0().top_0().size_full())
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             tools_handle.update(cx, |view, cx| {
                 if view.close_menu_owned_by("title-tools", cx) { return; }

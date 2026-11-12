@@ -77,6 +77,8 @@ pub(super) fn render(
             },
         )
         .absolute()
+        .left_0()
+        .top_0()
         .size_full(),
     )
     .on_mouse_down(MouseButton::Left, move |_, window, cx| {

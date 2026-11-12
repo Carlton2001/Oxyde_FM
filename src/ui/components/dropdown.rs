@@ -230,7 +230,8 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
         let icon_color: Hsla = theme.text;
         let chevron_color: Hsla = theme.icon_disabled; // ~20% white for chevron arrow
 
-        let mut calculated_width: f32 = logical(180.0);
+        // Menus have a floor of their own; a list opened from a button takes `min_width`.
+        let mut calculated_width: f32 = if self.min_width.is_some() { 0.0 } else { logical(180.0) };
 
         let text_system = window.text_system();
         let font = window.text_style().font();

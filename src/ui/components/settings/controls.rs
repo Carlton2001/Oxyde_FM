@@ -82,6 +82,8 @@ pub(super) fn picker(
                 },
             )
             .absolute()
+            .left_0()
+            .top_0()
             .size_full(),
         )
         .child(icon(icon_path, theme))
