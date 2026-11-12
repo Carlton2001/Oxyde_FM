@@ -114,7 +114,7 @@ impl FileChooserWindow {
                         .text_ellipsis()
                         .overflow_hidden()
                         .text_color(theme.accent)
-                        .native_tooltip(Tooltip::text(summary.clone()))
+                        .fixed_tooltip(Tooltip::text(summary.clone()))
                         .child(summary),
                 )
             })

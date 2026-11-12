@@ -41,19 +41,24 @@ pub(super) fn origin(window: &Window, content: Size<Pixels>) -> Point<Pixels> {
     )
 }
 
+/// Centered under the element, kept inside the window that must contain it.
 fn anchored_origin(
     bounds: Bounds<Pixels>,
     content: Size<Pixels>,
     viewport: Size<Pixels>,
     gap: Pixels,
 ) -> Point<Pixels> {
-    cursor_origin(
-        point(bounds.left(), bounds.bottom()),
+    let below = cursor_origin(
+        point(bounds.center().x - content.width / 2.0, bounds.bottom()),
         content,
         viewport,
         gap,
         px(0.0),
-    )
+    );
+    let x = (bounds.center().x - content.width / 2.0)
+        .min(viewport.width - content.width)
+        .max(px(0.0));
+    point(x, below.y)
 }
 
 pub(super) fn follow_pointer(window: &mut Window) {

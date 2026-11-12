@@ -11,6 +11,32 @@ use unicode_segmentation::UnicodeSegmentation;
 
 const ITEM_MINIMUM_WIDTH: Rems = rems(14.0);
 const ITEM_MAXIMUM_WIDTH: Rems = rems(30.0);
+/// Labels and notices wrap past this width, a comfortable reading measure.
+const PLAIN_MAXIMUM_WIDTH: Rems = rems(24.0);
+/// The interface's text size: a tooltip reads like the control it describes.
+const TITLE_SIZE: Rems = rems(0.8125);
+/// Details, shortcuts and locations under a title.
+const DETAIL_SIZE: Rems = rems(0.75);
+
+/// The floating frame every tooltip shares with the menus.
+pub(super) fn frame(theme: OxydeTheme) -> Div {
+    div()
+        .bg(theme.menu_surface)
+        .border(rems(0.0625))
+        .border_color(theme.menu_border)
+        .rounded(rems(0.5))
+        .shadow(tooltip_shadow())
+}
+
+/// Measures `text` as Inter at `size` and `weight`, before layout decides any width.
+fn shape(window: &Window, text: &SharedString, size: Rems, weight: FontWeight) -> ShapedLine {
+    let mut font = window.text_style().font();
+    font.family = "Inter".into();
+    font.weight = weight;
+    window.text_system().shape_line(text.clone(), rem_pixels(size), &[TextRun {
+        len: text.len(), font, color: Hsla::default(), background_color: None, underline: None, strikethrough: None,
+    }], None)
+}
 
 fn filename_line_ranges(name: &str, width: f32, x_for_index: impl Fn(usize) -> f32) -> Vec<std::ops::Range<usize>> {
     text_line_ranges(name, width, true, x_for_index)
@@ -145,11 +171,11 @@ impl Render for DriveTooltip {
         let theme = *OxydeTheme::global(cx);
         let usage = drive_usage(self.drive.total_bytes, self.drive.free_bytes);
         let mut body = div().flex().flex_col().items_center().gap(rems(0.5))
-            .child(div().max_w(rems(18.0)).text_size(rems(0.8125)).child(self.name.clone()));
+            .child(div().max_w(rems(18.0)).text_size(TITLE_SIZE).font_weight(FontWeight::MEDIUM).child(self.name.clone()));
         // Windows names include the drive letter; Linux names omit the mount point.
         let path_in_name = cfg!(target_os = "windows");
         if !path_in_name {
-            body = body.child(div().max_w(rems(18.0)).text_size(rems(0.6875)).text_color(theme.text_muted).child(self.drive.path.clone()));
+            body = body.child(div().max_w(rems(18.0)).text_size(DETAIL_SIZE).text_color(theme.text_muted).child(self.drive.path.clone()));
         }
         if let Some((used, ratio)) = usage {
             let usage_color = theme.drive_usage_color(self.drive.total_bytes, self.drive.free_bytes);
@@ -169,13 +195,12 @@ impl Render for DriveTooltip {
             args.set("total", format_size(self.drive.total_bytes, false, false, cx.i18n().language()));
             body = body.child(div().relative().size(rems(4.75)).flex().items_center().justify_center()
                 .child(chart).child(div().text_size(rems(0.875)).font_weight(FontWeight::SEMIBOLD).child(format!("{}%", (ratio * 100.0).round() as u32))))
-                .child(div().text_size(rems(0.6875)).text_color(theme.text_muted).child(cx.i18n().text_with_args(Message::DriveTooltipUsage, &args)));
+                .child(div().text_size(DETAIL_SIZE).text_color(theme.text_muted).child(cx.i18n().text_with_args(Message::DriveTooltipUsage, &args)));
         } else if path_in_name {
-            body = body.child(div().text_size(rems(0.6875)).text_color(theme.text_muted).child(self.drive.path.clone()));
+            body = body.child(div().text_size(DETAIL_SIZE).text_color(theme.text_muted).child(self.drive.path.clone()));
         }
-        CursorTooltip::new(div().bg(theme.surface).text_color(theme.text)
+        CursorTooltip::new(frame(theme).text_color(theme.text)
             .font_family("Inter").font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
-            .border(rems(0.0625)).border_color(theme.border).rounded_md().shadow(tooltip_shadow())
             .px(rems(0.75)).py(rems(0.5)).child(body).into_any_element())
     }
 }
@@ -199,12 +224,7 @@ impl Render for DuplicateResultTooltip {
         let width = rem_pixels(rems(26.5)).min((window.viewport_size().width - rem_pixels(rems(2.0))).max(px(1.0)));
         let content_width = (width - rem_pixels(rems(1.625))).as_f32().max(1.0);
         let wrap = |text: SharedString, size: Rems, weight: FontWeight, location: bool| {
-            let mut font = window.text_style().font();
-            font.family = "Inter".into(); font.weight = weight;
-            let line = window.text_system().shape_line(text.clone(), rem_pixels(size), &[TextRun {
-                len: text.len(), font, color: theme.text, background_color: None,
-                underline: None, strikethrough: None,
-            }], None);
+            let line = shape(window, &text, size, weight);
             let ranges = if location {
                 location_line_ranges(&text, content_width, |index| line.x_for_index(index).as_f32())
             } else {
@@ -214,16 +234,15 @@ impl Render for DuplicateResultTooltip {
         };
         let mut args = FluentArgs::new(); args.set("value", self.location.as_str());
         let location = cx.i18n().text_with_args(Message::TooltipLocation, &args);
-        div().w(width).max_w(width).px(rems(0.75)).py(rems(0.5))
-            .bg(theme.surface).border(rems(0.0625)).border_color(theme.border).rounded(rems(0.375))
-            .shadow(tooltip_shadow()).font_family("Inter")
+        frame(theme).w(width).max_w(width).px(rems(0.75)).py(rems(0.5))
+            .font_family("Inter")
             .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT).line_height(relative(1.25))
             .flex().flex_col().gap(rems(0.5))
-            .child(div().text_size(rems(0.75)).font_weight(FontWeight::MEDIUM).text_color(theme.text)
-                .children(wrap(self.name.clone(), rems(0.75), FontWeight::MEDIUM, false).into_iter().map(|line| div().whitespace_nowrap().child(line))))
-            .child(div().text_size(rems(0.6875)).text_color(theme.text_muted)
-                .children(wrap(location, rems(0.6875), crate::ui::style::DEFAULT_FONT_WEIGHT, true).into_iter().map(|line| div().whitespace_nowrap().child(line))))
-            .child(div().flex().items_center().gap(rems(0.375)).text_size(rems(0.75)).text_color(theme.accent)
+            .child(div().text_size(TITLE_SIZE).font_weight(FontWeight::MEDIUM).text_color(theme.text)
+                .children(wrap(self.name.clone(), TITLE_SIZE, FontWeight::MEDIUM, false).into_iter().map(|line| div().whitespace_nowrap().child(line))))
+            .child(div().text_size(DETAIL_SIZE).text_color(theme.text_muted)
+                .children(wrap(location, DETAIL_SIZE, crate::ui::style::DEFAULT_FONT_WEIGHT, true).into_iter().map(|line| div().whitespace_nowrap().child(line))))
+            .child(div().flex().items_center().gap(rems(0.375)).text_size(DETAIL_SIZE).text_color(theme.accent)
                 .child(cx.i18n().text(Message::DuplicateGoToFolder))
                 .child(svg().path("icons/arrow-right.svg").size(rems(0.875)).text_color(theme.accent)))
     }
@@ -234,7 +253,13 @@ impl Render for Tooltip {
         let theme = *OxydeTheme::global(cx);
         let chrome = rem_pixels(rems(1.625));
         // Pane items share one envelope, with or without a preview; other tooltips keep 40rem.
-        let width_limit = rem_pixels(if self.file_info.is_some() { ITEM_MAXIMUM_WIDTH } else { rems(40.0) });
+        let width_limit = rem_pixels(if self.file_info.is_some() { ITEM_MAXIMUM_WIDTH } else { PLAIN_MAXIMUM_WIDTH });
+        // A title over details reads as a heading; a lone label reads like the interface.
+        let title_weight = if self.file_info.is_some() || self.meta.is_some() || self.secondary_action.is_some() {
+            FontWeight::MEDIUM
+        } else {
+            crate::ui::style::DEFAULT_FONT_WEIGHT
+        };
         let media_width = self.preview_view.clone().and_then(|preview| {
             preview.update(cx, |preview, cx| {
                 if matches!(preview.data, Some(super::PreviewData::Text(_))) {
@@ -257,22 +282,16 @@ impl Render for Tooltip {
         let title_lines: Vec<SharedString> = if let Some(info) = &self.file_info {
             // One rule for every line: the widest line or preview sets the width
             // within [14rem, 30rem]; a line wider than that wraps, never truncates.
-            let shape = |text: &SharedString, size: Rems, weight: FontWeight| {
-                let mut font = window.text_style().font();
-                font.family = "Inter".into(); font.weight = weight;
-                window.text_system().shape_line(text.clone(), rem_pixels(size), &[TextRun {
-                    len: text.len(), font, color: theme.text, background_color: None, underline: None, strikethrough: None,
-                }], None)
-            };
-            let title = shape(&self.title, rems(0.75), FontWeight::MEDIUM);
+            let shape = |text: &SharedString, size: Rems, weight: FontWeight| shape(window, text, size, weight);
+            let title = shape(&self.title, TITLE_SIZE, title_weight);
             let body: Vec<SharedString> = if let Some(file) = &info.network {
                 network_tooltip_lines(file, cx.i18n())
             } else {
                 file_detail_lines(info, cx).into_iter().chain(info.location.clone()).chain(info.extra.iter().cloned()).collect()
             };
-            let shaped: Vec<_> = body.iter().map(|text| (text, shape(text, rems(0.6875), crate::ui::style::DEFAULT_FONT_WEIGHT))).collect();
+            let shaped: Vec<_> = body.iter().map(|text| (text, shape(text, DETAIL_SIZE, crate::ui::style::DEFAULT_FONT_WEIGHT))).collect();
             let notice_chrome = rem_pixels(rems(0.875)); // 2 x padding + 2 x border.
-            let notice: Vec<_> = info.notice.iter().map(|text| (text, shape(text, rems(0.6875), crate::ui::style::DEFAULT_FONT_WEIGHT))).collect();
+            let notice: Vec<_> = info.notice.iter().map(|text| (text, shape(text, DETAIL_SIZE, crate::ui::style::DEFAULT_FONT_WEIGHT))).collect();
             let natural = shaped.iter().fold(title.width, |width, (_, line)| width.max(line.width))
                 .max(notice.iter().fold(px(0.0), |width, (_, line)| width.max(line.width + notice_chrome)))
                 .max(media_width.unwrap_or(px(0.0)));
@@ -290,42 +309,34 @@ impl Render for Tooltip {
             filename_line_ranges(&self.title, content, |index| title.x_for_index(index).as_f32())
                 .into_iter().map(|range| self.title[range].to_string().into()).collect()
         } else if self.wrap_title {
-            let mut font = window.text_style().font();
-            font.family = "Inter".into();
-            font.weight = FontWeight::MEDIUM;
-           
-            let line = window.text_system().shape_line(self.title.clone(), rem_pixels(rems(0.75)), &[TextRun {
-                len: self.title.len(), font, color: theme.text, background_color: None,
-                underline: None, strikethrough: None,
-            }], None);
-            tooltip_width = (line.width + chrome + px(1.0)).min(maximum_width);
-            location_line_ranges(&self.title, (tooltip_width - chrome - px(1.0)).as_f32().max(1.0), |index| line.x_for_index(index).as_f32())
-                .into_iter().map(|range| self.title[range].to_string().into()).collect()
+            // Text shaping takes one line at a time: the label's own breaks stay, and each
+            // paragraph wraps on its own.
+            let paragraphs: Vec<(SharedString, ShapedLine)> = self.title.lines().map(|paragraph| {
+                let paragraph = SharedString::from(paragraph.to_owned());
+                let line = shape(window, &paragraph, TITLE_SIZE, title_weight);
+                (paragraph, line)
+            }).collect();
+            let natural = paragraphs.iter().fold(px(0.0), |width, (_, line)| width.max(line.width));
+            tooltip_width = (natural + chrome + px(1.0)).min(maximum_width);
+            let content = (tooltip_width - chrome - px(1.0)).as_f32().max(1.0);
+            paragraphs.iter().flat_map(|(paragraph, line)| {
+                let lines: Vec<SharedString> = location_line_ranges(paragraph, content, |index| line.x_for_index(index).as_f32())
+                    .into_iter().map(|range| SharedString::from(paragraph[range].to_string())).collect();
+                // An empty paragraph keeps its blank line.
+                if lines.is_empty() { vec![SharedString::default()] } else { lines }
+            }).collect()
         } else if let Some((label, shortcut)) = &self.secondary_action {
-            let shape = |text: &SharedString, size: Rems, weight: FontWeight| {
-                let mut font = window.text_style().font();
-                font.family = "Inter".into(); font.weight = weight;
-                window.text_system().shape_line(text.clone(), rem_pixels(size), &[TextRun {
-                    len: text.len(), font, color: theme.text, background_color: None, underline: None, strikethrough: None,
-                }], None).width
-            };
-            let title = shape(&self.title, rems(0.75), FontWeight::MEDIUM);
-            let action = shape(label, rems(0.75), crate::ui::style::DEFAULT_FONT_WEIGHT)
-                + rem_pixels(rems(0.75)) + shape(shortcut, rems(0.6875), crate::ui::style::DEFAULT_FONT_WEIGHT);
+            let width = |text: &SharedString, size: Rems, weight: FontWeight| shape(window, text, size, weight).width;
+            let title = width(&self.title, TITLE_SIZE, title_weight);
+            let action = width(label, TITLE_SIZE, crate::ui::style::DEFAULT_FONT_WEIGHT)
+                + rem_pixels(rems(0.75)) + width(shortcut, DETAIL_SIZE, crate::ui::style::DEFAULT_FONT_WEIGHT);
             tooltip_width = (title.max(action) + chrome + px(1.0)).min(maximum_width);
             vec![self.title.clone()]
         } else if let Some(meta) = &self.meta {
             // Resolve the width before laying out percentage-width flex rows.
             // Standalone tooltips must not inherit a host row's line height.
-            let shape = |text: SharedString, font_size: Rems, weight: FontWeight| {
-                let mut font = window.text_style().font();
-                font.family = "Inter".into(); font.weight = weight;
-                window.text_system().shape_line(text.clone(), rem_pixels(font_size), &[TextRun {
-                    len: text.len(), font, color: theme.text, background_color: None, underline: None, strikethrough: None,
-                }], None)
-            };
-            let title_width = shape(self.title.clone(), rems(0.75), FontWeight::MEDIUM).width;
-            let shaped_meta: Vec<_> = meta.lines().map(|line| (line.to_owned(), shape(line.to_owned().into(), rems(0.6875), crate::ui::style::DEFAULT_FONT_WEIGHT))).collect();
+            let title_width = shape(window, &self.title, TITLE_SIZE, title_weight).width;
+            let shaped_meta: Vec<_> = meta.lines().map(|line| (line.to_owned(), shape(window, &line.to_owned().into(), DETAIL_SIZE, crate::ui::style::DEFAULT_FONT_WEIGHT))).collect();
             let meta_width = shaped_meta.iter().fold(px(0.0), |width, (_, line)| width.max(line.width));
             // The slack absorbs layout rounding so a fitting line never wraps.
             tooltip_width = (title_width.max(meta_width) + chrome + px(1.0)).min(maximum_width);
@@ -345,9 +356,9 @@ impl Render for Tooltip {
             .border(rems(0.0625))
             .border_color(gpui::transparent_black())
             .when(self.preview_view.is_none(), |this| this
-                .bg(theme.surface)
-                .border_color(theme.border)
-                .rounded_md()
+                .bg(theme.menu_surface)
+                .border_color(theme.menu_border)
+                .rounded(rems(0.5))
                 .shadow(tooltip_shadow()))
             .font_family("Inter")
             .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
@@ -367,8 +378,8 @@ impl Render for Tooltip {
                     } else {
                         theme.text
                     })
-                    .text_size(rems(0.75))
-                    .font_weight(FontWeight::MEDIUM)
+                    .text_size(TITLE_SIZE)
+                    .font_weight(title_weight)
                     .flex()
                     .items_center()
                     .gap(rems(0.75))
@@ -378,14 +389,14 @@ impl Render for Tooltip {
                             .child(line))))
                     .when_some(self.shortcut.clone(), |row, shortcut| {
                         row.child(div().whitespace_nowrap().text_color(theme.text_muted)
-                            .text_size(rems(0.6875)).child(shortcut))
+                            .text_size(DETAIL_SIZE).child(shortcut))
                     }),
             )
             .when_some(self.secondary_action.clone(), |tooltip, (label, shortcut)| {
                 tooltip.child(div().flex_none().w_full().flex().items_center().gap(rems(0.75))
-                    .text_size(rems(0.75)).text_color(theme.text)
+                    .text_size(TITLE_SIZE).text_color(theme.text)
                     .child(div().flex_1().whitespace_nowrap().child(label))
-                    .child(div().whitespace_nowrap().text_size(rems(0.6875)).text_color(theme.text_muted).child(shortcut)))
+                    .child(div().whitespace_nowrap().text_size(DETAIL_SIZE).text_color(theme.text_muted).child(shortcut)))
             })
             .when_some(self.meta.clone(), |this, meta| {
                 this.child(
@@ -393,7 +404,7 @@ impl Render for Tooltip {
                         .flex_none()
                         .max_w((tooltip_width - chrome).max(px(1.0)))
                         .text_color(theme.text_muted)
-                        .text_size(rems(0.6875))
+                        .text_size(DETAIL_SIZE)
                         .map(|block| match meta_lines {
                             Some(lines) => block.flex().flex_col()
                                 .children(lines.into_iter().map(|line| div().whitespace_nowrap().child(line))),
@@ -402,15 +413,15 @@ impl Render for Tooltip {
                 )
             })
             .when(self.file_info.is_some(), |this| {
-                this.child(div().flex().flex_col().text_size(rems(0.6875)).text_color(theme.text_muted)
+                this.child(div().flex().flex_col().text_size(DETAIL_SIZE).text_color(theme.text_muted)
                     .children(body_lines.into_iter().map(|line| div().whitespace_nowrap().child(line))))
             })
             .when(!notice_lines.is_empty(), |this| {
                 this.child(div().flex_none().w_full().flex().flex_col()
                     .px(rems(0.375)).py(rems(0.375))
                     .border(rems(0.0625)).border_color(theme.accent.opacity(0.6))
-                    .rounded_sm().bg(theme.accent.opacity(0.06))
-                    .text_size(rems(0.6875)).text_color(theme.accent)
+                    .rounded(rems(0.25)).bg(theme.accent.opacity(0.06))
+                    .text_size(DETAIL_SIZE).text_color(theme.accent)
                     .children(notice_lines.into_iter().map(|line| div().whitespace_nowrap().child(line))))
             });
 
@@ -418,9 +429,7 @@ impl Render for Tooltip {
             if let Some(preview) = self.preview_view.clone() {
                 let limit = size((tooltip_width - chrome).max(px(1.0)), rem_pixels(rems(24.0)));
                 preview.update(cx, |preview, _| preview.maximum_size = Some(limit));
-                return div().w(tooltip_width).flex().flex_col()
-                    .bg(theme.surface).border(rems(0.0625)).border_color(theme.border)
-                    .rounded_md().shadow(tooltip_shadow())
+                return frame(theme).w(tooltip_width).flex().flex_col()
                     .font_family("Inter").font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
                     .child(div().px_3().pt_2().max_h(limit.height).overflow_hidden().child(preview))
                     .child(box_div).into_any_element();

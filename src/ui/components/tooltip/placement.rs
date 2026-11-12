@@ -113,14 +113,9 @@ impl Element for PreviewTooltip {
         };
         let frame_height = layout.metadata_size.height + extra;
         let origin = super::position::origin(window, layout.metadata_size);
-        let mut frame = div()
+        let mut frame = super::presentation::frame(theme)
             .w(layout.metadata_size.width)
             .h(frame_height)
-            .bg(theme.surface)
-            .border(rems(0.0625))
-            .border_color(theme.border)
-            .rounded_md()
-            .shadow(super::presentation::tooltip_shadow())
             .into_any_element();
         frame.layout_as_root(AvailableSpace::min_size(), window, cx);
         let frame_origin = preview_frame_origin(origin, extra);

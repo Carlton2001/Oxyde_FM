@@ -90,7 +90,7 @@ pub(super) fn render(
                 .items_center()
                 .justify_center()
                 .rounded(rems(0.375))
-                .native_tooltip(Tooltip::text(i18n.text(if can_start {
+                .fixed_tooltip(Tooltip::text(i18n.text(if can_start {
                     Message::OpsResume
                 } else {
                     Message::OpsPause
@@ -116,7 +116,7 @@ pub(super) fn render(
                 .items_center()
                 .justify_center()
                 .rounded(rems(0.375))
-                .native_tooltip(Tooltip::text(i18n.text(if turbo {
+                .fixed_tooltip(Tooltip::text(i18n.text(if turbo {
                     Message::OpsFast
                 } else {
                     Message::OpsNormal
@@ -151,7 +151,7 @@ pub(super) fn render(
                 .items_center()
                 .justify_center()
                 .rounded(rems(0.375))
-                .native_tooltip(Tooltip::text(i18n.text(Message::OpsStop)))
+                .fixed_tooltip(Tooltip::text(i18n.text(Message::OpsStop)))
                 .child(
                     svg()
                         .path("icons/x.svg")

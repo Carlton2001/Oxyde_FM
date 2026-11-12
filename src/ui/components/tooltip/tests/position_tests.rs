@@ -57,17 +57,19 @@ fn offset_scales_with_interface_dimensions() {
 }
 
 #[test]
-fn anchored_tooltip_follows_target_bounds_without_mouse_coordinates() {
+fn anchored_tooltip_centers_under_target_bounds_without_mouse_coordinates() {
     let content = size(px(200.0), px(40.0));
     let viewport = size(px(800.0), px(600.0));
     let bounds = Bounds::new(point(px(100.0), px(10.0)), size(px(150.0), px(32.0)));
     assert_eq!(
         anchored_origin(bounds, content, viewport, px(4.0)),
-        point(px(104.0), px(46.0))
+        point(px(75.0), px(46.0))
     );
     let moved = Bounds::new(point(px(200.0), px(10.0)), bounds.size);
     assert_eq!(
         anchored_origin(moved, content, viewport, px(4.0)),
-        point(px(204.0), px(46.0))
+        point(px(175.0), px(46.0))
     );
+    let at_edge = Bounds::new(point(px(0.0), px(10.0)), size(px(20.0), px(32.0)));
+    assert_eq!(anchored_origin(at_edge, content, viewport, px(4.0)).x, px(0.0));
 }

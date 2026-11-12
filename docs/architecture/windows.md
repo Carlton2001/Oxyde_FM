@@ -60,7 +60,9 @@ Before destroying an owner, close its descendants with `tool_window::close_trans
 
 Native tooltips are transparent, passive `PopUp` windows, with no activation or taskbar entry; clicks pass through. One GPUI shadow, with no DWM decoration, non-client frame or global topmost. Keep the prepaint origin given by the shadow margin.
 
-The visible frame follows the pointer at 12 logical pixels on X/Y, flipped and bounded to the work area. Fixed placements keep the element's bounds. A transparent shadow margin adds no visible offset.
+The visible frame follows the pointer at 12 logical pixels on X/Y, flipped and bounded to the work area. A fixed tooltip (`fixed_tooltip`, for buttons and controls) is centered 4 logical pixels under its element, as GTK places them, and goes above only when the screen's work area ends below: being its own window, it may overflow Oxyde's. Integrated rendering (X11) keeps it inside the window instead. A transparent shadow margin adds no visible offset.
+
+Every tooltip draws the menus' frame (`presentation::frame`: menu surface and border, 0.5 rem corners). A lone label is set like the interface, 13 px at normal weight, and wraps past 24 rem; a title over details is medium, its details and shortcuts 12 px. Controls show theirs after GPUI's 500 ms; file, tree and sidebar hover sessions wait 750 ms, which prepares the preview.
 
 `ui/window_geometry.rs` remembers the restorable position and maximized state; `app/tool_geometry.rs` manages secondary families via `AppConfig::tool_window_placements`. Keep negative positions, ignore minimization and bound invalid geometry to available screens. Writes defer by 350 ms; closing forces the last save. Resetting preferences keeps these positions.
 

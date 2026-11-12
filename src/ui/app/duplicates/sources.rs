@@ -122,7 +122,7 @@ impl DuplicateWindow {
                         .truncate()
                         .text_size(rems(0.75))
                         .text_color(theme.text_muted)
-                        .native_tooltip(crate::ui::components::tooltip::Tooltip::text(path.clone()))
+                        .fixed_tooltip(crate::ui::components::tooltip::Tooltip::text(path.clone()))
                         .child(path.clone()),
                 );
             }

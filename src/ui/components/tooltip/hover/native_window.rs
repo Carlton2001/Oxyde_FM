@@ -120,7 +120,15 @@ fn place(root: &NativeTooltip, window: &mut Window, cx: &App) {
     if let Ok(raw) = HasWindowHandle::window_handle(window) {
         let anchor = root.view.as_ref().and_then(|view| view.clone().downcast::<Tooltip>().ok())
             .and_then(|view| view.read(cx).fixed_bounds.clone());
-        let anchor = anchor.map(|bounds| { let bounds = bounds.get(); (bounds.left().as_f32(), bounds.top().as_f32(), bounds.size.width.as_f32(), bounds.size.height.as_f32()) });
+        // Centered under its element, as GTK places tooltips: the anchor narrows or widens to
+        // the visible frame around the element's center. The placement flips it above only
+        // when the work area ends below.
+        let frame_width = visible_size(root.measured, window.rem_size()).width - window.rem_size() * 4.0;
+        let anchor = anchor.map(|bounds| {
+            let bounds = bounds.get();
+            let width = frame_width.max(px(1.0));
+            ((bounds.center().x - width / 2.0).as_f32(), bounds.top().as_f32(), width.as_f32(), bounds.size.height.as_f32())
+        });
         let _ = oxyde_lib::platform::platform().set_popup_anchor(raw.as_raw(), anchor, false, false, false);
         let size = root.view.as_ref().map(|_| {
             let measured = visible_size(root.measured, window.rem_size());

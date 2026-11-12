@@ -24,7 +24,7 @@ pub(super) fn render(
         .h(crate::ui::style::COLUMN_HEADER_HEIGHT)
         .hover(|style| style.bg(theme.control_hover))
         .when(view.context_menus.is_empty(), |button| {
-            button.native_tooltip(Tooltip::with_shortcut(
+            button.fixed_tooltip(Tooltip::with_shortcut(
                 cx.i18n().text(if all_selected { Message::DeselectAll } else { Message::SelectAll }),
                 Some(if all_selected { "Ctrl+Shift+A" } else { "Ctrl+A" }.into()),
             ))

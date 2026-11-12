@@ -274,7 +274,7 @@ impl AdvancedSearchWindow {
             )
                 .track_focus(&self.advanced_search.as_ref().unwrap().controls[index])
                 .child(input::field_button_icon("icons/regex.svg", checked, &theme))
-                .native_tooltip(crate::ui::components::tooltip::Tooltip::text(
+                .fixed_tooltip(crate::ui::components::tooltip::Tooltip::text(
                     cx.i18n().text(message),
                 ))
                 .on_click(move |_, _, cx| {
@@ -302,7 +302,7 @@ impl AdvancedSearchWindow {
                 theme,
             ))
             .child(cx.i18n().text(message))
-            .native_tooltip(crate::ui::components::tooltip::Tooltip::text(
+            .fixed_tooltip(crate::ui::components::tooltip::Tooltip::text(
                 cx.i18n().text(message),
             ))
             .on_click(move |_, _, cx| {

@@ -188,28 +188,20 @@ impl Tooltip {
         }).into()
     }
 
-    /// Crée un constructeur de tooltip simple affichant un texte.
+    /// A label, wrapped past the reading measure rather than cut.
     pub fn text(
         title: impl Into<SharedString>,
     ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
-        Self::plain_text(title.into(), false)
-    }
-
-    /// Full notices and paths wrap within the bubble without truncation.
-    pub fn wrapped_text(
-        title: impl Into<SharedString>,
-    ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
-        Self::plain_text(title.into(), true)
+        Self::plain_text(title.into())
     }
 
     fn plain_text(
         title: SharedString,
-        wrap_title: bool,
     ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         move |_, cx| {
             cx.new(|_| Self {
                 native_presentation: false, secondary_action: None, title: title.clone(),
-                wrap_title,
+                wrap_title: true,
                 meta: None,
                 shortcut: None,
                 file_info: None,

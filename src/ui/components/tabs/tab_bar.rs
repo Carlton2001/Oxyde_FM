@@ -100,7 +100,7 @@ impl RenderOnce for TabBar {
             .border_b(rems(0.0625))
             .border_color(theme.border)
             .hover(|s| s.bg(theme.hover))
-            .native_tooltip(Tooltip::text(cx.i18n().text(Message::NewTab)))
+            .fixed_tooltip(Tooltip::text(cx.i18n().text(Message::NewTab)))
             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                 on_new_tab(window, cx);
             })

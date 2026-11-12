@@ -202,7 +202,7 @@ pub(super) fn render(
     let title = div()
         .id("properties-name")
         .min_w_0()
-        .native_tooltip(crate::ui::components::tooltip::Tooltip::text(
+        .fixed_tooltip(crate::ui::components::tooltip::Tooltip::text(
             cx.i18n().text(Message::PropertiesCopyNameDoubleClick),
         ))
         .on_mouse_down(MouseButton::Left, move |event, _, cx| {

@@ -47,7 +47,7 @@ pub fn render_operations_footer(
         .items_center()
         .justify_center()
         .occlude()
-        .native_tooltip(Tooltip::text(tooltip))
+        .fixed_tooltip(Tooltip::text(tooltip))
         // Square fill and disabled icon color, as the other title bar buttons.
         .when(enabled, |button| button.hover(|style| style.bg(theme.control_hover)))
         .child({

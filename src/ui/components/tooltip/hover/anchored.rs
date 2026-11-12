@@ -1,7 +1,7 @@
 //! Where a passive tooltip surface goes on a compositor that owns window placement: GPUI
 //! anchors it to its parent, and the compositor keeps it on screen. X11 refuses such
 //! surfaces, and the tooltip then stays inside the window.
-use crate::ui::components::popup::{flip_axis, positioner, slide_axis};
+use crate::ui::components::popup::{flip_axis, positioner};
 use gpui::*;
 use std::cell::Cell;
 
@@ -47,10 +47,16 @@ pub(super) fn shape(fixed: Option<Bounds<Pixels>>, inset: Pixels) -> Option<bool
 /// at the window's edges, without which Mutter dismisses it.
 fn placement(fixed: Option<Bounds<Pixels>>, pointer: Point<Pixels>, inset: Pixels) -> (Bounds<Pixels>, popup::PopupAnchor, popup::PopupGravity, Point<Pixels>) {
     match fixed {
-        Some(bounds) => positioner(
-            slide_axis(bounds.left(), bounds.right(), inset, true),
-            flip_axis(bounds.top(), bounds.bottom(), ELEMENT_GAP, inset, true),
-        ),
+        // Centered under its element, as GTK places tooltips; the compositor flips it above
+        // only when the screen ends below. The shadow margins are even, so centering the
+        // surface centers its visible frame.
+        Some(bounds) => {
+            let y = flip_axis(bounds.top(), bounds.bottom(), ELEMENT_GAP, inset, true);
+            let rect = Bounds::from_corners(point(bounds.left(), y.start), point(bounds.right(), y.end));
+            let anchor = if y.at_end { popup::PopupAnchor::Bottom } else { popup::PopupAnchor::Top };
+            let gravity = if y.forward { popup::PopupGravity::Bottom } else { popup::PopupGravity::Top };
+            (rect, anchor, gravity, point(px(0.0), y.offset))
+        }
         None => positioner(
             flip_axis(pointer.x, pointer.x, POINTER_GAP, inset, true),
             flip_axis(pointer.y, pointer.y, POINTER_GAP, inset, true),

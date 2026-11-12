@@ -294,7 +294,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                                         .items_center()
                                         .when_some(rename_error, |field, error| {
                                             field
-                                                .native_tooltip(Tooltip::text(error))
+                                                .fixed_tooltip(Tooltip::text(error))
                                                 .border(rems(0.0625))
                                                 .border_color(theme.error)
                                                 .rounded_sm()

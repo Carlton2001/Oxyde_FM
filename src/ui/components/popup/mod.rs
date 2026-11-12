@@ -9,7 +9,7 @@ pub(crate) use dropdown::text_menu;
 #[cfg(not(target_os = "windows"))]
 mod wayland;
 #[cfg(not(target_os = "windows"))]
-pub(crate) use wayland::{available, flip_axis, positioner, slide_axis};
+pub(crate) use wayland::{available, flip_axis, positioner};
 
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct PopupAnchor {

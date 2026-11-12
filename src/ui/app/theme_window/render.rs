@@ -50,7 +50,7 @@ impl ThemeWindow {
             .child(div().id("theme-color-vision-label").flex().items_center().gap(rems(0.375))
                 .text_color(theme.text_muted).whitespace_nowrap()
                 .child(svg().path("icons/info.svg").size(rems(0.875)).flex_none().text_color(theme.text_muted))
-                .native_tooltip({
+                .fixed_tooltip({
                     // First line as the title, one line per mode below it.
                     let text = cx.i18n().text(Message::ThemeColorVisionDescription);
                     let (title, modes) = text.split_once('\n').unwrap_or((&text, ""));

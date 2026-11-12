@@ -131,7 +131,7 @@ pub(super) fn scale_row(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &App) -> 
     let value = div().id("scale-reset").min_w(rems(3.25)).h(rems(1.5)).flex().items_center().justify_center()
         .rounded(rems(0.25))
         .hover(|style| style.bg(crate::ui::elements::segmented::hover_fill(theme)))
-        .native_tooltip(Tooltip::text(cx.i18n().text(Message::SettingsScaleReset)))
+        .fixed_tooltip(Tooltip::text(cx.i18n().text(Message::SettingsScaleReset)))
         .child(cx.i18n().text_with_args(Message::SettingsScaleValue, &args))
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             cx.stop_propagation();
@@ -161,14 +161,14 @@ pub(super) fn search_limit_row(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &A
         .flex().items_center().justify_center()
         .rounded(rems(0.25))
         .hover(|style| style.bg(crate::ui::elements::segmented::hover_fill(theme)))
-        .native_tooltip(Tooltip::text(cx.i18n().text(Message::SettingsSearchLimitReset)))
+        .fixed_tooltip(Tooltip::text(cx.i18n().text(Message::SettingsSearchLimitReset)))
         .child(limit.to_string())
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             cx.stop_propagation();
             reset.update(cx, |view, cx| view.reset_search_limit(cx));
         });
     div().id("settings-search-limit-row").min_h(crate::ui::style::MENU_ITEM_HEIGHT).px(rems(0.375)).gap(rems(0.5)).flex().items_center()
-        .native_tooltip(Tooltip::text(cx.i18n().text(Message::SettingsSearchLimitDescription)))
+        .fixed_tooltip(Tooltip::text(cx.i18n().text(Message::SettingsSearchLimitDescription)))
         .child(icon("icons/zap.svg", theme))
         .child(div().flex_1().flex_shrink_0().whitespace_nowrap().child(cx.i18n().text(Message::SettingsSearchLimit)))
         .child(crate::ui::elements::stepper::stepper(
@@ -252,7 +252,7 @@ pub(super) fn settings_row(
         .gap(rems(0.5))
         .rounded(rems(0.3125))
         .hover(|s| s.bg(theme.control_hover))
-        .native_tooltip(Tooltip::wrapped_text(description))
+        .fixed_tooltip(Tooltip::text(description))
         .child(icon(icon_path, theme))
         .child(div().flex_1().flex_shrink_0().whitespace_nowrap().text_size(rems(0.8125)).child(label))
         .child(

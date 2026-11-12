@@ -70,7 +70,7 @@ pub(super) fn render(
                 .id(label_id)
                 .min_w_0()
                 .truncate()
-                .native_tooltip(Tooltip::wrapped_text(group.label(cx.i18n())))
+                .fixed_tooltip(Tooltip::text(group.label(cx.i18n())))
                 .child(group.label(cx.i18n())),
         )
         .child(
@@ -111,7 +111,7 @@ fn selection_checkbox(
         .flex()
         .items_center()
         .justify_center()
-        .native_tooltip(Tooltip::wrapped_text(tooltip))
+        .fixed_tooltip(Tooltip::text(tooltip))
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_mouse_up(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_click(move |_, window, cx| {

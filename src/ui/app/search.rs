@@ -502,7 +502,7 @@ impl OxydeApp {
                     .min_w_0()
                     .truncate()
                     .text_color(theme.accent)
-                    .native_tooltip(crate::ui::components::tooltip::Tooltip::text(
+                    .fixed_tooltip(crate::ui::components::tooltip::Tooltip::text(
                         root.to_owned(),
                     ))
                     .child(format!("'{query}'")),
@@ -515,7 +515,7 @@ impl OxydeApp {
                         .min_w_0()
                         .truncate()
                         .text_color(theme.warning_text)
-                        .native_tooltip(crate::ui::components::tooltip::Tooltip::wrapped_text(
+                        .fixed_tooltip(crate::ui::components::tooltip::Tooltip::text(
                             warnings.detail(cx.i18n()),
                         ))
                         .child(warnings.label(cx.i18n())),
@@ -524,7 +524,7 @@ impl OxydeApp {
             .when(content_warnings.count > 0, |bar| {
                 bar.child(div().id(SharedString::from(format!("search-content-warning-{id}")))
                     .min_w_0().truncate().text_color(theme.warning_text)
-                    .native_tooltip(crate::ui::components::tooltip::Tooltip::wrapped_text(content_warnings.detail(cx.i18n())))
+                    .fixed_tooltip(crate::ui::components::tooltip::Tooltip::text(content_warnings.detail(cx.i18n())))
                     .child(content_warnings.label(cx.i18n())))
             })
             .when(running || limited, |bar| {
@@ -534,7 +534,7 @@ impl OxydeApp {
                         .text_color(theme.text_muted)
                         .when(running, |status| {
                             status
-                                .native_tooltip(crate::ui::components::tooltip::Tooltip::text(
+                                .fixed_tooltip(crate::ui::components::tooltip::Tooltip::text(
                                     cx.i18n().text(Message::QuickSearchStop).to_string(),
                                 ))
                                 .on_click(move |_, _, cx| {
