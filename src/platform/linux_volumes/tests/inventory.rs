@@ -169,3 +169,20 @@ fn unlabeled_volumes_keep_no_name_and_follow_named_ones() {
     let named: Vec<_> = drives.iter().map(|drive| (drive.label.as_str(), drive.volume_bytes)).collect();
     assert_eq!(named, [("Root", 0), ("Data", 0), ("", 523_170_217_984)]);
 }
+
+#[test]
+fn fstab_mounts_outside_the_user_places_follow_their_gvfs_options() {
+    let mut shown = block("/dev/sdb1", "Games", false, Some(&["/mnt/games"]), internal());
+    shown.fstab = Some(("/mnt/games/".into(), "nofail,x-gvfs-show,x-gvfs-name=Jeux".into()));
+    let mut plain = block("/dev/sdb2", "Backup", false, Some(&["/mnt/backup"]), internal());
+    plain.fstab = Some(("/mnt/backup".into(), "defaults".into()));
+    let mut hidden = block("/dev/sdb3", "Media", false, Some(&["/media/library"]), internal());
+    hidden.fstab = Some(("/media/library".into(), "x-gvfs-hide".into()));
+    // Mounted elsewhere than its fstab entry, the filesystem follows its mount point.
+    let mut moved = block("/dev/sdb4", "Moved", false, Some(&["/mnt/moved"]), internal());
+    moved.fstab = Some(("/mnt/elsewhere".into(), "x-gvfs-show".into()));
+    let mut both = block("/dev/sdb5", "Both", false, Some(&["/srv/both"]), internal());
+    both.fstab = Some(("/srv/both".into(), "x-gvfs-hide,x-gvfs-show".into()));
+    let paths: Vec<_> = mounted(&[shown, plain, hidden, moved, both], &session()).into_iter().map(|drive| drive.path).collect();
+    assert_eq!(paths, ["/", "/srv/both", "/mnt/games"]);
+}

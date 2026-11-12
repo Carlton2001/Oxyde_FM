@@ -17,6 +17,15 @@ impl Session {
         }
     }
 
+    /// Whether a block mounted at `point` is shown, as the GVfs volume monitor decides:
+    /// mounted where `/etc/fstab` puts it, the entry's `x-gvfs-show` or `x-gvfs-hide`
+    /// option comes first, so a disk the system mounts under `/mnt` with `x-gvfs-show`
+    /// stays listed.
+    fn displays(&self, point: &str, fstab: Option<&(String, String)>) -> bool {
+        let configured = fstab.filter(|(dir, _)| same_point(dir, point)).and_then(|(_, options)| gvfs_choice(options));
+        configured.unwrap_or_else(|| self.shows(point))
+    }
+
     fn shows(&self, point: &str) -> bool {
         if point == "/" {
             return true;
@@ -32,6 +41,24 @@ impl Session {
     }
 }
 
+/// `x-gvfs-show` shows the filesystem wherever it is mounted and takes precedence over
+/// `x-gvfs-hide`, as in GVfs; `None` leaves the choice to the mount point.
+fn gvfs_choice(options: &str) -> Option<bool> {
+    let keys: Vec<&str> = options.split(',').map(|option| option.split('=').next().unwrap_or("").trim()).collect();
+    if keys.contains(&"x-gvfs-show") {
+        Some(true)
+    } else if keys.contains(&"x-gvfs-hide") {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+fn same_point(a: &str, b: &str) -> bool {
+    let trim = |point: &str| if point == "/" { "/".to_string() } else { point.trim_end_matches('/').to_string() };
+    trim(a) == trim(b)
+}
+
 /// Mounted volumes, `/` first as "Root", then internal, removable and optical drives, each
 /// group by name. `HintIgnore` hides EFI, recovery and swap;
 /// system mounts such as `/boot` stay hidden because of their location.
@@ -40,7 +67,7 @@ pub(super) fn mounted(blocks: &[Block], session: &Session) -> Vec<DriveInfo> {
         .iter()
         .filter(|block| !block.hint_ignore)
         .filter_map(|block| {
-            let point = block.mount_points.as_ref()?.iter().find(|point| session.shows(point))?;
+            let point = block.mount_points.as_ref()?.iter().find(|point| session.displays(point, block.fstab.as_ref()))?;
             Some(DriveInfo {
                 path: point.clone(),
                 label: label(block, point),
@@ -77,10 +104,7 @@ pub(super) fn unmounted(blocks: &[Block], session: &Session) -> Vec<UnmountedVol
         .filter(|block| block.mount_points.as_ref().is_some_and(Vec::is_empty))
         .filter(|block| block.id_usage == "filesystem" && !block.hint_ignore && !block.partitioned)
         .filter(|block| match &block.fstab {
-            Some((point, options)) => {
-                let options: Vec<&str> = options.split(',').collect();
-                !options.contains(&"x-gvfs-hide") && (options.contains(&"x-gvfs-show") || session.shows(point))
-            }
+            Some((point, _)) => session.displays(point, block.fstab.as_ref()),
             None => true,
         })
         .map(|block| UnmountedVolume {
