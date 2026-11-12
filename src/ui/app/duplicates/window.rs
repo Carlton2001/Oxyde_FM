@@ -29,7 +29,7 @@ impl Render for DuplicateWindow {
         let placeholder = cx.i18n().text(Message::DuplicateFilter);
         self.filter
             .update(cx, |input, cx| input.set_placeholder(placeholder, cx));
-        let sidebar = self.render_sources(theme, cx);
+        let sidebar = self.render_sources(theme, window, cx);
         let mut args = FluentArgs::new();
         args.set("groups", self.groups.len() as i64);
         args.set(

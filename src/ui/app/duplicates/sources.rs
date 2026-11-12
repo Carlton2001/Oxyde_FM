@@ -6,7 +6,7 @@ use gpui::prelude::FluentBuilder;
 use gpui::*;
 
 impl DuplicateWindow {
-    pub(super) fn render_sources(&self, theme: OxydeTheme, cx: &mut Context<Self>) -> Stateful<Div> {
+    pub(super) fn render_sources(&self, theme: OxydeTheme, window: &Window, cx: &mut Context<Self>) -> Stateful<Div> {
         let section_title = |icon: &'static str, message: Message| {
             div()
                 .flex()
@@ -216,14 +216,17 @@ impl DuplicateWindow {
             options = options.child(
                 div()
                     .id(("criterion", index))
+                    .track_focus(&self.option_focus[index])
                     .tab_index(0)
                     .flex()
                     .items_center()
                     .gap(rems(0.5))
-                    .focus_visible(move |s| s.bg(theme.selected))
-                    .child(
+                    .child(crate::ui::elements::focus_ring::focus_ring(
                         crate::ui::elements::checkbox::checkbox(theme, checked, false),
-                    )
+                        crate::ui::elements::focus_ring::keyboard_focused(&self.option_focus[index], window),
+                        false,
+                        theme,
+                    ))
                     .child(cx.i18n().text(message))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         if !this.running {

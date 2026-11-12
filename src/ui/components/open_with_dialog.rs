@@ -134,7 +134,7 @@ pub(crate) fn render_open_with_dialog(
         .gap(rems(0.5))
         .pt(rems(0.25))
         .child(div().flex_1().min_w_0().child(i18n.text(Message::OpenWithAlways)))
-        .child(crate::ui::elements::toggle::toggle(prompt.remember || is_default, theme))
+        .child(crate::ui::elements::toggle::toggle("switch", prompt.remember || is_default, theme))
         .when(!is_default, |row| row.on_click(move |_, _, cx| toggle.update(cx, |view, cx| view.toggle_open_with_remember(cx))));
     let body = div()
         .flex()

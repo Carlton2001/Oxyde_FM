@@ -256,7 +256,7 @@ pub(super) fn settings_row(
         .child(icon(icon_path, theme))
         .child(div().flex_1().flex_shrink_0().whitespace_nowrap().text_size(rems(0.8125)).child(label))
         .child(
-            crate::ui::elements::toggle::toggle(value, theme),
+            crate::ui::elements::toggle::toggle("switch", value, theme),
         )
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             action(cx);

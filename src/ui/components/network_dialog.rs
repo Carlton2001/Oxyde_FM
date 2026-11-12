@@ -408,13 +408,6 @@ pub(crate) fn render_network_dialog(
                 .gap(rems(0.5))
                 .mt(rems(0.5))
                 .py_1()
-                .rounded_sm()
-                .border(rems(0.0625))
-                .border_color(if dialog.controls[1].is_focused(window) {
-                    theme.accent
-                } else {
-                    theme.surface.alpha(0.0)
-                })
                 .on_click(move |_, window, cx| {
                     h.update(cx, |view, cx| {
                         if let Some(dialog) = &mut view.network_dialog {
@@ -426,9 +419,12 @@ pub(crate) fn render_network_dialog(
                         }
                     })
                 })
-                .child(
+                .child(crate::ui::elements::focus_ring::focus_ring(
                     crate::ui::elements::checkbox::checkbox(theme, dialog.reconnect, false),
-                )
+                    crate::ui::elements::focus_ring::keyboard_focused(&dialog.controls[1], window),
+                    false,
+                    theme,
+                ))
                 .child(cx.i18n().text(Message::NetworkReconnect)),
         );
     }

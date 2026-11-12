@@ -165,8 +165,8 @@ fn toggle_row(
         .items_center()
         .gap(rems(1.0))
         .child(div().flex_1().min_w_0().font_weight(FontWeight::MEDIUM).child(label))
-        .child(toggle(value, theme))
-        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+        .child(toggle("switch", value, theme))
+        .on_click(move |_, _, cx| {
             handle.update(cx, |this, cx| this.edit_trash_retention(edit, cx));
         })
 }
@@ -313,8 +313,8 @@ fn render_body(
                 .items_center()
                 .gap(rems(1.0))
                 .child(div().flex_1().min_w_0().child(cx.i18n().text(Message::TrashConfirmDelete)))
-                .child(toggle(dialog.confirm, theme))
-                .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                .child(toggle("switch", dialog.confirm, theme))
+                .on_click(move |_, _, cx| {
                     confirm.update(cx, |this, cx| {
                         if let Some(dialog) = this.trash_settings.as_mut().filter(|dialog| !dialog.busy && !dialog.loading) {
                             dialog.confirm = !dialog.confirm;

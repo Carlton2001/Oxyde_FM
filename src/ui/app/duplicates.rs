@@ -21,6 +21,8 @@ pub struct DuplicateWindow {
     location_icons: Vec<&'static str>,
     selected: HashSet<String>,
     options: [bool; 3],
+    /// Keyboard stops of the three criteria checkboxes.
+    option_focus: [FocusHandle; 3],
     groups: Arc<Vec<DuplicateGroup>>,
     collapsed: HashSet<usize>,
     filter: Entity<TextInput>,

@@ -75,7 +75,7 @@ fn option_row(
         .items_start()
         .gap(rems(0.5))
         .rounded(rems(0.3125))
-        .hover(|style| style.bg(theme.menu_hover))
+        .hover(|style| style.bg(theme.control_hover))
         // Level with the label's first line.
         .child(div().pt(rems(0.125)).child(crate::ui::elements::checkbox::checkbox(theme, checked, false)))
         .child(

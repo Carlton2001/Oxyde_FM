@@ -52,6 +52,7 @@ impl AdvancedSearchWindow {
                     Message::AdvancedUseRegex,
                     true,
                     handle.clone(),
+                    window,
                     cx,
                 ));
             } else {
@@ -87,6 +88,7 @@ impl AdvancedSearchWindow {
                             Message::AdvancedSearchSubfolders,
                             false,
                             handle.clone(),
+                            window,
                             cx,
                         ))
                         .child(self.advanced_toggle(
@@ -94,6 +96,7 @@ impl AdvancedSearchWindow {
                             Message::AdvancedSearchInArchives,
                             false,
                             handle.clone(),
+                            window,
                             cx,
                         )),
                     compact, cx,
@@ -235,6 +238,7 @@ impl AdvancedSearchWindow {
                     Message::AdvancedCaseSensitive,
                     false,
                     handle.clone(),
+                    window,
                     cx,
                 ))
                 .child(self.advanced_toggle(
@@ -242,6 +246,7 @@ impl AdvancedSearchWindow {
                     Message::AdvancedIgnoreAccents,
                     false,
                     handle.clone(),
+                    window,
                     cx,
                 )),
             compact, cx,
@@ -255,6 +260,7 @@ impl AdvancedSearchWindow {
         message: Message,
         regex: bool,
         handle: Entity<Self>,
+        window: &Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let theme = *cx.theme();
@@ -281,48 +287,21 @@ impl AdvancedSearchWindow {
                 })
                 .into_any_element();
         }
+        let focus = &self.advanced_search.as_ref().unwrap().controls[index];
+        let ring = crate::ui::elements::focus_ring::keyboard_focused(focus, window);
         div()
             .id(SharedString::from(format!("advanced-flag-{index}")))
             .flex()
             .items_center()
-            .gap(rems(0.375))
-            .track_focus(&self.advanced_search.as_ref().unwrap().controls[index])
-            .focus(move |style| style.bg(theme.control_hover))
-            .child(if !regex {
-                crate::ui::elements::checkbox::checkbox(theme, checked, false)
-            } else {
-                div()
-                    .size(rems(if regex { 1.75 } else { 1.0 }))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded_sm()
-                    .border(rems(0.0625))
-                    .border_color(theme.border)
-                    .bg(if checked { theme.accent } else { theme.header })
-                    .text_color(if checked {
-                        theme.text_on_accent
-                    } else {
-                        theme.text_muted
-                    })
-                    .when(regex || checked, |e| {
-                        e.child(
-                            svg()
-                                .path(if regex {
-                                    "icons/regex.svg"
-                                } else {
-                                    "icons/check.svg"
-                                })
-                                .size(rems(if regex { 0.875 } else { 0.75 }))
-                                .text_color(if checked {
-                                    theme.text_on_accent
-                                } else {
-                                    theme.text
-                                }),
-                        )
-                    })
-            })
-            .when(!regex, |e| e.child(cx.i18n().text(message)))
+            .gap(rems(0.5))
+            .track_focus(focus)
+            .child(crate::ui::elements::focus_ring::focus_ring(
+                crate::ui::elements::checkbox::checkbox(theme, checked, false),
+                ring,
+                false,
+                theme,
+            ))
+            .child(cx.i18n().text(message))
             .native_tooltip(crate::ui::components::tooltip::Tooltip::text(
                 cx.i18n().text(message),
             ))

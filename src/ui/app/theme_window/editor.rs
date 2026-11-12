@@ -83,7 +83,8 @@ impl ThemeWindow {
                 .when(draft.active != index, |row| row.hover(|row| row.bg(theme.menu_hover)))
                 .child(swatch(draft.colors[index], theme))
                 .child(described(i18n.text(*label), i18n.text(*description), theme))
-                .child(div().w(rems(6.5)).flex_none().child(draft.hex_inputs[index].clone()))
+                .child(div().w(rems(6.5)).flex_none().font_family("JetBrains Mono")
+                    .child(draft.hex_inputs[index].clone()))
                 .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                     let _ = select.update(cx, |this, cx| this.select_color(index, cx));
                 })

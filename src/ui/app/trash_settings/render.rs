@@ -447,8 +447,8 @@ fn render_body(
                                     .child(cx.i18n().text(Message::TrashDeleteImmediately)),
                             ),
                     )
-                    .child(toggle(config.nuke_on_delete, theme))
-                    .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                    .child(toggle("switch", config.nuke_on_delete, theme))
+                    .on_click(move |_, _, cx| {
                         nuke.update(cx, |this, cx| {
                             if let Some(d) = &mut this.trash_settings {
                                 if !d.busy && !d.loading {
@@ -486,8 +486,8 @@ fn render_body(
                         .min_w_0()
                         .child(cx.i18n().text(Message::TrashConfirmDelete)),
                 )
-                .child(toggle(dialog.confirm, theme))
-                .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                .child(toggle("switch", dialog.confirm, theme))
+                .on_click(move |_, _, cx| {
                     confirm.update(cx, |this, cx| {
                         if let Some(d) = &mut this.trash_settings {
                             if !d.busy && !d.loading {

@@ -48,16 +48,19 @@ pub(crate) fn render_remote_login_dialog(
         body = body.child(div()
             .id("remote-anonymous")
             .track_focus(&login.controls[ANONYMOUS])
-            .flex().items_center().gap(rems(0.5)).py_1().rounded_sm()
-            .border(rems(0.0625))
-            .border_color(if login.controls[ANONYMOUS].is_focused(window) { theme.accent } else { theme.surface.alpha(0.0) })
+            .flex().items_center().gap(rems(0.5)).py_1()
             .on_click(move |_, window, cx| toggle.update(cx, |view, cx| {
                 if let Some(login) = &view.remote_login {
                     window.focus(&login.controls[ANONYMOUS], cx);
                 }
                 view.toggle_remote_anonymous(cx);
             }))
-            .child(crate::ui::elements::checkbox::checkbox(theme, login.anonymous, false))
+            .child(crate::ui::elements::focus_ring::focus_ring(
+                crate::ui::elements::checkbox::checkbox(theme, login.anonymous, false),
+                crate::ui::elements::focus_ring::keyboard_focused(&login.controls[ANONYMOUS], window),
+                false,
+                theme,
+            ))
             .child(cx.i18n().text(Message::RemoteAnonymous)));
     }
     for (index, needed, label) in [
@@ -83,16 +86,21 @@ pub(crate) fn render_remote_login_dialog(
         let mut choices = div()
             .id("remote-remember")
             .track_focus(&login.controls[REMEMBER])
-            .flex().flex_col().min_w_0().px(rems(0.25)).rounded_md()
-            .border(rems(0.0625))
-            .border_color(if login.controls[REMEMBER].is_focused(window) { theme.accent } else { theme.surface.alpha(0.0) });
+            .flex().flex_col().min_w_0();
+        let group_ring = crate::ui::elements::focus_ring::keyboard_focused(&login.controls[REMEMBER], window);
         for (index, (save, label)) in SAVES.into_iter().enumerate() {
             let select = handle.clone();
             choices = choices.child(
                 div()
                     .id(("remote-remember-choice", index))
                     .flex().items_center().gap(rems(0.5)).py_1().min_w_0()
-                    .child(crate::ui::elements::radio::radio(theme, login.save == save))
+                    // The group is one focus stop: the ring marks its chosen radio.
+                    .child(crate::ui::elements::focus_ring::focus_ring(
+                        crate::ui::elements::radio::radio(theme, login.save == save),
+                        group_ring && login.save == save,
+                        true,
+                        theme,
+                    ))
                     .child(div().min_w_0().child(cx.i18n().text(label)))
                     .on_click(move |_, window, cx| select.update(cx, |view, cx| {
                         if let Some(login) = &view.remote_login {

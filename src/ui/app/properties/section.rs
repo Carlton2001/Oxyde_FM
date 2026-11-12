@@ -95,5 +95,5 @@ pub(super) fn toggle_row(id: impl Into<ElementId>, label: SharedString, value: b
         .min_w_0()
         .when(!enabled, |row| row.opacity(0.5))
         .child(div().flex_1().min_w_0().child(label))
-        .child(crate::ui::elements::toggle::toggle(value, theme))
+        .child(crate::ui::elements::toggle::toggle("switch", value, theme))
 }
