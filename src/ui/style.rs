@@ -35,7 +35,7 @@ pub const TAB_MAX_WIDTH: Rems = rems(12.0);
 pub const TAB_MIN_WIDTH: Rems = rems(7.0);
 pub const NAV_BAR_HEIGHT: Rems = rems(2.25);
 pub const STATUS_BAR_HEIGHT: Rems = rems(2.25);
-pub const COLUMN_HEADER_HEIGHT: Rems = rems(1.625);
+pub const COLUMN_HEADER_HEIGHT: Rems = rems(1.75);
 pub fn column_header_height() -> f32 {
     rem_pixels(COLUMN_HEADER_HEIGHT).as_f32()
 }
@@ -62,6 +62,12 @@ pub fn details_horizontal_padding() -> f32 {
 pub const MENU_ITEM_HEIGHT: Rems = rems(2.25);
 pub fn menu_item_height() -> f32 {
     rem_pixels(MENU_ITEM_HEIGHT).as_f32()
+}
+
+/// Height of a menu separator, its 1/16 rem line centered in it.
+pub const MENU_SEPARATOR_HEIGHT: Rems = rems(0.5);
+pub fn menu_separator_height() -> f32 {
+    rem_pixels(MENU_SEPARATOR_HEIGHT).as_f32()
 }
 
 pub fn menu_list_max_height(viewport: f32, header: bool, maximum: f32) -> f32 {

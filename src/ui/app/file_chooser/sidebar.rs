@@ -17,10 +17,10 @@ use gpui::*;
 use oxyde_lib::models::DriveInfo;
 use oxyde_lib::platform::UnmountedVolume;
 
-const ROW_HEIGHT: Rems = rems(1.75);
-const DRIVE_HEIGHT: Rems = rems(2.25);
-/// The gap above the first entry.
-const LIST_TOP: Rems = rems(0.375);
+/// Places, drives and volumes, at the height of the main sidebar's entries.
+const ENTRY_HEIGHT: Rems = crate::ui::style::MENU_ITEM_HEIGHT;
+/// Space above the first entry and below the last one, as the main sidebar's.
+const LIST_PADDING: Rems = crate::ui::components::sidebar::LIST_PADDING;
 /// One tooltip session for the whole list, as the main sidebar's.
 const REGION: HoverRegion = HoverRegion::Controls("file-chooser-places");
 
@@ -90,7 +90,7 @@ impl FileChooserWindow {
         div()
             .id(("file-chooser-place", index))
             .w_full()
-            .h(ROW_HEIGHT)
+            .h(ENTRY_HEIGHT)
             .px_3()
             .flex()
             .items_center()
@@ -117,7 +117,7 @@ impl FileChooserWindow {
         div()
             .id(("file-chooser-drive", index))
             .w_full()
-            .h(DRIVE_HEIGHT)
+            .h(ENTRY_HEIGHT)
             .px_3()
             .flex()
             .items_center()
@@ -147,7 +147,7 @@ impl FileChooserWindow {
         div()
             .id(SharedString::from(format!("file-chooser-volume-{}", volume.id)))
             .w_full()
-            .h(DRIVE_HEIGHT)
+            .h(ENTRY_HEIGHT)
             .px_3()
             .flex()
             .items_center()
@@ -182,9 +182,7 @@ impl FileChooserWindow {
         let volumes = !places.drives.is_empty() || !places.volumes.is_empty();
         if volumes {
             // The section line between quick access and the volumes.
-            rows.push(div().w_full().h(ROW_HEIGHT).px_3().flex().items_center()
-                .child(div().flex_1().h(rems(0.0625)).flex_shrink_0().bg(theme.border))
-                .into_any_element());
+            rows.push(crate::ui::elements::separator::horizontal(theme.border).px_3().into_any_element());
         }
         rows.extend(places.drives.iter().enumerate().map(|(index, drive)| self.render_drive(index, drive, owner.as_ref(), theme, cx)));
         rows.extend(places.volumes.iter().map(|volume| self.render_volume(volume, owner.as_ref(), theme, cx)));
@@ -208,7 +206,7 @@ impl FileChooserWindow {
             .child(
                 div()
                     .absolute()
-                    .top(LIST_TOP)
+                    .top_0()
                     .bottom_0()
                     .left(rems(0.5))
                     // 12 px scrollbar track + 6 px clear margin when needed.
@@ -217,10 +215,12 @@ impl FileChooserWindow {
                     .when_some(owner.clone(), |list, owner| list.child(crate::ui::components::tooltip::hover::region_container(owner, REGION, px(0.0), px(0.0), cx)))
                     .child(div().id("file-chooser-places").size_full().flex().flex_col().overflow_y_scroll().track_scroll(&scroll)
                         .on_scroll_wheel(move |_, _, cx| cx.notify(entity_id))
-                        .children(rows.into_iter().map(|row| div().flex_none().child(row)))),
+                        .child(div().flex_none().h(LIST_PADDING))
+                        .children(rows.into_iter().map(|row| div().flex_none().child(row)))
+                        .child(div().flex_none().h(LIST_PADDING))),
             )
             .child(
-                div().absolute().top(LIST_TOP).bottom_0().right_0().w(rems(0.75))
+                div().absolute().top_0().bottom_0().right_0().w(rems(0.75))
                     .child(render_scrollbar_with_pointer(theme, cx.entity(), ScrollbarAxis::Vertical, viewport_h.max(1.0), if viewport_h > 0.0 { content_h } else { 1.0 },
                         -scroll.offset().y.as_f32(), dragging, "file-chooser-sidebar".into(), None,
                         move |this: &mut Self, track, viewport, content, _, cx| {
@@ -234,8 +234,9 @@ impl FileChooserWindow {
     fn sidebar_content_height(&self) -> f32 {
         let places = &self.places;
         let section = !places.drives.is_empty() || !places.volumes.is_empty();
-        rem_pixels(ROW_HEIGHT).as_f32() * (places.folders.len() + usize::from(section)) as f32
-            + rem_pixels(DRIVE_HEIGHT).as_f32() * (places.drives.len() + places.volumes.len()) as f32
+        rem_pixels(LIST_PADDING).as_f32() * 2.0
+            + rem_pixels(ENTRY_HEIGHT).as_f32() * (places.folders.len() + places.drives.len() + places.volumes.len()) as f32
+            + if section { rem_pixels(crate::ui::style::MENU_SEPARATOR_HEIGHT).as_f32() } else { 0.0 }
     }
 
     /// Whether the places overflow their list, which then shows a vertical scrollbar.

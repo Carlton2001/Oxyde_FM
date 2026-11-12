@@ -41,7 +41,7 @@ pub(super) fn context_menu_height(menu: &ContextMenuInstance, viewport_height: P
     let header = matches!(&menu.content, ContextMenuContent::Items(_, Some(_)));
     let max_height = crate::ui::style::menu_list_max_height(viewport_height.as_f32(), header, max_height);
     let separator_height = match &menu.content {
-        ContextMenuContent::Items(items, _) => items.iter().filter(|item| matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count() as f32 * logical(9.0),
+        ContextMenuContent::Items(items, _) => items.iter().filter(|item| matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count() as f32 * crate::ui::style::menu_separator_height(),
         _ => 0.0,
     };
     px((item_count as f32 * crate::ui::style::menu_item_height() + separator_height).min(max_height) + header_height + logical(4.0))

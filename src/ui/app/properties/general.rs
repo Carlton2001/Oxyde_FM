@@ -310,5 +310,5 @@ pub(super) fn render(
 }
 
 pub(super) fn divider(theme: OxydeTheme) -> Div {
-    div().h(rems(0.0625)).w_full().bg(theme.border).my(rems(0.75))
+    crate::ui::elements::separator::horizontal(theme.border)
 }

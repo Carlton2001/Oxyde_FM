@@ -1,5 +1,4 @@
 use super::menus::linux_context_menu;
-use super::sidebar_row_h;
 use crate::ui::paths::paths_match;
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, OxydeApp};
 use crate::ui::components::tooltip::hover::{HoverRegion, SharedTooltipExt};
@@ -29,7 +28,7 @@ pub(super) fn render(
     div()
         .id("sb-linux")
         .w(px(row_w))
-        .h(px(sidebar_row_h()))
+        .h(px(super::sidebar_entry_h()))
         .px_3()
         .flex()
         .items_center()

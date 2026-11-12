@@ -410,7 +410,7 @@ impl OxydeApp {
                                                                     parent_visible_y
                                                                         + px(items_inner.iter().take(ix_inner).filter(|item| !matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count()
                                                                             as f32
-                                                                            * crate::ui::style::menu_item_height() + items_inner.iter().take(ix_inner).filter(|item| matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count() as f32 * logical(9.0));
+                                                                            * crate::ui::style::menu_item_height() + items_inner.iter().take(ix_inner).filter(|item| matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count() as f32 * crate::ui::style::menu_separator_height());
                                                                 (on_h)(
                                                                     sub_pos, open_left,
                                                                     app,

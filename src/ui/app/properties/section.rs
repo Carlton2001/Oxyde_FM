@@ -40,7 +40,7 @@ pub(super) fn card(theme: OxydeTheme) -> Div {
 
 /// A separator inside a card.
 pub(super) fn rule(theme: OxydeTheme) -> Div {
-    div().h(rems(0.0625)).w_full().my(rems(0.125)).bg(theme.border)
+    crate::ui::elements::separator::horizontal(theme.border)
 }
 
 /// A label and its value; `compact` stacks them in a narrow window.

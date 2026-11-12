@@ -146,7 +146,7 @@ fn card(theme: crate::ui::theme::OxydeTheme) -> Div {
 }
 
 fn divider(theme: crate::ui::theme::OxydeTheme) -> Div {
-    div().h(rems(0.0625)).w_full().bg(theme.border)
+    crate::ui::elements::separator::horizontal(theme.border)
 }
 
 /// A labelled row whose whole surface toggles the setting, like the Windows options.

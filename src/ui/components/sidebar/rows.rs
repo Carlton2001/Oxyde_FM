@@ -56,13 +56,10 @@ pub(super) fn render_sidebar_rows(
         match item {
             // ── Section header ─────────────────────────────
             SidebarItem::Header(_) => {
-                div()
+                crate::ui::elements::separator::horizontal(theme.border)
                     .w(px(row_w))
-                    .h(px(sidebar_row_h()))
+                    .h(px(sidebar_item_height(item)))
                     .px_3()
-                    .flex()
-                    .items_center()
-                    .child(div().flex_1().h(rems(0.0625)).flex_shrink_0().bg(theme.border))
                     .into_any_element()
             }
 
@@ -82,7 +79,7 @@ pub(super) fn render_sidebar_rows(
                 div()
                     .id(SharedString::from(format!("sb-pin-{}", path)))
                     .w(px(row_w))
-                    .h(px(sidebar_row_h()))
+                    .h(px(super::sidebar_entry_h()))
                     .px_3()
                     .flex()
                     .items_center()

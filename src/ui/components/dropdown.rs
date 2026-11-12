@@ -317,7 +317,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
         self.items = visible_items;
         let item_count = self.items.len();
         let maximum = crate::ui::style::menu_list_max_height(crate::ui::components::popup::available_size(window, cx).height.as_f32(), self.header.is_some(), self.max_height);
-        let separator_height = crate::ui::scale::device_snapped(logical(9.0), window.scale_factor());
+        let separator_height = crate::ui::scale::device_snapped(crate::ui::style::menu_separator_height(), window.scale_factor());
         let separator_count = separator_before.iter().filter(|value| **value).count();
         let viewport_h = (item_count as f32 * item_h + separator_count as f32 * separator_height).min(maximum);
         let content_h = item_count as f32 * item_h + separator_count as f32 * separator_height;

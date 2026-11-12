@@ -1,6 +1,6 @@
 //! Pinned folder reorder layer: it captures the pointer above the list, so the
 //! other rows lose their hover, and floats the moved row like a dragged tab.
-use super::sidebar_row_h;
+use super::sidebar_entry_h;
 use crate::ui::app::OxydeApp;
 use crate::ui::theme::OxydeTheme;
 use gpui::prelude::*;
@@ -40,7 +40,7 @@ pub(super) fn overlay(
 ) -> Option<AnyElement> {
     let reorder = view.pinned_reorder.as_ref()?;
     let name = view.state.pinned_items.iter().find(|item| item.path == reorder.path)?.name.clone();
-    let row_h = sidebar_row_h();
+    let row_h = sidebar_entry_h();
     // The floating row keeps the list's column and only follows the pointer vertically.
     // Shifted right so the insertion marker stays visible on its left; it may overflow the list.
     let list = scroll.bounds();

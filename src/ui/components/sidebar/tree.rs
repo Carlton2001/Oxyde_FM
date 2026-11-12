@@ -68,9 +68,9 @@ pub(super) fn render_sidebar_tree(
         .fold(0.0_f32, f32::max);
     let viewport_w = view.sidebar_display_width();
     let list_top = crate::ui::scale::rem_pixels(list_top_rems()).as_f32();
-    // The bottom padding belongs to the content, so the scrollbar covers it too.
-    let bottom_padding = crate::ui::scale::rem_pixels(rems(0.5)).as_f32();
-    let content_h = (sidebar_items.iter().map(sidebar_item_height).sum::<f32>() + bottom_padding).max(1.0);
+    // The paddings belong to the content, so the scrollbar covers them too.
+    let padding = crate::ui::scale::rem_pixels(super::LIST_PADDING).as_f32();
+    let content_h = (sidebar_items.iter().map(sidebar_item_height).sum::<f32>() + padding * 2.0).max(1.0);
     // The list's side insets: a left margin, and on the right the vertical scrollbar's
     // gutter when the rows overflow even without a horizontal scrollbar.
     let natural_gutter = list_margins(content_h > (view.list_height - list_top).max(1.0));
@@ -118,7 +118,7 @@ pub(super) fn render_sidebar_tree(
     let scrolled = offset >= 0.5;
     let mut reorder_slots = Vec::new();
     if view.pinned_reorder.is_some() {
-        let mut top = 0.0;
+        let mut top = padding;
         for item in &sidebar_items {
             if let SidebarItem::Pinned { item: pinned } = item {
                 if !pinned.name.is_empty() && pinned_paths.contains(&pinned.path) {
@@ -188,7 +188,7 @@ pub(super) fn render_sidebar_tree(
                             };
                             let scroll = scroll.clone();
                             let mut start = 0;
-                            let mut top = 0.0;
+                            let mut top = padding;
                             while start < sidebar_items.len() && top + sidebar_item_height(&sidebar_items[start]) < offset {
                                 top += sidebar_item_height(&sidebar_items[start]);
                                 start += 1;

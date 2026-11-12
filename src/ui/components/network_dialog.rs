@@ -397,7 +397,7 @@ pub(crate) fn render_network_dialog(
                 false,
                 cx,
             ))
-            .child(div().my(rems(0.5)).h(rems(0.0625)).bg(theme.border))
+            .child(crate::ui::elements::separator::horizontal(theme.border))
             .child(field(
                 cx.i18n().text(Message::NetworkUsername),
                 dialog.inputs[1].clone(),

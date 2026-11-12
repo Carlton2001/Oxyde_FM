@@ -20,12 +20,22 @@ pub(crate) use pinned::render_pinned_menu;
 /// Width of the collapsed sidebar, the rail: its entries are square cells.
 pub(crate) const RAIL_WIDTH: Rems = rems(2.25);
 
+/// Folders of the tree, at the height of the file list's rows.
 const SIDEBAR_ROW_H: Rems = rems(1.75);
 fn sidebar_row_h() -> f32 { rem_pixels(SIDEBAR_ROW_H).as_f32() }
+/// Places, devices and WSL, at the height of the bars and menu entries.
+fn sidebar_entry_h() -> f32 { crate::ui::style::menu_item_height() }
+/// Space above the first row and below the last one.
+pub(crate) const LIST_PADDING: Rems = rems(0.5);
 
 pub(crate) fn sidebar_item_height(item: &SidebarItem) -> f32 {
-    if matches!(item, SidebarItem::Drive { .. } | SidebarItem::Volume { .. }) { rem_pixels(rems(2.25)).as_f32() }
-    else { sidebar_row_h() }
+    match item {
+        SidebarItem::Directory { .. } => sidebar_row_h(),
+        // A section is a separator between groups, as in menus.
+        SidebarItem::Header(_) => crate::ui::style::menu_separator_height(),
+        SidebarItem::Pinned { .. } | SidebarItem::OneDrive { .. } | SidebarItem::Linux { .. }
+        | SidebarItem::Drive { .. } | SidebarItem::Volume { .. } => sidebar_entry_h(),
+    }
 }
 
 pub(crate) fn sidebar_item_visible(item: &SidebarItem, show_hidden: bool, show_system: bool, show_network: bool) -> bool {

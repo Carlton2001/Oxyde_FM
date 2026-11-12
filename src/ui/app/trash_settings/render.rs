@@ -422,7 +422,7 @@ fn render_body(
                             ),
                     ),
             )
-            .child(div().h(rems(0.0625)).w_full().bg(theme.border))
+            .child(crate::ui::elements::separator::horizontal(theme.border))
             .child(
                 div()
                     .id("trash-nuke")

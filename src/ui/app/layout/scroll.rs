@@ -92,7 +92,7 @@ impl OxydeApp {
                 _ => 0,
             };
             if item_count > 0 {
-                let content_h = item_count as f32 * crate::ui::style::menu_item_height() + separators as f32 * logical(9.0);
+                let content_h = item_count as f32 * crate::ui::style::menu_item_height() + separators as f32 * crate::ui::style::menu_separator_height();
                 let viewport_h = content_h.min(logical(480.0));
                 let max_v_offset = (content_h - viewport_h).max(0.0);
                 let current_v_offset = instance

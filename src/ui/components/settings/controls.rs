@@ -17,12 +17,9 @@ pub(super) fn icon(path: &'static str, theme: OxydeTheme) -> impl IntoElement {
         .text_color(theme.text)
 }
 
+/// A line between groups of rows.
 pub(super) fn separator(theme: OxydeTheme) -> impl IntoElement {
-    div()
-        .h(rems(0.0625))
-        .my(rems(0.25))
-        .bg(theme.border)
-        .flex_none()
+    crate::ui::elements::separator::horizontal(theme.border)
 }
 
 pub(super) fn picker(
