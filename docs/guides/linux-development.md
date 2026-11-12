@@ -52,7 +52,7 @@ Tests still run on Windows: `./scripts/test-windows.ps1 -Offline`, or without re
 
 ## Desktop behavior worth knowing
 
-- Hybrid GPU: at startup, Vulkan drivers of cards with no connected screen are excluded (`VK_LOADER_DRIVERS_DISABLE`, `platform/linux_gpu.rs`), unless the user or desktop already chose a GPU, and applications opened by Oxyde do not inherit this. It keeps a discrete GPU suspended.
+- Hybrid GPU: at startup, Vulkan drivers of every vendor but the compositor's GPU are excluded (`VK_LOADER_DRIVERS_DISABLE`, `platform/linux_gpu.rs`). The compositor names that GPU through linux-dmabuf's default feedback, which GPUI and Mesa also follow; a window drawn by another GPU can be refused by it. Without that answer (X11, older compositors), only cards whose kernel runtime power state is `suspended` lose their drivers. A user or desktop choice of GPU is left untouched, and applications opened by Oxyde do not inherit this. It keeps a discrete GPU suspended without depending on where screens are wired.
 - Rounded corners: `client_decorations` rounds floating corners of client-decorated windows by 10 px, and no corner touching a screen edge. GPUI only clips to rectangles, so a background reaching a corner rounds itself with `inner_corners`.
 - Scales: screens report logical size through xdg-output, because `wl_output` gives the next whole scale (1280x800 instead of 2048x1280 for 2560x1600 at 125%). The compositor hides window positions, so only the largest screen bounds a restored size. The minimum size yields on a logical screen too small for it.
 - KDE: titled windows request `WindowDecorations::Client` (`ui::window_decorations`).

@@ -33,6 +33,33 @@ pub(crate) fn trace_shutdown_request(source: &'static str) {
     }
 }
 
+/// Bytes one session may add to the log: a fault repeating at full speed once wrote 5.6 GB.
+const LOG_SESSION_LIMIT: u64 = 32 * 1024 * 1024;
+
+/// The log file, which drops what a session writes past `LOG_SESSION_LIMIT`.
+struct SessionLog {
+    file: std::fs::File,
+    left: u64,
+}
+
+impl std::io::Write for SessionLog {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        if self.left == 0 {
+            return Ok(buffer.len());
+        }
+        if buffer.len() as u64 > self.left {
+            self.left = 0;
+            self.file.write_all(b"Log size limit reached: this session's later messages are dropped.\n")?;
+            return Ok(buffer.len());
+        }
+        self.left -= buffer.len() as u64;
+        self.file.write_all(buffer)?;
+        Ok(buffer.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> { self.file.flush() }
+}
+
 fn initialize_logging() {
     use std::io::Write;
     let mut logger = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn"));
@@ -52,7 +79,9 @@ fn initialize_logging() {
         std::fs::OpenOptions::new().create(true).append(true).open(&path).ok().map(|file| (path, file))
     });
     let path = log_file.as_ref().map(|(path, _)| path.clone());
-    if let Some((_, file)) = log_file { logger.target(env_logger::Target::Pipe(Box::new(file))); }
+    if let Some((_, file)) = log_file {
+        logger.target(env_logger::Target::Pipe(Box::new(SessionLog { file, left: LOG_SESSION_LIMIT })));
+    }
     logger.init();
     log::info!("session start; pid={}; version={}; log={path:?}", std::process::id(), env!("CARGO_PKG_VERSION"));
     let previous_hook = std::panic::take_hook();
@@ -145,7 +174,7 @@ fn main() {
     };
     oxyde_lib::platform::platform().identify_process();
     if let Some(drivers) = idle_gpus {
-        log::info!("Vulkan drivers of GPUs without a screen disabled: {drivers}");
+        log::info!("Vulkan drivers disabled: {drivers}");
     }
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

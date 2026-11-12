@@ -110,6 +110,10 @@ zbus = { version = "5.19", default-features = false, features = ["async-io", "bl
 async-io = "2.6"
 # Already locked through zbus: disk checks of bus calls, off its executor.
 blocking = "1.6"
+# Already locked through GPUI's Wayland backend: the compositor names the GPU it renders
+# with, before GPUI starts.
+wayland-client = "0.31.11"
+wayland-protocols = { version = "0.32.9", features = ["client"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # Required by the official COM implementation macro; already used by windows.

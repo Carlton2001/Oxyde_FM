@@ -60,3 +60,9 @@ compare both copies to the new upstream.
 - `gpui_linux/src/linux/wayland/{client,window}.rs`: a window's mouse position is the pointer's
   only while the pointer is over it. Upstream gives every window the last location in the
   hovered surface's coordinates, so a submenu opened beside its parent showed a hovered row.
+- `gpui_linux/src/linux/platform.rs`: a quit asked before the event loop runs ends the
+  application. calloop's `run` clears an earlier stop, so when the first window could not
+  open, the process stayed without a window and kept its single-instance name.
+- `gpui_linux/src/linux/wayland/client.rs`: the event loop ends once the connection has
+  failed. After a protocol error the socket stays readable and calloop-wayland-source drops
+  the error, so the loop spun at full speed, logging each failed read (5.6 GB of log).

@@ -361,8 +361,8 @@ pub trait Platform: Send + Sync {
     /// Registered WSL distributions, read without starting any of them. Blocking.
     fn wsl_distributions(&self) -> Vec<crate::models::SidebarNode> { Vec::new() }
     fn show_startup_error(&self, _title: &str, message: &str) { eprintln!("{message}"); }
-    /// Keeps GPUs without a screen asleep; returns what it disabled. Changes the process
-    /// environment: call it while the process has a single thread.
+    /// Keeps GPUs the desktop does not render with asleep; returns what it disabled and
+    /// why. Changes the process environment: call it while the process has a single thread.
     fn prefer_display_gpu(&self) -> Option<String> { None }
     /// Locations the desktop asked this launch to open, instead of the saved tabs.
     fn startup_locations(&self) -> Vec<String> { Vec::new() }

@@ -4488,6 +4488,8 @@ dependencies = [
  "usvg",
  "uuid",
  "walkdir",
+ "wayland-client",
+ "wayland-protocols",
  "windows 0.62.2",
  "windows-core 0.62.2",
  "xz2",
