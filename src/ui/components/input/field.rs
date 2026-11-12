@@ -16,7 +16,7 @@ pub(crate) const FIELD_BUTTON_WIDTH: Rems = rems(2.0);
 pub(crate) const FIELD_ICON_SIZE: Rems = rems(1.0);
 const FIELD_BORDER: Rems = rems(0.0625);
 /// Corner of every field frame.
-pub(crate) const FIELD_RADIUS: Rems = rems(0.25);
+const FIELD_RADIUS: Rems = rems(0.25);
 /// Frame radius less its border, so a cell at an edge follows the frame corner.
 const FIELD_INNER_RADIUS: Rems = rems(0.1875);
 

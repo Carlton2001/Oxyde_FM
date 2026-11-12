@@ -3,7 +3,7 @@ mod field;
 mod options;
 mod render;
 pub(crate) use field::{
-    BAR_FIELD_HEIGHT, FIELD_PADDING, FIELD_RADIUS, FieldEdge, control_frame, field_button, field_button_icon, field_option,
+    BAR_FIELD_HEIGHT, FIELD_PADDING, FieldEdge, control_frame, field_button, field_button_icon, field_option,
     field_frame, field_icon, password_field, read_only_field,
 };
 pub(crate) use options::{InputAppearance, TextInputOptions};

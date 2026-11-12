@@ -50,7 +50,7 @@ impl FileChooserWindow {
                 });
             },
             |_, _, _, _, _| {},
-            TextInputOptions { appearance: InputAppearance::Embedded, ..Default::default() },
+            TextInputOptions { appearance: InputAppearance::Bare, ..Default::default() },
             window,
         ));
         let focus = input.read(cx).focus_handle.clone();
@@ -98,8 +98,8 @@ impl FileChooserWindow {
                     // Its arrows move the list's selection, so Enter chooses what they reach.
                     .on_action(cx.listener(|this, _: &CompletionUp, _, cx| this.move_selection("up", false, cx)))
                     .on_action(cx.listener(|this, _: &CompletionDown, _, cx| this.move_selection("down", false, cx)))
-                    // The one borderless field: the surface alone sets it off in the bar.
-                    .child(div().w(rems(10.0)).h_full().rounded(crate::ui::components::input::FIELD_RADIUS).bg(theme.surface).child(input));
+                    // The one field without a frame: its text follows the separator, as the bar's own.
+                    .child(div().w(rems(10.0)).h_full().child(input));
                 bar.child(field.with_animation(
                     SharedString::from(format!("file-chooser-filter-slide-{revision}")),
                     Animation::new(std::time::Duration::from_millis(250)),

@@ -373,8 +373,8 @@ impl OxydeApp {
                     .flex_none()
                     .overflow_hidden()
                     .h(crate::ui::components::input::BAR_FIELD_HEIGHT)
-                    // The one borderless field: the surface alone sets it off in the bar.
-                    .child(div().w(rems(10.0)).h_full().rounded(crate::ui::components::input::FIELD_RADIUS).bg(theme.surface).child(input));
+                    // The one field without a frame: its text follows the separator, as the bar's own.
+                    .child(div().w(rems(10.0)).h_full().child(input));
                 bar.child(field.with_animation(
                     SharedString::from(format!("search-slide-{id}-{slide_revision}")),
                     Animation::new(std::time::Duration::from_millis(250)),
@@ -655,7 +655,7 @@ impl OxydeApp {
                     });
                 },
                 TextInputOptions {
-                    appearance: InputAppearance::Embedded,
+                    appearance: InputAppearance::Bare,
                     ..Default::default()
                 },
                 window,
