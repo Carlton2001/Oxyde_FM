@@ -315,6 +315,7 @@ impl OxydeApp {
         let rename_history = self.history.clone();
         let generation = self.rename_generation;
         let path_for_check = old_path.clone();
+        let renamed_path = new_path.clone();
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
@@ -337,6 +338,18 @@ impl OxydeApp {
                         _ => false,
                     };
                     if let Ok(Ok(())) = &result {
+                        let parent = std::path::Path::new(&renamed_path).parent();
+                        this.state.layout.visit_panes_mut(&mut |pane| {
+                            let active = pane.active_tab_index;
+                            for (index, tab) in pane.tabs.iter_mut().enumerate() {
+                                if tab.follow_renamed_item(&path_for_check, &renamed_path)
+                                    && index == active
+                                    && parent == Some(std::path::Path::new(&tab.path))
+                                {
+                                    tab.pending_rename_reveal = Some(renamed_path.clone());
+                                }
+                            }
+                        });
                         this.reconcile_watchers(cx);
                     }
                     if !current_attempt {
@@ -588,6 +601,19 @@ impl OxydeApp {
             }
         }
     }
+}
+
+/// Shows the renamed item once its listing arrives, scrolling only if it is out of view.
+pub(super) fn reveal_renamed_item(tab: &mut crate::ui::workspace::TabState, width: f32) {
+    let Some(path) = tab.pending_rename_reveal.take() else { return; };
+    let Some(index) = tab.filtered_files().iter().position(|file| file.path == path) else { return; };
+    let group = crate::ui::date_groups::group_for_file(&tab.filtered_files()[index], tab.grouping(), chrono::Local::now().date_naive());
+    tab.collapsed_groups.remove(&group);
+    let columns = if tab.view_mode == crate::ui::workspace::ViewMode::Grid {
+        crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::zed_track_width()).columns
+    } else { 1 };
+    let rows = crate::ui::date_groups::display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, columns);
+    super::selection::scroll_row_into_view(tab, &rows, index);
 }
 
 fn initial_selection_len(name: &str, is_dir: bool, extension: Option<&str>) -> usize {

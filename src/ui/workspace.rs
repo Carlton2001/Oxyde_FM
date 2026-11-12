@@ -145,6 +145,8 @@ pub struct TabState {
     pub search_text: String,
     pub search_revision: u64,
     pub pending_reveal: Option<String>,
+    /// Renamed while selected: shown by the least scroll once the listing has it.
+    pub pending_rename_reveal: Option<String>,
     /// Restored from the saved workspace and not listed yet: a location that
     /// vanished meanwhile, such as an unmounted volume, falls back home.
     pub restored: bool,

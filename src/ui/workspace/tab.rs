@@ -37,6 +37,21 @@ impl TabState {
         crate::ui::date_groups::GroupMode::ALL.into_iter().filter(|mode| self.supports_grouping(*mode)).collect()
     }
 
+    /// A renamed item stays selected under its new name, as in Nautilus.
+    /// Returns whether it was selected.
+    pub(crate) fn follow_renamed_item(&mut self, old_path: &str, new_path: &str) -> bool {
+        for path in [&mut self.selection_anchor, &mut self.keyboard_cursor].into_iter().flatten() {
+            if path == old_path {
+                *path = new_path.to_owned();
+            }
+        }
+        let selected = self.selected_paths.remove(old_path);
+        if selected {
+            self.selected_paths.insert(new_path.to_owned());
+        }
+        selected
+    }
+
     /// The archive's containing directory reports replacement/deletion events.
     /// This consumes the location resolved by the listing worker, without I/O.
     pub(crate) fn watched_path(&self) -> String {
@@ -71,6 +86,7 @@ impl TabState {
             search_text: String::new(),
             search_revision: 0,
             pending_reveal: None,
+            pending_rename_reveal: None,
             restored: false,
             path: path.clone(),
             archive_root: None,
@@ -154,3 +170,7 @@ impl TabState {
 #[cfg(test)]
 #[path = "tab/tests/grouping.rs"]
 mod grouping_tests;
+
+#[cfg(test)]
+#[path = "tab/tests/renamed_selection.rs"]
+mod renamed_selection_tests;

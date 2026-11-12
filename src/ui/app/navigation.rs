@@ -603,6 +603,7 @@ impl OxydeApp {
                                     tab.list_scroll = UniformListScrollHandle::new();
                                 }
                                 tab.reveal_pending_item(pane_width);
+                                super::rename::reveal_renamed_item(tab, pane_width);
                             }
                             Err(error) => {
                                 tab.clear_files();
