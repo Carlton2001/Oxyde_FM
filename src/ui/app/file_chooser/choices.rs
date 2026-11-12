@@ -77,7 +77,7 @@ impl FileChooserWindow {
                 .gap(rems(0.5))
                 .text_size(rems(0.8125))
                 .child(label)
-                .child(self.render_menu(FooterMenu::Choice(position), shown, theme, cx))
+                .child(self.render_menu(FooterMenu::Choice(position), shown, cx))
                 .into_any_element()
         }).collect()
     }

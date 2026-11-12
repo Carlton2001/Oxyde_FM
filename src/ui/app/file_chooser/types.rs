@@ -2,7 +2,6 @@
 //! filter shown decides which files the list offers and goes back with the choice.
 use super::menus::FooterMenu;
 use super::FileChooserWindow;
-use crate::ui::theme::OxydeTheme;
 use gpui::*;
 
 impl FileChooserWindow {
@@ -17,9 +16,9 @@ impl FileChooserWindow {
 
     /// The filter shown and the menu of the others; nothing when the application gives
     /// none, or when it asks for folders, which filters leave alone.
-    pub(super) fn render_type_filter(&self, theme: OxydeTheme, cx: &mut Context<Self>) -> Option<AnyElement> {
+    pub(super) fn render_type_filter(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         if self.directory { return None; }
         let label = self.filters.get(self.type_filter?)?.name.clone();
-        Some(self.render_menu(FooterMenu::Types, label, theme, cx))
+        Some(self.render_menu(FooterMenu::Types, label, cx))
     }
 }

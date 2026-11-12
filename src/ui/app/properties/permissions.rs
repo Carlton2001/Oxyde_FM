@@ -361,27 +361,15 @@ fn choice(
     label: String,
     editable: bool,
     handle: &Entity<PropertiesWindow>,
-    theme: OxydeTheme,
+    cx: &App,
 ) -> AnyElement {
     if !editable {
         return plain(label);
     }
     let measure = handle.clone();
     let open = handle.clone();
-    div()
-        .id(id)
-        .relative()
+    crate::ui::components::select_menu::trigger(id, label, false, true, cx)
         .flex_1()
-        .min_w_0()
-        .h(rems(2.0))
-        .px(rems(0.625))
-        .flex()
-        .items_center()
-        .justify_between()
-        .border(rems(0.0625))
-        .border_color(theme.border)
-        .bg(theme.surface)
-        .rounded_sm()
         .child(
             canvas(
                 |bounds, _, _| bounds,
@@ -397,8 +385,6 @@ fn choice(
             .inset_0()
             .size_full(),
         )
-        .child(div().flex_1().min_w_0().truncate().child(label))
-        .child(svg().path("icons/chevron-down.svg").size(rems(0.75)).flex_none().text_color(theme.text))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             cx.stop_propagation();
             update(&open, cx, move |edit| {
@@ -446,7 +432,7 @@ fn menu_view(
         .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
         .on_mouse_up(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-        .w(bounds.size.width);
+        .w(crate::ui::components::select_menu::list_width(bounds.size.width));
     for (index, (label, selected, pick)) in edit.entries(menu, cx).into_iter().enumerate() {
         let choose = handle.clone();
         let key_choose = handle.clone();
@@ -454,7 +440,7 @@ fn menu_view(
             update(&key_choose, cx, move |edit| edit.pick(menu, pick))
         });
         list = list.child(crate::ui::components::popup::keyboard::item(
-            crate::ui::components::select_menu::row(div().id(("permissions-choice", index)), theme, selected)
+            crate::ui::components::select_menu::choice(div().id(("permissions-choice", index)), theme, selected, true)
                 .child(label)
                 .on_click(move |_, _, cx| {
                     cx.stop_propagation();
@@ -468,7 +454,7 @@ fn menu_view(
     let close = handle.clone();
     deferred(
         anchored()
-            .position(point(bounds.left(), bounds.bottom()))
+            .position(crate::ui::components::select_menu::list_origin(bounds))
             .snap_to_window()
             .child(list.on_mouse_down_out(move |event, _, cx| {
                 if bounds.contains(&event.position) {

@@ -9,22 +9,21 @@ use gpui::{prelude::*, *};
 pub(super) fn render(
     view: &OxydeApp,
     handle: Entity<OxydeApp>,
-    window: &mut Window,
     cx: &mut Context<OxydeApp>,
 ) -> AnyElement {
     let dialog = view.network_dialog.as_ref().expect("network dialog");
     let theme = *cx.theme();
-    let viewport_h = rem_pixels(rems(8.25)).as_f32();
-    let content_h = rem_pixels(rems(1.5)).as_f32() * 26.0;
+    // Four and a half entries show, so the list reads as scrollable.
+    let entry = crate::ui::style::MENU_ITEM_HEIGHT;
+    let viewport = entry * 4.5;
+    let viewport_h = rem_pixels(viewport).as_f32();
+    let content_h = rem_pixels(entry).as_f32() * 26.0;
     let mut choices = crate::ui::components::select_menu::surface(theme)
         .id("network-letter-options")
-        .w((rem_pixels(rems(30.0)).min(
-            crate::ui::components::popup::available_size(window, cx).width - rem_pixels(rems(2.0)),
-        ) - rem_pixels(rems(8.375)))
-        .max(rem_pixels(rems(4.0))))
+        .w(crate::ui::components::select_menu::list_width(dialog.letter_bounds.map_or(px(0.0), |bounds| bounds.size.width)))
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-        .h(rems(9.0));
+        .h(viewport + crate::ui::components::select_menu::chrome());
     let refresh = handle.clone();
     let mut rows = div()
         .id("network-letter-scroll")
@@ -68,23 +67,7 @@ pub(super) fn render(
                 }
             });
         });
-        let row = div()
-            .id(("network-letter-option", index))
-            .h(rems(1.5))
-            .flex_none()
-            .flex()
-            .items_center()
-            .gap(rems(0.5))
-            .px_3()
-            .text_color(if used {
-                theme.icon_disabled
-            } else {
-                theme.text
-            })
-            .when(selected, |row| row.bg(theme.selected))
-            .when(!used, |row| {
-                row.hover(|style| style.bg(theme.control_hover))
-            })
+        let row = crate::ui::components::select_menu::choice(div().id(("network-letter-option", index)), theme, selected, !used)
             .on_click(move |_, _, cx| {
                 h.update(cx, |view, cx| {
                     if let Some(dialog) = &mut view.network_dialog {

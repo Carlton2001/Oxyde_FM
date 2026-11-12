@@ -1,7 +1,6 @@
 use super::{controls::choice, SettingsPicker};
 use crate::ui::app::OxydeApp;
 use crate::ui::components::popup;
-use crate::ui::elements::button::{button_style, ButtonVariant};
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::ThemeContext;
 use gpui::{prelude::*, *};
@@ -11,8 +10,9 @@ const FORMATS: [(&str, &str); 8] = OxydeApp::ARCHIVE_FORMATS;
 
 fn choices(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &App) -> AnyElement {
     let theme = *cx.theme();
+    let trigger = view.archive_format_bounds.map_or(px(0.0), |bounds| bounds.size.width);
     crate::ui::components::select_menu::surface(theme)
-        .w(rems(8.0))
+        .w(crate::ui::components::select_menu::list_width(trigger))
         .children(FORMATS.map(|(format, label)| {
             let handle = handle.clone();
             choice(
@@ -37,7 +37,6 @@ pub(super) fn render(
     window: &mut Window,
     cx: &mut Context<OxydeApp>,
 ) -> AnyElement {
-    let theme = *cx.theme();
     let bounds = Rc::new(Cell::new(None));
     let paint_bounds = bounds.clone();
     let paint_handle = handle.clone();
@@ -58,21 +57,9 @@ pub(super) fn render(
         .find(|(format, _)| *format == view.default_archive_format())
         .unwrap()
         .1;
-    let control = button_style(
-        div().id("default-archive-format"),
-        theme,
-        ButtonVariant::Secondary,
-        true,
-    )
-    .relative()
-    .w(rems(5.0))
-    .h(crate::ui::style::MENU_ITEM_HEIGHT)
-    .px(rems(0.5))
-    .flex()
-    .items_center()
-    .gap(rems(0.5))
-    .rounded_md()
-    .child(
+    let control = crate::ui::components::select_menu::trigger("default-archive-format", label, false, true, cx)
+        .w(rems(8.0))
+        .child(
         canvas(
             |bounds, _, _| bounds,
             move |_, bounds, window, cx| {
@@ -91,13 +78,6 @@ pub(super) fn render(
         )
         .absolute()
         .size_full(),
-    )
-    .child(div().flex_1().child(label))
-    .child(
-        svg()
-            .path("icons/chevron-down.svg")
-            .size(rems(0.875))
-            .text_color(theme.text),
     )
     .on_mouse_down(MouseButton::Left, move |_, window, cx| {
         cx.stop_propagation();
@@ -152,7 +132,7 @@ pub(super) fn render(
                     })
                     .child(
                         anchored()
-                            .position(bounds.bottom_left())
+                            .position(crate::ui::components::select_menu::list_origin(bounds))
                             .snap_to_window()
                             .child(choices(view, handle, cx)),
                     ),

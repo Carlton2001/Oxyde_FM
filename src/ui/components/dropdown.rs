@@ -202,6 +202,8 @@ pub struct GenericDropdown<T: crate::ui::components::scrollbar::ScrollbarState +
     pub on_outside: Option<Rc<dyn Fn(Point<Pixels>, &mut Window, &mut App)>>,
     pub is_dragging: bool,
     pub width: Option<f32>,
+    /// Narrowest outer width, such as the trigger's for a list opened from one.
+    pub min_width: Option<f32>,
     pub max_height: f32,
     pub header: Option<AnyElement>,
     pub on_item_hover: Option<Rc<dyn Fn(usize, Point<Pixels>, &mut App)>>,
@@ -278,9 +280,10 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                 calculated_width.max(line.width.as_f32() + logical(16.0) + icon_width + chevron_width + badge_width + shortcut_width);
         }
 
-        let requested_width = self.width.unwrap_or(calculated_width);
         // A field-only popup has no scrollbar gutter; keep its editor centered.
         let right_padding = if self.is_context_menu && !self.items.is_empty() { logical(5.0) } else { logical(4.0) };
+        let requested_width = self.width.unwrap_or(calculated_width)
+            .max(self.min_width.unwrap_or(0.0) - logical(4.0) - right_padding);
         let outer_width = (requested_width + logical(4.0) + right_padding)
             .min((crate::ui::components::popup::available_size(window, cx).width.as_f32() - logical(16.0)).max(1.0));
         let width = (outer_width - logical(4.0) - right_padding).max(1.0);

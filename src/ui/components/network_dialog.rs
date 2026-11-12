@@ -317,9 +317,13 @@ pub(crate) fn render_network_dialog(
         let h = handle.clone();
         let letter_bounds = handle.clone();
         let mut letter = div().relative().flex().flex_col().child(
-            crate::ui::components::input::control_frame(dialog.controls[0].is_focused(window), cx)
-                .id("network-letter")
-                .relative()
+            crate::ui::components::select_menu::trigger(
+                "network-letter",
+                dialog.letter.clone().map(SharedString::from).unwrap_or_else(|| cx.i18n().text(Message::NetworkNoLetter)),
+                dialog.controls[0].is_focused(window),
+                !busy && !dialog.loading,
+                cx,
+            )
                 .child(canvas(|bounds, _, _| bounds, move |bounds, _, window, cx| {
                     let bounds = crate::ui::components::popup::owner_bounds(window, cx, bounds);
                     letter_bounds.update(cx, |view, cx| {
@@ -330,11 +334,6 @@ pub(crate) fn render_network_dialog(
                 }).absolute().inset_0().size_full())
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .track_focus(&dialog.controls[0])
-                .justify_between()
-                .px_3()
-                .when(!busy && !dialog.loading, |d| {
-                    d.hover(|s| s.bg(theme.control_hover))
-                })
                 .on_click(move |_, window, cx| {
                     h.update(cx, |view, cx| {
                         if let Some(dialog) = &mut view.network_dialog {
@@ -345,20 +344,7 @@ pub(crate) fn render_network_dialog(
                             }
                         }
                     })
-                })
-                .child(
-                    dialog
-                        .letter
-                        .clone()
-                        .map(SharedString::from)
-                        .unwrap_or_else(|| cx.i18n().text(Message::NetworkNoLetter)),
-                )
-                .child(
-                    svg()
-                        .path("icons/chevron-down.svg")
-                        .size(rems(0.875))
-                        .text_color(theme.text),
-                ),
+                }),
         );
         if dialog.letter_open {
             let native = crate::ui::components::popup::supported(window, cx);
@@ -366,16 +352,16 @@ pub(crate) fn render_network_dialog(
                 let bounds = dialog.letter_bounds.unwrap_or_default();
                 crate::ui::components::popup::show("network-letters", crate::ui::components::popup::PopupAnchor::element(bounds), handle.clone(), window, cx,
                     |view| view.network_dialog.as_ref().is_some_and(|dialog| dialog.letter_open && !dialog.disconnect),
-                    |view, window, cx| letters::render(view, cx.entity(), window, cx),
+                    |view, _, cx| letters::render(view, cx.entity(), cx),
                     |view, _, cx| { if let Some(dialog) = &mut view.network_dialog { dialog.letter_open = false; dialog.letter_scroll_drag = None; cx.notify(); } });
             }
             if !native {
-            let choices = letters::render(view, handle.clone(), window, cx);
+            let choices = letters::render(view, handle.clone(), cx);
             letter = letter.child(
                 deferred(
                     anchored()
                         .position_mode(AnchoredPositionMode::Local)
-                        .position(point(px(0.0), rem_pixels(rems(2.25))))
+                        .position(point(px(0.0), rem_pixels(rems(2.25) + crate::ui::components::select_menu::LIST_GAP)))
                         .snap_to_window_with_margin(rem_pixels(rems(0.5)))
                         .child(choices),
                 )

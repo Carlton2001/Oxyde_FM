@@ -13,6 +13,7 @@ pub(crate) fn text_menu<T: 'static, S: ScrollbarState + 'static>(
     scroll_owner: Entity<S>,
     items: Vec<DropdownItem>,
     scroll: UniformListScrollHandle,
+    min_width: Option<f32>,
     parent: &mut Window,
     cx: &mut App,
     alive: impl Fn(&T) -> bool + 'static,
@@ -48,6 +49,7 @@ pub(crate) fn text_menu<T: 'static, S: ScrollbarState + 'static>(
                 on_outside: None,
                 is_dragging: false,
                 width: None,
+                min_width,
                 max_height: super::available_size(window, cx)
                     .height
                     .as_f32()

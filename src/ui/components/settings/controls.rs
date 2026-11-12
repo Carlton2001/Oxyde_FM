@@ -62,7 +62,7 @@ pub(super) fn picker(
         .flex()
         .items_center()
         .gap(rems(0.5))
-        .rounded_md()
+        .rounded(rems(0.3125))
         .when(active, |row| row.bg(theme.selected))
         .hover(|s| s.bg(theme.menu_hover))
         .child(
@@ -110,7 +110,7 @@ pub(super) fn window_row(
         .flex()
         .items_center()
         .gap(rems(0.5))
-        .rounded_md()
+        .rounded(rems(0.3125))
         .hover(|s| s.bg(theme.menu_hover))
         .child(icon(icon_path, theme))
         .child(div().flex_1().flex_shrink_0().whitespace_nowrap().child(label))
@@ -206,14 +206,7 @@ pub(super) fn submenu_choice(
 ) -> impl IntoElement {
     let select = Rc::new(on_select);
     let key_select = select.clone();
-    let row = div().id(id)
-        .h(crate::ui::style::MENU_ITEM_HEIGHT).flex_none().px(rems(0.5))
-        .flex().items_center().gap(rems(0.5))
-        .rounded(rems(0.3125))
-        .hover(|s| s.bg(theme.menu_hover))
-        .child(div().size(rems(1.0)).flex_none().when(selected, |slot| {
-            slot.child(svg().path("icons/check.svg").size(rems(1.0)).text_color(theme.text))
-        }))
+    let row = crate::ui::components::select_menu::choice(div().id(id), theme, selected, true)
         .child(div().whitespace_nowrap().child(label))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| select(cx));
     crate::ui::components::popup::keyboard::item(row, Rc::new(move |_, cx| key_select(cx)), None, None)
@@ -229,10 +222,9 @@ pub(super) fn choice_with_icon(
 ) -> impl IntoElement {
     let select = Rc::new(on_select);
     let key_select = select.clone();
-    let row = crate::ui::components::select_menu::row(div().id(id), theme, selected)
+    let row = crate::ui::components::select_menu::choice(div().id(id), theme, selected, true)
         .when_some(icon_path, |row, path| row.child(icon(path, theme)))
         .child(div().flex_1().child(label))
-        .when(selected, |row| row.child(icon("icons/check.svg", theme)))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| select(cx));
     crate::ui::components::popup::keyboard::item(row, Rc::new(move |_, cx| key_select(cx)), None, None)
 }
@@ -256,7 +248,7 @@ pub(super) fn settings_row(
         .flex()
         .items_center()
         .gap(rems(0.5))
-        .rounded_md()
+        .rounded(rems(0.3125))
         .hover(|s| s.bg(theme.control_hover))
         .native_tooltip(Tooltip::wrapped_text(description))
         .child(icon(icon_path, theme))

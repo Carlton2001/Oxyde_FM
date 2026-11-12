@@ -57,7 +57,7 @@ pub(super) fn render(
     let owner = match edit.single() {
         Some(loaded) if loaded.editable && !loaded.owners.is_empty() => {
             let name = account_name(&loaded.owners, &loaded.owner, edit.owner);
-            choice(PermissionMenu::Owner, "permissions-owner-choice".into(), name, true, handle, theme)
+            choice(PermissionMenu::Owner, "permissions-owner-choice".into(), name, true, handle, cx)
         }
         Some(loaded) => plain(loaded.owner.name.clone()),
         None => plain(shared_name(edit, |loaded| &loaded.owner, cx)),
@@ -65,7 +65,7 @@ pub(super) fn render(
     let group = match edit.single() {
         Some(loaded) if loaded.editable && loaded.groups.len() > 1 => {
             let name = account_name(&loaded.groups, &loaded.group, edit.group);
-            choice(PermissionMenu::Group, "permissions-group".into(), name, true, handle, theme)
+            choice(PermissionMenu::Group, "permissions-group".into(), name, true, handle, cx)
         }
         Some(loaded) => plain(loaded.group.name.clone()),
         None => plain(shared_name(edit, |loaded| &loaded.group, cx)),

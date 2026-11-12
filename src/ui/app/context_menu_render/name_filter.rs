@@ -30,6 +30,7 @@ impl OxydeApp {
         is_context_menu: true,
         scroll_handle,
         width: Some(input_width),
+        min_width: None,
         max_height: logical(480.0),
         on_close: {
             let h = h.clone();

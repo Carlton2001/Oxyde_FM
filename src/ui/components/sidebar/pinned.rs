@@ -38,19 +38,10 @@ fn render_pinned_contents(
         .copied()
         .unwrap_or_default();
     let button_bounds = Bounds::new(origin, size(window.rem_size() * 2.0, window.rem_size() * 2.0));
-    let menu = div()
+    let menu = crate::ui::components::select_menu::surface(theme)
         .id("pinned-rail-menu")
-        .occlude()
         .w(rems(17.0))
-        .max_h(rems(30.0))
-        .p(rems(0.4375))
-        .text_size(rems(0.8125))
-        .text_color(theme.text)
-        .bg(theme.menu_surface)
-        .border(rems(0.0625))
-        .border_color(theme.menu_border)
-        .rounded(rems(0.5))
-        .shadow(crate::ui::style::rem_shadow(true));
+        .max_h(rems(30.0));
     let mut contents = div().id("pinned-rail-scroll").max_h(rems(29.0)).overflow_y_scroll();
     for (index, item) in view
         .state
@@ -68,16 +59,9 @@ fn render_pinned_contents(
         let context = handle.clone();
         let context_path = path.clone();
         contents = contents.child(
-            crate::ui::components::popup::keyboard::item(div()
-                .id(("pinned-rail-item", index))
-                .px(rems(0.5))
-                .h(rems(1.625))
-                .flex()
-                .items_center()
-                .gap(rems(0.5))
+            crate::ui::components::popup::keyboard::item(crate::ui::components::select_menu::row(div()
+                .id(("pinned-rail-item", index)), theme, false)
                 .min_w_0()
-                .rounded(rems(0.3125))
-                .hover(|row| row.bg(theme.menu_hover))
                 .child(svg().path("icons/pin.svg").size(rems(1.0)).flex_none().text_color(theme.text))
                 .child(div().flex_1().min_w_0().truncate().child(pinned_display_name(item, cx.i18n())))
                 .on_mouse_down(MouseButton::Left, move |_, _, cx| {

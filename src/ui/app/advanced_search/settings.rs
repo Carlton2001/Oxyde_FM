@@ -4,7 +4,7 @@ use super::AdvancedSearchWindow;
 use crate::ui::{
     components::{
         dropdown::DropdownItem,
-        modal::{action_button, responsive_form_row},
+        modal::responsive_form_row,
     },
     i18n::{I18nContext, Message},
     theme::ThemeContext,
@@ -107,25 +107,12 @@ impl AdvancedSearchWindow {
         }
         let unit_handle = handle.clone();
         let mut unit = Some(
-            action_button("advanced-unit")
-                .h(rems(2.25))
-                .min_w(rems(5.0))
-                .flex()
-                .items_center()
-                .justify_between()
-                .gap(rems(0.5))
-                .border(rems(0.0625))
-                .border_color(theme.border)
-                .bg(theme.surface)
+            crate::ui::components::select_menu::trigger("advanced-unit", units[d.unit], d.controls[8].is_focused(window), true, cx)
                 .track_focus(&d.controls[8])
-                .focus(move |style| style.border_color(theme.accent))
-                .child(units[d.unit])
-                .child(
-                    svg()
-                        .path("icons/chevron-down.svg")
-                        .size(rems(0.75))
-                        .text_color(theme.text),
-                )
+                .child(canvas(|bounds, _, _| bounds, {
+                    let measure = handle.clone();
+                    move |bounds, _, _, cx| measure.update(cx, |this, _| this.unit_bounds = Some(bounds))
+                }).absolute().inset_0().size_full())
                 .on_mouse_down(MouseButton::Left, move |event, _, cx| {
                     unit_handle.update(cx, |this, cx| {
                         let dismissed = this.unit_menu_dismissed.take().is_some_and(|at| at.elapsed() < std::time::Duration::from_millis(300));
@@ -150,12 +137,15 @@ impl AdvancedSearchWindow {
                             })
                             .collect();
                         this.context_menus.clear();
+                        // The list opens under the button, at least as wide.
+                        let (position, width) = this.unit_bounds
+                            .map_or((event.position, px(0.0)), |bounds| (crate::ui::components::select_menu::list_origin(bounds), bounds.size.width));
                         this.context_menus.push(ContextMenuInstance {
             native_bounds: None,
-                            position: event.position,
+                            position,
                             content: ContextMenuContent::Items(items, None),
                             scroll_handle: UniformListScrollHandle::new(),
-                            width: px(0.0),
+                            width,
                             open_left: false,
                             hovered_item: None,
                             native_request_id: None, open_up: false,

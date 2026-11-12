@@ -414,19 +414,8 @@ fn render_limit_action(
     let label = LIMIT_ACTIONS.iter().find(|(action, _)| *action == current)
         .map(|(_, label)| cx.i18n().text(*label)).unwrap_or_default();
     let (measure, toggle_menu) = (handle.clone(), handle.clone());
-    let trigger = div()
-        .id("trash-kde-limit-action")
-        .relative()
+    let trigger = crate::ui::components::select_menu::trigger("trash-kde-limit-action", label, false, true, cx)
         .w_full()
-        .h(rems(2.0))
-        .px(rems(0.625))
-        .flex()
-        .items_center()
-        .justify_between()
-        .border(rems(0.0625))
-        .border_color(theme.border)
-        .bg(theme.surface)
-        .rounded_sm()
         .child(
             canvas(|bounds, _, _| bounds, move |bounds, _, _, cx| {
                 measure.update(cx, |this, _| {
@@ -437,8 +426,6 @@ fn render_limit_action(
             .inset_0()
             .size_full(),
         )
-        .child(div().flex_1().min_w_0().truncate().child(label))
-        .child(svg().path("icons/chevron-down.svg").size(rems(0.75)).flex_none().text_color(theme.text))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             cx.stop_propagation();
             set_action_menu(&toggle_menu, |open| !open, cx);
@@ -465,7 +452,7 @@ fn limit_action_menu(
         .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
         .on_mouse_up(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-        .w(bounds.size.width);
+        .w(crate::ui::components::select_menu::list_width(bounds.size.width));
     for (index, (action, label)) in LIMIT_ACTIONS.into_iter().enumerate() {
         let (choose, key_choose) = (handle.clone(), handle.clone());
         let pick = move |handle: &Entity<OxydeApp>, cx: &mut App| {
@@ -478,7 +465,7 @@ fn limit_action_menu(
         };
         let key_action = std::rc::Rc::new(move |_: &mut Window, cx: &mut App| pick(&key_choose, cx));
         list = list.child(crate::ui::components::popup::keyboard::item(
-            crate::ui::components::select_menu::row(div().id(("trash-kde-limit-choice", index)), theme, action == current)
+            crate::ui::components::select_menu::choice(div().id(("trash-kde-limit-choice", index)), theme, action == current, true)
                 .child(cx.i18n().text(label))
                 .on_click(move |_, _, cx| {
                     cx.stop_propagation();
@@ -492,7 +479,7 @@ fn limit_action_menu(
     let close = handle.clone();
     deferred(
         anchored()
-            .position(point(bounds.left(), bounds.bottom()))
+            .position(crate::ui::components::select_menu::list_origin(bounds))
             .snap_to_window()
             .child(list.on_mouse_down_out(move |event, _, cx| {
                 if !bounds.contains(&event.position) {

@@ -86,6 +86,7 @@ impl FileChooserWindow {
             is_context_menu: false,
             scroll_handle: self.crumbs.menu_scroll.clone(),
             width: None,
+            min_width: None,
             max_height: logical(360.0),
             header: None,
             on_close: Rc::new(move |_, cx| {

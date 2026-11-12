@@ -9,7 +9,7 @@ pub(super) fn render(
     cx: &mut Context<TextInput>,
 ) -> AnyElement {
     let theme = *cx.theme();
-    let content_height = window.rem_size() * (1.75 * view.completions.len() as f32);
+    let content_height = window.rem_size() * (crate::ui::style::MENU_ITEM_HEIGHT.0 * view.completions.len() as f32);
     let viewport_height = content_height.min(window.rem_size() * 14.0).min(
         (crate::ui::components::popup::available_size(window, cx).height
             - window.rem_size() * 0.75)

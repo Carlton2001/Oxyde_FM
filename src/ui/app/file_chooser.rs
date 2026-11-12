@@ -87,6 +87,8 @@ pub struct FileChooserWindow {
     /// The footer's menu that is open.
     menu: Option<menus::FooterMenu>,
     menu_scroll: UniformListScrollHandle,
+    /// Width of each menu's button, the narrowest its list may be.
+    menu_trigger_widths: std::rc::Rc<std::cell::RefCell<std::collections::HashMap<SharedString, Pixels>>>,
     /// The name to save under, when saving one file.
     name: save::Name,
     /// The prompt asking before files are replaced, and what its Replace answers.
@@ -368,6 +370,7 @@ impl FileChooserWindow {
             choices: choices.into_iter().map(choices::Choice::new).collect(),
             menu: None,
             menu_scroll: UniformListScrollHandle::new(),
+            menu_trigger_widths: Default::default(),
             name: Default::default(),
             overwrite: None,
             folder: String::new(),

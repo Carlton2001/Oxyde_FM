@@ -4,7 +4,6 @@
 use super::FileChooserWindow;
 use crate::ui::components::dropdown::{DropdownItem, GenericDropdown, IconName};
 use crate::ui::scale::logical;
-use crate::ui::theme::OxydeTheme;
 use gpui::prelude::*;
 use gpui::*;
 use std::rc::Rc;
@@ -74,6 +73,9 @@ impl FileChooserWindow {
             is_context_menu: false,
             scroll_handle: self.menu_scroll.clone(),
             width: None,
+            min_width: Some(crate::ui::components::select_menu::list_width(
+                self.menu_trigger_widths.borrow().get(&menu.id()).copied().unwrap_or_default(),
+            ).as_f32()),
             max_height: logical(360.0),
             header: None,
             on_close: Rc::new(move |_, cx| {
@@ -90,13 +92,16 @@ impl FileChooserWindow {
     }
 
     /// The button showing `label`, the answer given, which opens `menu` above it.
-    pub(super) fn render_menu(&self, menu: FooterMenu, label: String, theme: OxydeTheme, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_menu(&self, menu: FooterMenu, label: String, cx: &mut Context<Self>) -> AnyElement {
         let handle = cx.entity();
         let open = self.menu == Some(menu);
-        let trigger = crate::ui::components::tool_window::action_button(menu.id(), SharedString::default(), false, cx)
+        let widths = self.menu_trigger_widths.clone();
+        let key = menu.id();
+        let trigger = crate::ui::components::select_menu::trigger(menu.id(), label, false, true, cx)
             .max_w(rems(18.0))
-            .child(div().min_w_0().truncate().child(label))
-            .child(svg().path("icons/chevron-down.svg").size(rems(0.75)).flex_none().text_color(theme.text))
+            .child(canvas(|bounds, _, _| bounds, move |bounds, _, _, _| {
+                widths.borrow_mut().insert(key.clone(), bounds.size.width);
+            }).absolute().inset_0().size_full())
             .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, _, cx| {
                 this.menu = if this.menu == Some(menu) { None } else { Some(menu) };
                 this.menu_scroll = UniformListScrollHandle::new();

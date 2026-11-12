@@ -39,6 +39,8 @@ pub struct AdvancedSearchWindow {
     unit_menu: Option<UniformListScrollHandle>,
     /// When the native outside click dismissed the unit menu, before its control sees the click.
     unit_menu_dismissed: Option<std::time::Instant>,
+    /// The unit button, under which its list opens at its width.
+    unit_bounds: Option<Bounds<Pixels>>,
     handle: WeakEntity<Self>,
     scrollbar_origins: std::collections::HashMap<String, Point<f32>>,
     grab_offset: f32,

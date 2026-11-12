@@ -57,6 +57,7 @@ pub(super) fn render(
         is_context_menu: false,
         scroll_handle: view.breadcrumb_scroll.clone(),
         width: None,
+        min_width: None,
         max_height: logical(360.0),
         header: None,
         on_close: Rc::new(move |_, cx| {

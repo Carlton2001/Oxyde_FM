@@ -47,6 +47,7 @@ Toggles use `elements::toggle::toggle`, including in trash settings: slightly ti
 | Button | `elements/button/style.rs`: `button_style`, `ButtonVariant` |
 | Bar button (navigation, status, Viewer) | `elements/bar_button.rs`: `cell`, `labelled`, `fill`, `icon` |
 | Separator between groups | `elements/separator.rs`: `horizontal` |
+| Menu or list of choices | `components/dropdown.rs`: `GenericDropdown` for menus; `components/select_menu.rs`: `surface`, `row` (highlighted entry), `choice` (check of the value chosen in the icon column) for lists drawn by their caller. Both share the surface (0.5 rem corner, 0.25 rem padding, the marked shadow), which the settings panel and its submenus and the rail's quick access menu also take, and the entries (2.25 rem, 0.3125 rem corner, `menu_hover`). A list opened from a button uses `select_menu::trigger` (a field's frame, the value, a chevron; at least `TRIGGER_MIN_WIDTH`, 6 rem) and opens 0.25 rem under it (`select_menu::list_origin`, the gap an owned popup leaves), at `select_menu::list_width`: the button's width, at least `LIST_MIN_WIDTH`, 10 rem (`GenericDropdown::min_width` for menus) |
 | Single choice among a few options | `elements/segmented.rs`: `segmented`, `segment` |
 | Form or modal | `components/modal.rs`: `Modal`, `form_row`, `action_button` |
 | Operation failure notice | `app/dialog_windows/fixed/notice.rs`: heading, cause panel, kept locations, hint, optional Retry |

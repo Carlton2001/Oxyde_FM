@@ -361,8 +361,13 @@ impl Render for AdvancedSearchWindow {
                 if crate::ui::components::popup::supported(window, cx) {
                     let scroll = menu.scroll_handle.clone();
                     crate::ui::components::popup::text_menu(
-                        format!("advanced-text-menu-{index}"), crate::ui::components::popup::PopupAnchor::point(menu.position, false),
-                        close.clone(), handle.clone(), items.clone(), scroll.clone(), window, cx,
+                        format!("advanced-text-menu-{index}"),
+                        // A list opens under its button as every list does; a text menu at the pointer.
+                        match self.unit_bounds.filter(|_| menu.width > px(0.0)) {
+                            Some(bounds) => crate::ui::components::popup::PopupAnchor::element(bounds),
+                            None => crate::ui::components::popup::PopupAnchor::point(menu.position, false),
+                        },
+                        close.clone(), handle.clone(), items.clone(), scroll.clone(), (menu.width > px(0.0)).then(|| crate::ui::components::select_menu::list_width(menu.width).as_f32()), window, cx,
                         move |view| view.context_menus.get(index).is_some_and(|menu| std::rc::Rc::ptr_eq(&menu.scroll_handle.0, &scroll.0)),
                         |view, _, cx| {
                             if view.unit_menu.take().is_some_and(|unit| view.context_menus.first().is_some_and(|menu| std::rc::Rc::ptr_eq(&menu.scroll_handle.0, &unit.0))) {
@@ -375,8 +380,13 @@ impl Render for AdvancedSearchWindow {
                     continue;
                 }
                                 {
-                let width = crate::ui::scale::rem_pixels(rems(13.0));
-                let height = crate::ui::scale::rem_pixels(rems(items.len() as f32 * 1.625 + 1.0));
+                // A list opened from a button takes its width; other menus a fixed one.
+                let width = if menu.width > px(0.0) {
+                    crate::ui::components::select_menu::list_width(menu.width)
+                } else {
+                    crate::ui::scale::rem_pixels(rems(13.0))
+                };
+                let height = crate::ui::scale::rem_pixels(crate::ui::style::MENU_ITEM_HEIGHT * items.len() as f32 + rems(1.0));
                 // The root starts after the Linux shadow margin; menu positions are window points.
                 let shown = crate::ui::components::client_decorations::content_bounds(window);
                 let viewport = shown.size;
@@ -403,6 +413,7 @@ impl Render for AdvancedSearchWindow {
                             on_outside: None,
                             is_dragging: false,
                             width: Some(width.as_f32()),
+                            min_width: None,
                             max_height: viewport.height.as_f32(),
                             header: None,
                             on_item_hover: None,

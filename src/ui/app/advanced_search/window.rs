@@ -203,6 +203,7 @@ impl AdvancedSearchWindow {
             context_menus: Vec::new(),
             unit_menu: None,
             unit_menu_dismissed: None,
+            unit_bounds: None,
             handle: cx.entity().downgrade(),
             scrollbar_origins: std::collections::HashMap::new(),
             grab_offset: 0.0,

@@ -477,7 +477,7 @@ impl Render for DialogWindow {
                 let scroll = menu.scroll_handle.clone();
                 crate::ui::components::popup::text_menu(
                     format!("dialog-text-menu-{index}"), crate::ui::components::popup::PopupAnchor::point(menu.position, false),
-                    handle, owner.clone(), items.clone(), scroll.clone(), window, cx,
+                    handle, owner.clone(), items.clone(), scroll.clone(), None, window, cx,
                     move |view| view.context_menus.get(index).is_some_and(|menu| std::rc::Rc::ptr_eq(&menu.scroll_handle.0, &scroll.0)),
                     |view, _, cx| { view.context_menus.clear(); cx.notify(); },
                 );
@@ -515,6 +515,7 @@ impl Render for DialogWindow {
                         }),
                         on_outside: None,
                         width: None,
+                        min_width: None,
                         max_height: crate::ui::scale::logical(480.0)
                             .min(shown.size.height.as_f32()),
                         is_dragging: false,

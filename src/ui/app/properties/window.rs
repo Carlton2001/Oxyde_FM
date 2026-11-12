@@ -199,7 +199,7 @@ impl Render for PropertiesWindow {
                 let scroll = menu.scroll_handle.clone();
                 crate::ui::components::popup::text_menu(
                     format!("properties-text-menu-{index}"), crate::ui::components::popup::PopupAnchor::point(menu.position, false),
-                    close.clone(), handle.clone(), items.clone(), scroll.clone(), window, cx,
+                    close.clone(), handle.clone(), items.clone(), scroll.clone(), None, window, cx,
                     move |view| view.context_menus.get(index).is_some_and(|menu| std::rc::Rc::ptr_eq(&menu.scroll_handle.0, &scroll.0)),
                     |view, _, cx| { view.context_menus.clear(); cx.notify(); },
                 );
@@ -225,6 +225,7 @@ impl Render for PropertiesWindow {
                         on_outside: None,
                         is_dragging: false,
                         width: None,
+                        min_width: None,
                         max_height: crate::ui::components::client_decorations::content_bounds(window).size.height.as_f32(),
                         header: None,
                         on_item_hover: None,

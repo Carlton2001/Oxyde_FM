@@ -111,6 +111,7 @@ impl OxydeApp {
             is_context_menu: true,
             scroll_handle,
             width: None,
+            min_width: None,
             max_height: native_menu_max_height(px(win_h)),
             on_close: {
                 let h = h.clone();

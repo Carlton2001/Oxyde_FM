@@ -39,21 +39,16 @@ pub(super) fn fields(
         body.child(general::divider(theme))
             .child(crate::ui::components::modal::responsive_form_row(
                 cx.i18n().text(Message::ShortcutRun),
-                div()
-                    .id("shortcut-run")
-                    .relative()
+                crate::ui::components::select_menu::trigger(
+                    "shortcut-run",
+                    cx.i18n().text(run_window_message(dialog.run_window)),
+                    false,
+                    !dialog.saving,
+                    cx,
+                )
                     .track_focus(&dialog.run_focus)
+                    .focus(move |style| style.border_color(theme.accent))
                     .flex_1()
-                    .min_w_0()
-                    .h(rems(2.0))
-                    .px(rems(0.625))
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .border(rems(0.0625))
-                    .border_color(theme.border)
-                    .bg(theme.surface)
-                    .rounded_sm()
                     .child(
                         canvas(
                             |bounds, _, _| bounds,
@@ -69,20 +64,6 @@ pub(super) fn fields(
                         .inset_0()
                         .size_full(),
                     )
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .truncate()
-                            .child(cx.i18n().text(run_window_message(dialog.run_window))),
-                    )
-                    .child(
-                        svg()
-                            .path("icons/chevron-down.svg")
-                            .size(rems(0.75))
-                            .flex_none()
-                            .text_color(theme.text),
-                    )
                     .on_mouse_down(MouseButton::Left, move |event, window, cx| {
                         picker.update(cx, |this, cx| {
                             if let Some(dialog) = &mut this.properties_dialog {
@@ -91,7 +72,7 @@ pub(super) fn fields(
                                     dialog.run_menu = dialog.run_menu.is_none().then_some(
                                         dialog
                                             .run_bounds
-                                            .map(|bounds| point(bounds.left(), bounds.bottom()))
+                                            .map(crate::ui::components::select_menu::list_origin)
                                             .unwrap_or(event.position),
                                     );
                                     cx.notify();
@@ -151,16 +132,19 @@ fn run_choices(handle: &Entity<PropertiesWindow>, theme: OxydeTheme, selected_mo
             .on_mouse_up(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_mouse_move(|_, _, cx| cx.stop_propagation())
             .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-            .w(rems(17.0));
+            .w(crate::ui::components::select_menu::list_width(
+                handle.read(cx).properties_dialog.as_ref().and_then(|dialog| dialog.run_bounds).map_or(px(0.0), |bounds| bounds.size.width),
+            ));
         for mode in [1, 3, 7] {
             let choice = handle.clone();
             let key_choice = handle.clone();
             let key_action = std::rc::Rc::new(move |_: &mut Window, cx: &mut App| { key_choice.update(cx, |this, cx| { if let Some(dialog) = &mut this.properties_dialog { dialog.run_window = mode; dialog.run_menu = None; cx.notify(); } }); });
             menu = menu.child(
-                crate::ui::components::popup::keyboard::item(crate::ui::components::select_menu::row(
+                crate::ui::components::popup::keyboard::item(crate::ui::components::select_menu::choice(
                     div().id(("shortcut-run-mode", mode as usize)),
                     theme,
                     selected_mode == mode,
+                    true,
                 )
                     .child(cx.i18n().text(run_window_message(mode)))
                     .on_click(move |_, _, cx| {

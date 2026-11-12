@@ -27,7 +27,7 @@ impl FileChooserWindow {
             .when(enabled, |button| button.tab_index(0).on_click(cx.listener(|this, _, window, cx| this.accept(window, cx))));
         let name = self.render_name_field(theme, cx);
         let named = name.is_some();
-        let asked: Vec<AnyElement> = self.render_type_filter(theme, cx).into_iter().chain(self.render_choices(theme, cx)).collect();
+        let asked: Vec<AnyElement> = self.render_type_filter(cx).into_iter().chain(self.render_choices(theme, cx)).collect();
         // The name stretches; else a gap keeps the buttons at the end.
         let spaced = !named && !asked.is_empty();
         crate::ui::components::tool_window::footer(cx)

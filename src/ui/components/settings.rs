@@ -19,6 +19,10 @@ use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
 
+/// Width a submenu adds around its longest choice: the entry's margins (2 × 0.5
+/// rem), check column and gap (1.5 rem), the surface's padding and outline.
+const CHOICE_CHROME: f32 = 2.5 + 0.625;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SettingsPicker {
     Language,
@@ -150,10 +154,10 @@ fn render_settings_surface(
                                 background_color: None, underline: None, strikethrough: None }], None,
                         );
                         line.width.as_f32() / window.rem_size().as_f32()
-                    }).fold(0.0_f32, f32::max) + 3.5
+                    }).fold(0.0_f32, f32::max) + CHOICE_CHROME
             }
             SettingsPicker::Date => [Message::DateFormatUs, Message::DateFormatEuropean, Message::DateFormatIso]
-                .into_iter().map(label_width).fold(0.0_f32, f32::max) + 3.5,
+                .into_iter().map(label_width).fold(0.0_f32, f32::max) + CHOICE_CHROME,
             SettingsPicker::Compression => 22.0,
             // The explanations wrap at a readable width.
             SettingsPicker::Integration => 24.0,
@@ -165,12 +169,13 @@ fn render_settings_surface(
             SettingsPicker::Integration => label_width(Message::SettingsSystemIntegration) + 1.75,
             _ => 0.0,
         };
-        content_width.max(title_width)
+        // At least as wide as any list, as the default format's.
+        content_width.max(title_width).max(crate::ui::components::select_menu::LIST_MIN_WIDTH.0)
     });
     let about_width = 16.5;
     let column_gap = 0.5;
-    // Panel padding (2 × 0.375 rem) and borders (2 × 0.0625 rem).
-    let panel_frame = 0.875;
+    // Panel padding (2 × 0.25 rem) and borders (2 × 0.0625 rem).
+    let panel_frame = crate::ui::components::select_menu::chrome().0;
     let panel_width = left_width + right_width + column_gap + panel_frame
         + if view.settings_about_open { about_width + column_gap } else { 0.0 };
     let left = columns::left_column(view, handle.clone(), left_width, cx);
@@ -216,20 +221,12 @@ fn render_settings_surface(
             px(crate::ui::components::title_bar::titlebar_h()),
         ));
     let available_height = (crate::ui::components::popup::available_size(window, cx).height - origin.y - margin).max(px(1.0));
-    let panel = div()
+    // The menus' surface: corner, padding, outline and shadow.
+    let panel = crate::ui::components::select_menu::surface(theme)
         .id("settings-panel")
         .w(rems(panel_width))
         .max_w(crate::ui::components::popup::available_size(window, cx).width - margin * 2.0)
         .max_h(available_height)
-        .p(rems(0.4375))
-        .rounded_lg()
-        .bg(theme.menu_surface)
-        .border(rems(0.0625))
-        .border_color(theme.menu_border)
-        .shadow(crate::ui::style::rem_shadow(false))
-        .text_size(rems(0.8125))
-        .text_color(theme.text)
-        .occlude()
         .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
         .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
         .child(super::scroll_area::scroll_area("settings-panel-scroll-state",
@@ -278,19 +275,10 @@ fn render_settings_surface(
         // when needed; scrolling is only necessary if it exceeds the viewport.
         let submenu_available_height =
             (crate::ui::components::popup::available_size(window, cx).height - margin * 2.0).max(px(1.0));
-        let submenu = div()
+        let submenu = crate::ui::components::select_menu::surface(theme)
             .id("settings-submenu")
             .w(submenu_width)
             .max_h(submenu_available_height)
-            .p(rems(0.4375))
-            .rounded_lg()
-            .bg(theme.menu_surface)
-            .border(rems(0.0625))
-            .border_color(theme.menu_border)
-            .shadow(crate::ui::style::rem_shadow(false))
-            .occlude()
-            .text_size(rems(0.8125))
-            .text_color(theme.text)
             .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
             .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
             .child(super::scroll_area::scroll_area("settings-submenu-scroll-state",
