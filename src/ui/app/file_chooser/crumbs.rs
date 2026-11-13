@@ -15,5 +15,7 @@ pub(super) struct Crumbs {
     pub(super) viewport: Rc<Cell<f32>>,
     /// A chevron's open menu: the folder it lists, the chevron's index, its folders.
     pub(super) menu: Option<(String, usize, Vec<FileEntry>)>,
+    /// The chevron whose folder is being listed, before its menu opens.
+    pub(super) request: Option<(String, usize)>,
     pub(super) menu_scroll: UniformListScrollHandle,
 }

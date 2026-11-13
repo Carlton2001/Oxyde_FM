@@ -37,22 +37,32 @@ fn root_icon(path: &str, drives: &[DriveInfo]) -> &'static str {
 }
 
 impl FileChooserWindow {
-    /// A chevron's press: lists the folder before it, or closes its open menu.
+    /// A chevron's press: lists the folder before it, or closes its open or pending menu.
     fn toggle_crumb_menu(&mut self, path: String, index: usize, cx: &mut Context<Self>) {
-        if self.crumbs.menu.as_ref().is_some_and(|(open, current, _)| *open == path && *current == index) {
+        let request = (path, index);
+        let open = self.crumbs.menu.as_ref().is_some_and(|(open, current, _)| *open == request.0 && *current == request.1);
+        if open || self.crumbs.request.as_ref() == Some(&request) {
             self.crumbs.menu = None;
+            self.crumbs.request = None;
             cx.notify();
             return;
         }
+        self.crumbs.request = Some(request.clone());
         let (show_hidden, show_system) = (self.show_hidden, self.show_system);
         cx.spawn(async move |this, cx| {
-            if let Ok(entries) = oxyde_lib::commands::io::list_dir(path.clone(), Some(show_hidden), Some(show_system)).await {
-                let _ = this.update(cx, |this, cx| {
+            let listed = oxyde_lib::commands::io::list_dir(request.0.clone(), Some(show_hidden), Some(show_system)).await;
+            let _ = this.update(cx, |this, cx| {
+                // A later press replaced or cancelled this request.
+                if this.crumbs.request.as_ref() != Some(&request) {
+                    return;
+                }
+                this.crumbs.request = None;
+                if let Ok(entries) = listed {
                     let folders: Vec<FileEntry> = entries.into_iter().filter(|entry| entry.is_dir).collect();
-                    this.crumbs.menu = Some((path, index, folders));
+                    this.crumbs.menu = Some((request.0, request.1, folders));
                     cx.notify();
-                });
-            }
+                }
+            });
         }).detach();
     }
 
@@ -64,7 +74,7 @@ impl FileChooserWindow {
             DropdownItem {
                 label: entry.name.clone(),
                 badge: None,
-                icon: Some(if self.system_icons { IconName::NativeFolder(entry.path.clone()) } else { IconName::FolderOpen }),
+                icon: Some(if self.system_icons { IconName::NativeFolder(entry.path.clone()) } else { IconName::Folder }),
                 stay_open: false,
                 has_submenu: false,
                 is_dimmed: false,
@@ -123,14 +133,17 @@ impl FileChooserWindow {
             .child(
                 div()
                     .id(("file-chooser-chevron", index))
-                    .h(rems(1.5))
+                    .h(crate::ui::style::CRUMB_HEIGHT)
                     .w(rems(1.125))
                     .flex()
                     .items_center()
                     .justify_center()
-                    .rounded_md()
+                    .rounded(crate::ui::style::CRUMB_RADIUS)
+                    .text_color(theme.text_muted)
+                    // The fill stays while its menu is open.
+                    .when(open, |chevron| chevron.bg(theme.control_hover))
                     .hover(move |style| style.bg(theme.control_hover))
-                    .child(svg().path("icons/chevron-right.svg").size_3().text_color(theme.text))
+                    .child(std::path::MAIN_SEPARATOR_STR)
                     .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, _, cx| this.toggle_crumb_menu(parent.clone(), index, cx))),
             )
             // Where owned menu windows are not available, the menu draws in this window.
@@ -211,13 +224,13 @@ impl FileChooserWindow {
                 div()
                     .id(("file-chooser-crumb", index))
                     .flex_none()
-                    .h(rems(1.5))
+                    .h(crate::ui::style::CRUMB_HEIGHT)
                     .px(rems(0.375))
                     .flex()
                     .items_center()
-                    .rounded_md()
+                    .rounded(crate::ui::style::CRUMB_RADIUS)
                     .text_color(if is_last { theme.text } else { theme.text_muted })
-                    .when(!is_last, |crumb| crumb.hover(move |style| style.text_color(theme.text_muted).bg(theme.control_hover)))
+                    .when(!is_last, |crumb| crumb.hover(move |style| style.text_color(theme.text).bg(theme.control_hover)))
                     .on_mouse_down(MouseButton::Left, cx.listener(move |this, event: &MouseDownEvent, window, cx| {
                         if event.click_count >= 2 {
                             cx.stop_propagation();

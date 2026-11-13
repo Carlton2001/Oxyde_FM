@@ -276,6 +276,8 @@ pub struct OxydeApp {
     pub list_bounds: std::collections::HashMap<String, Bounds<f32>>,
     pub scrollbar_origins: std::collections::HashMap<String, Point<f32>>,
     pub breadcrumb_menu: Option<(String, String, usize, Vec<FileEntry>)>, // (pane_id, path, index, dirs)
+    /// The chevron whose folder is being listed, before its menu opens.
+    pub(crate) breadcrumb_menu_request: Option<(String, String, usize)>,
     pub context_menus: Vec<ContextMenuInstance>,
     /// Control that opened the current root menu, identified with that menu's scroll state.
     pub(crate) context_menu_owner: Option<(SharedString, UniformListScrollHandle)>,
@@ -508,6 +510,7 @@ impl OxydeApp {
             list_bounds: std::collections::HashMap::new(),
             scrollbar_origins: std::collections::HashMap::new(),
             breadcrumb_menu: None,
+            breadcrumb_menu_request: None,
             context_menus: Vec::new(),
             context_menu_owner: None,
             dismissed_menu_owner: None,

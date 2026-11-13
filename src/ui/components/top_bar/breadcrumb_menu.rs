@@ -11,8 +11,6 @@ pub(super) fn render(
     pane: &str,
     path: &str,
     index: usize,
-    _: &mut Window,
-    _: &mut Context<OxydeApp>,
 ) -> AnyElement {
     let Some((current_pane, current_path, current_index, entries)) = &view.breadcrumb_menu else {
         return div().into_any_element();
@@ -32,7 +30,7 @@ pub(super) fn render(
                 icon: Some(if view.use_system_icons() {
                     IconName::NativeFolder(entry.path.clone())
                 } else {
-                    IconName::FolderOpen
+                    IconName::Folder
                 }),
                 stay_open: false,
                 has_submenu: false,

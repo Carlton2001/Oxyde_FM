@@ -46,6 +46,10 @@ pub const TAB_MAX_WIDTH: Rems = rems(12.0);
 pub const TAB_MIN_WIDTH: Rems = rems(7.0);
 pub const NAV_BAR_HEIGHT: Rems = rems(2.25);
 pub const STATUS_BAR_HEIGHT: Rems = rems(2.25);
+/// Corner of the breadcrumb's segments and chevrons, as the path field that replaces them.
+pub const CRUMB_RADIUS: Rems = rems(0.25);
+/// Height of the breadcrumb's segments and separators, as the path field (`BAR_FIELD_HEIGHT`).
+pub const CRUMB_HEIGHT: Rems = ROW_HEIGHT;
 pub const COLUMN_HEADER_HEIGHT: Rems = rems(1.75);
 pub fn column_header_height() -> f32 {
     rem_pixels(COLUMN_HEADER_HEIGHT).as_f32()

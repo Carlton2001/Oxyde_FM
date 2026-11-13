@@ -31,7 +31,7 @@ pub enum IconName {
     Unplug,
     Check,
     Checkbox(bool),
-    FolderOpen,
+    Folder,
     NativeFolder(String),
     /// An image file, such as an application's icon; the window icon when missing.
     Image(Option<std::path::PathBuf>),
@@ -464,9 +464,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                                     }
                                                                     IconName::NativeFolder(_) => "icons/folder.svg",
                                                                     IconName::Image(_) => "icons/app-window.svg",
-                                                                    IconName::FolderOpen => {
-                                                                        "icons/folder-open.svg"
-                                                                    }
+                                                                    IconName::Folder => "icons/folder.svg",
                                                                     IconName::HardDrive => {
                                                                         "icons/hard-drive.svg"
                                                                     }

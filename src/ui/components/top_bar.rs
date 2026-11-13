@@ -14,7 +14,6 @@ use gpui::prelude::*;
 use gpui::*;
 
 
-use oxyde_lib::models::FileEntry;
 
 /// Returns the display label for a drive letter segment (e.g. "C:" → "Disque local (C:)").
 /// Falls back to the raw part if no matching drive is found in sidebar_items.
@@ -127,8 +126,6 @@ pub fn render_top_bar(
     let can_go_back = !active_tab.back_stack.is_empty();
     let can_go_forward = !active_tab.forward_stack.is_empty();
     let show_tooltips = view.context_menus.is_empty();
-    let show_hidden_setting = view.show_hidden;
-    let show_system_setting = view.show_system;
 
     let history_state = view.history.summary();
     let has_undo_entry = history_state.undo.is_some();
@@ -154,7 +151,7 @@ pub fn render_top_bar(
     let icon_active = theme.text;
     let icon_disabled = theme.icon_disabled;
     let hover_bg: Hsla = theme.control_hover;
-    let crumb_sep: Hsla = theme.text; // Chevrons open the directory menu.
+    let crumb_sep: Hsla = theme.text_muted; // Slashes open the directory menu.
     let crumb_parent: Hsla = theme.text_muted; // parent segments — readable but recessed
     let crumb_current = theme.text; // current segment — full brightness
 
@@ -352,156 +349,54 @@ pub fn render_top_bar(
 
                         let level_path = accumulated_path.clone();
 
-                        // Chevron separator (not before first element)
+                        // Separator opening the folder's menu (not before the first element)
                         if index > 0 {
                             let mut parent_path = level_path.clone();
                             if parent_path.ends_with(part) {
                                 parent_path = parent_path[..parent_path.len() - part.len()].to_string();
                             }
-                            let parent_path_cap = parent_path.clone();
-
+                            let open = view.breadcrumb_menu.as_ref()
+                                .is_some_and(|(pane, path, current, _)| *pane == p_id && *path == parent_path && *current == index);
                             elements.push(
                                div()
                                    .relative()
                                    .flex_none()
                                    .child({
-                                       {
-                                           let pane = p_id.clone(); let path = parent_path_cap.clone();
-                                           let test_pane = pane.clone(); let test_path = path.clone();
-                                           crate::ui::components::popup::anchored_surface(format!("breadcrumb-menu-{}-{index}", p_id), handle.clone(),
-                                               move |view| view.breadcrumb_menu.as_ref().is_some_and(|(pane, path, current, _)| *pane == test_pane && *path == test_path && *current == index),
-                                               move |view, window, cx| breadcrumb_menu::render(view, cx.entity(), &pane, &path, index, window, cx),
-                                               |view, _, cx| { view.breadcrumb_menu = None; cx.notify(); }).into_any_element()
-                                       }
-                                   })                                   .child(
+                                       let pane = p_id.clone(); let path = parent_path.clone();
+                                       let test_pane = pane.clone(); let test_path = path.clone();
+                                       crate::ui::components::popup::anchored_surface(format!("breadcrumb-menu-{}-{index}", p_id), handle.clone(),
+                                           move |view| view.breadcrumb_menu.as_ref().is_some_and(|(pane, path, current, _)| *pane == test_pane && *path == test_path && *current == index),
+                                           move |view, _, cx| breadcrumb_menu::render(view, cx.entity(), &pane, &path, index),
+                                           |view, _, cx| { view.breadcrumb_menu = None; cx.notify(); })
+                                   })
+                                   .child(
                                        div()
                                            .id(SharedString::from(format!("chevron-btn-{}-{}", p_id, index)))
-                                           .h(rems(1.5))
+                                           .h(crate::ui::style::CRUMB_HEIGHT)
                                            .w(rems(1.125))
                                            .flex()
                                            .items_center()
                                            .justify_center()
-                                           .rounded_md()
+                                           .rounded(crate::ui::style::CRUMB_RADIUS)
+                                           .text_color(crumb_sep)
+                                           // The fill stays while its menu is open.
+                                           .when(open, |chevron| chevron.bg(hover_bg))
                                            .hover(move |s| s.bg(hover_bg))
-                                           .child(svg().path("icons/chevron-right.svg").size_3().text_color(crumb_sep))
+                                           // The path's own separator: a backslash on Windows, a slash in URIs.
+                                           .child(SharedString::from(separator.to_string()))
                                            .on_mouse_down(MouseButton::Left, {
                                                let handle = handle.clone();
-                                               let p_id_cap = p_id.clone();
-                                               let path_cap = parent_path_cap.clone();
-                                               let idx_cap = index;
-                                               let show_hidden_cap = show_hidden_setting;
-                                               let show_system_cap = show_system_setting;
+                                               let pane = p_id.clone();
+                                               let path = parent_path.clone();
                                                move |_, _, cx: &mut App| {
-                                                   let handle = handle.clone();
-                                                   let p_id_cap = p_id_cap.clone();
-                                                   let path_cap = path_cap.clone();
-                                                   // A second click on the same chevron closes its menu.
-                                                   let was_open = handle.update(cx, |this, cx| {
-                                                       let open = this.breadcrumb_menu.as_ref().is_some_and(|(pane, path, current, _)| *pane == p_id_cap && *path == path_cap && *current == idx_cap);
-                                                       if open { this.breadcrumb_menu = None; cx.notify(); }
-                                                       open
-                                                   });
-                                                   if was_open { return; }
-                                                   cx.spawn(move |cx: &mut AsyncApp| {
-                                                       let cx = cx.clone();
-                                                       let handle = handle.clone();
-                                                       let p_id_cap = p_id_cap.clone();
-                                                       let path_cap = path_cap.clone();
-                                                       let idx_cap = idx_cap;
-                                                       async move {
-                                                           if let Ok(dirs) = oxyde_lib::commands::io::list_dir(path_cap.clone(), Some(show_hidden_cap), Some(show_system_cap)).await {
-                                                                cx.update(|cx| {
-                                                                    handle.update(cx, |this, cx| {
-                                                                        let filtered_entries: Vec<FileEntry> = dirs.into_iter().filter(|e| e.is_dir).collect();
-                                                                        this.breadcrumb_menu = Some((p_id_cap, path_cap, idx_cap, filtered_entries));
-                                                                        cx.notify();
-                                                                    });
-                                                                });
-                                                           }
-                                                       }
-                                                   }).detach();
+                                                   handle.update(cx, |this, cx| this.toggle_breadcrumb_menu(pane.clone(), path.clone(), index, cx));
                                                }
                                            })
                                    )
-                                   .child({
-                                       let breadcrumb_menu = view.breadcrumb_menu.clone();
-                                       div()
-                                            .when_some(breadcrumb_menu, |this: Div, (m_pane_id, menu_path, _, dirs): (String, String, usize, Vec<FileEntry>)| {
-                                                if crate::ui::components::popup::supported_source(&handle, _cx) { return this; }
-                                                {
-                                                if m_pane_id == p_id && menu_path == parent_path_cap {
-                                                    let items = dirs.into_iter()
-                                                        .map(|entry| {
-                                                        let h = handle.clone();
-                                                        let p_id = p_id.clone();
-                                                        let entry_path = entry.path.clone();
-                                                        let is_faded = entry.is_hidden || entry.is_system;
-                                                        crate::ui::components::dropdown::DropdownItem {
-                                                            label: entry.name.clone(),
-                                                            icon: Some(if cfg!(target_os = "windows") && view.use_system_icons() {
-                                                                IconName::NativeFolder(entry.path.clone())
-                                                            } else { IconName::FolderOpen }),
-                                                            badge: None,
-                                                            stay_open: false,
-                                                            has_submenu: false,
-                                                            is_dimmed: false,
-                                                            is_faded,
-                                                            on_click: std::rc::Rc::new(move |_, app| {
-                                                                h.update(app, |this, cx| {
-                                                                    this.navigate_to(&p_id, entry_path.clone(), cx);
-                                                                    this.breadcrumb_menu = None;
-                                            });
-                                                            }),
-                                                            on_hover: None,
-                                                        }
-                                                    }).collect();
-
-                                                    this.child(
-                                                        deferred(
-                                                            anchored()
-                                                                .anchor(Anchor::BottomLeft)
-                                                                .child(
-                                                                    crate::ui::components::dropdown::GenericDropdown {
-                                                                        id: "breadcrumb-dropdown".into(),
-                                                                        h_app: handle.clone(),
-                                                                        items,
-                                                                        reserve_icon_space: true,
-                                                                        is_context_menu: false,
-                                                                        scroll_handle: view.breadcrumb_scroll.clone(),
-                                                                        width: None,
-                                                                        min_width: None,
-                                                                        max_height: logical(360.0),
-                                                                        header: None,
-                                                                        on_close: {
-                                                                            let h = handle.clone();
-                                                                            std::rc::Rc::new(move |_, app| {
-                                                                                h.update(app, |this, cx| {
-                                                                                    this.breadcrumb_menu = None;
-                                                                                    cx.notify();
-                                                                                });
-                                                                            })
-                                                                        },
-                                                                        on_outside: None,
-                                                                        on_drag: std::rc::Rc::new(|this, tid, vh, ch, _| {
-                                                                           this.drag_target = Some(crate::ui::app::DragTarget::BreadcrumbV {
-                                                                               viewport_h: vh,
-                                                                               content_h: ch,
-                                                                               track_id: tid
-                                                                           });
-                                                                        }),
-                                                                        is_dragging: matches!(view.drag_target, Some(crate::ui::app::DragTarget::BreadcrumbV { .. })),
-                                                                        on_item_hover: None,
-                                                                        on_width_calculated: None,
-                                                                        on_hover_change: None,
-                                                                    }
-                                                                )
-                                                        )
-                                                    )
-                                                } else {
-                                                    this
-                                                }
-                                                }
-                                            })
+                                   // Where owned menu windows are not available, the menu draws in this window.
+                                   .when(open && !crate::ui::components::popup::supported_source(&handle, _cx), |chevron| {
+                                       chevron.child(deferred(anchored().anchor(Anchor::BottomLeft)
+                                           .child(breadcrumb_menu::render(view, handle.clone(), &p_id, &parent_path, index))))
                                    })
                                    .into_any_element()
                             );
@@ -531,13 +426,13 @@ pub fn render_top_bar(
                             .relative()
                             .child(canvas({ let bounds = segment_bounds.clone(); move |rect, _, _| bounds.set(rect) }, |_, _, _, _| {}).absolute().left_0().top_0().size_full())
                             .flex_none()
-                            .h(rems(1.5))
+                            .h(crate::ui::style::CRUMB_HEIGHT)
                             .px(rems(0.375))
                             .flex()
                             .items_center()
-                            .rounded_md()
+                            .rounded(crate::ui::style::CRUMB_RADIUS)
                             .text_color(seg_color)
-                            .when(!is_last, |d| d.hover(move |s| s.text_color(theme.text_muted).bg(hover_bg)))
+                            .when(!is_last, |d| d.hover(move |s| s.text_color(theme.text).bg(hover_bg)))
                             .on_mouse_down(MouseButton::Left, {
                                 let h = handle.clone();
                                 let p = pane_id.clone();

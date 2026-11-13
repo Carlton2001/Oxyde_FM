@@ -1,6 +1,37 @@
 use super::*;
 
 impl OxydeApp {
+    /// A chevron's press: lists the folder before it, or closes its open or pending menu.
+    pub(crate) fn toggle_breadcrumb_menu(&mut self, pane: String, path: String, index: usize, cx: &mut Context<Self>) {
+        let request = (pane, path, index);
+        let open = self.breadcrumb_menu.as_ref()
+            .is_some_and(|(pane, path, current, _)| *pane == request.0 && *path == request.1 && *current == request.2);
+        if open || self.breadcrumb_menu_request.as_ref() == Some(&request) {
+            self.breadcrumb_menu = None;
+            self.breadcrumb_menu_request = None;
+            cx.notify();
+            return;
+        }
+        self.breadcrumb_menu_request = Some(request.clone());
+        let (show_hidden, show_system) = (self.show_hidden, self.show_system);
+        cx.spawn(async move |this, cx| {
+            let listed = oxyde_lib::commands::io::list_dir(request.1.clone(), Some(show_hidden), Some(show_system)).await;
+            let _ = this.update(cx, |this, cx| {
+                // A later press replaced or cancelled this request.
+                if this.breadcrumb_menu_request.as_ref() != Some(&request) {
+                    return;
+                }
+                this.breadcrumb_menu_request = None;
+                if let Ok(entries) = listed {
+                    let (pane, path, index) = request;
+                    let folders = entries.into_iter().filter(|entry| entry.is_dir).collect();
+                    this.breadcrumb_menu = Some((pane, path, index, folders));
+                    cx.notify();
+                }
+            });
+        }).detach();
+    }
+
     pub(crate) fn begin_breadcrumb_edit(
         &mut self,
         pane_id: String,
