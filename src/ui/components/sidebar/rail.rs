@@ -103,6 +103,21 @@ pub(super) fn render_sidebar_rail(
         .flex()
         .flex_col()
         .pb_2();
+    let current_path = view
+        .state
+        .layout
+        .find_pane(&view.state.active_pane_id)
+        .map(|pane| pane.active_tab().path.clone());
+    // Volumes and Home stand for everything beneath them: only the deepest one that
+    // holds the current folder lights, so the root does not light with every mount.
+    let owner = current_path.as_deref().and_then(|current| {
+        let roots = view.state.sidebar_items.iter().filter_map(|item| match item {
+            SidebarItem::Drive { drive, .. } => Some(drive.path.as_str()),
+            SidebarItem::Pinned { item } if item.name.is_empty() => Some(item.path.as_str()),
+            _ => None,
+        });
+        deepest_root(current, roots).map(str::to_string)
+    });
     for item in &view.state.sidebar_items {
         if !super::sidebar_item_visible(
             item,
@@ -164,22 +179,11 @@ pub(super) fn render_sidebar_rail(
             }
             _ => Box::new(Tooltip::text(label)),
         };
-        let selected = view
-            .state
-            .layout
-            .find_pane(&view.state.active_pane_id)
-            .is_some_and(|pane| {
-                let current_path = &pane.active_tab().path;
-                if is_drive {
-                    std::path::Path::new(current_path)
-                        .ancestors()
-                        .any(|ancestor| {
-                            crate::ui::paths::paths_match(&ancestor.to_string_lossy(), &path)
-                        })
-                } else {
-                    crate::ui::paths::paths_match(current_path, &path)
-                }
-            });
+        let selected = if is_drive || is_home {
+            owner.as_deref().is_some_and(|owner| owner == path)
+        } else {
+            current_path.as_deref().is_some_and(|current| crate::ui::paths::paths_match(current, &path))
+        };
         entries = entries.child(
             sidebar_button_with_tooltip(
                 format!("rail-{path}"),
@@ -285,6 +289,15 @@ pub(super) fn render_sidebar_rail(
     )
 }
 
+/// The deepest of `roots` that holds `path`, as a mount table resolves a file's volume.
+fn deepest_root<'a>(path: &str, roots: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
+    let path = std::path::Path::new(path);
+    roots
+        .into_iter()
+        .filter(|root| crate::ui::paths::path_within(path, std::path::Path::new(root)))
+        .max_by_key(|root| std::path::Path::new(root).components().count())
+}
+
 /// Windows drives show their letter; volumes without one show their type icon.
 fn drive_letter(path: &str) -> Option<String> {
     let mut chars = path.chars();
@@ -293,3 +306,7 @@ fn drive_letter(path: &str) -> Option<String> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+#[path = "tests/rail_tests.rs"]
+mod tests;
