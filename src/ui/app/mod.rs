@@ -369,6 +369,11 @@ pub struct OxydeApp {
     pub(crate) clipboard_has_files: bool,
     pub breadcrumb_editing: bool,
     pub(crate) pinned_rail_open: bool,
+    /// The pinned menu was opened by resting the pointer on its button: the click
+    /// that usually follows keeps it open instead of closing it.
+    pub(crate) pinned_rail_by_hover: bool,
+    /// That click kept the menu: the dismissal the compositor sends for it must not close it.
+    pub(crate) pinned_rail_kept: bool,
     /// Pressed pinned folder and press position, until it moves or is released.
     pub(crate) pinned_press: Option<(String, Point<Pixels>)>,
     pub(crate) pinned_reorder: Option<PinnedReorder>,
@@ -601,6 +606,8 @@ impl OxydeApp {
             clipboard_has_files: false,
             breadcrumb_editing: false,
             pinned_rail_open: false,
+            pinned_rail_by_hover: false,
+            pinned_rail_kept: false,
             pinned_press: None,
             pinned_reorder: None,
             breadcrumb_text: String::new(),

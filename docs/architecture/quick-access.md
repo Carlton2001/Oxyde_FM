@@ -20,7 +20,7 @@ pub trait QuickAccess: Send + Sync {
 
 ## Order
 
-Dragging a pinned folder in the sidebar reorders it (`components/sidebar/reorder.rs`, `app/pinned_order.rs`). The order is Oxyde's own, kept in `AppConfig::pinned_order`; the system file manager keeps its order, and folders missing from Oxyde's list follow at the end in the system's order. The Windows taskbar menu lists the pinned folders.
+Dragging a pinned folder in the sidebar reorders it (`components/sidebar/reorder.rs`, `app/pinned_order.rs`). As a dragged tab, the folder is lifted at its row's width and the other folders slide aside (`reorder::shifts`, a `motion::glide` spring per row) to open the slot it targets and close the place it left, with no insertion marker. The order is Oxyde's own, kept in `AppConfig::pinned_order`; the system file manager keeps its order, and folders missing from Oxyde's list follow at the end in the system's order. The Windows taskbar menu lists the pinned folders.
 
 ## Behavior outside Windows
 

@@ -18,12 +18,16 @@ pub(super) fn render_sidebar_rail(
     cx: &mut Context<OxydeApp>,
 ) -> Div {
     let theme = *cx.theme();
+    let rail_hover = handle.clone();
     let rail = div()
         .size_full()
+        .relative()
         .flex()
         .flex_col()
         .bg(theme.sidebar)
         .rounded_bl(view.window_corners.bottom_left)
+        // Resting on another entry closes the pinned menu; its button stops the move.
+        .on_mouse_move(move |_, window, cx| super::pinned::close_soon(&rail_hover, window, cx))
         .child(sidebar_toolbar(view, handle.clone(), false, cx));
     let h = handle.clone();
     let mut pinned = Some(
@@ -36,9 +40,16 @@ pub(super) fn render_sidebar_rail(
                 theme,
                 true,
                 move |_, _, cx| {
+                    crate::ui::components::popup::hover::cancel(cx);
                     h.update(cx, |this, cx| {
                         this.context_menus.clear();
-                        this.pinned_rail_open = !this.pinned_rail_open;
+                        // The click that follows a hover keeps the menu it opened.
+                        let by_hover = std::mem::take(&mut this.pinned_rail_by_hover);
+                        if by_hover && this.pinned_rail_open {
+                            this.pinned_rail_kept = true;
+                        } else {
+                            this.pinned_rail_open = !this.pinned_rail_open;
+                        }
                         cx.notify();
                     })
                 },
@@ -46,6 +57,25 @@ pub(super) fn render_sidebar_rail(
             .w_full()
             .h(RAIL_ROW)
             .relative()
+            .on_mouse_move({
+                let hover = handle.clone();
+                move |_, window, cx| {
+                    cx.stop_propagation();
+                    if hover.read(cx).pinned_rail_open {
+                        crate::ui::components::popup::hover::cancel(cx);
+                        return;
+                    }
+                    let open = hover.clone();
+                    crate::ui::components::popup::hover::intend("pinned-rail-open", window, cx, move |_, cx| {
+                        open.update(cx, |this, cx| {
+                            this.context_menus.clear();
+                            this.pinned_rail_open = true;
+                            this.pinned_rail_by_hover = true;
+                            cx.notify();
+                        });
+                    });
+                }
+            })
             .child(
                 canvas(|bounds, _, _| bounds, {
                     let measure = handle.clone();
@@ -228,6 +258,13 @@ pub(super) fn render_sidebar_rail(
     }
     // Mark the fixed header edge only once entries have scrolled beneath it.
     let scrolled = crate::ui::components::scrollbar::scrolled_from_top(&view.sidebar_rail_scroll);
+    // Leaving the rail closes the pinned menu too, unless the pointer reaches the menu.
+    let leave = handle.clone();
+    let rail = rail.child(div().id("sidebar-rail-hover").absolute().inset_0().on_hover(move |hovered, window, cx| {
+        if !hovered {
+            super::pinned::close_soon(&leave, window, cx);
+        }
+    }));
     rail.child(
         div()
             .relative()

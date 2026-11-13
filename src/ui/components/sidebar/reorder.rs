@@ -1,5 +1,6 @@
 //! Pinned folder reorder layer: it captures the pointer above the list, so the
-//! other rows lose their hover, and floats the moved row like a dragged tab.
+//! other rows lose their hover, and lifts the moved row like a dragged tab while
+//! the others slide aside to open the slot it targets and close the place it left.
 use super::sidebar_entry_h;
 use crate::ui::app::OxydeApp;
 use crate::ui::theme::OxydeTheme;
@@ -31,6 +32,33 @@ fn target(slots: &[Slot], y: f32) -> Option<(String, bool)> {
     }
 }
 
+/// How far the row at `index` moves while the row at `source` is dragged toward the
+/// insertion slot `target` (0 before the first row, `len` after the last), as tabs do.
+fn shift(index: usize, source: usize, target: usize, height: f32) -> f32 {
+    if target > source + 1 && index > source && index < target {
+        -height
+    } else if target < source && index >= target && index < source {
+        height
+    } else {
+        0.0
+    }
+}
+
+/// The vertical offset of every reorderable row during `reorder`, by path.
+pub(super) fn shifts(slots: &[Slot], reorder: &crate::ui::app::PinnedReorder) -> std::collections::HashMap<String, f32> {
+    let source = slots.iter().position(|slot| slot.path == reorder.path);
+    // Without a target yet, the room stays where the row was lifted.
+    let target = reorder.target.as_ref()
+        .and_then(|(path, after)| Some(slots.iter().position(|slot| slot.path == *path)? + usize::from(*after)));
+    slots.iter().enumerate().map(|(index, slot)| {
+        let offset = match (source, target) {
+            (Some(source), Some(target)) => shift(index, source, target, slots[source].height),
+            _ => 0.0,
+        };
+        (slot.path.clone(), offset)
+    }).collect()
+}
+
 pub(super) fn overlay(
     view: &OxydeApp,
     handle: Entity<OxydeApp>,
@@ -41,10 +69,8 @@ pub(super) fn overlay(
     let reorder = view.pinned_reorder.as_ref()?;
     let name = view.state.pinned_items.iter().find(|item| item.path == reorder.path)?.name.clone();
     let row_h = sidebar_entry_h();
-    // The floating row keeps the list's column and only follows the pointer vertically.
-    // Shifted right so the insertion marker stays visible on its left; it may overflow the list.
+    // The lifted row keeps the list's column and only follows the pointer vertically.
     let list = scroll.bounds();
-    let shift = crate::ui::scale::rem_pixels(rems(1.5));
     let ghost = div()
         .w(list.size.width)
         .px_3()
@@ -78,7 +104,7 @@ pub(super) fn overlay(
             .on_mouse_up_out(MouseButton::Left, move |_, _, cx| out_handle.update(cx, |this, cx| this.release_pinned(false, cx)))
             .child(deferred(
                 anchored()
-                    .position(point(list.left() + shift, reorder.pointer.y - px(row_h / 2.0)))
+                    .position(point(list.left(), reorder.pointer.y - px(row_h / 2.0)))
                     .child(ghost),
             ))
             .into_any_element(),

@@ -6,7 +6,7 @@ mod default_format;
 mod data_actions;
 mod integration;
 
-use controls::{choice, section, submenu_choice};
+use controls::{choice, submenu_choice};
 use compression::compression_table;
 
 pub(crate) use data_actions::render_settings_confirmation;
@@ -22,6 +22,20 @@ use gpui::*;
 /// Width a submenu adds around its longest choice: the entry's margins (2 × 0.5
 /// rem), check column and gap (1.5 rem), the surface's padding and outline.
 const CHOICE_CHROME: f32 = 2.5 + 0.625;
+
+/// Where a submenu opens: beside the row that opened it, its first entry level with
+/// that row, as GTK's.
+fn submenu_anchor(view: &OxydeApp) -> Option<Bounds<Pixels>> {
+    let row = view.settings_submenu_bounds?;
+    let chrome = crate::ui::scale::rem_pixels(crate::ui::components::select_menu::chrome()) / 2.0;
+    Some(Bounds::new(point(row.left(), row.top() - chrome), row.size))
+}
+
+/// A move rightward more than up or down.
+fn aims_right(from: Point<Pixels>, to: Point<Pixels>) -> bool {
+    let (dx, dy) = (to.x - from.x, to.y - from.y);
+    dx > px(0.0) && dx >= dy.abs()
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SettingsPicker {
@@ -163,14 +177,8 @@ fn render_settings_surface(
             SettingsPicker::Integration => 24.0,
             _ => 18.0,
         };
-        let title_width = match kind {
-            SettingsPicker::Language => label_width(Message::SettingsLanguage) + 1.75,
-            SettingsPicker::Date => label_width(Message::SettingsDateFormat) + 1.75,
-            SettingsPicker::Integration => label_width(Message::SettingsSystemIntegration) + 1.75,
-            _ => 0.0,
-        };
         // At least as wide as any list, as the default format's.
-        content_width.max(title_width).max(crate::ui::components::select_menu::LIST_MIN_WIDTH.0)
+        content_width.max(crate::ui::components::select_menu::LIST_MIN_WIDTH.0)
     });
     let about_width = 16.5;
     let column_gap = 0.5;
@@ -222,8 +230,29 @@ fn render_settings_surface(
         ));
     let available_height = (crate::ui::components::popup::available_size(window, cx).height - origin.y - margin).max(px(1.0));
     // The menus' surface: corner, padding, outline and shadow.
+    let hover = handle.clone();
     let panel = crate::ui::components::select_menu::surface(theme)
         .id("settings-panel")
+        // Resting on a row without a submenu closes the one open; its own rows stop the move.
+        .on_mouse_move(move |event, window, cx| {
+            let previous = crate::ui::components::popup::hover::moved(event.position, cx);
+            if hover.read(cx).settings_picker.is_none() {
+                return;
+            }
+            // Heading for the submenu, beside its row: each such move restarts the
+            // delay, so crossing rows on the way keeps it and only resting closes it.
+            if previous.is_some_and(|from| aims_right(from, event.position)) {
+                crate::ui::components::popup::hover::cancel(cx);
+            }
+            let close = hover.clone();
+            crate::ui::components::popup::hover::intend("settings-close", window, cx, move |_, cx| {
+                close.update(cx, |view, cx| {
+                    view.settings_picker = None;
+                    view.settings_submenu_bounds = None;
+                    cx.notify();
+                });
+            });
+        })
         .w(rems(panel_width))
         .max_w(crate::ui::components::popup::available_size(window, cx).width - margin * 2.0)
         .max_h(available_height)
@@ -233,7 +262,7 @@ fn render_settings_surface(
             div().max_h((available_height - window.rem_size()).max(px(1.0))),
             div().id("settings-panel-scroll").child(body), true, window, cx));
     if _only_picker.is_none() && crate::ui::components::popup::is_menu(window, cx) {
-        if let (Some(kind), Some(bounds)) = (view.settings_picker.filter(|kind| *kind != SettingsPicker::About), view.settings_submenu_bounds) {
+        if let (Some(kind), Some(bounds)) = (view.settings_picker.filter(|kind| *kind != SettingsPicker::About), submenu_anchor(view)) {
             let open_left = false;
             crate::ui::components::popup::show("settings-picker", crate::ui::components::popup::PopupAnchor::beside(bounds, open_left), handle.clone(), window, cx,
                 move |view| view.settings_open && view.settings_picker == Some(kind),
@@ -259,14 +288,13 @@ fn render_settings_surface(
             });
         })
         .child(anchored().position(origin).snap_to_window().child(panel));
-    if let (Some(kind), Some(bounds)) = (view.settings_picker.filter(|kind| *kind != SettingsPicker::About), view.settings_submenu_bounds) {
-        let (title, choices): (SharedString, Vec<AnyElement>) = match kind {
-            SettingsPicker::Language => (cx.i18n().text(Message::SettingsLanguage), languages),
-            SettingsPicker::Date => (cx.i18n().text(Message::SettingsDateFormat), dates),
+    if let (Some(kind), Some(bounds)) = (view.settings_picker.filter(|kind| *kind != SettingsPicker::About), submenu_anchor(view)) {
+        let choices: Vec<AnyElement> = match kind {
+            SettingsPicker::Language => languages,
+            SettingsPicker::Date => dates,
             SettingsPicker::About => unreachable!("About is rendered as a settings column"),
-            SettingsPicker::Compression => (cx.i18n().text(Message::Compression), compression),
-            SettingsPicker::Integration => (cx.i18n().text(Message::SettingsSystemIntegration), integration),
-
+            SettingsPicker::Compression => compression,
+            SettingsPicker::Integration => integration,
         };
         let submenu_width =
             crate::ui::scale::rem_pixels(rems(picker_content_width.unwrap_or(18.0)))
@@ -281,9 +309,11 @@ fn render_settings_surface(
             .max_h(submenu_available_height)
             .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
             .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
+            // Reaching the submenu keeps it, whatever rows the pointer crossed on the way.
+            .on_mouse_move(|_, _, cx| crate::ui::components::popup::hover::cancel(cx))
             .child(super::scroll_area::scroll_area("settings-submenu-scroll-state",
                 div().max_h((submenu_available_height - window.rem_size()).max(px(1.0))),
-                div().id("settings-submenu-scroll").child(section(title, theme)).children(choices),
+                div().id("settings-submenu-scroll").children(choices),
                 false, window, cx));
 
         if _only_picker.is_some() { return submenu.into_any_element(); }
@@ -311,3 +341,7 @@ fn render_settings_surface(
     }
     overlay.into_any_element()
 }
+
+#[cfg(test)]
+#[path = "settings/tests/aim.rs"]
+mod aim;

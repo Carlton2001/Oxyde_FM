@@ -30,6 +30,8 @@ pub(super) struct SidebarRowPresentation {
     /// Rows render while the app is being updated: they cannot read it.
     pub(super) mounting_volume: Option<String>,
     pub(super) pinned_reorder: Option<crate::ui::app::PinnedReorder>,
+    /// How far each pinned row slides aside while another is moved.
+    pub(super) pinned_shifts: std::collections::HashMap<String, f32>,
 }
 
 pub(super) fn render_sidebar_rows(
@@ -42,7 +44,7 @@ pub(super) fn render_sidebar_rows(
 ) -> Vec<AnyElement> {
     let SidebarRowPresentation {
         row_w, pinned_paths: pinned_paths_for_list, expandable_drives,
-        show_tooltips, use_system_icons, mounting_volume, pinned_reorder,
+        show_tooltips, use_system_icons, mounting_volume, pinned_reorder, pinned_shifts,
     } = presentation;
     let (row_w, show_tooltips, use_system_icons) = (*row_w, *show_tooltips, *use_system_icons);
     let items  = items_for_list.to_vec();
@@ -69,14 +71,13 @@ pub(super) fn render_sidebar_rows(
                 let is_home   = item.name.is_empty();
                 let reorderable = !is_onedrive && !is_home && pinned_paths_for_list.contains(&path);
                 let moving    = pinned_reorder.as_ref().is_some_and(|reorder| reorder.path == path);
-                let slot_after = pinned_reorder.as_ref().and_then(|reorder| reorder.target.as_ref())
-                    .filter(|(target, _)| *target == path).map(|(_, after)| *after);
+                let shift     = pinned_shifts.get(&path).copied().unwrap_or(0.0);
                 let is_sel    = sel.as_deref().is_some_and(|selected| paths_match(selected, &path));
                 let sel_bg:   Hsla = theme.selected;
                 let hov_bg:   Hsla = if is_sel { theme.selection_hover } else { theme.hover };
                 let is_dimmed = item.name.starts_with('.');
 
-                div()
+                let row = div()
                     .id(SharedString::from(format!("sb-pin-{}", path)))
                     .w(px(row_w))
                     .h(px(super::sidebar_entry_h()))
@@ -85,7 +86,8 @@ pub(super) fn render_sidebar_rows(
                     .items_center()
                     .when(is_dimmed, |d| d.opacity(0.75))
                     .relative().when(is_sel, |d| d.bg(sel_bg).child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent)))
-                    .when(moving, |d| d.opacity(0.1))
+                    // Lifted: its place stays open until the others close it.
+                    .when(moving, |d| d.opacity(0.0))
                     .hover(move |s| s.bg(hov_bg))
                     .when(show_tooltips, |d| {
                         let name = pinned_display_name(item, cx.i18n());
@@ -108,10 +110,6 @@ pub(super) fn render_sidebar_rows(
                             });
                         }
                     })
-                    .when_some(slot_after, |d, after| d.child(
-                        div().absolute().left_0().right_0().h(rems(0.125)).bg(theme.accent)
-                            .when(after, |d| d.bottom_0()).when(!after, |d| d.top_0())
-                    ))
                     // Middle click → open in new tab
                     .on_mouse_down(MouseButton::Middle, {
                         let h = h.clone(); let p = path.clone();
@@ -192,8 +190,14 @@ pub(super) fn render_sidebar_rows(
                                 this.execute_file_drop(paths, tgt.clone(), cx);
                             });
                         }
-                    })
-                    .into_any_element()
+                    });
+                // Keyed by position too: after a drop, a row at a new place starts settled
+                // instead of gliding back from the offset its layout now includes.
+                div().relative().child(row).with_spring(
+                    SharedString::from(format!("sb-pin-shift-{path}-{i}")),
+                    crate::ui::elements::motion::glide(shift),
+                    |row, y| row.top(px(y)),
+                ).into_any_element()
             }
 
             // ── Drive item ─────────────────────────────────

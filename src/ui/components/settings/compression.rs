@@ -13,7 +13,9 @@ const FORMAT_COLUMN: Rems = rems(3.0);
 pub(super) fn compression_table(view: &OxydeApp, handle: Entity<OxydeApp>, window: &mut Window, cx: &mut Context<OxydeApp>) -> Vec<AnyElement> {
     let theme = *cx.theme();
     let mut rows = vec![super::default_format::render(view, handle.clone(), window, cx)];
-    for (format, label) in [("zip", "ZIP"), ("7z", "7z"), ("zst", "Zst"), ("gz", "Gz"), ("xz", "Xz"), ("bz2", "Bz2")] {
+    // Named as everywhere else; Tar and Lz4 have no level to choose.
+    let leveled = OxydeApp::ARCHIVE_FORMATS.into_iter().filter(|(format, _)| !matches!(*format, "tar" | "lz4"));
+    for (format, label) in leveled {
         let configured = view.compression_quality(format);
         let selected = if configured == "fast" || configured == "best" { configured } else { "normal" };
         let mut levels = segmented(SharedString::from(format!("compression-{format}")), None, theme).flex_1().min_w_0();

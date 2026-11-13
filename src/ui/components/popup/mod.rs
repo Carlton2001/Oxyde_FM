@@ -1,5 +1,6 @@
 //! Owned transient surfaces. Business state and actions remain in the caller.
 use gpui::*;
+pub(crate) mod hover;
 pub(crate) mod keyboard;
 
 mod window;

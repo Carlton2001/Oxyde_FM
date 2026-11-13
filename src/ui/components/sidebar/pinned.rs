@@ -14,10 +14,32 @@ pub(crate) fn render_pinned_menu(view: &OxydeApp, handle: Entity<OxydeApp>, wind
         crate::ui::components::popup::show("pinned-rail", crate::ui::components::popup::PopupAnchor::beside(bounds, false), handle.clone(), window, cx,
             |view| view.sidebar_collapsed && view.pinned_rail_open,
             |view, window, cx| render_pinned_contents(view, cx.entity(), window, cx),
-            |view, _, cx| { view.pinned_rail_open = false; cx.notify(); });
+            |view, _, cx| {
+                // The compositor closes a menu on any click outside it, the click on its own
+                // button included, after the button has seen it: keep what the button decided.
+                view.pinned_rail_open = std::mem::take(&mut view.pinned_rail_kept);
+                cx.notify();
+            });
         return div().into_any_element();
     }
     render_pinned_contents(view, handle, window, cx)
+}
+
+/// Closes the pinned menu once the pointer rests outside it and its button, unless a
+/// context menu opened from one of its entries holds the pointer.
+pub(super) fn close_soon(handle: &Entity<OxydeApp>, window: &mut Window, cx: &mut App) {
+    if !handle.read(cx).pinned_rail_open {
+        return;
+    }
+    let close = handle.clone();
+    crate::ui::components::popup::hover::intend("pinned-rail-close", window, cx, move |_, cx| {
+        close.update(cx, |this, cx| {
+            if this.context_menus.is_empty() {
+                this.pinned_rail_open = false;
+                cx.notify();
+            }
+        });
+    });
 }
 
 // Align with the rail's outer edge, including its half-rem trailing padding.
@@ -41,7 +63,18 @@ fn render_pinned_contents(
     let menu = crate::ui::components::select_menu::surface(theme)
         .id("pinned-rail-menu")
         .w(rems(17.0))
-        .max_h(rems(30.0));
+        .max_h(rems(30.0))
+        // Reaching the menu keeps it, whatever entries the pointer crossed on the way;
+        // leaving it for anything but its button closes it.
+        .on_mouse_move(|_, _, cx| crate::ui::components::popup::hover::cancel(cx))
+        .on_hover({
+            let handle = handle.clone();
+            move |hovered, window, cx| {
+                if !hovered {
+                    close_soon(&handle, window, cx);
+                }
+            }
+        });
     let mut contents = div().id("pinned-rail-scroll").max_h(rems(29.0)).overflow_y_scroll();
     for (index, item) in view
         .state

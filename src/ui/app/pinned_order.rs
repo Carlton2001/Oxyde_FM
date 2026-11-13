@@ -10,7 +10,8 @@ const DRAG_THRESHOLD: f32 = 4.0;
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct PinnedReorder {
     pub(crate) path: String,
-    /// Row the folder would land next to, and whether it goes after it.
+    /// Row the folder would land next to, and whether it goes after it; `None` until
+    /// the pointer moves.
     pub(crate) target: Option<(String, bool)>,
     /// Window position of the pointer, where the floating row follows it.
     pub(crate) pointer: Point<Pixels>,
@@ -59,9 +60,8 @@ impl OxydeApp {
     pub(crate) fn move_pinned_reorder(&mut self, pointer: Point<Pixels>, target: Option<(String, bool)>, cx: &mut Context<Self>) {
         if let Some(reorder) = &mut self.pinned_reorder {
             reorder.pointer = pointer;
-            // A drop that would leave the folder in place shows no marker.
-            let items = &self.state.pinned_items;
-            reorder.target = target.filter(|(target, after)| moved(items, &reorder.path, target, *after).is_some());
+            // Over its own slot too: the room stays open and releasing changes nothing.
+            reorder.target = target;
             cx.notify();
         }
     }

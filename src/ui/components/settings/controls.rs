@@ -22,6 +22,9 @@ pub(super) fn separator(theme: OxydeTheme) -> impl IntoElement {
     crate::ui::elements::separator::horizontal(theme.border)
 }
 
+/// A row opening a submenu beside the panel, or About's column. A submenu opens on a click
+/// or once the pointer rests on the row ([`hover`]); a click never closes it, as GTK's.
+/// About toggles on a click only, since its column widens the panel.
 pub(super) fn picker(
     view: &OxydeApp,
     handle: Entity<OxydeApp>,
@@ -31,29 +34,28 @@ pub(super) fn picker(
     label: SharedString,
     theme: OxydeTheme,
 ) -> impl IntoElement {
-    let active = if kind == SettingsPicker::About { view.settings_about_open }
-        else { view.settings_picker == Some(kind) };
+    use crate::ui::components::popup::hover;
+    let about = kind == SettingsPicker::About;
+    let active = if about { view.settings_about_open } else { view.settings_picker == Some(kind) };
     let row_bounds = Rc::new(Cell::new(None::<Bounds<Pixels>>));
     let paint_bounds = row_bounds.clone();
     let paint_handle = handle.clone();
-    let action = Rc::new(move |cx: &mut App| {
-            handle.update(cx, |view, cx| {
-                view.archive_format_bounds = None;
-                if kind == SettingsPicker::About {
-                    view.settings_about_open = !view.settings_about_open;
-                    view.settings_picker = None;
-                    view.settings_submenu_bounds = None;
-                } else if view.settings_picker == Some(kind) {
-                    view.settings_picker = None;
-                    view.settings_submenu_bounds = None;
-                } else {
-                    view.settings_picker = Some(kind);
-                    view.settings_submenu_bounds = row_bounds.get();
-                }
-                cx.notify();
-            });
+    let hover_handle = handle.clone();
+    let open = Rc::new(move |cx: &mut App| {
+        handle.update(cx, |view, cx| {
+            view.archive_format_bounds = None;
+            if about {
+                view.settings_about_open = !view.settings_about_open;
+                view.settings_picker = None;
+                view.settings_submenu_bounds = None;
+            } else if view.settings_picker != Some(kind) {
+                view.settings_picker = Some(kind);
+                view.settings_submenu_bounds = row_bounds.get();
+            }
+            cx.notify();
         });
-    let key_action = action.clone(); let submenu_action = action.clone();
+    });
+    let (key_open, submenu_open, hover_open) = (open.clone(), open.clone(), open.clone());
     let row = div()
         .id(id)
         .relative()
@@ -71,7 +73,7 @@ pub(super) fn picker(
                 move |_, bounds, window, cx| {
                     let bounds = crate::ui::components::popup::owner_bounds(window, cx, bounds);
                     paint_bounds.set(Some(bounds));
-                    if active && kind != SettingsPicker::About {
+                    if active && !about {
                         paint_handle.update(cx, |view, cx| {
                             if view.settings_submenu_bounds != Some(bounds) {
                                 view.settings_submenu_bounds = Some(bounds);
@@ -88,11 +90,24 @@ pub(super) fn picker(
         )
         .child(icon(icon_path, theme))
         .child(div().flex_1().flex_shrink_0().whitespace_nowrap().child(label))
-        .child(icon(if kind == SettingsPicker::About && active { "icons/chevron-left.svg" }
+        .child(icon(if about && active { "icons/chevron-left.svg" }
             else { "icons/chevron-right.svg" }, theme))
-        .on_mouse_down(MouseButton::Left, move |_, _, cx| action(cx));
-    crate::ui::components::popup::keyboard::item(row, Rc::new(move |_, cx| key_action(cx)), Some(Rc::new(move |_, cx| submenu_action(cx))), None)
-
+        // About lets the move reach the panel, which closes an open submenu as any row does.
+        .when(!about, |row| row.on_mouse_move(move |event, window, cx| {
+            cx.stop_propagation();
+            hover::moved(event.position, cx);
+            if hover_handle.read(cx).settings_picker == Some(kind) {
+                hover::cancel(cx);
+            } else {
+                let open = hover_open.clone();
+                hover::intend(format!("settings-open-{id}"), window, cx, move |_, cx| open(cx));
+            }
+        }))
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+            hover::cancel(cx);
+            open(cx);
+        });
+    crate::ui::components::popup::keyboard::item(row, Rc::new(move |_, cx| key_open(cx)), Some(Rc::new(move |_, cx| submenu_open(cx))), None)
 }
 
 /// Row opening a separate window; the settings menu closes behind it.

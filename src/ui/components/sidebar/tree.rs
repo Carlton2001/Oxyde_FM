@@ -182,6 +182,8 @@ pub(super) fn render_sidebar_tree(
                                 use_system_icons,
                                 mounting_volume: mounting_volume.clone(),
                                 pinned_reorder: view.pinned_reorder.clone(),
+                                pinned_shifts: view.pinned_reorder.as_ref()
+                                    .map(|reorder| reorder::shifts(&reorder_slots, reorder)).unwrap_or_default(),
                             };
                             let render_rows = move |range: std::ops::Range<usize>, cx: &mut App| {
                                 render_sidebar_rows(range, cx, &items_for_list, &h, &sel, &presentation)
