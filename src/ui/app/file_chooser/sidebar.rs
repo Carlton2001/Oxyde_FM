@@ -8,7 +8,7 @@ use crate::ui::paths::paths_match;
 use crate::ui::components::sidebar::volume_row::name as volume_name;
 use crate::ui::components::tooltip::hover::{HoverRegion, SharedTooltipExt};
 use crate::ui::components::tooltip::Tooltip;
-use crate::ui::elements::resize_highlight::resize_highlight;
+use crate::ui::elements::resize_separator::resize_separator;
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::scale::{logical, rem_pixels};
 use crate::ui::theme::OxydeTheme;
@@ -270,7 +270,7 @@ impl FileChooserWindow {
     }
 
     /// The sidebar's edge, a copy of the main window's resize handle.
-    pub(super) fn render_sidebar_edge(&self, theme: OxydeTheme, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn render_sidebar_edge(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let start = move |this: &mut Self, event: &MouseDownEvent, window: &Window, cx: &mut Context<Self>| {
             if event.click_count == 2 {
                 this.fit_sidebar(window, cx);
@@ -279,53 +279,9 @@ impl FileChooserWindow {
             this.grab_offset = event.position.x.as_f32() - this.sidebar_display_width();
             cx.notify();
         };
-        let highlighted = self.sidebar_edge_hovered || self.resizing_sidebar;
-        div()
-            .id("file-chooser-sidebar-edge")
-            .relative()
-            .w(rems(0.0625))
-            .bg(theme.border)
-            .cursor(CursorStyle::ResizeLeftRight)
-            .h_full()
-            .flex_none()
-            .flex()
-            .justify_center()
-            .child(
-                deferred(div()
-                    .id("file-chooser-sidebar-edge-hit-area")
-                    .absolute()
-                    .left(rems(-0.0625))
-                    .w(rems(0.1875))
-                    .h_full()
-                    .occlude()
-                    .cursor(CursorStyle::ResizeLeftRight)
-                    .child(
-                        div()
-                            .absolute()
-                            .left(rems(0.0625))
-                            .top_0()
-                            .bottom_0()
-                            .w(rems(0.0625))
-                            .child(resize_highlight("file-chooser-sidebar-edge-highlight", highlighted, theme.accent.opacity(0.6))),
-                    )
-                    .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
-                        if this.sidebar_edge_hovered != *hovered {
-                            this.sidebar_edge_hovered = *hovered;
-                            cx.notify();
-                        }
-                    }))
-                    .on_mouse_down(MouseButton::Left, cx.listener(move |this, event, window, cx| {
-                        cx.stop_propagation();
-                        start(this, event, window, cx);
-                    }))),
-            )
-            .child(
-                div()
-                    .w(rems(0.0625))
-                    .h_full()
-                    .bg(theme.border),
-            )
-            .on_mouse_down(MouseButton::Left, cx.listener(move |this, event, window, cx| start(this, event, window, cx)))
+        resize_separator("file-chooser-sidebar-edge", Axis::Horizontal)
+            .dragging(self.resizing_sidebar)
+            .on_press(cx.listener(move |this, event, window, cx| start(this, event, window, cx)))
     }
 
     /// The edge's drag, as the main window's `SidebarResize`.

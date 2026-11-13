@@ -8,7 +8,7 @@ impl Render for OxydeApp {
         let zoom_handle = cx.entity();
         let theme = *cx.theme();
         use crate::ui::components::sidebar::render_sidebar;
-        use crate::ui::elements::resize_highlight::resize_highlight;
+        use crate::ui::elements::resize_separator::resize_separator;
 
         let handle = self.handle.clone().expect("handle set");
         let window_handle = _window.window_handle();
@@ -257,70 +257,16 @@ impl Render for OxydeApp {
                             .child(render_sidebar(self, handle.clone(), _window, cx)),
                     )
                     .child(
-                        div()
-                            .id("sidebar-resize-handle")
-                            .relative()
-                            .w(rems(0.0625))
-                            .bg(theme.border)
-                            .cursor(CursorStyle::ResizeLeftRight)
-                            .h_full()
-                            .flex_none()
-                            .flex()
-                            .justify_center()
-                            .child(
-                                deferred(div()
-                                    .id("sidebar-resize-hit-area")
-                                    .absolute()
-                                    .left(rems(-0.0625))
-                                    .w(rems(0.1875))
-                                    .h_full()
-                                    .occlude()
-                                    .cursor(CursorStyle::ResizeLeftRight)
-                                    .child(
-                                        div()
-                                            .absolute()
-                                            .left(rems(0.0625))
-                                            .top_0()
-                                            .bottom_0()
-                                            .w(rems(0.0625))
-                                            .child(resize_highlight(
-                                                "sidebar-resize-highlight",
-                                                self.hovered_separator.as_deref() == Some(SIDEBAR_SEPARATOR)
-                                                    || matches!(self.drag_target, Some(DragTarget::SidebarResize)),
-                                                theme.accent.opacity(0.6),
-                                            )),
-                                    )
-                                    .on_hover({
-                                        let h = handle.clone();
-                                        move |hovered, _, cx| h.update(cx, |this, cx| this.hover_separator(SIDEBAR_SEPARATOR, *hovered, cx))
-                                    })
-                                    .on_mouse_down(MouseButton::Left, {
-                                        let h = handle.clone();
-                                        move |e, _, cx| {
-                                            cx.stop_propagation();
-                                            h.update(cx, |this, cx| {
-                                                if e.click_count == 2 { this.fit_sidebar(); }
-                                                this.drag_target = Some(DragTarget::SidebarResize);
-                                                this.grab_offset = e.position.x.as_f32() - this.sidebar_display_width();
-                                                cx.notify();
-                                            });
-                                        }
-                                    })),
-                            )
-                            .child(
-                                div()
-                                    .w(rems(0.0625))
-                                    .h_full()
-                                    .bg(theme.border),
-                            )
-                            .on_mouse_down(MouseButton::Left, {
+                        resize_separator("sidebar-resize", Axis::Horizontal)
+                            .dragging(matches!(self.drag_target, Some(DragTarget::SidebarResize)))
+                            .on_press({
                                 let h = handle.clone();
                                 move |e, _, cx| {
                                     h.update(cx, |this, cx| {
-                                        if e.click_count == 2 { this.fit_sidebar(); cx.notify(); }
+                                        if e.click_count == 2 { this.fit_sidebar(); }
                                         this.drag_target = Some(DragTarget::SidebarResize);
-                                        this.grab_offset =
-                                            e.position.x.as_f32() - this.sidebar_display_width();
+                                        this.grab_offset = e.position.x.as_f32() - this.sidebar_display_width();
+                                        cx.notify();
                                     });
                                 }
                             }),
@@ -356,6 +302,3 @@ impl Render for OxydeApp {
         crate::ui::components::client_decorations::frame(root, theme.border, _window, cx)
     }
 }
-
-/// The hover key of the sidebar's resize separator.
-const SIDEBAR_SEPARATOR: &str = "sidebar-resize";

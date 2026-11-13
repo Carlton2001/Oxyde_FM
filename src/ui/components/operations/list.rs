@@ -5,7 +5,7 @@ use super::detail::{kind, source_summary, status_badge, status_label};
 use super::items::outcome::badge;
 use super::{is_final, OperationsPanelView};
 use crate::ui::components::scrollbar::{render_scrollbar_with_pointer, ScrollbarAxis};
-use crate::ui::elements::resize_highlight::resize_highlight;
+use crate::ui::elements::resize_separator::resize_separator;
 use crate::ui::scale::rem_pixels;
 use crate::ui::elements::progress_bar::progress_bar;
 use crate::ui::format::format_number;
@@ -226,7 +226,6 @@ impl OperationsPanelView {
     /// edge (itself the main window's): dragged to resize, a double click restores
     /// the default width.
     pub(super) fn render_list_edge(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = *cx.theme();
         let width = self.list_display_width(window);
         let start = move |this: &mut Self, event: &MouseDownEvent, cx: &mut Context<Self>| {
             if event.click_count == 2 {
@@ -239,45 +238,9 @@ impl OperationsPanelView {
             this.grab_offset = event.position.x.as_f32() - width;
             cx.notify();
         };
-        let highlighted = self.list_edge_hovered || self.resizing_list;
-        div()
-            .id("operations-list-edge")
-            .relative()
-            .w(rems(0.0625))
-            .bg(theme.border)
-            .cursor(CursorStyle::ResizeLeftRight)
-            .h_full()
-            .flex_none()
-            .child(
-                deferred(div()
-                    .id("operations-list-edge-hit-area")
-                    .absolute()
-                    .left(rems(-0.0625))
-                    .w(rems(0.1875))
-                    .h_full()
-                    .occlude()
-                    .cursor(CursorStyle::ResizeLeftRight)
-                    .child(
-                        div()
-                            .absolute()
-                            .left(rems(0.0625))
-                            .top_0()
-                            .bottom_0()
-                            .w(rems(0.0625))
-                            .child(resize_highlight("operations-list-edge-highlight", highlighted, theme.accent.opacity(0.6))),
-                    )
-                    .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
-                        if this.list_edge_hovered != *hovered {
-                            this.list_edge_hovered = *hovered;
-                            cx.notify();
-                        }
-                    }))
-                    .on_mouse_down(MouseButton::Left, cx.listener(move |this, event, _, cx| {
-                        cx.stop_propagation();
-                        start(this, event, cx);
-                    }))),
-            )
-            .on_mouse_down(MouseButton::Left, cx.listener(move |this, event, _, cx| start(this, event, cx)))
+        resize_separator("operations-list-edge", Axis::Horizontal)
+            .dragging(self.resizing_list)
+            .on_press(cx.listener(move |this, event, _, cx| start(this, event, cx)))
     }
 
     /// The edge's drag, as the file chooser's sidebar.

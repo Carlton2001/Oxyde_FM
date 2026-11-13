@@ -117,19 +117,9 @@ fn space_card(drive: &oxyde_lib::models::DriveInfo, label_width: Pixels, compact
                     .gap(rems(0.75))
                     .child(
                         div()
-                            .relative()
                             .flex_1()
-                            .h(rems(0.5))
-                            .rounded_full()
-                            .bg(theme.border)
-                            .overflow_hidden()
-                            .child(
-                                crate::ui::elements::rounded_fill::rounded_fill(ratio, rems(0.25), fill)
-                                    .absolute()
-                                    .left_0()
-                                    .top_0()
-                                    .size_full(),
-                            ),
+                            .min_w_0()
+                            .child(crate::ui::elements::progress_bar::progress_bar("properties-space", ratio, fill, false, cx)),
                     )
                     .child(
                         div()
@@ -145,7 +135,7 @@ fn space_card(drive: &oxyde_lib::models::DriveInfo, label_width: Pixels, compact
                     .gap_x(rems(1.25))
                     .gap_y(rems(0.25))
                     .child(legend(fill, Message::PropertiesUsed, used))
-                    .child(legend(theme.border, Message::TrashAvailableSpace, drive.free_bytes)),
+                    .child(legend(theme.control_hover, Message::TrashAvailableSpace, drive.free_bytes)),
             )
             .child(section::rule(theme));
     }

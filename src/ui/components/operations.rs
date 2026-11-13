@@ -30,7 +30,6 @@ pub struct OperationsPanelView {
     /// Pixels per rem at the last layout, which converts the dragged width.
     rem_px: f32,
     resizing_list: bool,
-    list_edge_hovered: bool,
     items: items::Items,
     scrollbar_origins: std::collections::HashMap<String, Point<f32>>,
     grab_offset: f32,

@@ -4,7 +4,7 @@ pub(crate) mod focus_ring;
 pub(crate) mod radio;
 pub(crate) mod toggle;
 pub(crate) mod motion;
-pub(crate) mod resize_highlight;
+pub(crate) mod resize_separator;
 pub mod stepper;
 pub(crate) mod segmented;
 pub(crate) mod bar_button;

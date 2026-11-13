@@ -133,7 +133,7 @@ impl Render for FileChooserWindow {
                     .w_full()
                     .overflow_hidden()
                     .child(self.render_sidebar(theme, cx))
-                    .child(self.render_sidebar_edge(theme, cx))
+                    .child(self.render_sidebar_edge(cx))
                     .child(self.render_pane(theme, cx)),
             )
             .child(self.render_footer(theme, cx));

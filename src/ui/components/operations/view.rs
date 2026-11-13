@@ -33,7 +33,6 @@ impl OperationsPanelView {
             list_width,
             rem_px: 16.0,
             resizing_list: false,
-            list_edge_hovered: false,
             items: Default::default(),
             scrollbar_origins: Default::default(),
             grab_offset: 0.0,

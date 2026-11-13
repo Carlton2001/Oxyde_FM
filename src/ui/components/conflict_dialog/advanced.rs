@@ -2,7 +2,7 @@ use super::comparison::conflict_icon;
 use super::controls::{automatic_badge, edit, visible};
 use super::rules::{ancestors, category, decision, parent};
 use crate::ui::app::{OxydeApp, PendingFileOperation};
-use crate::ui::elements::resize_highlight::resize_highlight;
+use crate::ui::elements::resize_separator::resize_separator;
 use crate::ui::format::format_number;
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::ThemeContext;
@@ -39,9 +39,6 @@ pub(super) fn render_advanced_body(
 ) -> Div {
     let t = *cx.theme();
     let sidebar_drag = handle.clone();
-    let edge_hover = handle.clone();
-    let edge_hovered = pending.dialog.sidebar_edge_hovered;
-    let edge_highlighted = edge_hovered || pending.dialog.sidebar_resize.is_some();
     let mut body = div().flex().flex_col().flex_1().min_h_0().gap(rems(0.0));
     let mut filters = crate::ui::elements::segmented::segmented("conflict-filters", None, t);
     for (filter, message) in [
@@ -288,44 +285,15 @@ pub(super) fn render_advanced_body(
                     .child(legend),
             )
             .child(
-                // The main window's pane separator: a 1px line in a 4px hit area that
-                // straddles it, painted last so the detail pane does not cover it.
-                deferred(div()
-                    .id("conflict-sidebar-resize")
-                    .on_hover(move |hovered, _, cx| {
-                        if edge_hovered != *hovered {
-                            let hovered = *hovered;
-                            edit(&edge_hover, cx, |p| p.dialog.sidebar_edge_hovered = hovered);
-                        }
-                    })
-                    .cursor(CursorStyle::ResizeLeftRight)
-                    .w(rems(0.25))
-                    .mx(rems(-0.125))
-                    .h_full()
-                    .flex_none()
-                    .flex()
-                    .justify_end()
-                    .pr(rems(0.125))
-                    .occlude()
-                    .child(
-                        div()
-                            .relative()
-                            .w(rems(0.0625))
-                            .h_full()
-                            .bg(t.border)
-                            .child(resize_highlight(
-                                "conflict-sidebar-resize-highlight",
-                                edge_highlighted,
-                                t.accent.opacity(0.6),
-                            )),
-                    )
-                    .on_mouse_down(MouseButton::Left, move |event, _, cx| {
-                        cx.stop_propagation();
+                resize_separator("conflict-sidebar-resize", Axis::Horizontal)
+                    .overlap()
+                    .dragging(pending.dialog.sidebar_resize.is_some())
+                    .on_press(move |event, _, cx| {
                         edit(&sidebar_drag, cx, |p| {
                             p.dialog.sidebar_resize =
                                 Some((event.position, p.dialog.sidebar_width))
                         });
-                    })),
+                    }),
             )
             .child(
                 div()

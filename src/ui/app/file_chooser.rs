@@ -120,8 +120,6 @@ pub struct FileChooserWindow {
     /// The sidebar's width at the baseline scale, and whether its edge is dragged.
     sidebar_width: f32,
     resizing_sidebar: bool,
-    /// Whether the pointer is over the sidebar's edge, whose line then shows the accent.
-    sidebar_edge_hovered: bool,
     /// The window's width at the baseline scale, as last laid out.
     window_width: f32,
     show_hidden: bool,
@@ -391,7 +389,6 @@ impl FileChooserWindow {
             options: lent.options,
             sidebar_width,
             resizing_sidebar: false,
-            sidebar_edge_hovered: false,
             window_width: 0.0,
             show_hidden: lent.show_hidden,
             show_system: lent.show_system,

@@ -88,7 +88,7 @@ An animation is never in the way of an action: clicks, navigation and drops stay
 
 `elements/motion.rs` provides critically damped springs (`presence`, `glide`, `slide`) that redirect without a jump. Do not animate owned windows appearing (menus, tooltips): Windows overlays its own opening animation. Remove a repeating animation from rendering once it has no purpose.
 
-A resize separator's accent fades in over its line while it is hovered or dragged (`elements/resize_highlight.rs`); the separator itself and the resizing stay immediate. Double-clicking a split's separator shares the two neighbouring panes equally; double-clicking the sidebar's edge fits it to its widest row, as rows truncate.
+Every resize separator is `elements::resize_separator`: a 1 px line, a 7 px hit area centered on it and a 3 px accent that fades in once the pointer has rested 250 ms on it, or at once while it is dragged; the resizing itself stays immediate. `overlap` lays the line over the last pixel of the area before it, for splits whose panes take the whole width. Double-clicking a split's separator shares the two neighbouring panes equally; double-clicking the sidebar's edge fits it to its widest row, as rows truncate.
 
 On Linux, an inactive window fades its title bar content to half opacity over 200 ms, as GNOME headers do (`components/backdrop.rs`). Open menus and modal prompts count as part of their owner, which keeps an active header while they hold the keyboard.
 
