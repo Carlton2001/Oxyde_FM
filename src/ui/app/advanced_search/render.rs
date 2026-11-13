@@ -210,44 +210,12 @@ impl AdvancedSearchWindow {
                         cx.notify();
                         return;
                     }
-                    if let Some(d) = &mut this.advanced_search {
-                        if let Some((index, date)) = d.calendar {
-                            let delta = match event.keystroke.key.as_str() {
-                                "left" => -1,
-                                "right" => 1,
-                                "up" => -7,
-                                "down" => 7,
-                                _ => 0,
-                            };
-                            if delta != 0 {
-                                d.calendar = Some((index, date + chrono::Duration::days(delta)));
-                            } else if event.keystroke.key == "enter" {
-                                let value = date.format("%Y-%m-%d").to_string();
-                                d.values[index] = value.clone();
-                                d.inputs[index]
-                                    .update(cx, |input, cx| input.set_content(value, cx));
-                                d.calendar = None;
-                            } else if event.keystroke.key == "escape" {
-                                d.calendar = None;
-                            }
-                            cx.stop_propagation();
-                            cx.notify();
-                            return;
-                        }
+                    if this.calendar_key(&event.keystroke.key, cx) {
+                        cx.stop_propagation();
+                        return;
                     }
                     match event.keystroke.key.as_str() {
-                        "escape" => {
-                            if this
-                                .advanced_search
-                                .as_ref()
-                                .is_some_and(|d| d.calendar.is_some())
-                            {
-                                this.advanced_search.as_mut().unwrap().calendar = None;
-                                cx.notify();
-                            } else {
-                                this.close_advanced_search(window, cx);
-                            }
-                        }
+                        "escape" => this.close_advanced_search(window, cx),
                         "space" | "enter"
                             if this.advanced_search.as_ref().is_some_and(|d| {
                                 d.controls.iter().any(|f| f.is_focused(window))
@@ -263,10 +231,7 @@ impl AdvancedSearchWindow {
                                 0..=5 => d.flags[control] = !d.flags[control],
                                 6 | 7 => d.help = control == 7,
                                 8 => d.unit = (d.unit + 1) % 5,
-                                9 | 10 => {
-                                    d.calendar =
-                                        Some((control - 4, chrono::Local::now().date_naive()))
-                                }
+                                9 | 10 => this.open_calendar(control - 4),
                                 11 => {
                                     d.flags = [false, false, true, false, false, false];
                                     d.unit = 1;
@@ -326,7 +291,7 @@ impl AdvancedSearchWindow {
                 });
             })
             .child(frame);
-        layer = self.render_advanced_calendar(layer, handle, cx);
+        layer = self.render_advanced_calendar(layer, handle, window, cx);
         layer.into_any_element()
     }
 }

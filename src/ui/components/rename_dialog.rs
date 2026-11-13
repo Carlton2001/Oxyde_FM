@@ -1,6 +1,7 @@
 use crate::ui::app::OxydeApp;
-use crate::ui::components::modal::{action_button, Modal};
-use crate::ui::elements::button::{button_style, ButtonVariant};
+use crate::ui::components::dialog;
+use crate::ui::components::modal::Modal;
+use crate::ui::elements::button::ButtonVariant;
 use crate::ui::elements::segmented::{outline, segment, segmented};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::ThemeContext;
@@ -18,7 +19,7 @@ pub fn render_rename_dialog(
     // A focus ring for the dialog's controls reached by the keyboard, not by a click.
     let keyboard = window.last_input_was_keyboard();
     let ring = |control: usize, idle: Hsla| {
-        controls.as_ref().filter(|controls| controls[control].is_focused(window) && keyboard).map_or(idle, |_| theme_accent(cx))
+        controls.as_ref().filter(|controls| controls[control].is_focused(window) && keyboard).map_or(idle, |_| cx.theme().accent)
     };
     let key_handle = handle.clone();
     let title = if view.archive_creation.is_some() {
@@ -28,7 +29,7 @@ pub fn render_rename_dialog(
     };
     let theme = *cx.theme();
     let input = view.editing_view.clone();
-    let backdrop_handle = handle.clone();
+    let close_handle = handle.clone();
     let cancel_handle = handle.clone();
     let submit_handle = handle;
     // A refused password shakes and explains its own field, not the name.
@@ -186,57 +187,53 @@ pub fn render_rename_dialog(
             body.child(crate::ui::components::modal::field_error(error, theme).mt(rems(0.5)))
         });
 
+    // Renaming has no other control than the field: its buttons keep their own stops.
+    let buttons = match &controls {
+        Some(controls) => [controls[CANCEL].clone(), controls[SUBMIT].clone()],
+        None => window.use_keyed_state("rename-dialog-buttons", cx, |_, cx| [cx.focus_handle(), cx.focus_handle()]).read(cx).clone(),
+    };
     let modal = Modal::new("rename-dialog", cx.i18n().text(title), body)
         .title_icon(if view.archive_creation.is_some() {
             "icons/archive.svg"
         } else {
             "icons/pencil.svg"
         })
-        .standalone(false)
-        .width(rems(30.0))
-        .body_gap(rems(0.375))
-        .on_backdrop_dismiss(move |_, cx| {
-            backdrop_handle.update(cx, |this, cx| this.cancel_rename(cx));
-        });
-    let modal = modal
+        .on_close(move |_, cx| close_handle.update(cx, |this, cx| this.cancel_rename(cx)))
         .action(
-            button_style(
-                action_button("rename-cancel"),
-                theme,
-                ButtonVariant::Secondary,
-                true,
-            )
-            .when_some(controls.as_ref(), |button, controls| {
-                button.track_focus(&controls[CANCEL]).border(rems(0.0625)).border_color(ring(CANCEL, theme.border))
-            })
-            .child(cx.i18n().text(Message::Cancel))
-            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                cancel_handle.update(cx, |this, cx| this.cancel_rename(cx));
-            }),
+            dialog::button("rename-cancel", cx.i18n().text(Message::Cancel), ButtonVariant::Secondary)
+                .focus(&buttons[0])
+                .on_press(move |_, cx| cancel_handle.update(cx, |this, cx| this.cancel_rename(cx))),
         )
         .action(
-            button_style(
-                action_button("rename-submit"),
-                theme,
-                ButtonVariant::Primary,
-                true,
-            )
-            .when_some(controls.as_ref(), |button, controls| {
-                button.track_focus(&controls[SUBMIT]).border(rems(0.0625)).border_color(ring(SUBMIT, theme.accent))
-            })
-            .child(cx.i18n().text(title))
-            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                submit_handle.update(cx, |this, cx| this.submit_rename(cx));
-            }),
+            dialog::button("rename-submit", cx.i18n().text(title), ButtonVariant::Primary)
+                .focus(&buttons[1])
+                .on_press(move |_, cx| submit_handle.update(cx, |this, cx| this.submit_rename(cx))),
         );
     div()
         .absolute()
         .inset_0()
         .on_key_down(move |event, window, cx| {
             key_handle.update(cx, |view, cx| {
-                if view.archive_creation.is_some()
-                    && view.compression_key(event.keystroke.key.as_str(), event.keystroke.modifiers.shift, window, cx)
-                {
+                let key = event.keystroke.key.as_str();
+                let shift = event.keystroke.modifiers.shift;
+                let handled = if view.archive_creation.is_some() {
+                    view.compression_key(key, shift, window, cx)
+                } else {
+                    match key {
+                        "tab" => {
+                            let mut order: Vec<FocusHandle> = view.editing_view.iter().map(|input| input.read(cx).focus_handle.clone()).collect();
+                            order.extend(buttons.iter().cloned());
+                            dialog::cycle(&order, shift, window, cx);
+                            true
+                        }
+                        "escape" => {
+                            view.cancel_rename(cx);
+                            true
+                        }
+                        _ => false,
+                    }
+                };
+                if handled {
                     cx.stop_propagation();
                 }
             })
@@ -278,10 +275,6 @@ fn extension_change(original: &str, edited: &str, is_dir: bool) -> Option<(Strin
     let from = extension(original)?;
     let to = extension(edited.trim());
     (to.as_deref() != Some(from.as_str())).then_some((from, to))
-}
-
-fn theme_accent(cx: &App) -> Hsla {
-    cx.theme().accent
 }
 
 #[cfg(test)]

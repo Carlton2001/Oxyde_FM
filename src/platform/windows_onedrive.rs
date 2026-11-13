@@ -68,7 +68,7 @@ pub(super) fn folders() -> Vec<QuickAccessItem> {
             continue;
         }
         let label = string(account.0, w!("DisplayName"))
-            .map(|name| format!("OneDrive — {name}"))
+            .map(|name| format!("OneDrive - {name}"))
             .unwrap_or_else(|| "OneDrive".into());
         roots.push(QuickAccessItem { name: label, path });
     }

@@ -45,19 +45,22 @@ Toggles use `elements::toggle::toggle`, including in trash settings: slightly ti
 
 | Need | Reference |
 | --- | --- |
-| Button | `elements/button/style.rs`: `button_style`, `ButtonVariant` |
+| Button | `elements/button/style.rs`: `button_style`, `ButtonVariant`; `elements/button.rs`: `action`, the geometry of text action buttons |
 | Bar button (navigation, status, Viewer) | `elements/bar_button.rs`: `cell`, `labelled`, `fill`, `icon` |
 | Separator between groups | `elements/separator.rs`: `horizontal`; `vertical` in a bar |
 | Menu or list of choices | `components/dropdown.rs`: `GenericDropdown` for menus; `components/select_menu.rs`: `surface`, `row` (highlighted entry), `choice` (check of the value chosen in the icon column) for lists drawn by their caller. Both share the surface (0.5 rem corner, 0.25 rem padding, the marked shadow), which the settings panel and its submenus and the rail's quick access menu also take, and the entries (2.25 rem, 0.3125 rem corner, `menu_hover`). A list opened from a button uses `select_menu::trigger` (a field's frame, the value, a chevron; at least `TRIGGER_MIN_WIDTH`, 6 rem) and opens 0.25 rem under it (`select_menu::list_origin`, the gap an owned popup leaves), at `select_menu::list_width`: the button's width, at least `LIST_MIN_WIDTH`, 10 rem (`GenericDropdown::min_width` for menus) |
 | Single choice among a few options | `elements/segmented.rs`: `segmented`, `segment` |
-| Form or modal | `components/modal.rs`: `Modal`, `form_row`, `action_button` |
+| Form or modal | `components/modal.rs`: `Modal`, `form_row`, `field_error` (every refused value or failure message of a prompt) |
+| Prompt button and keyboard | `components/dialog.rs`: `button` (variant, focus stop, enabled, `on_press`), `cycle` for Tab and Shift+Tab |
 | Operation failure notice | `app/dialog_windows/fixed/notice.rs`: heading, cause panel, kept locations, hint, optional Retry |
-| Confirmation or notice | `components/confirmation.rs`: `body` (icon in a tinted disc, question, details, irreversibility warning), `cancel_button`, `confirm_button` with `Tone::Danger` for destructive actions |
+| Confirmation or notice | `components/confirmation.rs`: `body` (icon in a tinted disc, question, details, irreversibility warning), its action taking `Tone::variant`, `Tone::Danger` for destructive actions |
 | Secondary window and footer | `components/tool_window`; [window contracts](windows.md) |
 | Plain field | `TextInput::new` with `TextInputOptions::default()` |
 | Composite field | `input::field_frame` with `InputAppearance::Embedded` |
 
-Views keep dimensions, identifiers and callbacks. For a disabled button, remove or guard its callback: style alone is not enough. Modals move by their title, with no dimmed background; their transparent layer blocks interaction behind them and reserves the status bar.
+Views keep dimensions, identifiers and callbacks. For a disabled button, remove or guard its callback: style alone is not enough.
+
+Prompts are windows of their own (`Modal`, see [windows](windows.md)): forms are 30 rem wide, confirmations and notices 27.5 rem. Their footer buttons are `dialog::button`: Cancel or a neutral choice `Secondary`, the action asked for `Primary`, `Danger` when it destroys, Cancel before the action. A button presses on release under the pointer, as GTK's, and on Enter or Space while it holds the keyboard; the accent ring (`elements::focus_ring`) marks it only when the keyboard brought the focus, the border keeping its color. Elsewhere in the prompt, Tab and Shift+Tab go through its stops with `dialog::cycle`, Escape cancels and Enter presses the default action. A date field opens its picker as a popup under the field (`advanced_search/calendar.rs`), never as a prompt.
 
 The standard field provides height 2.25 rem, text 0.8125 rem, line height 1.25, `surface` background, `border` then `accent` on focus, a 0.25 rem radius (`FIELD_RADIUS`) and 0.75 rem horizontal margins. Do not recreate this frame per form. `clearable: true` explicitly enables Clear.
 

@@ -4,7 +4,6 @@ use crate::ui::app::{OxydeApp, PendingFileOperation};
 use crate::ui::components::modal::Modal;
 use crate::ui::format::format_number;
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
-use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
 use oxyde_lib::models::ConflictAction;
@@ -12,13 +11,11 @@ use oxyde_lib::models::ConflictAction;
 pub(super) fn render_frame(
     pending: &PendingFileOperation,
     body: Div,
-    width: f32,
     simple_width: Option<Pixels>,
     handle: Entity<OxydeApp>,
     window: &mut Window,
     cx: &App,
 ) -> impl IntoElement {
-    let t = *cx.theme();
     let advanced = pending.dialog.advanced;
     let title = if advanced {
         cx.i18n().text(Message::ConflictAdvancedTitle).to_string()
@@ -46,17 +43,13 @@ pub(super) fn render_frame(
         },
     );
     let mut modal = Modal::new("conflict-dialog", title, body)
-        .standalone(advanced)
+        .fill_window(advanced)
         .content_width(simple_width)
-        .width(rems(if advanced { width } else { 42.0 }))
         .header(header)
-        .header_background(t.surface)
-        .body_background(t.active_background)
         .body_padding(
             rems(if advanced { 0.0 } else { 1.25 }),
             rems(if advanced { 0.0 } else { 1.25 }),
-        )
-        .wrap_actions();
+        );
     if advanced {
         let all_resolved = pending
             .conflicts

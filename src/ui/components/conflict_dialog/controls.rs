@@ -1,6 +1,6 @@
 use super::rules::{decision, filtered_indices};
 use crate::ui::app::{OxydeApp, PendingFileOperation};
-use crate::ui::components::modal::action_button;
+use crate::ui::elements::button::action;
 use crate::ui::elements::button::{button_style, ButtonVariant};
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::ThemeContext;
@@ -94,7 +94,7 @@ pub(super) fn button_with_label(
     let click_callback = callback.clone();
     let keyboard_handle = handle.clone();
     button_style(
-        action_button(id),
+        action(div().id(id)),
         t,
         if primary {
             ButtonVariant::Primary

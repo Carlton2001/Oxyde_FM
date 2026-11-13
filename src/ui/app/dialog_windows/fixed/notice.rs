@@ -1,6 +1,8 @@
 //! Operation notices: a heading, the cause set apart, then what to do next.
 use crate::ui::app::OxydeApp;
 use crate::ui::components::confirmation::{self, Tone};
+use crate::ui::components::dialog;
+use crate::ui::elements::button::ButtonVariant;
 use crate::ui::components::modal::Modal;
 use crate::ui::format::{display_paths, error_detail, format_number};
 use crate::ui::i18n::{FluentArgs, I18n, I18nContext, Message};
@@ -133,6 +135,7 @@ pub(super) fn render_notice(
     app: &OxydeApp,
     owner: Entity<OxydeApp>,
     focus: &FocusHandle,
+    window: &mut Window,
     cx: &mut Context<OxydeApp>,
 ) -> impl IntoElement {
     let Some((key, detail)) = app.file_operation_notice.clone() else {
@@ -153,24 +156,26 @@ pub(super) fn render_notice(
             cx.notify();
         });
     };
+    // Close holds the dialog window's own focus, the first it gets.
+    let retry_focus = window.use_keyed_state("operation-notice-retry", cx, |_, cx| cx.focus_handle()).read(cx).clone();
+    let order: Vec<FocusHandle> = if retry { vec![focus.clone(), retry_focus.clone()] } else { vec![focus.clone()] };
     let modal = Modal::new(
         "operation-notice",
         title,
         confirmation::body("icons/circle-x.svg", Tone::Danger, SharedString::default(), paragraphs, None, theme),
     )
     .title_icon("icons/circle-x.svg")
-    .standalone(false)
     .on_close(move |_, cx| dismiss(&close, cx))
     .action(
-        confirmation::cancel_button("operation-notice-close", false, cx.i18n().text(Message::Close), theme)
-            .on_mouse_down(MouseButton::Left, move |_, _, cx| dismiss(&button, cx)),
+        dialog::button("operation-notice-close", cx.i18n().text(Message::Close), ButtonVariant::Secondary)
+            .focus(focus)
+            .on_press(move |_, cx| dismiss(&button, cx)),
     );
     let modal = if retry {
         modal.action(
-            confirmation::confirm_button("operation-notice-retry", false, Tone::Neutral, cx.i18n().text(Message::Retry), theme)
-                .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                    retry_button.update(cx, |app, cx| app.retry_failed_delete(cx));
-                }),
+            dialog::button("operation-notice-retry", cx.i18n().text(Message::Retry), Tone::Neutral.variant())
+                .focus(&retry_focus)
+                .on_press(move |_, cx| retry_button.update(cx, |app, cx| app.retry_failed_delete(cx))),
         )
     } else {
         modal
@@ -178,10 +183,11 @@ pub(super) fn render_notice(
     div()
         .absolute()
         .inset_0()
-        .track_focus(focus)
-        .on_key_down(move |event, _, cx| {
-            if matches!(event.keystroke.key.as_str(), "escape" | "enter" | "space") {
-                dismiss(&keyboard, cx);
+        .on_key_down(move |event, window, cx| {
+            match event.keystroke.key.as_str() {
+                "escape" | "enter" => dismiss(&keyboard, cx),
+                "tab" => dialog::cycle(&order, event.keystroke.modifiers.shift, window, cx),
+                _ => {}
             }
             cx.stop_propagation();
         })

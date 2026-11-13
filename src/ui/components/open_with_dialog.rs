@@ -2,13 +2,18 @@
 //! « Always use for this file type ».
 use crate::ui::app::open_with::OpenWithPrompt;
 use crate::ui::app::OxydeApp;
-use crate::ui::components::modal::{action_button, Modal};
-use crate::ui::elements::button::{button_style, ButtonVariant};
+use crate::ui::components::dialog;
+use crate::ui::components::modal::Modal;
+use crate::ui::elements::button::ButtonVariant;
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
 use oxyde_lib::models::{ApplicationChoice, ApplicationFit};
+
+const REMEMBER: usize = 0;
+const CANCEL: usize = 1;
+const OPEN: usize = 2;
 
 const SECTIONS: [(ApplicationFit, Message); 3] = [
     (ApplicationFit::Recommended, Message::OpenWithRecommended),
@@ -66,7 +71,7 @@ fn row(choice: &ApplicationChoice, index: usize, selected: bool, handle: &Entity
 pub(crate) fn render_open_with_dialog(
     view: &OxydeApp,
     handle: Entity<OxydeApp>,
-    _window: &mut Window,
+    window: &mut Window,
     cx: &mut Context<OxydeApp>,
 ) -> impl IntoElement {
     let prompt = view.open_with.as_ref().expect("open with prompt");
@@ -128,19 +133,24 @@ pub(crate) fn render_open_with_dialog(
         .is_some_and(|choice| choice.is_default);
     let remember = div()
         .id("open-with-remember")
+        .track_focus(&prompt.controls[REMEMBER])
         .when(is_default, |row| row.opacity(0.5))
         .flex()
         .items_center()
         .gap(rems(0.5))
         .pt(rems(0.25))
         .child(div().flex_1().min_w_0().child(i18n.text(Message::OpenWithAlways)))
-        .child(crate::ui::elements::toggle::toggle("switch", prompt.remember || is_default, theme))
+        .child(crate::ui::elements::focus_ring::focus_ring(
+            crate::ui::elements::toggle::toggle("switch", prompt.remember || is_default, theme),
+            crate::ui::elements::focus_ring::keyboard_focused(&prompt.controls[REMEMBER], window),
+            false,
+            theme,
+        ))
         .when(!is_default, |row| row.on_click(move |_, _, cx| toggle.update(cx, |view, cx| view.toggle_open_with_remember(cx))));
     let body = div()
         .flex()
         .flex_col()
         .gap(rems(0.5))
-        .text_size(rems(0.8125))
         .child(div().pb(rems(0.25)).child(intro))
         .child(div().w_full().child(prompt.input.clone()))
         .child(list)
@@ -149,23 +159,17 @@ pub(crate) fn render_open_with_dialog(
     let can_open = prompt.selected.is_some_and(|index| prompt.visible().contains(&index));
     let modal = Modal::new("open-with", i18n.text(Message::OpenWith), body)
         .title_icon("icons/app-window.svg")
-        .standalone(false)
-        .body_background(theme.active_background)
         .on_close(move |_, cx| close.update(cx, |view, cx| view.answer_open_with(false, cx)))
-        .width(rems(30.0))
         .action(
-            button_style(action_button("open-with-cancel"), theme, ButtonVariant::Secondary, true)
-                .border(rems(0.0625))
-                .border_color(theme.border)
-                .child(i18n.text(Message::Cancel))
-                .on_click(move |_, _, cx| cancel.update(cx, |view, cx| view.answer_open_with(false, cx))),
+            dialog::button("open-with-cancel", i18n.text(Message::Cancel), ButtonVariant::Secondary)
+                .focus(&prompt.controls[CANCEL])
+                .on_press(move |_, cx| cancel.update(cx, |view, cx| view.answer_open_with(false, cx))),
         )
         .action(
-            button_style(action_button("open-with-open"), theme, ButtonVariant::Primary, can_open)
-                .border(rems(0.0625))
-                .border_color(theme.accent)
-                .child(i18n.text(Message::Open))
-                .on_click(move |_, _, cx| open.update(cx, |view, cx| view.answer_open_with(true, cx))),
+            dialog::button("open-with-open", i18n.text(Message::Open), ButtonVariant::Primary)
+                .focus(&prompt.controls[OPEN])
+                .enabled(can_open)
+                .on_press(move |_, cx| open.update(cx, |view, cx| view.answer_open_with(true, cx))),
         );
     let keyboard = handle;
     div()
@@ -185,8 +189,23 @@ pub(crate) fn render_open_with_dialog(
             let typing = keyboard.read(cx).open_with.as_ref()
                 .is_some_and(|prompt| prompt.input.read(cx).focus_handle.is_focused(window));
             keyboard.update(cx, |view, cx| {
+                let Some(prompt) = &view.open_with else { return };
+                let on_switch = prompt.controls[REMEMBER].is_focused(window);
                 match event.keystroke.key.as_str() {
                     "escape" => view.answer_open_with(false, cx),
+                    "tab" => {
+                        let mut order = vec![prompt.input.read(cx).focus_handle.clone()];
+                        order.extend(prompt.controls.iter().cloned());
+                        dialog::cycle(&order, event.keystroke.modifiers.shift, window, cx);
+                    }
+                    "space" if on_switch => {
+                        let is_default = prompt.selected
+                            .and_then(|index| prompt.choices.as_ref()?.get(index))
+                            .is_some_and(|choice| choice.is_default);
+                        if !is_default {
+                            view.toggle_open_with_remember(cx);
+                        }
+                    }
                     "enter" => view.answer_open_with(true, cx),
                     "up" if !typing => view.move_open_with_selection(-1, cx),
                     "down" if !typing => view.move_open_with_selection(1, cx),
@@ -197,15 +216,5 @@ pub(crate) fn render_open_with_dialog(
                 cx.stop_propagation();
             })
         })
-        .on_action(|_: &crate::ui::app::Ouvrir, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Supprimer, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Renommer, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Copier, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Couper, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Coller, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::ToutSelectionner, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Annuler, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Refaire, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Actualiser, _, cx| cx.stop_propagation())
         .child(modal)
 }

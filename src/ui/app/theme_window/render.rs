@@ -18,9 +18,7 @@ impl ThemeWindow {
     fn button(&self, id: &'static str, message: Message, variant: ButtonVariant, enabled: bool,
               action: Action, cx: &mut Context<Self>) -> Stateful<Div> {
         let handle = cx.entity().downgrade();
-        button_style(div().id(id), *cx.theme(), variant, enabled)
-            .flex_none().whitespace_nowrap().flex().items_center().justify_center()
-            .px(rems(0.75)).py(rems(0.375)).text_size(rems(0.8125)).rounded(crate::ui::elements::button::ACTION_BUTTON_RADIUS)
+        crate::ui::elements::button::action(button_style(div().id(id), *cx.theme(), variant, enabled))
             .child(cx.i18n().text(message))
             .when(enabled, |button| button.tab_index(0).on_click(move |_, window, cx| {
                 let _ = handle.update(cx, |this, cx| action(this, window, cx));

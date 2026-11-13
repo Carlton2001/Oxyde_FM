@@ -4,20 +4,22 @@ use crate::ui::app::{
     OxydeApp,
 };
 use crate::ui::components::{
+    confirmation::{self, Tone},
+    dialog,
     input::TextInput,
-    modal::{action_button, form_row, Modal},
+    modal::{form_row, Modal},
 };
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::scale::rem_pixels;
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
-use crate::ui::elements::button::{button_style, ButtonVariant};
+use crate::ui::elements::button::ButtonVariant;
 
 pub(crate) fn render_force_confirmation(
     view: &OxydeApp,
     handle: Entity<OxydeApp>,
-    window: &mut Window,
+    _window: &mut Window,
     cx: &mut Context<OxydeApp>,
 ) -> impl IntoElement {
     let confirmation = view
@@ -34,48 +36,30 @@ pub(crate) fn render_force_confirmation(
     let force = handle.clone();
     let keyboard = handle.clone();
     let close = handle.clone();
+    // Cancel holds the keyboard first: its focus is the prompt's.
     div()
         .absolute()
         .inset_0()
-        .track_focus(&confirmation.focus)
         .on_key_down(move |event, window, cx| {
             keyboard.update(cx, |view, cx| match event.keystroke.key.as_str() {
                 "escape" => view.resolve_network_force(false, window, cx),
                 "tab" => {
                     if let Some(confirmation) = &view.network_force_confirmation {
-                        let focus = if confirmation.confirm_focus.is_focused(window) {
-                            &confirmation.focus
-                        } else {
-                            &confirmation.confirm_focus
-                        };
-                        window.focus(focus, cx);
+                        let order = [confirmation.focus.clone(), confirmation.confirm_focus.clone()];
+                        dialog::cycle(&order, event.keystroke.modifiers.shift, window, cx);
                     }
-                }
-                "enter" | "space" => {
-                    let force = view
-                        .network_force_confirmation
-                        .as_ref()
-                        .is_some_and(|confirmation| confirmation.confirm_focus.is_focused(window));
-                    view.resolve_network_force(force, window, cx);
                 }
                 _ => {}
             });
             cx.stop_propagation();
         })
-        .on_action(|_: &crate::ui::app::Supprimer, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Ouvrir, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Renommer, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Copier, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Couper, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Coller, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::ToutSelectionner, _, cx| cx.stop_propagation())
         .child(
             Modal::new(
                 "network-force-confirmation",
                 cx.i18n().text(Message::DisconnectThisNetworkDrive),
-                crate::ui::components::confirmation::body(
+                confirmation::body(
                     "icons/triangle-alert.svg",
-                    crate::ui::components::confirmation::Tone::Danger,
+                    Tone::Danger,
                     cx.i18n().text_with_args(Message::NetworkForcePrompt, &args),
                     Vec::new(),
                     None,
@@ -83,31 +67,20 @@ pub(crate) fn render_force_confirmation(
                 ),
             )
             .title_icon("icons/triangle-alert.svg")
-            .standalone(false)
             .on_close(move |window, cx| {
                 close.update(cx, |view, cx| view.resolve_network_force(false, window, cx));
             })
             .action(
-                crate::ui::components::confirmation::cancel_button(
-                    "network-force-cancel",
-                    confirmation.focus.is_focused(window),
-                    cx.i18n().text(Message::Cancel),
-                    theme,
-                )
-                    .on_click(move |_, window, cx| {
+                dialog::button("network-force-cancel", cx.i18n().text(Message::Cancel), ButtonVariant::Secondary)
+                    .focus(&confirmation.focus)
+                    .on_press(move |window, cx| {
                         cancel.update(cx, |view, cx| view.resolve_network_force(false, window, cx));
                     }),
             )
             .action(
-                crate::ui::components::confirmation::confirm_button(
-                    "network-force-accept",
-                    confirmation.confirm_focus.is_focused(window),
-                    crate::ui::components::confirmation::Tone::Danger,
-                    cx.i18n().text(Message::NetworkForceAction),
-                    theme,
-                )
-                .track_focus(&confirmation.confirm_focus)
-                    .on_click(move |_, window, cx| {
+                dialog::button("network-force-accept", cx.i18n().text(Message::NetworkForceAction), Tone::Danger.variant())
+                    .focus(&confirmation.confirm_focus)
+                    .on_press(move |window, cx| {
                         force.update(cx, |view, cx| view.resolve_network_force(true, window, cx));
                     }),
             ),
@@ -442,55 +415,29 @@ pub(crate) fn render_network_dialog(
     if let Some((key, detail)) = &dialog.error {
         let mut args = FluentArgs::new();
         args.set("detail", detail.clone());
-        body = body.child(
-            div()
-                .text_color(theme.error)
-                .child(cx.i18n().text_with_args(*key, &args)),
-        );
+        body = body.child(crate::ui::components::modal::field_error(cx.i18n().text_with_args(*key, &args), theme));
     }
     let cancel = handle.clone();
     let submit = handle.clone();
     let close = handle.clone();
     let modal = Modal::new("network-dialog", title, body)
         .title_icon(if disconnect { "icons/server-off.svg" } else { "icons/server.svg" })
-        .standalone(false)
-        .body_background(theme.active_background)
         .on_close(move |window, cx| close.update(cx, |view, cx| view.cancel_network_dialog(window, cx)))
-        .width(rems(30.0))
         .action(
-            button_style(action_button("network-cancel"), theme, ButtonVariant::Secondary, !busy)
-                .track_focus(&dialog.controls[2])
-                .border(rems(0.0625))
-                .border_color(if dialog.controls[2].is_focused(window) {
-                    theme.accent
-                } else {
-                    theme.border
-                })
-                .when(busy, |d| d.opacity(0.5))
-                .child(cx.i18n().text(Message::Cancel))
-                .on_click(move |_, window, cx| {
-                    cancel.update(cx, |view, cx| view.cancel_network_dialog(window, cx))
-                }),
+            dialog::button("network-cancel", cx.i18n().text(Message::Cancel), ButtonVariant::Secondary)
+                .focus(&dialog.controls[2])
+                .enabled(!busy)
+                .on_press(move |window, cx| cancel.update(cx, |view, cx| view.cancel_network_dialog(window, cx))),
         )
         .action(
-            button_style(action_button("network-submit"), theme, ButtonVariant::Primary, !disabled)
-                .track_focus(&dialog.controls[3])
-                .border(rems(0.0625))
-                .border_color(if dialog.controls[3].is_focused(window) {
-                    theme.text_on_accent
-                } else {
-                    theme.accent
-                })
-                .child(cx.i18n().text(if disconnect {
-                    Message::NetworkDisconnect
-                } else {
-                    Message::NetworkFinish
-                }))
-                .on_click(move |_, _, cx| {
-                    if !disabled {
-                        submit.update(cx, |view, cx| view.submit_network_dialog(cx));
-                    }
-                }),
+            dialog::button(
+                "network-submit",
+                cx.i18n().text(if disconnect { Message::NetworkDisconnect } else { Message::NetworkFinish }),
+                ButtonVariant::Primary,
+            )
+            .focus(&dialog.controls[3])
+            .enabled(!disabled)
+            .on_press(move |_, cx| submit.update(cx, |view, cx| view.submit_network_dialog(cx))),
         );
     let keyboard = handle.clone();
     div()
@@ -531,20 +478,10 @@ pub(crate) fn render_network_dialog(
                             order.extend(dialog.drive_focus.iter().cloned());
                         }
                         order.extend(dialog.controls[2..].iter().cloned());
-                        let current = order.iter().position(|focus| focus.is_focused(window));
-                        let next = if event.keystroke.modifiers.shift {
-                            current.map_or(order.len() - 1, |current| {
-                                (current + order.len() - 1) % order.len()
-                            })
-                        } else {
-                            current.map_or(0, |current| (current + 1) % order.len())
-                        };
-                        window.focus(&order[next], cx);
+                        dialog::cycle(&order, event.keystroke.modifiers.shift, window, cx);
                     }
                     "enter" => {
-                        if dialog.controls[2].is_focused(window) {
-                            view.cancel_network_dialog(window, cx);
-                        } else if !dialog.disconnect
+                        if !dialog.disconnect
                             && dialog.controls[0].is_focused(window)
                             && !dialog.busy
                             && !dialog.loading
@@ -554,12 +491,6 @@ pub(crate) fn render_network_dialog(
                         } else {
                             view.submit_network_dialog(cx);
                         }
-                    }
-                    "space" if dialog.controls[2].is_focused(window) => {
-                        view.cancel_network_dialog(window, cx)
-                    }
-                    "space" if dialog.controls[3].is_focused(window) => {
-                        view.submit_network_dialog(cx)
                     }
                     "space" | "down" | "up"
                         if dialog.disconnect
@@ -635,15 +566,5 @@ pub(crate) fn render_network_dialog(
                 cx.stop_propagation();
             })
         })
-        .on_action(|_: &crate::ui::app::Ouvrir, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Supprimer, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Renommer, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Copier, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Couper, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Coller, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::ToutSelectionner, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Annuler, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Refaire, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Actualiser, _, cx| cx.stop_propagation())
         .child(modal)
 }

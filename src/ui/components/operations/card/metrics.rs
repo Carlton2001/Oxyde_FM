@@ -104,7 +104,7 @@ pub(super) fn render(operation: &FileOperation, cx: &App) -> Div {
                                 .child(
                                     percentage
                                         .map(|value| format!("{value}%"))
-                                        .unwrap_or_else(|| "—".into()),
+                                        .unwrap_or_else(|| "-".into()),
                                 ),
                         )
                         .when_some(volume, |column, volume| {

@@ -390,7 +390,7 @@ impl OxydeApp {
                     true, false, theme,
                 )
                     .fixed_tooltip(crate::ui::components::tooltip::Tooltip::with_shortcut(
-                        format!("{} — {}", cx.i18n().text(Message::QuickSearch), cx.i18n().text(Message::QuickSearchCurrentFolder)),
+                        cx.i18n().text(Message::QuickSearchTooltip),
                         Some("Ctrl+F".into()),
                     ))
                     .child(crate::ui::elements::bar_button::icon("icons/search.svg", theme.text))

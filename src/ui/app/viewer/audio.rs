@@ -51,13 +51,13 @@ impl Viewer {
         let value = |keys: &[&str]| audio.and_then(|audio| audio.value(keys));
         let title = value(&["TrackTitle"])
             .or_else(|| self.file.as_ref().map(|file| file.name.as_str()))
-            .unwrap_or("—");
+            .unwrap_or("-");
         let track = match (value(&["TrackNumber"]), value(&["TrackTotal"])) {
             (Some(number), Some(total)) => format!("{number} / {total}"),
-            (number, _) => number.unwrap_or("—").to_owned(),
+            (number, _) => number.unwrap_or("-").to_owned(),
         };
         let artist = value(&["AlbumArtist", "TrackArtist"]);
-        let date = value(&["Year", "RecordingDate", "ReleaseDate"]).unwrap_or("—");
+        let date = value(&["Year", "RecordingDate", "ReleaseDate"]).unwrap_or("-");
         let year = date
             .get(..4)
             .filter(|year| year.bytes().all(|byte| byte.is_ascii_digit()))
@@ -145,7 +145,7 @@ impl Viewer {
                 } else {
                     row.child(audio_cell(
                         Message::AudioAlbum,
-                        value(&["AlbumTitle"]).unwrap_or("—").to_owned(),
+                        value(&["AlbumTitle"]).unwrap_or("-").to_owned(),
                         true,
                         cx,
                     ))

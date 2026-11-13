@@ -1,7 +1,7 @@
 use super::*;
-use crate::ui::components::modal::{action_button, Modal};
+use crate::ui::components::modal::Modal;
 use crate::ui::theme::ThemeContext;
-use crate::ui::elements::button::{button_style, ButtonVariant};
+use crate::ui::elements::button::ButtonVariant;
 
 use crate::ui::elements::toggle::toggle;
 
@@ -12,103 +12,67 @@ pub(crate) fn render(
     cx: &mut Context<OxydeApp>,
 ) -> impl IntoElement {
     let dialog = view.trash_settings.as_ref().unwrap();
-    let theme = *cx.theme();
     let disabled = dialog.loading || dialog.busy;
     let size = crate::ui::format::format_size(dialog.usage.0, false, false, cx.i18n().language());
     let empty = handle.clone();
     let cancel = handle.clone();
     let save = handle.clone();
-    let close = handle.clone();
     let keyboard = handle.clone();
     let title_close = handle.clone();
     let body = render_body(dialog, &handle, empty, size, window, cx);
+    // Cancel holds the dialog's first focus.
     div()
         .absolute()
         .inset_0()
-        .track_focus(&dialog.focus)
         .on_key_down(move |event, window, cx| {
             // Character input is dispatched after key handlers by GPUI.
             // Only consume the modal shortcuts so TextInput can receive typing.
-            if !matches!(event.keystroke.key.as_str(), "escape" | "tab" | "enter" | "space") {
+            if !matches!(event.keystroke.key.as_str(), "escape" | "tab" | "enter") {
                 return;
             }
             keyboard.update(cx, |this, cx| match event.keystroke.key.as_str() {
                 "escape" => this.close_trash_settings(window, cx),
                 "tab" => {
                     if let Some(dialog) = &this.trash_settings {
-                        let input_focus = dialog.input.read(cx).focus_handle.clone();
-                        let controls = [&dialog.focus, &input_focus, &dialog.save_focus];
-                        let current = controls
-                            .iter()
-                            .position(|focus| focus.is_focused(window))
-                            .unwrap_or(0);
-                        let next = if event.keystroke.modifiers.shift {
-                            (current + 2) % 3
-                        } else {
-                            (current + 1) % 3
-                        };
-                        window.focus(controls[next], cx);
+                        let order = [dialog.focus.clone(), dialog.input.read(cx).focus_handle.clone(), dialog.save_focus.clone()];
+                        crate::ui::components::dialog::cycle(&order, event.keystroke.modifiers.shift, window, cx);
                     }
                 }
-                "enter" | "space" => {
-                    if this
-                        .trash_settings
-                        .as_ref()
-                        .is_some_and(|dialog| dialog.save_focus.is_focused(window))
-                    {
+                // Enter in a field saves, as the default button.
+                "enter" => {
+                    if this.trash_settings.as_ref().is_some_and(|dialog| !dialog.loading && !dialog.busy) {
                         this.save_trash_settings(cx);
-                    } else {
-                        this.close_trash_settings(window, cx);
                     }
                 }
                 _ => {}
             });
             cx.stop_propagation();
         })
-        .on_action(|_: &Supprimer, _, cx| cx.stop_propagation())
-        .on_action(|_: &Ouvrir, _, cx| cx.stop_propagation())
-        .on_action(|_: &Renommer, _, cx| cx.stop_propagation())
-        .on_action(|_: &Copier, _, cx| cx.stop_propagation())
-        .on_action(|_: &Couper, _, cx| cx.stop_propagation())
-        .on_action(|_: &Coller, _, cx| cx.stop_propagation())
         .child(
-            Modal::new(
-                "trash-settings",
-                cx.i18n().text(Message::TrashProperties),
-                body,
-            )
-            .title_icon("icons/trash-2.svg")
-            .standalone(false)
-            .header_background(theme.surface)
-            .body_background(theme.active_background)
-            .header(crate::ui::components::tool_window::header(
-                "icons/trash-2.svg", cx.i18n().text(Message::TrashProperties),
-                window, false, cx,
-                move |window, cx| {
-                    title_close.update(cx, |app, cx| app.close_trash_settings(window, cx));
-                },
-            ))
-            .width(rems(28.0))
-            .on_backdrop_dismiss(move |window, cx| {
-                close.update(cx, |this, cx| this.close_trash_settings(window, cx));
-            })
-            .action(
-                button_style(action_button("trash-settings-cancel"), theme, ButtonVariant::Secondary, true)
-                    .track_focus(&dialog.focus)
-                    .child(cx.i18n().text(Message::Cancel))
-                    .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                        cancel.update(cx, |this, cx| this.close_trash_settings(window, cx));
-                    }),
-            )
-            .action(
-                button_style(action_button("trash-settings-save"), theme, ButtonVariant::Primary, !disabled)
-                    .track_focus(&dialog.save_focus)
-
-                    .child(cx.i18n().text(Message::TrashSettingsOk))
-                    .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                        save.update(cx, |this, cx| this.save_trash_settings(cx));
-                    }),
-            ),
+            Modal::new("trash-settings", cx.i18n().text(Message::TrashProperties), body)
+                .title_icon("icons/trash-2.svg")
+                .header(crate::ui::components::tool_window::header(
+                    "icons/trash-2.svg", cx.i18n().text(Message::TrashProperties),
+                    window, false, cx,
+                    move |window, cx| {
+                        title_close.update(cx, |app, cx| app.close_trash_settings(window, cx));
+                    },
+                ))
+                .action(
+                    crate::ui::components::dialog::button("trash-settings-cancel", cx.i18n().text(Message::Cancel), ButtonVariant::Secondary)
+                        .focus(&dialog.focus)
+                        .on_press(move |window, cx| {
+                            cancel.update(cx, |this, cx| this.close_trash_settings(window, cx));
+                        }),
+                )
+                .action(
+                    crate::ui::components::dialog::button("trash-settings-save", cx.i18n().text(Message::TrashSettingsOk), ButtonVariant::Primary)
+                        .focus(&dialog.save_focus)
+                        .enabled(!disabled)
+                        .on_press(move |_, cx| {
+                            save.update(cx, |this, cx| this.save_trash_settings(cx));
+                        }),
+                ),
         )
 }
 
@@ -278,15 +242,9 @@ fn render_body(
                         ),
                 )
                 .child(
-                    button_style(action_button("trash-settings-empty"), theme, ButtonVariant::Secondary, !disabled && dialog.usage.1 > 0)
-                        .flex_none()
-                        .opacity(if disabled || dialog.usage.1 == 0 {
-                            0.5
-                        } else {
-                            1.0
-                        })
-                        .child(cx.i18n().text(Message::TrashDeleteAll))
-                        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                    crate::ui::components::dialog::button("trash-settings-empty", cx.i18n().text(Message::TrashDeleteAll), ButtonVariant::Secondary)
+                        .enabled(!disabled && dialog.usage.1 > 0)
+                        .on_press(move |_, cx| {
                             empty.update(cx, |this, cx| this.empty_trash_from_settings(cx));
                         }),
                 ),
@@ -368,7 +326,7 @@ fn render_body(
                                     .border_color(theme.border)
                                     .cursor(CursorStyle::Arrow)
                                     .child(
-                                        action_button("trash-unit-mb")
+                                        div().id("trash-unit-mb")
                                             .h_full()
                                             .px(rems(0.5))
                                             .py_0()
@@ -394,7 +352,7 @@ fn render_body(
                                             }),
                                     )
                                     .child(
-                                        action_button("trash-unit-percent")
+                                        div().id("trash-unit-percent")
                                             .h_full()
                                             .px(rems(0.5))
                                             .py_0()

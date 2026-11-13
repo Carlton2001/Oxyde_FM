@@ -19,6 +19,8 @@ pub(crate) struct OpenWithPrompt {
     /// « Always use for this file type ».
     pub remember: bool,
     pub focus: FocusHandle,
+    /// The switch, Cancel and Open, after the search field in the Tab order.
+    pub controls: [FocusHandle; 3],
     pub scroll: ScrollHandle,
 }
 
@@ -203,6 +205,7 @@ impl OxydeApp {
             query: String::new(),
             remember: false,
             focus: cx.focus_handle(),
+            controls: std::array::from_fn(|_| cx.focus_handle()),
             scroll: ScrollHandle::new(),
         });
         cx.notify();

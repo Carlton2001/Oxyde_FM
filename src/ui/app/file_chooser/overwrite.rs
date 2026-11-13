@@ -1,10 +1,11 @@
 //! Asking before saving over files already there, in a prompt over the file chooser
 //! that blocks it, as the main window's confirmations look (`confirmation::body`,
-//! `Modal::standalone`): Cancel has the keyboard first, Tab moves it, Enter or Space
-//! presses it, Escape and the title bar's button cancel.
+//! `Modal`): Cancel has the keyboard first, Tab moves it, Enter or Space presses it,
+//! Escape and the title bar's button cancel.
 use super::FileChooserWindow;
 use crate::ui::components::confirmation::{self, Tone};
 use crate::ui::components::modal::Modal;
+use crate::ui::elements::button::ButtonVariant;
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
@@ -105,13 +106,9 @@ impl OverwritePrompt {
         match event.keystroke.key.as_str() {
             "escape" => self.answer(false, window, cx),
             "tab" => {
-                let next = if self.replace.is_focused(window) { self.cancel.clone() } else { self.replace.clone() };
-                window.focus(&next, cx);
+                let order = [self.cancel.clone(), self.replace.clone()];
+                crate::ui::components::dialog::cycle(&order, event.keystroke.modifiers.shift, window, cx);
                 cx.notify();
-            }
-            "enter" | "space" => {
-                let replace = self.replace.is_focused(window);
-                self.answer(replace, window, cx);
             }
             _ => return,
         }
@@ -157,22 +154,20 @@ impl Render for OverwritePrompt {
         args.set("count", self.existing.len() as i64);
         let title = cx.i18n().text_with_args(Message::FileChooserReplaceTitle, &args);
         let replace_label = cx.i18n().text(Message::ConflictReplace);
+        let (cancel, replace) = (cx.entity().downgrade(), cx.entity().downgrade());
+        let close = cx.entity().downgrade();
         let modal = Modal::new("file-chooser-replace", title, self.body(cx))
             .title_icon(ICON)
-            .standalone(false)
-            .on_backdrop_dismiss({
-                let close = cx.entity().downgrade();
-                move |window, cx| { let _ = close.update(cx, |this, cx| this.answer(false, window, cx)); }
-            })
+            .on_close(move |window, cx| { let _ = close.update(cx, |this, cx| this.answer(false, window, cx)); })
             .action(
-                confirmation::cancel_button("file-chooser-replace-cancel", self.cancel.is_focused(window), cx.i18n().text(Message::Cancel), theme)
-                    .track_focus(&self.cancel)
-                    .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| this.answer(false, window, cx))),
+                crate::ui::components::dialog::button("file-chooser-replace-cancel", cx.i18n().text(Message::Cancel), ButtonVariant::Secondary)
+                    .focus(&self.cancel)
+                    .on_press(move |window, cx| { let _ = cancel.update(cx, |this, cx| this.answer(false, window, cx)); }),
             )
             .action(
-                confirmation::confirm_button("file-chooser-replace-confirm", self.replace.is_focused(window), Tone::Danger, replace_label, theme)
-                    .track_focus(&self.replace)
-                    .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| this.answer(true, window, cx))),
+                crate::ui::components::dialog::button("file-chooser-replace-confirm", replace_label, Tone::Danger.variant())
+                    .focus(&self.replace)
+                    .on_press(move |window, cx| { let _ = replace.update(cx, |this, cx| this.answer(true, window, cx)); }),
             );
         let root = div()
             .size_full()

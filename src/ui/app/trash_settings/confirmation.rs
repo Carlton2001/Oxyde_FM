@@ -1,6 +1,7 @@
 use super::*;
-use crate::ui::components::confirmation;
+use crate::ui::components::{confirmation, dialog};
 use crate::ui::components::modal::Modal;
+use crate::ui::elements::button::ButtonVariant;
 use crate::ui::i18n::FluentArgs;
 use crate::ui::theme::ThemeContext;
 
@@ -14,100 +15,52 @@ pub(crate) fn render_delete_confirmation(
     if !pending.focus.is_focused(window) && !pending.confirm_focus.is_focused(window) {
         window.focus(&pending.focus, cx);
     }
-    let theme = *cx.theme();
     let tone = if pending.permanent_prompt { confirmation::Tone::Danger } else { confirmation::Tone::Neutral };
     let body = delete_body(pending, tone, cx);
-    let cancel = handle.clone();
-    let close = handle.clone();
-    let keyboard = handle.clone();
+    let title = cx.i18n().text(if pending.permanent_prompt { Message::TrashDeletePermanent } else { Message::Delete });
+    let answer = move |handle: &Entity<OxydeApp>, confirm: bool, window: &mut Window, cx: &mut App| {
+        handle.update(cx, |this, cx| {
+            if let Some(pending) = this.pending_trash_delete.take() {
+                if confirm {
+                    this.queue_trash_delete(pending.paths, pending.permanent, cx);
+                }
+            }
+            window.focus(&this.focus_handle, cx);
+            cx.notify();
+        });
+    };
+    let (cancel, confirm, close, keyboard) = (handle.clone(), handle.clone(), handle.clone(), handle);
+    // Cancel holds the keyboard first.
     div()
         .absolute()
         .inset_0()
-        .track_focus(&pending.focus)
         .on_key_down(move |event, window, cx| {
-            keyboard.update(cx, |this, cx| {
-                match event.keystroke.key.as_str() {
-                    "escape" => {
-                        this.pending_trash_delete = None;
-                        window.focus(&this.focus_handle, cx);
-                    }
-                    "tab" => {
-                        if let Some(pending) = &this.pending_trash_delete {
-                            window.focus(
-                                if pending.confirm_focus.is_focused(window) {
-                                    &pending.focus
-                                } else {
-                                    &pending.confirm_focus
-                                },
-                                cx,
-                            );
-                        }
-                    }
-                    "enter" | "space" => {
-                        if let Some(pending) = this.pending_trash_delete.take() {
-                            if pending.confirm_focus.is_focused(window) {
-                                this.queue_trash_delete(pending.paths, pending.permanent, cx);
-                            }
-                            window.focus(&this.focus_handle, cx);
-                        }
-                    }
-                    _ => {}
+            match event.keystroke.key.as_str() {
+                "escape" => answer(&keyboard, false, window, cx),
+                "tab" => {
+                    let Some(pending) = &keyboard.read(cx).pending_trash_delete else { return };
+                    let order = [pending.focus.clone(), pending.confirm_focus.clone()];
+                    dialog::cycle(&order, event.keystroke.modifiers.shift, window, cx);
+                    keyboard.update(cx, |_, cx| cx.notify());
                 }
-                cx.notify();
-            });
+                _ => return,
+            }
             cx.stop_propagation();
         })
-        .on_action(|_: &Supprimer, _, cx| cx.stop_propagation())
-        .on_action(|_: &Ouvrir, _, cx| cx.stop_propagation())
-        .on_action(|_: &Renommer, _, cx| cx.stop_propagation())
-        .on_action(|_: &Copier, _, cx| cx.stop_propagation())
-        .on_action(|_: &Couper, _, cx| cx.stop_propagation())
-        .on_action(|_: &Coller, _, cx| cx.stop_propagation())
         .child(
-            Modal::new(
-                "trash-delete-confirmation",
-                cx.i18n().text(if pending.permanent_prompt { Message::TrashDeletePermanent } else { Message::Delete }),
-                body,
-            )
-            .title_icon("icons/trash-2.svg")
-            .standalone(false)
-            .on_backdrop_dismiss(move |window, cx| {
-                close.update(cx, |this, cx| {
-                    this.pending_trash_delete = None;
-                    window.focus(&this.focus_handle, cx);
-                    cx.notify();
-                });
-            })
-            .action(
-                confirmation::cancel_button("trash-delete-cancel", pending.focus.is_focused(window), cx.i18n().text(Message::Cancel), theme)
-                    .track_focus(&pending.focus)
-                    .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                        cancel.update(cx, |this, cx| {
-                            this.pending_trash_delete = None;
-                            window.focus(&this.focus_handle, cx);
-                            cx.notify();
-                        });
-                    }),
-            )
-            .action(
-                confirmation::confirm_button(
-                    "trash-delete-confirm",
-                    pending.confirm_focus.is_focused(window),
-                    tone,
-                    cx.i18n().text(if pending.permanent_prompt { Message::TrashDeletePermanent } else { Message::Delete }),
-                    theme,
+            Modal::new("trash-delete-confirmation", title.clone(), body)
+                .title_icon("icons/trash-2.svg")
+                .on_close(move |window, cx| answer(&close, false, window, cx))
+                .action(
+                    dialog::button("trash-delete-cancel", cx.i18n().text(Message::Cancel), ButtonVariant::Secondary)
+                        .focus(&pending.focus)
+                        .on_press(move |window, cx| answer(&cancel, false, window, cx)),
                 )
-                .track_focus(&pending.confirm_focus)
-                .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-                    handle.update(cx, |this, cx| {
-                        if let Some(pending) = this.pending_trash_delete.take() {
-                            this.queue_trash_delete(pending.paths, pending.permanent, cx);
-                        }
-                        window.focus(&this.focus_handle, cx);
-                        cx.notify();
-                    });
-                }),
-            ),
+                .action(
+                    dialog::button("trash-delete-confirm", title, tone.variant())
+                        .focus(&pending.confirm_focus)
+                        .on_press(move |window, cx| answer(&confirm, true, window, cx)),
+                ),
         )
 }
 

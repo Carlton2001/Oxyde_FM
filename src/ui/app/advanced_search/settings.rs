@@ -173,7 +173,7 @@ impl AdvancedSearchWindow {
                 .when(compact, |fields| fields.flex_col().items_stretch());
             for index in start..=start + 1 {
                 if index != start && !compact {
-                    fields = fields.child("—");
+                    fields = fields.child("–");
                 }
                 let mut field = input::field_frame(&d.inputs[index], window, cx)
                     .flex_1()
@@ -197,22 +197,36 @@ impl AdvancedSearchWindow {
                         )
                             .track_focus(&d.controls[if index == 5 { 9 } else { 10 }])
                             .child(input::field_button_icon("icons/calendar-days.svg", false, &theme))
-                            .on_click(move |_, window, cx| {
+                            // On press, as the unit's list: a second press closes it.
+                            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                                 h.update(cx, |this, cx| {
-                                    if let Some(d) = &mut this.advanced_search {
-                                        d.calendar = Some((
-                                            index,
-                                            chrono::NaiveDate::parse_from_str(
-                                                &d.values[index],
-                                                "%Y-%m-%d",
-                                            )
-                                            .unwrap_or_else(|_| chrono::Local::now().date_naive()),
-                                        ));
-                                        window.focus(&d.focus, cx);
+                                    let dismissed = this.calendar_dismissed.take().is_some_and(|(shown, at)| {
+                                        shown == index && at.elapsed() < std::time::Duration::from_millis(300)
+                                    });
+                                    let open = this.advanced_search.as_ref().is_some_and(|d| d.calendar.is_some_and(|(shown, _)| shown == index));
+                                    if open {
+                                        if let Some(d) = &mut this.advanced_search {
+                                            d.calendar = None;
+                                        }
+                                    } else if !dismissed {
+                                        this.open_calendar(index);
                                     }
                                     cx.notify();
                                 });
                             }),
+                    );
+                    let measure = handle.clone();
+                    // The picker opens under the whole field, as a list under its button.
+                    field = field.relative().child(
+                        canvas(|bounds, _, _| bounds, move |bounds, _, _, cx| {
+                            measure.update(cx, |this, _| {
+                                if let Some(d) = &mut this.advanced_search {
+                                    d.calendar_anchors[index - 5] = Some(bounds);
+                                }
+                            })
+                        })
+                        .absolute()
+                        .inset_0(),
                     );
                 }
                 fields = if compact {

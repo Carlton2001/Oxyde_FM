@@ -25,6 +25,10 @@ pub struct AdvancedSearchDialog {
     focus: FocusHandle,
     pane: String,
     calendar: Option<(usize, chrono::NaiveDate)>,
+    /// Keyboard of the date picker in its popup window.
+    calendar_focus: FocusHandle,
+    /// The two date fields, under which their picker opens.
+    calendar_anchors: [Option<Bounds<Pixels>>; 2],
     controls: Vec<FocusHandle>,
     help_scroll: ScrollHandle,
     help_metrics: (f32, f32),
@@ -39,6 +43,8 @@ pub struct AdvancedSearchWindow {
     unit_menu: Option<UniformListScrollHandle>,
     /// When the native outside click dismissed the unit menu, before its control sees the click.
     unit_menu_dismissed: Option<std::time::Instant>,
+    /// When the date picker of a field last closed, before its button sees the press.
+    calendar_dismissed: Option<(usize, std::time::Instant)>,
     /// The unit button, under which its list opens at its width.
     unit_bounds: Option<Bounds<Pixels>>,
     handle: WeakEntity<Self>,

@@ -242,13 +242,10 @@ pub(crate) fn action_button(
     primary: bool,
     cx: &App,
 ) -> Stateful<Div> {
-    use crate::ui::elements::button::{button_style, ButtonVariant};
-    button_style(div().id(id), *cx.theme(),
-        if primary { ButtonVariant::Primary } else { ButtonVariant::Secondary }, true)
-        .tab_index(0).flex_none().whitespace_nowrap().flex().items_center().justify_center()
-        .gap(rems(0.5)).px(rems(0.75)).py(rems(0.375))
-        .text_size(rems(0.8125))
-        .rounded(crate::ui::elements::button::ACTION_BUTTON_RADIUS)
+    use crate::ui::elements::button::{action, button_style, ButtonVariant};
+    action(button_style(div().id(id), *cx.theme(),
+        if primary { ButtonVariant::Primary } else { ButtonVariant::Secondary }, true))
+        .tab_index(0)
         // Callers may supply icon/text children instead of the built-in label.
         // An empty text child still introduces an extra flex gap before them.
         .when(!label.is_empty(), |button| button.child(label))

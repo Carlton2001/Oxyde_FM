@@ -1,4 +1,3 @@
-use crate::ui::scale::rem_pixels;
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
@@ -61,42 +60,9 @@ pub(crate) fn field_error(message: SharedString, theme: crate::ui::theme::OxydeT
         .child(message)
 }
 
-/// Compact action dimensions shared by every application modal.
-pub fn action_button(id: impl Into<ElementId>) -> Stateful<Div> {
-    div()
-        .id(id)
-        .px(rems(0.75))
-        .py(rems(0.375))
-        .text_size(rems(0.8125))
-        .rounded(crate::ui::elements::button::ACTION_BUTTON_RADIUS)
-}
-#[derive(Default)]
-struct ModalPlacement {
-    offset: Point<Pixels>,
-    size: Size<Pixels>,
-    drag: Option<(Point<Pixels>, Point<Pixels>)>,
-}
-
-fn constrain_offset(
-    offset: Point<Pixels>,
-    modal: Size<Pixels>,
-    viewport: Size<Pixels>,
-) -> Point<Pixels> {
-    let x = ((viewport.width - modal.width) / 2.0).max(px(0.0));
-    let y = ((viewport.height - modal.height) / 2.0).max(px(0.0));
-    point(offset.x.clamp(-x, x), offset.y.clamp(-y, y))
-}
-/// Embedded dialogs leave the pane status bar and a shadow margin unobstructed.
-fn modal_viewport(viewport: Size<Pixels>, bottom_inset: Pixels) -> Size<Pixels> {
-    size(viewport.width, (viewport.height - bottom_inset).max(px(0.0)))
-}
-
-/// Shared presentation for centered dialogs. The caller owns business state,
-/// action callbacks, initial focus, keyboard bindings and placement in the
-/// render tree (including `deferred` and ordering relative to context menus).
-///
-/// The backdrop always blocks mouse input. Dismissal is opt-in and only reacts
-/// to the left button. No Escape/Enter binding or focus change is implicit.
+/// The frame of a modal prompt or dialog window: the secondary windows' title bar, a
+/// scrolling body and a footer of actions. The window is the prompt: the caller owns
+/// business state, callbacks, initial focus and keyboard bindings.
 #[derive(IntoElement)]
 pub struct Modal {
     id: ElementId,
@@ -104,16 +70,9 @@ pub struct Modal {
     title_icon: Option<SharedString>,
     body: AnyElement,
     actions: Vec<AnyElement>,
-    width: AbsoluteLength,
-    body_gap: AbsoluteLength,
-    on_backdrop_dismiss: Option<Box<dyn Fn(&mut Window, &mut App)>>,
     on_close: Option<Box<dyn Fn(&mut Window, &mut App)>>,
     header: Option<AnyElement>,
-    wrap_actions: bool,
     body_padding: (Rems, Rems),
-    header_background: Option<Hsla>,
-    body_background: Option<Hsla>,
-    standalone: bool,
     fill_window: bool,
     content_width: Option<Pixels>,
 }
@@ -123,9 +82,10 @@ impl Modal {
         self.content_width = width;
         self
     }
-    pub(crate) fn standalone(mut self, fill_window: bool) -> Self {
-        self.standalone = true;
-        self.fill_window = fill_window;
+
+    /// The body takes the window's height instead of fitting the window to it.
+    pub(crate) fn fill_window(mut self, fill: bool) -> Self {
+        self.fill_window = fill;
         self
     }
 
@@ -140,16 +100,9 @@ impl Modal {
             title_icon: None,
             body: body.into_any_element(),
             actions: Vec::new(),
-            width: rems(27.5).into(),
-            body_gap: rems(0.375).into(),
-            on_backdrop_dismiss: None,
             on_close: None,
             header: None,
-            wrap_actions: false,
             body_padding: (rems(1.0), rems(1.25)),
-            header_background: None,
-            body_background: None,
-            standalone: false,
             fill_window: false,
             content_width: None,
         }
@@ -159,34 +112,14 @@ impl Modal {
         self.body_padding = (horizontal, vertical);
         self
     }
-    pub fn header_background(mut self, color: Hsla) -> Self {
-        self.header_background = Some(color);
-        self
-    }
-    pub fn body_background(mut self, color: Hsla) -> Self {
-        self.body_background = Some(color);
-        self
-    }
-    pub fn wrap_actions(mut self) -> Self {
-        self.wrap_actions = true;
-        self
-    }
 
     pub fn title_icon(mut self, path: impl Into<SharedString>) -> Self {
         self.title_icon = Some(path.into());
         self
     }
-    pub fn width(mut self, width: impl Into<AbsoluteLength>) -> Self {
-        self.width = width.into();
-        self
-    }
 
     pub fn header(mut self, header: impl IntoElement) -> Self {
         self.header = Some(header.into_any_element());
-        self
-    }
-    pub fn body_gap(mut self, gap: impl Into<AbsoluteLength>) -> Self {
-        self.body_gap = gap.into();
         self
     }
 
@@ -195,17 +128,9 @@ impl Modal {
         self
     }
 
-    /// Title-bar close of a standalone window; defaults to the backdrop dismissal.
+    /// The title bar's close button.
     pub fn on_close(mut self, callback: impl Fn(&mut Window, &mut App) + 'static) -> Self {
         self.on_close = Some(Box::new(callback));
-        self
-    }
-
-    pub fn on_backdrop_dismiss(
-        mut self,
-        callback: impl Fn(&mut Window, &mut App) + 'static,
-    ) -> Self {
-        self.on_backdrop_dismiss = Some(Box::new(callback));
         self
     }
 }
@@ -213,216 +138,49 @@ impl Modal {
 impl RenderOnce for Modal {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = *cx.theme();
-        if self.standalone {
-            let height_limit = if self.fill_window { super::client_decorations::content_bounds(window).size.height } else {
-                crate::ui::components::tool_window::content_height_limit(window, cx)
-            };
-            let fill_window = self.fill_window;
-            let content_width = self.content_width;
-            let on_close = self.on_close.or(self.on_backdrop_dismiss);
-            let title = self.title;
-            let header = self.header.unwrap_or_else(|| {
-                // Same title bar as Properties and the other secondary windows.
-                window.set_window_title(title.as_ref());
-                super::tool_window::header(
-                    self.title_icon.unwrap_or_default(), title, window, false, cx,
-                    move |window, cx| if let Some(close) = &on_close { close(window, cx) },
-                ).into_any_element()
-            });
-            let body = super::scroll_area::scroll_area((self.id.clone(), "body-scroll"),
-                div().when(fill_window, |frame| frame.flex_1()),
-                div().id("modal-body").px(self.body_padding.0).py(self.body_padding.1)
-                    .flex().flex_col().gap(self.body_gap)
-                    .when(fill_window, |body| body.flex_1()).child(self.body), false, window, cx);
-            let corners = super::client_decorations::inner_corners(window);
-            return div().id(self.id).relative().w_full().max_h(height_limit)
-                // Its background reaches all four corners: the header's rounding alone leaves it square.
-                .rounded_tl(corners.top_left).rounded_tr(corners.top_right)
-                .rounded_bl(corners.bottom_left).rounded_br(corners.bottom_right)
-                .when(fill_window, |frame| frame.h_full())
-                .flex().flex_col().bg(self.body_background.unwrap_or(theme.active_background))
-                .text_color(theme.text).text_size(rems(0.8125)).line_height(relative(1.25))
-                .child(header)
-                .child(body)
-                .when(!self.actions.is_empty(), |frame| frame.child(
-                    div().flex_none().px(rems(1.0)).py(rems(0.625))
-                        .border_t(rems(0.0625)).border_color(theme.border).flex().justify_end()
-                        .when(self.wrap_actions, |actions| actions.flex_wrap())
-                        .gap(rems(0.5)).children(self.actions)))
-                .child(canvas(|bounds, _, _| bounds, move |_, bounds, window, cx| {
-                    // The laid-out width only follows the window: chasing it, snapped to device
-                    // pixels, would widen the window frame after frame at fractional scales.
-                    if !fill_window {
-                        match content_width {
-                            Some(width) => crate::ui::components::tool_window::fit_content_height_at_width(
-                                bounds.size.height, width, window, cx),
-                            None => crate::ui::components::tool_window::fit_content_height(
-                                bounds.size.height, window, cx),
-                        }
-                    }
-                }).absolute().size_full()).into_any_element();
-        }
-        let placement =
-            window.use_keyed_state(self.id.clone(), cx, |_, _| ModalPlacement::default());
-        let bottom_inset = rem_pixels(crate::ui::style::STATUS_BAR_HEIGHT + rems(1.0));
-        let viewport = modal_viewport(super::client_decorations::content_bounds(window).size, bottom_inset);
-        let offset = constrain_offset(placement.read(cx).offset, placement.read(cx).size, viewport);
-        let title_drag = placement.clone();
-        let measure = placement.clone();
-        let body = super::scroll_area::scroll_area((self.id.clone(), "body-scroll"), div(),
-            div().id("modal-body")
-                .when(self.actions.is_empty(), |body| body.rounded_b_lg())
-                .px(self.body_padding.0).py(self.body_padding.1)
-                .bg(self.body_background.unwrap_or(theme.surface))
-                .flex().flex_col().gap(self.body_gap).child(self.body), false, window, cx);
-        div()
-            .absolute()
-            .inset_0()
-            .pb(bottom_inset)
-            .flex()
-            .items_center()
-            .justify_center()
-            .occlude()
-            .on_any_mouse_down(move |event, window, cx| {
-                cx.stop_propagation();
-                if event.button == MouseButton::Left {
-                    if let Some(dismiss) = &self.on_backdrop_dismiss {
-                        dismiss(window, cx);
+        let height_limit = if self.fill_window { super::client_decorations::content_bounds(window).size.height } else {
+            crate::ui::components::tool_window::content_height_limit(window, cx)
+        };
+        let fill_window = self.fill_window;
+        let content_width = self.content_width;
+        let on_close = self.on_close;
+        let title = self.title;
+        let header = self.header.unwrap_or_else(|| {
+            // Same title bar as Properties and the other secondary windows.
+            window.set_window_title(title.as_ref());
+            super::tool_window::header(
+                self.title_icon.unwrap_or_default(), title, window, false, cx,
+                move |window, cx| if let Some(close) = &on_close { close(window, cx) },
+            ).into_any_element()
+        });
+        let body = super::scroll_area::scroll_area((self.id.clone(), "body-scroll"),
+            div().when(fill_window, |frame| frame.flex_1()),
+            div().id("modal-body").px(self.body_padding.0).py(self.body_padding.1)
+                .flex().flex_col().gap(rems(0.375))
+                .when(fill_window, |body| body.flex_1()).child(self.body), false, window, cx);
+        let corners = super::client_decorations::inner_corners(window);
+        div().id(self.id).relative().w_full().max_h(height_limit)
+            // Its background reaches all four corners: the header's rounding alone leaves it square.
+            .rounded_tl(corners.top_left).rounded_tr(corners.top_right)
+            .rounded_bl(corners.bottom_left).rounded_br(corners.bottom_right)
+            .when(fill_window, |frame| frame.h_full())
+            .flex().flex_col().bg(theme.active_background)
+            .text_color(theme.text).text_size(rems(0.8125)).line_height(relative(1.25))
+            .child(header)
+            .child(body)
+            .when(!self.actions.is_empty(), |frame| frame.child(
+                super::tool_window::footer(cx).children(self.actions)))
+            .child(canvas(|bounds, _, _| bounds, move |_, bounds, window, cx| {
+                // The laid-out width only follows the window: chasing it, snapped to device
+                // pixels, would widen the window frame after frame at fractional scales.
+                if !fill_window {
+                    match content_width {
+                        Some(width) => crate::ui::components::tool_window::fit_content_height_at_width(
+                            bounds.size.height, width, window, cx),
+                        None => crate::ui::components::tool_window::fit_content_height(
+                            bounds.size.height, window, cx),
                     }
                 }
-            })
-            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-            .child(
-                div()
-                    .id(self.id)
-                    .relative()
-                    .left(offset.x)
-                    .top(offset.y)
-                    .w(self.width)
-                    .max_w((viewport.width - rem_pixels(rems(2.0))).max(px(0.0)))
-                    .max_h((viewport.height - rem_pixels(rems(2.0))).max(px(0.0)))
-                    .flex()
-                    .flex_col()
-                    .rounded_lg()
-                    .shadow(crate::ui::style::rem_shadow(true))
-                    .bg(self.body_background.unwrap_or(theme.surface))
-                    .text_color(theme.text)
-                    .text_size(rems(0.8125))
-                    .line_height(relative(1.25))
-                    .border(rems(0.0625))
-                    .border_color(theme.border)
-                    .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
-                    .child(
-                        canvas(
-                            |bounds, _, _| bounds,
-                            move |bounds, _, window, cx| {
-                                measure.update(cx, |state, cx| {
-                                    let border = rem_pixels(rems(0.125));
-                                    state.size = bounds.size + size(border, border);
-                                    let offset = constrain_offset(
-                                        state.offset,
-                                        state.size,
-                                        modal_viewport(super::client_decorations::content_bounds(window).size, bottom_inset),
-                                    );
-                                    if offset != state.offset {
-                                        state.offset = offset;
-                                        cx.notify();
-                                    }
-                                });
-                                let moving = measure.clone();
-                                window.on_mouse_event(
-                                    move |event: &MouseMoveEvent, phase, window, cx| {
-                                        if phase == DispatchPhase::Capture {
-                                            moving.update(cx, |state, cx| {
-                                                if let Some((start, origin)) = state.drag {
-                                                    if event.dragging() {
-                                                        state.offset = constrain_offset(
-                                                            origin + event.position - start,
-                                                            state.size,
-                                                            modal_viewport(super::client_decorations::content_bounds(window).size, bottom_inset),
-                                                        );
-                                                    } else {
-                                                        state.drag = None;
-                                                    }
-                                                    cx.notify();
-                                                }
-                                            });
-                                        }
-                                    },
-                                );
-                                let released = measure.clone();
-                                window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
-                                    if phase == DispatchPhase::Capture
-                                        && event.button == MouseButton::Left
-                                    {
-                                        released.update(cx, |state, _| {
-                                            state.drag = None;
-                                        });
-                                    }
-                                });
-                            },
-                        )
-                        .absolute()
-                        .size_full(),
-                    )
-                    .child(
-                        div()
-                            .id("modal-titlebar")
-                            .on_mouse_down(MouseButton::Left, move |event, _, cx| {
-                                title_drag.update(cx, |state, _| {
-                                    state.drag = Some((event.position, state.offset));
-                                });
-                            })
-                            .flex_none()
-                            .h(rems(2.75))
-                            .px(rems(1.0))
-                            .flex()
-                            .items_center()
-                            .bg(self.header_background.unwrap_or(theme.header))
-                            .rounded_t_lg()
-                            .border_b(rems(0.0625))
-                            .border_color(theme.border)
-                            .child(self.header.unwrap_or_else(|| {
-                                div()
-                                    .flex()
-                                    .flex_none()
-                                    .items_center()
-                                    .gap(rems(0.5))
-                                    .when_some(self.title_icon, |header, icon| {
-                                        header.child(
-                                            svg()
-                                                .path(icon)
-                                                .size(rems(1.0))
-                                                .text_color(theme.text),
-                                        )
-                                    })
-                                    .child(
-                                        div()
-                                            .flex_1()
-                                            .text_size(rems(0.875))
-                                            .font_weight(FontWeight::MEDIUM)
-                                            .child(self.title),
-                                    )
-                                    .into_any_element()
-                            })),
-                    )
-                    .child(
-                        body,
-                    )
-                    .when(!self.actions.is_empty(), |panel| {
-                        panel.child(
-                            super::tool_window::footer(cx)
-                                .rounded_b_lg()
-                                .bg(self.header_background.unwrap_or(theme.surface))
-                                .when(self.wrap_actions, |d| d.flex_wrap())
-                                .gap(rems(0.5))
-                                .children(self.actions),
-                        )
-                    }),
-            ).into_any_element()
+            }).absolute().size_full())
     }
 }
-
-#[cfg(test)]
-#[path = "modal/tests/placement.rs"]
-mod tests;

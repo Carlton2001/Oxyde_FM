@@ -16,7 +16,8 @@ impl DialogKind {
     /// Initial content width, in rems; the height follows the content.
     pub(super) fn fixed_width(self) -> f32 {
         match self {
-            Self::Rename | Self::Network | Self::RemoteLogin | Self::OpenWith => 30.0,
+            // Forms; confirmations and notices keep the narrower width.
+            Self::Rename | Self::Network | Self::RemoteLogin | Self::ArchivePassword | Self::OpenWith => 30.0,
             _ => 27.5,
         }
     }
@@ -118,7 +119,7 @@ impl DialogKind {
             Self::OpenWith => open_with_dialog::render_open_with_dialog(app, owner, window, cx).into_any_element(),
             Self::TrashDelete => super::super::trash_settings::render_delete_confirmation(app, owner, window, cx).into_any_element(),
             Self::SettingsConfirmation => settings::render_settings_confirmation(app, owner, window, cx).into_any_element(),
-            Self::Notice => render_notice(app, owner, focus, cx).into_any_element(),
+            Self::Notice => render_notice(app, owner, focus, window, cx).into_any_element(),
             Self::Trash | Self::Conflict => div().into_any_element(),
         }
     }

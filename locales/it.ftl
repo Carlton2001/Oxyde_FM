@@ -289,9 +289,9 @@ operations-resume = Riprendi
 
 operations-stop = Annulla operazione
 
-operations-fast = Modalità rapida attiva — fai clic per passare alla modalità normale
+operations-fast = Modalità rapida attiva. Fai clic per passare alla modalità normale
 
-operations-normal = Modalità normale attiva — fai clic per passare alla modalità rapida
+operations-normal = Modalità normale attiva. Fai clic per passare alla modalità rapida
 
 operations-dismiss = Rimuovi
 
@@ -761,6 +761,7 @@ advanced-invalid = Controlla i modelli, le dimensioni e le date (AAAA-MM-GG).
 advanced-date-placeholder = AAAA-MM-GG
 
 advanced-weekdays = Lun Mar Mer Gio Ven Sab Dom
+advanced-months = gennaio febbraio marzo aprile maggio giugno luglio agosto settembre ottobre novembre dicembre
 
 duplicate-locations = Posizioni di ricerca
 
@@ -812,7 +813,7 @@ folder-size-provisional-description =
     Il ricalcolo automatico attende una pausa nell’attività.
     Aggiornare per forzare l’aggiornamento.
 
-quick-search-current-folder = Cartella corrente
+quick-search-tooltip = Cerca nella cartella corrente
 
 settings-clear-cache-confirm = Eliminare le cache di icone e miniature? Verranno ricreate quando necessario.
 

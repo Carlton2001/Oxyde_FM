@@ -1,8 +1,9 @@
 //! Credentials a remote server asks for while its share mounts, as GTK's mount dialog,
 //! or its question with choices, such as accepting an unknown SFTP host key.
 use crate::ui::app::OxydeApp;
-use crate::ui::components::modal::{action_button, form_row, Modal};
-use crate::ui::elements::button::{button_style, ButtonVariant};
+use crate::ui::components::dialog;
+use crate::ui::components::modal::{form_row, Modal};
+use crate::ui::elements::button::ButtonVariant;
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
@@ -35,13 +36,13 @@ pub(crate) fn render_remote_login_dialog(
 ) -> AnyElement {
     let login = view.remote_login.as_ref().expect("remote login");
     if !login.prompt.choices.is_empty() {
-        return render_question(view, handle, window, cx).into_any_element();
+        return render_question(view, handle, cx).into_any_element();
     }
     let theme = *cx.theme();
     let prompt = &login.prompt;
     // GVfs puts a title line first, which the dialog title already says.
     let message = prompt.message.split_once('\n').map_or(prompt.message.as_str(), |(_, rest)| rest).trim().to_string();
-    let mut body = div().flex().flex_col().gap(rems(0.375)).text_size(rems(0.8125))
+    let mut body = div().flex().flex_col().gap(rems(0.375))
         .child(div().pb(rems(0.375)).child(message));
     if prompt.anonymous {
         let toggle = handle.clone();
@@ -113,33 +114,23 @@ pub(crate) fn render_remote_login_dialog(
         body = body.child(form_row(SharedString::default(), choices, cx));
     }
     if prompt.retry {
-        body = body.child(div().text_color(theme.error).child(cx.i18n().text(Message::RemoteRetry)));
+        body = body.child(crate::ui::components::modal::field_error(cx.i18n().text(Message::RemoteRetry), theme));
     }
     let cancel = handle.clone();
     let submit = handle.clone();
     let close = handle.clone();
-    let focused = |control: usize| login.controls[control].is_focused(window);
     let modal = Modal::new("remote-login", cx.i18n().text(Message::RemoteLoginTitle), body)
         .title_icon("icons/server.svg")
-        .standalone(false)
-        .body_background(theme.active_background)
         .on_close(move |window, cx| close.update(cx, |view, cx| view.answer_remote_login(true, window, cx)))
-        .width(rems(30.0))
         .action(
-            button_style(action_button("remote-cancel"), theme, ButtonVariant::Secondary, true)
-                .track_focus(&login.controls[CANCEL])
-                .border(rems(0.0625))
-                .border_color(if focused(CANCEL) { theme.accent } else { theme.border })
-                .child(cx.i18n().text(Message::Cancel))
-                .on_click(move |_, window, cx| cancel.update(cx, |view, cx| view.answer_remote_login(true, window, cx))),
+            dialog::button("remote-cancel", cx.i18n().text(Message::Cancel), ButtonVariant::Secondary)
+                .focus(&login.controls[CANCEL])
+                .on_press(move |window, cx| cancel.update(cx, |view, cx| view.answer_remote_login(true, window, cx))),
         )
         .action(
-            button_style(action_button("remote-connect"), theme, ButtonVariant::Primary, true)
-                .track_focus(&login.controls[CONNECT])
-                .border(rems(0.0625))
-                .border_color(if focused(CONNECT) { theme.text_on_accent } else { theme.accent })
-                .child(cx.i18n().text(Message::RemoteConnect))
-                .on_click(move |_, window, cx| submit.update(cx, |view, cx| view.answer_remote_login(false, window, cx))),
+            dialog::button("remote-connect", cx.i18n().text(Message::RemoteConnect), ButtonVariant::Primary)
+                .focus(&login.controls[CONNECT])
+                .on_press(move |window, cx| submit.update(cx, |view, cx| view.answer_remote_login(false, window, cx))),
         );
     let keyboard = handle.clone();
     div()
@@ -169,37 +160,19 @@ pub(crate) fn render_remote_login_dialog(
                             }
                         }
                         order.extend(login.controls[CANCEL..].iter().cloned());
-                        let current = order.iter().position(|focus| focus.is_focused(window));
-                        let next = if event.keystroke.modifiers.shift {
-                            current.map_or(order.len() - 1, |current| (current + order.len() - 1) % order.len())
-                        } else {
-                            current.map_or(0, |current| (current + 1) % order.len())
-                        };
-                        window.focus(&order[next], cx);
+                        dialog::cycle(&order, event.keystroke.modifiers.shift, window, cx);
                     }
-                    "enter" | "space" if focused(CANCEL) => view.answer_remote_login(true, window, cx),
                     "space" if focused(ANONYMOUS) => view.toggle_remote_anonymous(cx),
                     "space" | "right" | "left" | "down" | "up" if focused(REMEMBER) => {
                         let save = cycled(login.save, matches!(event.keystroke.key.as_str(), "left" | "up"));
                         view.set_remote_password_save(save, cx);
                     }
-                    "space" if focused(CONNECT) => view.answer_remote_login(false, window, cx),
                     "enter" => view.answer_remote_login(false, window, cx),
                     _ => return,
                 }
                 cx.stop_propagation();
             })
         })
-        .on_action(|_: &crate::ui::app::Ouvrir, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Supprimer, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Renommer, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Copier, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Couper, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Coller, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::ToutSelectionner, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Annuler, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Refaire, _, cx| cx.stop_propagation())
-        .on_action(|_: &crate::ui::app::Actualiser, _, cx| cx.stop_propagation())
         .child(modal)
         .into_any_element()
 }
@@ -208,33 +181,24 @@ pub(crate) fn render_remote_login_dialog(
 fn render_question(
     view: &OxydeApp,
     handle: Entity<OxydeApp>,
-    window: &mut Window,
     cx: &mut Context<OxydeApp>,
 ) -> impl IntoElement {
     let login = view.remote_login.as_ref().expect("remote question");
-    let theme = *cx.theme();
     // GVfs's first line is a heading, such as « Identity verification failed ».
     let (heading, text) = login.prompt.message.split_once('\n').unwrap_or(("", login.prompt.message.as_str()));
-    let body = div().flex().flex_col().gap(rems(0.5)).text_size(rems(0.8125))
+    let body = div().flex().flex_col().gap(rems(0.5))
         .when(!heading.trim().is_empty(), |body| body.child(div().font_weight(FontWeight::MEDIUM).child(heading.trim().to_string())))
         .children(text.split("\n\n").map(|paragraph| div().child(paragraph.trim().to_string())));
     let close = handle.clone();
     let mut modal = Modal::new("remote-question", cx.i18n().text(Message::RemoteQuestionTitle), body)
         .title_icon("icons/server.svg")
-        .standalone(false)
-        .body_background(theme.active_background)
-        .on_close(move |window, cx| close.update(cx, |view, cx| view.answer_remote_login(true, window, cx)))
-        .width(rems(30.0));
+        .on_close(move |window, cx| close.update(cx, |view, cx| view.answer_remote_login(true, window, cx)));
     for (index, choice) in login.prompt.choices.iter().enumerate() {
         let answer = handle.clone();
-        let focus = &login.controls[index];
         modal = modal.action(
-            button_style(action_button(("remote-choice", index)), theme, ButtonVariant::Secondary, true)
-                .track_focus(focus)
-                .border(rems(0.0625))
-                .border_color(if focus.is_focused(window) { theme.accent } else { theme.border })
-                .child(choice.clone())
-                .on_click(move |_, window, cx| answer.update(cx, |view, cx| view.answer_remote_question(index, window, cx))),
+            dialog::button(("remote-choice", index), choice.clone(), ButtonVariant::Secondary)
+                .focus(&login.controls[index])
+                .on_press(move |window, cx| answer.update(cx, |view, cx| view.answer_remote_question(index, window, cx))),
         );
     }
     let keyboard = handle.clone();
@@ -245,23 +209,12 @@ fn render_question(
         .on_key_down(move |event, window, cx| {
             keyboard.update(cx, |view, cx| {
                 let Some(login) = &view.remote_login else { return };
-                let count = login.controls.len();
-                let current = login.controls.iter().position(|focus| focus.is_focused(window));
                 match event.keystroke.key.as_str() {
                     "escape" => view.answer_remote_login(true, window, cx),
                     "tab" | "left" | "right" => {
                         let back = event.keystroke.modifiers.shift || event.keystroke.key == "left";
-                        let next = match current {
-                            Some(current) if back => (current + count - 1) % count,
-                            Some(current) => (current + 1) % count,
-                            None => count - 1,
-                        };
-                        window.focus(&login.controls[next], cx);
+                        dialog::cycle(&login.controls, back, window, cx);
                     }
-                    "enter" | "space" => match current {
-                        Some(index) => view.answer_remote_question(index, window, cx),
-                        None => return,
-                    },
                     _ => return,
                 }
                 cx.stop_propagation();

@@ -1,7 +1,7 @@
-//! The body and buttons shared by confirmation dialogs: an icon in a tinted disc, the
-//! question, what it concerns, and a warning when the action cannot be undone. The
-//! calling dialog keeps its focus routing, keys and actions.
-use crate::ui::elements::button::{button_style, ButtonVariant};
+//! The body shared by confirmation dialogs: an icon in a tinted disc, the question,
+//! what it concerns, and a warning when the action cannot be undone. Their buttons are
+//! `dialog::button`, the action taking `Tone::variant`.
+use crate::ui::elements::button::ButtonVariant;
 use crate::ui::theme::OxydeTheme;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
@@ -10,6 +10,16 @@ use gpui::*;
 pub(crate) enum Tone {
     Neutral,
     Danger,
+}
+
+impl Tone {
+    /// The action asked for, red when it destroys.
+    pub(crate) fn variant(self) -> ButtonVariant {
+        match self {
+            Self::Neutral => ButtonVariant::Primary,
+            Self::Danger => ButtonVariant::Danger,
+        }
+    }
 }
 
 /// An empty question leaves the details alone, for a notice.
@@ -81,22 +91,4 @@ pub(crate) fn body(
 /// A secondary line under the question.
 pub(crate) fn detail(text: impl Into<SharedString>, theme: OxydeTheme) -> AnyElement {
     div().min_w_0().text_color(theme.text_muted).child(text.into()).into_any_element()
-}
-
-/// Cancel, outlined in accent while the dialog's own focus is on it.
-pub(crate) fn cancel_button(id: impl Into<ElementId>, focused: bool, label: SharedString, theme: OxydeTheme) -> Stateful<Div> {
-    button_style(super::modal::action_button(id), theme, ButtonVariant::Secondary, true)
-        .when(focused, |button| button.border_color(theme.accent))
-        .child(label)
-}
-
-/// The action asked for, red when it destroys.
-pub(crate) fn confirm_button(id: impl Into<ElementId>, focused: bool, tone: Tone, label: SharedString, theme: OxydeTheme) -> Stateful<Div> {
-    let variant = match tone {
-        Tone::Neutral => ButtonVariant::Primary,
-        Tone::Danger => ButtonVariant::Danger,
-    };
-    button_style(super::modal::action_button(id), theme, variant, true)
-        .when(focused, |button| button.border_color(theme.text))
-        .child(label)
 }

@@ -178,8 +178,8 @@ operations-finalizing = Finalizing…
 operations-pause = Pause
 operations-resume = Resume
 operations-stop = Cancel operation
-operations-fast = Fast mode active — click to switch to normal mode
-operations-normal = Normal mode active — click to switch to fast mode
+operations-fast = Fast mode active. Click to switch to normal mode
+operations-normal = Normal mode active. Click to switch to fast mode
 operations-dismiss = Dismiss
 operations-dismiss-all = Remove all completed operations
 operations-empty = No operations
@@ -480,6 +480,7 @@ advanced-max = Max
 advanced-invalid = Check patterns, sizes and dates (YYYY-MM-DD).
 advanced-date-placeholder = YYYY-MM-DD
 advanced-weekdays = Mon Tue Wed Thu Fri Sat Sun
+advanced-months = January February March April May June July August September October November December
 
 duplicate-locations = Search locations
 duplicate-settings = Search settings
@@ -511,7 +512,7 @@ folder-size-provisional-description =
     Size awaiting an update.
     Automatic recalculation waits for activity to settle.
     Refresh to force the update.
-quick-search-current-folder = Current folder
+quick-search-tooltip = Search the current folder
 
 settings-clear-cache-confirm = Delete icon and thumbnail caches? They will be recreated when needed.
 settings-reset-confirm = Restore default preferences? Open tabs and your custom themes will be preserved.

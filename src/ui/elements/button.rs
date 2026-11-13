@@ -4,6 +4,23 @@ pub use style::{button_style, ButtonVariant};
 /// Corner of text action buttons, matching the fields they sit beside.
 pub(crate) const ACTION_BUTTON_RADIUS: gpui::Rems = gpui::rems(0.25);
 
+/// The geometry of a text action button (footers, prompts): one line, centered content.
+/// Colors come from `button_style`.
+pub(crate) fn action(button: gpui::Stateful<gpui::Div>) -> gpui::Stateful<gpui::Div> {
+    use gpui::{rems, Styled};
+    button
+        .flex_none()
+        .whitespace_nowrap()
+        .flex()
+        .items_center()
+        .justify_center()
+        .gap(rems(0.5))
+        .px(rems(0.75))
+        .py(rems(0.375))
+        .text_size(rems(0.8125))
+        .rounded(ACTION_BUTTON_RADIUS)
+}
+
 /// Mini chevron signalant qu’un bouton icône ouvre un menu, orienté vers son ouverture.
 pub(crate) fn menu_chevron(up: bool, color: gpui::Hsla) -> gpui::Svg {
     use gpui::{rems, svg, Styled};

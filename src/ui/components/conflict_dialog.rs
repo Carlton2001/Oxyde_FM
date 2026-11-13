@@ -140,5 +140,5 @@ pub(crate) fn render_conflict_dialog(
             .child(comparison);
         body
     };
-    render_frame(pending, body, width, simple_width, handle, window, cx)
+    render_frame(pending, body, simple_width, handle, window, cx)
 }

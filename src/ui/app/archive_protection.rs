@@ -124,13 +124,7 @@ impl OxydeApp {
                 if order.is_empty() {
                     return false;
                 }
-                let current = order.iter().position(|focus| focus.contains_focused(window, cx) || focus.is_focused(window));
-                let next = if shift {
-                    current.map_or(order.len() - 1, |current| (current + order.len() - 1) % order.len())
-                } else {
-                    current.map_or(0, |current| (current + 1) % order.len())
-                };
-                window.focus(&order[next], cx);
+                crate::ui::components::dialog::cycle(&order, shift, window, cx);
                 cx.notify();
             }
             "left" | "right" if focused(FORMATS) => {
@@ -148,8 +142,6 @@ impl OxydeApp {
                 self.rename_error = None;
                 cx.notify();
             }
-            "enter" | "space" if focused(CANCEL) => self.cancel_rename(cx),
-            "enter" | "space" if focused(SUBMIT) => self.submit_rename(cx),
             "enter" if focused(FORMATS) || focused(PROTECTION) => self.submit_rename(cx),
             "escape" => self.cancel_rename(cx),
             _ => return false,

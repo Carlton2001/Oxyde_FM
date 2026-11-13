@@ -184,8 +184,8 @@ operations-finalizing = Finalisation…
 operations-pause = Pause
 operations-resume = Reprendre
 operations-stop = Annuler l’opération
-operations-fast = Mode rapide activé — cliquer pour passer en mode normal
-operations-normal = Mode normal activé — cliquer pour passer en mode rapide
+operations-fast = Mode rapide activé. Cliquer pour passer en mode normal
+operations-normal = Mode normal activé. Cliquer pour passer en mode rapide
 operations-dismiss = Retirer
 operations-dismiss-all = Retirer toutes les opérations terminées
 operations-empty = Aucune opération
@@ -486,6 +486,7 @@ advanced-max = Max
 advanced-invalid = Vérifiez les expressions, les tailles et les dates (AAAA-MM-JJ).
 advanced-date-placeholder = AAAA-MM-JJ
 advanced-weekdays = Lun Mar Mer Jeu Ven Sam Dim
+advanced-months = janvier février mars avril mai juin juillet août septembre octobre novembre décembre
 
 duplicate-locations = Emplacements de recherche
 duplicate-settings = Paramètres de recherche
@@ -517,7 +518,7 @@ folder-size-provisional-description =
     Taille à actualiser.
     Le recalcul automatique attend une accalmie.
     Actualisez pour forcer la mise à jour.
-quick-search-current-folder = Dossier courant
+quick-search-tooltip = Rechercher dans le dossier courant
 
 settings-clear-cache-confirm = Supprimer les caches d’icônes et de miniatures ? Ils seront recréés au besoin.
 settings-reset-confirm = Rétablir les préférences par défaut ? Les onglets ouverts et vos thèmes personnalisés seront conservés.

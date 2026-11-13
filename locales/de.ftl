@@ -289,9 +289,9 @@ operations-resume = Fortsetzen
 
 operations-stop = Vorgang abbrechen
 
-operations-fast = Schnellmodus aktiv — klicken, um zum Normalmodus zu wechseln
+operations-fast = Schnellmodus aktiv. Klicken, um zum Normalmodus zu wechseln
 
-operations-normal = Normalmodus aktiv — klicken, um zum Schnellmodus zu wechseln
+operations-normal = Normalmodus aktiv. Klicken, um zum Schnellmodus zu wechseln
 
 operations-dismiss = Entfernen
 
@@ -761,6 +761,7 @@ advanced-invalid = Prüfen Sie Muster, Größen und Daten (JJJJ-MM-TT).
 advanced-date-placeholder = JJJJ-MM-TT
 
 advanced-weekdays = Mo Di Mi Do Fr Sa So
+advanced-months = Januar Februar März April Mai Juni Juli August September Oktober November Dezember
 
 duplicate-locations = Suchorte
 
@@ -812,7 +813,7 @@ folder-size-provisional-description =
     Die Neuberechnung wartet auf eine Ruhephase.
     Zum Erzwingen aktualisieren.
 
-quick-search-current-folder = Aktueller Ordner
+quick-search-tooltip = Im aktuellen Ordner suchen
 
 settings-clear-cache-confirm = Symbol- und Miniaturbild-Caches löschen? Sie werden bei Bedarf neu erstellt.
 
