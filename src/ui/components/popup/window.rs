@@ -761,10 +761,11 @@ impl Render for MenuWindow {
                     || modifiers.alt
                     || modifiers.platform
                     || modifiers.function);
-                if plain
-                    && (event.keystroke.key == "escape"
-                        || (event.keystroke.key == "left" && focus.is_focused(window)))
-                {
+                // A row holding a value takes Left before it closes the menu.
+                let left = event.keystroke.key == "left" && focus.is_focused(window);
+                if plain && left && super::keyboard::key("left", window, cx) {
+                    cx.stop_propagation();
+                } else if plain && (event.keystroke.key == "escape" || left) {
                     close(cx);
                     cx.stop_propagation();
                 } else if focus.is_focused(window) {

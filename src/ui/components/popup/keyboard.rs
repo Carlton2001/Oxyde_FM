@@ -4,9 +4,12 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 pub(crate) type Action = Rc<dyn Fn(&mut Window, &mut App)>;
+/// Left (`false`) and Right (`true`) on a row holding a value, such as a stepper.
+pub(crate) type Adjust = Rc<dyn Fn(bool, &mut Window, &mut App)>;
 struct Row {
     action: Action,
     submenu: Option<Action>,
+    adjust: Option<Adjust>,
     scroll: Option<(ScrollHandle, usize)>,
 }
 #[derive(Default)]
@@ -59,18 +62,25 @@ pub(super) fn key(key: &str, window: &mut Window, cx: &mut App) -> bool {
             }
             window.refresh();
         }
-        "enter" | "space" | "right" => {
-            let index = nav.selected.filter(|index| *index < count).unwrap_or(0);
-            let row = &nav.rows[index];
-            let callback = if key == "right" {
-                row.submenu.clone()
-            } else {
-                Some(row.action.clone())
-            };
-            let Some(callback) = callback else {
+        "left" | "right" => {
+            // Left is the menu's own key elsewhere: the caller closes a submenu with it.
+            let adjust = nav.selected.and_then(|index| nav.rows.get(index)).and_then(|row| row.adjust.clone());
+            if let Some(adjust) = adjust {
+                adjust(key == "right", window, cx);
+            } else if key == "left" {
                 return false;
-            };
-            callback(window, cx);
+            } else {
+                let index = nav.selected.filter(|index| *index < count).unwrap_or(0);
+                let Some(submenu) = nav.rows[index].submenu.clone() else {
+                    return false;
+                };
+                submenu(window, cx);
+            }
+        }
+        "enter" | "space" => {
+            let index = nav.selected.filter(|index| *index < count).unwrap_or(0);
+            let action = nav.rows[index].action.clone();
+            action(window, cx);
         }
         _ => return false,
     }
@@ -99,6 +109,7 @@ pub(crate) struct KeyboardItem {
     action: Action,
     submenu: Option<Action>,
     scroll: Option<(ScrollHandle, usize)>,
+    adjust: Option<Adjust>,
 }
 pub(crate) fn item(
     row: Stateful<Div>,
@@ -111,6 +122,14 @@ pub(crate) fn item(
         action,
         submenu,
         scroll,
+        adjust: None,
+    }
+}
+impl KeyboardItem {
+    /// Left and Right change the row's value instead of leaving or opening a submenu.
+    pub(crate) fn adjust(mut self, adjust: Adjust) -> Self {
+        self.adjust = Some(adjust);
+        self
     }
 }
 impl RenderOnce for KeyboardItem {
@@ -128,6 +147,7 @@ impl RenderOnce for KeyboardItem {
             action: self.action,
             submenu: self.submenu,
             scroll: self.scroll,
+            adjust: self.adjust,
         });
         let selected = nav.selected == Some(index);
         let color = crate::ui::theme::OxydeTheme::global(cx).menu_hover;
