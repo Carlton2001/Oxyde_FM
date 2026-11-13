@@ -32,10 +32,21 @@ enum PickerPart {
     Hue,
 }
 
+/// Keyboard stops of the window besides the draft's fields.
+struct Stops {
+    create: FocusHandle,
+    delete: FocusHandle,
+    cancel: FocusHandle,
+    save: FocusHandle,
+    field: FocusHandle,
+    hue: FocusHandle,
+}
+
 pub struct ThemeWindow {
     owner: WeakEntity<OxydeApp>,
     draft: Option<ThemeDraft>,
     focus: FocusHandle,
+    stops: Stops,
     field_bounds: MeasuredBounds,
     hue_bounds: MeasuredBounds,
     drag: Option<PickerPart>,
@@ -118,6 +129,14 @@ impl ThemeWindow {
             owner,
             draft: None,
             focus,
+            stops: Stops {
+                create: cx.focus_handle(),
+                delete: cx.focus_handle(),
+                cancel: cx.focus_handle(),
+                save: cx.focus_handle(),
+                field: cx.focus_handle(),
+                hue: cx.focus_handle(),
+            },
             field_bounds: Default::default(),
             hue_bounds: Default::default(),
             drag: None,

@@ -23,6 +23,8 @@ pub(super) struct ThemeDraft {
     pub(super) hsv: Hsv,
     /// Name and colors as last saved; `None` for a new theme.
     saved: Option<(String, [u32; 6])>,
+    /// Entering a code field selects its seed; leaving it rewrites it from its color.
+    _settle: Vec<Subscription>,
 }
 
 impl ThemeDraft {
@@ -79,22 +81,41 @@ impl ThemeWindow {
                 |_, _, _, _, _| {},
                 TextInputOptions::default(), window)
         });
-        let hex_inputs = (0..6).map(|index| {
+        let hex_inputs: Vec<Entity<TextInput>> = (0..6).map(|index| {
             let change = handle.clone();
             let enter = handle.clone();
             let escape = handle.clone();
-            cx.new(|cx| TextInput::new(cx, "#rrggbb", format_hex_color(colors[index]),
-                move |value, _, cx| {
-                    let _ = change.update(cx, |this, cx| {
-                        if let Some(color) = parse_hex_color(value) {
-                            this.set_color(index, color, false, cx);
+            cx.new(|cx| {
+                let input = cx.entity().downgrade();
+                TextInput::new(cx, "#rrggbb", format_hex_color(colors[index]),
+                    move |value, _, cx| {
+                        let parsed = parse_hex_color(value);
+                        let _ = change.update(cx, |this, cx| {
+                            if let Some(color) = parsed {
+                                this.set_color(index, color, false, cx);
+                            }
+                        });
+                        // The input is being updated: mark it once this change is done.
+                        if parsed.is_none() {
+                            let input = input.clone();
+                            cx.defer(move |cx| {
+                                let _ = input.update(cx, |input, cx| input.mark_invalid(cx));
+                            });
                         }
-                    });
-                },
-                move |_, cx| { let _ = enter.update(cx, |this, cx| this.save_draft(cx)); },
-                move |_, cx| { let _ = escape.update(cx, |this, cx| this.discard_draft(cx)); },
-                |_, _, _, _, _| {},
-                TextInputOptions::default(), window))
+                    },
+                    move |_, cx| { let _ = enter.update(cx, |this, cx| this.save_draft(cx)); },
+                    move |_, cx| { let _ = escape.update(cx, |this, cx| this.discard_draft(cx)); },
+                    |_, _, _, _, _| {},
+                    TextInputOptions::default(), window)
+            })
+        }).collect();
+        // Reaching a code, by Tab or a click, edits its seed in the picker.
+        let settle = hex_inputs.iter().enumerate().flat_map(|(index, input)| {
+            let focus = input.read(cx).focus_handle.clone();
+            [
+                cx.on_focus(&focus, window, move |this, _, cx| this.select_color(index, cx)),
+                cx.on_focus_out(&focus, window, move |this, _, _, cx| this.settle_code(index, cx)),
+            ]
         }).collect();
         let focus = name_input.read(cx).focus_handle.clone();
         let saved = edit.then(|| (name.clone(), colors));
@@ -103,6 +124,7 @@ impl ThemeWindow {
             id, base, name, name_input, colors, hex_inputs,
             active: 5,
             hsv: Hsv::from_rgb(colors[5]),
+            _settle: settle,
         });
         window.focus(&focus, cx);
         self.preview(cx);
@@ -115,6 +137,19 @@ impl ThemeWindow {
             draft.hsv = Hsv::from_rgb(draft.colors[index]);
             cx.notify();
         }
+    }
+
+    /// A refused or shortened code gives way to the seed's color, written in full.
+    fn settle_code(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some(draft) = &self.draft else {
+            return;
+        };
+        let code = format_hex_color(draft.colors[index]);
+        draft.hex_inputs[index].update(cx, |input, cx| {
+            if input.content() != code {
+                input.set_content(code, cx);
+            }
+        });
     }
 
     /// `rewrite` puts the new value in the field, for changes made outside it.
@@ -134,7 +169,7 @@ impl ThemeWindow {
         cx.notify();
     }
 
-    fn set_hsv(&mut self, hsv: Hsv, cx: &mut Context<Self>) {
+    pub(super) fn set_hsv(&mut self, hsv: Hsv, cx: &mut Context<Self>) {
         let Some(draft) = &mut self.draft else {
             return;
         };

@@ -3,7 +3,8 @@
 use super::draft::builtin_label;
 use super::{ThemeWindow, ICON};
 use crate::ui::components::tool_window::{action_button, footer, header, pointer_drag};
-use crate::ui::elements::button::{button_style, ButtonVariant};
+use crate::ui::components::dialog::{self, DialogButton};
+use crate::ui::elements::button::ButtonVariant;
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::components::tooltip::{NativeTooltipExt, Tooltip};
 use crate::ui::elements::segmented::{segment, segmented};
@@ -14,15 +15,35 @@ use gpui::*;
 type Action = fn(&mut ThemeWindow, &mut Window, &mut Context<ThemeWindow>);
 
 impl ThemeWindow {
-    /// A disabled button keeps its place but has no action.
+    /// A disabled button keeps its place and its focus stop, and does nothing.
     fn button(&self, id: &'static str, message: Message, variant: ButtonVariant, enabled: bool,
-              action: Action, cx: &mut Context<Self>) -> Stateful<Div> {
+              focus: &FocusHandle, action: Action, cx: &mut Context<Self>) -> DialogButton {
         let handle = cx.entity().downgrade();
-        crate::ui::elements::button::action(button_style(div().id(id), *cx.theme(), variant, enabled))
-            .child(cx.i18n().text(message))
-            .when(enabled, |button| button.tab_index(0).on_click(move |_, window, cx| {
+        dialog::button(id, cx.i18n().text(message), variant).focus(focus).enabled(enabled)
+            .on_press(move |window, cx| {
                 let _ = handle.update(cx, |this, cx| action(this, window, cx));
-            }))
+            })
+    }
+
+    /// Tab order: the name, the actions, the six codes, then the picker.
+    fn tab_order(&self, cx: &App) -> Vec<FocusHandle> {
+        let Some(draft) = &self.draft else {
+            return vec![self.stops.create.clone()];
+        };
+        let mut order = vec![draft.name_input.read(cx).focus_handle.clone()];
+        if draft.id.is_some() {
+            order.push(self.stops.delete.clone());
+        }
+        order.extend([self.stops.cancel.clone(), self.stops.save.clone()]);
+        order.extend(draft.hex_inputs.iter().map(|input| input.read(cx).focus_handle.clone()));
+        order.extend([self.stops.field.clone(), self.stops.hue.clone()]);
+        order
+    }
+
+    fn cycle(&mut self, backwards: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let order = self.tab_order(cx);
+        dialog::cycle(&order, backwards, window, cx);
+        cx.notify();
     }
 
     /// Applies to every theme, so it sits with the window rather than with one theme.
@@ -63,15 +84,15 @@ impl ThemeWindow {
         let row = div().flex().flex_none().items_center().gap(rems(0.5));
         let Some(draft) = &self.draft else {
             return row.child(self.button("theme-create", Message::ThemeCreate, ButtonVariant::Primary, true,
-                |this, window, cx| this.start_draft(false, window, cx), cx));
+                &self.stops.create, |this, window, cx| this.start_draft(false, window, cx), cx));
         };
         let modified = draft.is_modified();
         row.when(draft.id.is_some(), |row| row.child(self.button("theme-delete", Message::ThemeDelete,
-                ButtonVariant::Secondary, true, |this, _, cx| this.delete_draft(cx), cx)))
+                ButtonVariant::Secondary, true, &self.stops.delete, |this, _, cx| this.delete_draft(cx), cx)))
             .child(self.button("theme-cancel", Message::Cancel, ButtonVariant::Secondary, modified,
-                |this, window, cx| this.revert_draft(window, cx), cx))
+                &self.stops.cancel, |this, window, cx| this.revert_draft(window, cx), cx))
             .child(self.button("theme-save", Message::ThemeSave, ButtonVariant::Primary, modified,
-                |this, _, cx| this.save_draft(cx), cx))
+                &self.stops.save, |this, _, cx| this.save_draft(cx), cx))
     }
 }
 
@@ -88,8 +109,12 @@ impl Render for ThemeWindow {
         let choice = app.theme_choice.clone();
         let vision = app.color_vision();
         let custom = app.custom_themes().to_vec();
-        // A dropped draft takes its focused field with it; keep Escape working.
-        if window.focused(cx).is_none() {
+        // A dropped draft takes its focused field with it, and the picker's stops leave
+        // with the editor; keep Escape working.
+        let picker_left = self.draft.is_none()
+            && [&self.stops.field, &self.stops.hue, &self.stops.delete, &self.stops.cancel, &self.stops.save]
+                .iter().any(|stop| stop.is_focused(window));
+        if picker_left || window.focused(cx).is_none() {
             window.focus(&self.focus, cx);
         }
         let (name, colors) = match &choice {
@@ -98,7 +123,7 @@ impl Render for ThemeWindow {
                 .map(|saved| (saved.name.clone().into(), saved.colors(ThemeSeed::for_id(saved.base()).colors())))
                 .unwrap_or_else(|| (SharedString::default(), [0; 6])),
         };
-        let detail = if self.draft.is_some() { self.render_editor(cx) } else { self.render_overview(name, colors, cx) };
+        let detail = if self.draft.is_some() { self.render_editor(window, cx) } else { self.render_overview(name, colors, cx) };
         let list = self.render_list(&custom, &choice, cx);
         let list = crate::ui::components::scroll_area::scroll_area("theme-list-scroll-state",
             div().w(rems(18.5)).flex_none().h_full().border_r(rems(0.0625)).border_color(theme.border).bg(theme.sidebar),
@@ -119,6 +144,13 @@ impl Render for ThemeWindow {
             .text_size(rems(0.8125))
             .line_height(relative(1.25))
             .track_focus(&self.focus)
+            .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                let modifiers = event.keystroke.modifiers;
+                if event.keystroke.key == "tab" && !(modifiers.control || modifiers.alt || modifiers.platform) {
+                    this.cycle(modifiers.shift, window, cx);
+                    cx.stop_propagation();
+                }
+            }))
             .on_key_down(move |event, window, cx| {
                 if event.keystroke.key == "escape" {
                     let _ = keys.update(cx, |this, cx| {

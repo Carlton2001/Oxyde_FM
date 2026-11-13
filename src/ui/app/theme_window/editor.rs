@@ -1,7 +1,8 @@
 //! The six seed colors: explained for the selected theme, editable for a draft.
 
 use super::{PickerPart, ThemeWindow};
-use crate::ui::elements::color_picker::{color_field, hue_strip};
+use crate::ui::elements::color_picker::{color_field, hue_strip, Hsv};
+use crate::ui::elements::segmented::outline;
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::{contrast, OxydeTheme, ThemeContext};
 use gpui::prelude::*;
@@ -21,9 +22,10 @@ const SEEDS: [(Message, Message); 6] = [
 /// Below this ratio against a pane, text stops meeting WCAG AA.
 const TEXT_CONTRAST: f32 = 4.5;
 
+/// Outlined as the segmented groups, so a swatch of the window's own background still shows.
 fn swatch(color: u32, theme: OxydeTheme) -> Div {
     div().size(rems(1.75)).flex_none().rounded_md().bg(rgb(color))
-        .border(rems(0.0625)).border_color(theme.border)
+        .border(rems(0.0625)).border_color(outline(theme))
 }
 
 fn described(label: SharedString, description: SharedString, theme: OxydeTheme) -> Div {
@@ -61,7 +63,8 @@ impl ThemeWindow {
             .child(div().text_color(theme.text_muted).child(i18n.text(Message::ThemeCreateHint)))
     }
 
-    pub(super) fn render_editor(&self, cx: &mut Context<Self>) -> Div {
+    /// One line per seed beside the picker; only the edited seed shows its role, above the picker.
+    pub(super) fn render_editor(&self, window: &mut Window, cx: &mut Context<Self>) -> Div {
         let Some(draft) = &self.draft else {
             return div();
         };
@@ -69,7 +72,7 @@ impl ThemeWindow {
         let theme = *cx.theme();
         let i18n = cx.i18n();
         let handle = cx.entity().downgrade();
-        let rows = SEEDS.iter().enumerate().map(|(index, (label, description))| {
+        let rows = SEEDS.iter().enumerate().map(|(index, (label, _))| {
             let select = handle.clone();
             div()
                 .id(("theme-seed", index))
@@ -82,31 +85,42 @@ impl ThemeWindow {
                 .when(draft.active == index, |row| row.bg(theme.selected))
                 .when(draft.active != index, |row| row.hover(|row| row.bg(theme.menu_hover)))
                 .child(swatch(draft.colors[index], theme))
-                .child(described(i18n.text(*label), i18n.text(*description), theme))
+                .child(div().flex_1().min_w_0().truncate().font_weight(FontWeight::MEDIUM).child(i18n.text(*label)))
                 .child(div().w(rems(6.5)).flex_none().font_family("JetBrains Mono")
                     .child(draft.hex_inputs[index].clone()))
                 .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                     let _ = select.update(cx, |this, cx| this.select_color(index, cx));
                 })
         });
-        let field = handle.clone();
-        let hue = handle.clone();
+        let (field_press, field_key) = (handle.clone(), handle.clone());
+        let (hue_press, hue_key) = (handle.clone(), handle.clone());
         let ratio = text_contrast(draft.colors);
+        let (label, description) = SEEDS[draft.active];
         let picker = div()
             .w(rems(14.0))
             .flex_none()
             .flex()
             .flex_col()
             .gap(rems(0.625))
-            .child(div().text_color(theme.text_muted).text_size(rems(0.75))
-                .child(i18n.text(SEEDS[draft.active].0).to_uppercase()))
-            .child(color_field("theme-picker-field", draft.hsv, self.field_bounds.clone(), theme,
+            .child(described(i18n.text(label), i18n.text(description), theme))
+            .child(color_field("theme-picker-field", draft.hsv, self.field_bounds.clone(), &self.stops.field, window, theme,
                 move |position, _, cx| {
-                    let _ = field.update(cx, |this, cx| this.press_picker(PickerPart::Field, position, cx));
+                    let _ = field_press.update(cx, |this, cx| this.press_picker(PickerPart::Field, position, cx));
+                },
+                move |hsv, _, cx| {
+                    let _ = field_key.update(cx, |this, cx| this.set_hsv(hsv, cx));
                 }).h(rems(11.0)).w_full())
-            .child(hue_strip("theme-picker-hue", draft.hsv.h, self.hue_bounds.clone(), theme,
+            .child(hue_strip("theme-picker-hue", draft.hsv.h, self.hue_bounds.clone(), &self.stops.hue, window, theme,
                 move |position, _, cx| {
-                    let _ = hue.update(cx, |this, cx| this.press_picker(PickerPart::Hue, position, cx));
+                    let _ = hue_press.update(cx, |this, cx| this.press_picker(PickerPart::Hue, position, cx));
+                },
+                move |h, _, cx| {
+                    let _ = hue_key.update(cx, |this, cx| {
+                        let hsv = this.draft.as_ref().map(|draft| draft.hsv);
+                        if let Some(hsv) = hsv {
+                            this.set_hsv(Hsv { h, ..hsv }, cx);
+                        }
+                    });
                 }).w_full())
             .child(div().text_size(rems(0.75)).text_color(theme.text_muted).child(i18n.text(Message::ThemePickerHint)))
             .when(ratio < TEXT_CONTRAST, |picker| {
@@ -123,7 +137,7 @@ impl ThemeWindow {
                 .child(div().flex_none().w(rems(3.5)).child(i18n.text(Message::ThemeName)))
                 .child(div().flex_1().min_w_0().child(draft.name_input.clone()))
                 .child(actions))
-            .child(div().flex().gap(rems(1.0))
+            .child(div().flex().items_start().gap(rems(1.0))
                 .child(div().flex_1().min_w_0().flex().flex_col().gap(rems(0.125)).children(rows))
                 .child(picker))
     }
