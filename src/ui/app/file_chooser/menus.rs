@@ -140,7 +140,8 @@ impl FileChooserWindow {
         let open = self.menu == Some(menu);
         control
             .relative()
-            .child(crate::ui::components::popup::anchored_surface(menu.id(), handle.clone(),
+            // The ways to accept end under the button's right edge, as a split button's do.
+            .child(crate::ui::components::popup::anchored_surface_aligned(menu.id(), handle.clone(), menu == FooterMenu::Accept,
                 move |this| this.menu == Some(menu),
                 move |this, _, cx| if this.menu == Some(menu) { this.dropdown(menu, cx.entity()).into_any_element() } else { div().into_any_element() },
                 |this, _, cx| this.close_menu(cx)))

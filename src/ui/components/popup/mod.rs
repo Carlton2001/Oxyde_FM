@@ -118,6 +118,18 @@ pub(crate) fn anchored_surface<T: 'static>(
     factory: impl Fn(&mut T, &mut Window, &mut Context<T>) -> AnyElement + 'static,
     close: impl Fn(&mut T, &mut Window, &mut Context<T>) + 'static,
 ) -> impl IntoElement {
+    anchored_surface_aligned(id, source, false, alive, factory, close)
+}
+
+/// As `anchored_surface`, ended to the element's right edge when `open_left`.
+pub(crate) fn anchored_surface_aligned<T: 'static>(
+    id: impl Into<SharedString>,
+    source: Entity<T>,
+    open_left: bool,
+    alive: impl Fn(&T) -> bool + 'static,
+    factory: impl Fn(&mut T, &mut Window, &mut Context<T>) -> AnyElement + 'static,
+    close: impl Fn(&mut T, &mut Window, &mut Context<T>) + 'static,
+) -> impl IntoElement {
     let id = id.into();
     let alive = std::rc::Rc::new(alive);
     let factory = std::rc::Rc::new(factory);
@@ -133,7 +145,7 @@ pub(crate) fn anchored_surface<T: 'static>(
             let close = close.clone();
             show(
                 id.clone(),
-                PopupAnchor::element(bounds),
+                PopupAnchor { open_left, ..PopupAnchor::element(bounds) },
                 source.clone(),
                 window,
                 cx,
