@@ -1,4 +1,4 @@
-use crate::ui::components::input::TextInputOptions;
+use crate::ui::components::input::{InputAppearance, TextInputOptions};
 use super::*;
 use oxyde_lib::models::DriveInfo;
 use std::collections::HashSet;
@@ -51,6 +51,8 @@ pub(crate) struct NetworkDialog {
     pub disconnect: bool,
     pub inputs: Vec<Entity<TextInput>>,
     pub values: [String; 3],
+    /// The password field's eye shows its characters.
+    pub revealed: bool,
     pub drives: Vec<DriveInfo>,
     pub selected: HashSet<String>,
     pub letter: Option<String>,
@@ -202,9 +204,11 @@ impl OxydeApp {
                                 this.open_text_context_menu(input, selected, point, window, cx)
                             })
                         },
-                        TextInputOptions {
-                            clearable: true,
-                            ..Default::default()
+                        // The password sits in `password_field`'s frame, by its eye.
+                        if index == 2 {
+                            TextInputOptions { appearance: InputAppearance::Embedded, ..Default::default() }
+                        } else {
+                            TextInputOptions { clearable: true, ..Default::default() }
                         },
                         window,
                     );
@@ -244,6 +248,7 @@ impl OxydeApp {
             disconnect,
             inputs,
             values,
+            revealed: false,
             drives,
             selected,
             letter,
@@ -328,6 +333,14 @@ impl OxydeApp {
             });
         })
         .detach();
+    }
+
+    pub(crate) fn toggle_network_password_reveal(&mut self, cx: &mut Context<Self>) {
+        let Some(dialog) = &mut self.network_dialog else { return };
+        dialog.revealed = !dialog.revealed;
+        let masked = !dialog.revealed;
+        dialog.inputs[2].update(cx, |input, cx| input.set_masked(masked, cx));
+        cx.notify();
     }
 
     pub(crate) fn cancel_network_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {

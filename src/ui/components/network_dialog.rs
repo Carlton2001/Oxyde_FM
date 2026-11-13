@@ -112,8 +112,12 @@ fn field(
     secret: bool,
     cx: &App,
 ) -> AnyElement {
+    form_row(label, field_body(input, busy, secret, cx), cx).into_any_element()
+}
+
+fn field_body(input: Entity<TextInput>, busy: bool, secret: bool, cx: &App) -> AnyElement {
     let value = input.read(cx).content();
-    let body = if busy {
+    if busy {
         crate::ui::components::input::read_only_field(
             if secret {
                 "*".repeat(value.chars().count())
@@ -125,8 +129,7 @@ fn field(
         .into_any_element()
     } else {
         input.into_any_element()
-    };
-    form_row(label, body, cx).into_any_element()
+    }
 }
 
 pub(crate) fn render_network_dialog(
@@ -361,13 +364,24 @@ pub(crate) fn render_network_dialog(
                 false,
                 cx,
             ))
-            .child(field(
-                cx.i18n().text(Message::NetworkPassword),
-                dialog.inputs[2].clone(),
-                busy,
-                true,
-                cx,
-            ));
+            .child({
+                let input = dialog.inputs[2].clone();
+                let body = if busy {
+                    field_body(input, busy, !dialog.revealed, cx)
+                } else {
+                    let reveal = handle.clone();
+                    crate::ui::components::input::password_field(
+                        &input,
+                        "network-password-reveal",
+                        dialog.revealed,
+                        move |_, cx| reveal.update(cx, |view, cx| view.toggle_network_password_reveal(cx)),
+                        window,
+                        cx,
+                    )
+                    .into_any_element()
+                };
+                form_row(cx.i18n().text(Message::NetworkPassword), body, cx)
+            });
         let h = handle.clone();
         body = body.child(
             div()

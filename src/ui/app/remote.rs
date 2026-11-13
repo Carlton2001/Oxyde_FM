@@ -2,7 +2,7 @@
 //! mounted with the credentials its server asks for, as Nautilus does, then browsed at
 //! its local path; servers and the network list stay listed by URI.
 use super::*;
-use crate::ui::components::input::{TextInput, TextInputOptions};
+use crate::ui::components::input::{InputAppearance, TextInput, TextInputOptions};
 use oxyde_lib::platform::{PasswordSave, RemoteAnswer, RemoteError, RemoteLocation, RemotePrompt};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -14,6 +14,8 @@ pub(crate) struct RemoteLogin {
     pub inputs: Vec<Entity<TextInput>>,
     /// Kept as typed: an input calling back cannot be read while it updates.
     pub values: [String; 3],
+    /// The password field's eye shows its characters.
+    pub revealed: bool,
     pub anonymous: bool,
     pub save: PasswordSave,
     pub focus: FocusHandle,
@@ -135,6 +137,7 @@ impl OxydeApp {
                 initial,
                 inputs: Vec::new(),
                 values: Default::default(),
+                revealed: false,
                 anonymous: false,
                 save: PasswordSave::Never,
                 focus: cx.focus_handle(),
@@ -164,7 +167,12 @@ impl OxydeApp {
                     move |input, selected, point, window, cx| {
                         menu.update(cx, |this, cx| this.open_text_context_menu(input, selected, point, window, cx))
                     },
-                    TextInputOptions { clearable: index < 2, ..Default::default() },
+                    // The password sits in `password_field`'s frame, by its eye.
+                    if index < 2 {
+                        TextInputOptions { clearable: true, ..Default::default() }
+                    } else {
+                        TextInputOptions { appearance: InputAppearance::Embedded, ..Default::default() }
+                    },
                     window,
                 );
                 if index == 2 { input.password() } else { input }
@@ -178,6 +186,7 @@ impl OxydeApp {
             initial,
             inputs,
             values,
+            revealed: false,
             anonymous: false,
             save: PasswordSave::Never,
             focus: cx.focus_handle(),
@@ -230,6 +239,15 @@ impl OxydeApp {
     pub(crate) fn toggle_remote_anonymous(&mut self, cx: &mut Context<Self>) {
         let Some(login) = self.remote_login.as_mut().filter(|login| login.prompt.anonymous) else { return };
         login.anonymous = !login.anonymous;
+        cx.notify();
+    }
+
+    pub(crate) fn toggle_remote_password_reveal(&mut self, cx: &mut Context<Self>) {
+        let Some(login) = &mut self.remote_login else { return };
+        let Some(input) = login.inputs.get(2) else { return };
+        login.revealed = !login.revealed;
+        let masked = !login.revealed;
+        input.update(cx, |input, cx| input.set_masked(masked, cx));
         cx.notify();
     }
 

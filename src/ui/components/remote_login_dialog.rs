@@ -75,8 +75,19 @@ pub(crate) fn render_remote_login_dialog(
         let input = login.inputs[index].clone();
         let field = if login.anonymous {
             let value = &login.values[index];
-            let shown = if index == 2 { "*".repeat(value.chars().count()) } else { value.clone() };
+            let shown = if index == 2 && !login.revealed { "*".repeat(value.chars().count()) } else { value.clone() };
             crate::ui::components::input::read_only_field(shown, cx).into_any_element()
+        } else if index == 2 {
+            let reveal = handle.clone();
+            crate::ui::components::input::password_field(
+                &input,
+                "remote-password-reveal",
+                login.revealed,
+                move |_, cx| reveal.update(cx, |view, cx| view.toggle_remote_password_reveal(cx)),
+                window,
+                cx,
+            )
+            .into_any_element()
         } else {
             input.into_any_element()
         };
