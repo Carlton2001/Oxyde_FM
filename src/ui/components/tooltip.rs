@@ -1,6 +1,7 @@
 mod assets;
 mod pixels;
 mod presentation;
+pub(crate) use presentation::{frame, DETAIL_SIZE, TITLE_SIZE};
 mod preview;
 mod video;
 mod viewer;

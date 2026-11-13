@@ -77,6 +77,8 @@ Mutter closes a popup no longer touching its parent window. Shadow margins keep 
 
 ## File drag and drop
 
+The ghost, in the window or its own, draws the tooltips' frame and type: the name at 13 px medium, then the actions at 12 px, the current one on the `selected` fill in the accent, its key muted after it.
+
 On Windows, the ghost uses an owned GPUI window, click-through, with no activation or taskbar entry. It follows the pointer and its work area, also outside the owner. It becomes temporarily topmost during the OLE session, then is destroyed on drop, cancel or owner close. Native placements are deferred and grouped through `Platform`. The cursor stays unchanged; the ghost shows the negotiated action or refusal. Release or cancel hides the ghost from `QueryContinueDrag`, before calling the foreign `Drop`, which may take a while. This hiding invalidates pending placements and late measures, and no placement message can reopen the surface. Session end separately keeps the transfer acknowledgment.
 
 Internal interactions stay in GPUI. On leaving the window, passing over an overlaid foreign window or changing application, real paths verified beforehand in the background go to an OLE session, started by message after GPUI borrows are released. The internal drag is then removed; returning to Oxyde goes through the same external drop as other programs. Virtual archive members are not exported without preparation.

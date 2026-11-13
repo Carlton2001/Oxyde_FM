@@ -95,39 +95,28 @@ impl FileDragPreview {
     }
 }
 
+/// One action of the ghost, set as a shortcut in a tooltip: the active one takes the
+/// selected segment's fill and accent, its key stays muted.
 fn drag_op_pill(key_hint: &str, label: &str, active: bool, theme: &OxydeTheme) -> impl IntoElement {
+    use crate::ui::components::tooltip::DETAIL_SIZE;
     div()
         .flex()
         .items_center()
-        .gap(rems(0.25))
+        .gap(rems(0.375))
         .px(rems(0.375))
-        .py(rems(0.1875))
-        .rounded_md()
-        .bg(if active { theme.accent } else { theme.header })
-        .when(!key_hint.is_empty(), |d| {
-            d.child(
-                div()
-                    .text_size(rems(0.5625))
-                    .font_weight(FontWeight::BOLD)
-                    .text_color(if active {
-                        theme.background
-                    } else {
-                        theme.text_muted
-                    })
-                    .child(key_hint.to_string()),
-            )
-        })
+        .py(rems(0.125))
+        .rounded(rems(0.25))
+        .text_size(DETAIL_SIZE)
+        .when(active, |pill| pill.bg(theme.selected))
         .child(
             div()
-                .text_size(rems(0.6875))
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(if active {
-                    theme.background
-                } else {
-                    theme.text_muted
-                })
+                .text_color(if active { theme.accent } else { theme.text_muted })
+                .when(active, |label| label.font_weight(FontWeight::MEDIUM))
                 .child(label.to_string()),
         )
+        .when(!key_hint.is_empty(), |pill| {
+            pill.child(div().text_color(theme.text_muted).child(key_hint.to_string()))
+        })
 }
 
 impl Render for FileDragPreview {
@@ -178,61 +167,54 @@ fn ghost_content(paths: &[String], single_is_dir: bool, is_copy: bool, new_tab: 
             })
         };
 
+    // The tooltips' frame and type, lifted by the same shadow.
+    use crate::ui::components::tooltip::{frame, TITLE_SIZE};
+    frame(theme)
+        .font_family("Inter")
+        .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
+        .line_height(relative(1.25))
+        .px(rems(0.75))
+        .py(rems(0.5))
+        .flex()
+        .flex_col()
+        .gap(rems(0.375))
+        .whitespace_nowrap()
+        .child(
             div()
-                .px(rems(0.625))
-                .py(rems(0.5))
-                .rounded_md()
-                .bg(theme.surface)
-                .border(rems(0.0625))
-                .border_color(theme.accent)
-                // Lifted like the dragged tab and pinned row.
-                .shadow(crate::ui::style::rem_shadow(true))
                 .flex()
-                .flex_col()
-                .gap(rems(0.375))
-                .whitespace_nowrap()
+                .items_center()
+                .gap(rems(0.5))
+                .child(svg().path(icon_path).size(rems(1.0)).flex_none().text_color(theme.accent))
                 .child(
-                    // File icon + name row
                     div()
-                        .flex()
-                        .items_center()
-                        .gap(rems(0.375))
-                        .child(
-                            svg()
-                                .path(icon_path)
-                                .size(rems(0.875))
-                                .flex_none()
-                                .text_color(theme.accent),
-                        )
-                        .child(
-                            div()
-                                .max_w(rems(28.0)).truncate()
-                                .text_color(theme.text)
-                                .text_size(rems(0.75))
-                                .font_weight(FontWeight::MEDIUM)
-                                .child(name_label),
-                        ),
-                )
-                .child(
-                    // Operation pills row
-                    div()
-                        .flex()
-                        .gap(rems(0.25))
-                        .when(unavailable, |row| row.child(drag_op_pill("", cx.i18n().text(Message::DragUnavailable).as_ref(), false, &theme)))
-                        .when(new_tab && !unavailable, |row| row.child(drag_op_pill("", cx.i18n().text(Message::DragNewTab).as_ref(), true, &theme)))
-                        .when(!new_tab && !unavailable, |row| row.child(drag_op_pill(
-                            "+Ctrl",
-                            cx.i18n().text(Message::DragCopy).as_ref(),
-                            is_copy,
-                            &theme,
-                        )))
-                        .when(!unavailable, |row| row.child(drag_op_pill(
-                            "+Shift",
-                            cx.i18n().text(Message::DragMove).as_ref(),
-                            !is_copy,
-                            &theme,
-                        ))),
-                )
+                        .max_w(rems(24.0))
+                        .truncate()
+                        .text_color(theme.text)
+                        .text_size(TITLE_SIZE)
+                        .font_weight(FontWeight::MEDIUM)
+                        .child(name_label),
+                ),
+        )
+        .child(
+            div()
+                .flex()
+                .gap(rems(0.25))
+                .ml(rems(-0.375))
+                .when(unavailable, |row| row.child(drag_op_pill("", cx.i18n().text(Message::DragUnavailable).as_ref(), false, &theme)))
+                .when(new_tab && !unavailable, |row| row.child(drag_op_pill("", cx.i18n().text(Message::DragNewTab).as_ref(), true, &theme)))
+                .when(!new_tab && !unavailable, |row| row.child(drag_op_pill(
+                    "Ctrl",
+                    cx.i18n().text(Message::DragCopy).as_ref(),
+                    is_copy,
+                    &theme,
+                )))
+                .when(!unavailable, |row| row.child(drag_op_pill(
+                    "Shift",
+                    cx.i18n().text(Message::DragMove).as_ref(),
+                    !is_copy,
+                    &theme,
+                ))),
+        )
 }
 
 impl OxydeApp {

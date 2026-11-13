@@ -14,12 +14,12 @@ const ITEM_MAXIMUM_WIDTH: Rems = rems(30.0);
 /// Labels and notices wrap past this width, a comfortable reading measure.
 const PLAIN_MAXIMUM_WIDTH: Rems = rems(24.0);
 /// The interface's text size: a tooltip reads like the control it describes.
-const TITLE_SIZE: Rems = rems(0.8125);
+pub(crate) const TITLE_SIZE: Rems = rems(0.8125);
 /// Details, shortcuts and locations under a title.
-const DETAIL_SIZE: Rems = rems(0.75);
+pub(crate) const DETAIL_SIZE: Rems = rems(0.75);
 
-/// The floating frame every tooltip shares with the menus.
-pub(super) fn frame(theme: OxydeTheme) -> Div {
+/// The floating frame every tooltip and the drag ghost share with the menus.
+pub(crate) fn frame(theme: OxydeTheme) -> Div {
     div()
         .bg(theme.menu_surface)
         .border(rems(0.0625))
