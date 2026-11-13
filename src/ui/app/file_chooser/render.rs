@@ -137,6 +137,6 @@ impl Render for FileChooserWindow {
                     .child(self.render_pane(theme, cx)),
             )
             .child(self.render_footer(theme, cx));
-        crate::ui::components::client_decorations::frame(root, theme.border, window)
+        crate::ui::components::client_decorations::frame(root, theme.border, window, cx)
     }
 }

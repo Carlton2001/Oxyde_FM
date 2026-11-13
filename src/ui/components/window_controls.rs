@@ -55,12 +55,14 @@ fn buttons(layout: Option<WindowButtonLayout>, side: Side, allow_resize: bool) -
 pub(crate) type OnClose = std::rc::Rc<dyn Fn(&mut Window, &mut App)>;
 
 /// Renders the controls of one side. `corner` rounds the outer top edge of a
-/// full-height outermost button. The caller owns its close lifecycle.
+/// full-height outermost button; `muted` greys the symbols of an inactive window, as
+/// Windows does. The caller owns its close lifecycle.
 pub(crate) fn render(
     side: Side,
     is_maximized: bool,
     allow_resize: bool,
     corner: Pixels,
+    muted: bool,
     cx: &App,
     on_close: OnClose,
 ) -> impl IntoElement {
@@ -74,7 +76,7 @@ pub(crate) fn render(
     let elements: Vec<AnyElement> = buttons
         .into_iter()
         .map(|button| {
-            let symbol = glyph(style, button, is_maximized, cx);
+            let symbol = glyph(style, button, is_maximized, muted, cx);
             let shell = match style {
                 WindowControlStyle::Windows => {
                     windows_button(button, side, outermost == Some(button), corner, cx).child(symbol)
@@ -143,10 +145,10 @@ fn centered(disc: Rems, glyph: Rems) -> Pixels {
     disc - margin * 2.0
 }
 
-fn glyph(style: WindowControlStyle, button: WindowButton, is_maximized: bool, cx: &App) -> Svg {
+fn glyph(style: WindowControlStyle, button: WindowButton, is_maximized: bool, muted: bool, cx: &App) -> Svg {
     let theme = *cx.theme();
     let path = icon(style, button, is_maximized);
-    let symbol = svg().path(path).text_color(theme.text);
+    let symbol = svg().path(path).text_color(if muted { theme.text_muted } else { theme.text });
     match style {
         WindowControlStyle::Windows => symbol.size_3().when(button == WindowButton::Close, |symbol| {
             symbol.group_hover("window-close", move |s| s.text_color(theme.text_on_danger))

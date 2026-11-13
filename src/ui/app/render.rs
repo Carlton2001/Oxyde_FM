@@ -353,7 +353,7 @@ impl Render for OxydeApp {
         }
 
         root = root.child(deferred(self.render_toasts(_window, cx)));
-        crate::ui::components::client_decorations::frame(root, theme.border, _window)
+        crate::ui::components::client_decorations::frame(root, theme.border, _window, cx)
     }
 }
 

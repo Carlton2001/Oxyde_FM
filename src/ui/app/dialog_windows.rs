@@ -296,7 +296,8 @@ impl OxydeApp {
                             // with it, and follows it when the user leaves for another application.
                             let dialog_id = window.window_handle().window_id();
                             crate::ui::components::backdrop::attach(dialog_id, owner_window.window_id());
-                            subscriptions.push(cx.observe_window_activation(window, move |_, _, cx| {
+                            subscriptions.push(cx.observe_window_activation(window, move |_, window, cx| {
+                                crate::ui::components::backdrop::dialog_activation(window);
                                 let _ = owner_window.update(cx, |_, window, _| window.refresh());
                             }));
                             cx.on_release(move |_, _| crate::ui::components::backdrop::detach(dialog_id)).detach();
@@ -537,6 +538,6 @@ impl Render for DialogWindow {
             ));
             }
         }
-        crate::ui::components::client_decorations::frame(root, cx.theme().border, window)
+        crate::ui::components::client_decorations::frame(root, cx.theme().border, window, cx)
     }
 }

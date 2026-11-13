@@ -184,6 +184,6 @@ impl Render for ViewerWindow {
                     .relative()
                     .child(div().absolute().inset_0().size_full().child(self.viewer.clone())),
             );
-        crate::ui::components::client_decorations::frame(root, theme.border, window)
+        crate::ui::components::client_decorations::frame(root, theme.border, window, cx)
     }
 }

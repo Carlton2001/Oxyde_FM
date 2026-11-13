@@ -208,6 +208,6 @@ impl Render for DuplicateWindow {
                         .on_click(cx.listener(|this, _, _, cx| this.search(cx))),
                     ),
             );
-        crate::ui::components::client_decorations::frame(root, theme.border, window)
+        crate::ui::components::client_decorations::frame(root, theme.border, window, cx)
     }
 }

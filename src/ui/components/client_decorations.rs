@@ -12,16 +12,10 @@ pub(crate) trait ClientDecorationsExt: InteractiveElement + Sized {
         {
             self.on_mouse_down(MouseButton::Left, |event, window, _| {
                 let maximize = event.click_count == 2;
-                PENDING_MOVE.set(!maximize);
+                // The move starts past the drag threshold, so a shaky double-click still reaches the window.
+                PENDING_MOVE.set((!maximize).then_some(event.position));
                 if maximize && window.is_resizable() {
                     window.zoom_window();
-                }
-            })
-            .on_mouse_up(MouseButton::Left, |_, _, _| PENDING_MOVE.set(false))
-            // Start on the first motion so a double-click still reaches the window.
-            .on_mouse_move(|event, window, _| {
-                if event.pressed_button == Some(MouseButton::Left) && PENDING_MOVE.replace(false) {
-                    window.start_window_move();
                 }
             })
             .on_mouse_down(MouseButton::Right, |event, window, _| {
@@ -48,7 +42,7 @@ impl<T: InteractiveElement> ClientDecorationsExt for T {}
 
 /// Wrap a window root. On Linux with client decorations, a transparent margin carries the
 /// shadow and the resize zones; tiled, maximized and fullscreen sides have none.
-pub(crate) fn frame(content: impl IntoElement + Styled, border: Hsla, window: &mut Window) -> AnyElement {
+pub(crate) fn frame(content: impl IntoElement + Styled, border: Hsla, window: &mut Window, cx: &App) -> AnyElement {
     #[cfg(target_os = "linux")]
     {
         let Decorations::Client { tiling } = window.window_decorations() else {
@@ -58,12 +52,28 @@ pub(crate) fn frame(content: impl IntoElement + Styled, border: Hsla, window: &m
         let margin = margin(tiling);
         let side = |tiled: bool| if tiled { px(0.0) } else { px(1.0) };
         let corners = inner_corners(window);
+        let shadow = shadows(super::backdrop::activity(window, cx));
         div()
             .size_full()
             .pt(margin.top)
             .pr(margin.right)
             .pb(margin.bottom)
             .pl(margin.left)
+            // Window-wide, as the pointer may leave the title area before the threshold.
+            .child(canvas(|_, _, _| (), |_, _, window, _| {
+                window.on_mouse_event(|event: &MouseMoveEvent, phase, window, _| {
+                    let Some(pressed) = PENDING_MOVE.get() else { return };
+                    if phase != DispatchPhase::Bubble || event.pressed_button != Some(MouseButton::Left) {
+                        return;
+                    }
+                    let travel = event.position - pressed;
+                    if travel.x.as_f32().hypot(travel.y.as_f32()) >= MOVE_THRESHOLD {
+                        PENDING_MOVE.set(None);
+                        window.start_window_move();
+                    }
+                });
+                window.on_mouse_event(|_: &MouseUpEvent, _, _, _| PENDING_MOVE.set(None));
+            }).absolute().size_0())
             .when(window.is_resizable(), |frame| {
                 frame
                     .child(canvas(
@@ -87,13 +97,7 @@ pub(crate) fn frame(content: impl IntoElement + Styled, border: Hsla, window: &m
                 round(div(), corners, ALL)
                     .relative()
                     .size_full()
-                    .when(!tiling.is_tiled(), |window_area| window_area.shadow(vec![BoxShadow {
-                        color: hsla(0.0, 0.0, 0.0, 0.4),
-                        offset: point(px(0.0), px(0.0)),
-                        blur_radius: MARGIN / 2.0,
-                        spread_radius: px(0.0),
-                        inset: false,
-                    }]))
+                    .when(!tiling.is_tiled(), |window_area| window_area.shadow(shadow))
                     .child(round(content, corners, ALL))
                     // Drawn over the content so the border takes no layout space.
                     .child(round(div(), corners, ALL).absolute().inset_0().border_color(border)
@@ -106,7 +110,7 @@ pub(crate) fn frame(content: impl IntoElement + Styled, border: Hsla, window: &m
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (border, window);
+        let _ = (border, window, cx);
         content.into_any_element()
     }
 }
@@ -164,12 +168,37 @@ pub(crate) fn window_size_for(content: Size<Pixels>, window: &Window) -> Size<Pi
 
 #[cfg(target_os = "linux")]
 thread_local! {
-    static PENDING_MOVE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Where a press in a title area waits for the drag threshold before moving the window.
+    static PENDING_MOVE: std::cell::Cell<Option<Point<Pixels>>> = const { std::cell::Cell::new(None) };
 }
 
-/// Transparent margin holding the shadow and the resize zones.
+/// GTK's default drag threshold, in logical pixels.
 #[cfg(target_os = "linux")]
-const MARGIN: Pixels = px(10.0);
+const MOVE_THRESHOLD: f32 = 8.0;
+
+/// How far a corner's resize zone runs along each of its edges past the corner square, as
+/// GTK's corner handles.
+#[cfg(target_os = "linux")]
+const CORNER_GRAB: Pixels = px(24.0);
+
+/// Two layers, a tight contact shadow and a softer one below, both lighter in the backdrop
+/// like libadwaita's. GPUI blurs over three radii: the softer layer ends within the margin.
+#[cfg(target_os = "linux")]
+fn shadows(activity: f32) -> Vec<BoxShadow> {
+    let layer = |active: f32, backdrop: f32, drop: f32, blur: f32| BoxShadow {
+        color: hsla(0.0, 0.0, 0.0, backdrop + (active - backdrop) * activity),
+        offset: point(px(0.0), px(drop)),
+        blur_radius: px(blur),
+        spread_radius: px(0.0),
+        inset: false,
+    };
+    vec![layer(0.22, 0.14, 1.0, 1.0), layer(0.32, 0.16, 2.0, 2.75)]
+}
+
+/// Transparent margin holding the shadow and the resize zones, as wide as GTK 4's resize
+/// handles.
+#[cfg(target_os = "linux")]
+const MARGIN: Pixels = px(12.0);
 
 /// Radius of the window outline, as in Soliton.
 #[cfg(target_os = "linux")]
@@ -198,25 +227,50 @@ fn margin(tiling: Tiling) -> Edges<Pixels> {
     }
 }
 
-/// Non-overlapping zones of the margin, corners first; tiled sides have none.
+/// Non-overlapping zones of the margin. A corner between two free sides also runs
+/// `CORNER_GRAB` along both edges; tiled sides have no zone.
 #[cfg(target_os = "linux")]
 fn resize_zones(size: Size<Pixels>, tiling: Tiling) -> impl Iterator<Item = (ResizeEdge, Bounds<Pixels>)> {
     let Edges { top, right, bottom, left } = margin(tiling);
     let (width, height) = (size.width, size.height);
     let (inner_width, inner_height) = (width - left - right, height - top - bottom);
+    let grab_x = CORNER_GRAB.min((inner_width / 2.0).max(px(0.0)));
+    let grab_y = CORNER_GRAB.min((inner_height / 2.0).max(px(0.0)));
+    let free = |a: Pixels, b: Pixels| a > px(0.0) && b > px(0.0);
+    let (top_left, top_right) = (free(top, left), free(top, right));
+    let (bottom_left, bottom_right) = (free(bottom, left), free(bottom, right));
+    let along = |corner: bool, grab: Pixels| if corner { grab } else { px(0.0) };
     let zone = |x, y, w, h| Bounds::new(point(x, y), gpui::size(w, h));
-    [
-        (ResizeEdge::TopLeft, zone(px(0.0), px(0.0), left, top)),
-        (ResizeEdge::TopRight, zone(width - right, px(0.0), right, top)),
-        (ResizeEdge::BottomLeft, zone(px(0.0), height - bottom, left, bottom)),
-        (ResizeEdge::BottomRight, zone(width - right, height - bottom, right, bottom)),
-        (ResizeEdge::Top, zone(left, px(0.0), inner_width, top)),
-        (ResizeEdge::Bottom, zone(left, height - bottom, inner_width, bottom)),
-        (ResizeEdge::Left, zone(px(0.0), top, left, inner_height)),
-        (ResizeEdge::Right, zone(width - right, top, right, inner_height)),
-    ]
-    .into_iter()
-    .filter(|(_, zone)| !zone.is_empty())
+    let mut zones = Vec::with_capacity(12);
+    if top_left {
+        zones.push((ResizeEdge::TopLeft, zone(px(0.0), px(0.0), left + grab_x, top)));
+        zones.push((ResizeEdge::TopLeft, zone(px(0.0), top, left, grab_y)));
+    }
+    if top_right {
+        zones.push((ResizeEdge::TopRight, zone(width - right - grab_x, px(0.0), right + grab_x, top)));
+        zones.push((ResizeEdge::TopRight, zone(width - right, top, right, grab_y)));
+    }
+    if bottom_left {
+        zones.push((ResizeEdge::BottomLeft, zone(px(0.0), height - bottom, left + grab_x, bottom)));
+        zones.push((ResizeEdge::BottomLeft, zone(px(0.0), height - bottom - grab_y, left, grab_y)));
+    }
+    if bottom_right {
+        zones.push((ResizeEdge::BottomRight, zone(width - right - grab_x, height - bottom, right + grab_x, bottom)));
+        zones.push((ResizeEdge::BottomRight, zone(width - right, height - bottom - grab_y, right, grab_y)));
+    }
+    let top_start = if top_left { left + grab_x } else { px(0.0) };
+    let top_end = if top_right { width - right - grab_x } else { width };
+    zones.push((ResizeEdge::Top, zone(top_start, px(0.0), top_end - top_start, top)));
+    let bottom_start = if bottom_left { left + grab_x } else { px(0.0) };
+    let bottom_end = if bottom_right { width - right - grab_x } else { width };
+    zones.push((ResizeEdge::Bottom, zone(bottom_start, height - bottom, bottom_end - bottom_start, bottom)));
+    let left_start = top + along(top_left, grab_y);
+    let left_end = height - bottom - along(bottom_left, grab_y);
+    zones.push((ResizeEdge::Left, zone(px(0.0), left_start, left, left_end - left_start)));
+    let right_start = top + along(top_right, grab_y);
+    let right_end = height - bottom - along(bottom_right, grab_y);
+    zones.push((ResizeEdge::Right, zone(width - right, right_start, right, right_end - right_start)));
+    zones.into_iter().filter(|(_, zone)| !zone.is_empty())
 }
 
 #[cfg(target_os = "linux")]

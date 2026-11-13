@@ -178,6 +178,6 @@ impl Render for OverwritePrompt {
             .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
             .on_key_down(cx.listener(Self::key_down))
             .child(modal);
-        crate::ui::components::client_decorations::frame(root, theme.border, window)
+        crate::ui::components::client_decorations::frame(root, theme.border, window, cx)
     }
 }

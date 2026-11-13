@@ -160,6 +160,7 @@ fn header_frame(
 ) -> impl IntoElement {
     let theme = *cx.theme();
     let corners = super::client_decorations::inner_corners(window);
+    let muted = super::backdrop::muted_title(window, cx);
     let on_close: super::window_controls::OnClose = std::rc::Rc::new(on_close);
     use super::window_controls::{render as window_controls, Side};
     super::client_decorations::round(div(), corners, super::client_decorations::TOP)
@@ -173,7 +174,7 @@ fn header_frame(
         .border_color(theme.border)
         .child(div().size_full().flex().items_center()
             .opacity(super::backdrop::content_opacity(window, cx))
-        .child(window_controls(Side::Left, window.is_maximized(), allow_resize, corners.top_left, cx, on_close.clone()))
+        .child(window_controls(Side::Left, window.is_maximized(), allow_resize, corners.top_left, muted, cx, on_close.clone()))
         .child(
             div().px(rems(0.75)).child(
                 svg()
@@ -192,6 +193,7 @@ fn header_frame(
                 .window_control_area(WindowControlArea::Drag)
                 .client_drag_area()
                 .font_weight(FontWeight::BOLD)
+                .when(muted, |title| title.text_color(theme.text_muted))
                 .child(div().id("tool-window-title").min_w_0().truncate()
                     .when_some(title_tooltip, |title, tooltip| {
                         title.fixed_tooltip(crate::ui::components::tooltip::Tooltip::text(tooltip))
@@ -200,7 +202,7 @@ fn header_frame(
         )
         // Buttons touch each other, then leave the main title bar's space before the window controls.
         .when_some(actions, |header, actions| header.child(actions).child(div().w(rems(0.5)).h_full().flex_none()))
-        .child(window_controls(Side::Right, window.is_maximized(), allow_resize, corners.top_right, cx, on_close)))
+        .child(window_controls(Side::Right, window.is_maximized(), allow_resize, corners.top_right, muted, cx, on_close)))
 }
 
 /// A button of a secondary window's title bar, drawn as those of the main title

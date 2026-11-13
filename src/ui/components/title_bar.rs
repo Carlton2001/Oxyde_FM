@@ -20,6 +20,7 @@ pub fn render_title_bar(
     cx: &mut Context<OxydeApp>,
 ) -> impl IntoElement {
     let content_opacity = crate::ui::components::backdrop::content_opacity(window, cx);
+    let muted = crate::ui::components::backdrop::muted_title(window, cx);
     let theme = *cx.theme();
 
     let btn_hover_bg: Hsla = theme.control_hover;
@@ -149,7 +150,7 @@ pub fn render_title_bar(
             div()
                 .text_size(rems(0.8125))
                 .font_weight(FontWeight::BOLD)
-                .text_color(theme.text)
+                .text_color(if muted { theme.text_muted } else { theme.text })
                 .child("Oxyde"),
         );
 
@@ -184,7 +185,7 @@ pub fn render_title_bar(
         .border_color(theme.border)
         .child(div().size_full().flex().items_center()
             .opacity(content_opacity)
-        .child(window_controls(Side::Left, is_maximized, true, corners.top_left, cx, on_close.clone()))
+        .child(window_controls(Side::Left, is_maximized, true, corners.top_left, muted, cx, on_close.clone()))
         .child(app_button)
         .child(drag_area)
         .child(refresh)
@@ -193,7 +194,7 @@ pub fn render_title_bar(
         .child(tools)
         .child(crate::ui::components::operations::render_operations_footer(view, handle.clone(), cx))
         .child(div().w(rems(0.5)).h_full().flex_none())
-        .child(window_controls(Side::Right, is_maximized, true, corners.top_right, cx, on_close)))
+        .child(window_controls(Side::Right, is_maximized, true, corners.top_right, muted, cx, on_close)))
 }
 
 /// Close the main window the way its close button does, ending the application.

@@ -171,6 +171,6 @@ impl Render for ThemeWindow {
             .when(self.drag.is_some(), |frame| frame.child(pointer_drag(cx.entity(),
                 |this: &mut ThemeWindow, event: &MouseMoveEvent, cx| this.drag_picker(event.position, cx),
                 |this: &mut ThemeWindow, cx| { this.drag = None; cx.notify(); })));
-        crate::ui::components::client_decorations::frame(frame, theme.border, window).into_any_element()
+        crate::ui::components::client_decorations::frame(frame, theme.border, window, cx).into_any_element()
     }
 }

@@ -236,7 +236,7 @@ impl Render for PropertiesWindow {
             ));
             }
         }
-        crate::ui::components::client_decorations::frame(root, theme.border, window)
+        crate::ui::components::client_decorations::frame(root, theme.border, window, cx)
     }
 }
 
