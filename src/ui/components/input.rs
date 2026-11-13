@@ -2,6 +2,7 @@ mod completion_menu;
 mod field;
 mod options;
 mod render;
+mod selection;
 pub(crate) use field::{
     BAR_FIELD_HEIGHT, FIELD_PADDING, FieldEdge, control_frame, field_button, field_button_icon, field_option,
     field_frame, field_icon, password_field, read_only_field,
@@ -36,6 +37,7 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("ctrl-x", Cut, Some("TextInput")),
         KeyBinding::new("ctrl-v", Paste, Some("TextInput")),
     ]);
+    cx.bind_keys(selection::bindings());
 }
 pub struct TextInput {
     pub focus_handle: FocusHandle,
@@ -45,6 +47,7 @@ pub struct TextInput {
     selection_anchor: usize,
     selection_reversed: bool,
     is_selecting: bool,
+    drag: selection::Drag,
     last_layout: Option<ShapedLine>,
     last_bounds: Option<Bounds<Pixels>>,
     horizontal_offset: Pixels,
@@ -273,6 +276,7 @@ impl TextInput {
             selection_anchor,
             selection_reversed: false,
             is_selecting: false,
+            drag: Default::default(),
             last_layout: None,
             last_bounds: None,
             horizontal_offset: px(0.0),
@@ -429,23 +433,8 @@ impl TextInput {
         self.reset_blinking(cx);
     }
 
-    fn on_mouse_move(&mut self, event: &MouseMoveEvent, _: &mut Window, cx: &mut Context<Self>) {
-        if !event.dragging() {
-            self.is_selecting = false;
-            return;
-        }
-        if !self.is_selecting {
-            return;
-        }
-        let index = self.byte_index_for_position(event.position);
-        self.selected_range = self.selection_anchor.min(index)..self.selection_anchor.max(index);
-        self.selection_reversed = index < self.selection_anchor;
-        self.cursor_visible = self.selected_range.is_empty();
-        cx.notify();
-    }
-
     fn on_mouse_up(&mut self, _: &MouseUpEvent, _: &mut Window, _: &mut Context<Self>) {
-        self.is_selecting = false;
+        self.end_drag();
     }
 
     fn on_right_mouse_down(
@@ -1010,6 +999,7 @@ impl Element for TextInputElement {
             ElementInputHandler::new(bounds, input_handle.clone()),
             cx,
         );
+        selection::follow_drag(&input_handle, window, cx);
 
         if let Some(line) = line.take() {
             let line_h = window.line_height();

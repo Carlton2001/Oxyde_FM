@@ -34,6 +34,10 @@ impl Render for TextInput {
             .on_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::home))
             .on_action(cx.listener(Self::end))
+            .on_action(cx.listener(Self::select_left))
+            .on_action(cx.listener(Self::select_right))
+            .on_action(cx.listener(Self::select_home))
+            .on_action(cx.listener(Self::select_end))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_down(MouseButton::Right, cx.listener(Self::on_right_mouse_down))
             .when(self.options.submit_on_outside, |div| {
@@ -41,7 +45,6 @@ impl Render for TextInput {
             })
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
-            .on_mouse_move(cx.listener(Self::on_mouse_move))
             .map(|input| field::input_surface(input, self.options.appearance, is_focused, invalid, &theme))
             // A trailing button cell replaces the right text margin and meets the frame edge.
             .when(trailing_button, |input| input.pr_0())
