@@ -229,6 +229,8 @@ pub(crate) fn footer(cx: &App) -> Div {
         .flex_none()
         .px(rems(1.0))
         .py(rems(0.625))
+        // The windows' own line height: the file chooser's root keeps GPUI's taller one.
+        .line_height(relative(1.25))
         .border_t(rems(0.0625))
         .border_color(cx.theme().border)
         .flex()
