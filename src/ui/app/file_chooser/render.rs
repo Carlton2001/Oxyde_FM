@@ -20,6 +20,8 @@ impl FileChooserWindow {
             .h_full()
             .flex()
             .flex_col()
+            // Anything pressed among the folders and entries counts as looking around.
+            .capture_any_mouse_down(cx.listener(|this, _, _, cx| this.note_interaction(cx)))
             // A new width lays the columns and cards out again.
             .child(canvas(move |bounds, _, cx| {
                 let width = bounds.size.width.as_f32();

@@ -1,6 +1,7 @@
 //! The footer's menus, as the crumbs offer theirs (`GenericDropdown`, owned menu
-//! windows where available): the application's type filters, and each of its choices
-//! that offers a list of answers. One is open at a time.
+//! windows where available): the application's type filters, each of its choices
+//! that offers a list of answers, and the ways to accept beside the button. One is
+//! open at a time.
 use super::FileChooserWindow;
 use crate::ui::components::dropdown::{DropdownItem, GenericDropdown, IconName};
 use crate::ui::scale::logical;
@@ -16,6 +17,8 @@ pub(super) enum FooterMenu {
     Types,
     /// A choice's answers, by its position.
     Choice(usize),
+    /// The ways to accept (`additions.rs`).
+    Accept,
 }
 
 impl FooterMenu {
@@ -23,6 +26,7 @@ impl FooterMenu {
         match self {
             Self::Types => "file-chooser-type-menu".into(),
             Self::Choice(position) => format!("file-chooser-choice-menu-{position}").into(),
+            Self::Accept => "file-chooser-accept-list".into(),
         }
     }
 }
@@ -33,6 +37,7 @@ impl FileChooserWindow {
         match menu {
             FooterMenu::Types => (self.filters.iter().map(|filter| filter.name.clone()).collect(), self.type_filter),
             FooterMenu::Choice(position) => self.choices.get(position).map(|choice| choice.entries()).unwrap_or_default(),
+            FooterMenu::Accept => self.accept_entries(),
         }
     }
 
@@ -41,11 +46,12 @@ impl FileChooserWindow {
         match menu {
             FooterMenu::Types => self.set_type_filter(position, cx),
             FooterMenu::Choice(choice) => self.answer_choice(choice, position),
+            FooterMenu::Accept => self.choose_accept(position, cx),
         }
         cx.notify();
     }
 
-    fn toggle_menu(&mut self, menu: FooterMenu, cx: &mut Context<Self>) {
+    pub(super) fn toggle_menu(&mut self, menu: FooterMenu, cx: &mut Context<Self>) {
         self.menu = if self.menu == Some(menu) { None } else { Some(menu) };
         self.menu_scroll = UniformListScrollHandle::new();
         cx.notify();
@@ -103,41 +109,44 @@ impl FileChooserWindow {
         }
     }
 
-    /// The button showing `label`, the answer given, which opens `menu` above it.
-    pub(super) fn render_menu(&self, menu: FooterMenu, label: String, focus: &FocusHandle, window: &Window, cx: &mut Context<Self>) -> AnyElement {
-        let handle = cx.entity();
-        let open = self.menu == Some(menu);
+    /// The button showing `label`, the answer given, which opens `menu` above it; a
+    /// disabled one shows the answer and takes neither the pointer nor the keyboard.
+    pub(super) fn render_menu(&self, menu: FooterMenu, label: String, focus: &FocusHandle, enabled: bool, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let widths = self.menu_trigger_widths.clone();
         let key = menu.id();
-        let focused = crate::ui::elements::focus_ring::keyboard_focused(focus, window);
-        let trigger = crate::ui::components::select_menu::trigger(menu.id(), label, focused, true, cx)
-            .track_focus(focus)
+        let focused = enabled && crate::ui::elements::focus_ring::keyboard_focused(focus, window);
+        let trigger = crate::ui::components::select_menu::trigger(menu.id(), label, focused, enabled, cx)
             .w_full()
             .child(canvas(|bounds, _, _| bounds, move |bounds, _, _, _| {
                 widths.borrow_mut().insert(key.clone(), bounds.size.width);
             }).absolute().inset_0().size_full())
-            .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, _, cx| this.toggle_menu(menu, cx)))
-            // Space, Enter or Down while it has the keyboard opens it.
-            .on_key_down(cx.listener(move |this, event: &KeyDownEvent, _, cx| {
-                if matches!(event.keystroke.key.as_str(), "space" | "enter" | "down") && !event.keystroke.modifiers.modified() {
-                    this.toggle_menu(menu, cx);
-                    cx.stop_propagation();
-                }
-            }));
+            .when(enabled, |trigger| trigger
+                .track_focus(focus)
+                .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, _, cx| this.toggle_menu(menu, cx)))
+                // Space, Enter or Down while it has the keyboard opens it.
+                .on_key_down(cx.listener(move |this, event: &KeyDownEvent, _, cx| {
+                    if matches!(event.keystroke.key.as_str(), "space" | "enter" | "down") && !event.keystroke.modifiers.modified() {
+                        this.toggle_menu(menu, cx);
+                        cx.stop_propagation();
+                    }
+                })));
         // One width for every menu, which keeps the form's column straight.
-        div()
+        self.with_menu(menu, div().w(MENU_WIDTH).min_w_0().child(trigger), cx).into_any_element()
+    }
+
+    /// `control`, which opens `menu` from its bounds.
+    pub(super) fn with_menu(&self, menu: FooterMenu, control: Div, cx: &mut Context<Self>) -> Div {
+        let handle = cx.entity();
+        let open = self.menu == Some(menu);
+        control
             .relative()
-            .w(MENU_WIDTH)
-            .min_w_0()
             .child(crate::ui::components::popup::anchored_surface(menu.id(), handle.clone(),
                 move |this| this.menu == Some(menu),
                 move |this, _, cx| if this.menu == Some(menu) { this.dropdown(menu, cx.entity()).into_any_element() } else { div().into_any_element() },
                 |this, _, cx| this.close_menu(cx)))
-            .child(trigger)
             // Where owned menu windows are not available, the menu draws in this window.
             .when(open && !crate::ui::components::popup::supported_source(&handle, cx), |control| {
                 control.child(deferred(anchored().anchor(Anchor::BottomLeft).child(self.dropdown(menu, handle.clone()))))
             })
-            .into_any_element()
     }
 }

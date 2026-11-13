@@ -1,6 +1,8 @@
 #[cfg(unix)]
 use super::target;
-use super::{stem_end, Target};
+use super::{stem_end, strictly_typed, Target};
+use oxyde_lib::platform::{FileTypeFilter, FileTypePattern};
+use std::path::PathBuf;
 
 #[test]
 fn the_stem_ends_before_the_last_extension() {
@@ -38,4 +40,17 @@ fn a_free_name_without_an_extension_takes_the_one_given() {
     // A folder typed to be opened, or a file to be replaced, keeps its name.
     assert_eq!(extended(&folder.join("report"), Target::Folder, Some("txt")), None);
     assert_eq!(extended(&folder.join("report"), Target::File, Some("txt")), None);
+}
+
+#[test]
+fn strict_types_give_the_shown_filter_s_extension_to_names_it_does_not_show() {
+    let text = FileTypeFilter { name: "Text".into(), patterns: vec![FileTypePattern::Glob("*.txt".into()), FileTypePattern::Glob("*.md".into())] };
+    let typed = |name: &str| strictly_typed(PathBuf::from("/f").join(name), &text);
+    assert_eq!(typed("notes.txt"), PathBuf::from("/f/notes.txt"));
+    assert_eq!(typed("README.MD"), PathBuf::from("/f/README.MD"));
+    assert_eq!(typed("notes"), PathBuf::from("/f/notes.txt"));
+    assert_eq!(typed("notes.odt"), PathBuf::from("/f/notes.odt.txt"));
+    assert_eq!(typed("notes."), PathBuf::from("/f/notes.txt"));
+    let any = FileTypeFilter { name: "All".into(), patterns: vec![FileTypePattern::Glob("*".into())] };
+    assert_eq!(strictly_typed(PathBuf::from("/f/notes"), &any), PathBuf::from("/f/notes"));
 }

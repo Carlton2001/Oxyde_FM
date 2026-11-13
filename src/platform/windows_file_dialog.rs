@@ -13,13 +13,20 @@
 //! as Windows does, then the application's controls Oxyde shows: `choice` (an id, the
 //! answer given first and a label), each followed by its `option` lines (the choice's
 //! id, the item's id and its label); a choice without any is a checkbox, answered
-//! `true` or `false`. The answer is `cancel`, or `ok` followed by `filter<TAB>index`, a
+//! `true` or `false`. Then what fewer dialogs ask: `name-label` and `cancel-label`,
+//! the options `show-hidden`, `no-overwrite-prompt`, `strict-types`, `no-read-only`,
+//! `needs-interaction` and `hide-pinned` (`1` when set), `place` (`top` or `bottom`,
+//! a tab and a folder), `client` (the key of the application's remembered folder),
+//! `default-folder`, `edit` (a text field: its id, its text and a label), `note` (a
+//! text shown alone), `accept-menu` (the button's menu: an id and the item given
+//! first, followed by its `option` lines) and `disabled` (the id of a control shown
+//! but not to be changed). Older versions skip the lines they do not know. The answer is `cancel`, or `ok` followed by `filter<TAB>index`, a
 //! `path<TAB>…` line for each item chosen and a `choice<TAB>id<TAB>answer` line for
-//! each choice.
+//! each choice, text field and the button's menu.
 pub(super) mod registration;
 pub(super) mod relay;
 
-use super::{FileChooserAnswer, FileChooserChoice, FileChooserParent, FileChooserPurpose, FileChooserRequest, FileTypeFilter, FileTypePattern};
+use super::{FileChooserAnswer, FileChooserChoice, FileChooserExtras, FileChooserField, FileChooserParent, FileChooserPlace, FileChooserPurpose, FileChooserRequest, FileTypeFilter, FileTypePattern};
 use futures::channel::oneshot;
 use std::io::Write;
 use std::os::windows::io::AsRawHandle;
@@ -48,6 +55,7 @@ struct Asked {
     /// The filter shown first, counted from 1.
     filter: Option<usize>,
     choices: Vec<FileChooserChoice>,
+    extras: FileChooserExtras,
 }
 
 /// The patterns of a filter, written `*.png;*.jpg`. Windows reads `*.*` as every
@@ -82,7 +90,8 @@ fn asked(lines: &[String]) -> Asked {
             "option" => {
                 let mut parts = value.splitn(3, '\t');
                 let (Some(id), Some(item), label) = (parts.next(), parts.next(), parts.next()) else { continue };
-                if let Some(choice) = asked.choices.iter_mut().rev().find(|choice| choice.id == id) {
+                let accept = asked.extras.accept_menu.iter_mut().filter(|menu| menu.id == id);
+                if let Some(choice) = asked.choices.iter_mut().rev().find(|choice| choice.id == id).or(accept.into_iter().next()) {
                     choice.options.push((item.to_owned(), label.unwrap_or_default().to_owned()));
                 }
             }
@@ -90,6 +99,34 @@ fn asked(lines: &[String]) -> Asked {
                 let (name, specification) = value.split_once('\t').unwrap_or((value, ""));
                 asked.filters.push(FileTypeFilter { name: name.to_owned(), patterns: patterns(specification) });
             }
+            "name-label" => asked.extras.name_label = Some(value.replace('&', "").trim().trim_end_matches(':').trim().to_owned()).filter(|label| !label.is_empty()),
+            "cancel-label" => asked.extras.cancel_label = Some(value.replace('&', "")).filter(|label| !label.is_empty()),
+            "show-hidden" => asked.extras.show_hidden = value == "1",
+            "no-overwrite-prompt" => asked.extras.no_overwrite_prompt = value == "1",
+            "strict-types" => asked.extras.strict_types = value == "1",
+            "no-read-only" => asked.extras.refuse_read_only = value == "1",
+            "needs-interaction" => asked.extras.needs_interaction = value == "1",
+            "hide-pinned" => asked.extras.hide_pinned = value == "1",
+            "place" => {
+                let (side, path) = value.split_once('\t').unwrap_or(("bottom", value));
+                let path = PathBuf::from(path);
+                if path.is_absolute() {
+                    asked.extras.places.push(FileChooserPlace { path, first: side == "top" });
+                }
+            }
+            "client" => asked.extras.client = Some(value.to_owned()).filter(|client| !client.is_empty()),
+            "default-folder" => asked.extras.default_folder = Some(PathBuf::from(value)).filter(|folder| folder.is_absolute()),
+            "edit" => {
+                let mut parts = value.splitn(3, '\t');
+                let (Some(id), Some(text), label) = (parts.next(), parts.next(), parts.next()) else { continue };
+                asked.extras.fields.push(FileChooserField { id: id.to_owned(), label: label.unwrap_or_default().to_owned(), text: text.to_owned() });
+            }
+            "note" => asked.extras.notes.push(value.to_owned()),
+            "accept-menu" => {
+                let (id, initial) = value.split_once('\t').unwrap_or((value, ""));
+                asked.extras.accept_menu = Some(FileChooserChoice { id: id.to_owned(), label: String::new(), options: Vec::new(), initial: initial.to_owned() });
+            }
+            "disabled" => asked.extras.disabled.push(value.to_owned()),
             _ => {}
         }
     }
@@ -181,6 +218,14 @@ fn watch(launcher: u32, withdraw: Withdraw) {
     }
 }
 
+/// A menu whose answer given first is not offered starts on its first answer.
+fn offered(mut choice: FileChooserChoice) -> FileChooserChoice {
+    if !choice.options.is_empty() && !choice.options.iter().any(|(id, _)| *id == choice.initial) {
+        choice.initial = choice.options[0].0.clone();
+    }
+    choice
+}
+
 /// The request of the dialog a launcher handed over: the pipe to answer on, then what
 /// is asked. None when it names no pipe.
 pub(super) fn request(lines: &[String], launcher: Option<u32>) -> Option<FileChooserRequest> {
@@ -214,12 +259,14 @@ pub(super) fn request(lines: &[String], launcher: Option<u32>) -> Option<FileCho
         current_folder: asked.folder.filter(|folder| folder.is_dir()),
         default_extension: asked.extension,
         // A menu whose answer given first is not offered starts on its first answer.
-        choices: asked.choices.into_iter().map(|mut choice| {
-            if !choice.options.is_empty() && !choice.options.iter().any(|(id, _)| *id == choice.initial) {
-                choice.initial = choice.options[0].0.clone();
-            }
-            choice
-        }).collect(),
+        choices: asked.choices.into_iter().map(offered).collect(),
+        extras: FileChooserExtras {
+            // Read here too: places and folders that are gone are left out.
+            places: asked.extras.places.into_iter().filter(|place| place.path.is_dir()).collect(),
+            default_folder: asked.extras.default_folder.filter(|folder| folder.is_dir()),
+            accept_menu: asked.extras.accept_menu.map(offered).filter(|menu| !menu.options.is_empty()),
+            ..asked.extras
+        },
         parent: asked.owner.map(FileChooserParent::Windows),
         answer,
         withdrawn,

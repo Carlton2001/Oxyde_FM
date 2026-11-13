@@ -64,3 +64,38 @@ fn the_applications_controls_are_choices_and_answered_as_such() {
     let answer = FileChooserAnswer { paths: vec![PathBuf::from(r"C:\a.txt")], filter: None, choices: vec![("7".into(), "1".into()), ("9".into(), "true".into())] };
     assert_eq!(answer_text(Some(&answer)), "ok\npath\tC:\\a.txt\nchoice\t7\t1\nchoice\t9\ttrue\n");
 }
+
+#[test]
+fn what_only_windows_dialogs_ask_is_read_as_extras() {
+    use crate::platform::{FileChooserExtras, FileChooserField, FileChooserPlace};
+    let read = asked(&lines(&[
+        "purpose\tsave", "name-label\t&File name:", "cancel-label\t&Close", "show-hidden\t1", "no-overwrite-prompt\t1",
+        "strict-types\t1", "no-read-only\t1", "needs-interaction\t1", "hide-pinned\t0",
+        "place\ttop\tC:\\Projects", "place\tbottom\tD:\\Archive", "place\ttop\trelative",
+        "client\t{0A1B}", "default-folder\tC:\\Users\\a", "edit\t4\tdraft\tAuthor", "note\tSigned files only",
+        "accept-menu\t12\t2", "option\t12\t1\tOpen", "option\t12\t2\tOpen read-only", "disabled\t4",
+    ]));
+    assert_eq!(read.extras, FileChooserExtras {
+        name_label: Some("File name".into()),
+        cancel_label: Some("Close".into()),
+        show_hidden: true,
+        no_overwrite_prompt: true,
+        strict_types: true,
+        refuse_read_only: true,
+        needs_interaction: true,
+        hide_pinned: false,
+        places: vec![
+            FileChooserPlace { path: PathBuf::from(r"C:\Projects"), first: true },
+            FileChooserPlace { path: PathBuf::from(r"D:\Archive"), first: false },
+        ],
+        client: Some("{0A1B}".into()),
+        default_folder: Some(PathBuf::from(r"C:\Users\a")),
+        fields: vec![FileChooserField { id: "4".into(), label: "Author".into(), text: "draft".into() }],
+        notes: vec!["Signed files only".into()],
+        accept_menu: Some(FileChooserChoice {
+            id: "12".into(), label: String::new(),
+            options: vec![("1".into(), "Open".into()), ("2".into(), "Open read-only".into())], initial: "2".into(),
+        }),
+        disabled: vec!["4".into()],
+    });
+}

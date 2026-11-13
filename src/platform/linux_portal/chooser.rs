@@ -7,7 +7,7 @@
 //! applies its own fallback only to a backend that is missing: a failing Oxyde would
 //! otherwise leave the application without a file chooser.
 use super::pending::{self, Pending};
-use crate::platform::{FileChooserAnswer, FileChooserChoice, FileChooserParent, FileChooserPurpose, FileChooserRequest, FileTypeFilter, FileTypePattern, InstanceMessage, InstanceRequest};
+use crate::platform::{FileChooserAnswer, FileChooserChoice, FileChooserExtras, FileChooserParent, FileChooserPurpose, FileChooserRequest, FileTypeFilter, FileTypePattern, InstanceMessage, InstanceRequest};
 use futures::channel::{mpsc::UnboundedSender, oneshot};
 use futures::{FutureExt, StreamExt};
 use std::collections::HashMap;
@@ -385,6 +385,8 @@ impl FileChooser {
             current_folder,
             default_extension: None,
             choices: raw_choices(options).into_iter().map(choice).collect(),
+            // Each application starts where it last chose.
+            extras: FileChooserExtras { client: Some(call.app_id.clone()).filter(|app| !app.is_empty()), ..Default::default() },
             parent: parent_window(&call.parent_window),
             answer,
             withdrawn,

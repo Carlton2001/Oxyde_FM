@@ -51,6 +51,9 @@ impl FileChooserWindow {
 
     fn go(&mut self, folder: String, step: Step, cx: &mut Context<Self>) {
         let left = std::mem::replace(&mut self.folder, folder);
+        if !left.is_empty() {
+            self.note_interaction(cx);
+        }
         if !left.is_empty() && left != self.folder {
             match step {
                 Step::New => {
@@ -315,6 +318,9 @@ impl FileChooserWindow {
 
     /// Whether the button that accepts has something to choose, or a name to save under.
     pub(super) fn can_accept(&self, cx: &App) -> bool {
+        if self.awaits_interaction() {
+            return false;
+        }
         match self.purpose {
             FileChooserPurpose::Save { .. } => !self.typed_name(cx).is_empty() || self.selected_folder().is_some(),
             _ => self.directory || !self.selection.is_empty(),

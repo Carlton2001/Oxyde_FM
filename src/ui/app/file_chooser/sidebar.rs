@@ -101,8 +101,8 @@ impl FileChooserWindow {
             .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, _, cx| this.show_folder(path.clone(), cx)))
             .child(
                 div().w_4().h_4().mr_2().flex().items_center().justify_center().flex_shrink_0()
-                    .child(svg().path(if is_home { "icons/house.svg" } else { "icons/pin.svg" }).size_4()
-                        .text_color(if is_home { theme.text } else { theme.accent })),
+                    .child(svg().path(if is_home { "icons/house.svg" } else if place.added { "icons/folder.svg" } else { "icons/pin.svg" }).size_4()
+                        .text_color(if is_home || place.added { theme.text } else { theme.accent })),
             )
             .child(div().flex_1().min_w_0().truncate().text_color(theme.text).child(name))
             .into_any_element()

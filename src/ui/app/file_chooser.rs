@@ -12,6 +12,7 @@ mod choices;
 mod create;
 mod crumbs;
 mod details;
+mod additions;
 mod filter;
 mod footer;
 mod grid;
@@ -34,7 +35,7 @@ use super::OxydeApp;
 use futures::channel::oneshot;
 use gpui::*;
 use oxyde_lib::models::{DriveInfo, FileEntry};
-use oxyde_lib::platform::{FileChooserAnswer, FileChooserParent, FileChooserPurpose, FileChooserRequest, FileTypeFilter, UnmountedVolume};
+use oxyde_lib::platform::{FileChooserAnswer, FileChooserExtras, FileChooserParent, FileChooserPurpose, FileChooserRequest, FileTypeFilter, UnmountedVolume};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -51,6 +52,8 @@ struct Place {
     label: String,
     path: String,
     home: bool,
+    /// Added by the application, named by the folder's own name.
+    added: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -160,6 +163,14 @@ pub struct FileChooserWindow {
     scroll_top_anchor: std::cell::Cell<f32>,
     focus: FocusHandle,
     footer: footer::Footer,
+    /// What only some applications ask (`additions.rs`), the text fields they add, the
+    /// way to accept chosen in the button's menu, and whether the user did anything yet.
+    extras: FileChooserExtras,
+    fields: Vec<additions::Field>,
+    accept_item: Option<String>,
+    interacted: bool,
+    /// This window, which a menu's own window reaches it by.
+    window_handle: AnyWindowHandle,
     listing_task: Option<Task<()>>,
     arrange_task: Option<Task<()>>,
     subfolder_task: Option<Task<()>>,
@@ -191,15 +202,24 @@ struct Places {
 }
 
 impl Places {
-    fn of(app: &OxydeApp) -> Self {
+    /// The main window's places, without its pinned folders when the application asks
+    /// so, and with the application's own before or after them.
+    fn of(app: &OxydeApp, extras: &FileChooserExtras) -> Self {
         // As in Nautilus, the home folder heads the bookmarks without being one of them.
-        let home = dirs::home_dir().map(|home| Place { label: String::new(), path: home.to_string_lossy().into_owned(), home: true });
+        let home = dirs::home_dir().map(|home| Place { label: String::new(), path: home.to_string_lossy().into_owned(), home: true, added: false });
         let pinned = app.state.pinned_items.iter()
+            .filter(|_| !extras.hide_pinned)
             .filter(|item| std::path::Path::new(&item.path).is_absolute())
             .filter(|item| app.show_hidden || !item.name.starts_with('.'))
-            .map(|item| Place { label: item.name.clone(), path: item.path.clone(), home: item.name.is_empty() });
+            .map(|item| Place { label: item.name.clone(), path: item.path.clone(), home: item.name.is_empty(), added: false });
+        let added = |first: bool| extras.places.iter().filter(move |place| place.first == first).map(|place| Place {
+            label: place.path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| place.path.to_string_lossy().into_owned()),
+            path: place.path.to_string_lossy().into_owned(),
+            home: false,
+            added: true,
+        });
         Self {
-            folders: home.into_iter().chain(pinned).collect(),
+            folders: added(true).chain(home).chain(pinned).chain(added(false)).collect(),
             drives: app.state.drives.iter().filter(|drive| std::path::Path::new(&drive.path).is_absolute()).cloned().collect(),
             volumes: app.state.unmounted_volumes.clone(),
         }
@@ -227,7 +247,7 @@ impl OxydeApp {
     pub(crate) fn open_file_chooser(&mut self, mut request: FileChooserRequest, cx: &mut Context<Self>) {
         let owner = cx.entity().downgrade();
         let lent = Lent {
-            places: Places::of(self),
+            places: Places::of(self, &request.extras),
             options: arrange::Options::from_value(self.config.file_chooser_options.as_ref()),
             sidebar_width: self.sidebar_width,
             show_hidden: self.show_hidden,
@@ -328,7 +348,7 @@ fn default_title(purpose: &FileChooserPurpose, directory: bool) -> crate::ui::i1
 
 impl FileChooserWindow {
     fn new(owner: WeakEntity<OxydeApp>, request: FileChooserRequest, lent: Lent, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let FileChooserRequest { purpose, title, accept_label, multiple, directory, filters, current_filter, current_folder, default_extension, choices, parent: _, answer, withdrawn, shown: _ } = request;
+        let FileChooserRequest { purpose, title, accept_label, multiple, directory, filters, current_filter, current_folder, default_extension, choices, extras, parent: _, answer, withdrawn, shown: _ } = request;
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         crate::ui::components::tool_window::install_icon(ICON, window);
@@ -337,7 +357,7 @@ impl FileChooserWindow {
         window.on_window_should_close(cx, move |window, cx| {
             let _ = closing.update(cx, |this, cx| {
                 this.close_overwrite(cx);
-                this.send(None);
+                this.send(None, cx);
                 this.remember(cx);
             });
             crate::ui::components::tool_window::close_transients(window, cx);
@@ -354,7 +374,7 @@ impl FileChooserWindow {
         });
         // A volume mounted or plugged in, a folder pinned: the sidebar follows the main one.
         let owner_changes = owner.upgrade().map(|app| cx.observe(&app, |this: &mut Self, app, cx| {
-            let places = Places::of(app.read(cx));
+            let places = Places::of(app.read(cx), &this.extras);
             if places != this.places {
                 this.places = places;
                 this.load_drive_folders(cx);
@@ -362,7 +382,10 @@ impl FileChooserWindow {
             }
         }));
         let sidebar_width = lent.options.sidebar.unwrap_or(lent.sidebar_width);
+        // The application's folder, else where it last chose, its default, the last one.
         let folder = current_folder.map(|folder| oxyde_lib::utils::path_text::encode(&folder))
+            .or_else(|| extras.client.as_deref().and_then(|client| lent.options.client_folder(client)))
+            .or_else(|| extras.default_folder.as_ref().map(|folder| oxyde_lib::utils::path_text::encode(folder)))
             .or_else(|| lent.options.folder.clone())
             .or_else(|| dirs::home_dir().map(|home| home.to_string_lossy().into_owned()))
             .unwrap_or_else(|| if cfg!(target_os = "windows") { r"C:\".into() } else { "/".into() });
@@ -411,8 +434,8 @@ impl FileChooserWindow {
             sidebar_width,
             resizing_sidebar: false,
             window_width: 0.0,
-            show_hidden: lent.show_hidden,
-            show_system: lent.show_system,
+            show_hidden: lent.show_hidden || extras.show_hidden,
+            show_system: lent.show_system || extras.show_hidden,
             show_permissions: lent.show_permissions,
             system_icons: lent.system_icons,
             thumbnails: lent.thumbnails,
@@ -437,6 +460,11 @@ impl FileChooserWindow {
             scroll_top_anchor: Default::default(),
             focus,
             footer: footer::Footer::new(cx),
+            fields: extras.fields.iter().map(|field| additions::Field::new(field, window, cx)).collect(),
+            accept_item: extras.accept_menu.as_ref().map(|menu| menu.initial.clone()),
+            interacted: false,
+            window_handle: window.window_handle(),
+            extras,
             listing_task: None,
             arrange_task: None,
             subfolder_task: None,
@@ -452,12 +480,13 @@ impl FileChooserWindow {
         this
     }
 
-    /// Answers the application, once, with the type filter shown and its choices.
-    fn send(&mut self, chosen: Option<Vec<PathBuf>>) {
+    /// Answers the application, once, with the type filter shown, its choices and fields.
+    fn send(&mut self, chosen: Option<Vec<PathBuf>>, cx: &App) {
         let Some(answer) = self.answer.take() else { return };
         log::info!("file chooser answered: {chosen:?}");
         let filter = self.type_filter;
-        let choices = self.choice_answers();
+        let mut choices = self.choice_answers();
+        choices.extend(self.addition_answers(cx));
         let _ = answer.send(chosen.map(|paths| FileChooserAnswer { paths, filter, choices }));
     }
 
@@ -476,7 +505,11 @@ impl FileChooserWindow {
     /// Answers and closes.
     fn finish(&mut self, chosen: Option<Vec<PathBuf>>, window: &mut Window, cx: &mut Context<Self>) {
         self.close_overwrite(cx);
-        self.send(chosen);
+        // An application naming itself finds the folder it last chose in, as on Windows.
+        if let (Some(client), Some(_)) = (&self.extras.client, &chosen) {
+            self.options.remember_client(client, &self.folder);
+        }
+        self.send(chosen, cx);
         self.remember(cx);
         crate::ui::components::tool_window::close_transients(window, cx);
         window.remove_window();

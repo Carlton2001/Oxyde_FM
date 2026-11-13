@@ -9,7 +9,10 @@ use std::time::Instant;
 
 impl FileChooserWindow {
     pub(super) fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
-        if self.shortcut(&event.keystroke, window, cx) || self.footer_key(&event.keystroke, window, cx) || (self.focus.is_focused(window) && self.list_key(&event.keystroke, window, cx)) {
+        if self.shortcut(&event.keystroke, window, cx) || self.footer_key(&event.keystroke, window, cx) {
+            cx.stop_propagation();
+        } else if self.focus.is_focused(window) && self.list_key(&event.keystroke, window, cx) {
+            self.note_interaction(cx);
             cx.stop_propagation();
         }
     }

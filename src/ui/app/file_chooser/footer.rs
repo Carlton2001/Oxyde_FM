@@ -1,6 +1,6 @@
 //! Below the entries, everything the application asks in one place: a form of
-//! labeled rows (the name to save under, the type filters, the choices' menus, then
-//! their checkboxes) on the inactive panels' background, above the secondary
+//! labeled rows (the name to save under, the type filters, the choices' menus, the
+//! application's text fields, then the checkboxes and its notes) on the inactive panels' background, above the secondary
 //! windows' usual footer and its buttons. The form grows with what is asked, up to a
 //! third of the window, past which it scrolls; with many menus, they sit side by side. Tab and Shift+Tab move the keyboard from the
 //! entries through its controls in reading order and back, as GTK's file chooser
@@ -18,12 +18,13 @@ pub(super) struct Footer {
     pub(super) types: FocusHandle,
     cancel: FocusHandle,
     accept: FocusHandle,
+    pub(super) accept_menu: FocusHandle,
     scroll: ScrollHandle,
 }
 
 impl Footer {
     pub(super) fn new(cx: &mut App) -> Self {
-        Self { types: cx.focus_handle(), cancel: cx.focus_handle(), accept: cx.focus_handle(), scroll: ScrollHandle::new() }
+        Self { types: cx.focus_handle(), cancel: cx.focus_handle(), accept: cx.focus_handle(), accept_menu: cx.focus_handle(), scroll: ScrollHandle::new() }
     }
 }
 
@@ -61,10 +62,14 @@ impl FileChooserWindow {
             order.push(self.footer.types.clone());
         }
         order.extend(self.choice_menu_focus());
+        order.extend(self.field_focus());
         order.extend(self.choice_checkbox_focus());
         order.push(self.footer.cancel.clone());
         if self.can_accept(cx) {
             order.push(self.footer.accept.clone());
+            if self.extras.accept_menu.is_some() {
+                order.push(self.footer.accept_menu.clone());
+            }
         }
         order
     }
@@ -80,6 +85,8 @@ impl FileChooserWindow {
         } else {
             rows.extend(menus.into_iter().map(|menu| vec![menu]));
         }
+        // Each field has its row, disabled ones too.
+        rows.extend(self.field_rows());
         rows.push(self.choice_checkbox_focus().collect());
         rows.iter().position(|row| row.contains(focus))
     }
@@ -116,20 +123,26 @@ impl FileChooserWindow {
         let accept = self.accept_label.clone().unwrap_or_else(|| i18n.text(default_label));
         let enabled = self.can_accept(cx);
         let (cancelled, accepted) = (cx.entity().downgrade(), cx.entity().downgrade());
-        let cancel = crate::ui::components::dialog::button("file-chooser-cancel", i18n.text(Message::Cancel), ButtonVariant::Secondary)
+        let cancel_label = self.extras.cancel_label.clone().filter(|label| !label.is_empty()).map(SharedString::from)
+            .unwrap_or_else(|| i18n.text(Message::Cancel));
+        let cancel = crate::ui::components::dialog::button("file-chooser-cancel", cancel_label, ButtonVariant::Secondary)
             .focus(&self.footer.cancel)
             .on_press(move |window, cx| { let _ = cancelled.update(cx, |this, cx| this.finish(None, window, cx)); });
         let open = crate::ui::components::dialog::button("file-chooser-open", accept, ButtonVariant::Primary)
             .focus(&self.footer.accept)
             .enabled(enabled)
             .on_press(move |window, cx| { let _ = accepted.update(cx, |this, cx| this.accept(window, cx)); });
-
-        let (name_label, type_label) = (i18n.text(Message::FileChooserName), i18n.text(Message::FileChooserType));
+        let name_label = self.extras.name_label.clone().filter(|label| !label.is_empty()).map(SharedString::from)
+            .unwrap_or_else(|| i18n.text(Message::FileChooserName));
+        let type_label = i18n.text(Message::FileChooserType);
+        let open = self.render_accept(open.into_any_element(), enabled, theme, window, cx);
         let name = self.render_name_field(theme).map(|field| (name_label, field));
         let menus: Vec<(SharedString, AnyElement)> = self.render_type_filter(window, cx)
             .map(|menu| (type_label, menu)).into_iter()
             .chain(self.render_choice_menus(window, cx)).collect();
+        let fields = self.render_fields(cx);
         let checkboxes = self.render_choice_checkboxes(theme, window, cx);
+        let notes = self.render_notes(theme);
         // The secondary windows' footer, on their background to the window's lower corners.
         let corners = crate::ui::components::client_decorations::inner_corners(window);
         let footer = crate::ui::components::tool_window::footer(cx)
@@ -137,11 +150,13 @@ impl FileChooserWindow {
             .child(cancel)
             .child(open);
         let zone = div().flex_none().flex().flex_col();
-        if name.is_none() && menus.is_empty() && checkboxes.is_empty() {
+        if name.is_none() && menus.is_empty() && fields.is_empty() && checkboxes.is_empty() && notes.is_empty() {
             return zone.child(footer);
         }
 
-        let labels: Vec<SharedString> = name.iter().map(|(label, _)| label.clone()).chain(menus.iter().map(|(label, _)| label.clone())).collect();
+        let labels: Vec<SharedString> = name.iter().map(|(label, _)| label.clone())
+            .chain(menus.iter().map(|(label, _)| label.clone()))
+            .chain(fields.iter().map(|(label, _)| label.clone())).collect();
         let column = label_column(&labels, window, cx);
         let dense = menus.len() > DENSE_MENUS;
         // The form's rows, which the keyboard scrolls into view (`form_row`).
@@ -162,12 +177,18 @@ impl FileChooserWindow {
         } else {
             rows.extend(pairs);
         }
+        rows.extend(fields.into_iter().map(|(text, field)| div()
+            .flex().items_center().gap(LABEL_GAP).child(label(text, column)).child(field).into_any_element()));
+        // Below the menus and fields, on the controls' edge.
+        let aligned = |content: Div| div().flex().items_center().gap(LABEL_GAP)
+            .when(column > 0.0, |row| row.child(div().flex_none().w(rems(column))))
+            .child(content.flex_1().min_w_0())
+            .into_any_element();
         if !checkboxes.is_empty() {
-            // Below the menus, on the controls' edge.
-            rows.push(div().flex().items_center().gap(LABEL_GAP)
-                .when(column > 0.0, |row| row.child(div().flex_none().w(rems(column))))
-                .child(div().flex_1().min_w_0().flex().flex_wrap().gap_x(rems(1.5)).gap_y(ROW_GAP).children(checkboxes))
-                .into_any_element());
+            rows.push(aligned(div().flex().flex_wrap().gap_x(rems(1.5)).gap_y(ROW_GAP).children(checkboxes)));
+        }
+        if !notes.is_empty() {
+            rows.push(aligned(div().flex().flex_col().gap(rems(0.25)).children(notes)));
         }
 
         // Up to a third of the window, past which the form scrolls with the shared scrollbar.

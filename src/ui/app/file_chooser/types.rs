@@ -25,6 +25,6 @@ impl FileChooserWindow {
         if !self.shows_type_filter() { return None; }
         let label = self.filters.get(self.type_filter?)?.name.clone();
         let focus = self.footer.types.clone();
-        Some(self.render_menu(FooterMenu::Types, label, &focus, window, cx))
+        Some(self.render_menu(FooterMenu::Types, label, &focus, true, window, cx))
     }
 }

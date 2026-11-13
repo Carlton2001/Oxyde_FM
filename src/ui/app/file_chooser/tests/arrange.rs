@@ -51,7 +51,7 @@ fn the_filter_matches_names_without_regard_to_case_and_columns_measure_everythin
 
 #[test]
 fn options_survive_the_preferences_and_default_when_unreadable() {
-    let options = Options { grid: true, sort: SortColumn::Modified, direction: SortDirection::Descending, folder: Some("/home/a".into()), sidebar: Some(212.5) };
+    let options = Options { grid: true, sort: SortColumn::Modified, direction: SortDirection::Descending, folder: Some("/home/a".into()), sidebar: Some(212.5), clients: vec![("app".into(), "/home/a/b".into())] };
     let value = options.to_value().unwrap();
     assert_eq!(value["sort"], "modified");
     assert_eq!(Options::from_value(Some(&value)), options);
@@ -94,4 +94,21 @@ fn the_request_admits_folders_always_and_files_of_the_type_shown() {
     let empty = Admission { types: Some(FileTypeFilter { name: "None".into(), patterns: Vec::new() }), ..Default::default() };
     assert_eq!(arrange(&entries, "", &empty, &no_mime, SortColumn::Name, SortDirection::Ascending).folders, 2);
     assert_eq!(arrange(&entries, "", &empty, &no_mime, SortColumn::Name, SortDirection::Ascending).shown.len(), 2);
+}
+
+#[test]
+fn each_application_finds_its_own_last_folder_the_latest_first() {
+    let mut options = Options::default();
+    options.remember_client("a", "/one");
+    options.remember_client("b", "/two");
+    options.remember_client("a", "/three");
+    assert_eq!(options.client_folder("a").as_deref(), Some("/three"));
+    assert_eq!(options.client_folder("b").as_deref(), Some("/two"));
+    assert_eq!(options.client_folder("c"), None);
+    assert_eq!(options.clients.first().map(|(client, _)| client.as_str()), Some("a"));
+    for client in 0..40 {
+        options.remember_client(&client.to_string(), "/x");
+    }
+    assert_eq!(options.clients.len(), 32);
+    assert_eq!(options.client_folder("a"), None);
 }

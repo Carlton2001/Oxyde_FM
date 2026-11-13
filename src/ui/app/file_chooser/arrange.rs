@@ -19,7 +19,12 @@ pub(super) struct Options {
     pub(super) folder: Option<String>,
     /// The sidebar's width at the baseline scale, once resized here.
     pub(super) sidebar: Option<f32>,
+    /// The last folder chosen in by each application that names itself, latest first.
+    pub(super) clients: Vec<(String, String)>,
 }
+
+/// How many applications' folders are kept.
+const CLIENTS: usize = 32;
 
 impl Options {
     pub(super) fn from_value(value: Option<&serde_json::Value>) -> Self {
@@ -28,6 +33,16 @@ impl Options {
 
     pub(super) fn to_value(&self) -> Option<serde_json::Value> {
         serde_json::to_value(self).ok()
+    }
+
+    pub(super) fn client_folder(&self, client: &str) -> Option<String> {
+        self.clients.iter().find(|(known, _)| known == client).map(|(_, folder)| folder.clone())
+    }
+
+    pub(super) fn remember_client(&mut self, client: &str, folder: &str) {
+        self.clients.retain(|(known, _)| known != client);
+        self.clients.insert(0, (client.to_owned(), folder.to_owned()));
+        self.clients.truncate(CLIENTS);
     }
 }
 

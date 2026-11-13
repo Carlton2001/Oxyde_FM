@@ -20,6 +20,35 @@ pub(crate) struct Asked {
     /// The filter shown first, counted from 1.
     pub(crate) filter: u32,
     pub(crate) choices: Vec<AskedChoice>,
+    /// What fewer dialogs ask: their own labels and options, folders added to the
+    /// places (`true` when above the others), the key of the folder remembered for the
+    /// application, the folder to open when none is remembered, and the controls Oxyde
+    /// shows besides choices.
+    pub(crate) name_label: Option<String>,
+    pub(crate) cancel_label: Option<String>,
+    pub(crate) show_hidden: bool,
+    pub(crate) no_overwrite_prompt: bool,
+    pub(crate) strict_types: bool,
+    pub(crate) no_read_only: bool,
+    pub(crate) needs_interaction: bool,
+    pub(crate) hide_pinned: bool,
+    pub(crate) places: Vec<(bool, String)>,
+    pub(crate) client: Option<String>,
+    pub(crate) default_folder: Option<String>,
+    pub(crate) fields: Vec<AskedField>,
+    pub(crate) notes: Vec<String>,
+    /// The button's menu, an open drop-down: its items, the one the button stands for.
+    pub(crate) accept_menu: Option<AskedChoice>,
+    /// The controls shown but not to be changed.
+    pub(crate) disabled: Vec<u32>,
+}
+
+/// An edit box of the application's, as a text field.
+#[derive(Debug, Default, PartialEq)]
+pub(crate) struct AskedField {
+    pub(crate) id: u32,
+    pub(crate) label: String,
+    pub(crate) text: String,
 }
 
 /// A control of the application's, as a question beside the files.
@@ -71,6 +100,43 @@ pub(crate) fn text(asked: &Asked) -> String {
             line("option", &format!("{}\t{item}\t{}", choice.id, plain(label)));
         }
     }
+    let labels = [("name-label", &asked.name_label), ("cancel-label", &asked.cancel_label)];
+    for (key, value) in labels {
+        if let Some(value) = value.as_deref().filter(|value| !value.is_empty()) {
+            line(key, &plain(value));
+        }
+    }
+    let options = [
+        ("show-hidden", asked.show_hidden), ("no-overwrite-prompt", asked.no_overwrite_prompt), ("strict-types", asked.strict_types),
+        ("no-read-only", asked.no_read_only), ("needs-interaction", asked.needs_interaction), ("hide-pinned", asked.hide_pinned),
+    ];
+    for (key, _) in options.iter().filter(|(_, set)| *set) {
+        line(key, "1");
+    }
+    for (top, path) in &asked.places {
+        line("place", &format!("{}\t{}", if *top { "top" } else { "bottom" }, plain(path)));
+    }
+    let folders = [("client", &asked.client), ("default-folder", &asked.default_folder)];
+    for (key, value) in folders {
+        if let Some(value) = value.as_deref().filter(|value| !value.is_empty()) {
+            line(key, &plain(value));
+        }
+    }
+    for field in &asked.fields {
+        line("edit", &format!("{}\t{}\t{}", field.id, plain(&field.text), plain(&field.label)));
+    }
+    for note in &asked.notes {
+        line("note", &plain(note));
+    }
+    if let Some(menu) = &asked.accept_menu {
+        line("accept-menu", &format!("{}\t{}", menu.id, menu.initial));
+        for (item, label) in &menu.options {
+            line("option", &format!("{}\t{item}\t{}", menu.id, plain(label)));
+        }
+    }
+    for id in &asked.disabled {
+        line("disabled", &id.to_string());
+    }
     text
 }
 
@@ -80,7 +146,7 @@ pub(crate) struct Answer {
     pub(crate) paths: Vec<String>,
     /// The filter shown when the user chose, counted from 1.
     pub(crate) filter: Option<u32>,
-    /// Each control's id and its answer: an item's id, or `true` or `false`.
+    /// Each control's id and its answer: an item's id, `true` or `false`, or a text.
     pub(crate) choices: Vec<(u32, String)>,
 }
 
@@ -130,6 +196,28 @@ mod tests {
         ];
         let asked = Asked { choices, ..Default::default() };
         assert_eq!(text(&asked), "purpose\topen\nchoice\t7\t2\tEncoding\noption\t7\t1\tUTF-8\noption\t7\t2\tANSI\nchoice\t9\tfalse\tRead only\n");
+    }
+
+    #[test]
+    fn what_fewer_dialogs_ask_follows_the_choices() {
+        let asked = Asked {
+            saving: true,
+            name_label: Some("Name".into()),
+            cancel_label: Some(String::new()),
+            no_overwrite_prompt: true,
+            needs_interaction: true,
+            places: vec![(true, r"C:\Work".into()), (false, r"D:\Old".into())],
+            client: Some("app.exe:{1}".into()),
+            default_folder: Some(r"C:\Users".into()),
+            fields: vec![AskedField { id: 4, label: "Author".into(), text: "a\tb".into() }],
+            notes: vec!["Signed only".into()],
+            accept_menu: Some(AskedChoice { id: 12, label: String::new(), options: vec![(1, "Open".into()), (2, "Open read-only".into())], initial: "1".into() }),
+            disabled: vec![4],
+            ..Default::default()
+        };
+        assert_eq!(text(&asked), "purpose\tsave\nname-label\tName\nno-overwrite-prompt\t1\nneeds-interaction\t1\n\
+            place\ttop\tC:\\Work\nplace\tbottom\tD:\\Old\nclient\tapp.exe:{1}\ndefault-folder\tC:\\Users\n\
+            edit\t4\ta b\tAuthor\nnote\tSigned only\naccept-menu\t12\t1\noption\t12\t1\tOpen\noption\t12\t2\tOpen read-only\ndisabled\t4\n");
     }
 
     #[test]

@@ -64,6 +64,35 @@ fn pattern_extension(filter: &FileTypeFilter) -> Option<&str> {
     }
 }
 
+/// Whether `name` is one `filter` shows; only its plain `*.ext` patterns are told
+/// apart, the others taking any name.
+fn shown_by(name: &str, filter: &FileTypeFilter) -> bool {
+    let name = name.to_lowercase();
+    filter.patterns.iter().any(|pattern| match pattern {
+        FileTypePattern::Glob(pattern) => match pattern.strip_prefix("*.") {
+            Some(extension) if !extension.contains(['*', '?', '[']) => name.ends_with(&format!(".{}", extension.to_lowercase())),
+            _ => true,
+        },
+        FileTypePattern::MimeType(_) => true,
+    })
+}
+
+/// `path` given the extension of `filter` when its name is not one the filter shows,
+/// as a Windows dialog asked for strict types does.
+pub(super) fn strictly_typed(path: PathBuf, filter: &FileTypeFilter) -> PathBuf {
+    let (Some(name), Some(extension)) = (path.file_name().and_then(|name| name.to_str()), pattern_extension(filter)) else { return path };
+    if shown_by(name, filter) {
+        return path;
+    }
+    let name = format!("{}.{extension}", name.trim_end_matches('.'));
+    path.with_file_name(name)
+}
+
+/// Whether the file at `path` cannot be written. Reads the disk: run it off the UI thread.
+fn read_only(path: &Path) -> bool {
+    std::fs::metadata(path).is_ok_and(|metadata| metadata.permissions().readonly())
+}
+
 /// `path` with `extension`, when it is a free name without one; a folder typed to be
 /// opened, or a file to be replaced, keeps its name.
 fn extended(path: &Path, found: Target, extension: Option<&str>) -> Option<PathBuf> {
@@ -114,6 +143,7 @@ impl FileChooserWindow {
             name,
             move |_, _, cx| {
                 let _ = changed.update(cx, |this, cx| {
+                    this.note_interaction(cx);
                     this.name.invalid = false;
                     this.name.task = None;
                     cx.notify();
@@ -176,11 +206,22 @@ impl FileChooserWindow {
         let home = dirs::home_dir();
         let path = super::location::typed_path(&text, &path_text::decode(&self.folder), home.as_deref());
         let extension = self.save_extension();
+        // What the application asks of the file: the shown filter's type, a writable one.
+        let strict = self.type_filter.and_then(|position| self.filters.get(position)).filter(|_| self.extras.strict_types).cloned();
+        let refuse_read_only = self.extras.refuse_read_only;
         self.name.task = Some(cx.spawn_in(window, async move |this, cx| {
-            let (path, found) = cx.background_spawn(async move { resolved(path, extension.as_deref()) }).await;
+            let (path, found, refused) = cx.background_spawn(async move {
+                let path = match strict {
+                    Some(filter) if target(&path) != Target::Folder => strictly_typed(path, &filter),
+                    _ => path,
+                };
+                let (path, found) = resolved(path, extension.as_deref());
+                let refused = refuse_read_only && found == Target::File && read_only(&path);
+                (path, found, refused)
+            }).await;
             let _ = this.update_in(cx, |this, window, cx| {
                 this.name.task = None;
-                if !this.save_at(path, found, window, cx) {
+                if refused || !this.save_at(path, found, window, cx) {
                     this.name.invalid = true;
                     this.name.shake = this.name.shake.wrapping_add(1);
                 }
@@ -197,6 +238,7 @@ impl FileChooserWindow {
                 self.set_name(String::new(), cx);
                 self.show_folder(path_text::encode(&path), cx);
             }
+            Target::File if self.extras.no_overwrite_prompt => self.finish(Some(vec![path]), window, cx),
             Target::File => self.confirm_overwrite(vec![path.clone()], vec![path], window, cx),
             Target::Free => self.finish(Some(vec![path]), window, cx),
             Target::Unreachable => return false,
@@ -215,7 +257,7 @@ impl FileChooserWindow {
             }).await;
             let _ = this.update_in(cx, |this, window, cx| {
                 this.name.task = None;
-                if existing.is_empty() {
+                if existing.is_empty() || this.extras.no_overwrite_prompt {
                     this.finish(Some(targets), window, cx);
                 } else {
                     this.confirm_overwrite(existing, targets, window, cx);

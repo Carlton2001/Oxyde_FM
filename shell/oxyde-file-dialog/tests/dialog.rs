@@ -12,7 +12,7 @@ use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 use windows::Win32::UI::Shell::Common::COMDLG_FILTERSPEC;
 use windows::Win32::UI::Shell::{
     IFileDialog, IFileDialog2, IFileDialogCustomize, IFileDialogEvents, IFileDialogEvents_Impl, IFileOpenDialog, IFileSaveDialog, IShellItem,
-    SHCreateItemFromParsingName, CDCS_INACTIVE, FDE_OVERWRITE_RESPONSE, FDE_SHAREVIOLATION_RESPONSE, FOS_ALLOWMULTISELECT, FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
+    SHCreateItemFromParsingName, CDCS_INACTIVE, CDCS_VISIBLE, FDAP_TOP, FDE_OVERWRITE_RESPONSE, FDE_SHAREVIOLATION_RESPONSE, FOS_ALLOWMULTISELECT, FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
 };
 
 const OPEN: GUID = GUID::from_u128(0xDC1C5A9C_E88A_4DDE_A5A1_60F82A20AEF7);
@@ -60,10 +60,14 @@ impl Installed {
         self.folder.join("requests.txt")
     }
 
-    /// What the launcher was asked, each time it was run.
+    /// What the launcher was asked, each time it was run, without the lines that
+    /// depend on the machine: the test's program and the folder Windows remembers for it.
     fn asked(&self) -> Vec<String> {
         let asked = std::fs::read_to_string(self.requests()).unwrap_or_default();
-        asked.split("\n--\n").filter(|request| !request.is_empty()).map(str::to_owned).collect()
+        asked.split("\n--\n").filter(|request| !request.is_empty()).map(|request| {
+            request.lines().filter(|line| !line.starts_with("client\t") && !line.starts_with("default-folder\t"))
+                .map(|line| format!("{line}\n")).collect()
+        }).collect()
     }
 }
 
@@ -171,7 +175,8 @@ fn saves_under_a_name_that_is_still_free(installed: &Installed, folder: &Path) {
         dialog.Show(None).unwrap();
         assert_eq!(path(&dialog.GetResult().unwrap()), saved.to_str().unwrap());
     }
-    let expected = format!("purpose\tsave\nname\treport\nfolder\t{}\nextension\ttxt\nfilter\tText\t*.txt\nfilter-index\t1\n", folder.display());
+    // A Save dialog refuses read-only files unless told otherwise.
+    let expected = format!("purpose\tsave\nname\treport\nfolder\t{}\nextension\ttxt\nfilter\tText\t*.txt\nfilter-index\t1\nno-read-only\t1\n", folder.display());
     assert_eq!(installed.asked(), [expected]);
 }
 
@@ -192,10 +197,14 @@ fn a_refused_choice_is_asked_again(installed: &Installed, folder: &Path) {
 fn the_applications_controls_are_asked_and_answered(installed: &Installed, folder: &Path) {
     let file = folder.join("encoded.txt");
     std::fs::write(&file, b"").unwrap();
-    installed.answers(&[&format!("ok\npath\t{}\nchoice\t2\t11\nchoice\t3\ttrue\n", file.display())]);
+    installed.answers(&[&format!("ok\npath\t{}\nchoice\t2\t11\nchoice\t3\ttrue\nchoice\t5\tGrace\nchoice\t7\t1\n", file.display())]);
     let dialog: IFileOpenDialog = installed.dialog(&OPEN);
     let controls: IFileDialogCustomize = dialog.cast().unwrap();
+    let second: IFileDialog2 = dialog.cast().unwrap();
     unsafe {
+        dialog.SetFileNameLabel(w!("&Notes:")).unwrap();
+        second.SetCancelButtonLabel(w!("Leave")).unwrap();
+        dialog.AddPlace(&item(folder), FDAP_TOP).unwrap();
         controls.StartVisualGroup(1, w!("&Encoding:")).unwrap();
         controls.AddComboBox(2).unwrap();
         controls.AddControlItem(2, 10, w!("UTF-8")).unwrap();
@@ -205,13 +214,28 @@ fn the_applications_controls_are_asked_and_answered(installed: &Installed, folde
         controls.SetSelectedControlItem(2, 10).unwrap();
         controls.EndVisualGroup().unwrap();
         controls.AddCheckButton(3, w!("Read only"), false).unwrap();
+        controls.StartVisualGroup(6, w!("Author")).unwrap();
+        controls.AddEditBox(5, w!("Ada")).unwrap();
+        controls.EndVisualGroup().unwrap();
+        controls.AddCheckButton(8, w!("Locked"), false).unwrap();
+        controls.SetControlState(8, CDCS_VISIBLE).unwrap();
+        controls.AddText(4, w!("Signed files only")).unwrap();
+        controls.EnableOpenDropDown(7).unwrap();
+        controls.AddControlItem(7, 1, w!("Open")).unwrap();
+        controls.AddControlItem(7, 2, w!("Open read-only")).unwrap();
         dialog.Show(None).unwrap();
         assert_eq!(controls.GetSelectedControlItem(2).unwrap(), 11);
         assert!(controls.GetCheckButtonState(3).unwrap().as_bool());
+        let text = controls.GetEditBoxText(5).unwrap();
+        assert_eq!(PCWSTR(text).to_string().unwrap(), "Grace");
+        CoTaskMemFree(Some(text.cast()));
     }
     let asked = installed.asked();
     let request = asked.last().unwrap();
-    assert!(request.ends_with("choice\t2\t10\tEncoding\noption\t2\t10\tUTF-8\noption\t2\t11\tANSI\nchoice\t3\tfalse\tRead only\n"), "{request}");
+    let expected = format!("choice\t2\t10\tEncoding\noption\t2\t10\tUTF-8\noption\t2\t11\tANSI\nchoice\t3\tfalse\tRead only\nchoice\t8\tfalse\tLocked\n\
+        name-label\t&Notes:\ncancel-label\tLeave\nplace\ttop\t{}\nedit\t5\tAda\tAuthor\nnote\tSigned files only\n\
+        accept-menu\t7\t1\noption\t7\t1\tOpen\noption\t7\t2\tOpen read-only\ndisabled\t8\n", folder.display());
+    assert!(request.ends_with(&expected), "{request}");
 }
 
 fn the_other_interfaces_are_there(installed: &Installed) {

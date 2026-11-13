@@ -2,8 +2,11 @@
 //! sets goes on to the system's dialog, which stays ready to be shown; what Oxyde
 //! needs to stand for it is noted on the way. `Show` asks Oxyde when the dialog is a
 //! plain one, and the system's dialog otherwise: when the application added controls
-//! Oxyde cannot show (`controls` says which it can), filters items itself, browses things that are not files, or took from
-//! the system's dialog an interface this one does not have.
+//! Oxyde cannot show (menus and push buttons, whose events come while the dialog is
+//! open; `controls` says which it can), filters items itself, browses things that are
+//! not files, confines browsing to a part of the Shell, or took from the system's
+//! dialog an interface this one does not have. What is chosen in Oxyde goes to the
+//! recent documents, as the system's dialog adds it.
 //!
 //! The object is written by hand rather than generated, to answer for interfaces it
 //! does not implement with the system dialog's: an application asking for one of them
@@ -23,7 +26,9 @@ use windows::Win32::UI::Shell::Common::COMDLG_FILTERSPEC;
 use windows::Win32::UI::Shell::{
     IFileDialog, IFileDialog2, IFileDialog2_Vtbl, IFileDialogControlEvents, IFileDialogCustomize, IFileDialogCustomize_Vtbl, IFileDialogEvents, IFileDialog_Vtbl,
     IFileOpenDialog, IFileOpenDialog_Vtbl, IFileSaveDialog, IFileSaveDialog_Vtbl, IModalWindow, IModalWindow_Vtbl, IShellItem,
-    CDCONTROLSTATEF, FDAP, FILEOPENDIALOGOPTIONS, FOS_ALLNONSTORAGEITEMS, FOS_ALLOWMULTISELECT, FOS_NODEREFERENCELINKS, FOS_PICKFOLDERS,
+    CDCONTROLSTATEF, FDAP, FDAP_TOP, FILEOPENDIALOGOPTIONS, FOS_ALLNONSTORAGEITEMS, FOS_ALLOWMULTISELECT, FOS_DONTADDTORECENT, FOS_FORCESHOWHIDDEN,
+    FOS_HIDEPINNEDPLACES, FOS_NODEREFERENCELINKS, FOS_NOREADONLYRETURN, FOS_OKBUTTONNEEDSINTERACTION, FOS_OVERWRITEPROMPT, FOS_PICKFOLDERS,
+    FOS_STRICTFILETYPES,
 };
 
 /// How often a choice the application refuses is asked again before giving up.
@@ -54,6 +59,12 @@ pub(crate) struct Dialog {
     folder: RefCell<Option<IShellItem>>,
     default_folder: RefCell<Option<IShellItem>>,
     save_as: RefCell<Option<IShellItem>>,
+    name_label: RefCell<Option<String>>,
+    cancel_label: RefCell<Option<String>>,
+    /// Folders added to the places, `true` above the others.
+    places: RefCell<Vec<(bool, String)>>,
+    /// The application's key for its remembered folder.
+    client: RefCell<Option<String>>,
     events: RefCell<Vec<(u32, IFileDialogEvents)>>,
     /// What the user chose in Oxyde, when Oxyde was the dialog last shown.
     answer: RefCell<Option<Answer>>,
@@ -97,6 +108,10 @@ impl Dialog {
             folder: RefCell::default(),
             default_folder: RefCell::default(),
             save_as: RefCell::default(),
+            name_label: RefCell::default(),
+            cancel_label: RefCell::default(),
+            places: RefCell::default(),
+            client: RefCell::default(),
             events: RefCell::default(),
             answer: RefCell::default(),
             showing: Cell::new(0),
@@ -132,10 +147,19 @@ impl Dialog {
             windows::Win32::System::Com::CoTaskMemFree(Some(name.0.cast()));
             read
         }).filter(|name| !name.is_empty());
+        // The folder the application insists on; the one the system's dialog would open,
+        // which it remembers for the application, else the default, when Oxyde remembers none.
         let folder = self.folder.borrow().clone().as_ref().and_then(items::path)
-            .or_else(|| save_as.as_ref().and_then(|item| item.GetParent().ok()).as_ref().and_then(items::path))
-            .or_else(|| self.inner.GetFolder().ok().as_ref().and_then(items::path))
+            .or_else(|| save_as.as_ref().and_then(|item| item.GetParent().ok()).as_ref().and_then(items::path));
+        let default_folder = self.inner.GetFolder().ok().as_ref().and_then(items::path)
             .or_else(|| self.default_folder.borrow().clone().as_ref().and_then(items::path));
+        let controls = self.inner_controls.as_ref().map(|inner| self.custom.borrow().asked(inner)).unwrap_or_default();
+        // Windows remembers a folder for each application, and for each of its keys.
+        let program = std::env::current_exe().ok().and_then(|exe| exe.file_name().map(|name| name.to_string_lossy().to_lowercase())).unwrap_or_default();
+        let client = match self.client.borrow().as_deref() {
+            Some(key) => format!("{program}:{key}"),
+            None => program,
+        };
         Asked {
             saving: self.saving(),
             folders: options.contains(FOS_PICKFOLDERS),
@@ -149,7 +173,22 @@ impl Dialog {
             filters: self.filters.borrow().clone(),
             // Until the application chooses one, the system's dialog counts none: the first is shown.
             filter: self.inner.GetFileTypeIndex().unwrap_or(1).max(1),
-            choices: self.inner_controls.as_ref().map(|inner| self.custom.borrow().asked(inner)).unwrap_or_default(),
+            choices: controls.choices,
+            name_label: self.name_label.borrow().clone(),
+            cancel_label: self.cancel_label.borrow().clone(),
+            show_hidden: options.contains(FOS_FORCESHOWHIDDEN),
+            no_overwrite_prompt: self.saving() && !options.contains(FOS_OVERWRITEPROMPT),
+            strict_types: options.contains(FOS_STRICTFILETYPES),
+            no_read_only: options.contains(FOS_NOREADONLYRETURN),
+            needs_interaction: options.contains(FOS_OKBUTTONNEEDSINTERACTION),
+            hide_pinned: options.contains(FOS_HIDEPINNEDPLACES),
+            places: self.places.borrow().clone(),
+            client: Some(client).filter(|client| !client.is_empty()),
+            default_folder,
+            fields: controls.fields,
+            notes: controls.notes,
+            accept_menu: controls.accept_menu,
+            disabled: controls.disabled,
         }
     }
 
@@ -159,7 +198,10 @@ impl Dialog {
         let Some(inner) = &self.inner_controls else { return };
         let listeners: Vec<IFileDialogControlEvents> = self.events.borrow().iter().filter_map(|(_, listener)| listener.cast().ok()).collect();
         for (id, value) in choices {
-            if self.custom.borrow().is_check(*id) {
+            if self.custom.borrow().is_edit(*id) {
+                // As typed: the system's dialog tells no listener of an edit box's text.
+                let _ = inner.SetEditBoxText(*id, &windows::core::HSTRING::from(value.as_str()));
+            } else if self.custom.borrow().is_check(*id) {
                 let checked = value == "true";
                 if inner.GetCheckButtonState(*id).is_ok_and(|known| known.as_bool() == checked) || inner.SetCheckButtonState(*id, checked).is_err() {
                     continue;
@@ -216,8 +258,13 @@ impl Dialog {
                 let _ = self.inner.SetFileTypeIndex(filter);
             }
             self.set_choices(&answer.choices);
+            let recent = if options.contains(FOS_DONTADDTORECENT) { Vec::new() } else { answer.paths.clone() };
             self.answer.replace(Some(answer));
             if self.accepted() {
+                for path in recent {
+                    let wide: Vec<u16> = path.encode_utf16().chain([0]).collect();
+                    windows::Win32::UI::Shell::SHAddToRecentDocs(windows::Win32::UI::Shell::SHARD_PATHW.0 as u32, Some(wide.as_ptr().cast()));
+                }
                 return Some(S_OK);
             }
             // The application refuses the choice and has said why: the user chooses again.
@@ -465,9 +512,23 @@ forward!(set_file_type_index => SetFileTypeIndex(index: u32));
 forward!(set_options => SetOptions(options: FILEOPENDIALOGOPTIONS));
 forward!(get_options => GetOptions(options: *mut FILEOPENDIALOGOPTIONS));
 forward!(set_file_name => SetFileName(name: PCWSTR));
-forward!(set_file_name_label => SetFileNameLabel(label: PCWSTR));
-forward!(add_place => AddPlace(item: *mut c_void, place: FDAP));
-forward!(set_client_guid => SetClientGuid(guid: *const GUID));
+noted!(set_file_name_label => SetFileNameLabel, name_label);
+
+unsafe extern "system" fn add_place<const N: usize>(this: *mut c_void, item: *mut c_void, place: FDAP) -> HRESULT {
+    let dialog = Dialog::of::<N>(this);
+    if let Some(path) = item_of(item).as_ref().and_then(items::path) {
+        dialog.places.borrow_mut().push((place == FDAP_TOP, path));
+    }
+    (Interface::vtable(&dialog.inner).AddPlace)(Interface::as_raw(&dialog.inner), item, place)
+}
+
+unsafe extern "system" fn set_client_guid<const N: usize>(this: *mut c_void, guid: *const GUID) -> HRESULT {
+    let dialog = Dialog::of::<N>(this);
+    if !guid.is_null() {
+        dialog.client.replace(Some(format!("{:?}", *guid)));
+    }
+    (Interface::vtable(&dialog.inner).SetClientGuid)(Interface::as_raw(&dialog.inner), guid)
+}
 forward!(clear_client_data => ClearClientData());
 noted!(set_title => SetTitle, title);
 noted!(set_ok_button_label => SetOkButtonLabel, accept);
@@ -544,7 +605,9 @@ static SAVE: IFileSaveDialog_Vtbl = IFileSaveDialog_Vtbl {
 };
 
 unsafe extern "system" fn set_cancel_button_label(this: *mut c_void, label: PCWSTR) -> HRESULT {
-    let Some(inner) = &Dialog::of::<1>(this).inner_second else { return E_NOTIMPL };
+    let dialog = Dialog::of::<1>(this);
+    dialog.cancel_label.replace(text_of(label));
+    let Some(inner) = &dialog.inner_second else { return E_NOTIMPL };
     (Interface::vtable(inner).SetCancelButtonLabel)(Interface::as_raw(inner), label)
 }
 
@@ -587,10 +650,10 @@ unsafe fn text_or_empty(text: PCWSTR) -> String {
     text_of(text).unwrap_or_default()
 }
 
-control!(enable_open_drop_down => EnableOpenDropDown(control: u32), |dialog, _| unlike(dialog));
+control!(enable_open_drop_down => EnableOpenDropDown(control: u32), |dialog, id| dialog.custom.borrow_mut().add_open_drop_down(id));
 control!(add_menu => AddMenu(control: u32, label: PCWSTR), |dialog, _, _| unlike(dialog));
 control!(add_push_button => AddPushButton(control: u32, label: PCWSTR), |dialog, _, _| unlike(dialog));
-control!(add_edit_box => AddEditBox(control: u32, text: PCWSTR), |dialog, _, _| unlike(dialog));
+control!(add_edit_box => AddEditBox(control: u32, text: PCWSTR), |dialog, id, _| dialog.custom.borrow_mut().add_edit(id));
 control!(add_combo_box => AddComboBox(control: u32), |dialog, id| dialog.custom.borrow_mut().add_choice(id));
 control!(add_radio_button_list => AddRadioButtonList(control: u32), |dialog, id| dialog.custom.borrow_mut().add_choice(id));
 control!(add_check_button => AddCheckButton(control: u32, label: PCWSTR, checked: BOOL), |dialog, id, text, _| dialog.custom.borrow_mut().add_check(id, &text_or_empty(text)));

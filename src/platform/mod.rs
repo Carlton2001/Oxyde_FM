@@ -188,6 +188,56 @@ pub struct FileChooserChoice {
     pub initial: String,
 }
 
+/// A text field an application adds beside the files (Windows' edit boxes): its
+/// text goes back with the choice, as a choice's answer.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FileChooserField {
+    pub id: String,
+    pub label: String,
+    pub text: String,
+}
+
+/// A folder an application adds to the places, at their start or their end.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FileChooserPlace {
+    pub path: std::path::PathBuf,
+    pub first: bool,
+}
+
+/// What only some applications ask of their dialog, Windows' options for the most
+/// part; the default asks none of it and keeps the chooser's own behavior.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FileChooserExtras {
+    /// The application's labels for the name field and for Cancel.
+    pub name_label: Option<String>,
+    pub cancel_label: Option<String>,
+    /// Hidden and system files are listed from the start.
+    pub show_hidden: bool,
+    /// A file saved over is replaced without asking.
+    pub no_overwrite_prompt: bool,
+    /// A name saved must have an extension of the type filter shown, which is added.
+    pub strict_types: bool,
+    /// A read-only file or folder cannot be saved to.
+    pub refuse_read_only: bool,
+    /// The button waits for the user to browse, select or type.
+    pub needs_interaction: bool,
+    /// The user's pinned places are left out.
+    pub hide_pinned: bool,
+    pub places: Vec<FileChooserPlace>,
+    /// Who asks, to start where that application last chose: its own key, else none.
+    pub client: Option<String>,
+    /// The folder to start in when nothing better is known: the application's default.
+    pub default_folder: Option<std::path::PathBuf>,
+    pub fields: Vec<FileChooserField>,
+    /// Texts the application shows beside its controls, read only.
+    pub notes: Vec<String>,
+    /// Ways to accept, offered in a menu beside the button (Windows' open drop-down):
+    /// the answer chosen goes back as this choice's, the first one by default.
+    pub accept_menu: Option<FileChooserChoice>,
+    /// The choices and fields shown but not to be changed.
+    pub disabled: Vec<String>,
+}
+
 /// What the user chose in a file chooser.
 #[derive(Debug, Default, PartialEq)]
 pub struct FileChooserAnswer {
@@ -220,6 +270,7 @@ pub struct FileChooserRequest {
     /// to the dialog (Windows): the shown filter's when it names one, else this one.
     pub default_extension: Option<String>,
     pub choices: Vec<FileChooserChoice>,
+    pub extras: FileChooserExtras,
     /// The application's window, which the chooser opens over.
     pub parent: Option<FileChooserParent>,
     /// Receives the choice, or nothing when the user cancels.
