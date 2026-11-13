@@ -290,6 +290,12 @@ pub(super) fn render_advanced_body(
                     .dragging(pending.dialog.sidebar_resize.is_some())
                     .on_press(move |event, _, cx| {
                         edit(&sidebar_drag, cx, |p| {
+                            // A double click restores the default width, as the operations
+                            // window's list, then a drag goes on from there.
+                            if event.click_count == 2 {
+                                p.dialog.sidebar_width = super::DEFAULT_SIDEBAR_WIDTH
+                                    .min(super::max_sidebar_width(p.dialog.width));
+                            }
                             p.dialog.sidebar_resize =
                                 Some((event.position, p.dialog.sidebar_width))
                         });

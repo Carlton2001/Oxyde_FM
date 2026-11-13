@@ -670,7 +670,7 @@ conflict-back = Retour
 conflict-recent-tab = Récents
 conflict-older-tab = Anciens
 conflict-automatic = Auto
-conflict-apply-summary = Appliquer: { $replace_count ->
+conflict-apply-summary = Appliquer : { $replace_count ->
         [one] { $replace_number } remplacement
        *[other] { $replace_number } remplacements
     }, { $skip_count ->

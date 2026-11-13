@@ -39,7 +39,7 @@ impl Default for ConflictDialogState {
         Self {
             advanced: false,
             width: 52.0,
-            sidebar_width: 25.0,
+            sidebar_width: DEFAULT_SIDEBAR_WIDTH,
             sidebar_resize: None,
             focus: None,
             selected: 0,
@@ -110,7 +110,7 @@ pub(crate) fn render_conflict_dialog(
     let max_width = (crate::ui::components::client_decorations::content_bounds(window).size.width / window.rem_size()).max(2.0);
     pending.dialog.width = max_width;
     let width = pending.dialog.width.min(max_width);
-    let sidebar_width = pending.dialog.sidebar_width.min((width - 20.0).max(10.0));
+    let sidebar_width = pending.dialog.sidebar_width.min(max_sidebar_width(width));
     let rows = visible(pending);
     let current = &pending.conflicts[pending.dialog.selected];
     let comparison = render_comparison(pending, system, &handle, cx);
@@ -139,4 +139,17 @@ pub(crate) fn render_conflict_dialog(
         body
     };
     render_frame(pending, body, simple_width, handle, window, cx)
+}
+
+/// The advanced view's list width at first, and after a double click on its edge, in rems.
+const DEFAULT_SIDEBAR_WIDTH: f32 = 25.0;
+/// The narrowest the advanced view's list gets, in rems.
+const MIN_SIDEBAR_WIDTH: f32 = 10.0;
+/// The narrowest the comparison beside it gets, in rems: a card's metadata line
+/// (label, date and time) beside the icon, in every language's default format.
+const MIN_DETAIL_WIDTH: f32 = 27.0;
+
+/// The widest the list may be in a window `width` rems wide, keeping the comparison's minimum.
+fn max_sidebar_width(width: f32) -> f32 {
+    (width - MIN_DETAIL_WIDTH).max(MIN_SIDEBAR_WIDTH)
 }

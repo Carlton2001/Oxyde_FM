@@ -159,7 +159,7 @@ pub(super) fn render_frame(
                         return;
                     }
                     p.dialog.sidebar_width =
-                        (initial_width + dx).clamp(10.0, (p.dialog.width - 20.0).max(10.0));
+                        (initial_width + dx).clamp(super::MIN_SIDEBAR_WIDTH, super::max_sidebar_width(p.dialog.width));
                 });
             });
             let released = release_handle.clone();

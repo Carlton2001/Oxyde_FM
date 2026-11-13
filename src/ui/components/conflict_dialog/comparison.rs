@@ -29,20 +29,24 @@ pub(super) fn conflict_icon(
         ))
         .into_any_element()
 }
+/// A label and its value, the value going under the label when the card is too narrow
+/// for both, so a long date never runs past the card.
 fn metadata(label: SharedString, value: String, highlight: bool, cx: &App) -> impl IntoElement {
     div()
         .flex()
-        .flex_none()
+        .flex_wrap()
+        .min_w_0()
         .items_center()
-        .gap(rems(0.5))
-        .whitespace_nowrap()
+        .gap_x(rems(0.5))
         .child(
             div()
+                .whitespace_nowrap()
                 .text_color(cx.theme().text_muted)
                 .child(format!("{label} :")),
         )
         .child(
             div()
+                .whitespace_nowrap()
                 .text_color(if highlight {
                     cx.theme().accent
                 } else {
@@ -98,6 +102,7 @@ fn card(
         .child(
             div()
                 .flex()
+                .flex_wrap()
                 .items_center()
                 .justify_between()
                 .min_h(rems(1.25))
