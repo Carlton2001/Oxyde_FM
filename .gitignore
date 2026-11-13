@@ -1,5 +1,6 @@
 # Rust/Cargo
 /target/
+/shell/oxyde-file-dialog/target/
 # Keep Cargo.lock tracked for reproducible application builds.
 **/*.rs.bk
 *.profraw
