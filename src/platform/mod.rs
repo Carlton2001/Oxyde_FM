@@ -321,8 +321,10 @@ pub trait Platform: Send + Sync {
     /// Includes foreign windows overlapping the owner's client rectangle.
     fn file_drag_pointer_outside(&self, _window: raw_window_handle::RawWindowHandle) -> bool { false }
     /// Deferred placement of a passive drag ghost; topmost only for a native session.
+    /// `size` includes a transparent `inset` on each side, for the shadow: the visible ghost,
+    /// not the window, keeps its distance from the cursor.
     fn place_drag_window(&self, _window: raw_window_handle::RawWindowHandle,
-        _size: [f32; 2], _scale: f32, _native: bool) -> Result<(), String> { Ok(()) }
+        _size: [f32; 2], _inset: f32, _scale: f32, _native: bool) -> Result<(), String> { Ok(()) }
     /// Cancel queued placements and hide this ghost permanently until destruction.
     fn dismiss_drag_window(&self, _window: raw_window_handle::RawWindowHandle) -> Result<(), String> { Ok(()) }
     /// Diagnostic scan of this process only. Call from a background thread.

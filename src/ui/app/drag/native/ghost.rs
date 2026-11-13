@@ -137,11 +137,17 @@ pub(super) fn sync(native: bool, parent: &Window, cx: &mut App) {
     });
 }
 
+/// Transparent margin around the ghost for its shadow, as native tooltips reserve.
+fn shadow_inset(window: &Window) -> Pixels {
+    window.rem_size() * 2.0
+}
+
 fn place(ghost: &Ghost, window: &Window) {
     if let (Some(measured), Ok(raw)) = (ghost.measured, HasWindowHandle::window_handle(window)) {
         let _ = platform().place_drag_window(
             raw.as_raw(),
             [measured.width.as_f32(), measured.height.as_f32()],
+            shadow_inset(window).as_f32(),
             window.scale_factor(),
             ghost.native,
         );
@@ -210,9 +216,11 @@ impl Element for MeasuredGhost {
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Size<Pixels>) {
-        let measured = self
+        let inset = shadow_inset(window) * 2.0;
+        let content = self
             .content
             .layout_as_root(AvailableSpace::min_size(), window, cx);
+        let measured = size(content.width + inset, content.height + inset);
         let style = Style {
             size: size(measured.width.into(), measured.height.into()),
             ..Default::default()
@@ -228,7 +236,8 @@ impl Element for MeasuredGhost {
         window: &mut Window,
         cx: &mut App,
     ) {
-        self.content.prepaint_at(Point::default(), window, cx);
+        let inset = shadow_inset(window);
+        self.content.prepaint_at(point(inset, inset), window, cx);
         if self.owner.read(cx).measured != Some(*measured) {
             let owner = self.owner.clone();
             let measured = *measured;

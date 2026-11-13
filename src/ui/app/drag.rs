@@ -185,6 +185,8 @@ fn ghost_content(paths: &[String], single_is_dir: bool, is_copy: bool, new_tab: 
                 .bg(theme.surface)
                 .border(rems(0.0625))
                 .border_color(theme.accent)
+                // Lifted like the dragged tab and pinned row.
+                .shadow(crate::ui::style::rem_shadow(true))
                 .flex()
                 .flex_col()
                 .gap(rems(0.375))

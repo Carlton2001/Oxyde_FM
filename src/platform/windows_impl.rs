@@ -848,8 +848,8 @@ impl Platform for WindowsPlatform {
     }
 
     fn place_drag_window(&self, window: raw_window_handle::RawWindowHandle,
-        size: [f32; 2], scale: f32, native: bool) -> Result<(), String> {
-        super::windows_file_drag::place_ghost(window, size, scale, native)
+        size: [f32; 2], inset: f32, scale: f32, native: bool) -> Result<(), String> {
+        super::windows_file_drag::place_ghost(window, size, inset, scale, native)
     }
 
     fn file_drag_pointer_outside(&self, window: raw_window_handle::RawWindowHandle) -> bool {

@@ -34,6 +34,8 @@ struct Pending {
 #[derive(Clone, Copy)]
 struct Placement {
     size: [f32; 2],
+    /// Transparent shadow margin on each side, included in `size`.
+    inset: f32,
     scale: f32,
     native: bool,
 }
@@ -115,6 +117,7 @@ pub(super) fn queue(
 pub(super) fn place_ghost(
     raw: RawWindowHandle,
     size: [f32; 2],
+    inset: f32,
     scale: f32,
     native: bool,
 ) -> std::result::Result<(), String> {
@@ -132,6 +135,7 @@ pub(super) fn place_ghost(
                 window.0 as isize,
                 Placement {
                     size,
+                    inset,
                     scale,
                     native,
                 },
@@ -208,8 +212,11 @@ unsafe extern "system" fn subclass(
                 };
                 let width = (placement.size[0] * scale).ceil() as i32;
                 let height = (placement.size[1] * scale).ceil() as i32;
-                let mut x = point.x + (12.0 * scale) as i32;
-                let mut y = point.y + (4.0 * scale) as i32;
+                // The visible ghost keeps its distances to the cursor and the work area; only
+                // its transparent shadow margin may reach past them.
+                let inset = (placement.inset * scale).round() as i32;
+                let mut x = point.x + (12.0 * scale) as i32 - inset;
+                let mut y = point.y + (4.0 * scale) as i32 - inset;
                 use windows::Win32::Graphics::Gdi::{
                     GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
                 };
@@ -222,19 +229,19 @@ unsafe extern "system" fn subclass(
                 }
                 .as_bool()
                 {
-                    if x + width > info.rcWork.right {
-                        x = point.x - width - (12.0 * scale) as i32;
+                    if x + width - inset > info.rcWork.right {
+                        x = point.x - width + inset - (12.0 * scale) as i32;
                     }
-                    if y + height > info.rcWork.bottom {
-                        y = point.y - height - (4.0 * scale) as i32;
+                    if y + height - inset > info.rcWork.bottom {
+                        y = point.y - height + inset - (4.0 * scale) as i32;
                     }
                     x = x.clamp(
-                        info.rcWork.left,
-                        (info.rcWork.right - width).max(info.rcWork.left),
+                        info.rcWork.left - inset,
+                        (info.rcWork.right - width + inset).max(info.rcWork.left - inset),
                     );
                     y = y.clamp(
-                        info.rcWork.top,
-                        (info.rcWork.bottom - height).max(info.rcWork.top),
+                        info.rcWork.top - inset,
+                        (info.rcWork.bottom - height + inset).max(info.rcWork.top - inset),
                     );
                 }
                 let _ = unsafe {

@@ -89,14 +89,14 @@ fn release_hides_the_preview_before_drop_without_ending_the_transfer() {
 #[test]
 fn a_dismissed_preview_cannot_be_reshown_by_queued_or_late_placements() {
     let ghost = TestWindow::new();
-    place_ghost(ghost.raw(), [1.0, 1.0], 1.0, true).unwrap();
+    place_ghost(ghost.raw(), [1.0, 1.0], 0.0, 1.0, true).unwrap();
     dismiss_ghost(ghost.raw()).unwrap();
     unsafe {
         SendMessageW(ghost.0, PLACE, Some(WPARAM(0)), Some(LPARAM(0)));
     }
     flush_dismissals();
     assert!(!unsafe { IsWindowVisible(ghost.0) }.as_bool());
-    place_ghost(ghost.raw(), [1.0, 1.0], 1.0, true).unwrap();
+    place_ghost(ghost.raw(), [1.0, 1.0], 0.0, 1.0, true).unwrap();
     unsafe {
         SendMessageW(ghost.0, PLACE, Some(WPARAM(0)), Some(LPARAM(0)));
     }
