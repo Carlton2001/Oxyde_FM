@@ -8,12 +8,14 @@ use crate::ui::{
 use gpui::*;
 use oxyde_lib::commands::search::AdvancedSearchOptions;
 
-pub(crate) fn close_advanced_search_windows(cx: &mut App) {
+pub(crate) fn close_advanced_search_windows(cx: &mut App) -> bool {
+    let mut closed = false;
     for handle in cx.windows() {
         if let Some(handle) = handle.downcast::<AdvancedSearchWindow>() {
-            let _ = handle.update(cx, |_, window, cx| { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() });
+            closed |= handle.update(cx, |_, window, cx| { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() }).is_ok();
         }
     }
+    closed
 }
 
 impl OxydeApp {

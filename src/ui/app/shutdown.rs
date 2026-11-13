@@ -54,6 +54,37 @@ pub(crate) fn finish_pending_cleanup() {
     HISTORY.finish();
 }
 
+impl super::OxydeApp {
+    /// At start, removes the partial output an ended Oxyde left in its staging
+    /// folders (`staging_journal`), then says where.
+    pub(crate) fn recover_interrupted_operations(&mut self, cx: &mut gpui::Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let recovered = cx.background_executor().spawn(async { oxyde_lib::systems::staging_journal::recover() }).await;
+            if recovered.removed.is_empty() {
+                return;
+            }
+            log::info!("Interrupted staging removed: {:?}", recovered.removed);
+            let mut folders: Vec<String> = Vec::new();
+            for parent in recovered.removed.iter().filter_map(|path| path.parent()) {
+                let parent = parent.to_string_lossy().into_owned();
+                if !folders.contains(&parent) {
+                    folders.push(parent);
+                }
+            }
+            let _ = this.update(cx, |this, cx| {
+                this.toast(
+                    super::toasts::ToastKind::Success,
+                    crate::ui::i18n::Message::InterruptedOutputRemoved,
+                    folders.join(", "),
+                    recovered.removed.len(),
+                    cx,
+                );
+            });
+        })
+        .detach();
+    }
+}
+
 #[cfg(test)]
 #[path = "shutdown/tests/cleanup.rs"]
 mod tests;

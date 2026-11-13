@@ -8,15 +8,17 @@ use oxyde_lib::models::DriveInfo;
 use std::{collections::HashSet, sync::Arc};
 
 /// Secondary searches must not keep Oxyde alive after its main window closes.
-pub(crate) fn close_duplicate_windows(cx: &mut App) {
+pub(crate) fn close_duplicate_windows(cx: &mut App) -> bool {
+    let mut closed = false;
     for handle in cx.windows() {
         if let Some(handle) = handle.downcast::<DuplicateWindow>() {
-            let _ = handle.update(cx, |this, window, _| {
+            closed |= handle.update(cx, |this, window, _| {
                 cancel_find_duplicates(&this.cancellation);
                 window.remove_window();
-            });
+            }).is_ok();
         }
     }
+    closed
 }
 
 impl OxydeApp {

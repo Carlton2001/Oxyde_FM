@@ -18,10 +18,12 @@ mod execution;
 mod extract;
 mod scheduler;
 mod summaries;
-pub use summaries::OperationProgress;
+pub use summaries::{OperationProgress, OperationSummary};
 pub use copy::with_copy_workers_for_benchmark;
 mod item_outcomes;
 pub use item_outcomes::ItemOutcome;
+mod overview;
+pub use overview::compare_names;
 
 const SPEED_HISTORY_LIMIT: usize = 60;
 const FILE_OPS_LOG_TARGET: &str = module_path!();
@@ -57,6 +59,10 @@ pub struct FileOperation {
     pub sequence: u64,
     pub op_type: FileOpType,
     pub sources: Vec<PathBuf>,
+    /// The folder holding every source, when they share one.
+    pub source_parent: Option<PathBuf>,
+    /// The first sources in natural name order, for previews.
+    pub first_sources: Vec<PathBuf>,
     pub destination: Option<PathBuf>, // None for Delete/Trash
     pub status: OpStatus,
     pub total_bytes: u64,
@@ -68,6 +74,8 @@ pub struct FileOperation {
     pub speed_history: Vec<u64>,
     pub duration_ms: Option<u64>,
     started_at: Option<std::time::Instant>,
+    paused_since: Option<std::time::Instant>,
+    paused_total: std::time::Duration,
     speed_sample_at: Option<std::time::Instant>,
     speed_sample_bytes: u64,
     pub compression_quality: String,
@@ -129,6 +137,8 @@ impl FileOperation {
             sequence: self.sequence,
             op_type: self.op_type.clone(),
             sources: self.sources.clone(),
+            source_parent: self.source_parent.clone(),
+            first_sources: self.first_sources.clone(),
             destination: self.destination.clone(),
             status: self.status.clone(),
             total_bytes: self.total_bytes,
@@ -140,6 +150,8 @@ impl FileOperation {
             speed_history: self.speed_history.clone(),
             duration_ms: self.duration_ms,
             started_at: self.started_at,
+            paused_since: self.paused_since,
+            paused_total: self.paused_total,
             speed_sample_at: None,
             speed_sample_bytes: 0,
             compression_quality: self.compression_quality.clone(),
@@ -192,6 +204,8 @@ impl FileOperation {
             id: Uuid::new_v4().to_string(),
             sequence: 0,
             op_type,
+            source_parent: overview::common_parent(&sources),
+            first_sources: overview::first_by_name(&sources, overview::PREVIEW_LEN),
             sources,
             destination,
             status: OpStatus::Queued,
@@ -204,6 +218,8 @@ impl FileOperation {
             speed_history: Vec::new(),
             duration_ms: None,
             started_at: None,
+            paused_since: None,
+            paused_total: std::time::Duration::ZERO,
             speed_sample_at: None,
             speed_sample_bytes: 0,
             compression_quality: "normal".into(),
@@ -456,6 +472,7 @@ impl FileOperationManager {
                 return false;
             }
             if paused {
+                locked.pause_clock(true);
                 locked.pause_flag.store(true, Ordering::Relaxed);
                 locked.resume_requested = false;
                 locked.status = OpStatus::Paused;

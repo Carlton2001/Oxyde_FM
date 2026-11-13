@@ -108,6 +108,21 @@ impl OxydeApp {
         Some((self.main_window, properties))
     }
 
+    /// Shows `folder` in the main window, in a new tab unless the active one shows it,
+    /// with `item` selected; returns the window to bring forward, if it is open.
+    pub(crate) fn show_in_main_window(&mut self, folder: String, item: Option<String>, cx: &mut Context<Self>) -> Option<gpui::AnyWindowHandle> {
+        let pane = self.state.active_pane_id.clone();
+        let shown = self.state.find_pane(&pane).is_some_and(|pane| shows(&pane.active_tab().path, &folder));
+        if !shown {
+            self.add_tab(&pane, folder, true, cx);
+        }
+        if let Some(item) = item {
+            self.select_received_items(vec![item], cx);
+        }
+        cx.notify();
+        self.main_window
+    }
+
     /// Selects `items` in the active tab, which shows their folder, and scrolls to the
     /// first once the listing is there.
     fn select_received_items(&mut self, items: Vec<String>, cx: &mut Context<Self>) {

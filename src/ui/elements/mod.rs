@@ -10,4 +10,5 @@ pub(crate) mod segmented;
 pub(crate) mod bar_button;
 pub(crate) mod separator;
 pub(crate) mod rounded_fill;
+pub(crate) mod progress_bar;
 pub(crate) mod color_picker;

@@ -34,6 +34,9 @@ pub(super) struct Staging {
     owned_identity: std::cell::Cell<Option<StagingIdentity>>,
     path: PathBuf,
     pub file: PathBuf,
+    /// Lets a later start remove this folder if the process ends first; dropped
+    /// after the cleanup below, with the other fields.
+    _journal: Option<super::staging_journal::Entry>,
 }
 impl Staging {
     fn new(parents: &super::path_parents::HeldParents) -> io::Result<Self> {
@@ -47,7 +50,9 @@ impl Staging {
         let leaf = format!("{prefix}{}", uuid::Uuid::new_v4());
         let path = parents.resolved_path(Path::new(&leaf))?;
         let (directory, pin) = platform().create_copy_staging(parents.directory(), &path)?;
+        let journal = super::staging_journal::record(&path, &directory, &pin);
         Ok(Self {
+            _journal: journal,
             directory,
             pin: Some(pin),
             owned_output: std::cell::RefCell::new(None),

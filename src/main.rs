@@ -119,6 +119,9 @@ fn restore_folder_handler() {
 }
 
 fn main() {
+    // Staging folders of this process and of its workers are noted, so the next
+    // start can remove those an ended process left.
+    oxyde_lib::systems::staging_journal::enable();
     #[cfg(target_os = "windows")]
     if oxyde_lib::commands::icon_session_worker::run_if_requested() { return; }
     #[cfg(target_os = "windows")]
@@ -244,6 +247,7 @@ fn main() {
                     None => this.show_only_locations(&startup_locations),
                 }
                 if initialize_date_format && !load_failed { this.save_preferences(cx); }
+                this.recover_interrupted_operations(cx);
             });
             if for_file_chooser {
                 // Started by the bus for the portal: an Oxyde left without a window, and

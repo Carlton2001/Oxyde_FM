@@ -232,6 +232,7 @@ impl OxydeApp {
             || self.network_force_confirmation.is_some()
             || self.pending_trash_delete.is_some()
             || self.file_operation_notice.is_some()
+            || self.quit_confirmation.is_some()
         {
             return;
         }

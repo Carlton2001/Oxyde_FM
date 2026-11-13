@@ -75,7 +75,7 @@ pub fn render_operations_footer(
         })
         .when(enabled, |button| {
             button.on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                super::open_operations_window(handle.clone(), cx);
+                super::open_operations_window(handle.clone(), None, cx);
             })
         })
 }

@@ -34,7 +34,7 @@ impl OxydeApp {
 
 /// The width of `text` in a details column, in logical pixels: the bold of the
 /// headers when `bold`, the tabular figures of the value cells when `tabular`.
-pub(in crate::ui::app) fn column_text_width(window: &Window, cx: &App, text: &str, bold: bool, tabular: bool) -> f32 {
+pub(crate) fn column_text_width(window: &Window, cx: &App, text: &str, bold: bool, tabular: bool) -> f32 {
     let mut font = window.text_style().font();
     font.family = "Inter".into();
     font.weight = if bold { FontWeight::BOLD } else { crate::ui::style::DEFAULT_FONT_WEIGHT };
@@ -57,7 +57,7 @@ pub(in crate::ui::app) fn type_column_text(label: &str, i18n: &crate::ui::i18n::
 }
 
 /// What the size column shows for a measured size.
-pub(in crate::ui::app) fn size_column_text(size: u64, directory: bool, calculated: bool, i18n: &crate::ui::i18n::I18n) -> String {
+pub(crate) fn size_column_text(size: u64, directory: bool, calculated: bool, i18n: &crate::ui::i18n::I18n) -> String {
     if directory && calculated && size == 0 {
         i18n.text(Message::FolderSizeEmpty).to_string()
     } else {

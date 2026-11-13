@@ -12,6 +12,7 @@ mod archive_move_sources;
 pub mod file_ops;
 pub(crate) mod transfer_naming;
 pub(crate) mod file_copy;
+pub mod staging_journal;
 pub(crate) mod copy_diagnostics;
 #[doc(hidden)]
 pub mod copy_benchmark;

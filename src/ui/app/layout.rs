@@ -1,4 +1,4 @@
-pub(super) mod measurements;
+pub(crate) mod measurements;
 mod geometry;
 mod pane;
 mod scroll;

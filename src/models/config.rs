@@ -86,9 +86,9 @@ pub struct AppConfig {
     /// manager keeps its own order; folders missing here follow at the end.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pinned_order: Vec<String>,
-    /// Window-local top-left coordinates for the operations panel.
-    #[serde(default)]
-    pub operations_panel_position: Option<[f32; 2]>,
+    /// Width of the operations window's list, in rems, as last dragged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operations_list_width: Option<f32>,
     #[serde(default = "default_true")]
     pub confirm_delete: bool,
     /// Snapshots interpreted and validated by their GPUI views.
@@ -159,7 +159,7 @@ impl Default for AppConfig {
             show_network: true,
             show_onedrive: true,
             pinned_order: Vec::new(),
-            operations_panel_position: None,
+            operations_list_width: None,
             confirm_delete: true,
             workspace_state: None,
             last_notified_update: None,
@@ -186,7 +186,7 @@ impl AppConfig {
         let duplicate_search_options = self.duplicate_search_options.take();
         let duplicate_search_window_size = self.duplicate_search_window_size.take();
         let file_chooser_options = self.file_chooser_options.take();
-        let operations_panel_position = self.operations_panel_position;
+        let operations_list_width = self.operations_list_width;
         let window_placement = self.window_placement;
         let tool_window_placements = std::mem::take(&mut self.tool_window_placements);
         let custom_themes = std::mem::take(&mut self.custom_themes);
@@ -204,7 +204,7 @@ impl AppConfig {
             duplicate_search_options,
             duplicate_search_window_size,
             file_chooser_options,
-            operations_panel_position,
+            operations_list_width,
             window_placement,
             tool_window_placements,
             ..Self::default()
@@ -229,7 +229,7 @@ mod reset_tests {
             workspace_state: Some(serde_json::json!({"tabs": ["C:/"]})),
             duplicate_search_options: Some(serde_json::json!([true, false, true])),
             duplicate_search_window_size: Some(serde_json::json!([900.0, 650.0])),
-            operations_panel_position: Some([20.0, 30.0]),
+            operations_list_width: Some(20.0),
             window_placement: Some(super::WindowPlacement {
                 x: -800.0, y: 30.0, width: 700.0, height: 500.0, maximized: true,
             }),
@@ -247,7 +247,7 @@ mod reset_tests {
         assert_eq!(config.workspace_state, previous.workspace_state);
         assert_eq!(config.duplicate_search_options, previous.duplicate_search_options);
         assert_eq!(config.duplicate_search_window_size, previous.duplicate_search_window_size);
-        assert_eq!(config.operations_panel_position, Some([20.0, 30.0]));
+        assert_eq!(config.operations_list_width, Some(20.0));
         assert_eq!(config.window_placement, previous.window_placement);
     }
 }
@@ -422,7 +422,7 @@ mod tests {
         let path = dir.path().join("config.json");
         fs::write(&path, r#"{"theme":"oxyde-dark","language":"fr","search_limit":123,"duplicate_search_options":[false,true,true]}"#).unwrap();
         let mut config = ConfigManager::read_from_path(&path).unwrap();
-        config.operations_panel_position = Some([42.5, 87.25]);
+        config.operations_list_width = Some(19.25);
         config.ui_rem_size = 20;
         config.date_format = "ISO".into();
         for (theme, language) in [
@@ -451,7 +451,7 @@ mod tests {
             assert_eq!(config.ui_rem_size, 20);
             assert_eq!(config.date_format, "ISO");
             assert_eq!(config.show_network, theme == ThemeId::Light);
-            assert_eq!(config.operations_panel_position, Some([42.5, 87.25]));
+            assert_eq!(config.operations_list_width, Some(19.25));
             assert_eq!(config.duplicate_search_options, Some(serde_json::json!([false, true, true])));
         }
     }

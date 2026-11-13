@@ -11,17 +11,19 @@ pub(super) struct ViewerWindow {
     _subscriptions: Vec<Subscription>,
 }
 
-pub(crate) fn close_viewer_windows(cx: &mut App) {
+pub(crate) fn close_viewer_windows(cx: &mut App) -> bool {
+    let mut closed = false;
     for handle in cx.windows() {
         if let Some(handle) = handle.downcast::<ViewerWindow>() {
-            let _ = handle.update(cx, |view, window, cx| {
+            closed |= handle.update(cx, |view, window, cx| {
                 view.viewer.update(cx, |viewer, _| viewer.media = None);
                 super::media_overlay::release_surface_overlays(window);
                 tool_window::close_transients(window, cx);
                 window.remove_window();
-            });
+            }).is_ok();
         }
     }
+    closed
 }
 
 impl Viewer {

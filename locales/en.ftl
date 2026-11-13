@@ -157,7 +157,6 @@ operations-title = { $count ->
    *[other] Operations ({ $count })
     }
 operations-show-panel = Show operations
-operations-hide-panel = Hide operations
 operations-queued = Queued
 operations-calculating = Calculating…
 operations-running = Running
@@ -166,6 +165,16 @@ operations-cancelled = Cancelled
 operations-completed = Completed
 operations-error = Failed
 operations-to = To: { $path }
+operations-from = From: { $path }
+operations-source-summary = { $count ->
+    [1] { $name } and { $number } other
+   *[other] { $name } and { $number } others
+    }
+operations-group-running = Running
+operations-group-finished = Finished
+operations-dismiss-finished = Remove finished
+operations-turbo = Turbo
+operations-outcome-count = { $value }: { $number }
 operations-items = { $count ->
     [1] { $done } / { $total } item
    *[other] { $done } / { $total } items
@@ -181,7 +190,6 @@ operations-stop = Cancel operation
 operations-fast = Fast mode active. Click to switch to normal mode
 operations-normal = Normal mode active. Click to switch to fast mode
 operations-dismiss = Dismiss
-operations-dismiss-all = Remove all completed operations
 operations-empty = No operations
 name-filter-placeholder = Filter by name…
 undo-operation = Undo: { $operation }
@@ -327,6 +335,7 @@ quick-search-clear = Clear
 quick-search-stop = Stop searching
 open-file-location = Open file location
 column-location = Location
+column-state = State
 tool-duplicates = Find duplicates
 
 tabs-new-tab = New tab
@@ -685,6 +694,19 @@ archive-cache-extract = Extract and open…
 archive-cache-exported = File extracted: { $detail }
 archive-limit-bytes = Processing stopped: the total decompressed size exceeds the { $limit } limit for this action. The compressed archive size is not the size being measured.
 archive-processing-failed = Archive processing failed. The file may be damaged or require too many resources.
+quit-operations-title = Quit Oxyde?
+quit-operations-prompt = { $count ->
+    [one] An operation is running or paused. Quitting cancels it: the items it has not processed yet stay as they are.
+   *[other] { $number } operations are running or paused. Quitting cancels them: the items they have not processed yet stay as they are.
+}
+quit-operations-stay = Don’t quit
+quit-operations-confirm = Cancel and quit
+quit-operations-cancelling = Cancelling operations…
+update-waits-for-operations = Finish or cancel the running operations before installing the update.
+interrupted-output-removed = { $count ->
+    [one] Removed the partial file of an interrupted operation in { $detail }
+   *[other] Removed { $number } partial files of interrupted operations in { $detail }
+}
 archive-recovery-notice = Retained files
 archive-recovery-completed = The action completed, but some files or folders were kept. Check these locations before deleting them: { $locations }
 archive-recovery-stopped = The action did not complete. Some files or folders were kept, including results already published. Check these locations before trying again: { $locations }
@@ -824,7 +846,6 @@ operations-affected-items = { $count ->
     [1] Item involved ({ $number })
    *[other] Items involved ({ $number })
     }
-operations-view-items = View all { $count } items…
 operations-items-filter = Search names or paths…
 operations-no-matching-items = No matching items.
 operations-items-loading = Loading items…

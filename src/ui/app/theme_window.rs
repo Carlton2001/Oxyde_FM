@@ -14,15 +14,17 @@ use gpui::*;
 
 const ICON: &str = "icons/palette.svg";
 
-pub(crate) fn close_theme_windows(cx: &mut App) {
+pub(crate) fn close_theme_windows(cx: &mut App) -> bool {
+    let mut closed = false;
     for handle in cx.windows() {
         if let Some(handle) = handle.downcast::<ThemeWindow>() {
-            let _ = handle.update(cx, |_, window, cx| {
+            closed |= handle.update(cx, |_, window, cx| {
                 crate::ui::components::tool_window::close_transients(window, cx);
                 window.remove_window()
-            });
+            }).is_ok();
         }
     }
+    closed
 }
 
 /// Part of the color picker following the pointer.

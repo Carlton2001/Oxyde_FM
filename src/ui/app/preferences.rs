@@ -381,6 +381,18 @@ impl OxydeApp {
         self.save_preferences(cx);
     }
 
+    /// Width of the operations window's list, in rems, as last dragged.
+    pub(crate) fn operations_list_width(&self) -> Option<f32> {
+        self.config.operations_list_width
+    }
+
+    pub(crate) fn set_operations_list_width(&mut self, width: Option<f32>, cx: &mut Context<Self>) {
+        if self.config.operations_list_width != width {
+            self.config.operations_list_width = width;
+            self.save_preferences(cx);
+        }
+    }
+
     pub(crate) fn save_preferences(&mut self, cx: &mut Context<Self>) {
         if self.preferences_load_failed {
             self.settings_error = Some(Message::SettingsLoadError);

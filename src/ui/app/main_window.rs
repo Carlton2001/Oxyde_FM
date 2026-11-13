@@ -30,6 +30,39 @@ pub(crate) fn end_when_unused(cx: &mut App) {
     }).detach();
 }
 
+/// How long the secondary windows get to fade out before the main window closes: the
+/// compositor fades a closing window, and the main window fading over them would show
+/// them through it.
+const SECONDARY_FADE: std::time::Duration = std::time::Duration::from_millis(200);
+
+/// Closes every window that belongs to the main one; true when a secondary window
+/// was open, which the main window then waits for (`remove_main_window`).
+pub(crate) fn close_secondary_windows(cx: &mut App) -> bool {
+    #[cfg(target_os = "windows")]
+    crate::ui::app::close_file_drag(cx);
+    crate::ui::components::tooltip::hover::close_native_windows(cx);
+    crate::ui::components::popup::close_all(cx);
+    // Dialogs sit above the main window: they fade out in view either way.
+    crate::ui::app::close_dialog_windows(cx);
+    // Every close runs; `|` does not stop at the first window found.
+    crate::ui::app::duplicates::close_duplicate_windows(cx)
+        | crate::ui::components::operations::close_operations_windows(cx)
+        | crate::ui::app::advanced_search::close_advanced_search_windows(cx)
+        | crate::ui::app::theme_window::close_theme_windows(cx)
+        | crate::ui::app::viewer::close_viewer_windows(cx)
+        | crate::ui::app::properties::close_properties_windows(cx)
+}
+
+/// Removes the main window once the secondary windows closed with it have faded out.
+pub(crate) fn remove_main_window(window: &mut Window, cx: &mut App) {
+    let handle = window.window_handle();
+    cx.spawn(async move |cx| {
+        cx.background_executor().timer(SECONDARY_FADE).await;
+        let _ = handle.update(cx, |_, window, _| window.remove_window());
+    })
+    .detach();
+}
+
 impl OxydeApp {
     /// What only a browsing Oxyde needs: folder watching, the tabs' listings and the
     /// update check. Once per process, before the first main window.
@@ -79,7 +112,11 @@ pub(crate) fn open(app: Entity<OxydeApp>, cx: &mut App) -> Option<AnyWindowHandl
         move |window, cx| {
             app.update(cx, |this, cx| this.observe_main_window(window, cx));
             let viewer_owner = app.downgrade();
-            window.on_window_should_close(cx, move |_, cx| {
+            window.on_window_should_close(cx, move |window, cx| {
+                // Alt+F4 or the compositor's close: unfinished operations ask first.
+                if viewer_owner.update(cx, |app, cx| app.may_quit(window, cx)).is_ok_and(|quit| !quit) {
+                    return false;
+                }
                 let _ = viewer_owner.update(cx, |app, cx| {
                     app.stop_viewers(cx);
                     app.main_window = None;
@@ -89,18 +126,12 @@ pub(crate) fn open(app: Entity<OxydeApp>, cx: &mut App) -> Option<AnyWindowHandl
                 if !super::file_chooser::is_open(cx) && !oxyde_lib::platform::platform().answering_file_chooser() {
                     crate::trace_shutdown_request("native window close");
                 }
-                #[cfg(target_os = "windows")]
-                crate::ui::app::close_file_drag(cx);
-                crate::ui::components::tooltip::hover::close_native_windows(cx);
-                crate::ui::components::popup::close_all(cx);
-                crate::ui::app::duplicates::close_duplicate_windows(cx);
-                crate::ui::components::operations::close_operations_windows(cx);
-                crate::ui::app::advanced_search::close_advanced_search_windows(cx);
-                crate::ui::app::theme_window::close_theme_windows(cx);
-                crate::ui::app::viewer::close_viewer_windows(cx);
-                crate::ui::app::properties::close_properties_windows(cx);
-                crate::ui::app::close_dialog_windows(cx);
-                true
+                // Closed here, after the secondary windows have faded out behind it.
+                let delayed = close_secondary_windows(cx);
+                if delayed {
+                    remove_main_window(window, cx);
+                }
+                !delayed
             });
             let focus_handle = app.read(cx).focus_handle.clone();
             #[cfg(target_os = "windows")]

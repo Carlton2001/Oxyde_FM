@@ -7,12 +7,14 @@ use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
 
-pub(crate) fn close_properties_windows(cx: &mut App) {
+pub(crate) fn close_properties_windows(cx: &mut App) -> bool {
+    let mut closed = false;
     for window in cx.windows() {
         if let Some(window) = window.downcast::<PropertiesWindow>() {
-            let _ = window.update(cx, |_, window, cx| { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() });
+            closed |= window.update(cx, |_, window, cx| { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() }).is_ok();
         }
     }
+    closed
 }
 
 impl OxydeApp {

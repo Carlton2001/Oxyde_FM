@@ -12,7 +12,45 @@ pub struct OperationProgress {
     pub processed_files: usize,
 }
 
+/// One line of the operations list: what it does, to what, and how far it got.
+#[derive(Clone, Debug, PartialEq)]
+pub struct OperationSummary {
+    pub progress: OperationProgress,
+    /// The first source in name order and how many there are.
+    pub first_source: Option<std::path::PathBuf>,
+    pub source_count: usize,
+}
+
 impl FileOperationManager {
+    /// Every operation, oldest first, without cloning sources or per-item results.
+    pub fn list_summaries(&self) -> Vec<OperationSummary> {
+        let operations = self.operations.lock().unwrap();
+        let mut summaries: Vec<_> = operations
+            .values()
+            .map(|operation| {
+                let op = operation.lock().unwrap();
+                (
+                    op.sequence,
+                    OperationSummary {
+                        progress: OperationProgress {
+                            id: op.id.clone(),
+                            op_type: op.op_type.clone(),
+                            status: op.status.clone(),
+                            total_bytes: op.total_bytes,
+                            processed_bytes: op.processed_bytes,
+                            total_files: op.total_files,
+                            processed_files: op.processed_files,
+                        },
+                        first_source: op.first_sources.first().cloned(),
+                        source_count: op.sources.len(),
+                    },
+                )
+            })
+            .collect();
+        summaries.sort_by_key(|(sequence, _)| *sequence);
+        summaries.into_iter().map(|(_, summary)| summary).collect()
+    }
+
     pub fn operation_progress(&self, id: &str) -> Option<OperationProgress> {
         let operations = self.operations.lock().unwrap();
         let op = operations.get(id)?.lock().unwrap();

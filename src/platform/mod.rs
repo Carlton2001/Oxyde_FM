@@ -559,6 +559,9 @@ pub trait Platform: Send + Sync {
     /// Create a private archive writer relative to staging; retain rename/delete
     /// access and exclude external writers/replacement on Windows.
     fn create_operation_output(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File>;
+    /// Reopen a staging folder an ended process left, as `create_copy_staging` holds
+    /// it, so `remove_copy_staging` can remove it; a link or reparse point is refused.
+    fn open_copy_staging(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     /// Remove only the staging marker and empty directory. Output cleanup needs a separately retained ownership proof.
     fn remove_copy_staging(&self, directory: &std::fs::File, pin: std::fs::File, path: &std::path::Path) -> std::io::Result<()>;
     fn lock_cache_file(&self, path: &std::path::Path) -> std::io::Result<std::fs::File>;

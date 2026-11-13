@@ -67,6 +67,7 @@ impl OperationScheduler {
                             waiting.insert(id.to_string(), entry);
                         } else {
                             operation.pause_flag.store(false, Ordering::Relaxed);
+                            operation.pause_clock(false);
                             operation.resume_requested = false;
                             operation.execution_started = true;
                             operation.status = if operation.started_at.is_some() {
@@ -177,6 +178,7 @@ impl FileOperationManager {
                         && !locked.cancel_flag.load(Ordering::Relaxed)
                     {
                         locked.pause_flag.store(false, Ordering::Relaxed);
+                        locked.pause_clock(false);
                         locked.resume_requested = false;
                         locked.status = if locked.started_at.is_some() {
                             OpStatus::Running

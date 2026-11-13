@@ -4,7 +4,7 @@ Reference: `SHUTDOWN-PDF-INTEL-2026-10-04`. The Windows workaround was manually 
 
 ## Contract to preserve
 
-1. Close windows and finish application cleanup: history, temporary files and last preferences, including the geometry debounce.
+1. Close windows and finish application cleanup. The secondary windows (operations, duplicates, search, theme, viewer, properties) close first and the main window 200 ms later (`main_window::close_secondary_windows`, `remove_main_window`), so the compositor's close fade of the main window does not show them through it. Then finish the cleanup: history, temporary files and last preferences, including the geometry debounce.
 2. Leave GPUI, then stop Tokio with a bound and flush logs.
 3. Call `Platform::finish_process_shutdown` at the very end.
 4. On Windows, stop the image then icon supervisors, then the icon persistence queue (bounded waits of two seconds each), then `TerminateProcess(GetCurrentProcess(), 0)`. The queue abandons pending requests; the active write can finish in that time. Linux waits up to two seconds for the file chooser portal's last replies, then returns normally.

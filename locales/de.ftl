@@ -250,7 +250,6 @@ operations-title = { $count ->
 
 operations-show-panel = Vorgänge anzeigen
 
-operations-hide-panel = Vorgänge ausblenden
 
 operations-queued = In Warteschlange
 
@@ -268,6 +267,16 @@ operations-error = Fehlgeschlagen
 
 
 operations-to = Nach: { $path }
+operations-from = Von: { $path }
+operations-source-summary = { $count ->
+    [1] { $name } und { $number } weiteres
+   *[other] { $name } und { $number } weitere
+    }
+operations-group-running = Laufend
+operations-group-finished = Abgeschlossen
+operations-dismiss-finished = Abgeschlossene entfernen
+operations-turbo = Turbo
+operations-outcome-count = { $value }: { $number }
 
 operations-items = { $count ->
     [1] { $done } / { $total } Element
@@ -295,7 +304,6 @@ operations-normal = Normalmodus aktiv. Klicken, um zum Schnellmodus zu wechseln
 
 operations-dismiss = Entfernen
 
-operations-dismiss-all = Alle abgeschlossenen Vorgänge entfernen
 
 operations-empty = Keine Vorgänge
 
@@ -509,6 +517,7 @@ quick-search-stop = Suche beenden
 open-file-location = Dateipfad öffnen
 
 column-location = Ort
+column-state = Status
 
 tool-duplicates = Duplikate finden
 
@@ -992,6 +1001,19 @@ archive-cache-extract = Entpacken und öffnen…
 archive-cache-exported = Datei entpackt: { $detail }
 archive-limit-bytes = Verarbeitung angehalten: Die gesamte entpackte Größe überschreitet die Grenze von { $limit } für diese Aktion. Die komprimierte Archivgröße wird nicht zugrunde gelegt.
 archive-processing-failed = Die Archivverarbeitung ist fehlgeschlagen. Die Datei ist möglicherweise beschädigt oder benötigt zu viele Ressourcen.
+quit-operations-title = Oxyde beenden?
+quit-operations-prompt = { $count ->
+    [one] Ein Vorgang läuft oder ist pausiert. Beenden bricht ihn ab: Noch nicht verarbeitete Elemente bleiben unverändert.
+   *[other] { $number } Vorgänge laufen oder sind pausiert. Beenden bricht sie ab: Noch nicht verarbeitete Elemente bleiben unverändert.
+}
+quit-operations-stay = Nicht beenden
+quit-operations-confirm = Abbrechen und beenden
+quit-operations-cancelling = Vorgänge werden abgebrochen…
+update-waits-for-operations = Schließen Sie laufende Vorgänge ab oder brechen Sie sie ab, bevor Sie das Update installieren.
+interrupted-output-removed = { $count ->
+    [one] Teildatei eines unterbrochenen Vorgangs in { $detail } entfernt
+   *[other] { $number } Teildateien unterbrochener Vorgänge in { $detail } entfernt
+}
 archive-recovery-notice = Aufbewahrte Dateien
 archive-recovery-completed = Die Aktion wurde abgeschlossen, aber einige Dateien oder Ordner wurden behalten. Prüfen Sie diese Speicherorte, bevor Sie sie löschen: { $locations }
 archive-recovery-stopped = Die Aktion wurde nicht abgeschlossen. Einige Dateien oder Ordner wurden behalten, einschließlich bereits veröffentlichter Ergebnisse. Prüfen Sie diese Speicherorte, bevor Sie es erneut versuchen: { $locations }
@@ -1131,7 +1153,6 @@ operations-affected-items = { $count ->
     [1] Betroffenes Element ({ $number })
    *[other] Betroffene Elemente ({ $number })
     }
-operations-view-items = Alle { $count } Elemente anzeigen…
 operations-items-filter = Namen oder Pfade suchen…
 operations-no-matching-items = Keine passenden Elemente.
 operations-items-loading = Elemente werden geladen…

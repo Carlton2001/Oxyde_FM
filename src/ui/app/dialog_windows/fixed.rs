@@ -34,6 +34,7 @@ impl DialogKind {
             Self::TrashDelete => app.pending_trash_delete.is_some(),
             Self::SettingsConfirmation => app.settings_confirmation.is_some(),
             Self::Notice => app.file_operation_notice.is_some(),
+            Self::QuitConfirmation => app.quit_confirmation.is_some(),
             Self::Trash | Self::Conflict => false,
         }
     }
@@ -48,6 +49,7 @@ impl DialogKind {
             Self::OpenWith => app.open_with.as_ref().map(|prompt| prompt.input.read(cx).focus_handle.clone()),
             Self::TrashDelete => app.pending_trash_delete.as_ref().map(|p| p.focus.clone()),
             Self::SettingsConfirmation => app.settings_confirmation.as_ref().map(|c| c.focus.clone()),
+            Self::QuitConfirmation => app.quit_confirmation.as_ref().map(|c| c.focus.clone()),
             _ => None,
         }
     }
@@ -79,6 +81,13 @@ impl DialogKind {
             Self::TrashDelete => app.pending_trash_delete = None,
             Self::SettingsConfirmation => app.resolve_settings_confirmation(false, window, cx),
             Self::Notice => app.dismiss_notice(),
+            // Closing it keeps Oxyde open; once cancelling, it stays until the end.
+            Self::QuitConfirmation => {
+                if app.quit_confirmation.as_ref().is_some_and(|confirmation| confirmation.cancelling) {
+                    return false;
+                }
+                app.resolve_quit_confirmation(false, window, cx);
+            }
             Self::Trash | Self::Conflict => {}
         }
         cx.notify();
@@ -97,6 +106,7 @@ impl DialogKind {
             Self::TrashDelete => app.pending_trash_delete = None,
             Self::SettingsConfirmation => app.settings_confirmation = None,
             Self::Notice => app.dismiss_notice(),
+            Self::QuitConfirmation => app.quit_confirmation = None,
             Self::Trash | Self::Conflict => {}
         }
     }
@@ -120,6 +130,7 @@ impl DialogKind {
             Self::TrashDelete => super::super::trash_settings::render_delete_confirmation(app, owner, window, cx).into_any_element(),
             Self::SettingsConfirmation => settings::render_settings_confirmation(app, owner, window, cx).into_any_element(),
             Self::Notice => render_notice(app, owner, focus, window, cx).into_any_element(),
+            Self::QuitConfirmation => crate::ui::components::quit_confirmation::render(app, owner, window, cx).into_any_element(),
             Self::Trash | Self::Conflict => div().into_any_element(),
         }
     }

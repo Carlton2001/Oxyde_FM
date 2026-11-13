@@ -197,15 +197,22 @@ pub fn render_title_bar(
         .child(window_controls(Side::Right, is_maximized, true, corners.top_right, muted, cx, on_close)))
 }
 
-/// Close the main window the way its close button does, ending the application.
+/// Close the main window the way its close button does, ending the application;
+/// with operations unfinished, the user confirms first (`OxydeApp::may_quit`).
 pub(crate) fn close_main_window(handle: &Entity<OxydeApp>, reason: &'static str, window: &mut Window, cx: &mut App) {
+    if handle.update(cx, |view, cx| view.may_quit(window, cx)) {
+        close_main_window_now(handle, reason, window, cx);
+    }
+}
+
+/// Closes the main window without asking: no operation is left, or they were cancelled.
+pub(crate) fn close_main_window_now(handle: &Entity<OxydeApp>, reason: &'static str, window: &mut Window, cx: &mut App) {
     handle.update(cx, |view, cx| view.stop_viewers(cx));
     crate::trace_shutdown_request(reason);
-    crate::ui::app::duplicates::close_duplicate_windows(cx);
-    crate::ui::components::operations::close_operations_windows(cx);
-    crate::ui::app::advanced_search::close_advanced_search_windows(cx);
-    crate::ui::app::theme_window::close_theme_windows(cx);
-    crate::ui::app::viewer::close_viewer_windows(cx);
-    window.remove_window();
+    if crate::ui::app::main_window::close_secondary_windows(cx) {
+        crate::ui::app::main_window::remove_main_window(window, cx);
+    } else {
+        window.remove_window();
+    }
 }
 

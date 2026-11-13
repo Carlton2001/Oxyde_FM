@@ -1,4 +1,5 @@
 use super::{graph, status_color};
+use crate::ui::elements::progress_bar::progress_bar;
 use crate::ui::format::{format_number, format_size};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::ThemeContext;
@@ -12,7 +13,7 @@ pub(super) fn render(operation: &FileOperation, cx: &App) -> Div {
     let i18n = cx.i18n();
     let language = i18n.language();
     let final_state = super::super::is_final(&operation.status);
-    let color = status_color(operation, theme);
+    let color = status_color(&operation.status, theme);
     let ratio = if operation.total_bytes > 0 {
         Some(operation.processed_bytes as f64 / operation.total_bytes as f64)
     } else if operation.total_files > 0 {
@@ -25,20 +26,31 @@ pub(super) fn render(operation: &FileOperation, cx: &App) -> Div {
         }
     };
     let percentage = ratio.map(|ratio| (ratio * 100.0).clamp(0.0, 100.0).round() as u32);
-    let volume = (operation.total_bytes > 0).then(|| {
+    let mut items = FluentArgs::new();
+    items.set("done", format_number(operation.processed_files as u64, language));
+    items.set("total", format_number(operation.total_files as u64, language));
+    items.set("count", operation.total_files as i64);
+    let items = i18n.text_with_args(Message::OpsItems, &items);
+    // Volume and item count share one line, divided as the status bar divides.
+    let volume = if operation.total_bytes > 0 {
         format!(
-            "{} / {}",
+            "{} / {} • {items}",
             format_size(operation.processed_bytes, false, true, language),
             format_size(operation.total_bytes, false, true, language)
         )
-    });
+    } else {
+        items.to_string()
+    };
+    let paused = matches!(operation.status, OpStatus::Paused);
+    let finalizing = matches!(operation.status, OpStatus::Running) && ratio.is_some_and(|ratio| ratio >= 1.0);
     let displayed_speed = if final_state {
         operation.duration_ms.and_then(|duration| {
             (duration > 0 && operation.processed_bytes > 0)
                 .then(|| operation.processed_bytes.saturating_mul(1_000) / duration)
         })
     } else {
-        (operation.bytes_per_second > 0).then_some(operation.bytes_per_second)
+        // A paused worker keeps its last speed: the pause is shown instead.
+        (!paused && operation.bytes_per_second > 0).then_some(operation.bytes_per_second)
     };
     let speed = displayed_speed
         .map(|speed| {
@@ -54,9 +66,9 @@ pub(super) fn render(operation: &FileOperation, cx: &App) -> Div {
         .unwrap_or_else(|| {
             if final_state {
                 String::new()
-            } else if matches!(operation.status, OpStatus::Running)
-                && ratio.is_some_and(|ratio| ratio >= 1.0)
-            {
+            } else if paused {
+                i18n.text(Message::OpsPaused).to_string()
+            } else if finalizing {
                 i18n.text(Message::OpsFinalizing).to_string()
             } else {
                 i18n.text(Message::OpsSpeedWaiting).to_string()
@@ -68,7 +80,7 @@ pub(super) fn render(operation: &FileOperation, cx: &App) -> Div {
             args.set("duration", format_elapsed_duration(duration, language));
             i18n.text_with_args(Message::OpsDuration, &args)
         })
-    } else if operation.bytes_per_second > 0 && operation.total_bytes > operation.processed_bytes {
+    } else if !paused && operation.bytes_per_second > 0 && operation.total_bytes > operation.processed_bytes {
         let seconds =
             (operation.total_bytes - operation.processed_bytes) / operation.bytes_per_second;
         let mut args = FluentArgs::new();
@@ -107,9 +119,7 @@ pub(super) fn render(operation: &FileOperation, cx: &App) -> Div {
                                         .unwrap_or_else(|| "-".into()),
                                 ),
                         )
-                        .when_some(volume, |column, volume| {
-                            column.child(div().text_color(theme.text_muted).child(volume))
-                        }),
+                        .child(div().text_color(theme.text_muted).child(volume)),
                 )
                 .child(
                     div()
@@ -135,42 +145,20 @@ pub(super) fn render(operation: &FileOperation, cx: &App) -> Div {
                 ),
         )
         .when(!final_state && !operation.speed_history.is_empty(), |metrics| {
-            metrics.child(
-                div()
-                    .relative()
-                    .overflow_hidden()
-                    .child(
-                        svg()
-                            .path("visuals/operation-grid.svg")
-                            .absolute()
-                            .inset_0()
-                            .size_full()
-                            .text_color(theme.text_muted.opacity(0.4)),
-                    )
-                    .child(graph::render(operation.speed_history.clone(), color)),
-            )
+            metrics.child(graph::render(
+                operation.speed_history.clone(),
+                color,
+                theme.text_muted,
+            ))
         })
         .when_some(percentage, |metrics, percentage| {
-            metrics.child(
-                div()
-                    .h(rems(0.3125))
-                    .w_full()
-                    .rounded_full()
-                    .bg(theme.control_hover)
-                    .overflow_hidden()
-                    .child(
-                        div()
-                            .h_full()
-                            .rounded_full()
-                            .bg(color.opacity(0.7))
-                            // Glide between worker updates instead of stepping.
-                            .with_spring(
-                                SharedString::from(format!("operation-card-fill-{}", operation.id)),
-                                crate::ui::elements::motion::slide(percentage as f32 / 100.0),
-                                |fill, fraction| fill.w(relative(fraction)),
-                            ),
-                    ),
-            )
+            metrics.child(progress_bar(
+                format!("operation-card-bar-{}", operation.id),
+                percentage as f32 / 100.0,
+                color,
+                finalizing,
+                cx,
+            ))
         })
 }
 

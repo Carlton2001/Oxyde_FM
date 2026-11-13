@@ -7,6 +7,7 @@ pub mod input;
 pub mod modal;
 pub(crate) mod dialog;
 pub(crate) mod confirmation;
+pub(crate) mod quit_confirmation;
 pub(crate) mod network;
 pub(crate) mod network_dialog;
 pub(crate) mod remote_login_dialog;

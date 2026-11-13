@@ -262,6 +262,9 @@ impl Platform for LinuxPlatform {
         #[cfg(not(target_os = "linux"))]
         { let _ = parent; std::fs::OpenOptions::new().read(true).write(true).create_new(true).open(path) }
     }
+    fn open_copy_staging(&self, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        self.hold_archive_directory(path)
+    }
     fn remove_copy_staging(&self, directory: &std::fs::File, pin: std::fs::File, path: &std::path::Path) -> std::io::Result<()> {
         #[cfg(target_os = "linux")]
         {

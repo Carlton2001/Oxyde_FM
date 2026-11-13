@@ -55,6 +55,7 @@ pub(crate) mod open_with;
 mod folder_handler;
 mod system_menus;
 mod instance;
+mod quit;
 pub(crate) mod main_window;
 pub(crate) mod file_chooser;
 pub(crate) mod archive_protection;
@@ -130,11 +131,6 @@ pub enum DragTarget {
     },
     ContextMenuV {
         menu_idx: usize,
-        viewport_h: f32,
-        content_h: f32,
-        track_id: String,
-    },
-    OperationsPanelV {
         viewport_h: f32,
         content_h: f32,
         track_id: String,
@@ -338,6 +334,7 @@ pub struct OxydeApp {
     pub(super) remote_connections: std::collections::HashMap<String, (u64, std::sync::Arc<std::sync::atomic::AtomicBool>)>,
     pub(crate) network_dialog_revision: u64,
     pub(crate) network_force_confirmation: Option<network::NetworkForceConfirmation>,
+    pub(crate) quit_confirmation: Option<quit::QuitConfirmation>,
     pub(crate) network_force_focus_pending: bool,
     pub(crate) network_focus_restore: bool,
     pub _subscriptions: Vec<Subscription>,
@@ -397,8 +394,6 @@ pub struct OxydeApp {
     main_window: Option<AnyWindowHandle>,
     pub(crate) operations_panel_view:
         Option<Entity<crate::ui::components::operations::OperationsPanelView>>,
-    pub(crate) operations_panel_scroll: ScrollHandle,
-    pub(crate) expanded_operations: std::collections::HashSet<String>,
     pub(crate) archive_creation: Option<(Vec<std::path::PathBuf>, String)>,
     pub(crate) archive_protection: Option<archive_protection::ArchiveProtection>,
     pub(crate) rename_error: Option<Message>,
@@ -564,6 +559,7 @@ impl OxydeApp {
             trash_delete_check_pending: false,
             network_dialog_revision: 0,
             network_force_confirmation: None,
+            quit_confirmation: None,
             network_force_focus_pending: false,
             network_focus_restore: false,
             window_geometry_save_task: None,
@@ -628,8 +624,6 @@ impl OxydeApp {
             update_status: UpdateStatus::Idle,
             main_window: None,
             operations_panel_view: None,
-            operations_panel_scroll: ScrollHandle::new(),
-            expanded_operations: std::collections::HashSet::new(),
             archive_creation: None,
             archive_protection: None,
             rename_error: None,

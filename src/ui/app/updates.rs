@@ -75,6 +75,11 @@ impl OxydeApp {
     /// Install the available update, or open its download for a portable copy or a package.
     pub(crate) fn install_update(&mut self, cx: &mut Context<Self>) {
         let UpdateStatus::Available(update) = self.update_status.clone() else { return; };
+        // The installer closes Oxyde, which would cut unfinished operations short.
+        if !updates_by_hand() && self.file_ops.operation_counts().1 > 0 {
+            self.toast(ToastKind::Error, Message::UpdateWaitsForOperations, String::new(), 0, cx);
+            return;
+        }
         if updates_by_hand() {
             self.open_external_item(update.manual_download().into(), cx);
             return;

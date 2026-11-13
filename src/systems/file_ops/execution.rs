@@ -75,8 +75,8 @@ impl FileOperationManager {
 
         let mut locked = op.lock().unwrap();
         locked.duration_ms = locked
-            .started_at
-            .map(|started| started.elapsed().as_millis().min(u64::MAX as u128) as u64);
+            .active_duration()
+            .map(|active| active.as_millis().min(u64::MAX as u128) as u64);
         Self::finish_status(&mut locked, final_status.clone());
         // Keep the bounded graph for final cards and persisted history.
         locked.bytes_per_second = 0;

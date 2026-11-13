@@ -1,5 +1,7 @@
 use crate::ui::app::OxydeApp;
 use crate::ui::i18n::{I18nContext, Message};
+use crate::ui::elements::progress_bar::progress_bar;
+use crate::ui::style::TabularFigures;
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
@@ -13,6 +15,7 @@ pub(crate) fn render_operation_progress(app: &OxydeApp, cx: &Context<OxydeApp>) 
         .into_iter()
         .map(|op| {
             let owner = cx.entity();
+            let operation = op.id.clone();
             let (label, icon) = match op.op_type {
                 FileOpType::Copy => (Message::OpCopy, "icons/copy.svg"),
                 FileOpType::Move => (Message::OpMove, "icons/arrow-right.svg"),
@@ -29,8 +32,14 @@ pub(crate) fn render_operation_progress(app: &OxydeApp, cx: &Context<OxydeApp>) 
                 0.0
             };
             let finalizing = matches!(op.status, OpStatus::Running) && ratio >= 1.0;
+            let paused = matches!(op.status, OpStatus::Paused);
             let ratio = ratio.clamp(0.0, 1.0) as f32;
-            let progress_label = if finalizing {
+            // A pause changes lightness, not only hue: the bar, the icon and the label dim.
+            let color = if paused { theme.text_muted } else { theme.accent };
+            let icon = if paused { "icons/pause.svg" } else { icon };
+            let progress_label = if paused {
+                cx.i18n().text(Message::OpsPaused)
+            } else if finalizing {
                 cx.i18n().text(Message::OpsFinalizing)
             } else {
                 format!("{}%", (ratio * 100.0).round() as u32).into()
@@ -39,7 +48,7 @@ pub(crate) fn render_operation_progress(app: &OxydeApp, cx: &Context<OxydeApp>) 
                 .id(SharedString::from(format!("operation-progress-{}", op.id)))
                 .flex_none()
                 .on_click(move |_, _, cx| {
-                    super::open_operations_window(owner.clone(), cx);
+                    super::open_operations_window(owner.clone(), Some(operation.clone()), cx);
                 })
                 .w(rems(24.0))
                 .min_h(rems(3.0))
@@ -62,94 +71,23 @@ pub(crate) fn render_operation_progress(app: &OxydeApp, cx: &Context<OxydeApp>) 
                         .path(icon)
                         .size(rems(1.125))
                         .flex_none()
-                        .text_color(theme.accent),
+                        .text_color(color),
                 )
                 .child(div().flex_none().child(cx.i18n().text(label)))
-                .child(
-                    div()
-                        .relative()
-                        .flex_1()
-                        .min_w_0()
-                        .h(rems(0.25))
-                        .rounded_full()
-                        .bg(theme.border)
-                        .overflow_hidden()
-                        // Glide between worker updates instead of stepping.
-                        .child(div().absolute().size_full().with_spring(
-                            SharedString::from(format!("operation-fill-{}", op.id)),
-                            crate::ui::elements::motion::slide(ratio),
-                            move |fill, ratio| {
-                                fill.child(
-                                    crate::ui::elements::rounded_fill::rounded_fill(
-                                        ratio,
-                                        rems(0.125),
-                                        theme.accent,
-                                    )
-                                    .absolute()
-                                    .size_full(),
-                                )
-                            },
-                        ))
-                        .when(finalizing, |bar| {
-                            bar.child(
-                                div()
-                                    .absolute()
-                                    .left(rems(0.125))
-                                    .right(rems(0.125))
-                                    .h_full()
-                                    .overflow_hidden()
-                                    .child(
-                                        div()
-                                            .absolute()
-                                            .top_0()
-                                            .h_full()
-                                            .w(relative(0.4))
-                                            .flex()
-                                            .child(div().flex_1().h_full().bg(linear_gradient(
-                                                90.0,
-                                                linear_color_stop(
-                                                    theme.text_on_accent.opacity(0.0),
-                                                    0.0,
-                                                ),
-                                                linear_color_stop(
-                                                    theme.text_on_accent.opacity(0.45),
-                                                    1.0,
-                                                ),
-                                            )))
-                                            .child(div().flex_1().h_full().bg(linear_gradient(
-                                                90.0,
-                                                linear_color_stop(
-                                                    theme.text_on_accent.opacity(0.45),
-                                                    0.0,
-                                                ),
-                                                linear_color_stop(
-                                                    theme.text_on_accent.opacity(0.0),
-                                                    1.0,
-                                                ),
-                                            )))
-                                            .with_animation(
-                                                SharedString::from(format!(
-                                                    "operation-finalizing-shimmer-{}",
-                                                    op.id
-                                                )),
-                                                Animation::new(std::time::Duration::from_millis(
-                                                    1800,
-                                                ))
-                                                .repeat()
-                                                .with_easing(ease_in_out),
-                                                |reflection, delta| {
-                                                    reflection.left(relative(-0.4 + 1.4 * delta))
-                                                },
-                                            ),
-                                    ),
-                            )
-                        }),
-                )
+                .child(div().flex_1().min_w_0().child(progress_bar(
+                    format!("operation-progress-bar-{}", op.id),
+                    ratio,
+                    color,
+                    finalizing,
+                    cx,
+                )))
                 .child(
                     div()
                         .min_w(rems(2.5))
                         .flex_none()
                         .text_right()
+                        .tabular_figures()
+                        .when(paused, |label| label.text_color(theme.text_muted))
                         .child(progress_label),
                 )
                 .into_any_element()

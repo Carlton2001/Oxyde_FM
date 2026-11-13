@@ -452,18 +452,6 @@ impl OxydeApp {
                 }
             }
         }
-        DragTarget::OperationsPanelV {
-            viewport_h,
-            content_h,
-            track_id,
-        } => {
-            if let Some(origin) = self.scrollbar_origins.get(&track_id) {
-                let target_px = drag_scrolled(viewport_h, content_h, viewport_h, pos.y.as_f32() - origin.y, self.grab_offset);
-                self.operations_panel_scroll
-                    .set_offset(point(px(0.0), px(-target_px)));
-                return true;
-            }
-        }
             _ => {}
         }
         false
@@ -488,7 +476,7 @@ impl OxydeApp {
                 }
                 DragTarget::SidebarV { .. } | DragTarget::SidebarH { .. } | DragTarget::FileListV { .. }
                 | DragTarget::FileListH { .. } | DragTarget::BreadcrumbV { .. }
-                | DragTarget::ContextMenuV { .. } | DragTarget::OperationsPanelV { .. } => {
+                | DragTarget::ContextMenuV { .. } => {
                     if self.move_scrollbar_thumb(&target, pos) {
                         cx.notify();
                     }

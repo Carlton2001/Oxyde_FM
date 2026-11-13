@@ -60,6 +60,28 @@ pub(super) fn create(parent: &File, path: &Path) -> io::Result<(File, File)> {
     Ok((directory, pin))
 }
 
+/// An existing staging folder with the access `create` keeps, for its removal.
+pub(super) fn open(path: &Path) -> io::Result<File> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| io::Error::other("Staging path has no parent"))?;
+    let leaf = path
+        .file_name()
+        .ok_or_else(|| io::Error::other("Staging path has no file name"))?;
+    let parent = super::windows_file_moves::hold_parent(parent)?;
+    ordinary_directory(&parent)?;
+    let directory = super::windows_no_reparse::open_relative(
+        &parent,
+        leaf,
+        true,
+        GENERIC_READ.0 | DELETE.0,
+        FILE_SHARE_READ.0 | FILE_SHARE_WRITE.0,
+        1, // FILE_OPEN
+    )?;
+    ordinary_directory(&directory)?;
+    Ok(directory)
+}
+
 pub(super) fn create_output(parent: &File, path: &Path) -> io::Result<File> {
     ordinary_directory(parent)?;
     let leaf = path

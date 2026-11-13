@@ -163,7 +163,6 @@ operations-title = { $count ->
    *[other] Opérations ({ $count })
     }
 operations-show-panel = Afficher les opérations
-operations-hide-panel = Masquer les opérations
 operations-queued = En attente
 operations-calculating = Calcul en cours…
 operations-running = En cours
@@ -172,6 +171,16 @@ operations-cancelled = Annulée
 operations-completed = Terminée
 operations-error = Échec
 operations-to = Vers : { $path }
+operations-from = Depuis : { $path }
+operations-source-summary = { $count ->
+    [1] { $name } et { $number } autre
+   *[other] { $name } et { $number } autres
+    }
+operations-group-running = En cours
+operations-group-finished = Terminées
+operations-dismiss-finished = Retirer les terminées
+operations-turbo = Turbo
+operations-outcome-count = { $value } : { $number }
 operations-items = { $count ->
     [1] { $done } / { $total } élément
    *[other] { $done } / { $total } éléments
@@ -187,7 +196,6 @@ operations-stop = Annuler l’opération
 operations-fast = Mode rapide activé. Cliquer pour passer en mode normal
 operations-normal = Mode normal activé. Cliquer pour passer en mode rapide
 operations-dismiss = Retirer
-operations-dismiss-all = Retirer toutes les opérations terminées
 operations-empty = Aucune opération
 name-filter-placeholder = Filtrer par nom…
 undo-operation = Annuler : { $operation }
@@ -333,6 +341,7 @@ quick-search-clear = Effacer
 quick-search-stop = Arrêter la recherche
 open-file-location = Ouvrir l’emplacement du fichier
 column-location = Emplacement
+column-state = État
 tool-duplicates = Rechercher les doublons
 
 tabs-new-tab = Nouvel onglet
@@ -691,6 +700,19 @@ archive-cache-extract = Extraire et ouvrir…
 archive-cache-exported = Fichier extrait : { $detail }
 archive-limit-bytes = Le traitement est arrêté : la taille totale décompressée dépasse la limite de { $limit } pour cette action. La taille compressée de l’archive n’est pas la taille prise en compte.
 archive-processing-failed = Le traitement de l’archive a échoué. Le fichier peut être endommagé ou nécessiter trop de ressources.
+quit-operations-title = Quitter Oxyde ?
+quit-operations-prompt = { $count ->
+    [one] Une opération est en cours ou en pause. Quitter l’annule : les éléments qu’elle n’a pas encore traités restent tels quels.
+   *[other] { $number } opérations sont en cours ou en pause. Quitter les annule : les éléments qu’elles n’ont pas encore traités restent tels quels.
+}
+quit-operations-stay = Ne pas quitter
+quit-operations-confirm = Annuler et quitter
+quit-operations-cancelling = Annulation des opérations…
+update-waits-for-operations = Terminez ou annulez les opérations en cours avant d’installer la mise à jour.
+interrupted-output-removed = { $count ->
+    [one] Fichier partiel d’une opération interrompue supprimé dans { $detail }
+   *[other] { $number } fichiers partiels d’opérations interrompues supprimés dans { $detail }
+}
 archive-recovery-notice = Fichiers conservés
 archive-recovery-completed = L’action est terminée, mais des fichiers ou dossiers ont été conservés. Vérifiez ces emplacements avant de les supprimer : { $locations }
 archive-recovery-stopped = L’action n’a pas été menée à son terme. Des fichiers ou dossiers ont été conservés, y compris les résultats déjà publiés. Vérifiez ces emplacements avant de réessayer : { $locations }
@@ -830,7 +852,6 @@ operations-affected-items = { $count ->
     [1] Élément concerné ({ $number })
    *[other] Éléments concernés ({ $number })
     }
-operations-view-items = Voir les { $count } éléments…
 operations-items-filter = Rechercher un nom ou un chemin…
 operations-no-matching-items = Aucun élément correspondant.
 operations-items-loading = Chargement des éléments…

@@ -39,12 +39,13 @@ pub(super) enum DialogKind {
     TrashDelete,
     SettingsConfirmation,
     Notice,
+    QuitConfirmation,
 }
 
-pub(super) const DIALOG_KINDS: usize = 11;
+pub(super) const DIALOG_KINDS: usize = 12;
 
 impl DialogKind {
-    pub(super) const FIXED: [Self; 9] = [
+    pub(super) const FIXED: [Self; 10] = [
         Self::Rename,
         Self::Network,
         Self::NetworkForce,
@@ -54,6 +55,7 @@ impl DialogKind {
         Self::TrashDelete,
         Self::SettingsConfirmation,
         Self::Notice,
+        Self::QuitConfirmation,
     ];
 
     fn index(self) -> usize {
@@ -76,6 +78,7 @@ impl DialogKind {
             Self::OpenWith => "icons/app-window.svg",
             Self::SettingsConfirmation => "icons/settings.svg",
             Self::Notice => "icons/circle-x.svg",
+            Self::QuitConfirmation => "icons/triangle-alert.svg",
         }
     }
 }

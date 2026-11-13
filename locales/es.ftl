@@ -250,7 +250,6 @@ operations-title = { $count ->
 
 operations-show-panel = Mostrar operaciones
 
-operations-hide-panel = Ocultar operaciones
 
 operations-queued = En cola
 
@@ -268,6 +267,16 @@ operations-error = Fallida
 
 
 operations-to = Hasta: { $path }
+operations-from = Desde: { $path }
+operations-source-summary = { $count ->
+    [1] { $name } y { $number } más
+   *[other] { $name } y { $number } más
+    }
+operations-group-running = En curso
+operations-group-finished = Terminadas
+operations-dismiss-finished = Quitar terminadas
+operations-turbo = Turbo
+operations-outcome-count = { $value }: { $number }
 
 operations-items = { $count ->
     [1] { $done } / { $total } elemento
@@ -295,7 +304,6 @@ operations-normal = Modo normal activo. Haga clic para cambiar al modo rápido
 
 operations-dismiss = Quitar
 
-operations-dismiss-all = Quitar todas las operaciones finalizadas
 
 operations-empty = No hay operaciones
 
@@ -509,6 +517,7 @@ quick-search-stop = Detener búsqueda
 open-file-location = Abrir ubicación del archivo
 
 column-location = Ubicación
+column-state = Estado
 
 tool-duplicates = Encontrar duplicados
 
@@ -992,6 +1001,19 @@ archive-cache-extract = Extraer y abrir…
 archive-cache-exported = Archivo extraído: { $detail }
 archive-limit-bytes = Procesamiento detenido: el tamaño total descomprimido supera el límite de { $limit } para esta acción. No se toma en cuenta el tamaño comprimido del archivo.
 archive-processing-failed = No se pudo procesar el archivo. Puede estar dañado o necesitar demasiados recursos.
+quit-operations-title = ¿Salir de Oxyde?
+quit-operations-prompt = { $count ->
+    [one] Hay una operación en curso o en pausa. Salir la cancela: los elementos que aún no ha procesado quedan como están.
+   *[other] Hay { $number } operaciones en curso o en pausa. Salir las cancela: los elementos que aún no han procesado quedan como están.
+}
+quit-operations-stay = No salir
+quit-operations-confirm = Cancelar y salir
+quit-operations-cancelling = Cancelando las operaciones…
+update-waits-for-operations = Termine o cancele las operaciones en curso antes de instalar la actualización.
+interrupted-output-removed = { $count ->
+    [one] Se eliminó el archivo parcial de una operación interrumpida en { $detail }
+   *[other] Se eliminaron { $number } archivos parciales de operaciones interrumpidas en { $detail }
+}
 archive-recovery-notice = Archivos conservados
 archive-recovery-completed = La acción ha terminado, pero se han conservado algunos archivos o carpetas. Compruebe estas ubicaciones antes de eliminarlos: { $locations }
 archive-recovery-stopped = La acción no se ha completado. Se han conservado algunos archivos o carpetas, incluidos resultados ya publicados. Compruebe estas ubicaciones antes de volver a intentarlo: { $locations }
@@ -1131,7 +1153,6 @@ operations-affected-items = { $count ->
     [1] Elemento de la operación ({ $number })
    *[other] Elementos de la operación ({ $number })
     }
-operations-view-items = Ver los { $count } elementos…
 operations-items-filter = Buscar nombres o rutas…
 operations-no-matching-items = No hay elementos coincidentes.
 operations-items-loading = Cargando elementos…
