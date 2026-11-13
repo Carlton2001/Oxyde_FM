@@ -1,6 +1,6 @@
 # Quick access and opening
 
-Pinned folders in the Quick Access section, pinning and unpinning, their refresh; on Linux, the home folder among locations, opening an item through the desktop's application, and the Properties system button. OneDrive, network and trash are separate.
+Pinned folders in the Quick Access section, pinning and unpinning, their refresh, the home folder heading them; on Linux, opening an item through the desktop's application, and the Properties system button. OneDrive, network and trash are separate.
 
 ## Interface
 
@@ -22,9 +22,12 @@ pub trait QuickAccess: Send + Sync {
 
 Dragging a pinned folder in the sidebar reorders it (`components/sidebar/reorder.rs`, `app/pinned_order.rs`). As a dragged tab, the folder is lifted at its row's width and the other folders slide aside (`reorder::shifts`, a `motion::glide` spring per row) to open the slot it targets and close the place it left, with no insertion marker. The order is Oxyde's own, kept in `AppConfig::pinned_order`; the system file manager keeps its order, and folders missing from Oxyde's list follow at the end in the system's order. The Windows taskbar menu lists the pinned folders.
 
+## Home folder
+
+The home folder opens the Quick Access section on every system, above the pinned folders, as in Nautilus, with the Lucide `house` icon, in the expanded sidebar and in the rail; it cannot be unpinned. An item with no name designates it, and the interface names it in the chosen language (`sidebar-home`).
+
 ## Behavior outside Windows
 
-- The home folder opens the Quick Access section, above bookmarks, as in Nautilus, with the Lucide `house` icon; it cannot be unpinned. An item with no name designates it, and the interface names it in the chosen language (`sidebar-home`).
 - Opening waits for `xdg-open`'s verdict (3 s at most): a failure shows as on Windows; past that, the process is reaped in the background.
 - `show_properties_dialog` does nothing: Oxyde's Properties window serves Linux.
 
