@@ -3,9 +3,8 @@
 //! measured metadata columns, rows and their scrollbar. Choosing needs no menus, drags,
 //! renaming, column filters or horizontal scrolling: the window's minimum width keeps
 //! the columns in view.
-use super::{ColumnWidths, FileChooserWindow};
+use super::{scroll, ColumnWidths, FileChooserWindow};
 use crate::ui::components::icons::render_file_icon;
-use crate::ui::components::scrollbar::{render_scrollbar_with_pointer, ScrollbarAxis};
 use crate::ui::components::tooltip::hover::SharedTooltipExt;
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::app::layout::measurements;
@@ -163,7 +162,9 @@ impl FileChooserWindow {
                             .flex()
                             .items_center()
                             .child(div().flex_none().mr_2().child(render_file_icon(file.path.clone(), crate::ui::components::icons::entry_icon(file), rems(1.0), &theme, self.system_icons, false)))
-                            .child(if has_subdirectories {
+                            .child(if let Some(field) = self.render_rename(&file.path, Some(widths.name - logical(40.0)), theme, cx) {
+                                field
+                            } else if has_subdirectories {
                                 div()
                                     .flex_1()
                                     .min_w_0()
@@ -205,14 +206,6 @@ impl FileChooserWindow {
         }
     }
 
-    /// A press beside the entries: nothing is selected any more.
-    pub(super) fn press_background(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        window.focus(&self.focus, cx);
-        if self.selection.clear() {
-            cx.notify();
-        }
-    }
-
     pub(super) fn render_details(&self, theme: OxydeTheme, cx: &mut Context<Self>) -> AnyElement {
         let pane_viewport_w = self.pane_width.get().max(1.0);
         let permissions_w = if self.show_permissions { logical(self.column_widths.permissions) } else { 0.0 };
@@ -234,7 +227,6 @@ impl FileChooserWindow {
         let count = self.shown.len() + 1;
         let content_h = (count as f32 * crate::ui::style::row_height()).max(1.0);
         let source = cx.entity();
-        let entity_id = source.entity_id();
         let mut container = div()
             .on_scroll_wheel(|_, window, cx| crate::ui::components::tooltip::hover::dismiss(window, cx))
             .when_some(self.tooltip_owner(), |container, owner| container.child(crate::ui::components::tooltip::hover::region_container(
@@ -270,6 +262,7 @@ impl FileChooserWindow {
                             .bottom(px(status_bar_height))
                             .flex()
                             .flex_col()
+                            .child(self.measure_entries())
                             .child(self.render_headers(widths, theme, cx))
                             .child(
                                 uniform_list("file-chooser-list", count, move |range, _, cx| {
@@ -280,12 +273,13 @@ impl FileChooserWindow {
                                         this.render_row(position, widths, *cx.theme(), cx)
                                     }).collect::<Vec<_>>())
                                 })
-                                .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| this.press_background(window, cx)))
+                                .on_mouse_down(MouseButton::Left, cx.listener(|this, event, window, cx| this.press_background(event, window, cx)))
                                 .track_scroll(&self.list)
                                 .w_full()
                                 .flex_1()
                                 .min_h_0(),
-                            ),
+                            )
+                            .children(self.render_band(theme)),
                     ),
             )
             // The blank area right of the last column and the gutters also deselect.
@@ -296,7 +290,7 @@ impl FileChooserWindow {
                     .bottom(px(status_bar_height))
                     .left(rem_pixels(rems(0.5)) + px(widths.total))
                     .right_0()
-                    .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| this.press_background(window, cx))),
+                    .on_mouse_down(MouseButton::Left, cx.listener(|this, event, window, cx| this.press_background(event, window, cx))),
             )
             .child(
                 div()
@@ -305,9 +299,9 @@ impl FileChooserWindow {
                     .left_0()
                     .bottom_0()
                     .w(rems(0.5))
-                    .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| {
+                    .on_mouse_down(MouseButton::Left, cx.listener(|this, event, window, cx| {
                         cx.stop_propagation();
-                        this.press_background(window, cx);
+                        this.press_background(event, window, cx);
                     })),
             );
 
@@ -316,22 +310,16 @@ impl FileChooserWindow {
         let measured_v_h = base.bounds().size.height.as_f32();
         // Before the first layout, no scrollbar shows.
         let v_v_h = if measured_v_h > 0.0 { measured_v_h } else { content_h };
-        let v_offset = -base.offset().y.as_f32();
-        let dragging = self.scroll_drag.as_ref().is_some_and(|(track, _, _)| track.ends_with("file-chooser-details"));
-        container = container.child(
-            div()
-                .absolute()
-                .top(px(crate::ui::style::column_header_height()))
-                .bottom(px(status_bar_height))
-                .right_0()
-                .w(rems(3.625))
-                .child(render_scrollbar_with_pointer(theme, cx.entity(), ScrollbarAxis::Vertical, v_v_h, content_h, v_offset, dragging,
-                    "file-chooser-details".into(), None, self.list.0.borrow().base_handle.clone(),
-                    move |this: &mut Self, track, viewport, content, _, cx| {
-                        this.scroll_drag = Some((track, viewport, content));
-                        cx.notify(entity_id);
-                    })),
-        );
+        // The rail and the button back to the start, as the main list's scroll zone.
+        let zone = div()
+            .absolute()
+            .top(px(crate::ui::style::column_header_height()))
+            .bottom(px(status_bar_height))
+            .right_0()
+            .w(rems(3.625));
+        let rail = self.render_vertical_scrollbar(theme, scroll::DETAILS, base.clone(), v_v_h, content_h, cx);
+        let top = self.scroll_top_button(theme, base, v_v_h, content_h, cx);
+        container = container.child(self.scroll_zone(zone, cx).child(rail).child(top));
 
         if let Some((message, protected)) = self.empty_message(cx) {
             container = container.child(

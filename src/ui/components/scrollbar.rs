@@ -57,6 +57,16 @@ impl WheelTarget {
             Self::List(list) => list.scroll_by(-step),
         }
     }
+
+    /// Puts the content `scrolled` from its start, as a press beside the thumb moves
+    /// it there. Lists measure their items as they go: their owners place them.
+    fn jump(&self, axis: ScrollbarAxis, scrolled: f32) {
+        if let Self::Handle(handle) = self {
+            let mut offset = handle.offset();
+            *(if axis == ScrollbarAxis::Vertical { &mut offset.y } else { &mut offset.x }) = px(-scrolled);
+            handle.set_offset(offset);
+        }
+    }
 }
 
 pub const TRACK_WIDTH: Rems = rems(0.75);
@@ -233,7 +243,8 @@ pub(crate) fn render_scrollbar_on_track<T: ScrollbarState + 'static>(
     let track_id_cap = track_id.clone();
     let handle_cap = handle.clone();
     let owner = handle.entity_id();
-    let wheel = wheel.into();
+    let wheel: WheelTarget = wheel.into();
+    let jump = wheel.clone();
     let overflow = (content_size - viewport_size).max(0.0);
 
     let track_container = div()
@@ -320,12 +331,15 @@ pub(crate) fn render_scrollbar_on_track<T: ScrollbarState + 'static>(
 
                         // A press on the thumb keeps its grip; elsewhere the thumb
                         // centers under the pointer, as GTK warps it.
-                        let grab_offset =
-                            if mouse_in_track >= t_pos && mouse_in_track <= t_pos + geometry.size {
-                                mouse_in_track - t_pos
-                            } else {
-                                geometry.size / 2.0
-                            };
+                        let on_thumb = mouse_in_track >= t_pos && mouse_in_track <= t_pos + geometry.size;
+                        let grab_offset = if on_thumb { mouse_in_track - t_pos } else { geometry.size / 2.0 };
+                        // Every owner sees the thumb under the pointer at once, before
+                        // any move; owners that place it themselves then do the same.
+                        if !on_thumb {
+                            jump.jump(axis, geometry.scrolled_at(mouse_in_track - grab_offset));
+                            app.notify();
+                            window.refresh();
+                        }
 
                         this.set_grab_offset(grab_offset);
                         on_drag(

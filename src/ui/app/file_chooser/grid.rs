@@ -4,7 +4,6 @@
 //! renaming.
 use super::FileChooserWindow;
 use crate::ui::components::icons::render_file_icon;
-use crate::ui::components::scrollbar::{render_scrollbar_with_pointer, ScrollbarAxis};
 use crate::ui::components::tooltip::hover::SharedTooltipExt;
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::i18n::{I18nContext, Message};
@@ -47,7 +46,7 @@ impl FileChooserWindow {
             .gap_0p5()
             .rounded_md()
             .border(rems(0.0625))
-            .border_color(if is_selected { theme.accent } else { theme.border.opacity(0.0) })
+            .border_color(if self.rename_refused(&path) { theme.error } else if is_selected { theme.accent } else { theme.border.opacity(0.0) })
             .bg(if is_selected { theme.selected } else { theme.active_background })
             .when(!is_selected, |d| d.hover(|d| d.bg(theme.hover)))
             .on_mouse_down(MouseButton::Left, press)
@@ -94,7 +93,10 @@ impl FileChooserWindow {
                     .text_ellipsis()
                     .overflow_hidden()
                     .when(file.is_hidden || file.is_system, |d| d.opacity(0.75))
-                    .child(div().font_weight(FontWeight::MEDIUM).child(name)),
+                    .child(match self.render_rename(&path, None, theme, cx) {
+                        Some(field) => field,
+                        None => div().font_weight(FontWeight::MEDIUM).child(name).into_any_element(),
+                    }),
             )
             .child(
                 div()
@@ -123,7 +125,7 @@ impl FileChooserWindow {
                 .text_color(theme.text_muted)
                 .text_size(rems(0.8125))
                 .child(if protected { crate::ui::components::file_list::protected_folder_message(message, &theme).into_any_element() } else { div().child(message).into_any_element() })
-                .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| this.press_background(window, cx)))
+                .on_mouse_down(MouseButton::Left, cx.listener(|this, event, window, cx| this.press_background(event, window, cx)))
                 .into_any_element()
         } else {
             let row_height = crate::ui::style::grid_card_row_height();
@@ -164,7 +166,6 @@ impl FileChooserWindow {
             } else {
                 rows_height + crate::ui::style::row_height()
             };
-            let dragging = self.scroll_drag.as_ref().is_some_and(|(track, _, _)| track.ends_with("file-chooser-grid"));
             div()
                 .id("file-chooser-grid-scroll")
                 .relative()
@@ -175,15 +176,17 @@ impl FileChooserWindow {
                 .overflow_hidden()
                 .px_2()
                 .pr(px(crate::ui::components::scrollbar::track_width()))
+                .child(self.measure_entries())
                 .child(list)
-                .child(div().absolute().top_0().bottom_0().right_0().w(rems(3.625))
-                    .child(render_scrollbar_with_pointer(theme, cx.entity(), ScrollbarAxis::Vertical, actual_viewport.max(1.0), content_height, -scroll.offset().y.as_f32(), dragging,
-                        "file-chooser-grid".into(), None, scroll.clone(),
-                        move |this: &mut Self, track, viewport, content, _, cx| {
-                            this.scroll_drag = Some((track, viewport, content));
-                            cx.notify(entity_id);
-                        })))
-                .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| this.press_background(window, cx)))
+                .children(self.render_band(theme))
+                .child({
+                    // The rail and the button back to the start, as the main grid's scroll zone.
+                    let zone = div().absolute().top_0().bottom_0().right_0().w(rems(3.625));
+                    let rail = self.render_vertical_scrollbar(theme, super::scroll::GRID, scroll.clone(), actual_viewport.max(1.0), content_height, cx);
+                    let top = self.scroll_top_button(theme, scroll.clone(), actual_viewport.max(1.0), content_height, cx);
+                    self.scroll_zone(zone, cx).child(rail).child(top)
+                })
+                .on_mouse_down(MouseButton::Left, cx.listener(|this, event, window, cx| this.press_background(event, window, cx)))
                 .into_any_element()
         };
         div()

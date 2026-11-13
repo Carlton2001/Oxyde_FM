@@ -6,11 +6,14 @@
 //! main window lends it its display choices, shares its places and volumes as they
 //! change, and keeps its view, sort, sidebar width and last folder for the next one.
 mod arrange;
+mod band;
 mod browse;
 mod choices;
+mod create;
 mod crumbs;
 mod details;
 mod filter;
+mod footer;
 mod grid;
 mod keys;
 mod location;
@@ -19,6 +22,7 @@ mod navbar;
 mod overwrite;
 mod render;
 mod save;
+mod scroll;
 mod selection;
 mod setting;
 mod sidebar;
@@ -142,9 +146,18 @@ pub struct FileChooserWindow {
     pane_width: std::rc::Rc<std::cell::Cell<f32>>,
     scrollbar_origins: HashMap<String, Point<f32>>,
     grab_offset: f32,
-    /// The scrollbar being dragged: its track, viewport and content heights.
-    scroll_drag: Option<(String, f32, f32)>,
+    /// The new folder whose name is edited in place.
+    rename: Option<create::Rename>,
+    /// The selection rectangle being drawn, and the entries' area it is measured in.
+    band: Option<band::Band>,
+    entries_bounds: std::rc::Rc<std::cell::Cell<Bounds<Pixels>>>,
+    /// The scrollbar being dragged.
+    scroll_drag: Option<scroll::ScrollDrag>,
+    /// The pointer beside the entries' scrollbar, and where its button to the start was.
+    scroll_zone_hover: bool,
+    scroll_top_anchor: std::cell::Cell<f32>,
     focus: FocusHandle,
+    footer_focus: footer::FooterFocus,
     listing_task: Option<Task<()>>,
     arrange_task: Option<Task<()>>,
     subfolder_task: Option<Task<()>>,
@@ -365,7 +378,7 @@ impl FileChooserWindow {
             filters,
             type_filter: current_filter,
             default_extension,
-            choices: choices.into_iter().map(choices::Choice::new).collect(),
+            choices: choices.into_iter().map(|choice| choices::Choice::new(choice, cx.focus_handle())).collect(),
             menu: None,
             menu_scroll: UniformListScrollHandle::new(),
             menu_trigger_widths: Default::default(),
@@ -407,8 +420,14 @@ impl FileChooserWindow {
             pane_width: Default::default(),
             scrollbar_origins: Default::default(),
             grab_offset: 0.0,
+            rename: None,
+            band: None,
+            entries_bounds: Default::default(),
             scroll_drag: None,
+            scroll_zone_hover: false,
+            scroll_top_anchor: Default::default(),
             focus,
+            footer_focus: footer::FooterFocus::new(cx),
             listing_task: None,
             arrange_task: None,
             subfolder_task: None,
@@ -453,10 +472,10 @@ impl FileChooserWindow {
         window.remove_window();
     }
 
-    /// The main window, which the shared tooltips follow; none while a crumb's menu
-    /// is open, as none shows over the main window's menus.
+    /// The main window, which the shared tooltips follow; none while a crumb's menus
+    /// are open or a selection rectangle is drawn, as none shows over the main window's menus.
     fn tooltip_owner(&self) -> Option<Entity<OxydeApp>> {
-        self.owner.upgrade().filter(|_| self.crumbs.menu.is_none())
+        self.owner.upgrade().filter(|_| self.crumbs.menu.is_none() && self.crumbs.context.is_none() && !self.drawing_band())
     }
 
     /// The entry at a position of the list.

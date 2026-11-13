@@ -12,11 +12,13 @@ pub(super) struct Choice {
     choice: FileChooserChoice,
     /// The answer's id; `"true"` or `"false"` for a checkbox.
     answer: String,
+    /// Its keyboard stop in the footer.
+    pub(super) focus: FocusHandle,
 }
 
 impl Choice {
-    pub(super) fn new(choice: FileChooserChoice) -> Self {
-        Self { answer: choice.initial.clone(), choice }
+    pub(super) fn new(choice: FileChooserChoice, focus: FocusHandle) -> Self {
+        Self { answer: choice.initial.clone(), choice, focus }
     }
 
     fn checkbox(&self) -> bool {
@@ -51,20 +53,31 @@ impl FileChooserWindow {
         self.choices.iter().map(|choice| (choice.choice.id.clone(), choice.answer.clone())).collect()
     }
 
-    pub(super) fn render_choices(&self, theme: OxydeTheme, cx: &mut Context<Self>) -> Vec<AnyElement> {
+    pub(super) fn render_choices(&self, theme: OxydeTheme, window: &Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        use crate::ui::elements::focus_ring::{focus_ring, keyboard_focused};
         self.choices.iter().enumerate().map(|(position, choice)| {
             let label = choice.choice.label.clone();
             if choice.checkbox() {
                 return div()
                     .id(("file-chooser-choice", position))
+                    .track_focus(&choice.focus)
                     .flex_none()
                     .flex()
                     .items_center()
                     .gap(rems(0.5))
                     .text_size(rems(0.8125))
-                    .child(crate::ui::elements::checkbox::checkbox(theme, choice.answer == "true", false))
+                    .child(focus_ring(crate::ui::elements::checkbox::checkbox(theme, choice.answer == "true", false),
+                        keyboard_focused(&choice.focus, window), false, theme))
                     .child(label)
-                    .on_click(cx.listener(move |this, _, _, cx| this.toggle_choice(position, cx)))
+                    // Keys are handled below, on press, as the dialogs' buttons take them.
+                    .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| if !event.is_keyboard() { this.toggle_choice(position, cx) }))
+                    // Space or Enter while it has the keyboard, as the dialogs' checkboxes.
+                    .on_key_down(cx.listener(move |this, event: &KeyDownEvent, _, cx| {
+                        if matches!(event.keystroke.key.as_str(), "space" | "enter") && !event.keystroke.modifiers.modified() {
+                            this.toggle_choice(position, cx);
+                            cx.stop_propagation();
+                        }
+                    }))
                     .into_any_element();
             }
             let (labels, answered) = choice.entries();
@@ -77,7 +90,7 @@ impl FileChooserWindow {
                 .gap(rems(0.5))
                 .text_size(rems(0.8125))
                 .child(label)
-                .child(self.render_menu(FooterMenu::Choice(position), shown, cx))
+                .child(self.render_menu(FooterMenu::Choice(position), shown, &choice.focus, window, cx))
                 .into_any_element()
         }).collect()
     }

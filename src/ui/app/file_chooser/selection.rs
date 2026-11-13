@@ -100,6 +100,17 @@ impl Selection {
         }
     }
 
+    /// A selection rectangle's entries; the anchor stays only while Ctrl or Shift
+    /// combine them with an earlier selection. Whether anything changed.
+    pub(super) fn cover(&mut self, marked: std::collections::HashSet<usize>, keep_anchor: bool) -> bool {
+        let marked: BTreeSet<usize> = marked.into_iter().collect();
+        let anchor = if keep_anchor { self.anchor } else { None };
+        let cursor = self.cursor.filter(|cursor| marked.contains(cursor)).or_else(|| marked.first().copied());
+        let changed = self.marked != marked || self.anchor != anchor || self.cursor != cursor;
+        *self = Self { cursor, anchor, marked };
+        changed
+    }
+
     pub(super) fn keep(&self, shown: &[FileEntry]) -> Kept {
         let path = |position: Option<usize>| position.and_then(|position| shown.get(position)).map(|entry| entry.path.clone());
         Kept {

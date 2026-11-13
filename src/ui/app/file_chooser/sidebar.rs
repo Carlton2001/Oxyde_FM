@@ -3,7 +3,6 @@
 //! line, the mounted drives, then the volumes a click mounts (`mount_volume`). Choosing
 //! needs no menus, drops, reordering or folder tree.
 use super::{FileChooserWindow, Place};
-use crate::ui::components::scrollbar::{render_scrollbar_with_pointer, ScrollbarAxis};
 use crate::ui::paths::paths_match;
 use crate::ui::components::sidebar::volume_row::name as volume_name;
 use crate::ui::components::tooltip::hover::{HoverRegion, SharedTooltipExt};
@@ -191,7 +190,6 @@ impl FileChooserWindow {
         let viewport_h = scroll.bounds().size.height.as_f32();
         let overflows = self.sidebar_overflows();
         let entity_id = cx.entity().entity_id();
-        let dragging = self.scroll_drag.as_ref().is_some_and(|(track, _, _)| track.ends_with("file-chooser-sidebar"));
         div()
             .w(px(self.sidebar_display_width()))
             .h_full()
@@ -221,12 +219,8 @@ impl FileChooserWindow {
             )
             .child(
                 div().absolute().top_0().bottom_0().right_0().w(rems(0.75))
-                    .child(render_scrollbar_with_pointer(theme, cx.entity(), ScrollbarAxis::Vertical, viewport_h.max(1.0), if viewport_h > 0.0 { content_h } else { 1.0 },
-                        -scroll.offset().y.as_f32(), dragging, "file-chooser-sidebar".into(), None, scroll.clone(),
-                        move |this: &mut Self, track, viewport, content, _, cx| {
-                            this.scroll_drag = Some((track, viewport, content));
-                            cx.notify(entity_id);
-                        })),
+                    .child(self.render_vertical_scrollbar(theme, super::scroll::SIDEBAR, scroll.clone(), viewport_h.max(1.0),
+                        if viewport_h > 0.0 { content_h } else { 1.0 }, cx)),
             )
     }
 

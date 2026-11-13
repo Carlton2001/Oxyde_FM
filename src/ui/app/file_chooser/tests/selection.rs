@@ -53,3 +53,20 @@ fn the_selection_follows_its_entries_when_they_move() {
     let left = Selection::restore(&Kept::path("/f/c".into()), &after);
     assert_eq!(marked(&left), [1]);
 }
+
+#[test]
+fn a_rectangle_replaces_the_selection_and_keeps_the_anchor_only_when_combined() {
+    let mut selection = Selection::default();
+    selection.only(3);
+    assert!(selection.cover([5, 6].into_iter().collect(), false));
+    assert_eq!(marked(&selection), [5, 6]);
+    // The cursor left the selection: the arrows start from its first entry.
+    assert_eq!(selection.cursor(), Some(5));
+    // Without an anchor, Shift selects the entry alone.
+    selection.extend(8, false);
+    assert_eq!(marked(&selection), [8]);
+    assert!(selection.cover([1, 8].into_iter().collect(), true));
+    selection.extend(10, false);
+    assert_eq!(marked(&selection), [8, 9, 10]);
+    assert!(!selection.cover([8, 9, 10].into_iter().collect(), true));
+}

@@ -119,7 +119,11 @@ impl FileChooserWindow {
                     cx.notify();
                 });
             },
-            move |window, cx| { let _ = entered.update(cx, |this, cx| this.save(window, cx)); },
+            // After the field's own update, which reading the name would collide with.
+            move |window, cx| {
+                let entered = entered.clone();
+                window.defer(cx, move |window, cx| { let _ = entered.update(cx, |this, cx| this.save(window, cx)); });
+            },
             move |window, cx| { let _ = escaped.update(cx, |this, cx| this.finish(None, window, cx)); },
             |_, _, _, _, _| {},
             TextInputOptions { initial_selection: Some(0..stem), ..Default::default() },

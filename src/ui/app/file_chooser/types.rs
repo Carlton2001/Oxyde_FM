@@ -16,9 +16,15 @@ impl FileChooserWindow {
 
     /// The filter shown and the menu of the others; nothing when the application gives
     /// none, or when it asks for folders, which filters leave alone.
-    pub(super) fn render_type_filter(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        if self.directory { return None; }
+    /// Whether the footer offers the type filters.
+    pub(super) fn shows_type_filter(&self) -> bool {
+        !self.directory && self.type_filter.is_some_and(|filter| filter < self.filters.len())
+    }
+
+    pub(super) fn render_type_filter(&self, window: &Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if !self.shows_type_filter() { return None; }
         let label = self.filters.get(self.type_filter?)?.name.clone();
-        Some(self.render_menu(FooterMenu::Types, label, cx))
+        let focus = self.footer_focus.types.clone();
+        Some(self.render_menu(FooterMenu::Types, label, &focus, window, cx))
     }
 }

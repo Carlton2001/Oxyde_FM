@@ -7,14 +7,14 @@ use gpui::*;
 /// Height of the band near each edge where rectangle selection starts scrolling.
 const AUTOSCROLL_EDGE: f32 = 30.0;
 /// Scroll speed per pixel of depth into the band, per second (GTK adds the depth each frame).
-const AUTOSCROLL_RATE: f32 = 60.0;
+pub(crate) const AUTOSCROLL_RATE: f32 = 60.0;
 /// Depth beyond which the speed stops growing.
 const AUTOSCROLL_MAX_DEPTH: f32 = 150.0;
 
 /// How deep the pointer is in the band along the list's top (negative) or bottom
 /// (positive) edge, up to the depth beyond which the speed stops growing; zero
 /// between the bands.
-fn autoscroll_depth(y: f32, top: f32, bottom: f32) -> f32 {
+pub(crate) fn autoscroll_depth(y: f32, top: f32, bottom: f32) -> f32 {
     let edge = logical(AUTOSCROLL_EDGE);
     let depth = if y < top + edge {
         y - (top + edge)
@@ -313,11 +313,13 @@ impl OxydeApp {
     }
 }
 
-fn rectangle_selection(
-    initial: &std::collections::HashSet<String>,
-    covered: std::collections::HashSet<String>,
+/// What a selection rectangle selects: what it covers, added to the selection before
+/// it with Shift, toggled against it with Ctrl. The file chooser shares it.
+pub(crate) fn rectangle_selection<T: Clone + Eq + std::hash::Hash>(
+    initial: &std::collections::HashSet<T>,
+    covered: std::collections::HashSet<T>,
     modifiers: Modifiers,
-) -> std::collections::HashSet<String> {
+) -> std::collections::HashSet<T> {
     if modifiers.control {
         initial.symmetric_difference(&covered).cloned().collect()
     } else if modifiers.shift {

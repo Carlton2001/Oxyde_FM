@@ -405,8 +405,6 @@ impl OxydeApp {
     }
 
     fn create_new_item(&mut self, pane_id: &str, is_dir: bool, cx: &mut Context<Self>) {
-        use oxyde_lib::models::transaction::{Transaction, TransactionDetails, TransactionType};
-
         if let Some(pane) = self.state.layout.find_pane(pane_id) {
             let current_path = pane.active_tab().path.clone();
             if current_path.starts_with("search://") { return; }
@@ -470,34 +468,7 @@ impl OxydeApp {
                                 cx,
                             );
                             if is_dir && !in_archive {
-                                this.history.push(Transaction::new(
-                                    TransactionType::NewFolder,
-                                    TransactionDetails {
-                                        deleted_items: None,
-                                        created_links: None,
-                                        moved_links: None,
-                                        directory_attributes: None,
-                                        renamed_dirs: None,
-                                        renamed_item_identity: None,
-                                        moved_directory_identities: None,
-                                        new_folder_identity: identity,
-                                        moved_file_identities: None,
-                                        copied_directory_identities: None,
-                                        copied_file_identities: None,
-                                        paths: vec![folder_path.to_string_lossy().into_owned()],
-                                        target_dir: Some(current_path),
-                                        old_path: None,
-                                        new_path: None,
-                                        created_files: None,
-                                        created_dirs: None,
-                                        overwritten_files: None,
-                                        moved_files: None,
-                                        trash_metadata_backups: None,
-                                        moved_dirs: None,
-                                        copied_files: None,
-                                        copied_file_hashes: None,
-                                    },
-                                ));
+                                this.history.push(new_folder_transaction(&folder_path, identity, current_path));
                             }
                             this.refresh_all_tabs(cx);
                             this.state.refresh_sidebar();
@@ -632,3 +603,41 @@ fn initial_selection_len(name: &str, is_dir: bool, extension: Option<&str>) -> u
 #[cfg(test)]
 #[path = "rename/tests/selection.rs"]
 mod selection_tests;
+
+/// The history entry of a folder created empty, which Undo removes again. The file
+/// chooser records its new folders with it too.
+pub(super) fn new_folder_transaction(
+    folder_path: &std::path::Path,
+    identity: Option<oxyde_lib::models::transaction::HistoryFileIdentity>,
+    current_path: String,
+) -> oxyde_lib::models::transaction::Transaction {
+    use oxyde_lib::models::transaction::{Transaction, TransactionDetails, TransactionType};
+    Transaction::new(
+        TransactionType::NewFolder,
+        TransactionDetails {
+            deleted_items: None,
+            created_links: None,
+            moved_links: None,
+            directory_attributes: None,
+            renamed_dirs: None,
+            renamed_item_identity: None,
+            moved_directory_identities: None,
+            new_folder_identity: identity,
+            moved_file_identities: None,
+            copied_directory_identities: None,
+            copied_file_identities: None,
+            paths: vec![folder_path.to_string_lossy().into_owned()],
+            target_dir: Some(current_path),
+            old_path: None,
+            new_path: None,
+            created_files: None,
+            created_dirs: None,
+            overwritten_files: None,
+            moved_files: None,
+            trash_metadata_backups: None,
+            moved_dirs: None,
+            copied_files: None,
+            copied_file_hashes: None,
+        },
+    )
+}

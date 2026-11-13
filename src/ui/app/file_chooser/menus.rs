@@ -42,6 +42,12 @@ impl FileChooserWindow {
         cx.notify();
     }
 
+    fn toggle_menu(&mut self, menu: FooterMenu, cx: &mut Context<Self>) {
+        self.menu = if self.menu == Some(menu) { None } else { Some(menu) };
+        self.menu_scroll = UniformListScrollHandle::new();
+        cx.notify();
+    }
+
     fn close_menu(&mut self, cx: &mut Context<Self>) {
         self.menu = None;
         cx.notify();
@@ -83,9 +89,11 @@ impl FileChooserWindow {
                 let _ = close.update(cx, |this, cx| this.close_menu(cx));
             }),
             on_outside: None,
-            // The menu scrolls with the wheel; its thumb is not dragged here.
-            on_drag: Rc::new(|_, _, _, _, _| {}),
-            is_dragging: false,
+            on_drag: Rc::new({
+                let scroll = self.menu_scroll.0.borrow().base_handle.clone();
+                move |this, track, viewport, content, _| this.start_menu_drag(track, viewport, content, scroll.clone())
+            }),
+            is_dragging: self.dragging_menu(),
             on_item_hover: None,
             on_width_calculated: None,
             on_hover_change: None,
@@ -93,20 +101,25 @@ impl FileChooserWindow {
     }
 
     /// The button showing `label`, the answer given, which opens `menu` above it.
-    pub(super) fn render_menu(&self, menu: FooterMenu, label: String, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_menu(&self, menu: FooterMenu, label: String, focus: &FocusHandle, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let handle = cx.entity();
         let open = self.menu == Some(menu);
         let widths = self.menu_trigger_widths.clone();
         let key = menu.id();
-        let trigger = crate::ui::components::select_menu::trigger(menu.id(), label, false, true, cx)
+        let focused = crate::ui::elements::focus_ring::keyboard_focused(focus, window);
+        let trigger = crate::ui::components::select_menu::trigger(menu.id(), label, focused, true, cx)
+            .track_focus(focus)
             .max_w(rems(18.0))
             .child(canvas(|bounds, _, _| bounds, move |bounds, _, _, _| {
                 widths.borrow_mut().insert(key.clone(), bounds.size.width);
             }).absolute().inset_0().size_full())
-            .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, _, cx| {
-                this.menu = if this.menu == Some(menu) { None } else { Some(menu) };
-                this.menu_scroll = UniformListScrollHandle::new();
-                cx.notify();
+            .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, _, cx| this.toggle_menu(menu, cx)))
+            // Space, Enter or Down while it has the keyboard opens it.
+            .on_key_down(cx.listener(move |this, event: &KeyDownEvent, _, cx| {
+                if matches!(event.keystroke.key.as_str(), "space" | "enter" | "down") && !event.keystroke.modifiers.modified() {
+                    this.toggle_menu(menu, cx);
+                    cx.stop_propagation();
+                }
             }));
         div()
             .relative()

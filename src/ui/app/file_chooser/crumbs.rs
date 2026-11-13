@@ -18,4 +18,6 @@ pub(super) struct Crumbs {
     /// The chevron whose folder is being listed, before its menu opens.
     pub(super) request: Option<(String, usize)>,
     pub(super) menu_scroll: UniformListScrollHandle,
+    /// A crumb's right-click menu: the folder it names and its index.
+    pub(super) context: Option<(String, usize)>,
 }

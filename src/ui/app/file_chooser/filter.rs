@@ -42,7 +42,11 @@ impl FileChooserWindow {
             cx.i18n().text(Message::NameFilterPlaceholder),
             self.filter.text.clone(),
             move |text, _, cx| { let _ = change.update(cx, |this, cx| this.set_filter(text, cx)); },
-            move |window, cx| { let _ = enter.update(cx, |this, cx| this.activate(window, cx)); },
+            // After the field's own update: saving reads the name field.
+            move |window, cx| {
+                let enter = enter.clone();
+                window.defer(cx, move |window, cx| { let _ = enter.update(cx, |this, cx| this.activate(window, cx)); });
+            },
             move |window, cx| {
                 let _ = escape.update(cx, |this, cx| {
                     this.clear_filter(cx);

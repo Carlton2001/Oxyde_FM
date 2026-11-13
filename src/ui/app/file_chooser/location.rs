@@ -73,7 +73,11 @@ impl FileChooserWindow {
                     cx.notify();
                 });
             },
-            move |window, cx| { let _ = entered.update(cx, |this, cx| this.submit_location(window, cx)); },
+            // After the field's own update, which reading its text would collide with.
+            move |window, cx| {
+                let entered = entered.clone();
+                window.defer(cx, move |window, cx| { let _ = entered.update(cx, |this, cx| this.submit_location(window, cx)); });
+            },
             move |window, cx| { let _ = escaped.update(cx, |this, cx| this.cancel_location(window, cx)); },
             |_, _, _, _, _| {},
             TextInputOptions {

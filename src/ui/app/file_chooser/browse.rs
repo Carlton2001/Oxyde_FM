@@ -63,7 +63,9 @@ impl FileChooserWindow {
         }
         // A new folder starts unfiltered, its path no longer edited.
         self.location.close();
+        self.rename = None;
         self.crumbs.menu = None;
+        self.crumbs.context = None;
         self.filter.clear();
         self.entries = Arc::new(Vec::new());
         self.shown = Arc::new(Vec::new());
@@ -86,7 +88,7 @@ impl FileChooserWindow {
     /// a type filter names MIME types, the files' types are read there too, once for
     /// all filters. Its folders are then checked for subfolders, as the main window
     /// checks them.
-    fn list_folder(&mut self, keep: Kept, cx: &mut Context<Self>) {
+    pub(super) fn list_folder(&mut self, keep: Kept, cx: &mut Context<Self>) {
         self.listing = Listing::Loading;
         self.arrange_task = None;
         let folder = self.folder.clone();

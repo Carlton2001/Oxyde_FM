@@ -25,8 +25,21 @@ fn remote_share<'a>(path: &str, drives: &'a [DriveInfo]) -> Option<&'a DriveInfo
     })
 }
 
+/// A drive letter's crumb, `C:`, named as the main window names it: its label first.
+fn drive_label(part: &str, drives: &[DriveInfo]) -> String {
+    let letter = part.to_uppercase();
+    drives.iter().find(|drive| drive.path.to_uppercase().starts_with(&letter) && !drive.label.is_empty())
+        .map_or_else(|| part.to_string(), |drive| format!("{} ({part})", drive.label))
+}
+
 /// The volume holding `path`, as the main window's root icon shows it.
 fn root_icon(path: &str, drives: &[DriveInfo]) -> &'static str {
+    if oxyde_lib::platform::is_wsl_path(path) {
+        return "icons/box.svg";
+    }
+    if path.starts_with("\\\\") {
+        return "icons/network.svg";
+    }
     drives.iter().filter(|drive| {
         std::path::Path::new(path).ancestors().any(|ancestor| {
             crate::ui::paths::paths_match(&ancestor.to_string_lossy(), &drive.path)
@@ -47,6 +60,7 @@ impl FileChooserWindow {
             cx.notify();
             return;
         }
+        self.crumbs.context = None;
         self.crumbs.request = Some(request.clone());
         let (show_hidden, show_system) = (self.show_hidden, self.show_system);
         cx.spawn(async move |this, cx| {
@@ -107,7 +121,60 @@ impl FileChooserWindow {
                 });
             }),
             on_outside: None,
-            // The menu scrolls with the wheel; its thumb is not dragged here.
+            on_drag: Rc::new({
+                let scroll = self.crumbs.menu_scroll.0.borrow().base_handle.clone();
+                move |this, track, viewport, content, _| this.start_menu_drag(track, viewport, content, scroll.clone())
+            }),
+            is_dragging: self.dragging_menu(),
+            on_item_hover: None,
+            on_width_calculated: None,
+            on_hover_change: None,
+        }
+    }
+
+    /// A crumb's right-click menu, as the main bar's: its folder's path to copy.
+    fn crumb_context_menu(&self, handle: Entity<Self>, cx: &App) -> GenericDropdown<Self> {
+        let path = self.crumbs.context.as_ref().map(|(path, _)| path.clone()).unwrap_or_default();
+        let copy = handle.downgrade();
+        let items = vec![DropdownItem {
+            label: cx.i18n().text(Message::CopyPath).to_string(),
+            badge: None,
+            icon: Some(IconName::Copy),
+            stay_open: false,
+            has_submenu: false,
+            is_dimmed: false,
+            is_faded: false,
+            on_click: Rc::new(move |_, cx| {
+                #[cfg(target_os = "windows")]
+                let _ = oxyde_lib::platform::clipboard::set_clipboard_text(path.clone());
+                #[cfg(not(target_os = "windows"))]
+                cx.write_to_clipboard(ClipboardItem::new_string(path.clone()));
+                let _ = copy.update(cx, |this, cx| {
+                    this.crumbs.context = None;
+                    cx.notify();
+                });
+            }),
+            on_hover: None,
+        }];
+        let close = handle.downgrade();
+        GenericDropdown {
+            id: "file-chooser-crumb-context".into(),
+            h_app: handle,
+            items,
+            reserve_icon_space: true,
+            is_context_menu: true,
+            scroll_handle: UniformListScrollHandle::new(),
+            width: None,
+            min_width: None,
+            max_height: logical(360.0),
+            header: None,
+            on_close: Rc::new(move |_, cx| {
+                let _ = close.update(cx, |this, cx| {
+                    this.crumbs.context = None;
+                    cx.notify();
+                });
+            }),
+            on_outside: None,
             on_drag: Rc::new(|_, _, _, _, _| {}),
             is_dragging: false,
             on_item_hover: None,
@@ -199,12 +266,21 @@ impl FileChooserWindow {
             cx.notify();
         }
         let separator = std::path::MAIN_SEPARATOR;
-        let mut accumulated = if current_path.starts_with('/') { separator.to_string() } else { String::new() };
+        // A share starts with two separators, a drive letter with its root, as in the main bar.
+        let mut accumulated = if current_path.starts_with("\\\\") || current_path.starts_with("//") {
+            format!("{separator}{separator}")
+        } else if current_path.starts_with('/') {
+            separator.to_string()
+        } else {
+            String::new()
+        };
         let mut elements: Vec<AnyElement> = Vec::new();
         for (index, part) in path_parts.iter().enumerate() {
             let is_last = index + 1 == total_parts;
             if index == 0 && share.is_some() {
                 accumulated = part.clone();
+            } else if index == 0 && part.ends_with(':') {
+                accumulated = format!("{part}{separator}");
             } else {
                 if !accumulated.is_empty() && !accumulated.ends_with(separator) {
                     accumulated.push(separator);
@@ -213,16 +289,28 @@ impl FileChooserWindow {
             }
             let level = accumulated.clone();
             if index > 0 {
-                let parent = level[..level.len() - part.len()].to_string();
+                let parent = level.strip_suffix(part.as_str()).unwrap_or(&level).to_string();
                 elements.push(self.render_chevron(parent, index, theme, cx));
             }
             let label = match share {
                 Some(share) if index == 0 => share.label.clone(),
+                None if index == 0 && part.ends_with(':') => drive_label(part, &self.places.drives),
                 _ => oxyde_lib::utils::path_text::display(part),
             };
+            let context_level = level.clone();
+            let context_open = self.crumbs.context.as_ref().is_some_and(|(_, current)| *current == index);
+            let handle = cx.entity();
             elements.push(
                 div()
                     .id(("file-chooser-crumb", index))
+                    .relative()
+                    .child(crate::ui::components::popup::anchored_surface(format!("file-chooser-crumb-context-{index}"), handle.clone(),
+                        move |this| this.crumbs.context.as_ref().is_some_and(|(_, current)| *current == index),
+                        |this, _, cx| this.crumb_context_menu(cx.entity(), cx).into_any_element(),
+                        |this, _, cx| { this.crumbs.context = None; cx.notify(); }))
+                    .when(context_open && !crate::ui::components::popup::supported_source(&handle, cx), |crumb| {
+                        crumb.child(deferred(anchored().anchor(Anchor::TopLeft).child(self.crumb_context_menu(handle.clone(), cx))))
+                    })
                     .flex_none()
                     .h(crate::ui::style::CRUMB_HEIGHT)
                     .px(rems(0.375))
@@ -237,6 +325,15 @@ impl FileChooserWindow {
                             this.begin_location(None, window, cx);
                         } else if !is_last {
                             this.show_folder(level.clone(), cx);
+                        }
+                    }))
+                    .on_mouse_down(MouseButton::Right, cx.listener({
+                        let level = context_level;
+                        move |this, _, _, cx| {
+                            cx.stop_propagation();
+                            this.crumbs.menu = None;
+                            this.crumbs.context = if this.crumbs.context.as_ref().is_some_and(|(_, current)| *current == index) { None } else { Some((level.clone(), index)) };
+                            cx.notify();
                         }
                     }))
                     .child(label)
@@ -313,6 +410,7 @@ impl FileChooserWindow {
         let editing = self.location.input.clone();
         let i18n = cx.i18n();
         let (back_label, forward_label, up_label) = (i18n.text(Message::Back), i18n.text(Message::Forward), i18n.text(Message::Up));
+        let new_folder_label = i18n.text(Message::NewFolder);
         let history_button = |id: &'static str, icon: &'static str, enabled: bool| {
             bar_button::fill(bar_button::cell(id, crate::ui::style::NAV_BAR_HEIGHT), enabled, false, theme)
                 .child(bar_button::icon(icon, bar_button::icon_color(enabled, false, theme)))
@@ -343,14 +441,19 @@ impl FileChooserWindow {
                             .fixed_tooltip(Tooltip::with_shortcut(forward_label, Some("Alt+→".into())))
                             .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.go_forward(cx))))),
             )
+            // Up stays in place at the root, disabled, then New folder, as in the main window.
             .child(
-                div().h_full().flex().items_center().flex_shrink_0()
-                    .when(parent, |actions| actions.child(
-                        bar_button::fill(bar_button::cell("file-chooser-up", crate::ui::style::NAV_BAR_HEIGHT), true, false, theme)
-                            .fixed_tooltip(Tooltip::with_shortcut(up_label, Some("Alt+↑".into())))
-                            .on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.go_up(cx)))
-                            .child(bar_button::icon("icons/arrow-up.svg", theme.text)),
-                    )),
+                div().h_full().flex().items_center().flex_shrink_0().child(
+                    bar_button::fill(bar_button::cell("file-chooser-up", crate::ui::style::NAV_BAR_HEIGHT), parent, false, theme)
+                        .fixed_tooltip(Tooltip::with_shortcut(up_label, Some("Alt+↑".into())))
+                        .when(parent, |button| button.on_mouse_down(MouseButton::Left, cx.listener(|this, _, _, cx| this.go_up(cx))))
+                        .child(bar_button::icon("icons/arrow-up.svg", bar_button::icon_color(parent, false, theme))),
+                ).child(
+                    bar_button::fill(bar_button::cell("file-chooser-new-folder", crate::ui::style::NAV_BAR_HEIGHT), true, false, theme)
+                        .fixed_tooltip(Tooltip::with_shortcut(new_folder_label, Some("Ctrl+Shift+N".into())))
+                        .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| this.create_folder(window, cx)))
+                        .child(bar_button::icon("icons/folder-plus.svg", theme.text)),
+                ),
             )
             // The only separator divides the actions from the crumbs.
             .child(crate::ui::elements::separator::vertical(theme.border))

@@ -5,6 +5,7 @@
 | `test-windows.ps1` | Full native Windows suite, also used by CI |
 | `check-linux.sh` | Warning-free `cargo check` on Linux |
 | `check-windows.sh`, `llvm-rc-crate-root.sh` | Compile the Windows target from Linux |
+| `show-file-chooser.sh` | Show the running Oxyde's Open and Save chooser through its portal interface, without another application |
 | `install-linux-desktop.sh` | Install the desktop entry and icon for the user |
 | `build-distribution.ps1` | Windows portable ZIP and installer |
 | `build-linux-packages.sh`, `linux-third-party-notices.py`, `rpm-license.py` | RPM and DEB packages |
