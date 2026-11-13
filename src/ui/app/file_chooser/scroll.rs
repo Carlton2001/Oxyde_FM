@@ -1,6 +1,6 @@
 //! The file chooser's scrollbars, as the main window drives its own (`drag.rs`,
 //! `drag/popup.rs`, `file_list/scroll_top.rs`): a thumb dragged in the list, the grid,
-//! the places or a menu, the menus' thumbs followed from their own windows, and the
+//! the places, the footer's form or a menu, the menus' thumbs followed from their own windows, and the
 //! button that brings the entries back to their start.
 use super::FileChooserWindow;
 use crate::ui::components::scrollbar::{drag_scrolled, render_scrollbar_with_pointer, ScrollbarAxis};
@@ -20,6 +20,7 @@ pub(super) struct ScrollDrag {
 pub(super) const DETAILS: &str = "file-chooser-details";
 pub(super) const GRID: &str = "file-chooser-grid";
 pub(super) const SIDEBAR: &str = "file-chooser-sidebar";
+pub(super) const FORM: &str = "file-chooser-form";
 
 /// The thumb of a menu's list: a crumb's or the footer's, one open at a time.
 fn is_menu_track(track: &str) -> bool {

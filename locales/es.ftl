@@ -456,6 +456,7 @@ file-chooser-save-title = Guardar archivo
 file-chooser-save-files-title = Guardar archivos
 file-chooser-save = Guardar
 file-chooser-name = Nombre
+file-chooser-type = Tipo
 file-chooser-name-placeholder = Nombre del archivo
 file-chooser-replace-title = { $count ->
     [one] Reemplazar archivo

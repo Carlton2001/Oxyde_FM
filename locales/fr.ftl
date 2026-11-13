@@ -300,6 +300,7 @@ file-chooser-save-title = Enregistrer un fichier
 file-chooser-save-files-title = Enregistrer des fichiers
 file-chooser-save = Enregistrer
 file-chooser-name = Nom
+file-chooser-type = Type
 file-chooser-name-placeholder = Nom du fichier
 file-chooser-replace-title = { $count ->
     [one] Remplacer le fichier

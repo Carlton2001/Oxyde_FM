@@ -232,35 +232,27 @@ impl FileChooserWindow {
         }
     }
 
-    /// The name's label and field, red and shaken when it leads nowhere, as the path
-    /// edited in the navigation bar.
-    pub(super) fn render_name_field(&self, theme: OxydeTheme, cx: &mut Context<Self>) -> Option<AnyElement> {
+    /// The name's field, red and shaken when it leads nowhere, as the path edited in
+    /// the navigation bar; the footer gives it its label.
+    pub(super) fn render_name_field(&self, theme: OxydeTheme) -> Option<AnyElement> {
         let input = self.name.input.clone()?;
         let invalid = self.name.invalid;
         let field = div()
             .flex_1()
             .min_w(rems(10.0))
-            .max_w(rems(28.0))
+            .max_w(rems(40.0))
             .when(invalid, |field| field.border(rems(0.0625)).border_color(theme.error).rounded_md())
             .child(input);
-        let row = div()
-            .flex_1()
-            .min_w(rems(14.0))
-            .flex()
-            .items_center()
-            .gap(rems(0.5))
-            .child(div().flex_none().child(cx.i18n().text(Message::FileChooserName)))
-            .child(field);
         if !invalid {
-            return Some(row.into_any_element());
+            return Some(field.into_any_element());
         }
-        Some(row.with_animation(
+        Some(field.with_animation(
             SharedString::from(format!("file-chooser-name-shake-{}", self.name.shake)),
             Animation::new(std::time::Duration::from_millis(300)),
-            |row, delta| {
+            |field, delta| {
                 let amplitude = (1.0 - delta) * logical(8.0);
                 let offset = (delta * std::f32::consts::PI * 6.0).sin() * amplitude;
-                row.relative().left(px(offset))
+                field.relative().left(px(offset))
             },
         ).into_any_element())
     }

@@ -8,6 +8,9 @@ use gpui::prelude::*;
 use gpui::*;
 use std::rc::Rc;
 
+/// The width of the footer's menus.
+pub(super) const MENU_WIDTH: Rems = Rems(16.0);
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum FooterMenu {
     Types,
@@ -109,7 +112,7 @@ impl FileChooserWindow {
         let focused = crate::ui::elements::focus_ring::keyboard_focused(focus, window);
         let trigger = crate::ui::components::select_menu::trigger(menu.id(), label, focused, true, cx)
             .track_focus(focus)
-            .max_w(rems(18.0))
+            .w_full()
             .child(canvas(|bounds, _, _| bounds, move |bounds, _, _, _| {
                 widths.borrow_mut().insert(key.clone(), bounds.size.width);
             }).absolute().inset_0().size_full())
@@ -121,10 +124,11 @@ impl FileChooserWindow {
                     cx.stop_propagation();
                 }
             }));
+        // One width for every menu, which keeps the form's column straight.
         div()
             .relative()
+            .w(MENU_WIDTH)
             .min_w_0()
-            .flex_none()
             .child(crate::ui::components::popup::anchored_surface(menu.id(), handle.clone(),
                 move |this| this.menu == Some(menu),
                 move |this, _, cx| if this.menu == Some(menu) { this.dropdown(menu, cx.entity()).into_any_element() } else { div().into_any_element() },

@@ -15,6 +15,7 @@ Cases:
   folder       OpenFile with directory: select folders
   filters      OpenFile with type filters (glob and MIME) and a current filter
   choices      OpenFile with a menu and a checkbox in the footer
+  many-choices SaveFile with filters, six menus and three checkboxes
   save         SaveFile with a suggested name and type filters
   save-again   SaveFile of an existing file (current_file)
   save-files   SaveFiles: a folder for three files
@@ -33,10 +34,18 @@ for argument in "$@"; do
 done
 destination=${OXYDE_CHOOSER_DESTINATION:-$destination}
 [[ ${#cases[@]} -eq 0 ]] && cases=(open)
-[[ ${cases[0]} == all ]] && cases=(open multiple folder filters choices save save-again save-files)
+[[ ${cases[0]} == all ]] && cases=(open multiple folder filters choices many-choices save save-again save-files)
 
 home_bytes="b'$HOME'"
 filters="[('Images', [(uint32 1, 'image/*')]), ('Text', [(uint32 0, '*.txt'), (uint32 0, '*.md')]), ('All files', [(uint32 0, '*')])]"
+many_choices="[('encoding', 'Encoding', [('utf8', 'UTF-8'), ('latin1', 'Latin-1')], 'utf8'), \
+('endings', 'Line endings', [('lf', 'Unix (LF)'), ('crlf', 'Windows (CRLF)')], 'lf'), \
+('quality', 'Quality', [('high', 'High'), ('medium', 'Medium'), ('low', 'Low')], 'high'), \
+('color', 'Color profile', [('srgb', 'sRGB'), ('p3', 'Display P3')], 'srgb'), \
+('layers', 'Layers', [('keep', 'Keep'), ('flatten', 'Flatten')], 'keep'), \
+('version', 'Format version', [('2', '2.0'), ('1', '1.x compatible')], '2'), \
+('metadata', 'Keep metadata', @a(ss) [], 'true'), ('backup', 'Make a backup', @a(ss) [], 'false'), \
+('open', 'Open after saving', @a(ss) [], 'false')]"
 choices="[('encoding', 'Encoding', [('utf8', 'UTF-8'), ('latin1', 'Latin-1')], 'utf8'), ('readonly', 'Open read-only', @a(ss) [], 'false')]"
 
 call() {
@@ -63,6 +72,7 @@ for case_name in "${cases[@]}"; do
         folder) call OpenFile "Select folders" "{'directory': <true>, 'multiple': <true>}" ;;
         filters) call OpenFile "Open with filters" "{'filters': <$filters>, 'current_filter': <('Text', [(uint32 0, '*.txt'), (uint32 0, '*.md')])>}" ;;
         choices) call OpenFile "Open with choices" "{'choices': <$choices>, 'accept_label': <'_Import'>}" ;;
+        many-choices) call SaveFile "Save with options" "{'current_name': <'Picture.png'>, 'filters': <$filters>, 'choices': <$many_choices>}" ;;
         save) call SaveFile "Save as" "{'current_name': <'Notes.txt'>, 'filters': <$filters>, 'current_folder': <$home_bytes>}" ;;
         save-again) call SaveFile "Save again" "{'current_file': <b'$(existing_file)'>}" ;;
         save-files) call SaveFiles "Save files" "{'files': <[b'a.txt', b'b.txt', b'c.txt']>}" ;;

@@ -1,6 +1,7 @@
 //! The application's questions beside the files, such as an encoding, as the portal
-//! asks them: a checkbox, or a label and a menu of answers. They sit in the footer
-//! and their answers go back with the choice, as GTK's file chooser offers them.
+//! asks them: a checkbox, or a label and a menu of answers. They sit in the footer's
+//! form, menus first, and their answers go back with the choice, as GTK's file
+//! chooser offers them.
 use super::menus::FooterMenu;
 use super::FileChooserWindow;
 use crate::ui::theme::OxydeTheme;
@@ -53,45 +54,49 @@ impl FileChooserWindow {
         self.choices.iter().map(|choice| (choice.choice.id.clone(), choice.answer.clone())).collect()
     }
 
-    pub(super) fn render_choices(&self, theme: OxydeTheme, window: &Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        use crate::ui::elements::focus_ring::{focus_ring, keyboard_focused};
-        self.choices.iter().enumerate().map(|(position, choice)| {
-            let label = choice.choice.label.clone();
-            if choice.checkbox() {
-                return div()
-                    .id(("file-chooser-choice", position))
-                    .track_focus(&choice.focus)
-                    .flex_none()
-                    .flex()
-                    .items_center()
-                    .gap(rems(0.5))
-                    .text_size(rems(0.8125))
-                    .child(focus_ring(crate::ui::elements::checkbox::checkbox(theme, choice.answer == "true", false),
-                        keyboard_focused(&choice.focus, window), false, theme))
-                    .child(label)
-                    // Keys are handled below, on press, as the dialogs' buttons take them.
-                    .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| if !event.is_keyboard() { this.toggle_choice(position, cx) }))
-                    // Space or Enter while it has the keyboard, as the dialogs' checkboxes.
-                    .on_key_down(cx.listener(move |this, event: &KeyDownEvent, _, cx| {
-                        if matches!(event.keystroke.key.as_str(), "space" | "enter") && !event.keystroke.modifiers.modified() {
-                            this.toggle_choice(position, cx);
-                            cx.stop_propagation();
-                        }
-                    }))
-                    .into_any_element();
-            }
+    /// The choices offering a list of answers, each with its label: rows of the form.
+    pub(super) fn render_choice_menus(&self, window: &Window, cx: &mut Context<Self>) -> Vec<(SharedString, AnyElement)> {
+        self.choices.iter().enumerate().filter(|(_, choice)| !choice.checkbox()).map(|(position, choice)| {
             let (labels, answered) = choice.entries();
             let shown = answered.and_then(|answered| labels.get(answered).cloned()).unwrap_or_default();
+            (choice.choice.label.clone().into(), self.render_menu(FooterMenu::Choice(position), shown, &choice.focus, window, cx))
+        }).collect()
+    }
+
+    /// The checkboxes, which carry their own label below the form's menus.
+    pub(super) fn render_choice_checkboxes(&self, theme: OxydeTheme, window: &Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        use crate::ui::elements::focus_ring::{focus_ring, keyboard_focused};
+        self.choices.iter().enumerate().filter(|(_, choice)| choice.checkbox()).map(|(position, choice)| {
             div()
+                .id(("file-chooser-choice", position))
+                .track_focus(&choice.focus)
                 .flex_none()
-                .min_w_0()
                 .flex()
                 .items_center()
                 .gap(rems(0.5))
-                .text_size(rems(0.8125))
-                .child(label)
-                .child(self.render_menu(FooterMenu::Choice(position), shown, &choice.focus, window, cx))
+                .child(focus_ring(crate::ui::elements::checkbox::checkbox(theme, choice.answer == "true", false),
+                    keyboard_focused(&choice.focus, window), false, theme))
+                .child(choice.choice.label.clone())
+                // Keys are handled below, on press, as the dialogs' buttons take them.
+                .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| if !event.is_keyboard() { this.toggle_choice(position, cx) }))
+                // Space or Enter while it has the keyboard, as the dialogs' checkboxes.
+                .on_key_down(cx.listener(move |this, event: &KeyDownEvent, _, cx| {
+                    if matches!(event.keystroke.key.as_str(), "space" | "enter") && !event.keystroke.modifiers.modified() {
+                        this.toggle_choice(position, cx);
+                        cx.stop_propagation();
+                    }
+                }))
                 .into_any_element()
         }).collect()
+    }
+
+    /// The keyboard's stops of the choices' menus, then of their checkboxes: the form's
+    /// reading order.
+    pub(super) fn choice_menu_focus(&self) -> impl Iterator<Item = FocusHandle> + '_ {
+        self.choices.iter().filter(|choice| !choice.checkbox()).map(|choice| choice.focus.clone())
+    }
+
+    pub(super) fn choice_checkbox_focus(&self) -> impl Iterator<Item = FocusHandle> + '_ {
+        self.choices.iter().filter(|choice| choice.checkbox()).map(|choice| choice.focus.clone())
     }
 }

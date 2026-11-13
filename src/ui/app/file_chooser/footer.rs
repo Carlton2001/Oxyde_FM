@@ -1,25 +1,55 @@
-//! The footer, below the entries: the name to save under, the application's type
-//! filters and choices, and the buttons that answer it. Tab and Shift+Tab move the
-//! keyboard from the entries through its controls and back, as GTK's file chooser
+//! Below the entries, everything the application asks in one place: a form of
+//! labeled rows (the name to save under, the type filters, the choices' menus, then
+//! their checkboxes) on the inactive panels' background, above the secondary
+//! windows' usual footer and its buttons. The form grows with what is asked, up to a
+//! third of the window, past which it scrolls; with many menus, they sit side by side. Tab and Shift+Tab move the keyboard from the
+//! entries through its controls in reading order and back, as GTK's file chooser
 //! does; Enter or Space presses the control that has it, and Escape cancels.
 use super::FileChooserWindow;
 use crate::ui::elements::button::ButtonVariant;
 use crate::ui::i18n::{I18nContext, Message};
-use crate::ui::theme::OxydeTheme;
+use crate::ui::theme::{OxydeTheme, ThemeContext};
 use gpui::prelude::*;
 use gpui::*;
 
-/// The footer's own keyboard stops; the name field and the choices hold theirs.
-pub(super) struct FooterFocus {
+/// The footer's own keyboard stops, the name field and the choices holding theirs,
+/// and its form's scrolling.
+pub(super) struct Footer {
     pub(super) types: FocusHandle,
     cancel: FocusHandle,
     accept: FocusHandle,
+    scroll: ScrollHandle,
 }
 
-impl FooterFocus {
+impl Footer {
     pub(super) fn new(cx: &mut App) -> Self {
-        Self { types: cx.focus_handle(), cancel: cx.focus_handle(), accept: cx.focus_handle() }
+        Self { types: cx.focus_handle(), cancel: cx.focus_handle(), accept: cx.focus_handle(), scroll: ScrollHandle::new() }
     }
+}
+
+/// Past this many menus, they sit side by side where the width allows.
+const DENSE_MENUS: usize = 3;
+/// Between a label and its control, and between the form's rows.
+const LABEL_GAP: Rems = Rems(0.75);
+const ROW_GAP: Rems = Rems(0.5);
+
+/// The width of the longest label, in rems, which the form's label column takes.
+fn label_column(labels: &[SharedString], window: &Window, cx: &App) -> f32 {
+    let mut font = window.text_style().font();
+    font.family = "Inter".into();
+    font.weight = crate::ui::style::DEFAULT_FONT_WEIGHT;
+    let rem = crate::ui::scale::rem_pixels(rems(1.0)).as_f32();
+    labels.iter().map(|label| {
+        let line = window.text_system().shape_line(label.clone(), crate::ui::scale::rem_pixels(rems(0.8125)), &[TextRun {
+            len: label.len(), font: font.clone(), color: cx.theme().text, background_color: None, underline: None, strikethrough: None,
+        }], None);
+        line.width.as_f32() / rem
+    }).fold(0.0, f32::max).ceil()
+}
+
+/// A label, ended to its control, in the label column.
+fn label(text: SharedString, width: f32) -> Div {
+    div().flex_none().w(rems(width)).flex().justify_end().child(text)
 }
 
 impl FileChooserWindow {
@@ -28,14 +58,30 @@ impl FileChooserWindow {
         let mut order = vec![self.focus.clone()];
         order.extend(self.name.input.as_ref().map(|input| input.read(cx).focus_handle.clone()));
         if self.shows_type_filter() {
-            order.push(self.footer_focus.types.clone());
+            order.push(self.footer.types.clone());
         }
-        order.extend(self.choices.iter().map(|choice| choice.focus.clone()));
-        order.push(self.footer_focus.cancel.clone());
+        order.extend(self.choice_menu_focus());
+        order.extend(self.choice_checkbox_focus());
+        order.push(self.footer.cancel.clone());
         if self.can_accept(cx) {
-            order.push(self.footer_focus.accept.clone());
+            order.push(self.footer.accept.clone());
         }
         order
+    }
+
+    /// The form's row holding `focus`, as `render_footer` lays the rows out.
+    fn form_row(&self, focus: &FocusHandle, cx: &App) -> Option<usize> {
+        let mut rows: Vec<Vec<FocusHandle>> = Vec::new();
+        rows.extend(self.name.input.as_ref().map(|input| vec![input.read(cx).focus_handle.clone()]));
+        let menus: Vec<FocusHandle> = self.shows_type_filter().then(|| self.footer.types.clone()).into_iter()
+            .chain(self.choice_menu_focus()).collect();
+        if menus.len() > DENSE_MENUS {
+            rows.push(menus);
+        } else {
+            rows.extend(menus.into_iter().map(|menu| vec![menu]));
+        }
+        rows.push(self.choice_checkbox_focus().collect());
+        rows.iter().position(|row| row.contains(focus))
     }
 
     /// Tab and Escape while a stop has the keyboard; a field typing a path or a filter,
@@ -50,6 +96,9 @@ impl FileChooserWindow {
                 let count = order.len();
                 let next = if m.shift { (current + count - 1) % count } else { (current + 1) % count };
                 window.focus(&order[next], cx);
+                if let Some(row) = self.form_row(&order[next], cx) {
+                    self.footer.scroll.scroll_to_item(row);
+                }
                 cx.notify();
             }
             // The entries keep their own Escape, which also cancels.
@@ -68,22 +117,77 @@ impl FileChooserWindow {
         let enabled = self.can_accept(cx);
         let (cancelled, accepted) = (cx.entity().downgrade(), cx.entity().downgrade());
         let cancel = crate::ui::components::dialog::button("file-chooser-cancel", i18n.text(Message::Cancel), ButtonVariant::Secondary)
-            .focus(&self.footer_focus.cancel)
+            .focus(&self.footer.cancel)
             .on_press(move |window, cx| { let _ = cancelled.update(cx, |this, cx| this.finish(None, window, cx)); });
         let open = crate::ui::components::dialog::button("file-chooser-open", accept, ButtonVariant::Primary)
-            .focus(&self.footer_focus.accept)
+            .focus(&self.footer.accept)
             .enabled(enabled)
             .on_press(move |window, cx| { let _ = accepted.update(cx, |this, cx| this.accept(window, cx)); });
-        let name = self.render_name_field(theme, cx);
-        let named = name.is_some();
-        let asked: Vec<AnyElement> = self.render_type_filter(window, cx).into_iter().chain(self.render_choices(theme, window, cx)).collect();
-        // The name stretches; else a gap keeps the buttons at the end.
-        let spaced = !named && !asked.is_empty();
-        crate::ui::components::tool_window::footer(cx)
-            .children(name)
-            .children(asked)
-            .when(spaced, |footer| footer.child(div().flex_1()))
+
+        let (name_label, type_label) = (i18n.text(Message::FileChooserName), i18n.text(Message::FileChooserType));
+        let name = self.render_name_field(theme).map(|field| (name_label, field));
+        let menus: Vec<(SharedString, AnyElement)> = self.render_type_filter(window, cx)
+            .map(|menu| (type_label, menu)).into_iter()
+            .chain(self.render_choice_menus(window, cx)).collect();
+        let checkboxes = self.render_choice_checkboxes(theme, window, cx);
+        // The secondary windows' footer, on their background to the window's lower corners.
+        let corners = crate::ui::components::client_decorations::inner_corners(window);
+        let footer = crate::ui::components::tool_window::footer(cx)
+            .bg(theme.active_background).rounded_bl(corners.bottom_left).rounded_br(corners.bottom_right)
             .child(cancel)
-            .child(open)
+            .child(open);
+        let zone = div().flex_none().flex().flex_col();
+        if name.is_none() && menus.is_empty() && checkboxes.is_empty() {
+            return zone.child(footer);
+        }
+
+        let labels: Vec<SharedString> = name.iter().map(|(label, _)| label.clone()).chain(menus.iter().map(|(label, _)| label.clone())).collect();
+        let column = label_column(&labels, window, cx);
+        let dense = menus.len() > DENSE_MENUS;
+        // The form's rows, which the keyboard scrolls into view (`form_row`).
+        let mut rows: Vec<AnyElement> = Vec::new();
+        if let Some((text, field)) = name {
+            rows.push(div().flex().items_center().gap(LABEL_GAP).child(label(text, column)).child(field).into_any_element());
+        }
+        let pairs = menus.into_iter().map(|(text, menu)| div()
+            .flex().items_center().gap(LABEL_GAP)
+            .when(!dense, |pair| pair.w_full())
+            .when(dense, |pair| pair.flex_none())
+            .child(label(text, column))
+            .child(menu)
+            .into_any_element());
+        if dense {
+            // Many menus wrap into columns, each pair as wide as the label column and a menu.
+            rows.push(div().flex().flex_wrap().gap_x(rems(1.5)).gap_y(ROW_GAP).children(pairs).into_any_element());
+        } else {
+            rows.extend(pairs);
+        }
+        if !checkboxes.is_empty() {
+            // Below the menus, on the controls' edge.
+            rows.push(div().flex().items_center().gap(LABEL_GAP)
+                .when(column > 0.0, |row| row.child(div().flex_none().w(rems(column))))
+                .child(div().flex_1().min_w_0().flex().flex_wrap().gap_x(rems(1.5)).gap_y(ROW_GAP).children(checkboxes))
+                .into_any_element());
+        }
+
+        // Up to a third of the window, past which the form scrolls with the shared scrollbar.
+        let limit = window.viewport_size().height.as_f32() / 3.0;
+        let scroll = self.footer.scroll.clone();
+        let viewport = scroll.bounds().size.height.as_f32();
+        let content = viewport + scroll.max_offset().y.as_f32();
+        let scrolled = div()
+            .relative()
+            .min_h_0()
+            .child(div().id("file-chooser-form").max_h(px(limit)).overflow_y_scroll().track_scroll(&scroll)
+                .flex().flex_col().gap(ROW_GAP).children(rows))
+            .when(content > viewport + 0.5, |area| area.child(self.render_vertical_scrollbar(theme, super::scroll::FORM, scroll, viewport, content, cx)));
+        let form = div()
+            .border_t(rems(0.0625))
+            .border_color(theme.border)
+            .bg(theme.background)
+            .px(rems(1.0))
+            .py(rems(0.625))
+            .child(scrolled);
+        zone.child(form).child(footer)
     }
 }
