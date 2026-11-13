@@ -151,7 +151,12 @@ impl Controls {
         let mut naming = Vec::new();
         let mut texts = Vec::new();
         for (position, control) in self.list.iter().enumerate() {
-            let (visible, enabled) = state(inner.GetControlState(control.id));
+            // Some Windows builds do not keep a state for the button's drop-down
+            // (E_NOTIMPL): it is shown with the button.
+            let (visible, enabled) = match inner.GetControlState(control.id) {
+                Err(error) if control.kind == Kind::OpenDropDown && error.code() == windows::Win32::Foundation::E_NOTIMPL => (true, true),
+                known => state(known),
+            };
             let group_shown = control.group.is_none_or(|group| state(inner.GetControlState(group)) == (true, true));
             if !visible || !group_shown {
                 continue;
