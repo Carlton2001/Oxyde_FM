@@ -50,6 +50,8 @@ pub(crate) struct Callbacks {
     request_frame: Option<Box<dyn FnMut(RequestFrameOptions)>>,
     input: Option<Box<dyn FnMut(gpui::PlatformInput) -> gpui::DispatchEventResult>>,
     active_status_change: Option<Box<dyn FnMut(bool)>>,
+    // Oxyde: the toplevel's `activated` state changed.
+    activated_change: Option<Box<dyn FnMut()>>,
     visibility_change: Option<Box<dyn FnMut(WindowVisibility)>>,
     hover_status_change: Option<Box<dyn FnMut(bool)>>,
     resize: Option<Box<dyn FnMut(Size<Pixels>, f32)>>,
@@ -126,6 +128,9 @@ pub struct WaylandWindowState {
     client: WaylandClientStatePtr,
     handle: AnyWindowHandle,
     active: bool,
+    // Oxyde: the toplevel's `activated` state from its last configure, None before the first
+    // one. Mutter keeps it during a move while it takes the keyboard away.
+    activated: Option<bool>,
     hovered: bool,
     redraw_requested: bool,
     // Oxyde: a popup resize was requested and not yet answered: a frame drawn now would have
@@ -140,6 +145,10 @@ pub struct WaylandWindowState {
     pending_frame_callback: Option<wl_callback::WlCallback>,
     in_progress_configure: Option<InProgressConfigure>,
     resize_throttle: bool,
+    // Oxyde: the size of the last interactive-resize configure skipped by the throttle, applied
+    // at the next frame. Upstream acked and dropped it, so the window kept a stale size until
+    // another configure came, which may never happen once the pointer stops.
+    throttled_size: Option<Size<Pixels>>,
     in_progress_window_controls: Option<WindowControls>,
     window_controls: WindowControls,
     client_inset: Option<Pixels>,
@@ -698,10 +707,12 @@ impl WaylandWindowState {
             window_bounds: options.bounds,
             in_progress_configure: None,
             resize_throttle: false,
+            throttled_size: None,
             client,
             appearance,
             handle,
             active: false,
+            activated: None,
             hovered: false,
             redraw_requested: false,
             popup_resize_requested: false,
@@ -1036,10 +1047,40 @@ impl WaylandWindowStatePtr {
         state.children.values().any(|&blocking| blocking)
     }
 
+    /// The window geometry of the current bounds, less the client inset.
+    fn set_window_geometry(&self) {
+        let state = self.state.borrow();
+        let window_geometry = inset_by_tiling(
+            state.bounds.map_origin(|_| px(0.0)),
+            state.inset(),
+            state.tiling,
+        )
+        .map(|v| f32::from(v) as i32)
+        .map_size(|v| if v <= 0 { 1 } else { v });
+
+        state.surface_state.set_geometry(
+            window_geometry.origin.x,
+            window_geometry.origin.y,
+            window_geometry.size.width,
+            window_geometry.size.height,
+        );
+    }
+
     pub fn frame(&self) {
         self.frame_loop.set(FrameLoop::Ticking);
         let mut state = self.state.borrow_mut();
         state.resize_throttle = false;
+        if let Some(size) = state.throttled_size.take() {
+            state.window_bounds = Bounds {
+                origin: Point::default(),
+                size,
+            };
+            state.resize_throttle = true;
+            drop(state);
+            self.resize(size);
+            self.set_window_geometry();
+            state = self.state.borrow_mut();
+        }
         // GPUI may throttle this tick without calling draw, so leave the request
         // latched until a draw actually reaches the renderer.
         let force_render = state.redraw_requested;
@@ -1216,7 +1257,15 @@ impl WaylandWindowStatePtr {
                     let throttled = configure.resizing && state.resize_throttle;
                     if throttled {
                         state.surface_state.ack_configure(serial);
+                        if !configure.fullscreen && !configure.maximized {
+                            if let Some(size) =
+                                compute_outer_size(state.inset(), configure.size, state.tiling)
+                            {
+                                state.throttled_size = Some(size);
+                            }
+                        }
                     } else {
+                        state.throttled_size = None;
                         if configure.resizing {
                             state.resize_throttle = true;
                         }
@@ -1250,23 +1299,9 @@ impl WaylandWindowStatePtr {
                     }
                 }
             }
+            self.state.borrow_mut().surface_state.ack_configure(serial);
+            self.set_window_geometry();
             let mut state = self.state.borrow_mut();
-            state.surface_state.ack_configure(serial);
-
-            let window_geometry = inset_by_tiling(
-                state.bounds.map_origin(|_| px(0.0)),
-                state.inset(),
-                state.tiling,
-            )
-            .map(|v| f32::from(v) as i32)
-            .map_size(|v| if v <= 0 { 1 } else { v });
-
-            state.surface_state.set_geometry(
-                window_geometry.origin.x,
-                window_geometry.origin.y,
-                window_geometry.size.width,
-                window_geometry.size.height,
-            );
 
             let initial_configure = self.frame_loop.get() == FrameLoop::Unconfigured;
             // Oxyde: a popup that only moved needs a commit, not a new frame. Waiting for one
@@ -1352,9 +1387,11 @@ impl WaylandWindowStatePtr {
                 let mut maximized = false;
                 let mut resizing = false;
                 let mut visibility = WindowVisibility::Visible;
+                let mut activated = false;
 
                 for state in states {
                     match state {
+                        xdg_toplevel::State::Activated => activated = true,
                         xdg_toplevel::State::Maximized => {
                             maximized = true;
                         }
@@ -1383,6 +1420,16 @@ impl WaylandWindowStatePtr {
 
                 if fullscreen || maximized {
                     tiling = Tiling::tiled();
+                }
+
+                let changed = self.state.borrow().activated != Some(activated);
+                self.state.borrow_mut().activated = Some(activated);
+                if changed {
+                    let callback = self.callbacks.borrow_mut().activated_change.take();
+                    if let Some(mut fun) = callback {
+                        fun();
+                        self.callbacks.borrow_mut().activated_change = Some(fun);
+                    }
                 }
 
                 let mut state = self.state.borrow_mut();
@@ -2054,6 +2101,14 @@ impl PlatformWindow for WaylandWindow {
 
     fn on_input(&self, callback: Box<dyn FnMut(PlatformInput) -> gpui::DispatchEventResult>) {
         self.0.callbacks.borrow_mut().input = Some(callback);
+    }
+
+    fn is_activated(&self) -> Option<bool> {
+        self.borrow().activated
+    }
+
+    fn on_activated_change(&self, callback: Box<dyn FnMut()>) {
+        self.0.callbacks.borrow_mut().activated_change = Some(callback);
     }
 
     fn on_active_status_change(&self, callback: Box<dyn FnMut(bool)>) {

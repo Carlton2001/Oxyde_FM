@@ -1721,9 +1721,13 @@ impl Window {
                 let force_render =
                     mem::take(&mut deferred_force_render) || request_frame_options.force_render;
 
-                let thermal_state = handle
-                    .update(&mut cx, |_, _, cx| cx.thermal_state())
-                    .log_err();
+                // Oxyde: the window manager's active state, not keyboard focus, decides the
+                // inactive cap. Mutter takes the keyboard for an interactive resize or move,
+                // which capped those to 30 frames per second.
+                let (thermal_state, activated) = handle
+                    .update(&mut cx, |_, window, cx| (cx.thermal_state(), window.is_window_activated()))
+                    .log_err()
+                    .map_or((None, active.get()), |(thermal, activated)| (Some(thermal), activated));
 
                 // Throttle frame rate based on conditions:
                 // - Thermal pressure (Serious/Critical): cap to ~60fps
@@ -1733,7 +1737,7 @@ impl Window {
                         && next_frame_callbacks.borrow().is_empty())
                 {
                     None
-                } else if !active.get() && !input_rate_tracker.borrow_mut().is_high_rate() {
+                } else if !activated && !input_rate_tracker.borrow_mut().is_high_rate() {
                     inactive_frame_interval
                 } else if let Some(ThermalState::Critical | ThermalState::Serious) = thermal_state {
                     Some(Duration::from_micros(16667))
@@ -1878,6 +1882,28 @@ impl Window {
                 handle
                     .update(&mut cx, |_, window, cx| window.button_layout_changed(cx))
                     .log_err();
+            }
+        }));
+        // Oxyde: the window manager's active state changes the look, as keyboard focus does.
+        // Deferred: a configure may arrive during a roundtrip made while App is borrowed.
+        platform_window.on_activated_change(Box::new({
+            let cx = cx.to_async();
+            let foreground_executor = cx.foreground_executor().clone();
+            move || {
+                let mut cx = cx.clone();
+                foreground_executor
+                    .spawn(async move {
+                        handle
+                            .update(&mut cx, |_, window, cx| {
+                                window
+                                    .activation_observers
+                                    .clone()
+                                    .retain(&(), |callback| callback(window, cx));
+                                window.refresh();
+                            })
+                            .log_err();
+                    })
+                    .detach();
             }
         }));
         platform_window.on_active_status_change(Box::new({
@@ -2812,6 +2838,13 @@ impl Window {
     /// Returns whether this window is focused by the operating system (receiving key events).
     pub fn is_window_active(&self) -> bool {
         self.active.get()
+    }
+
+    /// Oxyde: whether the window manager shows this window as the active one. It stays true
+    /// while the compositor holds the keyboard for a move or resize; where the platform does not
+    /// tell, it follows [`Self::is_window_active`].
+    pub fn is_window_activated(&self) -> bool {
+        self.platform_window.is_activated().unwrap_or_else(|| self.active.get())
     }
 
     /// Returns whether this window is considered to be the window

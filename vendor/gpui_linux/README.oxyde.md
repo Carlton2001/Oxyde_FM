@@ -71,3 +71,17 @@ compare both copies to the new upstream.
 - `gpui_linux/src/linux/wayland/{client,window}.rs`: a window's mouse position is the pointer's
   only while the pointer is over it. Upstream gives every window the last location in the
   hovered surface's coordinates, so a submenu opened beside its parent showed a hovered row.
+- `PlatformWindow::is_activated` and `on_activated_change` (`gpui/src/platform.rs`, None and
+  no-op by default), `Window::is_window_activated` (`gpui/src/window.rs`, keyboard focus where
+  the platform returns None, with a deferred refresh and the activation observers run on each
+  change) and their Wayland version (`gpui_linux/src/linux/wayland/window.rs`, the toplevel's
+  `activated` configure state). Mutter takes the keyboard (`wl_keyboard.leave`) for the length
+  of an interactive move while the window stays activated, so a look based on keyboard focus
+  went to the backdrop whenever a window was dragged. GTK uses the same state for `:backdrop`.
+- `gpui/src/window.rs`: the 30 frames per second cap on inactive windows follows
+  `Window::is_window_activated`, not keyboard focus. Mutter takes the keyboard for an
+  interactive resize or move, so every window resize was capped.
+- `gpui_linux/src/linux/wayland/window.rs`: an interactive-resize configure skipped by the
+  once-per-frame throttle keeps its size (`throttled_size`), applied with the window geometry at
+  the next frame callback. Upstream acked it and dropped the size, so the window kept a stale
+  size until another configure came: wider or narrower than the pointer after a resize.

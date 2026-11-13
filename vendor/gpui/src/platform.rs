@@ -924,6 +924,14 @@ pub trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
     /// Requests that the operating system draw attention to this window.
     fn request_attention(&self) {}
     fn is_active(&self) -> bool;
+    /// Oxyde: whether the window manager shows this window as the active one, which may differ
+    /// from keyboard focus (Mutter takes the keyboard during an interactive move). None where the
+    /// platform does not tell them apart.
+    fn is_activated(&self) -> Option<bool> {
+        None
+    }
+    /// Oxyde: registers the callback invoked when [`Self::is_activated`] changes.
+    fn on_activated_change(&self, _callback: Box<dyn FnMut()>) {}
     /// The current [`WindowVisibility`]. Read once when the window is created;
     /// afterwards changes arrive through [`Self::on_visibility_change`].
     fn visibility(&self) -> WindowVisibility;
