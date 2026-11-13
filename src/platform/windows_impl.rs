@@ -114,7 +114,11 @@ impl Platform for WindowsPlatform {
         }
     }
     fn start_as_administrator(&self) -> std::io::Result<()> { super::windows_jump_list::start_as_administrator() }
-    fn refresh_folder_menus(&self, label: &str) { super::windows_folder_handler::refresh_menu(label) }
+    fn refresh_folder_menus(&self, label: &str) {
+        super::windows_folder_handler::refresh_menu(label);
+        // At start too: Win+E, which Explorer takes back on Windows 11 26H2.
+        super::windows_folder_handler::keep_win_e();
+    }
     fn withdraw_from_folder_menus(&self) { super::windows_folder_handler::withdraw_menu() }
     fn opens_folders_by_default(&self) -> Option<bool> { super::windows_folder_handler::enabled() }
     fn open_folders_by_default(&self, enabled: bool, previous: Option<&str>) -> Result<Option<String>, String> {

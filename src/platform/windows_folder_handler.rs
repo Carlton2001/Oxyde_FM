@@ -6,8 +6,11 @@
 //! the caller and written back when the choice is turned off; keys left empty are
 //! removed, which gives the system's values back. A portable copy is not offered the
 //! choice: deleted or moved, it would leave folders to a launcher that is gone, and
-//! nothing left to give them back.
+//! nothing left to give them back. Windows 11 26H2 opens Explorer for Win+E without the
+//! command; `direct_launch` gives it back.
+mod direct_launch;
 mod menu;
+pub(super) use direct_launch::{run as run_direct_launch_step, SWITCH as DIRECT_LAUNCH_SWITCH};
 pub(super) use menu::{refresh as refresh_menu, withdraw as withdraw_menu};
 
 use serde::{Deserialize, Serialize};
@@ -240,8 +243,17 @@ pub(super) fn set(enabled: bool, kept: Option<&str>) -> Result<Option<String>, S
             before.iter().for_each(|value| { let _ = write(value); });
             before.iter().for_each(|value| remove_empty(&value.key));
         }
+        if written.is_ok() {
+            // Folders open with Oxyde even when Win+E cannot be had.
+            if let Err(error) = direct_launch::claim(&executable) {
+                log::warn!("Cannot take Win+E from Explorer: {error}");
+            }
+        }
         written.and_then(|()| serde_json::to_string(&before).map(Some).map_err(|error| error.to_string()))
     } else {
+        if let Err(error) = direct_launch::withdraw() {
+            log::warn!("Cannot leave Win+E to Explorer: {error}");
+        }
         let kept = kept.filter(|kept| still_installed(kept, |program| std::path::Path::new(program).is_file()));
         let before = restored(kept, &wanted);
         // Every value is written back, even after a failure; the first error is kept.
@@ -254,6 +266,19 @@ pub(super) fn set(enabled: bool, kept: Option<&str>) -> Result<Option<String>, S
     };
     unsafe { SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None) };
     result
+}
+
+/// Takes Win+E again at start while folders open with this Oxyde, for a copy that took
+/// them before `direct_launch` existed, or a step Explorer did not run.
+pub(super) fn keep_win_e() {
+    if enabled() != Some(true) {
+        return;
+    }
+    if let Some(executable) = executable() {
+        if let Err(error) = direct_launch::claim(&executable) {
+            log::warn!("Cannot take Win+E from Explorer: {error}");
+        }
+    }
 }
 
 #[cfg(test)]

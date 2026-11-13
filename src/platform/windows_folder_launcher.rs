@@ -7,7 +7,8 @@
 //! file in it (`windows_shell_window`), and hands that file to Oxyde to select.
 //!
 //! The same executable relays the dialogs of other applications to Oxyde
-//! (`windows_file_dialog::relay`), started by Oxyde's dialog library.
+//! (`windows_file_dialog::relay`), started by Oxyde's dialog library, and gives Win+E
+//! back to Oxyde at each start of Explorer (`windows_folder_handler::direct_launch`).
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
@@ -47,6 +48,9 @@ fn select(items: &[String]) {
 pub fn run() {
     if std::env::args_os().nth(1).is_some_and(|argument| argument == super::windows_file_dialog::relay::SWITCH) {
         std::process::exit(super::windows_file_dialog::relay::run());
+    }
+    if std::env::args_os().nth(1).is_some_and(|argument| argument == super::windows_folder_handler::DIRECT_LAUNCH_SWITCH) {
+        return super::windows_folder_handler::run_direct_launch_step();
     }
     let current = std::env::current_dir().unwrap_or_default();
     let locations = super::windows_startup::locations(std::env::args_os().skip(1), &current);
