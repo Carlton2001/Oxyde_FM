@@ -1,7 +1,7 @@
 //! The places beside the entries, copies of the main sidebar's rows and list
 //! (`sidebar/rows.rs`, `volume_row.rs`, `tree.rs`): quick access folders, the section
-//! line, the mounted drives, then the volumes a click mounts (`mount_volume`). Choosing
-//! needs no menus, drops, reordering or folder tree.
+//! line, the mounted drives with their folder tree (`tree.rs`), then the volumes a
+//! click mounts (`mount_volume`). Choosing needs no menus, drops or reordering.
 use super::{FileChooserWindow, Place};
 use crate::ui::paths::paths_match;
 use crate::ui::components::sidebar::volume_row::name as volume_name;
@@ -21,7 +21,7 @@ const ENTRY_HEIGHT: Rems = crate::ui::style::MENU_ITEM_HEIGHT;
 /// Space above the first entry and below the last one, as the main sidebar's.
 const LIST_PADDING: Rems = crate::ui::components::sidebar::LIST_PADDING;
 /// One tooltip session for the whole list, as the main sidebar's.
-const REGION: HoverRegion = HoverRegion::Controls("file-chooser-places");
+pub(super) const REGION: HoverRegion = HoverRegion::Controls("file-chooser-places");
 
 /// A place's label: the home folder's is translated.
 fn place_name(place: &Place, i18n: &crate::ui::i18n::I18n) -> String {
@@ -113,6 +113,7 @@ impl FileChooserWindow {
         let is_sel = paths_match(&self.folder, &path);
         let hov_bg = if is_sel { theme.selection_hover } else { theme.hover };
         let label = crate::ui::format::drive_name(drive, cx.i18n());
+        let expandable = self.tree_expandable(&path);
         div()
             .id(("file-chooser-drive", index))
             .w_full()
@@ -124,10 +125,22 @@ impl FileChooserWindow {
             .when(is_sel, |d| d.bg(theme.selected).child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent)))
             .hover(move |s| s.bg(hov_bg))
             .when_some(owner.cloned(), |d, owner| d.shared_tooltip(owner, REGION, format!("drive:{path}"), cx, Tooltip::for_drive(label.clone(), drive.clone())))
-            .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, _, cx| this.show_folder(path.clone(), cx)))
-            // The chevron's room: the label stays aligned with the main sidebar's, where
-            // drives unfold their folders.
-            .child(div().w_4().h_4().mr_1().flex_shrink_0())
+            // A press opens it, a double press unfolds it, as in the main sidebar.
+            .on_mouse_down(MouseButton::Left, cx.listener({
+                let path = path.clone();
+                move |this, event: &MouseDownEvent, _, cx| {
+                    if event.click_count == 2 && expandable {
+                        this.toggle_tree(path.clone(), cx);
+                    } else {
+                        this.show_folder(path.clone(), cx);
+                    }
+                }
+            }))
+            .child(crate::ui::components::sidebar::folder_row::chevron(expandable, self.tree_expanded(&path), theme, {
+                let this = cx.entity().downgrade();
+                let path = path.clone();
+                move |_, cx| { let _ = this.update(cx, |this, cx| this.toggle_tree(path.clone(), cx)); }
+            }))
             .child(
                 div().w_4().h_4().mr_2().flex().items_center().justify_center().flex_shrink_0()
                     .child(svg().path(crate::ui::components::icons::drive_icon_path(drive)).size_4().text_color(theme.text)),
@@ -183,7 +196,12 @@ impl FileChooserWindow {
             // The section line between quick access and the volumes.
             rows.push(crate::ui::elements::separator::horizontal(theme.border).px_3().into_any_element());
         }
-        rows.extend(places.drives.iter().enumerate().map(|(index, drive)| self.render_drive(index, drive, owner.as_ref(), theme, cx)));
+        for (index, drive) in places.drives.iter().enumerate() {
+            rows.push(self.render_drive(index, drive, owner.as_ref(), theme, cx));
+            for folder in self.tree_folders(&drive.path) {
+                rows.push(self.render_tree_folder(&folder, owner.as_ref(), theme, cx));
+            }
+        }
         rows.extend(places.volumes.iter().map(|volume| self.render_volume(volume, owner.as_ref(), theme, cx)));
         let content_h = self.sidebar_content_height();
         let scroll = self.sidebar_scroll.clone();
@@ -228,9 +246,40 @@ impl FileChooserWindow {
     fn sidebar_content_height(&self) -> f32 {
         let places = &self.places;
         let section = !places.drives.is_empty() || !places.volumes.is_empty();
+        let folders: usize = places.drives.iter().map(|drive| self.tree_folders(&drive.path).len()).sum();
         rem_pixels(LIST_PADDING).as_f32() * 2.0
             + rem_pixels(ENTRY_HEIGHT).as_f32() * (places.folders.len() + places.drives.len() + places.volumes.len()) as f32
+            + crate::ui::components::sidebar::folder_row::height() * folders as f32
             + if section { rem_pixels(crate::ui::style::MENU_SEPARATOR_HEIGHT).as_f32() } else { 0.0 }
+    }
+
+    /// Scrolls the places to center the drive or tree folder `path`, as the main
+    /// sidebar reveals the folder it follows.
+    pub(super) fn reveal_in_sidebar(&self, path: &str) {
+        let places = &self.places;
+        let (entry, folder_h) = (rem_pixels(ENTRY_HEIGHT).as_f32(), crate::ui::components::sidebar::folder_row::height());
+        let mut top = rem_pixels(LIST_PADDING).as_f32() + entry * places.folders.len() as f32
+            + if places.drives.is_empty() && places.volumes.is_empty() { 0.0 } else { rem_pixels(crate::ui::style::MENU_SEPARATOR_HEIGHT).as_f32() };
+        let mut found = None;
+        'drives: for drive in &places.drives {
+            if paths_match(&drive.path, path) {
+                found = Some((top, entry));
+                break;
+            }
+            top += entry;
+            for folder in self.tree_folders(&drive.path) {
+                if paths_match(&folder.node.path, path) {
+                    found = Some((top, folder_h));
+                    break 'drives;
+                }
+                top += folder_h;
+            }
+        }
+        let Some((top, height)) = found else { return };
+        let scroll = &self.sidebar_scroll;
+        let viewport = scroll.bounds().size.height.as_f32();
+        let maximum = (self.sidebar_content_height() - viewport).max(0.0);
+        scroll.set_offset(point(scroll.offset().x, px(-(top + height / 2.0 - viewport / 2.0).clamp(0.0, maximum))));
     }
 
     /// Whether the places overflow their list, which then shows a vertical scrollbar.
@@ -255,6 +304,7 @@ impl FileChooserWindow {
         for volume in &self.places.volumes {
             widest = widest.max(labels.width(&volume_name(volume, i18n), false) + device_chrome);
         }
+        widest = widest.max(self.tree_width(&mut labels));
         if widest <= 0.0 {
             return;
         }

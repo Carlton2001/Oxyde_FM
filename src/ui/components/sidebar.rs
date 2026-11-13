@@ -1,3 +1,4 @@
+pub(crate) mod folder_row;
 mod linux_row;
 pub(crate) mod measure;
 mod menus;

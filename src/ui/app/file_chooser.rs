@@ -27,6 +27,7 @@ mod selection;
 mod setting;
 mod sidebar;
 mod status;
+mod tree;
 mod types;
 
 use super::OxydeApp;
@@ -142,6 +143,7 @@ pub struct FileChooserWindow {
     list: UniformListScrollHandle,
     grid_scroll: ScrollHandle,
     sidebar_scroll: ScrollHandle,
+    tree: tree::Tree,
     /// The pane's width, as last laid out.
     pane_width: std::rc::Rc<std::cell::Cell<f32>>,
     scrollbar_origins: HashMap<String, Point<f32>>,
@@ -215,6 +217,9 @@ struct Lent {
     system_icons: bool,
     thumbnails: bool,
     media_previews: bool,
+    /// The folders the main sidebar has listed, and whether it follows the path open.
+    tree_nodes: HashMap<String, Vec<oxyde_lib::models::SidebarNode>>,
+    follow_path: bool,
 }
 
 impl OxydeApp {
@@ -231,6 +236,8 @@ impl OxydeApp {
             system_icons: cfg!(target_os = "windows") && self.use_system_icons(),
             thumbnails: self.show_grid_thumbnails,
             media_previews: self.show_media_previews,
+            tree_nodes: self.state.sidebar_nodes.clone(),
+            follow_path: self.follows_active_path(),
         };
         let rem_size = self.ui_rem_size();
         let foreign_parent = request.parent.clone().and_then(foreign_window);
@@ -350,6 +357,7 @@ impl FileChooserWindow {
             let places = Places::of(app.read(cx));
             if places != this.places {
                 this.places = places;
+                this.load_drive_folders(cx);
                 cx.notify();
             }
         }));
@@ -417,6 +425,7 @@ impl FileChooserWindow {
             list: UniformListScrollHandle::new(),
             grid_scroll: ScrollHandle::new(),
             sidebar_scroll: ScrollHandle::new(),
+            tree: tree::Tree::new(lent.tree_nodes, lent.follow_path),
             pane_width: Default::default(),
             scrollbar_origins: Default::default(),
             grab_offset: 0.0,
@@ -434,6 +443,7 @@ impl FileChooserWindow {
             _withdrawal: withdrawal,
             _owner_changes: owner_changes,
         };
+        this.load_drive_folders(cx);
         this.show_folder(folder, cx);
         // Saving, the keyboard starts in the name, as other file choosers have it.
         if let Some(name) = proposed {

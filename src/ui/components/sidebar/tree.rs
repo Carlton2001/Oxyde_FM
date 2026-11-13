@@ -61,8 +61,7 @@ pub(super) fn render_sidebar_tree(
             }
             SidebarItem::Volume { volume } => labels.width(&super::volume_row::name(volume, _cx.i18n()), false) + rem(DEVICE_CHROME),
             SidebarItem::Directory { node, depth, .. } => {
-                logical(8.0) + (*depth as f32 * logical(12.0)) + rem(rems(1.0 + 0.25 + 1.0 + 0.5 + 0.75))
-                    + labels.width(&node.name, false)
+                super::folder_row::chrome(*depth) + labels.width(&node.name, false)
             }
         })
         .fold(0.0_f32, f32::max);

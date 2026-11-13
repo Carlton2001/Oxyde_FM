@@ -1,13 +1,12 @@
 use crate::ui::app::FileDropTargetExt;
 use crate::ui::components::dropdown::{DropdownItem, IconName};
 use super::menus::{directory_context_menu, drive_context_menu, location_context_menu, pinned_context_menu};
-use super::{pinned_display_name, sidebar_item_height, sidebar_row_h};
+use super::{pinned_display_name, sidebar_item_height};
 use crate::ui::paths::paths_match;
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, FileDragData, FileDragPreview, OxydeApp};
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::components::tooltip::hover::{HoverRegion, SharedTooltipExt};
 use crate::ui::i18n::{I18nContext, Message};
-use crate::ui::scale::logical;
 use crate::ui::theme::OxydeTheme;
 use crate::ui::workspace::SidebarItem;
 use gpui::prelude::*;
@@ -280,25 +279,10 @@ pub(super) fn render_sidebar_rows(
                         }
                     })
                     // Chevron expand toggle
-                    .child(
-                        div()
-                            .w_4().h_4().mr_1()
-                            .flex().items_center().justify_center().flex_shrink_0()
-                            .when(has_subs, |d| d
-                            .on_mouse_down(MouseButton::Left, {
-                                let h = h.clone(); let p = path.clone();
-                                move |_, _, cx| {
-                                    cx.stop_propagation();
-                                    h.update(cx, |view, cx| {
-                                        view.toggle_sidebar_path(p.clone(), cx);
-                                    });
-                                }
-                            })
-                            .child(svg()
-                                .path(if is_exp { "icons/chevron-down.svg" } else { "icons/chevron-right.svg" })
-                                .size_full()
-                                .text_color(theme.text)))
-                    )
+                    .child(super::folder_row::chevron(has_subs, is_exp, theme, {
+                        let h = h.clone(); let p = path.clone();
+                        move |_, cx| h.update(cx, |view, cx| view.toggle_sidebar_path(p.clone(), cx))
+                    }))
                     // Drive icon + label
                     .child(
                         div().w_4().h_4().mr_2().flex().items_center().justify_center().flex_shrink_0()
@@ -351,24 +335,16 @@ pub(super) fn render_sidebar_rows(
             SidebarItem::Directory { node, depth, is_expanded } => {
                 let path       = node.path.clone();
                 let is_sel     = sel.as_deref().is_some_and(|selected| paths_match(selected, &path));
-                let is_exp     = *is_expanded;
                 let has_subs   = node.has_subdirs;
-                let depth_px   = logical(8.0) + (*depth as f32 * logical(12.0));
-                let sel_bg:    Hsla = theme.selected;
-                let hov_bg:    Hsla = if is_sel { theme.selection_hover } else { theme.hover };
-                let is_dimmed  = node.is_hidden || node.is_system;
-
-                div()
-                    .id(SharedString::from(format!("sb-dir-{}", path)))
+                let row = super::folder_row::FolderRow {
+                    path: &path, name: &node.name, depth: *depth, expandable: has_subs, expanded: *is_expanded,
+                    selected: is_sel, dimmed: node.is_hidden || node.is_system, use_system_icons,
+                };
+                row.render(SharedString::from(format!("sb-dir-{}", path)), theme, {
+                        let h = h.clone(); let p = path.clone();
+                        move |_, cx| h.update(cx, |view, cx| view.toggle_sidebar_path(p.clone(), cx))
+                    })
                     .w(px(row_w))
-                    .h(px(sidebar_row_h()))
-                    .pl(px(depth_px))
-                    .pr_3()
-                    .flex()
-                    .items_center()
-                    .when(is_dimmed, |d| d.opacity(0.75))
-                    .relative().when(is_sel, |d| d.bg(sel_bg).child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent)))
-                    .hover(move |s| s.bg(hov_bg))
                     .when(show_tooltips, |d| d.shared_tooltip(h.clone(), HoverRegion::DirectoryTree, format!("directory:{path}"), cx, Tooltip::with_meta(node.name.clone(), path.clone())))
                     // Left click → select + navigate / toggle on double
                     .on_mouse_down(MouseButton::Left, {
@@ -418,47 +394,6 @@ pub(super) fn render_sidebar_rows(
                             });
                         }
                     })
-                    // Chevron expand toggle
-                    .child(
-                        div()
-                            .w_4().h_4().mr_1()
-                            .flex().items_center().justify_center().flex_shrink_0()
-                            .when(has_subs, |d| d
-                                .on_mouse_down(MouseButton::Left, {
-                                    let h = h.clone(); let p = path.clone();
-                                    move |_, _, cx| {
-                                        cx.stop_propagation();
-                                        h.update(cx, |view, cx| {
-                                            view.toggle_sidebar_path(p.clone(), cx);
-                                        });
-                                    }
-                                })
-                            )
-                            .child(if has_subs {
-                                svg().path(if is_exp { "icons/chevron-down.svg" } else { "icons/chevron-right.svg" })
-                                    .size_full().text_color(theme.text)
-                            } else {
-                                svg().path("").size_full()
-                            })
-                    )
-                    // Folder icon
-                    .child(
-                        div().w_4().h_4().mr_2().flex().items_center().justify_center().flex_shrink_0()
-                            .child(crate::ui::components::icons::render_file_icon(
-                                path.clone(), if is_exp && !use_system_icons {
-                                    crate::ui::components::icons::IconType::FolderOpen
-                                } else {
-                                    crate::ui::components::icons::IconType::Folder
-                                },
-                                rems(1.0), &theme, use_system_icons, false,
-                            ))
-                    )
-                    // Name
-                    .child(
-                        div().flex_1().min_w_0().truncate()
-                            .text_color(theme.text)
-                            .child(node.name.clone())
-                    )
                     // Drag source
                     .on_drag(
                         FileDragData { paths: vec![path.clone()], source_pane_id: "sidebar".to_string() },

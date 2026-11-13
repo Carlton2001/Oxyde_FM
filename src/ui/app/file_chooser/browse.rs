@@ -76,6 +76,7 @@ impl FileChooserWindow {
         self.grid_scroll.set_offset(point(px(0.0), px(0.0)));
         // Back in a parent, the folder just left stays selected.
         self.list_folder(Kept::path(left), cx);
+        self.follow_tree(cx);
     }
 
     /// Lists the folder again, the selection kept.
@@ -132,6 +133,7 @@ impl FileChooserWindow {
             let Ok(nodes) = oxyde_lib::commands::sidebar::get_sidebar_nodes(folder.clone()).await else { return };
             let _ = this.update(cx, |this, cx| {
                 if this.folder == folder {
+                    this.update_tree(&folder, &nodes);
                     this.subfolders = nodes.into_iter().map(|node| (node.path, node.has_subdirs)).collect();
                     cx.notify();
                 }
