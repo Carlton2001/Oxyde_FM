@@ -303,6 +303,32 @@ pub(super) fn surface_class() -> io::Result<windows::core::PCWSTR> {
     Ok(class)
 }
 
+/// Keep the surface just above its owner: tooltips and hover previews owned
+/// by the same window, shown before the video or reused while visible, must
+/// stay above it. Its own overlays are owned by it and remain above.
+fn lower_above_owner(surface: HWND, owner: HWND) {
+    unsafe {
+        let Ok(above) = GetWindow(owner, GW_HWNDPREV) else { return };
+        if above == surface {
+            return;
+        }
+        // Only an owned window may be the insertion point: inserting after an
+        // unrelated topmost window would make the surface topmost.
+        let mut current = above;
+        for _ in 0..8 {
+            match GetWindow(current, GW_OWNER) {
+                Ok(next) if next == owner => {
+                    let _ = SetWindowPos(surface, Some(above), 0, 0, 0, 0,
+                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+                    return;
+                }
+                Ok(next) => current = next,
+                Err(_) => return,
+            }
+        }
+    }
+}
+
 fn create_surface(owner: HWND) -> io::Result<Surface> {
     let class = surface_class()?;
     unsafe {
@@ -484,6 +510,9 @@ pub(super) fn run(path: &Path) -> io::Result<()> {
                         SetWindowPos(surface.0, Some(controls), 0, 0, 0, 0,
                             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER).map_err(native)?;
                     }
+                }
+                if !has_controls {
+                    lower_above_owner(surface.0, parent);
                 }
                 player.place(width, height);
                 applied = Some(placement);
