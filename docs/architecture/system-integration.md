@@ -99,7 +99,7 @@ Not covered, by design of Windows: applications run as administrator (COM ignore
 
 The library writes nothing and contacts nothing but the launcher next to it. It is off by default, labelled experimental, and removed entirely by unchecking the option. Diagnostics: set `OXYDE_FILE_DIALOG_LOG` to a file path in the environment of an application, and the library appends what it was asked, what Oxyde answered and which interface made it leave the dialog to Windows. Files (files-community) replaces the dialogs the same way.
 
-Tests: `shell/oxyde-file-dialog/tests/dialog.rs` loads the library as an application does, with a fake launcher, so nothing shows on screen (Open with several files, Save under a free name, folders, cancellation, a refused choice, the interfaces); `platform/windows_file_dialog/tests` answer requests over real pipes. The system's dialog being shown instead, and the registration itself, are checked by hand.
+Tests: `shell/oxyde-file-dialog/tests/dialog.rs` loads the library as an application does, with a fake launcher, so nothing shows on screen (Open with several files, Save under a free name, folders, cancellation, a refused choice, the interfaces); `platform/windows_file_dialog/tests` answer requests over real pipes. The system's dialog being shown instead, and the registration itself, are checked by hand. To show the dialogs as an application asks for them (options, controls, the cases left to Windows), `shell/oxyde-file-dialog/examples/show_dialog.rs` goes through the registered classes and prints the answer: `cargo run --offline --manifest-path shell/oxyde-file-dialog/Cargo.toml --target-dir target --example show_dialog -- --help`.
 
 ## Menus of folders and of the taskbar (Windows)
 

@@ -10,6 +10,7 @@ Code paths in backticks start at `src/` or the repository root.
 - [Linux distribution](guides/linux-distribution.md): RPM, DEB, CI
 - [Copy engine benchmark](guides/copy-benchmark.md)
 - [Visual checks](guides/visual-checks.md)
+- [Windows checks since v2.2.1](guides/windows-checks-since-2.2.1.md): release checklist, to replace at the next tag
 
 ## Architecture
 
