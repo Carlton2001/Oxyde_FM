@@ -283,10 +283,12 @@ fn levels(
     cx: &mut App,
 ) -> AnyElement {
     use crate::ui::components::tooltip::hover::SharedTooltipExt;
-    use crate::ui::elements::segmented::{segment, segmented};
+    use crate::ui::elements::segmented::{segment, segmented, SegmentPlace};
     use gpui::prelude::FluentBuilder;
     let mut control = segmented(SharedString::from(id.clone()), None, theme);
-    for (index, (label, selected, pick)) in edit.entries(menu, cx).into_iter().enumerate() {
+    let entries = edit.entries(menu, cx);
+    let count = entries.len();
+    for (index, (label, selected, pick)) in entries.into_iter().enumerate() {
         let short = match pick {
             Pick::Access(Some(access)) => cx.i18n().text(short_message(access)).to_string(),
             _ => label.clone(),
@@ -294,6 +296,7 @@ fn levels(
         let choose = handle.clone();
         let key = format!("{id}-{index}");
         let mut item = segment(SharedString::from(key.clone()), selected, editable || selected, theme)
+            .place(index, count)
             .when(!matches!(pick, Pick::Access(Some(_))), |segment| segment.italic());
         // One session for every level: once a tooltip shows, the next follows at once.
         if let Some(owner) = owner.cloned().filter(|_| short != label) {
@@ -315,7 +318,7 @@ fn levels(
 
 /// Files or folders, for the levels shown below it.
 fn kind_switch(id: &'static str, folders: bool, handle: &Entity<PropertiesWindow>, theme: OxydeTheme, cx: &App, set: fn(&mut PermissionsEdit, bool)) -> AnyElement {
-    use crate::ui::elements::segmented::{segment, segmented};
+    use crate::ui::elements::segmented::{segment, segmented, SegmentPlace};
     use gpui::prelude::FluentBuilder;
     let mut control = segmented(id, None, theme);
     for (shown, label, icon) in [
@@ -326,6 +329,7 @@ fn kind_switch(id: &'static str, folders: bool, handle: &Entity<PropertiesWindow
         let selected = shown == folders;
         control = control.child(
             segment(SharedString::from(format!("{id}-{shown}")), selected, true, theme)
+                .place(usize::from(shown), 2)
                 .child(svg().path(icon).size(rems(0.8125)).flex_none().text_color(if selected { theme.accent } else { theme.text }))
                 .child(cx.i18n().text(label))
                 .when(!selected, |segment| {

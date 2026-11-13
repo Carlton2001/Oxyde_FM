@@ -91,6 +91,7 @@ fn stepper_element(
         .read(cx).clone();
     hold.can_decrease.set(can_decrease);
     hold.can_increase.set(can_increase);
+    use super::segmented::SegmentPlace;
     let button = |increase: bool, enabled: bool| {
         let (on_step, hold, release, release_out) = (on_step.clone(), hold.clone(), hold.clone(), hold.clone());
         super::segmented::segment(
@@ -99,6 +100,7 @@ fn stepper_element(
                 enabled,
                 theme,
             )
+            .place(usize::from(increase) * 2, 3)
             .w(rems(1.5))
             .px_0()
             .child(svg().path(if increase { "icons/plus.svg" } else { "icons/minus.svg" }).size(rems(0.875)).flex_none()

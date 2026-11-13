@@ -40,6 +40,7 @@ pub(super) fn render_advanced_body(
     let t = *cx.theme();
     let sidebar_drag = handle.clone();
     let mut body = div().flex().flex_col().flex_1().min_h_0().gap(rems(0.0));
+    use crate::ui::elements::segmented::SegmentPlace;
     let mut filters = crate::ui::elements::segmented::segmented("conflict-filters", None, t);
     for (filter, message) in [
         Message::ConflictAll,
@@ -59,6 +60,7 @@ pub(super) fn render_advanced_body(
         let selected = pending.dialog.filter == filter;
         filters = filters.child(
             crate::ui::elements::segmented::segment(("conflict-filter", filter), selected, count > 0, t)
+                .place(filter, 4)
                 .gap(rems(0.5))
                 .child(cx.i18n().text(message))
                 .when(count > 0, |d| {

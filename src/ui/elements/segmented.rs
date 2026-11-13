@@ -2,9 +2,8 @@ use crate::ui::theme::OxydeTheme;
 use gpui::prelude::*;
 use gpui::*;
 
-/// Square frame and options, as the bars' buttons (`bar_button::SQUARE_FILL`).
-/// `false` rounds them; kept as an option.
-const SQUARE: bool = true;
+/// Corner radius of the frame.
+const RADIUS: Rems = rems(0.25);
 /// Space above and below the frame.
 const MARGIN: Rems = rems(0.125);
 /// Space between the frame's outline and its options.
@@ -12,6 +11,9 @@ const PADDING: Rems = rems(0.125);
 /// Height of an option: what remains of 2.25 rem once the margin, the outline
 /// (1/16 rem on each side) and the padding are taken.
 pub const SEGMENT_HEIGHT: Rems = rems(2.25 - 0.125 * 2.0 - 0.0625 * 2.0 - 0.125 * 2.0);
+/// Radius of an option's corners that meet the frame's: the frame's, less the outline
+/// and the padding, so both curves stay parallel.
+const INNER_RADIUS: Rems = rems(0.25 - 0.0625 - 0.125);
 
 /// Mutually exclusive options drawn as one control, also framing the − value + stepper.
 /// The fill and outline derive from the text color, so they contrast on every theme and
@@ -29,13 +31,14 @@ pub fn segmented(id: impl Into<ElementId>, ring: Option<Hsla>, theme: OxydeTheme
         .gap(rems(0.125))
         .my(MARGIN)
         .p(PADDING)
-        .when(!SQUARE, |frame| frame.rounded_md())
+        .rounded(RADIUS)
         .bg(theme.text.opacity(0.05))
         .border(rems(0.0625))
         .border_color(ring.unwrap_or(outline(theme)))
 }
 
 /// One option of [`segmented`]. A disabled option must also omit its action.
+/// [`SegmentPlace::place`] rounds the corners it shares with the frame.
 pub fn segment(id: impl Into<ElementId>, selected: bool, enabled: bool, theme: OxydeTheme) -> Stateful<Div> {
     div()
         .id(id)
@@ -47,7 +50,6 @@ pub fn segment(id: impl Into<ElementId>, selected: bool, enabled: bool, theme: O
         .gap(rems(0.375))
         .min_w_0()
         .whitespace_nowrap()
-        .when(!SQUARE, |segment| segment.rounded(rems(0.25)))
         .text_color(if !enabled {
             theme.icon_disabled
         } else if selected {
@@ -61,6 +63,19 @@ pub fn segment(id: impl Into<ElementId>, selected: bool, enabled: bool, theme: O
                 .hover(move |style| style.bg(hover_fill(theme)))
                 .active(move |style| style.bg(theme.text.opacity(0.14)))
         })
+}
+
+/// Position of an option in its [`segmented`] frame.
+pub trait SegmentPlace {
+    /// Rounds the corners of option `index` among `count` that meet the frame's corners.
+    fn place(self, index: usize, count: usize) -> Self;
+}
+
+impl SegmentPlace for Stateful<Div> {
+    fn place(self, index: usize, count: usize) -> Self {
+        self.when(index == 0, |option| option.rounded_l(INNER_RADIUS))
+            .when(index + 1 >= count, |option| option.rounded_r(INNER_RADIUS))
+    }
 }
 
 /// The resting outline of [`segmented`], for a caller that only colors it while focused.

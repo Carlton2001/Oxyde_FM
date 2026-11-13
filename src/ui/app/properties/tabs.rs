@@ -2,7 +2,7 @@ use super::{PropertiesDialog, PropertiesTab, PropertiesWindow};
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::OxydeTheme;
 use gpui::prelude::FluentBuilder;
-use crate::ui::elements::segmented::{segment, segmented};
+use crate::ui::elements::segmented::{segment, segmented, SegmentPlace};
 use gpui::*;
 
 /// General first, then the tab the item has: Shortcut on Windows, Permissions
@@ -19,6 +19,8 @@ pub(super) fn render(
         return None;
     }
     let mut control = segmented("properties-tabs", None, theme);
+    let count = 1 + usize::from(has_shortcut) + usize::from(has_permissions);
+    let mut index = 0;
     for (tab, id, message, icon, shown) in [
         (PropertiesTab::General, "properties-general-tab", Message::PropertiesGeneral, "icons/file-text.svg", true),
         (PropertiesTab::Shortcut, "properties-shortcut-tab", Message::PropertiesShortcut, "icons/link.svg", has_shortcut),
@@ -31,6 +33,7 @@ pub(super) fn render(
         let active = tab == dialog.tab;
         control = control.child(
             segment(id, active, true, theme)
+                .place(index, count)
                 .px(rems(0.875))
                 .child(svg().path(icon).size(rems(0.875)).flex_none().text_color(if active { theme.accent } else { theme.text }))
                 .child(cx.i18n().text(message))
@@ -41,6 +44,7 @@ pub(super) fn render(
                     })
                 }),
         );
+        index += 1;
     }
     Some(div().flex().flex_none().justify_center().px(rems(1.0)).pt(rems(0.75)).child(control))
 }

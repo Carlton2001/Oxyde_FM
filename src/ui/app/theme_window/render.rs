@@ -7,7 +7,7 @@ use crate::ui::components::dialog::{self, DialogButton};
 use crate::ui::elements::button::ButtonVariant;
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::components::tooltip::{NativeTooltipExt, Tooltip};
-use crate::ui::elements::segmented::{segment, segmented};
+use crate::ui::elements::segmented::{segment, segmented, SegmentPlace};
 use crate::ui::theme::{ColorVision, ThemeChoice, ThemeContext, ThemeSeed};
 use gpui::prelude::*;
 use gpui::*;
@@ -50,14 +50,15 @@ impl ThemeWindow {
     fn render_color_vision(&self, current: ColorVision, cx: &mut Context<Self>) -> Div {
         let theme = *cx.theme();
         let mut group = segmented("theme-color-vision", None, theme);
-        for (vision, message) in [
+        for (index, (vision, message)) in [
             (ColorVision::Typical, Message::ColorVisionTypical),
             (ColorVision::RedGreen, Message::ColorVisionRedGreen),
             (ColorVision::BlueYellow, Message::ColorVisionBlueYellow),
-        ] {
+        ].into_iter().enumerate() {
             let owner = self.owner.clone();
             let handle = cx.entity().downgrade();
             group = group.child(segment(SharedString::from(format!("color-vision-{}", vision.as_str())), current == vision, true, theme)
+                .place(index, 3)
                 .child(cx.i18n().text(message))
                 .on_click(move |_, _, cx| {
                     let _ = owner.update(cx, |app, cx| app.set_color_vision(vision, cx));

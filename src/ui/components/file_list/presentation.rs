@@ -217,10 +217,11 @@ fn view_mode_switch(
         None,
         theme,
     );
-    for (mode, name, icon, tooltip) in [
+    use crate::ui::elements::segmented::SegmentPlace;
+    for (index, (mode, name, icon, tooltip)) in [
         (ViewMode::Details, "details", "icons/list.svg", Message::ViewDetails),
         (ViewMode::Grid, "grid", "icons/layout-grid.svg", Message::ViewGrid),
-    ] {
+    ].into_iter().enumerate() {
         let selected = mode == active_mode;
         let pane_id = pane_id.to_string();
         let handle = handle.clone();
@@ -231,6 +232,7 @@ fn view_mode_switch(
                 true,
                 theme,
             )
+            .place(index, 2)
             .w(rems(1.75))
             .px_0()
             .fixed_tooltip(Tooltip::text(cx.i18n().text(tooltip)))

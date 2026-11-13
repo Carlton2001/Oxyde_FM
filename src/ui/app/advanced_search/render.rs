@@ -25,6 +25,7 @@ impl AdvancedSearchWindow {
             .flex_col()
             .gap(rems(0.75))
             .when(d.help, |body| body.h_full().min_h_0());
+        use crate::ui::elements::segmented::SegmentPlace;
         let mut tabs = crate::ui::elements::segmented::segmented("advanced-tabs", None, theme);
         for (help, message) in [
             (false, Message::AdvancedSettings),
@@ -39,6 +40,7 @@ impl AdvancedSearchWindow {
                     true,
                     theme,
                 )
+                .place(usize::from(help), 2)
                 .px(rems(0.875))
                 .child(
                     svg()

@@ -2,7 +2,7 @@ use crate::ui::app::OxydeApp;
 use crate::ui::components::dialog;
 use crate::ui::components::modal::Modal;
 use crate::ui::elements::button::ButtonVariant;
-use crate::ui::elements::segmented::{outline, segment, segmented};
+use crate::ui::elements::segmented::{outline, segment, segmented, SegmentPlace};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
@@ -48,11 +48,12 @@ pub fn render_rename_dialog(
         if let Some(controls) = &controls {
             formats = formats.track_focus(&controls[FORMATS]);
         }
-        for (format, label) in OxydeApp::ARCHIVE_FORMATS {
+        for (index, (format, label)) in OxydeApp::ARCHIVE_FORMATS.into_iter().enumerate() {
             let format_handle = cancel_handle.clone();
             let selected = *extension == crate::ui::app::archive_extension(format);
             formats = formats.child(
                 segment(format!("archive-format-{format}"), selected, true, theme)
+                    .place(index, OxydeApp::ARCHIVE_FORMATS.len())
                     .flex_1()
                     .child(label)
                     .on_mouse_down(MouseButton::Left, move |_, _, cx| {
@@ -72,6 +73,7 @@ pub fn render_rename_dialog(
             let select = cancel_handle.clone();
             choices = choices.child(
                 segment(if value { "archive-protection-password" } else { "archive-protection-none" }, protected == value, allowed, theme)
+                    .place(usize::from(value), 2)
                     .flex_1()
                     .child(cx.i18n().text(label))
                     .when(allowed, |segment| {
