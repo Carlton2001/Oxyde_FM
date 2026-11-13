@@ -2,7 +2,7 @@
 //! labeled rows (the name to save under, the type filters, the choices' menus, the
 //! application's text fields, then the checkboxes and its notes) on the inactive panels' background, above the secondary
 //! windows' usual footer and its buttons. The form grows with what is asked, up to a
-//! third of the window, past which it scrolls; with many menus, they sit side by side. Tab and Shift+Tab move the keyboard from the
+//! third of the window, past which it scrolls; with several menus, they sit side by side where the width allows. Tab and Shift+Tab move the keyboard from the
 //! entries through its controls in reading order and back, as GTK's file chooser
 //! does; Enter or Space presses the control that has it, and Escape cancels.
 use super::FileChooserWindow;
@@ -29,7 +29,7 @@ impl Footer {
 }
 
 /// Past this many menus, they sit side by side where the width allows.
-const DENSE_MENUS: usize = 3;
+const DENSE_MENUS: usize = 1;
 /// Between a label and its control, and between the form's rows.
 const LABEL_GAP: Rems = Rems(0.75);
 const ROW_GAP: Rems = Rems(0.5);
@@ -172,7 +172,7 @@ impl FileChooserWindow {
             .child(menu)
             .into_any_element());
         if dense {
-            // Many menus wrap into columns, each pair as wide as the label column and a menu.
+            // Several menus wrap into columns, each pair as wide as the label column and a menu.
             rows.push(div().flex().flex_wrap().gap_x(rems(1.5)).gap_y(ROW_GAP).children(pairs).into_any_element());
         } else {
             rows.extend(pairs);
