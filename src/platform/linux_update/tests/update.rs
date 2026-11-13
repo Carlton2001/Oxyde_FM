@@ -194,12 +194,25 @@ fn uninstall_forgets_associations_cache_and_settings() {
     std::fs::create_dir_all(service.parent().unwrap()).unwrap();
     std::fs::write(&service, b"[D-BUS Service]\n").unwrap();
     let system = tempfile::tempdir().unwrap();
-    let output = Command::new("bash").arg(INSTALL_SCRIPT).args(["--uninstall", "--purge"])
+    let uninstall = || Command::new("bash").arg(INSTALL_SCRIPT).args(["--uninstall", "--purge"])
         .env("HOME", home.path()).env("XDG_DATA_DIRS", system.path())
         .env_remove("XDG_DATA_HOME").env_remove("XDG_CONFIG_HOME").env_remove("XDG_CACHE_HOME")
         .stdin(Stdio::null()).output().unwrap();
+    // Without a terminal, the script stops while a process named oxyde runs: the PDF
+    // and media worker tests start the application binary alongside this one.
+    let mut output = uninstall();
+    for _ in 0..100 {
+        if !String::from_utf8_lossy(&output.stderr).contains("Oxyde is running") { break; }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        output = uninstall();
+    }
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.contains("Oxyde is running") {
+        // The developer's Oxyde: the script stopped before changing anything.
+        assert!(root.exists() && service.exists(), "{stderr}");
+        return;
+    }
     assert!(output.status.success(), "{stderr}");
     assert!(stdout.contains("no longer the default application for folders"), "{stdout}");
     assert_eq!(std::fs::read_to_string(config.join("mimeapps.list")).unwrap(), "[Default Applications]\n\
@@ -209,10 +222,8 @@ fn uninstall_forgets_associations_cache_and_settings() {
     assert!(!root.exists() && !home.path().join(".local/bin/oxyde").exists());
     assert!(!home.path().join(format!(".local/share/applications/{ours}")).exists());
     assert!(!service.exists());
-    // A running Oxyde, the developer's included, keeps the cache and settings it uses.
-    let running = stderr.contains("Oxyde is running");
-    assert!(running || !home.path().join(".cache/Oxyde").exists(), "{stderr}");
-    assert!(running || !config.join("Oxyde").exists(), "{stderr}");
+    assert!(!home.path().join(".cache/Oxyde").exists(), "{stderr}");
+    assert!(!config.join("Oxyde").exists(), "{stderr}");
 }
 
 /// A system package still provides the entry: its associations stay valid.
