@@ -80,15 +80,18 @@ fn fixed_bounds(view: &AnyView, cx: &App) -> Option<Bounds<Pixels>> {
     view.clone().downcast::<Tooltip>().ok()?.read(cx).fixed_bounds.as_ref().map(|bounds| bounds.get())
 }
 
+fn valid_size(measured: Option<Size<Pixels>>) -> Option<Size<Pixels>> {
+    measured.filter(|size| {
+        size.width.as_f32().is_finite()
+            && size.height.as_f32().is_finite()
+            && size.width > px(0.0)
+            && size.height > px(0.0)
+    })
+}
+
+#[cfg(any(not(target_os = "windows"), test))]
 fn visible_size(measured: Option<Size<Pixels>>, rem: Pixels) -> Size<Pixels> {
-    measured
-        .filter(|size| {
-            size.width.as_f32().is_finite()
-                && size.height.as_f32().is_finite()
-                && size.width > px(0.0)
-                && size.height > px(0.0)
-        })
-        .unwrap_or_else(|| size(rem * 26.5, rem * 8.0))
+    valid_size(measured).unwrap_or_else(|| size(rem * 26.5, rem * 8.0))
 }
 
 pub(super) fn close_for(id: WindowId, cx: &mut App) {
@@ -118,26 +121,29 @@ fn place(root: &NativeTooltip, window: &mut Window, cx: &App) {
 #[cfg(target_os = "windows")]
 fn place(root: &NativeTooltip, window: &mut Window, cx: &App) {
     if let Ok(raw) = HasWindowHandle::window_handle(window) {
+        // Shown only once its content is measured: placing a guessed size, then the real one,
+        // made the tooltip jump, above its element for instance when the guess did not fit below.
+        let Some(measured) = root.view.as_ref().and(valid_size(root.measured)) else {
+            let _ = oxyde_lib::platform::platform().place_hover_window(raw.as_raw(), None, window.scale_factor());
+            return;
+        };
         let anchor = root.view.as_ref().and_then(|view| view.clone().downcast::<Tooltip>().ok())
             .and_then(|view| view.read(cx).fixed_bounds.clone());
         // Centered under its element, as GTK places tooltips: the anchor narrows or widens to
         // the visible frame around the element's center. The placement flips it above only
         // when the work area ends below.
-        let frame_width = visible_size(root.measured, window.rem_size()).width - window.rem_size() * 4.0;
+        let frame_width = measured.width - window.rem_size() * 4.0;
         let anchor = anchor.map(|bounds| {
             let bounds = bounds.get();
             let width = frame_width.max(px(1.0));
             ((bounds.center().x - width / 2.0).as_f32(), bounds.top().as_f32(), width.as_f32(), bounds.size.height.as_f32())
         });
         let _ = oxyde_lib::platform::platform().set_popup_anchor(raw.as_raw(), anchor, false, false, false);
-        let size = root.view.as_ref().map(|_| {
-            let measured = visible_size(root.measured, window.rem_size());
-            (
-                measured.width.as_f32(),
-                measured.height.as_f32(),
-                (window.rem_size() * 2.0).as_f32(),
-            )
-        });
+        let size = Some((
+            measured.width.as_f32(),
+            measured.height.as_f32(),
+            (window.rem_size() * 2.0).as_f32(),
+        ));
         if let Err(error) = oxyde_lib::platform::platform().place_hover_window(
             raw.as_raw(),
             size,
@@ -187,13 +193,18 @@ pub(super) fn sync(parent: &mut Window, cx: &mut App) {
     }
     #[cfg(not(target_os = "windows"))]
     let pointer = parent.mouse_position();
-    let clear_frames = handle.update(cx, |root, window, cx| {
+    let (clear_frames, measure) = handle.update(cx, |root, window, cx| {
         #[cfg(not(target_os = "windows"))]
         root.placement.pointer.set(pointer);
         let mut cleared = false;
+        let mut measure = false;
         if root.view.as_ref().map(|view| view.entity_id()) != view.as_ref().map(|view| view.entity_id()) {
             if let Some(old) = root.view.take() {
                 set_native(&old, false, cx);
+            } else if cfg!(target_os = "windows") {
+                // Hidden: the previous size must not place the new content.
+                root.measured = None;
+                measure = view.is_some();
             }
             root.view = view;
             cleared = root.view.is_none();
@@ -208,9 +219,26 @@ pub(super) fn sync(parent: &mut Window, cx: &mut App) {
             window.refresh();
         }
         place(root, window, cx);
-        cleared
-    }).unwrap_or(false);
+        (cleared, measure)
+    }).unwrap_or((false, false));
     if clear_frames { clear_hidden_frames(handle, cx); }
+    if measure { measure_hidden(handle, cx); }
+}
+
+/// A hidden HWND receives no WM_PAINT: lay its content out once so `MeasuredContent` publishes
+/// the size before the first show. The frame is presented when the window appears.
+fn measure_hidden(handle: WindowHandle<NativeTooltip>, cx: &mut App) {
+    cx.defer(move |cx| {
+        let _ = AnyWindowHandle::from(handle).update(cx, |view, window, cx| {
+            let waiting = view.downcast::<NativeTooltip>().is_ok_and(|root| {
+                let root = root.read(cx);
+                root.view.is_some() && root.measured.is_none()
+            });
+            if waiting {
+                window.draw(cx).clear(cx);
+            }
+        });
+    });
 }
 
 pub(super) fn follow_pointer(
