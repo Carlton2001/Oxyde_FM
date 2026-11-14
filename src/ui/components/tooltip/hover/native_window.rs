@@ -173,9 +173,7 @@ pub(super) fn sync(parent: &mut Window, cx: &mut App) {
     let view =
         session.and_then(|(scope, view)| scope.filter(|scope| scope.valid(parent, cx)).and(view));
     let ordinary = cx.default_global::<NativeWindows>().ordinary.get(&id).cloned();
-    // A menu never takes activation: its form's stands for it.
-    let active = parent.is_window_active() || crate::ui::components::popup::owner(parent, cx)
-        .is_some_and(|owner| owner.update(cx, |_, window, _| window.is_window_active()).unwrap_or(false));
+    let active = family_active(parent, cx);
     let view = if active && parent.is_window_hovered() { ordinary.or(view) } else { None };
     let rem = parent.rem_size();
     #[cfg(not(target_os = "windows"))]
@@ -367,6 +365,13 @@ fn clear_hidden_frames(handle: WindowHandle<NativeTooltip>, cx: &mut App) {
     });
 }
 
+/// Whether the tooltip's window is active. A menu never takes activation: its form's
+/// stands for it, else its tooltips would be cleared at every check.
+fn family_active(parent: &Window, cx: &mut App) -> bool {
+    parent.is_window_active() || crate::ui::components::popup::owner(parent, cx)
+        .is_some_and(|owner| owner.update(cx, |_, window, _| window.is_window_active()).unwrap_or(false))
+}
+
 fn dismiss_invalid_session(parent: &mut Window, cx: &mut App) {
     let id = Window::window_handle(parent).window_id();
     let (scope, shared) = cx.default_global::<Sessions>().windows.get(&id)
@@ -383,7 +388,7 @@ fn dismiss_invalid_session(parent: &mut Window, cx: &mut App) {
         super::clear(parent, cx);
         return;
     }
-    if !parent.is_window_active() || !parent.is_window_hovered()
+    if !family_active(parent, cx) || !parent.is_window_hovered()
         || (!ordinary && !scope.is_some_and(|scope| scope.valid(parent, cx)))
     {
         // Hiding alone leaves Sessions.tooltip and its decoder alive.
@@ -401,7 +406,7 @@ pub(super) fn present(view: &AnyView, parent: &mut Window, cx: &mut App) -> bool
     }
     // Opening means a new surface here, not showing a hidden one.
     #[cfg(not(target_os = "windows"))]
-    if !parent.is_window_active() || !parent.is_window_hovered() {
+    if !family_active(parent, cx) || !parent.is_window_hovered() {
         return !cx.default_global::<NativeWindows>().failed.contains(&Window::window_handle(parent).window_id());
     }
     #[cfg(not(target_os = "windows"))]
