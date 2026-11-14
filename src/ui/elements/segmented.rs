@@ -11,9 +11,9 @@ const PADDING: Rems = rems(0.125);
 /// Height of an option: what remains of 2.25 rem once the margin, the outline
 /// (1/16 rem on each side) and the padding are taken.
 pub const SEGMENT_HEIGHT: Rems = rems(2.25 - 0.125 * 2.0 - 0.0625 * 2.0 - 0.125 * 2.0);
-/// Radius of an option's corners that meet the frame's: the frame's, less the outline
-/// and the padding, so both curves stay parallel.
-const INNER_RADIUS: Rems = rems(0.25 - 0.0625 - 0.125);
+/// Radius of an option's corners that meet the frame's, as the switch's thumb: the
+/// parallel radius (the frame's less the outline and the padding) would leave 1 px.
+const INNER_RADIUS: Rems = rems(0.125);
 
 /// Mutually exclusive options drawn as one control, also framing the − value + stepper.
 /// The fill and outline derive from the text color, so they contrast on every theme and
@@ -28,7 +28,8 @@ pub fn segmented(id: impl Into<ElementId>, ring: Option<Hsla>, theme: OxydeTheme
         .flex()
         .flex_none()
         .items_center()
-        .gap(rems(0.125))
+        // Options stand as far apart as from the outline.
+        .gap(PADDING)
         .my(MARGIN)
         .p(PADDING)
         .rounded(RADIUS)
