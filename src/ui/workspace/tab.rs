@@ -33,6 +33,14 @@ impl TabState {
             _ => true,
         }
     }
+    /// The name of `mode` here: grouping by origin reads Location in search results.
+    pub(crate) fn grouping_message(&self, mode: crate::ui::date_groups::GroupMode) -> crate::ui::i18n::Message {
+        if mode == crate::ui::date_groups::GroupMode::Origin && self.path != "trash://" {
+            crate::ui::i18n::Message::ColumnLocation
+        } else {
+            mode.message()
+        }
+    }
     pub(crate) fn available_groupings(&self) -> Vec<crate::ui::date_groups::GroupMode> {
         crate::ui::date_groups::GroupMode::ALL.into_iter().filter(|mode| self.supports_grouping(*mode)).collect()
     }

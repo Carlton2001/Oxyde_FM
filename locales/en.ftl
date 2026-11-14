@@ -371,6 +371,7 @@ date-group-count = { $count ->
 }
 
 menu-sort-by = Sort by
+menu-filter-by = Filter by
 menu-sort-ascending = Ascending
 menu-sort-descending = Descending
 menu-sort-extension = Extension

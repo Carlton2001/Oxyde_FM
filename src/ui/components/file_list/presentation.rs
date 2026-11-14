@@ -22,9 +22,9 @@ fn grouping_button(pane_id: &str, enabled: bool, handle: Entity<OxydeApp>, theme
         .relative()
         .fixed_tooltip(move |window, cx| {
             use crate::ui::date_groups::GroupMode;
-            let mode = tooltip_handle.read(cx).state.find_pane(&tooltip_pane)
-                .map(|pane| pane.active_tab().grouping()).unwrap_or(GroupMode::None);
-            let label = mode.message();
+            let (mode, label) = tooltip_handle.read(cx).state.find_pane(&tooltip_pane)
+                .map(|pane| pane.active_tab()).map(|tab| (tab.grouping(), tab.grouping_message(tab.grouping())))
+                .unwrap_or((GroupMode::None, GroupMode::None.message()));
             let mut args = FluentArgs::new();
             args.set("mode", cx.i18n().text(label).to_string());
             let title = if mode == GroupMode::None {

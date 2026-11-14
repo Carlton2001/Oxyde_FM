@@ -4,7 +4,10 @@ use super::{dropdown, history_actions, network};
 use crate::ui::i18n::{I18n, Message};
 use gpui::*;
 use item::oxyde_context_menu_items_raw;
+pub use grid::with_grid_sort;
+pub(crate) use grid::grid_menu_items;
 
+mod grid;
 mod item;
 
 /// Menu sections, in Explorer order: navigation, tree, network, item state,
@@ -23,7 +26,7 @@ const GROUPS: &[&[Message]] = &[
     &[Message::Compress, Message::OpExtractHere],
     &[], // Undo/Redo, recognised by their icons.
     &[Message::Rename, Message::Delete, Message::TrashDeletePermanent, Message::TrashDeleteAll],
-    &[Message::SortBy],
+    &[Message::SortBy, Message::FilterBy],
     &[Message::Properties],
     &[Message::MoreOptions],
 ];
@@ -96,89 +99,6 @@ pub(crate) fn with_terminal_action(
         });
     }).icon(dropdown::IconName::Terminal);
     network::insert_after_open(items, vec![action], i18n)
-}
-
-/// Attach sorting controls to context menus in grid view.
-pub fn with_grid_sort(
-    mut items: Vec<dropdown::DropdownItem>,
-    app: &crate::ui::app::OxydeApp,
-    handle: Entity<crate::ui::app::OxydeApp>,
-    pane_id: &str,
-    i18n: &I18n,
-) -> Vec<dropdown::DropdownItem> {
-    use crate::ui::workspace::{SortColumn, SortDirection, ViewMode};
-    let Some(pane) = app.state.find_pane(pane_id) else { return items };
-    let tab = pane.active_tab();
-    if tab.view_mode != ViewMode::Grid { return items; }
-    let column = tab.sort_column;
-    let direction = tab.sort_direction;
-    let mut choices = Vec::new();
-    let mut sort_options = vec![
-        (Message::ColumnName, Some(SortColumn::Name), None),
-        (Message::SortExtension, Some(SortColumn::Type), None),
-        (Message::ColumnSize, Some(SortColumn::Size), None),
-        (Message::ColumnModified, Some(SortColumn::Modified), None),
-    ];
-    if tab.path == "trash://" {
-        sort_options.extend([
-            (Message::TrashOriginalLocation, Some(SortColumn::OriginalLocation), None),
-            (Message::TrashDeletedAt, Some(SortColumn::DeletedAt), None),
-        ]);
-    }
-    sort_options.extend([
-        (Message::SortAscending, None, Some(SortDirection::Ascending)),
-        (Message::SortDescending, None, Some(SortDirection::Descending)),
-    ]);
-    for (label, selected_column, selected_direction) in sort_options {
-        if label == Message::SortAscending {
-            choices.push(dropdown::DropdownItem::separator());
-        }
-        let h = handle.clone();
-        let pid = pane_id.to_string();
-        let mut item = dropdown::DropdownItem::new(i18n.text(label).to_string(), move |_, cx| {
-            h.update(cx, |this, cx| {
-                if let Some(pane) = this.state.find_pane_mut(&pid) {
-                    let tab = pane.active_tab_mut();
-                    if let Some(column) = selected_column { tab.sort_column = column; }
-                    if let Some(direction) = selected_direction { tab.sort_direction = direction; }
-                    let id = tab.id.clone();
-                    this.prepare_current_tab(id, cx);
-                }
-                this.context_menus.clear();
-                cx.notify();
-            });
-        });
-        if selected_column == Some(column) || selected_direction == Some(direction) {
-            item.icon = Some(dropdown::IconName::Check);
-        }
-        choices.push(item);
-    }
-    let sort = dropdown::DropdownItem::new(i18n.text(Message::SortBy).to_string(), |_, _| {})
-        .icon(dropdown::IconName::ListOrdered)
-        .stay_open(true)
-        .has_submenu(true)
-        .on_hover(move |position, open_left, cx| {
-            handle.update(cx, |this, cx| {
-                use crate::ui::app::{ContextMenuContent, ContextMenuInstance};
-                this.context_menus.truncate(1);
-                this.context_menus.push(ContextMenuInstance {
-            native_bounds: None,
-                    position,
-                    content: ContextMenuContent::Items(choices.clone()),
-                    scroll_handle: UniformListScrollHandle::new(),
-                    width: px(0.0),
-                    open_left,
-                    hovered_item: None,
-                    native_request_id: None, open_up: false,
-                });
-                cx.notify();
-            });
-        });
-    // Sorting always sits just above the information section.
-    let index = items.iter().position(|item| [Message::Properties, Message::MoreOptions].into_iter()
-        .any(|message| item.label == i18n.text(message).as_ref())).unwrap_or(items.len());
-    items.insert(index, sort);
-    context_menu_sections(items, i18n)
 }
 
 fn pane_context_menu_items_raw(

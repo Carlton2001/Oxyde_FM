@@ -87,14 +87,11 @@ impl OxydeApp {
                 continue;
             }
             let item_count = match &instance.content {
-                crate::ui::app::ContextMenuContent::Items(items) => items.iter().filter(|item| !matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count(),
                 crate::ui::app::ContextMenuContent::NativeItems { items, .. } => items.len(),
-                crate::ui::app::ContextMenuContent::ColumnFilter(_) => 0,
+                content => content.items().map_or(0, |items| items.iter().filter(|item| !matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count()),
             };
-            let separators = match &instance.content {
-                crate::ui::app::ContextMenuContent::Items(items) => items.iter().filter(|item| matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count(),
-                _ => 0,
-            };
+            let separators = instance.content.items()
+                .map_or(0, |items| items.iter().filter(|item| matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count());
             if item_count > 0 {
                 let content_h = item_count as f32 * crate::ui::style::menu_item_height() + separators as f32 * crate::ui::style::menu_separator_height();
                 let viewport_h = content_h.min(logical(480.0));

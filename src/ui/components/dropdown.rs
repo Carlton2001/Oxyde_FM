@@ -25,6 +25,7 @@ mod delete_shortcuts;
 pub enum IconName {
     Separator,
     ListOrdered,
+    Funnel,
     SquareDashedMousePointer,
     Disc,
     Eject,
@@ -608,6 +609,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                                     IconName::ListOrdered => {
                                                                         "icons/list-ordered.svg"
                                                                     }
+                                                                    IconName::Funnel => "icons/funnel.svg",
                                                                     IconName::CopyX => {
                                                                         "icons/copy-x.svg"
                                                                     }

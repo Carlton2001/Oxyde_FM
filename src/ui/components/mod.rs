@@ -34,4 +34,5 @@ mod context_menu;
 
 pub(crate) use context_menu::{context_menu_sections, is_terminal_folder, with_terminal_action};
 pub use context_menu::{oxyde_context_menu_items, pane_context_menu_items, tab_context_menu_items, with_grid_sort};
+pub(crate) use context_menu::grid_menu_items;
 use context_menu::without_unavailable_shell_menu;

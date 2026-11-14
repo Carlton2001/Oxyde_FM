@@ -34,16 +34,17 @@ impl OxydeApp {
         let Some(pane) = self.state.find_pane(pane_id) else {
             return;
         };
-        let selected = pane.active_tab().grouping();
+        let tab = pane.active_tab();
+        let selected = tab.grouping();
         let handle = cx.entity();
         let mut choices = Vec::new();
-        let mut modes = pane.active_tab().available_groupings();
+        let mut modes = tab.available_groupings();
         modes.sort_by_cached_key(|mode| (
             *mode != GroupMode::None,
-            cx.i18n().text(mode.message()).to_lowercase(),
+            cx.i18n().text(tab.grouping_message(*mode)).to_lowercase(),
         ));
         for mode in modes {
-            let label = mode.message();
+            let label = tab.grouping_message(mode);
             let handle = handle.clone();
             let pane_id = pane_id.to_string();
             let mut item = DropdownItem::new(cx.i18n().text(label).to_string(), move |_, cx| {

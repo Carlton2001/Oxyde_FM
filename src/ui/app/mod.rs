@@ -7,6 +7,7 @@ use gpui::*;
 pub use oxyde_lib::models::FileEntry;
 
 pub mod filters;
+pub(crate) use filters::GridMenuKind;
 pub(crate) mod trash_settings;
 pub(crate) mod properties;
 pub(crate) mod disk_images;
@@ -159,6 +160,19 @@ pub enum ContextMenuContent {
     },
     /// The filter panel of a details column.
     ColumnFilter(Box<filters::ColumnFilterPanel>),
+    /// Sort by or Filter by of the grid view, rebuilt from the tab while it stays open.
+    Grid(filters::GridMenu),
+}
+
+impl ContextMenuContent {
+    /// The rows of a menu of Oxyde's own entries.
+    pub(crate) fn items(&self) -> Option<&[crate::ui::components::dropdown::DropdownItem]> {
+        match self {
+            Self::Items(items) => Some(items),
+            Self::Grid(menu) => Some(&menu.items),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone)]

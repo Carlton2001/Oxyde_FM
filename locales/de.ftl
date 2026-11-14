@@ -557,6 +557,7 @@ date-group-count = { $count ->
     }
 
 menu-sort-by = Sortieren nach
+menu-filter-by = Filtern nach
 
 menu-sort-ascending = Aufsteigend
 

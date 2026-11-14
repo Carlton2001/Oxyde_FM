@@ -124,8 +124,32 @@ impl OxydeApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some(handle) = self.handle.clone() else { return };
-        let Some(tab) = self.state.find_pane(pane_id).map(|pane| pane.active_tab()) else { return };
+        let Some(panel) = self.column_filter_panel(pane_id, column, window, cx) else { return };
+        self.context_menus.clear();
+        self.context_menus.push(ContextMenuInstance {
+            native_bounds: None,
+            position: anchor,
+            content: ContextMenuContent::ColumnFilter(Box::new(panel)),
+            scroll_handle: UniformListScrollHandle::new(),
+            width: px(0.0),
+            open_left: false,
+            hovered_item: None,
+            native_request_id: None,
+            open_up: false,
+        });
+        cx.notify();
+    }
+
+    /// The panel of `column` for the active tab of `pane_id`, its fields holding the filter.
+    pub(super) fn column_filter_panel(
+        &mut self,
+        pane_id: &str,
+        column: FilterColumn,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<ColumnFilterPanel> {
+        let handle = self.handle.clone()?;
+        let tab = self.state.find_pane(pane_id).map(|pane| pane.active_tab())?;
         let field_text = match column {
             FilterColumn::Name => Some((tab.filter_name.clone(), Message::NameFilterPlaceholder)),
             FilterColumn::Location => Some((tab.filter_original_location.clone(), Message::OriginalLocationFilterPlaceholder)),
@@ -171,26 +195,14 @@ impl OxydeApp {
             RangeEditor { open, inputs, texts, unit, calendar: None }
         });
 
-        self.context_menus.clear();
-        self.context_menus.push(ContextMenuInstance {
-            native_bounds: None,
-            position: anchor,
-            content: ContextMenuContent::ColumnFilter(Box::new(ColumnFilterPanel {
-                pane_id: pane_id.to_string(),
-                column,
-                field,
-                range,
-                focused: Rc::new(Cell::new(false)),
-                entries: Default::default(),
-            })),
-            scroll_handle: UniformListScrollHandle::new(),
-            width: px(0.0),
-            open_left: false,
-            hovered_item: None,
-            native_request_id: None,
-            open_up: false,
-        });
-        cx.notify();
+        Some(ColumnFilterPanel {
+            pane_id: pane_id.to_string(),
+            column,
+            field,
+            range,
+            focused: Rc::new(Cell::new(false)),
+            entries: Default::default(),
+        })
     }
 
     /// After a filter is cleared, its fields read empty and the custom range folds.

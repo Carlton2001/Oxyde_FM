@@ -49,6 +49,7 @@ impl OxydeApp {
                         let dragging = matches!(view.drag_target, Some(DragTarget::ContextMenuV { menu_idx, .. }) if menu_idx == index);
                         let content = match &instance.content {
                             ContextMenuContent::Items(items) => view.render_items_menu(items, index, h, scroll.clone(), dragging, parent, height),
+                            ContextMenuContent::Grid(menu) => view.render_items_menu(&menu.items, index, h, scroll.clone(), dragging, parent, height),
                             ContextMenuContent::NativeItems { path, is_background, items } => view.render_native_menu(path, is_background, items, index, h, scroll.clone(), dragging, parent, height),
                             ContextMenuContent::ColumnFilter(panel) => view.render_column_filter(panel, index, h, scroll.clone(), dragging, height, window, cx),
                         };
@@ -78,6 +79,9 @@ impl OxydeApp {
             let content_element = match &instance.content {
                 ContextMenuContent::Items(items) => self.render_items_menu(
                     items, m_idx, h, scroll_handle, is_v_dragging, window_handle, win_h,
+                ),
+                ContextMenuContent::Grid(menu) => self.render_items_menu(
+                    &menu.items, m_idx, h, scroll_handle, is_v_dragging, window_handle, win_h,
                 ),
                 ContextMenuContent::NativeItems { path, is_background, items } => self.render_native_menu(
                     path, is_background, items, m_idx, h, scroll_handle, is_v_dragging, window_handle, win_h,

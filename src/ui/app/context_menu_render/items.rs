@@ -5,11 +5,9 @@ use crate::ui::scale::{logical, rem_pixels};
 use gpui::*;
 
 impl OxydeApp {
-    // Preserve the original clone semantics and bodies during structural extraction.
-    #[allow(clippy::ptr_arg)]
     pub(super) fn render_items_menu(
         &self,
-        items: &Vec<DropdownItem>,
+        items: &[DropdownItem],
         m_idx: usize,
         h: Entity<Self>,
         scroll_handle: UniformListScrollHandle,
@@ -37,7 +35,7 @@ impl OxydeApp {
             })
             .collect();
 
-        let items_cap = items.clone();
+        let items_cap = items.to_vec();
         GenericDropdown {
             id: ("context-menu", m_idx).into(),
             h_app: h.clone(),
@@ -218,7 +216,7 @@ impl OxydeApp {
                                 h_inner.update(cx, |this, cx| {
                                     this.submenu_timer = None;
                                     this.submenu_close_timer = None;
-                                    if this.context_menus.len() > m_idx + 1 {
+                                    if this.context_menus.len() > m_idx + 1 && !this.menu_stays_open(m_idx + 1) {
                                         this.context_menus.truncate(m_idx + 1);
                                         cx.notify();
                                     }
@@ -231,7 +229,7 @@ impl OxydeApp {
                             h_close.update(cx, |this, cx| {
                                 this.submenu_timer = None;
                                 this.submenu_close_timer = None;
-                                if this.context_menus.len() > m_idx + 1 {
+                                if this.context_menus.len() > m_idx + 1 && !this.menu_stays_open(m_idx + 1) {
                                     this.context_menus.truncate(m_idx + 1);
                                     cx.notify();
                                 }
@@ -280,9 +278,7 @@ impl OxydeApp {
                                             let h_inner = h_close.clone();
                                             cx.defer(move |cx| {
                                                 h_inner.update(cx, |this, cx| {
-                                                    if this.context_menus.len()
-                                                        > m_idx + 1
-                                                    {
+                                                    if this.context_menus.len() > m_idx + 1 && !this.menu_stays_open(m_idx + 1) {
                                                         this.context_menus
                                                             .truncate(m_idx + 1);
                                                         cx.notify();

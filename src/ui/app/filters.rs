@@ -1,10 +1,12 @@
-//! Sorting and the column filters of the details view. The filter panel's state and its
-//! opening live in `panel`, its drawing in `context_menu_render::column_filter`.
+//! Sorting and the column filters. The filter panel's state and its opening live in `panel`,
+//! its drawing in `context_menu_render::column_filter`; the grid view's submenus in `grid_menu`.
 use crate::ui::app::OxydeApp;
 use crate::ui::workspace::{DateRange, FilterColumn, FilterValue, SizeRange, TabState};
 use gpui::*;
 
+mod grid_menu;
 mod panel;
+pub(crate) use grid_menu::{GridMenu, GridMenuKind};
 pub(crate) use panel::{ColumnFilterPanel, RangeEditor, TYPE_SEARCH_THRESHOLD};
 
 impl OxydeApp {
@@ -44,7 +46,7 @@ impl OxydeApp {
         change(tab);
         let id = tab.id.clone();
         self.prepare_current_tab(id, cx);
-        cx.notify();
+        self.refresh_grid_menus(cx);
     }
 
     pub(crate) fn toggle_filter_value(&mut self, pane_id: &str, value: FilterValue, cx: &mut Context<Self>) {
