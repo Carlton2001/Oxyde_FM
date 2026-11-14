@@ -106,11 +106,7 @@ pub(super) fn sidebar_toolbar(
         } else {
             Message::SidebarCollapse
         }),
-        Some(if view.sidebar_collapsed {
-            "icons/panel-left.svg"
-        } else {
-            "icons/panel-left-close.svg"
-        }),
+        Some("icons/panel-left.svg"),
         None,
         theme,
         true,
