@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod built_binary;
 mod file_names;
 mod file_drag;
 pub use file_drag::{FileDragFeedback, FileDropEffect, FileDropPhase, NativeFileDrop};

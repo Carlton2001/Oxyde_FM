@@ -41,13 +41,7 @@ impl Drop for Fixture {
 
 #[test]
 fn native_pdf_recycles_after_viewer_session_closes_with_source_identity_retained() {
-    let executable = std::env::current_exe()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("oxyde.exe");
+    let executable = crate::platform::built_binary::path("oxyde.exe");
     for viewed in [false, true] {
         let fixture = Fixture::new();
         let retained_session = if viewed {

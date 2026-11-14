@@ -48,13 +48,7 @@ fn persistent_audio_session_reuses_pid_for_grid_hover_and_missing_covers() {
     let first = source(directory.path(), "first.wav", true);
     let second = source(directory.path(), "second.wav", true);
     let absent = source(directory.path(), "absent.wav", false);
-    let executable = std::env::current_exe()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("oxyde-image-worker.exe");
+    let executable = crate::platform::built_binary::path("oxyde-image-worker.exe");
     let cold = Instant::now();
     let mut session = Session::start_with(&executable, cold, AUDIO).unwrap();
     let process = HANDLE(session.worker.child.as_raw_handle());

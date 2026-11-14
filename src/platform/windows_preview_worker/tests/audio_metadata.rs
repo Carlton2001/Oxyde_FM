@@ -10,13 +10,7 @@ use std::io::Write;
 
 #[test]
 fn isolated_audio_metadata_worker_reads_inherited_source() {
-    let executable = std::env::current_exe()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("oxyde-image-worker.exe");
+    let executable = crate::platform::built_binary::path("oxyde-image-worker.exe");
     assert!(
         executable.is_file(),
         "Build oxyde-image-worker before this test"

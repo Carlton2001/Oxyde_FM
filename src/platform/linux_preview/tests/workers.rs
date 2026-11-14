@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 /// The real worker: `cargo build --offline --bins` comes first.
 fn oxyde() -> PathBuf {
-    let executable = std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().join("oxyde");
+    let executable = crate::platform::built_binary::path("oxyde");
     assert!(executable.is_file(), "Build oxyde before worker tests: cargo build --offline --bins");
     executable
 }

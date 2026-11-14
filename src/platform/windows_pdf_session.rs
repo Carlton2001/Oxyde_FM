@@ -228,7 +228,7 @@ mod tests {
 
     #[test]
     fn session_keeps_the_document_open_across_page_requests() {
-        let executable = std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().join("oxyde.exe");
+        let executable = crate::platform::built_binary::path("oxyde.exe");
         assert!(executable.is_file(), "Build oxyde.exe before native worker tests");
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("two.pdf");

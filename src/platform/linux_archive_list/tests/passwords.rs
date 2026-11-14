@@ -4,7 +4,7 @@ use crate::models::error::ArchivePasswordFailure;
 use crate::utils::archive_password::{forget, remember, ArchiveSecret};
 
 fn worker() -> PathBuf {
-    let executable = std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().join("oxyde-archive-list-worker");
+    let executable = crate::platform::built_binary::path("oxyde-archive-list-worker");
     assert!(executable.is_file(), "Build the workers before these tests: cargo build --offline --bins");
     executable
 }

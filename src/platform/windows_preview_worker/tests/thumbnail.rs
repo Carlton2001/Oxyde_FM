@@ -4,8 +4,7 @@ use std::time::Duration;
 
 #[test]
 fn isolated_image_worker_renders_svg_preview() {
-    let executable = std::env::current_exe().unwrap().parent().unwrap()
-        .parent().unwrap().join("oxyde-image-worker.exe");
+    let executable = crate::platform::built_binary::path("oxyde-image-worker.exe");
     assert!(executable.is_file(), "Build oxyde-image-worker before this test");
     let directory = tempfile::tempdir().unwrap();
     let source = directory.path().join("source.svg");
@@ -19,8 +18,7 @@ fn isolated_image_worker_renders_svg_preview() {
 
 #[test]
 fn isolated_thumbnail_worker_outputs_128_pixels_directly() {
-    let executable = std::env::current_exe().unwrap().parent().unwrap()
-        .parent().unwrap().join("oxyde-image-worker.exe");
+    let executable = crate::platform::built_binary::path("oxyde-image-worker.exe");
     assert!(executable.is_file(), "Build oxyde-image-worker before this test");
     let directory = tempfile::tempdir().unwrap();
     let source = directory.path().join("source.png");

@@ -28,8 +28,13 @@ struct Installed {
 
 impl Installed {
     fn new() -> Self {
-        // target/debug/deps/dialog-….exe: the library and the examples are one folder up.
-        let built = std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().to_owned();
+        // The library and the examples are in the nearest folder above the test that holds
+        // them: `deps` is one level down, and since Rust 1.100 the test sits deeper under `build`.
+        let test = std::env::current_exe().unwrap();
+        let built = test.ancestors().skip(1)
+            .find(|folder| folder.join("oxyde_file_dialog.dll").is_file())
+            .unwrap_or_else(|| test.parent().unwrap().parent().unwrap())
+            .to_owned();
         let folder = std::env::temp_dir().join(format!("oxyde-file-dialog-{}", std::process::id()));
         std::fs::create_dir_all(&folder).unwrap();
         std::fs::copy(built.join("oxyde_file_dialog.dll"), folder.join("oxyde_file_dialog.dll")).unwrap();

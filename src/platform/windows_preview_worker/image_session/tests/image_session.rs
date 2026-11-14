@@ -4,13 +4,7 @@ use windows::Win32::Foundation::WAIT_OBJECT_0;
 use windows::Win32::System::Threading::{GetProcessHandleCount, GetProcessId, WaitForSingleObject};
 
 fn executable() -> std::path::PathBuf {
-    let path = std::env::current_exe()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("oxyde-image-worker.exe");
+    let path = crate::platform::built_binary::path("oxyde-image-worker.exe");
     assert!(
         path.is_file(),
         "Build oxyde-image-worker before running this test"

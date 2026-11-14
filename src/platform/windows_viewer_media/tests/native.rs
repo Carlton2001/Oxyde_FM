@@ -113,13 +113,7 @@ fn exercise(path: &Path, video: bool) {
         )
         .unwrap()
     });
-    let executable = std::env::current_exe()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("oxyde.exe");
+    let executable = crate::platform::built_binary::path("oxyde.exe");
     assert!(
         executable.is_file(),
         "Build all binaries before native worker tests"
