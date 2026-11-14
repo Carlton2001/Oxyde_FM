@@ -31,7 +31,7 @@ pub(super) fn context_menu_height(menu: &ContextMenuInstance, viewport_height: P
         ContextMenuContent::Items(items) | ContextMenuContent::Grid(super::filters::GridMenu { items, .. }) => (
             items.iter().filter(|item| !matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count(),
             logical(6.0),
-            logical(480.0),
+            f32::INFINITY,
         ),
         ContextMenuContent::NativeItems { items, .. } => {
             (items.len(), logical(6.0), native_menu_max_height(viewport_height))

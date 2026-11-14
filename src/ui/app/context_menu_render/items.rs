@@ -1,7 +1,7 @@
 use crate::ui::app::{DragTarget, OxydeApp};
 use crate::ui::app::context_menus::{context_menu_contains_point, context_menu_height, context_menu_visible_top};
 use crate::ui::components::dropdown::{DropdownItem, GenericDropdown};
-use crate::ui::scale::{logical, rem_pixels};
+use crate::ui::scale::rem_pixels;
 use gpui::*;
 
 impl OxydeApp {
@@ -45,7 +45,8 @@ impl OxydeApp {
             scroll_handle,
             width: None,
             min_width: None,
-            max_height: logical(480.0),
+            // Only the window bounds the menu, as the native menus.
+            max_height: f32::INFINITY,
             on_close: {
                 let h = h.clone();
                 std::rc::Rc::new(move |_, cx| {
