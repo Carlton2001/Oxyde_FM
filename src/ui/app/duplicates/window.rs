@@ -6,13 +6,8 @@ use oxyde_lib::commands::duplicates::cancel_find_duplicates;
 
 impl DuplicateWindow {
     pub(super) fn button(id: impl Into<ElementId>, label: SharedString, cx: &App) -> Stateful<Div> {
-        Self::styled_button(id, label, false, cx)
+        crate::ui::components::tool_window::action_button(id, label, false, cx)
     }
-
-    fn styled_button(id: impl Into<ElementId>, label: SharedString, primary: bool, cx: &App) -> Stateful<Div> {
-        crate::ui::components::tool_window::action_button(id, label, primary, cx)
-    }
-
 }
 
 impl Render for DuplicateWindow {
@@ -31,10 +26,12 @@ impl Render for DuplicateWindow {
             .update(cx, |input, cx| input.set_placeholder(placeholder, cx));
         let sidebar = self.render_sources(theme, window, cx);
         let mut args = FluentArgs::new();
-        args.set("groups", self.groups.len() as i64);
+        // Counts follow the filter, like the cards below them.
+        let group_count = self.filtered.len();
+        args.set("groups", group_count as i64);
         args.set(
             "group_count",
-            crate::ui::format::format_number(self.groups.len() as u64, cx.i18n().language()),
+            crate::ui::format::format_number(group_count as u64, cx.i18n().language()),
         );
         let file_count = self.result_rows.file_count;
         args.set("file_count", file_count as i64);
@@ -42,12 +39,8 @@ impl Render for DuplicateWindow {
             "file_number",
             crate::ui::format::format_number(file_count as u64, cx.i18n().language()),
         );
-        args.set(
-            "files",
-            file_count as i64,
-        );
         let results = self.render_results(theme, system_icons, cx);
-        let disabled = self.selected.is_empty() || !self.options.iter().any(|v| *v);
+        let can_search = !self.running && !self.selected.is_empty() && self.options.iter().any(|v| *v);
         let root = div()
             .id("duplicate-window")
             .child(crate::ui::components::tool_window::pointer_drag(cx.entity(),
@@ -170,7 +163,12 @@ impl Render for DuplicateWindow {
             .child(
                 crate::ui::components::tool_window::footer(cx)
                     .child(
-                        Self::button("duplicate-cancel", cx.i18n().text(Message::Cancel), cx)
+                        // Cancel stops a running search; otherwise the button closes the window.
+                        Self::button(
+                            "duplicate-cancel",
+                            cx.i18n().text(if self.running { Message::Cancel } else { Message::Close }),
+                            cx,
+                        )
                             .on_click(cx.listener(|this, _, w, cx| {
                                 if this.running {
                                     cancel_find_duplicates(&this.cancellation);
@@ -181,28 +179,15 @@ impl Render for DuplicateWindow {
                             })),
                     )
                     .child(
-                        Self::styled_button(
-                            "duplicate-search",
-                            "".into(),
-                            !disabled && !self.running,
-                            cx,
-                        )
-                        .bg(if disabled || self.running {
-                            theme.header
-                        } else {
-                            theme.accent
-                        })
-                        .text_color(if disabled || self.running {
-                            theme.text_muted
-                        } else {
-                            theme.text_on_accent
-                        })
+                        crate::ui::elements::button::action(crate::ui::elements::button::button_style(
+                            div().id("duplicate-search"),
+                            theme,
+                            crate::ui::elements::button::ButtonVariant::Primary,
+                            can_search,
+                        ))
+                        .tab_index(0)
                         .child(svg().path("icons/search.svg").size(rems(0.875)).text_color(
-                            if disabled || self.running {
-                                theme.text_muted
-                            } else {
-                                theme.text_on_accent
-                            },
+                            if can_search { theme.text_on_accent } else { theme.icon_disabled },
                         ))
                         .child(cx.i18n().text(Message::AdvancedSearch))
                         .on_click(cx.listener(|this, _, _, cx| this.search(cx))),

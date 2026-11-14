@@ -13,6 +13,13 @@ impl DuplicateWindow {
         self.running = true;
         self.searched = true;
         self.error = None;
+        // Earlier results would otherwise stay under the progress message.
+        self.groups = Arc::new(vec![]);
+        self.filtered.clear();
+        self.result_rows = Arc::default();
+        self.collapsed.clear();
+        self.filter_task = None;
+        self.filtering = false;
         self.results_scroll.set_offset(point(px(0.0), px(0.0)));
         self.cancellation = Arc::new(DuplicateSearchState::new());
         let progress_token = self.cancellation.clone();

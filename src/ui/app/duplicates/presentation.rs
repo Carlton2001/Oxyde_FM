@@ -39,7 +39,6 @@ impl Results {
         collapsed: &HashSet<usize>,
     ) -> Self {
         let mut result = Self {
-            file_count: groups.iter().map(|group| group.files.len()).sum(),
             ..Self::default()
         };
         for &index in indices {
@@ -58,6 +57,7 @@ impl Results {
                 max_size,
             });
             result.len += count;
+            result.file_count += group.files.len();
             result.has_expanded |= expanded;
         }
         result

@@ -11,9 +11,15 @@ use std::sync::{Arc, Mutex};
 
 use crate::utils::hardware::{get_physical_disk_id, is_ssd};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DuplicateStage {
+    Scanning,
+    Hashing,
+}
+
 #[derive(Clone)]
 pub struct DuplicatesProgress {
-    pub stage: String,
+    pub stage: DuplicateStage,
     pub current: usize,
     pub total: usize,
     pub message: String,
@@ -26,7 +32,7 @@ impl DuplicateSearchState {
         Self(
             Arc::new(AtomicBool::new(false)),
             Arc::new(Mutex::new(DuplicatesProgress {
-                stage: "Scanning".into(),
+                stage: DuplicateStage::Scanning,
                 current: 0,
                 total: 0,
                 message: String::new(),
@@ -160,14 +166,14 @@ pub async fn find_duplicates(
             roots.retain(|existing| !existing.starts_with(&root));
             roots.push(root);
         }
-        let report = |stage: &str, current: usize, total: usize| {
+        let report = |stage: DuplicateStage, current: usize, total: usize| {
             if let Ok(mut value) = progress.lock() {
-                value.stage = stage.into();
+                value.stage = stage;
                 value.current = current;
                 value.total = total;
             }
         };
-        report("Scanning", 0, 0);
+        report(DuplicateStage::Scanning, 0, 0);
         // 1. Collect all files and group by selected criteria (Parallel Scan)
         #[derive(PartialEq, Eq, Hash, Debug)]
         struct GroupKey {
@@ -235,14 +241,14 @@ pub async fn find_duplicates(
                             .push(entry.path().to_path_buf());
                         let count = file_count.fetch_add(1, Ordering::Relaxed) + 1;
                         if count.is_multiple_of(100) {
-                            report("Scanning", count, 0);
+                            report(DuplicateStage::Scanning, count, 0);
                         }
                     }
                 }
             }
         });
 
-        report("Scanning", file_count.load(Ordering::Relaxed), 0);
+        report(DuplicateStage::Scanning, file_count.load(Ordering::Relaxed), 0);
         let initial_groups = Arc::try_unwrap(initial_groups)
             .unwrap()
             .into_inner()
@@ -313,7 +319,7 @@ pub async fn find_duplicates(
 
         let vol_semaphores: Arc<DashMap<u64, Arc<Mutex<()>>>> = Arc::new(DashMap::new());
         let hashed = AtomicUsize::new(0);
-        report("Hashing", 0, total_to_hash);
+        report(DuplicateStage::Hashing, 0, total_to_hash);
         let hash_total = total_to_hash;
         let partial_results: Vec<Option<(u64, PathBuf, blake3::Hash)>> = flat_potential
             .into_par_iter()
@@ -335,7 +341,7 @@ pub async fn find_duplicates(
                 let hash = calculate_hash(&path, limit, false, &cancel_flag).ok()?;
                 let count = hashed.fetch_add(1, Ordering::Relaxed) + 1;
                 if count.is_multiple_of(20) {
-                    report("Hashing", count, hash_total);
+                    report(DuplicateStage::Hashing, count, hash_total);
                 }
                 Some((size, path, hash))
             })
@@ -369,7 +375,7 @@ pub async fn find_duplicates(
 
         hashed.store(0, Ordering::Relaxed);
         let hash_total = total_end;
-        report("Hashing", 0, hash_total);
+        report(DuplicateStage::Hashing, 0, hash_total);
         let partial_end_results: Vec<Option<(u64, PathBuf, blake3::Hash)>> = end_check_list
             .into_par_iter()
             .map(|(size, path)| {
@@ -390,7 +396,7 @@ pub async fn find_duplicates(
                 let hash = calculate_hash(&path, limit, true, &cancel_flag).ok()?;
                 let count = hashed.fetch_add(1, Ordering::Relaxed) + 1;
                 if count.is_multiple_of(20) {
-                    report("Hashing", count, hash_total);
+                    report(DuplicateStage::Hashing, count, hash_total);
                 }
                 Some((size, path, hash))
             })
@@ -424,7 +430,7 @@ pub async fn find_duplicates(
 
         hashed.store(0, Ordering::Relaxed);
         let hash_total = total_final;
-        report("Hashing", 0, hash_total);
+        report(DuplicateStage::Hashing, 0, hash_total);
         let full_results: Vec<Option<(u64, PathBuf, blake3::Hash)>> = final_check_list
             .into_par_iter()
             .map(|(size, path)| {
@@ -440,7 +446,7 @@ pub async fn find_duplicates(
                 let hash = calculate_hash(&path, None, false, &cancel_flag).ok()?;
                 let count = hashed.fetch_add(1, Ordering::Relaxed) + 1;
                 if count.is_multiple_of(20) {
-                    report("Hashing", count, hash_total);
+                    report(DuplicateStage::Hashing, count, hash_total);
                 }
                 Some((size, path, hash))
             })

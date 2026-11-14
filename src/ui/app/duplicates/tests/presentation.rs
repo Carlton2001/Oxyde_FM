@@ -40,7 +40,7 @@ fn collapse_and_filter_preserve_original_group_and_file_identifiers() {
     let groups = [group(&[1, 100]), group(&[4, 4]), group(&[9, 10])];
     let rows = Results::prepare(&groups, &[2, 0], &HashSet::from([2]));
     assert_eq!(rows.len, 4);
-    assert_eq!(rows.file_count, 6);
+    assert_eq!(rows.file_count, 4);
     assert!(rows.has_expanded);
     assert_eq!(
         rows.row(0),

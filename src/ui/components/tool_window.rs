@@ -224,6 +224,22 @@ pub(crate) fn title_button(
 }
 
 /// Shared secondary-window footer, matching the recycle-bin properties modal.
+/// The application's section title: small, muted and uppercase, after an optional icon.
+pub(crate) fn section(label: SharedString, icon: Option<&'static str>, cx: &App) -> Div {
+    let theme = cx.theme();
+    div()
+        .flex()
+        .items_center()
+        .gap(rems(0.5))
+        .text_size(rems(0.6875))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(theme.text_muted)
+        .when_some(icon, |title, icon| {
+            title.child(svg().path(icon).size(rems(0.8125)).flex_none().text_color(theme.text))
+        })
+        .child(label.to_uppercase())
+}
+
 pub(crate) fn footer(cx: &App) -> Div {
     div()
         .flex_none()

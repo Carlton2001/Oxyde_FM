@@ -5,30 +5,19 @@ use crate::ui::theme::OxydeTheme;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
 
+/// Corner radius shared by the sidebar's framed blocks.
+const PANEL_RADIUS: Rems = rems(0.5);
+/// The rows' radius inside a framed block, inset by its border.
+const PANEL_INNER_RADIUS: Rems = rems(0.4375);
+
 impl DuplicateWindow {
     pub(super) fn render_sources(&self, theme: OxydeTheme, window: &Window, cx: &mut Context<Self>) -> Stateful<Div> {
-        let section_title = |icon: &'static str, message: Message| {
-            div()
-                .flex()
-                .items_center()
-                .gap(rems(0.5))
-                .mb(rems(0.5))
-                .text_size(rems(0.75))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(theme.text_muted)
-                .child(
-                    svg()
-                        .path(icon)
-                        .size(rems(0.875))
-                        .text_color(theme.text),
-                )
-                .child(cx.i18n().text(message).to_uppercase())
+        let section_title = |icon: &'static str, message: Message, cx: &App| {
+            crate::ui::components::tool_window::section(cx.i18n().text(message), Some(icon), cx).mb(rems(0.5))
         };
         let mut sidebar = div()
             .id("duplicate-sidebar")
-            .w(rems(17.5))
-            .flex_none()
-            .h_full()
+            .size_full()
             .overflow_y_scroll()
             .track_scroll(&self.sources_scroll)
             .px(rems(1.25))
@@ -37,13 +26,10 @@ impl DuplicateWindow {
             .flex_col()
             .border_r(rems(0.0625))
             .border_color(theme.border)
-            .child(section_title(
-                "icons/database.svg",
-                Message::DuplicateLocations,
-            ));
+            .child(section_title("icons/database.svg", Message::DuplicateLocations, cx));
         let mut locations = div()
             .flex_none()
-            .rounded(rems(0.375))
+            .rounded(PANEL_RADIUS)
             .border(rems(0.0625))
             .border_color(theme.border)
             .overflow_hidden();
@@ -129,8 +115,8 @@ impl DuplicateWindow {
             locations = locations.child(
                 div()
                     .id(("location", index))
-                    .when(index == 0, |row| row.rounded_t(rems(0.3125)))
-                    .when(index + 1 == self.locations.len(), |row| row.rounded_b(rems(0.3125)))
+                    .when(index == 0, |row| row.rounded_t(PANEL_INNER_RADIUS))
+                    .when(index + 1 == self.locations.len(), |row| row.rounded_b(PANEL_INNER_RADIUS))
                     .flex_none()
                     .tab_index(0)
                     .focus_visible(move |s| s.bg(theme.selected))
@@ -182,7 +168,7 @@ impl DuplicateWindow {
                     .flex_none()
                     .p(rems(0.75))
                     .mt(rems(0.125))
-                    .rounded(rems(0.5))
+                    .rounded(PANEL_RADIUS)
                     .border(rems(0.0625))
                     .border_color(theme.warning_border)
                     .bg(theme.warning_background)
@@ -190,13 +176,10 @@ impl DuplicateWindow {
                     .child(cx.i18n().text(Message::DuplicateWarning)),
             );
         }
-        sidebar = sidebar.child(div().mt(rems(1.75)).child(section_title(
-            "icons/settings-2.svg",
-            Message::DuplicateSettings,
-        )));
+        sidebar = sidebar.child(div().mt(rems(1.75)).child(section_title("icons/settings-2.svg", Message::DuplicateSettings, cx)));
         let mut options = div()
             .flex_none()
-            .rounded(rems(0.5))
+            .rounded(PANEL_RADIUS)
             .border(rems(0.0625))
             .border_color(theme.border)
             .bg(theme.header)
@@ -241,7 +224,6 @@ impl DuplicateWindow {
                     })),
             );
         }
-        sidebar = sidebar.child(options);
-            sidebar
+        sidebar.child(options)
     }
 }

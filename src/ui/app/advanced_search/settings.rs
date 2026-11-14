@@ -17,20 +17,6 @@ fn form_row(label: SharedString, value: impl IntoElement, compact: bool, cx: &Ap
     responsive_form_row(label, value, rems(6.5), compact, cx)
 }
 
-/// A muted title followed by a rule, separating groups of rows.
-fn section(label: SharedString, cx: &App) -> Div {
-    let theme = cx.theme();
-    div()
-        .flex()
-        .items_center()
-        .gap(rems(0.5))
-        .pt(rems(0.25))
-        .text_size(rems(0.75))
-        .text_color(theme.text_muted)
-        .child(label)
-        .child(div().flex_1().h(rems(0.0625)).bg(theme.border))
-}
-
 impl AdvancedSearchWindow {
     pub(super) fn render_advanced_settings(
         &self,
@@ -54,14 +40,14 @@ impl AdvancedSearchWindow {
             [(4, Message::AdvancedCaseSensitive), (5, Message::AdvancedIgnoreAccents)],
             handle.clone(), window, cx,
         ), compact, cx));
-        body = body.child(section(cx.i18n().text(Message::AdvancedSectionLocation), cx));
+        body = body.child(crate::ui::components::tool_window::section(cx.i18n().text(Message::AdvancedSectionLocation), Some("icons/folder-open.svg"), cx));
         let folder = self.advanced_text_field(1, Message::PathPlaceholder, handle.clone(), window, cx);
         body = body.child(form_row(cx.i18n().text(Message::AdvancedSearchIn), folder, compact, cx));
         body = body.child(form_row("".into(), self.advanced_toggles(
             [(2, Message::AdvancedSearchSubfolders), (3, Message::AdvancedSearchInArchives)],
             handle.clone(), window, cx,
         ), compact, cx));
-        body = body.child(section(cx.i18n().text(Message::AdvancedSectionFilters), cx));
+        body = body.child(crate::ui::components::tool_window::section(cx.i18n().text(Message::AdvancedSectionFilters), Some("icons/filter.svg"), cx));
         let unit_handle = handle.clone();
         let mut unit = Some(
             crate::ui::components::select_menu::trigger("advanced-unit", units[d.unit], d.controls[8].is_focused(window), true, cx)

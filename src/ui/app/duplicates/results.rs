@@ -4,6 +4,7 @@ use crate::ui::theme::OxydeTheme;
 use crate::ui::style::TabularFigures;
 use gpui::prelude::FluentBuilder;
 use gpui::*;
+use oxyde_lib::commands::duplicates::DuplicateStage;
 
 /// Space above each group card, and above the list's first and below its last row.
 const CARD_GAP: Rems = rems(0.5);
@@ -37,7 +38,7 @@ impl DuplicateWindow {
             );
             // Messages keep the space the cards leave above them.
             results = results.child(div().pt(CARD_GAP).tabular_figures().child(cx.i18n().text_with_args(
-                if progress.stage == "Scanning" {
+                if progress.stage == DuplicateStage::Scanning {
                     Message::DuplicateScanning
                 } else {
                     Message::DuplicateHashing
@@ -276,6 +277,11 @@ impl DuplicateWindow {
             .flex_none()
             .w_full()
             .bg(theme.surface)
+            // The card's sides continue under its header; the last row closes it.
+            .border_l(rems(0.0625))
+            .border_r(rems(0.0625))
+            .when(last, |row| row.border_b(rems(0.0625)))
+            .border_color(theme.border)
             .id(ElementId::Name(
                 format!("duplicate-file-{index}-{file_index}").into(),
             ))
