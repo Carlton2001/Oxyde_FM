@@ -181,13 +181,15 @@ pub(super) fn selection_checkbox(
         )
 }
 
-/// The buttons closing the status bar: the size bars and grouping toggles as
-/// full-height cells, then, past a separator, the switch between details and grid.
+/// The buttons closing the status bar, full-height cells parted by separators: the
+/// size bars, the grouping menu, then the switch between details and grid. The last
+/// cell reaches the bar's edge: `corner` rounds it where the bar meets the window's corner.
 pub(super) fn status_actions(
     pane_id: &str,
     sizes_active: bool,
     grouped: bool,
     active_mode: ViewMode,
+    corner: Pixels,
     handle: Entity<OxydeApp>,
     theme: OxydeTheme,
     cx: &mut Context<OxydeApp>,
@@ -197,44 +199,38 @@ pub(super) fn status_actions(
         .flex()
         .flex_none()
         .items_center()
-        .pr(rems(0.5))
         .child(sizes_button(pane_id, sizes_active, handle.clone(), theme, cx))
+        .child(crate::ui::elements::separator::vertical(theme.border))
         .child(grouping_button(pane_id, grouped, handle.clone(), theme))
         .child(crate::ui::elements::separator::vertical(theme.border))
-        .child(view_mode_switch(pane_id, active_mode, handle, theme, cx))
+        .child(view_mode_switch(pane_id, active_mode, corner, handle, theme, cx))
 }
 
-/// Details and grid as one segmented switch in the status bar.
+/// Details and grid as two status bar cells, the current one selected.
 fn view_mode_switch(
     pane_id: &str,
     active_mode: ViewMode,
+    corner: Pixels,
     handle: Entity<OxydeApp>,
     theme: OxydeTheme,
     cx: &mut Context<OxydeApp>,
 ) -> impl IntoElement {
-    let mut switch = crate::ui::elements::segmented::segmented(
-        SharedString::from(format!("view-mode-{pane_id}")),
-        None,
-        theme,
-    );
-    use crate::ui::elements::segmented::SegmentPlace;
-    for (index, (mode, name, icon, tooltip)) in [
+    let mut switch = div().h_full().flex().flex_none();
+    for (mode, name, icon, tooltip) in [
         (ViewMode::Details, "details", "icons/list.svg", Message::ViewDetails),
         (ViewMode::Grid, "grid", "icons/layout-grid.svg", Message::ViewGrid),
-    ].into_iter().enumerate() {
+    ] {
         let selected = mode == active_mode;
         let pane_id = pane_id.to_string();
         let handle = handle.clone();
+        let cell = bar_button::cell(
+            SharedString::from(format!("view-mode-{pane_id}-{name}")),
+            crate::ui::style::STATUS_BAR_HEIGHT,
+        );
         switch = switch.child(
-            crate::ui::elements::segmented::segment(
-                SharedString::from(format!("view-mode-{pane_id}-{name}")),
-                selected,
-                true,
-                theme,
-            )
-            .place(index, 2)
-            .w(rems(1.75))
-            .px_0()
+            bar_button::fill(cell, true, selected, theme)
+            // GPUI clips to rectangles: the fill rounds itself in the window's corner.
+            .when(mode == ViewMode::Grid, |cell| cell.rounded_br(corner))
             .fixed_tooltip(Tooltip::text(cx.i18n().text(tooltip)))
             .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                 cx.stop_propagation();
@@ -246,7 +242,7 @@ fn view_mode_switch(
                     cx.notify();
                 });
             })
-            .child(svg().path(icon).size(rems(0.875)).text_color(if selected { theme.accent } else { theme.text })),
+            .child(bar_button::icon(icon, bar_button::icon_color(true, selected, theme))),
         );
     }
     switch

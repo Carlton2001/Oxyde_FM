@@ -595,7 +595,7 @@ pub(super) fn render_details_file_list(
                     )
             })
             .child(div().flex_1())
-            .child(status_actions(&pane_id, active_tab.show_size_histogram, active_tab.is_grouped(), ViewMode::Details, handle.clone(), theme, cx)),
+            .child(status_actions(&pane_id, active_tab.show_size_histogram, active_tab.is_grouped(), ViewMode::Details, status_corner, handle.clone(), theme, cx)),
     );
 
     container.into_any_element()

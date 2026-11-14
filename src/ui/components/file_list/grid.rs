@@ -532,6 +532,6 @@ pub(super) fn render_grid_file_list(
                     )
                 })
                 .child(div().flex_1())
-                .child(status_actions(&pane_id, tab.show_size_histogram, tab.is_grouped(), ViewMode::Grid, handle.clone(), theme, cx)),
+                .child(status_actions(&pane_id, tab.show_size_histogram, tab.is_grouped(), ViewMode::Grid, status_corner, handle.clone(), theme, cx)),
         )
 }
