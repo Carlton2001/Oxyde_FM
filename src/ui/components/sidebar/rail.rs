@@ -127,6 +127,14 @@ pub(super) fn render_sidebar_rail(
         ) {
             continue;
         }
+        // Sections part as in the expanded tree; the places, pinned menu included, end first.
+        if let SidebarItem::Header(_) = item {
+            if let Some(pinned) = pinned.take() {
+                entries = entries.child(pinned);
+            }
+            entries = entries.child(crate::ui::elements::separator::horizontal(theme.border).px_2());
+            continue;
+        }
         let (path, label, icon, text) = match item {
             SidebarItem::Drive { drive, .. } => (
                 drive.path.clone(),
