@@ -59,6 +59,7 @@ pub(super) fn render(
         min_width: None,
         max_height: logical(360.0),
         header: None,
+        footer: None,
         on_close: Rc::new(move |_, cx| {
             close.update(cx, |view, cx| {
                 view.breadcrumb_menu = None;

@@ -47,7 +47,7 @@ impl AdvancedSearchWindow {
             [(2, Message::AdvancedSearchSubfolders), (3, Message::AdvancedSearchInArchives)],
             handle.clone(), window, cx,
         ), compact, cx));
-        body = body.child(crate::ui::components::tool_window::section(cx.i18n().text(Message::AdvancedSectionFilters), Some("icons/filter.svg"), cx));
+        body = body.child(crate::ui::components::tool_window::section(cx.i18n().text(Message::AdvancedSectionFilters), Some("icons/funnel.svg"), cx));
         let unit_handle = handle.clone();
         let mut unit = Some(
             crate::ui::components::select_menu::trigger("advanced-unit", units[d.unit], d.controls[8].is_focused(window), true, cx)
@@ -86,7 +86,7 @@ impl AdvancedSearchWindow {
                         this.context_menus.push(ContextMenuInstance {
             native_bounds: None,
                             position,
-                            content: ContextMenuContent::Items(items, None),
+                            content: ContextMenuContent::Items(items),
                             scroll_handle: UniformListScrollHandle::new(),
                             width,
                             open_left: false,

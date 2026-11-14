@@ -10,6 +10,10 @@ mod folder_sizes;
 pub(crate) use preparation::{resolve_native_kinds, FileUpdate};
 pub(crate) use folder_sizes::SIZE_FLASH_DURATION;
 pub(crate) use sorting::sort_files;
+pub use filters::{DateRange, FilterColumn, FilterValue, SizeRange};
+pub(crate) use filters::NameMatcher;
+#[cfg(test)]
+pub(crate) use filters::ColumnFilterFlags;
 mod tree;
 mod viewer;
 
@@ -172,11 +176,19 @@ pub struct TabState {
     pub sort_direction: SortDirection,
     pub filter_types: std::collections::HashSet<String>,
     pub filter_name: String,
+    /// The name filter is a regular expression rather than a text or a `*` pattern.
+    pub filter_name_regex: bool,
     pub filter_original_location: String,
     pub filter_sizes: std::collections::HashSet<SizeCategory>,
+    /// Custom size bounds, set instead of `filter_sizes`.
+    pub filter_size_range: Option<SizeRange>,
     /// Unix permission bits kept by the Permissions column filter.
     pub filter_permissions: std::collections::HashSet<u32>,
     pub filter_dates: std::collections::HashSet<DateGroup>,
+    /// Custom days, set instead of `filter_dates`.
+    pub filter_date_range: Option<DateRange>,
+    /// Column filters survive navigating to another folder.
+    pub keep_filters: bool,
     pub selected_paths: std::collections::HashSet<String>,
     pub selection_anchor: Option<String>,
     pub keyboard_cursor: Option<String>,
@@ -194,7 +206,7 @@ pub struct TabState {
     pub permissions_col_width: f32,
     pub column_type_labels: std::collections::HashSet<String>,
     pub column_size_values: std::collections::HashSet<(u64, bool, bool)>,
-    pub column_measurement_key: Option<(u32, crate::ui::i18n::Language, crate::ui::format::DateFormat, [bool; 4])>,
+    pub column_measurement_key: Option<(u32, crate::ui::i18n::Language, crate::ui::format::DateFormat)>,
     pub load_status: TabLoadStatus,
 }
 
@@ -211,11 +223,14 @@ pub enum TabLoadStatus {
 struct FileFilters {
     filter_types: std::collections::HashSet<String>,
     filter_name: String,
+    filter_name_regex: bool,
     trash_search: String,
     filter_original_location: String,
     filter_sizes: std::collections::HashSet<SizeCategory>,
+    filter_size_range: Option<SizeRange>,
     filter_permissions: std::collections::HashSet<u32>,
     filter_dates: std::collections::HashSet<DateGroup>,
+    filter_date_range: Option<DateRange>,
 }
 pub(crate) struct CalendarFilterRequest {
     tab_id: String,

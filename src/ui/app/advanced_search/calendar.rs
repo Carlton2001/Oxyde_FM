@@ -5,16 +5,12 @@
 use super::AdvancedSearchWindow;
 use crate::ui::{
     components::{popup, select_menu},
-    i18n::{I18nContext, Message},
-    theme::{OxydeTheme, ThemeContext},
+    i18n::I18nContext,
+    theme::ThemeContext,
 };
-use chrono::{Datelike, NaiveDate};
+use chrono::NaiveDate;
 use gpui::prelude::*;
 use gpui::*;
-
-/// A day's cell, square, as wide as a weekday's label.
-const CELL: Rems = rems(2.0);
-const CELL_RADIUS: Rems = rems(0.3125);
 
 impl AdvancedSearchWindow {
     /// Opens the picker of date field `index` on its date, today when it holds none.
@@ -112,7 +108,7 @@ impl AdvancedSearchWindow {
     fn calendar(&self, handle: Entity<Self>, window: Option<&mut Window>, cx: &mut Context<Self>) -> Div {
         let theme = *cx.theme();
         let Some((d, (_, date))) = self.advanced_search.as_ref().and_then(|d| Some((d, d.calendar?))) else { return div() };
-        let mut surface = select_menu::surface(theme).p(rems(0.5)).gap(rems(0.25));
+        let mut surface = select_menu::surface(theme).p(rems(0.5));
         if let Some(window) = window {
             if !d.calendar_focus.is_focused(window) {
                 window.focus(&d.calendar_focus, cx);
@@ -127,77 +123,17 @@ impl AdvancedSearchWindow {
                 }
             });
         }
-        let months: Vec<SharedString> = cx.i18n().text(Message::AdvancedMonths).split_whitespace().map(|month| month.to_string().into()).collect();
-        let month = months.get(date.month0() as usize).cloned().unwrap_or_default();
-        let navigation = div()
-            .flex()
-            .items_center()
-            .justify_between()
-            .child(step("calendar-previous", "icons/chevron-left.svg", -1, &handle, theme))
-            .child(div().font_weight(FontWeight::MEDIUM).child(format!("{month} {}", date.year())))
-            .child(step("calendar-next", "icons/chevron-right.svg", 1, &handle, theme));
-        let mut weekdays = div().flex();
-        for day in cx.i18n().text(Message::AdvancedWeekdays).split_whitespace() {
-            weekdays = weekdays.child(
-                div().w(CELL).h(rems(1.5)).flex().items_center().justify_center()
-                    .text_size(rems(0.75)).text_color(theme.text_muted).child(day.to_string()),
-            );
-        }
-        surface = surface.child(navigation).child(weekdays);
-        let first = date.with_day(1).unwrap_or(date);
-        let offset = first.weekday().num_days_from_monday() as i64;
-        let today = chrono::Local::now().date_naive();
-        for week in 0..6 {
-            let mut row = div().flex();
-            for weekday in 0..7 {
-                let day = first + chrono::Duration::days(week * 7 + weekday - offset);
-                let pick = handle.clone();
-                let chosen = day == date;
-                let outside = day.month() != date.month();
-                row = row.child(
-                    div()
-                        .id(SharedString::from(format!("calendar-day-{day}")))
-                        .size(CELL)
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .rounded(CELL_RADIUS)
-                        .text_color(if chosen {
-                            theme.text_on_accent
-                        } else if outside {
-                            theme.text_muted
-                        } else if day == today {
-                            theme.accent
-                        } else {
-                            theme.text
-                        })
-                        .when(day == today, |cell| cell.font_weight(FontWeight::SEMIBOLD))
-                        .when(chosen, |cell| cell.bg(theme.accent))
-                        .when(!chosen, |cell| cell.hover(|cell| cell.bg(theme.menu_hover)))
-                        .child(day.day().to_string())
-                        .on_click(move |_, _, cx| pick.update(cx, |this, cx| this.pick_calendar(day, cx))),
-                );
-            }
-            surface = surface.child(row);
-        }
-        surface
+        let pick = handle.clone();
+        let step = handle.clone();
+        surface.child(crate::ui::components::calendar::month(
+            date,
+            theme,
+            cx.i18n(),
+            std::rc::Rc::new(move |day, _, cx| pick.update(cx, |this, cx| this.pick_calendar(day, cx))),
+            std::rc::Rc::new(move |months, _, cx| step.update(cx, |this, cx| {
+                this.move_calendar(0, months);
+                cx.notify();
+            })),
+        ))
     }
-}
-
-/// A month back or forward, a square cell beside the month's name.
-fn step(id: &'static str, icon: &'static str, months: i32, handle: &Entity<AdvancedSearchWindow>, theme: OxydeTheme) -> Stateful<Div> {
-    let handle = handle.clone();
-    div()
-        .id(id)
-        .size(CELL)
-        .flex()
-        .items_center()
-        .justify_center()
-        .rounded(CELL_RADIUS)
-        .hover(|cell| cell.bg(theme.menu_hover))
-        .child(svg().path(icon).size(rems(1.0)).text_color(theme.text))
-        .on_click(move |_, _, cx| handle.update(cx, |this, cx| {
-            this.move_calendar(0, months);
-            cx.notify();
-        }))
 }

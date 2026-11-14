@@ -28,20 +28,21 @@ pub(super) fn context_menu_contains_point(
 pub(super) fn context_menu_height(menu: &ContextMenuInstance, viewport_height: Pixels) -> Pixels {
     if let Some(bounds) = menu.native_bounds { return bounds.size.height; }
     let (item_count, header_height, max_height) = match &menu.content {
-        ContextMenuContent::Items(items, header) => (
+        ContextMenuContent::Items(items) => (
             items.iter().filter(|item| !matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count(),
-            if header.is_some() { logical(42.0) } else { logical(6.0) },
+            logical(6.0),
             logical(480.0),
         ),
         ContextMenuContent::NativeItems { items, .. } => {
             (items.len(), logical(6.0), native_menu_max_height(viewport_height))
         }
-        ContextMenuContent::NameFilter { .. } => (0, crate::ui::style::row_height() + logical(8.0), logical(480.0)),
+        // Measured once drawn; until then, a header and a few rows.
+        ContextMenuContent::ColumnFilter(_) => (6, logical(96.0), logical(320.0)),
     };
-    let header = matches!(&menu.content, ContextMenuContent::Items(_, Some(_)));
+    let header = matches!(&menu.content, ContextMenuContent::ColumnFilter(_));
     let max_height = crate::ui::style::menu_list_max_height(viewport_height.as_f32(), header, max_height);
     let separator_height = match &menu.content {
-        ContextMenuContent::Items(items, _) => items.iter().filter(|item| matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count() as f32 * crate::ui::style::menu_separator_height(),
+        ContextMenuContent::Items(items) => items.iter().filter(|item| matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count() as f32 * crate::ui::style::menu_separator_height(),
         _ => 0.0,
     };
     px((item_count as f32 * crate::ui::style::menu_item_height() + separator_height).min(max_height) + header_height + logical(4.0))
@@ -418,8 +419,8 @@ impl OxydeApp {
             super::dialog_windows::show_text_menu(items, position, window, cx);
             return;
         }
-        // Preserve the editable filter while its text menu is open.
-        if let Some(index) = self.context_menus.iter().position(|menu| matches!(menu.content, ContextMenuContent::NameFilter { .. })) {
+        // Preserve the filter panel while the text menu of its field is open.
+        if let Some(index) = self.context_menus.iter().position(|menu| matches!(menu.content, ContextMenuContent::ColumnFilter(_))) {
             self.context_menus.truncate(index + 1);
         } else {
             self.context_menus.clear();
@@ -427,7 +428,7 @@ impl OxydeApp {
         self.context_menus.push(ContextMenuInstance {
             native_bounds: None,
             position,
-            content: ContextMenuContent::Items(items, None),
+            content: ContextMenuContent::Items(items),
             scroll_handle: UniformListScrollHandle::new(),
             width: px(0.0),
             open_left: false,

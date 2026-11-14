@@ -756,12 +756,7 @@ impl OxydeApp {
         tab.forward_stack.clear();
         tab.reset_folder_sizes();
         tab.path = path.clone();
-        tab.filter_name.clear();
-                    tab.filter_original_location.clear();
-        tab.filter_types.clear();
-        tab.filter_sizes.clear();
-        tab.filter_permissions.clear();
-        tab.filter_dates.clear();
+        tab.clear_column_filters();
         tab.list_scroll = UniformListScrollHandle::new();
         tab.list_scroll_h.set_offset(point(px(0.0), px(0.0)));
         let index = self.search_tab_location(tab_id);

@@ -92,7 +92,7 @@ pub fn render_title_bar(
                 view.context_menus.push(ContextMenuInstance {
             native_bounds: None,
                     position: point(bounds.right(), bounds.bottom()),
-                    content: ContextMenuContent::Items(items, None),
+                    content: ContextMenuContent::Items(items),
                     scroll_handle: UniformListScrollHandle::new(),
                     width: px(0.0), open_left: true,
                     hovered_item: None, native_request_id: None, open_up: false,

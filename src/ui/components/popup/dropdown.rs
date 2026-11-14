@@ -55,6 +55,7 @@ pub(crate) fn text_menu<T: 'static, S: ScrollbarState + 'static>(
                     .as_f32()
                     .min(crate::ui::scale::logical(480.0)),
                 header: None,
+                footer: None,
                 on_item_hover: None,
                 on_width_calculated: None,
                 on_hover_change: None,

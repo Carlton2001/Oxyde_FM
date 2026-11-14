@@ -193,7 +193,7 @@ impl Render for PropertiesWindow {
             root = root.child(super::dialog::render(self, handle.clone(), window, cx));
         }
         for (index, menu) in self.context_menus.iter().enumerate() {
-            let crate::ui::app::ContextMenuContent::Items(items, _) = &menu.content else {
+            let crate::ui::app::ContextMenuContent::Items(items) = &menu.content else {
                 continue;
             };
             let close = handle.clone();
@@ -230,6 +230,7 @@ impl Render for PropertiesWindow {
                         min_width: None,
                         max_height: crate::ui::components::client_decorations::content_bounds(window).size.height.as_f32(),
                         header: None,
+                        footer: None,
                         on_item_hover: None,
                         on_width_calculated: None,
                         on_hover_change: None,
@@ -298,7 +299,7 @@ impl PropertiesWindow {
         self.context_menus.push(ContextMenuInstance {
             native_bounds: None,
             position,
-            content: ContextMenuContent::Items(items, None),
+            content: ContextMenuContent::Items(items),
             scroll_handle: UniformListScrollHandle::new(),
             width: px(0.0),
             open_left: false,

@@ -22,6 +22,7 @@ pub mod settings;
 pub mod sidebar;
 pub mod tabs;
 pub(crate) mod backdrop;
+pub(crate) mod calendar;
 pub mod title_bar;
 pub mod tooltip;
 pub(crate) mod popup;

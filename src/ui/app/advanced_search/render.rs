@@ -321,7 +321,7 @@ impl Render for AdvancedSearchWindow {
         // These menus belong to this window, including its text input actions.
         {
             for (index, menu) in self.context_menus.iter().enumerate() {
-                let ContextMenuContent::Items(items, _) = &menu.content else {
+                let ContextMenuContent::Items(items) = &menu.content else {
                     continue;
                 };
                 let close = handle.clone();
@@ -383,6 +383,7 @@ impl Render for AdvancedSearchWindow {
                             min_width: None,
                             max_height: viewport.height.as_f32(),
                             header: None,
+                            footer: None,
                             on_item_hover: None,
                             on_width_calculated: None,
                             on_hover_change: None,

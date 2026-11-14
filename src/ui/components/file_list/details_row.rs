@@ -181,7 +181,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                           this.context_menus.push(ContextMenuInstance {
             native_bounds: None,
                               position: pos,
-                              content: ContextMenuContent::Items(with_grid_sort(oxyde_context_menu_items(cx.i18n(), h_inner_inner.clone(), is_dir, is_pinned, p_for_right_cap.clone(), this), this, h_inner_inner.clone(), &p_id_cap_cap, cx.i18n()), None),
+                              content: ContextMenuContent::Items(with_grid_sort(oxyde_context_menu_items(cx.i18n(), h_inner_inner.clone(), is_dir, is_pinned, p_for_right_cap.clone(), this), this, h_inner_inner.clone(), &p_id_cap_cap, cx.i18n())),
                               scroll_handle: UniformListScrollHandle::new(),
                               width: px(0.0),
                               open_left: false,

@@ -15,17 +15,17 @@ impl OxydeApp {
         let measure = |text: &str, bold: bool, tabular: bool| column_text_width(window, cx, text, bold, tabular);
         self.state.layout.visit_panes_mut(&mut |pane| {
             let tab = pane.active_tab_mut();
-            let (type_filtered, size_filtered, date_filtered, permissions_filtered) = tab.column_filter_flags();
-            let key = (reference, language, date_format, [type_filtered, date_filtered, size_filtered, permissions_filtered]);
+            // Filterable headers always keep room for their funnel, so filtering never moves a column.
+            let key = (reference, language, date_format);
             if tab.column_measurement_key == Some(key) { return; }
             let type_width = tab.column_type_labels.iter().map(|label| measure(&type_column_text(label, i18n), false, false)).fold(0.0_f32, f32::max);
-            tab.type_col_width = crate::ui::style::metadata_column_width(type_width, measure(i18n.text(Message::ColumnType).as_ref(), true, false), key.3[0]);
-            tab.date_col_width = crate::ui::style::metadata_column_width(measure(&date_sample, false, true), measure(i18n.text(Message::ColumnModified).as_ref(), true, false), key.3[1]);
+            tab.type_col_width = crate::ui::style::metadata_column_width(type_width, measure(i18n.text(Message::ColumnType).as_ref(), true, false), true);
+            tab.date_col_width = crate::ui::style::metadata_column_width(measure(&date_sample, false, true), measure(i18n.text(Message::ColumnModified).as_ref(), true, false), true);
             tab.deleted_col_width = crate::ui::style::metadata_column_width(measure(&date_sample, false, true), measure(i18n.text(Message::TrashDeletedAt).as_ref(), false, false), false);
             let size_width = tab.column_size_values.iter().map(|&(size, directory, calculated)| measure(&size_column_text(size, directory, calculated, i18n), false, true)).fold(0.0_f32, f32::max);
-            tab.size_col_width = crate::ui::style::metadata_column_width(size_width, measure(i18n.text(Message::ColumnSize).as_ref(), true, false), key.3[2]);
+            tab.size_col_width = crate::ui::style::metadata_column_width(size_width, measure(i18n.text(Message::ColumnSize).as_ref(), true, false), true);
             // Fixed width: four tabular digits, the most the column ever shows.
-            tab.permissions_col_width = crate::ui::style::metadata_column_width(measure("0000", false, true), measure(i18n.text(Message::ColumnPermissions).as_ref(), true, false), key.3[3]);
+            tab.permissions_col_width = crate::ui::style::metadata_column_width(measure("0000", false, true), measure(i18n.text(Message::ColumnPermissions).as_ref(), true, false), true);
             tab.column_measurement_key = Some(key);
         });
     }

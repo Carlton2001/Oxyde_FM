@@ -182,9 +182,7 @@ menu-close-tab = Chiudi scheda
 menu-select-all = Seleziona tutto
 menu-deselect-all = Deseleziona tutto
 
-menu-select-all-checks = Seleziona tutte le caselle
 
-menu-deselect-all-checks = Deseleziona tutte le caselle
 
 column-name = Nome
 
@@ -308,6 +306,23 @@ operations-dismiss = Rimuovi
 operations-empty = Nessuna operazione
 
 name-filter-placeholder = Filtra per nome
+filter-action = Filtra
+filter-clear = Cancella
+filter-clear-all = Cancella i filtri
+filter-all = Tutto
+filter-custom = Personalizzato…
+filter-keep = Mantieni cambiando cartella
+filter-search-types = Cerca un tipo
+filter-from = Dal
+filter-to = Al
+filter-min = Min
+filter-max = Max
+filter-regex = Espressione regolare
+filter-summary-name = Nome: { $value }
+filter-hidden = { $count ->
+    [one] { $number } nascosto
+   *[other] { $number } nascosti
+    }
 
 undo-operation = Annulla: { $operation }
 

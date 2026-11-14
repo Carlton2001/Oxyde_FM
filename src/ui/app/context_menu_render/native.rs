@@ -160,6 +160,7 @@ impl OxydeApp {
             },
             is_dragging: is_v_dragging,
             header: None,
+            footer: None,
             on_item_hover: Some(std::rc::Rc::new({
                 let h_app = h.clone();
                 let items_val = items_cap.clone();

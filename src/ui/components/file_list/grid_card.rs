@@ -205,7 +205,6 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                                 path.clone(),
                                 this,
                             ), this, h.clone(), &pid, cx.i18n()),
-                            None,
                         ),
                         scroll_handle: UniformListScrollHandle::new(
                         ),

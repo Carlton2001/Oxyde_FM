@@ -546,7 +546,7 @@ pub fn render_top_bar(
                                         this.context_menus.push(crate::ui::app::ContextMenuInstance {
             native_bounds: None,
                                             position: point(bounds.get().left(), bounds.get().bottom() + crate::ui::scale::rem_pixels(rems(0.25))),
-                                            content: crate::ui::app::ContextMenuContent::Items(items, None),
+                                            content: crate::ui::app::ContextMenuContent::Items(items),
                                             scroll_handle: UniformListScrollHandle::new(),
                                             width: px(0.0), open_left: false,
                                             hovered_item: None, native_request_id: None, open_up: false,

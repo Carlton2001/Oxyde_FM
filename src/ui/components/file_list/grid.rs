@@ -92,7 +92,7 @@ pub(super) fn render_grid_file_list(
             .when(protected_folder, |empty| empty.items_center())
             .text_color(theme.text_muted)
             .text_size(rems(0.8125))
-            .child(if protected_folder { super::protected_folder_message(message, &theme).into_any_element() } else { div().child(message).into_any_element() })
+            .child(if protected_folder { super::protected_folder_message(message, &theme).into_any_element() } else { super::filter_status::empty_message(message, tab, &pane_id, handle.clone(), cx) })
             .on_mouse_down(MouseButton::Left, {
                 let h = handle.clone();
                 let pid = pane_id.clone();
@@ -127,7 +127,7 @@ pub(super) fn render_grid_file_list(
                         this.context_menus.push(ContextMenuInstance {
             native_bounds: None,
                             position: event.position,
-                            content: ContextMenuContent::Items(items, None),
+                            content: ContextMenuContent::Items(items),
                             scroll_handle: UniformListScrollHandle::new(),
                             width: px(0.0),
                             open_left: false,
@@ -381,7 +381,6 @@ pub(super) fn render_grid_file_list(
                             position,
                             content: ContextMenuContent::Items(
                                 with_grid_sort(pane_context_menu_items(cx.i18n(), h.clone(), pid.clone(), this), this, h.clone(), &pid, cx.i18n()),
-                                None,
                             ),
                             scroll_handle: UniformListScrollHandle::new(),
                             width: px(0.0),
@@ -494,6 +493,7 @@ pub(super) fn render_grid_file_list(
                         .text_with_args(Message::StatusFolders, &folder_args),
                 )
                 .child(cx.i18n().text_with_args(Message::StatusFiles, &file_args))
+                .children(super::filter_status::chip(tab, &pane_id, handle.clone(), theme, cx))
                 .when(!selected.is_empty(), |bar| {
                     let entries: Vec<&FileEntry> = files
                         .iter()

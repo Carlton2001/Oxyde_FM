@@ -266,7 +266,6 @@ impl OxydeApp {
                                     can_close_tab,
                                     can_close_other_tabs,
                                 ),
-                                None,
                             ),
                             scroll_handle: gpui::UniformListScrollHandle::new(),
                             width: px(0.0),

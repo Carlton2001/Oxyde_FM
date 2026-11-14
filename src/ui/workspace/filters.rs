@@ -1,4 +1,7 @@
 use super::{CalendarFilterRequest, CalendarFilterResult, FileFilters, LayoutNode, SizeCategory, TabState};
+mod criteria;
+pub use criteria::{DateRange, FilterColumn, FilterValue, SizeRange};
+pub(crate) use criteria::NameMatcher;
 use crate::ui::date_groups::{CalendarReference, DateGroup};
 use crate::ui::i18n::Message;
 use oxyde_lib::models::FileEntry;
@@ -15,7 +18,24 @@ mod metadata_indicator_tests;
 #[path = "filters/tests/trash_search.rs"]
 mod trash_search_tests;
 
+#[cfg(test)]
+#[path = "filters/tests/criteria.rs"]
+mod criteria_tests;
+
+/// Lit header indicators, one per filterable column.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct ColumnFilterFlags {
+    pub name: bool,
+    pub location: bool,
+    pub types: bool,
+    pub sizes: bool,
+    pub permissions: bool,
+    pub dates: bool,
+}
+
 impl SizeCategory {
+    pub const ALL: [Self; 5] = [Self::Minuscule, Self::Petit, Self::Moyen, Self::Grand, Self::Huge];
+
     pub fn message(&self) -> Message {
         match self {
             Self::Minuscule => Message::SizeTiny,
@@ -45,88 +65,84 @@ impl FileFilters {
         Self {
             filter_types: tab.filter_types.clone(),
             filter_name: tab.filter_name.clone(),
+            filter_name_regex: tab.filter_name_regex,
             trash_search: if tab.path == "trash://" { tab.search_text.trim().to_lowercase() } else { String::new() },
             filter_original_location: tab.filter_original_location.clone(),
             filter_sizes: tab.filter_sizes.clone(),
+            filter_size_range: tab.filter_size_range,
             filter_permissions: tab.filter_permissions.clone(),
             filter_dates: tab.filter_dates.clone(),
+            filter_date_range: tab.filter_date_range,
         }
+    }
+    fn is_empty(&self) -> bool {
+        self.filter_types.is_empty()
+            && self.filter_name.is_empty()
+            && self.trash_search.is_empty()
+            && self.filter_original_location.is_empty()
+            && self.filter_sizes.is_empty()
+            && self.filter_size_range.is_none()
+            && self.filter_permissions.is_empty()
+            && self.filter_dates.is_empty()
+            && self.filter_date_range.is_none()
     }
     pub(super) fn snapshot(&self, files: &std::sync::Arc<Vec<FileEntry>>, today: chrono::NaiveDate) -> std::sync::Arc<Vec<FileEntry>> {
-        if self.filter_types.is_empty() && self.filter_name.is_empty() && self.trash_search.is_empty() && self.filter_original_location.is_empty() && self.filter_sizes.is_empty() && self.filter_permissions.is_empty() && self.filter_dates.is_empty() {
-            files.clone()
-        } else { self.filtered_files_on(files, today).into() }
+        if self.is_empty() { files.clone() } else { self.filtered_files_on(files, today).into() }
     }
     pub(super) fn filtered_files_on(&self, files: &[FileEntry], today: chrono::NaiveDate) -> Vec<FileEntry> {
-        if !self.filter_types.is_empty()
-            || !self.filter_name.is_empty()
-            || !self.trash_search.is_empty()
-            || !self.filter_original_location.is_empty()
-            || !self.filter_sizes.is_empty()
-            || !self.filter_permissions.is_empty()
-            || !self.filter_dates.is_empty()
-        {
-            let name_filter = self.filter_name.to_lowercase();
-            let search_pattern = self.trash_search.contains(['*', '?'])
-                .then(|| glob::Pattern::new(&self.trash_search));
-            let location_filter = self.filter_original_location.to_lowercase();
-            files
-                .iter()
-                .filter(|f| {
-                    let matches_type = if self.filter_types.is_empty() {
-                        true
-                    } else {
-                        if f.is_dir {
-                            self.filter_types.contains("Dossier")
-                        } else {
-                            std::path::Path::new(&f.name)
-                                .extension()
-                                .and_then(|e| e.to_str())
-                                .map(|s| self.filter_types.contains(&s.to_uppercase()))
-                                .unwrap_or(false)
-                        }
-                    };
-                    let matches_name = if self.filter_name.is_empty() {
-                        true
-                    } else {
-                        f.name
-                            .to_lowercase()
-                            .contains(&name_filter)
-                    };
-                    let matches_size = if self.filter_sizes.is_empty() {
-                        true
-                    } else {
-                        self.filter_sizes.iter().any(|cat| cat.matches(f.size))
-                    };
-                    let matches_permissions = self.filter_permissions.is_empty()
-                        || f.mode.is_some_and(|mode| self.filter_permissions.contains(&mode));
-                    let matches_date = if self.filter_dates.is_empty() {
-                        true
-                    } else {
-                        self.filter_dates
-                            .contains(&DateGroup::for_timestamp(f.modified, today))
-                    };
-                    let matches_location = self.filter_original_location.is_empty()
-                        || f.original_path
-                            .as_deref()
-                            .and_then(|path| std::path::Path::new(path).parent())
-                            .is_some_and(|path| {
-                                path.to_string_lossy()
-                                    .to_lowercase()
-                                    .contains(&location_filter)
-                            });
-                    let matches_search = match &search_pattern {
-                        Some(Ok(pattern)) => pattern.matches(&f.name.to_lowercase()),
-                        Some(Err(_)) => false,
-                        None => self.trash_search.is_empty() || f.name.to_lowercase().contains(&self.trash_search),
-                    };
-                    matches_type && matches_name && matches_search && matches_size && matches_permissions && matches_date && matches_location
-                })
-                .cloned()
-                .collect()
-        } else {
-            files.to_vec()
+        if self.is_empty() {
+            return files.to_vec();
         }
+        let compiled = self.compile(today);
+        files.iter().filter(|file| compiled.matches(file, None)).cloned().collect()
+    }
+    fn compile(&self, today: chrono::NaiveDate) -> CompiledFilters<'_> {
+        CompiledFilters {
+            filters: self,
+            name: NameMatcher::new(&self.filter_name, self.filter_name_regex),
+            search: self.trash_search.contains(['*', '?']).then(|| glob::Pattern::new(&self.trash_search)),
+            location: self.filter_original_location.to_lowercase(),
+            today,
+        }
+    }
+}
+
+/// Filters ready to test entries, their patterns compiled once.
+struct CompiledFilters<'a> {
+    filters: &'a FileFilters,
+    name: NameMatcher,
+    search: Option<Result<glob::Pattern, glob::PatternError>>,
+    location: String,
+    today: chrono::NaiveDate,
+}
+
+impl CompiledFilters<'_> {
+    /// Whether `f` passes every filter but the one of `except`, whose values are being counted.
+    fn matches(&self, f: &FileEntry, except: Option<FilterColumn>) -> bool {
+        let filters = self.filters;
+        let kept = |column| except != Some(column);
+        let matches_type = !kept(FilterColumn::Type) || filters.filter_types.is_empty()
+            || filters.filter_types.contains(&crate::ui::components::file_list::file_type_label(f));
+        let matches_name = !kept(FilterColumn::Name) || self.name.matches(&f.name);
+        let matches_size = !kept(FilterColumn::Size)
+            || ((filters.filter_sizes.is_empty() || filters.filter_sizes.iter().any(|cat| cat.matches(f.size)))
+                && filters.filter_size_range.is_none_or(|range| range.contains(f.size)));
+        let matches_permissions = !kept(FilterColumn::Permissions) || filters.filter_permissions.is_empty()
+            || f.mode.is_some_and(|mode| filters.filter_permissions.contains(&mode));
+        let matches_date = !kept(FilterColumn::Date)
+            || ((filters.filter_dates.is_empty() || filters.filter_dates.contains(&DateGroup::for_timestamp(f.modified, self.today)))
+                && filters.filter_date_range.is_none_or(|range| range.contains(f.modified)));
+        let matches_location = !kept(FilterColumn::Location) || self.location.is_empty()
+            || f.original_path
+                .as_deref()
+                .and_then(|path| std::path::Path::new(path).parent())
+                .is_some_and(|path| path.to_string_lossy().to_lowercase().contains(&self.location));
+        let matches_search = match &self.search {
+            Some(Ok(pattern)) => pattern.matches(&f.name.to_lowercase()),
+            Some(Err(_)) => false,
+            None => filters.trash_search.is_empty() || f.name.to_lowercase().contains(&filters.trash_search),
+        };
+        matches_type && matches_name && matches_search && matches_size && matches_permissions && matches_date && matches_location
     }
 }
 
@@ -143,24 +159,119 @@ impl CalendarFilterRequest {
 }
 
 impl TabState {
-    /// Match the header indicators: selecting every present value does not filter.
-    /// Type, size, date and permissions indicators.
-    pub(crate) fn column_filter_flags(&self) -> (bool, bool, bool, bool) {
-        let permissions_filtered = !self.filter_permissions.is_empty() && self.files.iter()
+    /// Which header indicators are lit. Checking every value present filters nothing, so it
+    /// lights none; a range or a typed text always does.
+    pub(crate) fn column_filter_flags(&self) -> ColumnFilterFlags {
+        let permissions = !self.filter_permissions.is_empty() && self.files.iter()
             .any(|file| file.mode.is_some_and(|mode| !self.filter_permissions.contains(&mode)));
-        let type_filtered = !self.filter_types.is_empty() && self.files.iter().any(|file| {
+        let types = !self.filter_types.is_empty() && self.files.iter().any(|file| {
             !self.filter_types.contains(&crate::ui::components::file_list::file_type_label(file))
         });
-        let categories = [SizeCategory::Minuscule, SizeCategory::Petit, SizeCategory::Moyen,
-            SizeCategory::Grand, SizeCategory::Huge];
-        let size_filtered = !self.filter_sizes.is_empty() && self.files.iter().any(|file| {
-            categories.iter().find(|category| category.matches(file.size))
+        let sizes = self.filter_size_range.is_some() || !self.filter_sizes.is_empty() && self.files.iter().any(|file| {
+            SizeCategory::ALL.iter().find(|category| category.matches(file.size))
                 .is_some_and(|category| !self.filter_sizes.contains(category))
         });
-        let date_filtered = !self.filter_dates.is_empty() &&
+        let dates = self.filter_date_range.is_some() || !self.filter_dates.is_empty() &&
             crate::ui::date_groups::counts_by_date(&self.files, chrono::Local::now().date_naive())
                 .keys().any(|group| !self.filter_dates.contains(group));
-        (type_filtered, size_filtered, date_filtered, permissions_filtered)
+        ColumnFilterFlags {
+            name: !self.filter_name.is_empty(),
+            location: !self.filter_original_location.is_empty(),
+            types,
+            sizes,
+            permissions,
+            dates,
+        }
+    }
+
+    /// Whether any column filter is set, even one that keeps every entry.
+    pub(crate) fn has_column_filters(&self) -> bool {
+        !self.filter_name.is_empty()
+            || !self.filter_original_location.is_empty()
+            || !self.filter_types.is_empty()
+            || !self.filter_sizes.is_empty()
+            || self.filter_size_range.is_some()
+            || !self.filter_permissions.is_empty()
+            || !self.filter_dates.is_empty()
+            || self.filter_date_range.is_some()
+    }
+
+    pub(crate) fn clear_column_filter(&mut self, column: FilterColumn) {
+        match column {
+            FilterColumn::Name => self.filter_name.clear(),
+            FilterColumn::Location => self.filter_original_location.clear(),
+            FilterColumn::Type => self.filter_types.clear(),
+            FilterColumn::Size => {
+                self.filter_sizes.clear();
+                self.filter_size_range = None;
+            }
+            FilterColumn::Permissions => self.filter_permissions.clear(),
+            FilterColumn::Date => {
+                self.filter_dates.clear();
+                self.filter_date_range = None;
+            }
+        }
+    }
+
+    pub(crate) fn is_value_checked(&self, value: &FilterValue) -> bool {
+        match value {
+            FilterValue::Type(label) => self.filter_types.contains(label),
+            FilterValue::Size(category) => self.filter_sizes.contains(category),
+            FilterValue::Date(group) => self.filter_dates.contains(group),
+            FilterValue::Permissions(mode) => self.filter_permissions.contains(mode),
+        }
+    }
+
+    /// Checks or unchecks `value`. Checked values replace a custom range of their column.
+    pub(crate) fn set_value_checked(&mut self, value: FilterValue, checked: bool) {
+        fn set<T: std::hash::Hash + Eq>(values: &mut std::collections::HashSet<T>, value: T, checked: bool) {
+            if checked { values.insert(value); } else { values.remove(&value); }
+        }
+        match value {
+            FilterValue::Type(label) => set(&mut self.filter_types, label, checked),
+            FilterValue::Size(category) => {
+                self.filter_size_range = None;
+                set(&mut self.filter_sizes, category, checked);
+            }
+            FilterValue::Date(group) => {
+                self.filter_date_range = None;
+                set(&mut self.filter_dates, group, checked);
+            }
+            FilterValue::Permissions(mode) => set(&mut self.filter_permissions, mode, checked),
+        }
+    }
+
+    /// A custom size range replaces the checked sizes; an open one removes the filter.
+    pub(crate) fn set_size_range(&mut self, range: SizeRange) {
+        self.filter_sizes.clear();
+        self.filter_size_range = (!range.is_open()).then_some(range);
+    }
+
+    /// Custom days replace the checked periods; an open range removes the filter.
+    pub(crate) fn set_date_range(&mut self, range: DateRange) {
+        self.filter_dates.clear();
+        self.filter_date_range = (!range.is_open()).then_some(range);
+    }
+
+    pub(crate) fn clear_column_filters(&mut self) {
+        for column in [FilterColumn::Name, FilterColumn::Location, FilterColumn::Type, FilterColumn::Size, FilterColumn::Permissions, FilterColumn::Date] {
+            self.clear_column_filter(column);
+        }
+    }
+
+    /// Calls `visit` with each entry the other filters keep, to count the values of `column`
+    /// as a spreadsheet does: a value hidden by another column counts zero.
+    pub(crate) fn visit_faceted(&self, column: FilterColumn, today: chrono::NaiveDate, mut visit: impl FnMut(&FileEntry)) {
+        let filters = FileFilters::from_tab(self);
+        let compiled = filters.compile(today);
+        for file in self.files.iter().filter(|file| compiled.matches(file, Some(column))) {
+            visit(file);
+        }
+    }
+
+    /// Changes whenever the files or their filters do; keys caches of faceted counts.
+    pub(crate) fn filter_revision(&self) -> (usize, u64) {
+        (std::sync::Arc::as_ptr(&self.files) as usize, self.filter_cache_revision)
     }
 
     pub fn update_cache(&mut self) {

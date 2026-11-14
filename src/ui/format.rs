@@ -60,14 +60,50 @@ pub fn format_number(number: u64, language: Language) -> String {
     result
 }
 
+/// A size typed in units of 1024^`unit` bytes, with a comma or a dot; empty gives `None`.
+pub fn size_in_bytes(value: &str, unit: usize) -> Result<Option<u64>, ()> {
+    let value = value.trim().replace(',', ".");
+    if value.is_empty() {
+        return Ok(None);
+    }
+    let (whole, fraction) = value.split_once('.').unwrap_or((&value, ""));
+    let multiplier = 1024u128.checked_pow(unit as u32).ok_or(())?;
+    let whole = whole
+        .parse::<u128>()
+        .map_err(|_| ())?
+        .checked_mul(multiplier)
+        .ok_or(())?;
+    let fraction = if fraction.is_empty() {
+        0
+    } else {
+        let denominator = 10u128.checked_pow(fraction.len() as u32).ok_or(())?;
+        fraction
+            .parse::<u128>()
+            .map_err(|_| ())?
+            .checked_mul(multiplier)
+            .ok_or(())?
+            / denominator
+    };
+    whole
+        .checked_add(fraction)
+        .and_then(|v| u64::try_from(v).ok())
+        .map(Some)
+        .ok_or(())
+}
+
+/// Byte units by power of 1024, as sizes are shown.
+pub fn size_units(language: Language) -> [&'static str; 7] {
+    match language {
+        Language::French => ["o", "Ko", "Mo", "Go", "To", "Po", "Eo"],
+        _ => ["B", "KB", "MB", "GB", "TB", "PB", "EB"],
+    }
+}
+
 pub fn format_size(bytes: u64, is_dir: bool, is_calculated: bool, language: Language) -> String {
     if is_dir && !is_calculated {
         return String::new();
     }
-    let units = match language {
-        Language::French => ["o", "Ko", "Mo", "Go", "To", "Po", "Eo"],
-        _ => ["B", "KB", "MB", "GB", "TB", "PB", "EB"],
-    };
+    let units = size_units(language);
     let mut unit = 0;
     let mut divisor = 1u128;
     while unit < units.len() - 1 && u128::from(bytes) >= divisor * 1024 {
@@ -104,6 +140,23 @@ pub fn format_date(timestamp_ms: u64, format: DateFormat) -> String {
         .and_then(DateTime::from_timestamp_millis)
         .map(|date| format_datetime(date.with_timezone(&Local).naive_local(), format))
         .unwrap_or_else(|| "–".into())
+}
+
+/// The day alone, in the chosen format.
+pub fn date_pattern(format: DateFormat) -> &'static str {
+    match format {
+        DateFormat::European => "%d/%m/%Y",
+        DateFormat::Us => "%m/%d/%Y",
+        DateFormat::Iso => "%Y-%m-%d",
+    }
+}
+
+/// A day typed in the chosen format, or as ISO 8601 whatever the format.
+pub fn parse_day(text: &str, format: DateFormat) -> Option<chrono::NaiveDate> {
+    let text = text.trim();
+    chrono::NaiveDate::parse_from_str(text, date_pattern(format))
+        .or_else(|_| chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d"))
+        .ok()
 }
 
 fn format_datetime(date: NaiveDateTime, format: DateFormat) -> String {

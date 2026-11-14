@@ -1,4 +1,5 @@
 use super::{AdvancedSearchWindow, OxydeApp};
+use crate::ui::format::size_in_bytes;
 use gpui::*;
 use oxyde_lib::commands::search::AdvancedSearchOptions;
 
@@ -6,36 +7,6 @@ pub fn parse_advanced_path(path: &str) -> Option<(String, AdvancedSearchOptions)
     let (kind, root, options): (String, String, AdvancedSearchOptions) =
         serde_json::from_str(path.strip_prefix("search://")?).ok()?;
     (kind == "advanced").then_some((root, options))
-}
-
-fn size_in_bytes(value: &str, unit: usize) -> Result<Option<u64>, ()> {
-    let value = value.trim().replace(',', ".");
-    if value.is_empty() {
-        return Ok(None);
-    }
-    let (whole, fraction) = value.split_once('.').unwrap_or((&value, ""));
-    let multiplier = 1024u128.checked_pow(unit as u32).ok_or(())?;
-    let whole = whole
-        .parse::<u128>()
-        .map_err(|_| ())?
-        .checked_mul(multiplier)
-        .ok_or(())?;
-    let fraction = if fraction.is_empty() {
-        0
-    } else {
-        let denominator = 10u128.checked_pow(fraction.len() as u32).ok_or(())?;
-        fraction
-            .parse::<u128>()
-            .map_err(|_| ())?
-            .checked_mul(multiplier)
-            .ok_or(())?
-            / denominator
-    };
-    whole
-        .checked_add(fraction)
-        .and_then(|v| u64::try_from(v).ok())
-        .map(Some)
-        .ok_or(())
 }
 
 impl AdvancedSearchWindow {

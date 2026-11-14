@@ -535,12 +535,7 @@ impl OxydeApp {
                 {
                     self.created_item_rename = None;
                 } else if tab.files.iter().any(|file| file.path == path) {
-                    tab.filter_name.clear();
-                    tab.filter_original_location.clear();
-                    tab.filter_types.clear();
-                    tab.filter_sizes.clear();
-                    tab.filter_permissions.clear();
-                    tab.filter_dates.clear();
+                    tab.clear_column_filters();
                     tab.update_cache();
                     tab.selected_paths.clear();
                     tab.selected_paths.insert(path.clone());

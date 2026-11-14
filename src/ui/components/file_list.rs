@@ -1,6 +1,7 @@
 mod details;
 mod details_row;
 mod filters;
+mod filter_status;
 mod grid;
 mod grid_scroll;
 mod grid_card;
@@ -11,7 +12,7 @@ mod selection_button;
 mod scroll_top;
 mod thumbnails;
 
-pub use filters::{get_date_filter_items, get_permissions_filter_items, get_size_filter_items, get_type_filter_items};
+pub(crate) use filters::{filter_entries, filter_summary, filters_summary, FilterEntry};
 pub(crate) use presentation::{file_type_display, file_type_label, network_category, network_entry};
 pub(crate) use thumbnails::{invalidate_thumbnail, clear_grid_thumbnails, render_grid_thumbnail, supports_thumbnail};
 

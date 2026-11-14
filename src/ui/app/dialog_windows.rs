@@ -130,7 +130,7 @@ pub(super) fn show_text_menu(
         view.context_menus = vec![super::ContextMenuInstance {
             native_bounds: None,
             position,
-            content: super::ContextMenuContent::Items(items, None),
+            content: super::ContextMenuContent::Items(items),
             scroll_handle: UniformListScrollHandle::new(),
             width: px(0.0),
             open_left: false,
@@ -473,7 +473,7 @@ impl Render for DialogWindow {
             .child(content);
                 let mut root = root;
         for (index, menu) in self.context_menus.iter().enumerate() {
-            let super::ContextMenuContent::Items(items, _) = &menu.content else {
+            let super::ContextMenuContent::Items(items) = &menu.content else {
                 continue;
             };
             let handle = cx.entity();
@@ -524,6 +524,7 @@ impl Render for DialogWindow {
                             .min(shown.size.height.as_f32()),
                         is_dragging: false,
                         header: None,
+                        footer: None,
                         on_item_hover: None,
                         on_width_calculated: Some(std::rc::Rc::new(move |width, cx| {
                             measured.update(cx, |view, cx| {

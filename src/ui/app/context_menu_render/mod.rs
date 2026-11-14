@@ -1,6 +1,6 @@
 mod items;
 mod native;
-mod name_filter;
+mod column_filter;
 
 use crate::ui::app::{ContextMenuContent, DragTarget, OxydeApp};
 use gpui::prelude::*;
@@ -48,9 +48,9 @@ impl OxydeApp {
                         let height = crate::ui::components::popup::available_size(window, cx).height.as_f32();
                         let dragging = matches!(view.drag_target, Some(DragTarget::ContextMenuV { menu_idx, .. }) if menu_idx == index);
                         let content = match &instance.content {
-                            ContextMenuContent::Items(items, header) => view.render_items_menu(items, header, index, h, instance.position, scroll.clone(), dragging, parent, height, cx),
+                            ContextMenuContent::Items(items) => view.render_items_menu(items, index, h, scroll.clone(), dragging, parent, height),
                             ContextMenuContent::NativeItems { path, is_background, items } => view.render_native_menu(path, is_background, items, index, h, scroll.clone(), dragging, parent, height),
-                            ContextMenuContent::NameFilter { input } => view.render_name_filter_menu(input, index, h, scroll.clone(), height, window, cx),
+                            ContextMenuContent::ColumnFilter(panel) => view.render_column_filter(panel, index, h, scroll.clone(), dragging, height, window, cx),
                         };
                         content.into_any_element()
                     },
@@ -76,14 +76,14 @@ impl OxydeApp {
             let _menu_width = instance.width;
 
             let content_element = match &instance.content {
-                ContextMenuContent::Items(items, header_type) => self.render_items_menu(
-                    items, header_type, m_idx, h, pos, scroll_handle, is_v_dragging, window_handle, win_h, cx,
+                ContextMenuContent::Items(items) => self.render_items_menu(
+                    items, m_idx, h, scroll_handle, is_v_dragging, window_handle, win_h,
                 ),
                 ContextMenuContent::NativeItems { path, is_background, items } => self.render_native_menu(
                     path, is_background, items, m_idx, h, scroll_handle, is_v_dragging, window_handle, win_h,
                 ),
-                ContextMenuContent::NameFilter { input } => self.render_name_filter_menu(
-                    input, m_idx, h, scroll_handle, win_h, _window, cx,
+                ContextMenuContent::ColumnFilter(panel) => self.render_column_filter(
+                    panel, m_idx, h, scroll_handle, is_v_dragging, win_h, _window, cx,
                 ),
             };
 

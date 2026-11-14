@@ -31,6 +31,11 @@ pub enum IconName {
     Unplug,
     Check,
     Checkbox(bool),
+    /// Some of the values below are checked.
+    CheckboxMixed,
+    /// A filter value: its check, then the icon of the files it stands for, from `path`
+    /// (the system's when `system`).
+    CheckboxFile { checked: bool, path: String, icon: crate::ui::components::icons::IconType, system: bool },
     Folder,
     NativeFolder(String),
     /// An image file, such as an application's icon; the window icon when missing.
@@ -211,6 +216,8 @@ pub struct GenericDropdown<T: crate::ui::components::scrollbar::ScrollbarState +
     pub min_width: Option<f32>,
     pub max_height: f32,
     pub header: Option<AnyElement>,
+    /// Below the list, which scrolls alone between header and footer.
+    pub footer: Option<AnyElement>,
     pub on_item_hover: Option<Rc<dyn Fn(usize, Point<Pixels>, &mut App)>>,
     pub on_width_calculated: Option<Rc<dyn Fn(Pixels, &mut App)>>,
     /// Fired with `true` when mouse enters, `false` when mouse leaves.
@@ -255,7 +262,9 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                 }],
                 None,
             );
-            let icon_width = if item.icon.is_some() || self.reserve_icon_space {
+            let icon_width = if matches!(item.icon, Some(IconName::CheckboxFile { .. })) {
+                logical(44.0)
+            } else if item.icon.is_some() || self.reserve_icon_space {
                 logical(24.0)
             } else {
                 0.0
@@ -342,6 +351,26 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
         let on_item_hover = self.on_item_hover.clone();
         let reserve_icon_space = self.reserve_icon_space;
 
+        let framed = self.header.is_some() || self.footer.is_some();
+        let mut scrollbar = has_scrollbar.then(|| {
+            let current_scroll = scroll_handle.0.borrow().base_handle.offset().y.as_f32().abs();
+            render_scrollbar_with_pointer(
+                theme,
+                h_app_copy,
+                ScrollbarAxis::Vertical,
+                viewport_h,
+                content_h,
+                current_scroll,
+                is_dragging,
+                format!("context-menu-scrollbar-{:?}", window.window_handle().window_id()),
+                None,
+                base_scroll_handle.clone(),
+                move |this, tid, vh, ch, _, cx| {
+                    (on_drag)(this, tid, vh, ch, cx);
+                },
+            )
+        });
+
         div()
             .occlude()
             .id(self.id)
@@ -359,7 +388,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
             .when_some(self.header.take(), |s, h| {
                 s.child(div().mb(rems(0.125)).child(h))
             })
-            .child(
+            .child(div().relative().flex().child(
                 div().w(px(list_w)).h(px(viewport_h)).child(
                     div().id("dropdown-items").flex_col().overflow_y_scroll().children({
                         let items = self.items.clone();
@@ -444,6 +473,14 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                             return d.child(img(path.clone()).size_full().object_fit(ObjectFit::Contain))
                                                                 .when(item.is_dimmed, |d| d.opacity(0.5));
                                                         }
+                                                        if let IconName::CheckboxFile { checked, path, icon, system } = icon {
+                                                            return d.w(rems(2.25)).flex().items_center().gap(rems(0.25))
+                                                                .child(crate::ui::elements::checkbox::checkbox(theme, *checked, false))
+                                                                .child(crate::ui::components::icons::render_file_icon(path.clone(), *icon, rems(1.0), &theme, *system, false));
+                                                        }
+                                                        if let IconName::CheckboxMixed = icon {
+                                                            return d.child(crate::ui::elements::checkbox::checkbox(theme, false, true));
+                                                        }
                                                         if let IconName::Checkbox(checked) = icon {
                                                             return d.child(crate::ui::elements::checkbox::checkbox(theme, *checked, false)).when(item.is_dimmed, |d| d.opacity(0.5));
                                                         }
@@ -459,7 +496,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                                     IconName::Check => {
                                                                         "icons/check.svg"
                                                                     }
-                                                                    IconName::Checkbox(_) => {
+                                                                    IconName::Checkbox(_) | IconName::CheckboxMixed | IconName::CheckboxFile { .. } => {
                                                                         "icons/square.svg"
                                                                     }
                                                                     IconName::NativeFolder(_) => "icons/folder.svg",
@@ -650,34 +687,12 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                     .track_scroll(&base_scroll_handle)
                     .size_full(),
                 ),
-            )
-            .when(has_scrollbar, |menu| {
-                menu.child({
-                    let current_scroll = scroll_handle
-                        .0
-                        .borrow()
-                        .base_handle
-                        .offset()
-                        .y
-                        .as_f32()
-                        .abs();
-                    render_scrollbar_with_pointer(
-                        theme,
-                        h_app_copy,
-                        ScrollbarAxis::Vertical,
-                        viewport_h,
-                        content_h,
-                        current_scroll,
-                        is_dragging,
-                        format!("context-menu-scrollbar-{:?}", window.window_handle().window_id()),
-                        None,
-                        base_scroll_handle.clone(),
-                        move |this, tid, vh, ch, _, cx| {
-                            (on_drag)(this, tid, vh, ch, cx);
-                        },
-                    )
-                })
+            // With a header or footer, the scrollbar spans the list alone.
+            ).when(framed, |list| list.children(scrollbar.take())))
+            .when_some(self.footer.take(), |s, f| {
+                s.child(div().mt(rems(0.125)).child(f))
             })
+            .children(scrollbar)
             .on_mouse_down_out({
                 let on_close = self.on_close.clone();
                 let on_outside = self.on_outside.clone();

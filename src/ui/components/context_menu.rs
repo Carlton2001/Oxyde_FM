@@ -164,7 +164,7 @@ pub fn with_grid_sort(
                 this.context_menus.push(ContextMenuInstance {
             native_bounds: None,
                     position,
-                    content: ContextMenuContent::Items(choices.clone(), None),
+                    content: ContextMenuContent::Items(choices.clone()),
                     scroll_handle: UniformListScrollHandle::new(),
                     width: px(0.0),
                     open_left,

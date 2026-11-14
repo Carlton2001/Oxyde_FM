@@ -83,12 +83,13 @@ impl OxydeApp {
         // Clamp ContextMenu scrolls
         for instance in &self.context_menus {
             let item_count = match &instance.content {
-                crate::ui::app::ContextMenuContent::Items(items, _) => items.iter().filter(|item| !matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count(),
+                crate::ui::app::ContextMenuContent::Items(items) => items.iter().filter(|item| !matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count(),
                 crate::ui::app::ContextMenuContent::NativeItems { items, .. } => items.len(),
-                crate::ui::app::ContextMenuContent::NameFilter { .. } => 0,
+                // Its list measures itself.
+                crate::ui::app::ContextMenuContent::ColumnFilter(_) => 0,
             };
             let separators = match &instance.content {
-                crate::ui::app::ContextMenuContent::Items(items, _) => items.iter().filter(|item| matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count(),
+                crate::ui::app::ContextMenuContent::Items(items) => items.iter().filter(|item| matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count(),
                 _ => 0,
             };
             if item_count > 0 {

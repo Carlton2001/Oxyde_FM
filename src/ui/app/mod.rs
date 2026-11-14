@@ -150,28 +150,15 @@ pub enum DragTarget {
 }
 
 #[derive(Clone)]
-#[allow(clippy::enum_variant_names)]
-pub enum ContextMenuHeader {
-    TypeSelectAll { pane_id: String },
-    SizeSelectAll { pane_id: String },
-    DateSelectAll { pane_id: String },
-    PermissionsSelectAll { pane_id: String },
-}
-
-#[derive(Clone)]
 pub enum ContextMenuContent {
-    Items(
-        Vec<crate::ui::components::dropdown::DropdownItem>,
-        Option<ContextMenuHeader>,
-    ),
+    Items(Vec<crate::ui::components::dropdown::DropdownItem>),
     NativeItems {
         path: Vec<String>,
         is_background: bool,
         items: Vec<oxyde_lib::models::WinMenuItem>,
     },
-    NameFilter {
-        input: Entity<crate::ui::components::input::TextInput>,
-    },
+    /// The filter panel of a details column.
+    ColumnFilter(Box<filters::ColumnFilterPanel>),
 }
 
 #[derive(Clone)]

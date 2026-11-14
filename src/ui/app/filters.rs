@@ -1,208 +1,13 @@
-use crate::ui::components::input::TextInputOptions;
-use crate::ui::app::{ContextMenuContent, ContextMenuHeader, ContextMenuInstance, OxydeApp};
-use crate::ui::i18n::{I18nContext, Message};
+//! Sorting and the column filters of the details view. The filter panel's state and its
+//! opening live in `panel`, its drawing in `context_menu_render::column_filter`.
+use crate::ui::app::OxydeApp;
+use crate::ui::workspace::{DateRange, FilterColumn, FilterValue, SizeRange, TabState};
 use gpui::*;
 
-#[derive(Clone, Copy)]
-pub enum PermissionFilterChange { Toggle(u32), All, None }
+mod panel;
+pub(crate) use panel::{ColumnFilterPanel, RangeEditor, TYPE_SEARCH_THRESHOLD};
 
 impl OxydeApp {
-    pub fn update_filter_size(
-        &mut self,
-        pane_id: &str,
-        category: crate::ui::workspace::SizeCategory,
-        active: bool,
-        cx: &mut Context<Self>,
-    ) {
-        if let Some(pane) = self.state.find_pane_mut(pane_id) {
-            let tab = pane.active_tab_mut();
-            if active {
-                tab.filter_sizes.insert(category);
-            } else {
-                tab.filter_sizes.remove(&category);
-            }
-            let id = tab.id.clone();
-            self.prepare_current_tab(id, cx);
-            cx.notify();
-        }
-    }
-
-    pub fn open_type_filter_menu(
-        &mut self,
-        pane_id: &str,
-        pos: Point<Pixels>,
-        cx: &mut Context<Self>,
-    ) {
-        if let Some(pane) = self.state.find_pane(pane_id) {
-            let tab = pane.active_tab();
-            let tab_files = tab.files.clone();
-            let current_filters = tab.filter_types.clone();
-            let items = crate::ui::components::file_list::get_type_filter_items(
-                cx.i18n(),
-                self.handle.as_ref().unwrap().clone(),
-                pane_id.to_string(),
-                tab_files,
-                current_filters,
-                pos,
-            );
-
-            self.context_menus.clear();
-            self.context_menus.push(ContextMenuInstance {
-            native_bounds: None,
-                position: pos,
-                content: ContextMenuContent::Items(
-                    items,
-                    Some(ContextMenuHeader::TypeSelectAll {
-                        pane_id: pane_id.to_string(),
-                    }),
-                ),
-                scroll_handle: UniformListScrollHandle::new(),
-                width: px(0.0),
-                open_left: false,
-                hovered_item: None,
-                native_request_id: None, open_up: false,
-            });
-            cx.notify();
-        }
-    }
-
-    pub fn open_size_filter_menu(
-        &mut self,
-        pane_id: &str,
-        pos: Point<Pixels>,
-        cx: &mut Context<Self>,
-    ) {
-        if let Some(pane) = self.state.find_pane(pane_id) {
-            let tab = pane.active_tab();
-            let tab_files = tab.files.clone();
-            let current_filters = tab.filter_sizes.clone();
-            let items = crate::ui::components::file_list::get_size_filter_items(
-                cx.i18n(),
-                self.handle.as_ref().unwrap().clone(),
-                pane_id.to_string(),
-                tab_files,
-                current_filters,
-                pos,
-            );
-
-            self.context_menus.clear();
-            self.context_menus.push(ContextMenuInstance {
-            native_bounds: None,
-                position: pos,
-                content: ContextMenuContent::Items(
-                    items,
-                    Some(ContextMenuHeader::SizeSelectAll {
-                        pane_id: pane_id.to_string(),
-                    }),
-                ),
-                scroll_handle: UniformListScrollHandle::new(),
-                width: px(0.0),
-                open_left: false,
-                hovered_item: None,
-                native_request_id: None, open_up: false,
-            });
-            cx.notify();
-        }
-    }
-
-    pub fn open_permissions_filter_menu(&mut self, pane_id: &str, pos: Point<Pixels>, cx: &mut Context<Self>) {
-        let Some(pane) = self.state.find_pane(pane_id) else { return; };
-        let tab = pane.active_tab();
-        let items = crate::ui::components::file_list::get_permissions_filter_items(
-            cx.i18n(),
-            self.handle.as_ref().unwrap().clone(),
-            pane_id.to_string(),
-            tab.files.clone(),
-            tab.filter_permissions.clone(),
-            pos,
-        );
-        self.context_menus.clear();
-        self.context_menus.push(ContextMenuInstance {
-            native_bounds: None,
-            position: pos,
-            content: ContextMenuContent::Items(items, Some(ContextMenuHeader::PermissionsSelectAll { pane_id: pane_id.to_string() })),
-            scroll_handle: UniformListScrollHandle::new(),
-            width: px(0.0),
-            open_left: false,
-            hovered_item: None,
-            native_request_id: None, open_up: false,
-        });
-        cx.notify();
-    }
-
-    /// Toggle one permission value, keep every value present, or clear the filter.
-    pub fn set_filter_permissions(&mut self, pane_id: &str, change: PermissionFilterChange, cx: &mut Context<Self>) {
-        let Some(pane) = self.state.find_pane_mut(pane_id) else { return; };
-        let tab = pane.active_tab_mut();
-        match change {
-            PermissionFilterChange::Toggle(mode) => if !tab.filter_permissions.remove(&mode) { tab.filter_permissions.insert(mode); },
-            PermissionFilterChange::All => { let modes: Vec<u32> = tab.files.iter().filter_map(|file| file.mode).collect(); tab.filter_permissions.extend(modes); }
-            PermissionFilterChange::None => tab.filter_permissions.clear(),
-        }
-        let id = tab.id.clone();
-        self.prepare_current_tab(id, cx);
-        cx.notify();
-    }
-
-    pub fn update_filter_date(
-        &mut self,
-        pane_id: &str,
-        category: crate::ui::date_groups::DateGroup,
-        active: bool,
-        cx: &mut Context<Self>,
-    ) {
-        if let Some(pane) = self.state.find_pane_mut(pane_id) {
-            let tab = pane.active_tab_mut();
-            if active {
-                tab.filter_dates.insert(category);
-            } else {
-                tab.filter_dates.remove(&category);
-            }
-            let id = tab.id.clone();
-            self.prepare_current_tab(id, cx);
-            cx.notify();
-        }
-    }
-
-    pub fn open_date_filter_menu(
-        &mut self,
-        pane_id: &str,
-        pos: Point<Pixels>,
-        cx: &mut Context<Self>,
-    ) {
-        if let Some(pane) = self.state.find_pane(pane_id) {
-            let tab = pane.active_tab();
-            let tab_files = tab.files.clone();
-            let current_filters = tab.filter_dates.clone();
-            let items = crate::ui::components::file_list::get_date_filter_items(
-                cx.i18n(),
-                self.handle.as_ref().unwrap().clone(),
-                pane_id.to_string(),
-                tab_files,
-                current_filters,
-                pos,
-            );
-
-            self.context_menus.clear();
-            self.context_menus.push(ContextMenuInstance {
-            native_bounds: None,
-                position: pos,
-                content: ContextMenuContent::Items(
-                    items,
-                    Some(ContextMenuHeader::DateSelectAll {
-                        pane_id: pane_id.to_string(),
-                    }),
-                ),
-                scroll_handle: UniformListScrollHandle::new(),
-                width: px(0.0),
-                open_left: false,
-                hovered_item: None,
-                native_request_id: None, open_up: false,
-            });
-            cx.notify();
-        }
-    }
-
     pub fn toggle_sort(
         &mut self,
         pane_id: &str,
@@ -231,226 +36,72 @@ impl OxydeApp {
         }
     }
 
-    pub fn toggle_filter_type(&mut self, pane_id: &str, filter: String, cx: &mut Context<Self>) {
-        if let Some(pane) = self.state.find_pane_mut(pane_id) {
-            let tab = pane.active_tab_mut();
-            if tab.filter_types.contains(&filter) {
-                tab.filter_types.remove(&filter);
-            } else {
-                tab.filter_types.insert(filter);
+    /// Applies `change` to the filters of the active tab of `pane_id`, then filters it again
+    /// off the UI thread.
+    fn change_filters(&mut self, pane_id: &str, cx: &mut Context<Self>, change: impl FnOnce(&mut TabState)) {
+        let Some(pane) = self.state.find_pane_mut(pane_id) else { return };
+        let tab = pane.active_tab_mut();
+        change(tab);
+        let id = tab.id.clone();
+        self.prepare_current_tab(id, cx);
+        cx.notify();
+    }
+
+    pub(crate) fn toggle_filter_value(&mut self, pane_id: &str, value: FilterValue, cx: &mut Context<Self>) {
+        self.change_filters(pane_id, cx, |tab| {
+            let checked = tab.is_value_checked(&value);
+            tab.set_value_checked(value, !checked);
+        });
+        self.empty_range_fields(cx);
+    }
+
+    /// Checks every value of `values`, or unchecks them when `checked` is false.
+    pub(crate) fn set_filter_values(&mut self, pane_id: &str, values: Vec<FilterValue>, checked: bool, cx: &mut Context<Self>) {
+        self.change_filters(pane_id, cx, |tab| {
+            for value in values {
+                tab.set_value_checked(value, checked);
             }
-            let id = tab.id.clone();
-            self.prepare_current_tab(id, cx);
-            cx.notify();
-        }
+        });
+        self.empty_range_fields(cx);
     }
 
-    pub fn clear_filter_types(&mut self, pane_id: &str, cx: &mut Context<Self>) {
+    pub(crate) fn set_name_filter(&mut self, pane_id: &str, text: String, cx: &mut Context<Self>) {
+        self.change_filters(pane_id, cx, |tab| tab.filter_name = text);
+    }
+
+    pub(crate) fn toggle_name_regex(&mut self, pane_id: &str, cx: &mut Context<Self>) {
+        self.change_filters(pane_id, cx, |tab| tab.filter_name_regex = !tab.filter_name_regex);
+    }
+
+    pub(crate) fn set_location_filter(&mut self, pane_id: &str, text: String, cx: &mut Context<Self>) {
+        self.change_filters(pane_id, cx, |tab| tab.filter_original_location = text);
+    }
+
+    pub(crate) fn set_size_range(&mut self, pane_id: &str, range: SizeRange, cx: &mut Context<Self>) {
+        self.change_filters(pane_id, cx, |tab| tab.set_size_range(range));
+    }
+
+    pub(crate) fn set_date_range(&mut self, pane_id: &str, range: DateRange, cx: &mut Context<Self>) {
+        self.change_filters(pane_id, cx, |tab| tab.set_date_range(range));
+    }
+
+    pub(crate) fn toggle_keep_filters(&mut self, pane_id: &str, cx: &mut Context<Self>) {
         if let Some(pane) = self.state.find_pane_mut(pane_id) {
             let tab = pane.active_tab_mut();
-            tab.filter_types.clear();
-            let id = tab.id.clone();
-            self.prepare_current_tab(id, cx);
+            tab.keep_filters = !tab.keep_filters;
             cx.notify();
         }
     }
 
-    pub fn clear_filter_sizes(&mut self, pane_id: &str, cx: &mut Context<Self>) {
-        if let Some(pane) = self.state.find_pane_mut(pane_id) {
-            let tab = pane.active_tab_mut();
-            tab.filter_sizes.clear();
-            let id = tab.id.clone();
-            self.prepare_current_tab(id, cx);
-            cx.notify();
-        }
+    /// Removes the filter of `column`, and empties the open panel's fields with it.
+    pub(crate) fn clear_column_filter(&mut self, pane_id: &str, column: FilterColumn, cx: &mut Context<Self>) {
+        self.change_filters(pane_id, cx, |tab| tab.clear_column_filter(column));
+        self.reset_filter_panel(cx);
     }
 
-    pub fn clear_filter_dates(&mut self, pane_id: &str, cx: &mut Context<Self>) {
-        if let Some(pane) = self.state.find_pane_mut(pane_id) {
-            let tab = pane.active_tab_mut();
-            tab.filter_dates.clear();
-            let id = tab.id.clone();
-            self.prepare_current_tab(id, cx);
-            cx.notify();
-        }
-    }
-
-    pub fn update_filter_name(&mut self, pane_id: &str, name: String, cx: &mut Context<Self>) {
-        if let Some(pane) = self.state.find_pane_mut(pane_id) {
-            let tab = pane.active_tab_mut();
-            tab.filter_name = name;
-            let id = tab.id.clone();
-            self.prepare_current_tab(id, cx);
-            cx.notify();
-        }
-    }
-
-    pub fn open_name_filter(
-        &mut self,
-        pane_id: &str,
-        pos: Point<Pixels>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let h_cap = self.handle.as_ref().unwrap().clone();
-        let pid_cap = pane_id.to_string();
-
-        let initial_text = self
-            .state
-            .find_pane(pane_id)
-            .map(|p: &crate::ui::workspace::PaneState| p.active_tab().filter_name.clone())
-            .unwrap_or_default();
-
-        let input = cx.new(|cx| {
-            let h_change = h_cap.clone();
-            let pid_change = pid_cap.clone();
-            let h_enter = h_cap.clone();
-            let h_esc = h_cap.clone();
-            let pid_esc = pid_cap.clone();
-            let h_context = h_cap.clone();
-
-            crate::ui::components::input::TextInput::new(
-                cx,
-                cx.i18n().text(Message::NameFilterPlaceholder).to_string(),
-                initial_text,
-                move |text, _, cx| {
-                    h_change.update(cx, |this, cx| {
-                        this.update_filter_name(&pid_change, text.to_string(), cx)
-                    });
-                },
-                move |_, cx| {
-                    h_enter.update(cx, |this, _| {
-                        this.context_menus.clear();
-                    });
-                },
-                move |_, cx| {
-                    h_esc.update(cx, |this, cx| {
-                        this.update_filter_name(&pid_esc, "".to_string(), cx);
-                        this.context_menus.clear();
-                    });
-                },
-                move |input, has_selection, position, window, cx| {
-                    h_context.update(cx, |this, cx| {
-                        this.open_text_context_menu(input, has_selection, position, window, cx)
-                    });
-                },
-                TextInputOptions {
-                    clearable: true,
-                    ..Default::default()
-                },
-                window,
-            )
-        });
-
-        self.context_menus.clear();
-        self.context_menus.push(ContextMenuInstance {
-            native_bounds: None,
-            position: pos,
-            content: ContextMenuContent::NameFilter {
-                input: input.clone(),
-            },
-            scroll_handle: UniformListScrollHandle::new(),
-            width: px(0.0),
-            open_left: false,
-            hovered_item: None,
-            native_request_id: None, open_up: false,
-        });
-        cx.notify();
-
-        #[cfg(not(target_os = "windows"))]
-        let focus_handle = input.read(cx).focus_handle.clone();
-        #[cfg(not(target_os = "windows"))]
-        cx.on_next_frame(window, move |_, window, cx| {
-            window.focus(&focus_handle, cx);
-        });
-    }
-    pub fn update_filter_original_location(&mut self, pane_id: &str, name: String, cx: &mut Context<Self>) {
-        if let Some(pane) = self.state.find_pane_mut(pane_id) {
-            let tab = pane.active_tab_mut();
-            tab.filter_original_location = name;
-            let id = tab.id.clone();
-            self.prepare_current_tab(id, cx);
-            cx.notify();
-        }
-    }
-
-    pub fn open_original_location_filter(
-        &mut self,
-        pane_id: &str,
-        pos: Point<Pixels>,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let h_cap = self.handle.as_ref().unwrap().clone();
-        let pid_cap = pane_id.to_string();
-
-        let initial_text = self
-            .state
-            .find_pane(pane_id)
-            .map(|p: &crate::ui::workspace::PaneState| p.active_tab().filter_original_location.clone())
-            .unwrap_or_default();
-
-        let input = cx.new(|cx| {
-            let h_change = h_cap.clone();
-            let pid_change = pid_cap.clone();
-            let h_enter = h_cap.clone();
-            let h_esc = h_cap.clone();
-            let pid_esc = pid_cap.clone();
-            let h_context = h_cap.clone();
-
-            crate::ui::components::input::TextInput::new(
-                cx,
-                cx.i18n().text(Message::OriginalLocationFilterPlaceholder).to_string(),
-                initial_text,
-                move |text, _, cx| {
-                    h_change.update(cx, |this, cx| {
-                        this.update_filter_original_location(&pid_change, text.to_string(), cx)
-                    });
-                },
-                move |_, cx| {
-                    h_enter.update(cx, |this, _| {
-                        this.context_menus.clear();
-                    });
-                },
-                move |_, cx| {
-                    h_esc.update(cx, |this, cx| {
-                        this.update_filter_original_location(&pid_esc, "".to_string(), cx);
-                        this.context_menus.clear();
-                    });
-                },
-                move |input, has_selection, position, window, cx| {
-                    h_context.update(cx, |this, cx| {
-                        this.open_text_context_menu(input, has_selection, position, window, cx)
-                    });
-                },
-                TextInputOptions {
-                    clearable: true,
-                    ..Default::default()
-                },
-                window,
-            )
-        });
-
-        self.context_menus.clear();
-        self.context_menus.push(ContextMenuInstance {
-            native_bounds: None,
-            position: pos,
-            content: ContextMenuContent::NameFilter {
-                input: input.clone(),
-            },
-            scroll_handle: UniformListScrollHandle::new(),
-            width: px(0.0),
-            open_left: false,
-            hovered_item: None,
-            native_request_id: None, open_up: false,
-        });
-        cx.notify();
-
-        #[cfg(not(target_os = "windows"))]
-        let focus_handle = input.read(cx).focus_handle.clone();
-        #[cfg(not(target_os = "windows"))]
-        cx.on_next_frame(window, move |_, window, cx| {
-            window.focus(&focus_handle, cx);
-        });
+    /// Removes every column filter of the active tab of `pane_id`.
+    pub(crate) fn clear_column_filters(&mut self, pane_id: &str, cx: &mut Context<Self>) {
+        self.change_filters(pane_id, cx, TabState::clear_column_filters);
+        self.reset_filter_panel(cx);
     }
 }

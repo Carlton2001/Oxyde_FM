@@ -114,6 +114,7 @@ impl FileChooserWindow {
             min_width: None,
             max_height: logical(360.0),
             header: None,
+            footer: None,
             on_close: Rc::new(move |_, cx| {
                 let _ = close.update(cx, |this, cx| {
                     this.crumbs.menu = None;
@@ -168,6 +169,7 @@ impl FileChooserWindow {
             min_width: None,
             max_height: logical(360.0),
             header: None,
+            footer: None,
             on_close: Rc::new(move |_, cx| {
                 let _ = close.update(cx, |this, cx| {
                     this.crumbs.context = None;

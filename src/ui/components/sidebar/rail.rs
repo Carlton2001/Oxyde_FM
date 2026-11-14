@@ -250,7 +250,7 @@ pub(super) fn render_sidebar_rail(
                     this.context_menus.push(ContextMenuInstance {
             native_bounds: None,
                         position: event.position,
-                        content: ContextMenuContent::Items(items, None),
+                        content: ContextMenuContent::Items(items),
                         scroll_handle: UniformListScrollHandle::new(),
                         width: px(0.0),
                         open_left: false,

@@ -84,7 +84,7 @@ impl OxydeApp {
             let _ = this.update(cx, |this, cx| {
                 // Still on « Open With », with no other submenu opened meanwhile.
                 let still_hovered = this.context_menus.len() == 1 && this.context_menus[0].hovered_item
-                    .zip(match &this.context_menus[0].content { ContextMenuContent::Items(items, _) => Some(items), _ => None })
+                    .zip(match &this.context_menus[0].content { ContextMenuContent::Items(items) => Some(items), _ => None })
                     .and_then(|(index, items)| items.get(index))
                     .is_some_and(|item| item.label == label);
                 if !still_hovered {
@@ -122,7 +122,7 @@ impl OxydeApp {
                 this.context_menus.push(ContextMenuInstance {
                     native_bounds: None,
                     position,
-                    content: ContextMenuContent::Items(items, None),
+                    content: ContextMenuContent::Items(items),
                     scroll_handle: UniformListScrollHandle::new(),
                     width: px(0.0),
                     open_left,

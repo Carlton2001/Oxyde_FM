@@ -94,6 +94,7 @@ impl FileChooserWindow {
             ).as_f32()),
             max_height: logical(360.0),
             header: None,
+            footer: None,
             on_close: Rc::new(move |_, cx| {
                 let _ = close.update(cx, |this, cx| this.close_menu(cx));
             }),

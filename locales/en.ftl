@@ -121,8 +121,6 @@ menu-close-other-tabs = Close other tabs
 menu-close-tab = Close tab
 menu-select-all = Select all
 menu-deselect-all = Deselect all
-menu-select-all-checks = Check all
-menu-deselect-all-checks = Uncheck all
 column-name = Name
 column-type = Type
 column-size = Size
@@ -192,6 +190,23 @@ operations-normal = Normal mode active. Click to switch to fast mode
 operations-dismiss = Dismiss
 operations-empty = No operations
 name-filter-placeholder = Filter by name…
+filter-action = Filter
+filter-clear = Clear
+filter-clear-all = Clear filters
+filter-all = All
+filter-custom = Custom…
+filter-keep = Keep when changing folders
+filter-search-types = Search types
+filter-from = From
+filter-to = To
+filter-min = Min
+filter-max = Max
+filter-regex = Regular expression
+filter-summary-name = Name: { $value }
+filter-hidden = { $count ->
+    [one] { $number } hidden
+   *[other] { $number } hidden
+    }
 undo-operation = Undo: { $operation }
 redo-operation = Redo: { $operation }
 

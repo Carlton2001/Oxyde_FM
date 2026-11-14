@@ -435,12 +435,9 @@ impl OxydeApp {
                 search.cancellation.0.store(true, std::sync::atomic::Ordering::Relaxed);
             }
             active_tab.clear_files();
-            active_tab.filter_types.clear();
-            active_tab.filter_name.clear();
-            active_tab.filter_original_location.clear();
-            active_tab.filter_sizes.clear();
-            active_tab.filter_permissions.clear();
-            active_tab.filter_dates.clear();
+            if !active_tab.keep_filters {
+                active_tab.clear_column_filters();
+            }
             active_tab.selected_paths.clear();
             active_tab.selection_anchor = None;
             // Back in an ancestor, the folder just left is selected and shown.

@@ -127,8 +127,6 @@ menu-close-other-tabs = Fermer les autres onglets
 menu-close-tab = Fermer l’onglet
 menu-select-all = Tout sélectionner
 menu-deselect-all = Tout désélectionner
-menu-select-all-checks = Tout cocher
-menu-deselect-all-checks = Tout décocher
 column-name = Nom
 column-type = Type
 column-size = Taille
@@ -198,6 +196,23 @@ operations-normal = Mode normal activé. Cliquer pour passer en mode rapide
 operations-dismiss = Retirer
 operations-empty = Aucune opération
 name-filter-placeholder = Filtrer par nom…
+filter-action = Filtrer
+filter-clear = Effacer
+filter-clear-all = Effacer les filtres
+filter-all = Tout
+filter-custom = Personnalisé…
+filter-keep = Conserver en changeant de dossier
+filter-search-types = Rechercher un type
+filter-from = Du
+filter-to = Au
+filter-min = Min.
+filter-max = Max.
+filter-regex = Expression régulière
+filter-summary-name = Nom : { $value }
+filter-hidden = { $count ->
+    [one] { $number } masqué
+   *[other] { $number } masqués
+    }
 undo-operation = Annuler : { $operation }
 redo-operation = Rétablir : { $operation }
 

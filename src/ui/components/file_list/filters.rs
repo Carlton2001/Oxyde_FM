@@ -1,212 +1,185 @@
+//! The values a column filter offers: one per value present in the folder, plus those still
+//! checked from another folder, each counted among the entries the other filters keep.
 use super::presentation::file_type_label;
-use crate::ui::app::OxydeApp;
-use crate::ui::i18n::Message;
-use gpui::*;
-use oxyde_lib::models::FileEntry;
+use crate::ui::components::icons::IconType;
+use crate::ui::date_groups::DateGroup;
+use crate::ui::i18n::{I18n, Message};
+use crate::ui::workspace::{FilterColumn, FilterValue, SizeCategory, TabState};
+use std::collections::HashMap;
 
-pub fn get_type_filter_items(
-    i18n: &crate::ui::i18n::I18n,
-    h: Entity<OxydeApp>,
-    pid: String,
-    tab_files: std::sync::Arc<Vec<FileEntry>>,
-    current_filters: std::collections::HashSet<String>,
-    pos: Point<Pixels>,
-) -> Vec<crate::ui::components::dropdown::DropdownItem> {
-    use crate::ui::components::dropdown::{DropdownItem, IconName};
+#[derive(Clone, Debug)]
+pub(crate) struct FilterEntry {
+    pub value: FilterValue,
+    pub label: String,
+    /// Entries with this value that the other columns' filters keep.
+    pub count: u64,
+    /// A file of that type, for its icon: Type values only.
+    pub sample: Option<(String, IconType)>,
+}
 
-    let mut exts = std::collections::HashMap::<String, u64>::new();
-    for f in tab_files.iter() {
-        *exts.entry(file_type_label(f)).or_default() += 1;
+/// Kinds that are not extensions, in the order they lead the Type list.
+const KINDS: [&str; 6] = ["Dossier", "Fichier", "Symlink", "Junction", "BrokenLink", "Réseau"];
+
+/// The label shown for a Type value: kinds translated, extensions as they are.
+pub(crate) fn type_label(value: &str, i18n: &I18n) -> String {
+    let message = match value {
+        "Dossier" => Message::FileTypeFolder,
+        "Fichier" => Message::FileTypeFile,
+        "Symlink" => Message::FileTypeSymlink,
+        "BrokenLink" => Message::FileTypeBrokenLink,
+        "Junction" => Message::FileTypeJunction,
+        "Réseau" => Message::SidebarNetwork,
+        _ => return value.to_string(),
+    };
+    i18n.text(message).to_string()
+}
+
+/// The values of `column`, in display order. Text columns have none.
+pub(crate) fn filter_entries(tab: &TabState, column: FilterColumn, i18n: &I18n) -> Vec<FilterEntry> {
+    let today = chrono::Local::now().date_naive();
+    let mut counts = HashMap::<FilterValue, u64>::new();
+    tab.visit_faceted(column, today, |file| {
+        if let Some(value) = value_of(file, column, today) {
+            *counts.entry(value).or_default() += 1;
+        }
+    });
+    let mut present = Vec::<FilterValue>::new();
+    let mut samples = HashMap::<String, (String, IconType)>::new();
+    let mut seen = std::collections::HashSet::new();
+    for file in tab.files.iter() {
+        let Some(value) = value_of(file, column, today) else { continue };
+        if let FilterValue::Type(label) = &value {
+            samples.entry(label.clone()).or_insert_with(|| (file.path.clone(), crate::ui::components::icons::entry_icon(file)));
+        }
+        if seen.insert(value.clone()) {
+            present.push(value);
+        }
     }
-    let mut sorted_exts: Vec<String> = exts.keys().cloned().collect();
-    sorted_exts.sort();
-
-    let mut items = Vec::new();
-
-    for ext in sorted_exts {
-        let h_ext = h.clone();
-        let pid_ext = pid.clone();
-        let e_cap = ext.clone();
-        let is_sel = current_filters.contains(&e_cap);
-
-        items.push(DropdownItem {
-            label: match ext.as_str() {
-                "Dossier" => i18n.text(Message::FileTypeFolder).to_string(),
-                "Fichier" => i18n.text(Message::FileTypeFile).to_string(),
-                "Symlink" => i18n.text(Message::FileTypeSymlink).to_string(),
-                "BrokenLink" => i18n.text(Message::FileTypeBrokenLink).to_string(),
-                "Junction" => i18n.text(Message::FileTypeJunction).to_string(),
-                _ => ext.clone(),
+    // Values checked in another folder stay listed, to be unchecked.
+    let checked: Vec<FilterValue> = match column {
+        FilterColumn::Type => tab.filter_types.iter().cloned().map(FilterValue::Type).collect(),
+        FilterColumn::Size => tab.filter_sizes.iter().copied().map(FilterValue::Size).collect(),
+        FilterColumn::Date => tab.filter_dates.iter().copied().map(FilterValue::Date).collect(),
+        FilterColumn::Permissions => tab.filter_permissions.iter().copied().map(FilterValue::Permissions).collect(),
+        FilterColumn::Name | FilterColumn::Location => Vec::new(),
+    };
+    for value in checked {
+        if seen.insert(value.clone()) {
+            present.push(value);
+        }
+    }
+    present.sort_by_key(order_key);
+    present
+        .into_iter()
+        .map(|value| FilterEntry {
+            label: match &value {
+                FilterValue::Type(label) => type_label(label, i18n),
+                FilterValue::Size(category) => i18n.text(category.message()).to_string(),
+                FilterValue::Date(group) => i18n.text(group.message()).to_string(),
+                FilterValue::Permissions(mode) => crate::ui::format::permissions::paired(*mode),
             },
-            icon: Some(IconName::Checkbox(is_sel)),
-            badge: Some(crate::ui::format::format_number(exts[&ext], i18n.language())),
-            stay_open: true,
-            has_submenu: false,
-            is_dimmed: false,
-            is_faded: false,
-            on_click: std::rc::Rc::new(move |_, app| {
-                let pid_cap = pid_ext.clone();
-                let e_inner = e_cap.clone();
-                h_ext.update(app, |this, cx| {
-                    this.toggle_filter_type(&pid_cap, e_inner, cx);
-                    this.open_type_filter_menu(&pid_cap, pos, cx);
-                });
-            }),
-            on_hover: None,
-        });
-    }
-
-    items
+            count: counts.get(&value).copied().unwrap_or(0),
+            sample: match &value {
+                FilterValue::Type(label) => samples.get(label).cloned(),
+                _ => None,
+            },
+            value,
+        })
+        .collect()
 }
 
-/// One entry per permission value present, in numeric order.
-pub fn get_permissions_filter_items(
-    i18n: &crate::ui::i18n::I18n,
-    handle: Entity<OxydeApp>,
-    pane_id: String,
-    files: std::sync::Arc<Vec<FileEntry>>,
-    current_filters: std::collections::HashSet<u32>,
-    pos: Point<Pixels>,
-) -> Vec<crate::ui::components::dropdown::DropdownItem> {
-    use crate::ui::components::dropdown::{DropdownItem, IconName};
-    let mut counts = std::collections::BTreeMap::<u32, u64>::new();
-    for mode in files.iter().filter_map(|file| file.mode) {
-        *counts.entry(mode).or_default() += 1;
-    }
-    counts.into_iter().map(|(mode, count)| {
-        let handle = handle.clone();
-        let pane_id = pane_id.clone();
-        DropdownItem {
-            label: crate::ui::format::permissions::paired(mode),
-            icon: Some(IconName::Checkbox(current_filters.contains(&mode))),
-            badge: Some(crate::ui::format::format_number(count, i18n.language())),
-            stay_open: true,
-            has_submenu: false,
-            is_dimmed: false,
-            is_faded: false,
-            on_click: std::rc::Rc::new(move |_, app| {
-                handle.update(app, |this, cx| {
-                    this.set_filter_permissions(&pane_id, crate::ui::app::filters::PermissionFilterChange::Toggle(mode), cx);
-                    this.open_permissions_filter_menu(&pane_id, pos, cx);
-                });
-            }),
-            on_hover: None,
-        }
-    }).collect()
-}
-
-pub fn get_date_filter_items(
-    i18n: &crate::ui::i18n::I18n,
-    handle: Entity<OxydeApp>,
-    pane_id: String,
-    files: std::sync::Arc<Vec<oxyde_lib::models::FileEntry>>,
-    current_filters: std::collections::HashSet<crate::ui::date_groups::DateGroup>,
-    pos: Point<Pixels>,
-) -> Vec<crate::ui::components::dropdown::DropdownItem> {
-    use crate::ui::components::dropdown::{DropdownItem, IconName};
-    use crate::ui::date_groups::DateGroup;
-    use std::rc::Rc;
-
-    let categories = DateGroup::ALL;
-    let present_categories = crate::ui::date_groups::counts_by_date(
-        &files,
-        chrono::Local::now().date_naive(),
-    );
-
-    let mut items = Vec::new();
-
-    for cat in categories {
-        if !present_categories.contains_key(&cat) {
-            continue;
-        }
-
-        let h = handle.clone();
-        let pid = pane_id.clone();
-        let active = current_filters.contains(&cat);
-        let c_cat = cat;
-
-        items.push(DropdownItem {
-            label: i18n.text(cat.message()).to_string(),
-            icon: Some(IconName::Checkbox(active)),
-            badge: Some(crate::ui::format::format_number(present_categories[&cat], i18n.language())),
-            stay_open: true,
-            has_submenu: false,
-            is_dimmed: false,
-            is_faded: false,
-            on_click: Rc::new(move |_, cx| {
-                let pid_inner = pid.clone();
-                h.update(cx, |this, cx| {
-                    this.update_filter_date(&pid_inner, c_cat, !active, cx);
-                    this.open_date_filter_menu(&pid_inner, pos, cx);
-                });
-            }),
-            on_hover: None,
-        });
-    }
-
-    items
-}
-
-pub fn get_size_filter_items(
-    i18n: &crate::ui::i18n::I18n,
-    handle: Entity<OxydeApp>,
-    pane_id: String,
-    files: std::sync::Arc<Vec<oxyde_lib::models::FileEntry>>,
-    current_filters: std::collections::HashSet<crate::ui::workspace::SizeCategory>,
-    pos: Point<Pixels>,
-) -> Vec<crate::ui::components::dropdown::DropdownItem> {
-    use crate::ui::components::dropdown::{DropdownItem, IconName};
-    use crate::ui::workspace::SizeCategory;
-    use std::rc::Rc;
-
-    let categories = [
-        SizeCategory::Minuscule,
-        SizeCategory::Petit,
-        SizeCategory::Moyen,
-        SizeCategory::Grand,
-        SizeCategory::Huge,
-    ];
-
-    let mut present_categories = std::collections::HashMap::<_, u64>::new();
-    for f in files.iter() {
-        for cat in &categories {
-            if cat.matches(f.size) {
-                *present_categories.entry(*cat).or_default() += 1;
-                break;
+/// What the filter of `column` keeps, as a header's tooltip reads it; `None` when unset.
+pub(crate) fn filter_summary(tab: &TabState, column: FilterColumn, i18n: &I18n, format: crate::ui::format::DateFormat) -> Option<String> {
+    let language = i18n.language();
+    let list = |mut labels: Vec<String>| {
+        labels.sort();
+        let more = labels.len().saturating_sub(3);
+        labels.truncate(3);
+        let text = labels.join(", ");
+        if more > 0 { format!("{text} (+{more})") } else { text }
+    };
+    let bounds = |low: Option<String>, high: Option<String>| match (low, high) {
+        (Some(low), Some(high)) => format!("{low} – {high}"),
+        (Some(low), None) => format!("≥ {low}"),
+        (None, Some(high)) => format!("≤ {high}"),
+        (None, None) => String::new(),
+    };
+    let text = match column {
+        FilterColumn::Name => tab.filter_name.clone(),
+        FilterColumn::Location => tab.filter_original_location.clone(),
+        FilterColumn::Type => list(tab.filter_types.iter().map(|label| type_label(label, i18n)).collect()),
+        FilterColumn::Permissions => list(tab.filter_permissions.iter().map(|mode| crate::ui::format::permissions::paired(*mode)).collect()),
+        FilterColumn::Size => match tab.filter_size_range {
+            Some(range) => {
+                let size = |bytes: Option<u64>| bytes.map(|bytes| crate::ui::format::format_size(bytes, false, false, language));
+                bounds(size(range.min), size(range.max))
             }
-        }
-    }
-
-    let mut items = Vec::new();
-
-    for cat in categories {
-        if !present_categories.contains_key(&cat) {
-            continue;
-        }
-
-        let h = handle.clone();
-        let pid = pane_id.clone();
-        let active = current_filters.contains(&cat);
-        let c_cat = cat;
-
-        items.push(DropdownItem {
-            label: i18n.text(cat.message()).to_string(),
-            icon: Some(IconName::Checkbox(active)),
-            badge: Some(crate::ui::format::format_number(present_categories[&cat], i18n.language())),
-            stay_open: true,
-            has_submenu: false,
-            is_dimmed: false,
-            is_faded: false,
-            on_click: Rc::new(move |_, cx| {
-                let pid_inner = pid.clone();
-                h.update(cx, |this, cx| {
-                    this.update_filter_size(&pid_inner, c_cat, !active, cx);
-                    this.open_size_filter_menu(&pid_inner, pos, cx);
-                });
-            }),
-            on_hover: None,
-        });
-    }
-
-    items
+            None => {
+                let mut sizes: Vec<_> = tab.filter_sizes.iter().copied().collect();
+                sizes.sort_by_key(|category| SizeCategory::ALL.iter().position(|c| c == category));
+                sizes.into_iter().map(|category| i18n.text(category.message()).to_string()).collect::<Vec<_>>().join(", ")
+            }
+        },
+        FilterColumn::Date => match tab.filter_date_range {
+            Some(range) => {
+                let day = |date: Option<chrono::NaiveDate>| date.map(|date| date.format(crate::ui::format::date_pattern(format)).to_string());
+                bounds(day(range.from), day(range.to))
+            }
+            None => {
+                let mut groups: Vec<_> = tab.filter_dates.iter().copied().collect();
+                groups.sort();
+                groups.into_iter().map(|group| i18n.text(group.message()).to_string()).collect::<Vec<_>>().join(", ")
+            }
+        },
+    };
+    (!text.is_empty()).then_some(text)
 }
+
+/// One line per set filter, its column named, for the status bar's tooltip.
+pub(crate) fn filters_summary(tab: &TabState, i18n: &I18n, format: crate::ui::format::DateFormat) -> String {
+    let trash = tab.path == "trash://";
+    [
+        (FilterColumn::Name, Message::FilterSummaryName),
+        (FilterColumn::Location, if trash { Message::TooltipOriginalLocation } else { Message::TooltipLocation }),
+        (FilterColumn::Type, Message::TooltipType),
+        (FilterColumn::Size, Message::TooltipSize),
+        (FilterColumn::Permissions, Message::TooltipPermissions),
+        (FilterColumn::Date, Message::TooltipModified),
+    ]
+    .into_iter()
+    .filter_map(|(column, message)| {
+        let value = filter_summary(tab, column, i18n, format)?;
+        let mut args = crate::ui::i18n::FluentArgs::new();
+        args.set("value", value);
+        Some(i18n.text_with_args(message, &args).to_string())
+    })
+    .collect::<Vec<_>>()
+    .join("\n")
+}
+
+fn value_of(file: &oxyde_lib::models::FileEntry, column: FilterColumn, today: chrono::NaiveDate) -> Option<FilterValue> {
+    match column {
+        FilterColumn::Type => Some(FilterValue::Type(file_type_label(file))),
+        FilterColumn::Size => SizeCategory::ALL.into_iter().find(|category| category.matches(file.size)).map(FilterValue::Size),
+        FilterColumn::Date => Some(FilterValue::Date(DateGroup::for_timestamp(file.modified, today))),
+        FilterColumn::Permissions => file.mode.map(FilterValue::Permissions),
+        FilterColumn::Name | FilterColumn::Location => None,
+    }
+}
+
+/// Kinds first, then extensions alphabetically; sizes and periods in their own order.
+fn order_key(value: &FilterValue) -> (usize, String) {
+    match value {
+        FilterValue::Type(label) => match KINDS.iter().position(|kind| kind == label) {
+            Some(index) => (index, String::new()),
+            None => (KINDS.len(), label.clone()),
+        },
+        FilterValue::Size(category) => (SizeCategory::ALL.iter().position(|c| c == category).unwrap_or(0), String::new()),
+        FilterValue::Date(group) => (DateGroup::ALL.iter().position(|g| g == group).unwrap_or(0), String::new()),
+        FilterValue::Permissions(mode) => (*mode as usize, String::new()),
+    }
+}
+
+#[cfg(test)]
+#[path = "tests/filters.rs"]
+mod tests;

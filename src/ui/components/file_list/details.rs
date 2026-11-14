@@ -192,7 +192,7 @@ pub(super) fn render_details_file_list(
                         .bottom(px(status_bar_height() + h_track))
                         .flex()
                         .flex_col()
-                        .child(render_headers(view, pane_id.clone(), handle.clone(), name_w, location_w, type_w, size_w, permissions_w, date_w, if trash_panel { logical(active_tab.deleted_col_width) } else { 0.0 }, &theme, cx.i18n()))
+                        .child(render_headers(view, pane_id.clone(), handle.clone(), name_w, location_w, type_w, size_w, permissions_w, date_w, if trash_panel { logical(active_tab.deleted_col_width) } else { 0.0 }, &theme, cx.i18n(), crate::ui::format::date_format(cx)))
                         .child(
                             uniform_list(
                                 SharedString::from(format!("file-list-{}", pane_id)),
@@ -543,7 +543,7 @@ pub(super) fn render_details_file_list(
                 .justify_center()
                 .text_color(theme.text_muted)
                 .text_size(rems(0.8125))
-                .child(if protected_folder { super::protected_folder_message(message, &theme).into_any_element() } else { div().child(message).into_any_element() }),
+                .child(if protected_folder { super::protected_folder_message(message, &theme).into_any_element() } else { super::filter_status::empty_message(message, active_tab, &pane_id, handle.clone(), cx) }),
         );
     }
 
@@ -581,6 +581,7 @@ pub(super) fn render_details_file_list(
             .tabular_figures()
             .child(folders_label)
             .child(files_label)
+            .children(super::filter_status::chip(active_tab, &pane_id, handle.clone(), theme, cx))
             .when_some(selection_summary, |bar, summary| {
                 bar.child("•")
                     .child(
@@ -613,7 +614,7 @@ fn background_menu(handle: Entity<OxydeApp>, pane_id: String) -> impl Fn(&MouseD
             this.context_menus.push(ContextMenuInstance {
                 native_bounds: None,
                 position,
-                content: ContextMenuContent::Items(items, None),
+                content: ContextMenuContent::Items(items),
                 scroll_handle: UniformListScrollHandle::new(),
                 width: px(0.0),
                 open_left: false,
