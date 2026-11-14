@@ -14,7 +14,7 @@ conflict-replace-all = Replace all
 common-close = Close
 common-retry = Retry
 settings-title = Preferences
-settings-appearance = APPEARANCE
+settings-appearance = Appearance
 settings-theme = Themes
 theme-window-title = Themes
 theme-color-vision = Color vision
@@ -55,7 +55,7 @@ settings-scale-reset = Reset the scale to 100%
 settings-language = Language
 theme-dark = { $name } Dark
 theme-light = { $name } Light
-settings-files = FILES
+settings-files = Files
 settings-hidden = Hidden files
 settings-hidden-description = Show hidden files and folders, including names starting with a dot
 settings-system = System files
@@ -565,6 +565,10 @@ update-download-portable = Download version { $version }
 update-downloading = Downloading the update…
 
 settings-search-limit-reset = Reset to the default limit of 3,000 results
+settings-search-limit-hint = Maximum results per search
+settings-turbo-hint = Default for new operations
+settings-sidebar = Sidebar
+settings-system-section = System
 
 menu-copy-name = Copy name
 

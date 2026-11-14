@@ -153,7 +153,7 @@ impl OxydeApp {
         cx: &mut Context<Self>,
     ) {
         self.context_menus.clear();
-        self.settings_open = false;
+        self.close_settings();
         if self.ejecting_drive || self.network_dialog.is_some() {
             cx.notify();
             return;

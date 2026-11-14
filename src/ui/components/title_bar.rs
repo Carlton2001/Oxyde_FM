@@ -87,7 +87,7 @@ pub fn render_title_bar(
                         if message == Message::ToolDuplicates { item.icon = Some(crate::ui::components::dropdown::IconName::Copy); }
                         item
                     }).collect();
-                view.settings_open = false;
+                view.close_settings();
                 view.context_menus.clear();
                 view.context_menus.push(ContextMenuInstance {
             native_bounds: None,
@@ -123,14 +123,13 @@ pub fn render_title_bar(
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             h_menu.update(cx, |this, cx| {
                 this.context_menus.clear();
-                this.settings_open = !this.settings_open;
-                if this.settings_open {
+                let open = !this.settings_open;
+                this.close_settings();
+                this.settings_open = open;
+                if open {
                     this.refresh_folder_handler(cx);
                     this.refresh_file_chooser_setting(cx);
                 }
-                this.settings_about_open = false;
-                this.settings_picker = None;
-                this.settings_submenu_bounds = None;
                 cx.notify();
             });
         })

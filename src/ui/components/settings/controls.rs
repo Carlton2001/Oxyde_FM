@@ -1,13 +1,15 @@
-use crate::ui::components::tooltip::NativeTooltipExt;
+use crate::ui::components::popup::keyboard::{self, KeyboardItem};
+use crate::ui::components::tooltip::{NativeTooltipExt, Tooltip};
 use crate::ui::app::OxydeApp;
-use crate::ui::i18n::{I18nContext, Message};
+use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::{OxydeTheme, ThemeContext};
 use gpui::prelude::*;
 use gpui::*;
 use super::SettingsPicker;
-use crate::ui::components::tooltip::Tooltip;
-use crate::ui::i18n::FluentArgs;
 use std::{cell::Cell, rc::Rc};
+
+/// Corner of every row, as the menus' entries.
+const ROW_RADIUS: Rems = rems(0.3125);
 
 pub(super) fn icon(path: &'static str, theme: OxydeTheme) -> impl IntoElement {
     svg()
@@ -17,54 +19,78 @@ pub(super) fn icon(path: &'static str, theme: OxydeTheme) -> impl IntoElement {
         .text_color(theme.text)
 }
 
+/// The frame shared by every row: its height, margins, icon gap and corner.
+fn row(id: &'static str, icon_path: &'static str, theme: OxydeTheme) -> Stateful<Div> {
+    div()
+        .id(id)
+        .min_h(crate::ui::style::MENU_ITEM_HEIGHT)
+        .px(rems(0.375))
+        .flex()
+        .items_center()
+        .gap(rems(0.5))
+        .rounded(ROW_RADIUS)
+        .child(icon(icon_path, theme))
+}
+
+/// The label, and under it a short hint for settings whose effect the name does not tell.
+fn label(label: SharedString, hint: Option<SharedString>, theme: OxydeTheme) -> impl IntoElement {
+    div()
+        .flex_1()
+        .min_w_0()
+        .flex()
+        .flex_col()
+        .when(hint.is_some(), |column| column.py(rems(0.375)))
+        .child(div().whitespace_nowrap().child(label))
+        .when_some(hint, |column, hint| {
+            column.child(div().text_size(rems(0.75)).text_color(theme.text_muted).child(hint))
+        })
+}
+
 /// A line between groups of rows.
 pub(super) fn separator(theme: OxydeTheme) -> impl IntoElement {
     crate::ui::elements::separator::horizontal(theme.border)
 }
 
-/// A row opening a submenu beside the panel, or About's column. A submenu opens on a click
-/// or once the pointer rests on the row ([`hover`]); a click never closes it, as GTK's.
-/// About toggles on a click only, since its column widens the panel.
+pub(super) fn section(label: SharedString, theme: OxydeTheme) -> impl IntoElement {
+    div()
+        .py(rems(0.375))
+        .px(rems(0.375))
+        .text_size(rems(0.6875))
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(theme.text_muted)
+        .child(label.to_uppercase())
+}
+
+/// A row opening a submenu beside the panel. It opens on a click or once the pointer
+/// rests on the row ([`hover`]); a click never closes it, as GTK's.
 pub(super) fn picker(
     view: &OxydeApp,
     handle: Entity<OxydeApp>,
     kind: SettingsPicker,
     id: &'static str,
     icon_path: &'static str,
-    label: SharedString,
+    text: SharedString,
     theme: OxydeTheme,
 ) -> impl IntoElement {
     use crate::ui::components::popup::hover;
-    let about = kind == SettingsPicker::About;
-    let active = if about { view.settings_about_open } else { view.settings_picker == Some(kind) };
+    let active = view.settings_picker == Some(kind);
     let row_bounds = Rc::new(Cell::new(None::<Bounds<Pixels>>));
     let paint_bounds = row_bounds.clone();
     let paint_handle = handle.clone();
     let hover_handle = handle.clone();
     let open = Rc::new(move |cx: &mut App| {
         handle.update(cx, |view, cx| {
-            view.archive_format_bounds = None;
-            if about {
-                view.settings_about_open = !view.settings_about_open;
-                view.settings_picker = None;
-                view.settings_submenu_bounds = None;
-            } else if view.settings_picker != Some(kind) {
+            if view.settings_picker != Some(kind) {
+                view.close_settings_submenu();
                 view.settings_picker = Some(kind);
                 view.settings_submenu_bounds = row_bounds.get();
+                cx.notify();
             }
-            cx.notify();
         });
     });
     let (key_open, submenu_open, hover_open) = (open.clone(), open.clone(), open.clone());
-    let row = div()
-        .id(id)
+    let row = row(id, icon_path, theme)
         .relative()
-        .h(crate::ui::style::MENU_ITEM_HEIGHT)
-        .px(rems(0.375))
-        .flex()
-        .items_center()
-        .gap(rems(0.5))
-        .rounded(rems(0.3125))
         .when(active, |row| row.bg(theme.selected))
         .hover(|s| s.bg(theme.menu_hover))
         .child(
@@ -73,7 +99,7 @@ pub(super) fn picker(
                 move |_, bounds, window, cx| {
                     let bounds = crate::ui::components::popup::owner_bounds(window, cx, bounds);
                     paint_bounds.set(Some(bounds));
-                    if active && !about {
+                    if active {
                         paint_handle.update(cx, |view, cx| {
                             if view.settings_submenu_bounds != Some(bounds) {
                                 view.settings_submenu_bounds = Some(bounds);
@@ -88,12 +114,9 @@ pub(super) fn picker(
             .top_0()
             .size_full(),
         )
-        .child(icon(icon_path, theme))
-        .child(div().flex_1().flex_shrink_0().whitespace_nowrap().child(label))
-        .child(icon(if about && active { "icons/chevron-left.svg" }
-            else { "icons/chevron-right.svg" }, theme))
-        // About lets the move reach the panel, which closes an open submenu as any row does.
-        .when(!about, |row| row.on_mouse_move(move |event, window, cx| {
+        .child(label(text, None, theme))
+        .child(icon("icons/chevron-right.svg", theme))
+        .on_mouse_move(move |event, window, cx| {
             cx.stop_propagation();
             hover::moved(event.position, cx);
             if hover_handle.read(cx).settings_picker == Some(kind) {
@@ -102,64 +125,53 @@ pub(super) fn picker(
                 let open = hover_open.clone();
                 hover::intend(format!("settings-open-{id}"), window, cx, move |_, cx| open(cx));
             }
-        }))
+        })
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             hover::cancel(cx);
             open(cx);
         });
-    crate::ui::components::popup::keyboard::item(row, Rc::new(move |_, cx| key_open(cx)), Some(Rc::new(move |_, cx| submenu_open(cx))), None)
+    keyboard::item(row, Rc::new(move |_, cx| key_open(cx)), Some(Rc::new(move |_, cx| submenu_open(cx))), None)
 }
 
 /// Row opening a separate window; the settings menu closes behind it.
 pub(super) fn window_row(
     id: &'static str,
     icon_path: &'static str,
-    label: SharedString,
+    text: SharedString,
     theme: OxydeTheme,
     on_open: impl Fn(&mut Window, &mut App) + 'static,
 ) -> impl IntoElement {
     let open = Rc::new(on_open);
     let key_open = open.clone();
-    let row = div()
-        .id(id)
-        .h(crate::ui::style::MENU_ITEM_HEIGHT)
-        .px(rems(0.375))
-        .flex()
-        .items_center()
-        .gap(rems(0.5))
-        .rounded(rems(0.3125))
+    let row = row(id, icon_path, theme)
         .hover(|s| s.bg(theme.menu_hover))
-        .child(icon(icon_path, theme))
-        .child(div().flex_1().flex_shrink_0().whitespace_nowrap().child(label))
+        .child(label(text, None, theme))
         .child(icon("icons/external-link.svg", theme))
         .on_mouse_down(MouseButton::Left, move |_, window, cx| open(window, cx));
-    crate::ui::components::popup::keyboard::item(row, Rc::new(move |window, cx| key_open(window, cx)), None, None)
+    keyboard::item(row, Rc::new(move |window, cx| key_open(window, cx)), None, None)
 }
 
 /// A row holding a stepper: one keyboard stop, Left and Right step, Enter restores the default.
 fn stepper_row(
     id: &'static str,
     icon_path: &'static str,
-    label: SharedString,
+    text: SharedString,
+    hint: Option<SharedString>,
     stepper: crate::ui::elements::stepper::Stepper,
     on_step: crate::ui::elements::stepper::Step,
     on_reset: Rc<dyn Fn(&mut Window, &mut App)>,
     theme: OxydeTheme,
-) -> crate::ui::components::popup::keyboard::KeyboardItem {
-    let row = div().id(id).min_h(crate::ui::style::MENU_ITEM_HEIGHT).px(rems(0.375)).gap(rems(0.5)).flex().items_center()
-        .rounded(rems(0.3125))
-        .child(icon(icon_path, theme))
-        .child(div().flex_1().flex_shrink_0().whitespace_nowrap().child(label))
+) -> KeyboardItem {
+    let row = row(id, icon_path, theme)
+        .child(label(text, hint, theme))
         .child(stepper);
-    crate::ui::components::popup::keyboard::item(row, on_reset, None, None).adjust(on_step)
+    keyboard::item(row, on_reset, None, None).adjust(on_step)
 }
 
 pub(super) fn scale_row(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &App) -> impl IntoElement {
     use crate::ui::scale::{BASE_REM_SIZE, MAX_REM_SIZE, MIN_REM_SIZE};
     let theme = *cx.theme();
     let reference = view.ui_rem_size();
-    let mut args = FluentArgs::new();
-    args.set("percentage", (reference * 100 + BASE_REM_SIZE / 2) / BASE_REM_SIZE);
     let reset_handle = handle.clone();
     let on_reset: Rc<dyn Fn(&mut Window, &mut App)> = Rc::new(move |window, cx| {
         crate::ui::components::popup::with_owner(window, cx, |window, cx| {
@@ -174,10 +186,19 @@ pub(super) fn scale_row(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &App) -> 
         }));
     });
     let reset = on_reset.clone();
-    let stepper = crate::ui::elements::stepper::stepper("scale", cx.i18n().text_with_args(Message::SettingsScaleValue, &args),
+    let stepper = crate::ui::elements::stepper::stepper("scale", scale_value(reference, cx),
             reference > MIN_REM_SIZE, reference < MAX_REM_SIZE, theme, on_step.clone())
         .reset(cx.i18n().text(Message::SettingsScaleReset), move |window, cx| reset(window, cx));
-    stepper_row("settings-scale-row", "icons/type.svg", cx.i18n().text(Message::SettingsScale), stepper, on_step, on_reset, theme)
+    stepper_row("settings-scale-row", "icons/type.svg", cx.i18n().text(Message::SettingsScale), None,
+        stepper, on_step, on_reset, theme)
+}
+
+/// The interface scale shown for a reference rem size, as a percentage.
+pub(super) fn scale_value(reference: u32, cx: &App) -> SharedString {
+    use crate::ui::scale::BASE_REM_SIZE;
+    let mut args = FluentArgs::new();
+    args.set("percentage", (reference * 100 + BASE_REM_SIZE / 2) / BASE_REM_SIZE);
+    cx.i18n().text_with_args(Message::SettingsScaleValue, &args)
 }
 
 pub(super) fn search_limit_row(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &App) -> impl IntoElement {
@@ -195,33 +216,14 @@ pub(super) fn search_limit_row(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &A
         .reset(cx.i18n().text(Message::SettingsSearchLimitReset), move |window, cx| reset(window, cx));
     div().id("settings-search-limit-tooltip")
         .fixed_tooltip(Tooltip::text(cx.i18n().text(Message::SettingsSearchLimitDescription)))
-        .child(stepper_row("settings-search-limit-row", "icons/zap.svg", cx.i18n().text(Message::SettingsSearchLimit),
-            stepper, on_step, on_reset, theme))
+        .child(stepper_row("settings-search-limit-row", "icons/search.svg", cx.i18n().text(Message::SettingsSearchLimit),
+            Some(cx.i18n().text(Message::SettingsSearchLimitHint)), stepper, on_step, on_reset, theme))
 }
 
-pub(super) fn section(label: SharedString, theme: OxydeTheme) -> impl IntoElement {
-    div()
-        .py(rems(0.375))
-        .px(rems(0.375))
-        .text_size(rems(0.6875))
-        .font_weight(FontWeight::SEMIBOLD)
-        .text_color(theme.text_muted)
-        .child(label.to_uppercase())
-}
-
+/// A choice of a list drawn in a submenu, its check in the icon column.
 pub(super) fn choice(
     id: &'static str,
-    label: SharedString,
-    selected: bool,
-    theme: OxydeTheme,
-    on_select: impl Fn(&mut App) + 'static,
-) -> impl IntoElement {
-    choice_with_icon(id, label, selected, theme, None, on_select)
-}
-
-pub(super) fn submenu_choice(
-    id: &'static str,
-    label: SharedString,
+    text: SharedString,
     selected: bool,
     theme: OxydeTheme,
     on_select: impl Fn(&mut App) + 'static,
@@ -229,57 +231,37 @@ pub(super) fn submenu_choice(
     let select = Rc::new(on_select);
     let key_select = select.clone();
     let row = crate::ui::components::select_menu::choice(div().id(id), theme, selected, true)
-        .child(div().whitespace_nowrap().child(label))
+        .child(div().flex_1().whitespace_nowrap().child(text))
         .on_mouse_down(MouseButton::Left, move |_, _, cx| select(cx));
-    crate::ui::components::popup::keyboard::item(row, Rc::new(move |_, cx| key_select(cx)), None, None)
+    keyboard::item(row, Rc::new(move |_, cx| key_select(cx)), None, None)
 }
 
-pub(super) fn choice_with_icon(
-    id: &'static str,
-    label: SharedString,
-    selected: bool,
-    theme: OxydeTheme,
-    icon_path: Option<&'static str>,
-    on_select: impl Fn(&mut App) + 'static,
-) -> impl IntoElement {
-    let select = Rc::new(on_select);
-    let key_select = select.clone();
-    let row = crate::ui::components::select_menu::choice(div().id(id), theme, selected, true)
-        .when_some(icon_path, |row, path| row.child(icon(path, theme)))
-        .child(div().flex_1().child(label))
-        .on_mouse_down(MouseButton::Left, move |_, _, cx| select(cx));
-    crate::ui::components::popup::keyboard::item(row, Rc::new(move |_, cx| key_select(cx)), None, None)
+/// A setting switched on or off, its description in a tooltip and, for the few whose
+/// name does not tell the effect, a hint under the label.
+pub(super) struct Toggle {
+    pub(super) id: &'static str,
+    pub(super) icon: &'static str,
+    pub(super) label: Message,
+    pub(super) description: Message,
+    pub(super) hint: Option<Message>,
+    pub(super) value: bool,
 }
 
-pub(super) fn settings_row(
-    label: SharedString,
-    description: SharedString,
-    icon_path: &'static str,
-    value: bool,
-    id: &'static str,
+pub(super) fn toggle_row(
+    toggle: Toggle,
     handle: Entity<OxydeApp>,
-    theme: OxydeTheme,
+    cx: &App,
     on_toggle: impl Fn(&mut OxydeApp, &mut Context<OxydeApp>) + 'static,
 ) -> impl IntoElement {
+    let theme = *cx.theme();
+    let i18n = cx.i18n();
     let action = Rc::new(move |cx: &mut App| { handle.update(cx, |view, cx| on_toggle(view, cx)); });
     let key_action = action.clone();
-    let row = div()
-        .id(id)
-        .min_h(crate::ui::style::MENU_ITEM_HEIGHT)
-        .px(rems(0.375))
-        .flex()
-        .items_center()
-        .gap(rems(0.5))
-        .rounded(rems(0.3125))
-        .hover(|s| s.bg(theme.control_hover))
-        .fixed_tooltip(Tooltip::text(description))
-        .child(icon(icon_path, theme))
-        .child(div().flex_1().flex_shrink_0().whitespace_nowrap().text_size(rems(0.8125)).child(label))
-        .child(
-            crate::ui::elements::toggle::toggle("switch", value, theme),
-        )
-        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-            action(cx);
-        });
-    crate::ui::components::popup::keyboard::item(row, Rc::new(move |_, cx| key_action(cx)), None, None)
+    let row = row(toggle.id, toggle.icon, theme)
+        .hover(|s| s.bg(theme.menu_hover))
+        .fixed_tooltip(Tooltip::text(i18n.text(toggle.description)))
+        .child(label(i18n.text(toggle.label), toggle.hint.map(|hint| i18n.text(hint)), theme))
+        .child(crate::ui::elements::toggle::toggle("switch", toggle.value, theme))
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| action(cx));
+    keyboard::item(row, Rc::new(move |_, cx| key_action(cx)), None, None)
 }

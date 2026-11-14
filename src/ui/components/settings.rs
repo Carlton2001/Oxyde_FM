@@ -1,27 +1,31 @@
+//! The settings panel, opened from the title bar's logo: two columns of settings and,
+//! beside the row that opened it, one submenu at a time.
 mod about;
 mod columns;
 mod controls;
 mod compression;
 mod default_format;
 mod data_actions;
+mod fallback;
 mod integration;
-
-use controls::{choice, submenu_choice};
-use compression::compression_table;
+mod measure;
+mod panel;
+mod submenu;
 
 pub(crate) use data_actions::render_settings_confirmation;
 
 use crate::ui::app::OxydeApp;
-
-use crate::ui::format::{date_format, DateFormat};
-use crate::ui::i18n::{I18nContext, Language, Message};
-use crate::ui::theme::ThemeContext;
-use gpui::prelude::*;
+use crate::ui::components::popup::{self, PopupAnchor};
 use gpui::*;
 
-/// Width a submenu adds around its longest choice: the entry's margins (2 × 0.5
-/// rem), check column and gap (1.5 rem), the surface's padding and outline.
-const CHOICE_CHROME: f32 = 2.5 + 0.625;
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SettingsPicker {
+    Language,
+    Date,
+    Compression,
+    Integration,
+    About,
+}
 
 /// Where a submenu opens: beside the row that opened it, its first entry level with
 /// that row, as GTK's.
@@ -37,309 +41,30 @@ fn aims_right(from: Point<Pixels>, to: Point<Pixels>) -> bool {
     dx > px(0.0) && dx >= dy.abs()
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SettingsPicker {
-    Language,
-    Date,
-    About,
-    Compression,
-    Integration,
-}
-
 pub fn render_settings_panel(view: &OxydeApp, handle: Entity<OxydeApp>, window: &mut Window, cx: &mut Context<OxydeApp>) -> AnyElement {
-    if crate::ui::components::popup::supported(window, cx) {
-        // Pinned to the window's left edge, below the title bar, wherever window buttons push the settings button.
-        let bounds = view.settings_button_bounds
-            .map(|button| Bounds::new(point(px(0.0), button.top()), size(px(0.0), button.size.height)))
-            .unwrap_or(Bounds::new(point(px(0.0), px(0.0)), size(px(0.0), px(44.0))));
-        crate::ui::components::popup::show("settings-panel", crate::ui::components::popup::PopupAnchor::element(bounds).at_window_edge(), handle.clone(), window, cx,
-            |view| view.settings_open,
-            |view, window, cx| render_settings_surface(view, cx.entity(), window, cx, None),
-            |view, _, cx| { view.archive_format_bounds = None; view.settings_open = false; view.settings_about_open = false; view.settings_picker = None; view.settings_submenu_bounds = None; cx.notify(); });
-        return div().into_any_element();
+    if !popup::supported(window, cx) {
+        return fallback::render(view, handle, window, cx);
     }
-    render_settings_surface(view, handle, window, cx, None)
+    // Pinned to the window's left edge, below the title bar, wherever window buttons push the settings button.
+    let bounds = view.settings_button_bounds
+        .map(|button| Bounds::new(point(px(0.0), button.top()), size(px(0.0), button.size.height)))
+        .unwrap_or(Bounds::new(point(px(0.0), px(0.0)), size(px(0.0), px(44.0))));
+    popup::show("settings-panel", PopupAnchor::element(bounds).at_window_edge(), handle, window, cx,
+        |view| view.settings_open,
+        |view, window, cx| render_native_panel(view, cx.entity(), window, cx),
+        |view, _, cx| { view.close_settings(); cx.notify(); });
+    div().into_any_element()
 }
-fn render_settings_surface(
-    view: &OxydeApp,
-    handle: Entity<OxydeApp>,
-    window: &mut Window,
-    cx: &mut Context<OxydeApp>,
-    _only_picker: Option<SettingsPicker>,
-) -> AnyElement {
-    // Only render this control in its actual owner, never in the parent menu.
-    let render_compression = _only_picker == Some(SettingsPicker::Compression)
-        || !crate::ui::components::popup::supported(window, cx);
-    let compression = if render_compression {
-        compression_table(view, handle.clone(), window, cx)
-    } else { Vec::new() };
-    let integration = integration::integration_choices(view, handle.clone(), cx);
-    let theme = *cx.theme();
-    let i18n = cx.i18n();
-    let backdrop = handle.clone();
-    let languages = [
-        (Language::French, "Français"),
-        (Language::English, "English"),
-        (Language::German, "Deutsch"),
-        (Language::Spanish, "Español"),
-        (Language::Italian, "Italiano"),
-    ]
-    .map(|(id, label)| {
-        let handle = handle.clone();
-        submenu_choice(
-            id.as_str(),
-            label.into(),
-            view.language == id,
-            theme,
-            move |cx| {
-                handle.update(cx, |view, cx| {
-                    view.set_language(id, cx);
-                    cx.notify();
-                });
-            },
-        )
-        .into_any_element()
-    })
-    .into_iter()
-    .collect();
-    let dates = [
-        (DateFormat::Us, Message::DateFormatUs),
-        (DateFormat::European, Message::DateFormatEuropean),
-        (DateFormat::Iso, Message::DateFormatIso),
-    ]
-    .map(|(format, label)| {
-        let handle = handle.clone();
-        submenu_choice(
-            format.as_str(),
-            i18n.text(label),
-            date_format(cx) == format,
-            theme,
-            move |cx| {
-                handle.update(cx, |view, cx| {
-                    view.set_date_format(format, cx);
-                });
-            },
-        )
-        .into_any_element()
-    })
-    .into_iter()
-    .collect();
-    // Keep the settings columns compact and stable when About is toggled.
-    // Measure translated labels before allocating space to icons and controls.
-    // These widths depend on the content, never on whether About is open.
-    let mut settings_font = window.text_style().font();
-    settings_font.family = "Inter".into();
-    settings_font.weight = crate::ui::style::DEFAULT_FONT_WEIGHT;
-    let label_width = |message| {
-        let label = i18n.text(message);
-        let line = window.text_system().shape_line(
-            label.clone(), crate::ui::scale::rem_pixels(rems(0.8125)),
-            &[TextRun {
-                len: label.len(), font: settings_font.clone(), color: theme.text,
-                background_color: None, underline: None, strikethrough: None,
-            }], None,
-        );
-        line.width.as_f32() / crate::ui::scale::rem_pixels(rems(1.0)).as_f32()
-    };
-    let left_width = [
-        Message::SettingsTheme,
-        Message::SettingsGridThumbnails, Message::SettingsWindowsIcons,
-        Message::SettingsCheckboxes, Message::SettingsPermissionsColumn, Message::SettingsPathTracking,
-        Message::SettingsHidden, Message::SettingsSystem,
-        Message::SettingsPreviews, Message::SettingsNetwork, Message::SettingsSystemIntegration,
-    ].into_iter().map(|message| label_width(message) + 5.0625)
-        .fold(16.5_f32, f32::max)
-        .max(label_width(Message::SettingsScale) + 9.6875);
-    let right_width = [
-        Message::SettingsLanguage, Message::SettingsDateFormat, Message::Compression,
-        Message::SettingsTurbo, Message::SettingsClearCache,
-        Message::SettingsResetPreferences, Message::SettingsAbout,
-    ].into_iter().map(|message| label_width(message) + 4.5)
-        .fold(17.5_f32, f32::max)
-        .max(label_width(Message::SettingsSearchLimit) + 9.125);
-    let picker_content_width = view.settings_picker.map(|kind| {
-        let content_width = match kind {
-            SettingsPicker::Language => {
-                ["Français", "English", "Deutsch", "Español", "Italiano"]
-                    .into_iter().map(|label| {
-                        let line = window.text_system().shape_line(
-                            label.into(), crate::ui::scale::rem_pixels(rems(0.8125)),
-                            &[TextRun { len: label.len(), font: settings_font.clone(), color: theme.text,
-                                background_color: None, underline: None, strikethrough: None }], None,
-                        );
-                        line.width.as_f32() / window.rem_size().as_f32()
-                    }).fold(0.0_f32, f32::max) + CHOICE_CHROME
-            }
-            SettingsPicker::Date => [Message::DateFormatUs, Message::DateFormatEuropean, Message::DateFormatIso]
-                .into_iter().map(label_width).fold(0.0_f32, f32::max) + CHOICE_CHROME,
-            SettingsPicker::Compression => 22.0,
-            // The explanations wrap at a readable width.
-            SettingsPicker::Integration => 24.0,
-            _ => 18.0,
-        };
-        // At least as wide as any list, as the default format's.
-        content_width.max(crate::ui::components::select_menu::LIST_MIN_WIDTH.0)
-    });
-    let about_width = 16.5;
-    let column_gap = 0.5;
-    // Panel padding (2 × 0.25 rem) and borders (2 × 0.0625 rem).
-    let panel_frame = crate::ui::components::select_menu::chrome().0;
-    let panel_width = left_width + right_width + column_gap + panel_frame
-        + if view.settings_about_open { about_width + column_gap } else { 0.0 };
-    let left = columns::left_column(view, handle.clone(), left_width, cx);
-    let about = about::about_column(view, handle.clone(), about_width, cx);
-    let right = columns::right_column(view, handle.clone(), right_width, cx);
-    let body = div()
-        .flex()
-        .flex_col()
-        .child(div().flex().gap(rems(column_gap)).child(left).child(right)
-            .when(view.settings_about_open, |columns| columns.child(about)))
-        .when_some(view.settings_data_status, |body, status| {
-            body.child(div().px(rems(0.375)).py(rems(0.375))
-                .text_color(if status == Message::SettingsCacheError { theme.error } else { theme.text_muted })
-                .child(i18n.text(status)))
-        })
-        .when_some(view.settings_error, |body, error| {
-            let handle = handle.clone();
-            body.child(
-                div()
-                    .py(rems(0.375))
-                    .text_size(rems(0.8125))
-                    .text_color(theme.error)
-                    .child(i18n.text(error))
-                    .when(error == Message::SettingsSaveError, |row| {
-                        row.child(choice(
-                            "retry-save",
-                            i18n.text(Message::Retry),
-                            false,
-                            theme,
-                            move |cx| {
-                                handle.update(cx, |view, cx| view.save_preferences(cx));
-                            },
-                        ))
-                    }),
-            )
-        });
-    let margin = crate::ui::scale::rem_pixels(rems(0.375));
-    let origin = view
-        .settings_button_bounds
-        .map(|b| point(px(0.0), b.bottom()))
-        .unwrap_or(point(
-            px(0.0),
-            px(crate::ui::components::title_bar::titlebar_h()),
-        ));
-    let available_height = (crate::ui::components::popup::available_size(window, cx).height - origin.y - margin).max(px(1.0));
-    // The menus' surface: corner, padding, outline and shadow.
-    let hover = handle.clone();
-    let panel = crate::ui::components::select_menu::surface(theme)
-        .id("settings-panel")
-        // Resting on a row without a submenu closes the one open; its own rows stop the move.
-        .on_mouse_move(move |event, window, cx| {
-            let previous = crate::ui::components::popup::hover::moved(event.position, cx);
-            if hover.read(cx).settings_picker.is_none() {
-                return;
-            }
-            // Heading for the submenu, beside its row: each such move restarts the
-            // delay, so crossing rows on the way keeps it and only resting closes it.
-            if previous.is_some_and(|from| aims_right(from, event.position)) {
-                crate::ui::components::popup::hover::cancel(cx);
-            }
-            let close = hover.clone();
-            crate::ui::components::popup::hover::intend("settings-close", window, cx, move |_, cx| {
-                close.update(cx, |view, cx| {
-                    view.settings_picker = None;
-                    view.settings_submenu_bounds = None;
-                    cx.notify();
-                });
-            });
-        })
-        .w(rems(panel_width))
-        .max_w(crate::ui::components::popup::available_size(window, cx).width - margin * 2.0)
-        .max_h(available_height)
-        .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
-        .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-        .child(super::scroll_area::scroll_area("settings-panel-scroll-state",
-            div().max_h((available_height - window.rem_size()).max(px(1.0))),
-            div().id("settings-panel-scroll").child(body), true, window, cx));
-    if _only_picker.is_none() && crate::ui::components::popup::is_menu(window, cx) {
-        if let (Some(kind), Some(bounds)) = (view.settings_picker.filter(|kind| *kind != SettingsPicker::About), submenu_anchor(view)) {
-            let open_left = false;
-            crate::ui::components::popup::show("settings-picker", crate::ui::components::popup::PopupAnchor::beside(bounds, open_left), handle.clone(), window, cx,
-                move |view| view.settings_open && view.settings_picker == Some(kind),
-                move |view, window, cx| render_settings_surface(view, cx.entity(), window, cx, Some(kind)),
-                |view, _, cx| { view.archive_format_bounds = None; view.settings_picker = None; view.settings_submenu_bounds = None; cx.notify(); });
-        }
-        return panel.into_any_element();
-    }    let mut overlay = div()
-        .absolute()
-        .top_0()
-        .bottom_0()
-        .left_0()
-        .right_0()
-        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-            cx.stop_propagation();
-            backdrop.update(cx, |view, cx| {
-                view.archive_format_bounds = None;
-                view.settings_open = false;
-                view.settings_about_open = false;
-                view.settings_picker = None;
-                view.settings_submenu_bounds = None;
-                cx.notify();
-            });
-        })
-        .child(anchored().position(origin).snap_to_window().child(panel));
-    if let (Some(kind), Some(bounds)) = (view.settings_picker.filter(|kind| *kind != SettingsPicker::About), submenu_anchor(view)) {
-        let choices: Vec<AnyElement> = match kind {
-            SettingsPicker::Language => languages,
-            SettingsPicker::Date => dates,
-            SettingsPicker::About => unreachable!("About is rendered as a settings column"),
-            SettingsPicker::Compression => compression,
-            SettingsPicker::Integration => integration,
-        };
-        let submenu_width =
-            crate::ui::scale::rem_pixels(rems(picker_content_width.unwrap_or(18.0)))
-            .min(crate::ui::components::popup::available_size(window, cx).width - margin * 2.0);
-        // Let the content determine the height. Anchoring moves the menu upwards
-        // when needed; scrolling is only necessary if it exceeds the viewport.
-        let submenu_available_height =
-            (crate::ui::components::popup::available_size(window, cx).height - margin * 2.0).max(px(1.0));
-        let submenu = crate::ui::components::select_menu::surface(theme)
-            .id("settings-submenu")
-            .w(submenu_width)
-            .max_h(submenu_available_height)
-            .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
-            .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-            // Reaching the submenu keeps it, whatever rows the pointer crossed on the way.
-            .on_mouse_move(|_, _, cx| crate::ui::components::popup::hover::cancel(cx))
-            .child(super::scroll_area::scroll_area("settings-submenu-scroll-state",
-                div().max_h((submenu_available_height - window.rem_size()).max(px(1.0))),
-                div().id("settings-submenu-scroll").children(choices),
-                false, window, cx));
 
-        if _only_picker.is_some() { return submenu.into_any_element(); }
-        let open_left = bounds.right() + submenu_width + margin > crate::ui::components::popup::available_size(window, cx).width
-            && bounds.left() - submenu_width >= margin;
-        let position = point(
-            if open_left {
-                bounds.left()
-            } else {
-                bounds.right()
-            },
-            bounds.top(),
-        );
-        overlay = overlay.child(
-            anchored()
-                .position(position)
-                .anchor(if open_left {
-                    Anchor::TopRight
-                } else {
-                    Anchor::TopLeft
-                })
-                .snap_to_window()
-                .child(submenu),
-        );
+/// The panel in its own surface, which opens the submenu as a surface of its own.
+fn render_native_panel(view: &OxydeApp, handle: Entity<OxydeApp>, window: &mut Window, cx: &mut Context<OxydeApp>) -> AnyElement {
+    if let (Some(kind), Some(bounds)) = (view.settings_picker, submenu_anchor(view)) {
+        popup::show("settings-picker", PopupAnchor::beside(bounds, false), handle.clone(), window, cx,
+            move |view| view.settings_open && view.settings_picker == Some(kind),
+            move |view, window, cx| submenu::render(view, cx.entity(), kind, window, cx).into_any_element(),
+            |view, _, cx| { view.close_settings_submenu(); cx.notify(); });
     }
-    overlay.into_any_element()
+    panel::render(view, handle, window, cx).into_any_element()
 }
 
 #[cfg(test)]

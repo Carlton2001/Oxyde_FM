@@ -19,7 +19,7 @@ conflict-replace-all = Tout remplacer
 common-close = Fermer
 common-retry = Réessayer
 settings-title = Préférences
-settings-appearance = APPARENCE
+settings-appearance = Apparence
 settings-theme = Thèmes
 theme-window-title = Thèmes
 theme-color-vision = Vision des couleurs
@@ -60,7 +60,7 @@ settings-scale-reset = Rétablir l’échelle à 100 %
 settings-language = Langue
 theme-dark = { $name } Sombre
 theme-light = { $name } Clair
-settings-files = FICHIERS
+settings-files = Fichiers
 settings-hidden = Fichiers cachés
 settings-hidden-description = Afficher les fichiers et dossiers cachés ou commençant par un point
 settings-system = Fichiers système
@@ -571,6 +571,10 @@ update-download-portable = Télécharger la version { $version }
 update-downloading = Téléchargement de la mise à jour…
 
 settings-search-limit-reset = Rétablir la limite par défaut de 3 000 résultats
+settings-search-limit-hint = Nombre maximal de résultats par recherche
+settings-turbo-hint = Par défaut pour les nouvelles opérations
+settings-sidebar = Barre latérale
+settings-system-section = Système
 
 menu-copy-name = Copier le nom
 

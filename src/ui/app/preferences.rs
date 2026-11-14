@@ -44,6 +44,18 @@ impl OxydeApp {
         self.save_preferences(cx);
     }
 
+    /// Closes the settings panel with its submenu and the list it may hold open.
+    pub(crate) fn close_settings(&mut self) {
+        self.settings_open = false;
+        self.close_settings_submenu();
+    }
+
+    pub(crate) fn close_settings_submenu(&mut self) {
+        self.settings_picker = None;
+        self.settings_submenu_bounds = None;
+        self.archive_format_bounds = None;
+    }
+
     pub(crate) fn open_settings_confirmation(
         &mut self,
         action: super::SettingsDataAction,
@@ -54,9 +66,7 @@ impl OxydeApp {
             return;
         }
         self.finish_pointer_drag(cx);
-        self.settings_open = false;
-        self.settings_picker = None;
-        self.settings_submenu_bounds = None;
+        self.close_settings();
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         self.settings_confirmation = Some(super::SettingsDataConfirmation {
@@ -89,7 +99,6 @@ impl OxydeApp {
         if self.clearing_cache { return; }
         self.clearing_cache = true;
         crate::ui::audio_covers::clear();
-        self.settings_data_status = Some(Message::SettingsCacheClearing);
         cx.notify();
         cx.spawn(async move |this, cx| {
             let result = cx.background_executor().spawn(async {
@@ -97,7 +106,6 @@ impl OxydeApp {
             }).await;
             let _ = this.update(cx, |this, cx| {
                 this.clearing_cache = false;
-                this.settings_data_status = None;
                 this.toast(if result.is_ok() { super::ToastKind::Success } else { super::ToastKind::Error }, if result.is_ok() { Message::SettingsCacheCleared } else { Message::SettingsCacheError }, String::new(), 0, cx);
                 if let Err(error) = result { log::warn!("Cache cleanup failed: {error}"); }
                 crate::ui::components::file_list::clear_grid_thumbnails(cx);
@@ -146,7 +154,6 @@ impl OxydeApp {
         self.breadcrumb_menu = None;
         self.refresh_all_tabs(cx);
         self.save_workspace(cx);
-        self.settings_data_status = None;
         self.toast(super::ToastKind::Success, Message::SettingsPreferencesReset, String::new(), 0, cx);
         // Resolve the regional default away from the UI thread.
         cx.spawn(async move |this, cx| {

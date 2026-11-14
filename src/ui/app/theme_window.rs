@@ -58,9 +58,7 @@ pub struct ThemeWindow {
 impl OxydeApp {
     pub(crate) fn open_theme_window(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         self.context_menus.clear();
-        self.settings_open = false;
-        self.settings_picker = None;
-        self.settings_submenu_bounds = None;
+        self.close_settings();
         cx.notify();
         if let Some(handle) = cx.windows().into_iter().find_map(|handle| handle.downcast::<ThemeWindow>()) {
             cx.defer(move |cx| {

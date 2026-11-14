@@ -21,7 +21,7 @@ pub(crate) fn close_advanced_search_windows(cx: &mut App) -> bool {
 impl OxydeApp {
     pub(crate) fn open_advanced_search(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         self.context_menus.clear();
-        self.settings_open = false;
+        self.close_settings();
         for handle in cx.windows() {
             if let Some(handle) = handle.downcast::<AdvancedSearchWindow>() {
                 cx.defer(move |cx| {

@@ -862,6 +862,10 @@ update-download-portable = Version { $version } herunterladen
 update-downloading = Update wird heruntergeladen…
 
 settings-search-limit-reset = Auf das Standardlimit von 3.000 Ergebnissen zurücksetzen
+settings-search-limit-hint = Maximale Ergebnisse pro Suche
+settings-turbo-hint = Standard für neue Vorgänge
+settings-sidebar = Seitenleiste
+settings-system-section = System
 
 menu-copy-name = Name kopieren
 

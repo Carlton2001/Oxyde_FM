@@ -139,7 +139,7 @@ impl OxydeApp {
             return;
         }
         self.context_menus.clear();
-        self.settings_open = false;
+        self.close_settings();
         let source = self
             .state
             .find_pane(&self.state.active_pane_id)

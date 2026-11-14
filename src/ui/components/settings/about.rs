@@ -6,18 +6,15 @@ use gpui::*;
 use crate::ui::i18n::FluentArgs;
 use super::controls::{icon, section, separator};
 
-pub(super) fn about_column(view: &OxydeApp, handle: Entity<OxydeApp>, about_width: f32, cx: &App) -> impl IntoElement {
+/// About's submenu: the application, its updates and the tools it is built with.
+pub(super) fn about(view: &OxydeApp, handle: Entity<OxydeApp>, cx: &App) -> AnyElement {
     let theme = *cx.theme();
     let i18n = cx.i18n();
     let mut version = FluentArgs::new();
     version.set("version", env!("CARGO_PKG_VERSION"));
     div()
-        .id("settings-about-column")
-        .w(rems(about_width)).flex_none()
+        .id("settings-about")
         .flex().flex_col().gap(rems(0.5))
-        .pl(rems(0.75)).pr(rems(0.25))
-        .border_l(rems(0.0625)).border_color(theme.border)
-        .child(section(i18n.text(Message::SettingsAbout), theme))
         .child(div().flex().flex_col().items_center().gap(rems(0.5)).py(rems(0.75))
             .child(img("icons/logo_about.png").size(rems(4.5)).flex_none())
             .child(div().text_size(rems(1.5)).font_weight(FontWeight::BOLD).child("Oxyde"))
@@ -36,6 +33,7 @@ pub(super) fn about_column(view: &OxydeApp, handle: Entity<OxydeApp>, about_widt
         .child(about_tool("about-lucide", "Lucide",
             if theme.light { "icons/lucide-light.svg" } else { "icons/lucide-dark.svg" },
             "https://lucide.dev", true, handle.clone(), theme))
+        .into_any_element()
 }
 
 /// Reflects the update check; each state offers its natural next action.

@@ -81,11 +81,9 @@ impl Render for OxydeApp {
                         }
                         if this.settings_open {
                             if this.settings_picker.is_some() {
-                                this.settings_picker = None;
-                                this.settings_submenu_bounds = None;
+                                this.close_settings_submenu();
                             } else {
-                                this.settings_open = false;
-                                this.settings_about_open = false;
+                                this.close_settings();
                             }
                             cx.stop_propagation();
                             cx.notify();
