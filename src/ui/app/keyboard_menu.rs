@@ -7,14 +7,13 @@ use crate::ui::date_groups::{display_rows, row_height, DisplayRow};
 use crate::ui::i18n::I18nContext;
 use crate::ui::scale::logical;
 use crate::ui::style::GridGeometry;
-use crate::ui::workspace::ViewMode;
 use gpui::*;
 
 /// The top, height and column of the row holding a file.
-fn file_place(rows: &[DisplayRow], index: usize, grid: bool) -> Option<(f32, f32, usize)> {
+fn file_place(rows: &[DisplayRow], index: usize, cards: Option<crate::ui::style::CardLayout>) -> Option<(f32, f32, usize)> {
     let mut top = 0.0;
     for row in rows {
-        let height = row_height(row, grid);
+        let height = row_height(row, cards);
         if let DisplayRow::Files(indices) = row {
             if let Some(column) = indices.iter().position(|file| *file == index) {
                 return Some((top, height, column));
@@ -32,9 +31,10 @@ impl OxydeApp {
         let width = self.list_bounds.get(&pane_id).map_or(self.list_width, |bounds| bounds.size.width);
         let Some(pane) = self.state.find_pane(&pane_id) else { return };
         let tab = pane.active_tab();
-        let grid = tab.view_mode == ViewMode::Grid;
-        let geometry = GridGeometry::for_viewport(width, crate::ui::components::scrollbar::track_width());
-        let rows = display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, if grid { geometry.columns } else { 1 });
+        let cards = tab.view_mode.cards();
+        let grid = cards.is_some();
+        let geometry = cards.map(|layout| GridGeometry::for_viewport(layout, width, crate::ui::components::scrollbar::track_width()));
+        let rows = display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, geometry.as_ref().map_or(1, |geometry| geometry.columns));
         let target = tab.keyboard_cursor.as_ref().filter(|path| tab.selected_paths.contains(*path))
             .or(tab.selection_anchor.as_ref().filter(|path| tab.selected_paths.contains(*path)))
             .and_then(|path| tab.filtered_files().iter().position(|file| &file.path == path))
@@ -44,14 +44,14 @@ impl OxydeApp {
                 _ => None,
             }));
         let scroll = tab.list_scroll.0.borrow().base_handle.clone();
-        let place = target.and_then(|index| file_place(&rows, index, grid));
+        let place = target.and_then(|index| file_place(&rows, index, cards));
         if let Some(index) = target {
             scroll_row_into_view(tab, &rows, index);
         }
         let bounds = scroll.bounds();
         let inset = px(logical(32.0));
         let position = place.map_or(bounds.origin + point(inset, px(logical(8.0))), |(top, height, column)| {
-            let cell = if grid { column as f32 * geometry.cell_width } else { 0.0 };
+            let cell = geometry.as_ref().map_or(0.0, |geometry| column as f32 * geometry.cell_width);
             let below = top + if grid { height / 2.0 } else { height };
             point(
                 bounds.left() + px(cell) + inset,

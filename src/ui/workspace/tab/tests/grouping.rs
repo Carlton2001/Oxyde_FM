@@ -50,14 +50,14 @@ fn type_mode_invalidates_rows_and_reveal_expands_the_right_family() {
         },
     ]);
     tab.update_cache();
-    let ungrouped = tab.presentation(false, 1);
+    let ungrouped = tab.presentation(None, 1);
     tab.group_mode = crate::ui::date_groups::GroupMode::Type;
-    let grouped = tab.presentation(false, 1);
+    let grouped = tab.presentation(None, 1);
     assert!(!Arc::ptr_eq(&ungrouped.rows, &grouped.rows));
-    assert!(Arc::ptr_eq(&grouped, &tab.presentation(false, 1)));
+    assert!(Arc::ptr_eq(&grouped, &tab.presentation(None, 1)));
     let archives = GroupKey::Family(FileFamily::Archives);
     tab.collapsed_groups.insert(archives.clone());
-    assert!(tab.presentation(false, 1).rows.len() < grouped.rows.len());
+    assert!(tab.presentation(None, 1).rows.len() < grouped.rows.len());
     tab.pending_reveal = Some("C:/backup.zip".into());
     tab.reveal_pending_item(800.0);
     assert!(!tab.collapsed_groups.contains(&archives));
@@ -146,7 +146,7 @@ fn manual_folder_size_changes_its_section_and_invalidates_presentation() {
         ..Default::default()
     }]);
     tab.update_cache();
-    let before = tab.presentation(false, 1);
+    let before = tab.presentation(None, 1);
     assert!(matches!(
         &before.rows[0],
         crate::ui::date_groups::DisplayRow::Header(GroupKey::Family(FileFamily::Folders), 1)
@@ -155,7 +155,7 @@ fn manual_folder_size_changes_its_section_and_invalidates_presentation() {
     folder.size = 2000000;
     folder.is_calculated = true;
     tab.update_cache();
-    let after = tab.presentation(false, 1);
+    let after = tab.presentation(None, 1);
     assert!(!Arc::ptr_eq(&before.rows, &after.rows));
     assert!(matches!(
         &after.rows[0],

@@ -59,6 +59,18 @@ pub enum ViewMode {
     Details,
     #[default]
     Grid,
+    Tiles,
+}
+
+impl ViewMode {
+    /// The card layout of the grid and the tiles; the details view has rows.
+    pub fn cards(self) -> Option<crate::ui::style::CardLayout> {
+        match self {
+            Self::Details => None,
+            Self::Grid => Some(crate::ui::style::CardLayout::grid()),
+            Self::Tiles => Some(crate::ui::style::CardLayout::Tiles),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]

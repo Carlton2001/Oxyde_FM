@@ -223,7 +223,7 @@ impl FileChooserWindow {
 
     /// Cards per grid row, from the pane's width as the main grid computes it.
     pub(super) fn grid_geometry(&self) -> crate::ui::style::GridGeometry {
-        crate::ui::style::GridGeometry::for_viewport(self.pane_width.get().max(1.0), crate::ui::components::scrollbar::track_width())
+        crate::ui::style::GridGeometry::for_viewport(crate::ui::style::CardLayout::grid(), self.pane_width.get().max(1.0), crate::ui::components::scrollbar::track_width())
     }
 
     /// Rows of positions as the arrows move through them: one entry per details row,
@@ -240,7 +240,7 @@ impl FileChooserWindow {
             return;
         }
         let row = position / self.grid_geometry().columns.max(1);
-        let height = crate::ui::style::grid_card_row_height();
+        let height = crate::ui::style::CardLayout::grid().row_height();
         // The grid's list starts below a 0.25 rem top padding.
         let top = row as f32 * height + crate::ui::scale::rem_pixels(rems(0.25)).as_f32();
         let handle = &self.grid_scroll;

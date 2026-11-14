@@ -260,6 +260,7 @@ impl OxydeApp {
             follow_path: self.follows_active_path(),
         };
         let rem_size = self.ui_rem_size();
+        self.sync_grid_size();
         let foreign_parent = request.parent.clone().and_then(foreign_window);
         let parent = request.parent.clone();
         // GPUI draws a new window before open_window returns, and its render reads the

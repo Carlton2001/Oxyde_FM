@@ -15,6 +15,7 @@ mod drive_watchers;
 pub mod layout;
 pub mod navigation;
 mod sizes;
+mod cards;
 mod preferences;
 pub(crate) mod shutdown;
 mod grouping;
@@ -257,6 +258,10 @@ pub struct OxydeApp {
     pub(crate) split_highlight_last: Option<String>,
     /// Pane whose vertical scrollbar zone is under the pointer.
     pub(crate) scroll_zone_hover: Option<String>,
+    /// Pane and path of the grid card under the pointer, which shows its whole name.
+    pub(crate) hovered_card: Option<(String, String)>,
+    /// Touchpad scrolling with Ctrl held, added up until it changes the grid's size.
+    pub(crate) grid_wheel: f32,
     /// Start of the operations halo cycle, and when its last cycle ends once operations stop.
     pub(crate) operations_breath: std::cell::Cell<Option<(std::time::Instant, Option<std::time::Instant>)>>,
     pub grab_offset: f32,
@@ -489,6 +494,8 @@ impl OxydeApp {
             highlight_split_pane: None,
             split_highlight_last: None,
             scroll_zone_hover: None,
+            hovered_card: None,
+            grid_wheel: 0.0,
             operations_breath: Default::default(),
             grab_offset: 0.0,
             sidebar_width,

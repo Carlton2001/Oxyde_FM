@@ -84,6 +84,8 @@ status-files = { $count ->
     }
 view-details = Vue détaillée
 view-grid = Vue grille
+view-tiles = Vue mosaïque
+grid-card-size = Taille des éléments
 selected-files = { $count ->
     [one] { $number } fichier sélectionné ({ $size })
    *[other] { $number } fichiers sélectionnés ({ $size })
@@ -902,6 +904,7 @@ group-code = Code et scripts
 group-other = Autres
 group-disk-images = Images disque
 mouse-right-click = Clic droit
+mouse-ctrl-wheel = Ctrl+molette
 grouping-current = Groupé par : { $mode }
 group-size = Taille
 group-extension = Extension

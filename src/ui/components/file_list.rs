@@ -5,6 +5,7 @@ mod filter_status;
 mod grid;
 mod grid_scroll;
 mod grid_card;
+mod card_body;
 mod headers;
 mod presentation;
 mod group_header;
@@ -20,7 +21,6 @@ use crate::ui::app::OxydeApp;
 use crate::ui::i18n::I18nContext;
 use crate::ui::scale::rem_pixels;
 use crate::ui::theme::ThemeContext;
-use crate::ui::workspace::ViewMode;
 use gpui::prelude::*;
 use gpui::*;
 
@@ -60,7 +60,7 @@ pub fn render_file_list(
     let theme = *cx.theme();
     let language = cx.i18n().language();
     let pane = view.state.layout.find_pane(&pane_id).expect("pane exists");
-    if pane.active_tab().view_mode == ViewMode::Grid {
+    if pane.active_tab().view_mode.cards().is_some() {
         return grid::render_grid_file_list(view, pane_id, handle, cx).into_any_element();
     }
     details::render_details_file_list(view, pane_id, handle, p_id_cap, theme, language, pane, cx)

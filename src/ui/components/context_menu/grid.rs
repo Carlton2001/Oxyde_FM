@@ -1,9 +1,9 @@
-//! Sort by and Filter by in the grid view's context menus, which has no column headers.
+//! Sort by and Filter by in the context menus of the grid and tiles, which have no column headers.
 
 use super::{context_menu_sections, dropdown};
 use crate::ui::app::{GridMenuKind, OxydeApp};
 use crate::ui::i18n::{I18n, Message};
-use crate::ui::workspace::{FilterColumn, SortColumn, SortDirection, TabState, ViewMode};
+use crate::ui::workspace::{FilterColumn, SortColumn, SortDirection, TabState};
 use gpui::*;
 
 /// Adds Sort by and Filter by to a context menu of the grid view, above the information section.
@@ -16,7 +16,7 @@ pub fn with_grid_sort(
 ) -> Vec<dropdown::DropdownItem> {
     let Some(pane) = app.state.find_pane(pane_id) else { return items };
     let tab = pane.active_tab();
-    if tab.view_mode != ViewMode::Grid { return items; }
+    if tab.view_mode.cards().is_none() { return items; }
     let mut entries = vec![submenu(Message::SortBy, dropdown::IconName::ListOrdered, GridMenuKind::Sort, handle.clone(), pane_id, i18n)];
     // The network neighbourhood filters nothing, as its headers show.
     if tab.path != "__network_vincinity__" {

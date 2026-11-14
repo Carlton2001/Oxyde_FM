@@ -1,4 +1,5 @@
-use super::{display_rows, rem_pixels, row_height, DisplayRow, TabState, ViewMode};
+use super::{display_rows, rem_pixels, row_height, DisplayRow, TabState};
+use crate::ui::workspace::ViewMode;
 use gpui::{point, px, rems, size};
 use oxyde_lib::models::FileEntry;
 
@@ -56,6 +57,7 @@ fn shrinking_grouped_grid_reveals_focus_with_variable_row_heights() {
     tab.group_mode = crate::ui::date_groups::GroupMode::Date;
     tab.keep_cursor_visible(size(800.0, 300.0));
     let columns = crate::ui::style::GridGeometry::for_viewport(
+        crate::ui::style::CardLayout::grid(),
         800.0,
         crate::ui::components::scrollbar::track_width(),
     )
@@ -70,8 +72,8 @@ fn shrinking_grouped_grid_reveals_focus_with_variable_row_heights() {
         .iter()
         .position(|row| matches!(row, DisplayRow::Files(indices) if indices.contains(&90)))
         .unwrap();
-    let top = crate::ui::date_groups::content_height(&rows[..row], true);
-    let bottom = top + row_height(&rows[row], true);
+    let top = crate::ui::date_groups::content_height(&rows[..row], ViewMode::Grid.cards());
+    let bottom = top + row_height(&rows[row], ViewMode::Grid.cards());
     let viewport = 300.0
         - rem_pixels(crate::ui::style::TAB_BAR_HEIGHT).as_f32()
         - rem_pixels(crate::ui::style::NAV_BAR_HEIGHT).as_f32()

@@ -35,7 +35,7 @@ pub(super) fn render_details_file_list(
     let active_tab = pane.active_tab();
     let search_results = active_tab.quick_search.is_some();
     let calculating_sizes = active_tab.size_calculation.is_some() || active_tab.folder_sizes.has_pending() || active_tab.folder_sizes.has_ready();
-    let presentation = active_tab.presentation(false, 1);
+    let presentation = active_tab.presentation(None, 1);
     let files = presentation.files.clone();
     let histogram_total = if active_tab.show_size_histogram { presentation.histogram_total } else { 0 };
     let rows = presentation.rows.clone();

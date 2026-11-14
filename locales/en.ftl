@@ -78,6 +78,8 @@ status-files = { $count ->
     }
 view-details = Details view
 view-grid = Grid view
+view-tiles = Tiles view
+grid-card-size = Item size
 selected-files = { $count ->
     [one] { $number } file selected ({ $size })
    *[other] { $number } files selected ({ $size })
@@ -896,6 +898,7 @@ group-code = Code and scripts
 group-other = Other
 group-disk-images = Disk images
 mouse-right-click = Right click
+mouse-ctrl-wheel = Ctrl+wheel
 grouping-current = Grouped by: { $mode }
 group-size = Size
 group-extension = Extension

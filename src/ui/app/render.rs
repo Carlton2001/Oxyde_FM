@@ -5,6 +5,7 @@ impl Render for OxydeApp {
         let reference = crate::ui::scale::normalized_reference(self.config.ui_rem_size);
         crate::ui::scale::set_reference(reference);
         _window.set_rem_size(px(reference as f32));
+        self.sync_grid_size();
         let zoom_handle = cx.entity();
         let theme = *cx.theme();
         use crate::ui::components::sidebar::render_sidebar;
@@ -104,17 +105,12 @@ impl Render for OxydeApp {
             .child(canvas(|_, _, _| (), move |_, _, window, _| {
                 // Low-level capture listeners must be installed during paint.
                 let zoom_handle = zoom_handle.clone();
+                // Ctrl and the wheel size the grid's cards; Ctrl + and Ctrl - zoom the interface.
                 window.on_mouse_event(move |event: &ScrollWheelEvent, phase, window, cx| {
-                    if phase == DispatchPhase::Capture && event.modifiers.control {
-                        let delta = event.delta.pixel_delta(window.line_height());
-                        if delta.y != px(0.0) {
-                            zoom_handle.update(cx, |this, cx| {
-                                let current = this.ui_rem_size();
-                                let next = if delta.y > px(0.0) { current + 1 } else { current.saturating_sub(1) };
-                                this.set_ui_rem_size(next, window, cx);
-                            });
-                            cx.stop_propagation();
-                        }
+                    if phase == DispatchPhase::Capture && event.modifiers.control
+                        && zoom_handle.update(cx, |this, cx| this.grid_size_wheel(event, window, cx))
+                    {
+                        cx.stop_propagation();
                     }
                 });
             }).absolute().size_full())

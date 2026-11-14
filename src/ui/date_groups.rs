@@ -105,16 +105,16 @@ pub enum DisplayRow {
     Files(Vec<usize>),
 }
 
-pub fn row_height(row: &DisplayRow, grid: bool) -> f32 {
-    if grid && matches!(row, DisplayRow::Files(_)) {
-        crate::ui::style::grid_card_row_height()
-    } else {
-        crate::ui::style::row_height()
+/// A group header keeps the list's row height; a line of cards takes its layout's.
+pub fn row_height(row: &DisplayRow, cards: Option<crate::ui::style::CardLayout>) -> f32 {
+    match cards {
+        Some(layout) if matches!(row, DisplayRow::Files(_)) => layout.row_height(),
+        _ => crate::ui::style::row_height(),
     }
 }
 
-pub fn content_height(rows: &[DisplayRow], grid: bool) -> f32 {
-    rows.iter().map(|row| row_height(row, grid)).sum()
+pub fn content_height(rows: &[DisplayRow], cards: Option<crate::ui::style::CardLayout>) -> f32 {
+    rows.iter().map(|row| row_height(row, cards)).sum()
 }
 
 pub fn visible_indices(rows: &[DisplayRow]) -> Vec<usize> {

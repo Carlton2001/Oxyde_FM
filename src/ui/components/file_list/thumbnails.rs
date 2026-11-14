@@ -47,12 +47,15 @@ impl Asset for GridThumbnailAsset {
     }
 }
 
+/// The thumbnail fills its card's area (`CardSpec::thumbnail_*`) at its proportions;
+/// until it loads, or without one, the card's icon shows at `CardSpec::icon`.
 pub(crate) fn render_grid_thumbnail(
     file: &oxyde_lib::models::FileEntry,
     pane_id: &str,
     fallback_icon: crate::ui::components::icons::IconType,
     theme: OxydeTheme,
     system: bool,
+    spec: crate::ui::style::CardSpec,
 ) -> impl IntoElement {
     let path = file.path.clone();
     let fallback_path = path.clone();
@@ -67,15 +70,14 @@ pub(crate) fn render_grid_thumbnail(
         result
     })
     .id(SharedString::from(format!("grid-thumbnail-{path}")))
-    // Stay inside the card's 4.25rem icon area, clear of the name below.
-    .w(rems(5.0))
-    .h(rems(3.75))
+    .w(spec.thumbnail_width)
+    .h(spec.thumbnail_height)
     .object_fit(ObjectFit::Contain)
     .with_fallback(move || {
         render_file_icon(
             fallback_path.clone(),
             fallback_icon,
-            rems(4.0),
+            spec.icon,
             &theme,
             system,
             true,

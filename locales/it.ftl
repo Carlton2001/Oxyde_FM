@@ -117,6 +117,8 @@ status-files = { $count ->
 view-details = Vista dettagli
 
 view-grid = Vista griglia
+view-tiles = Vista a riquadri
+grid-card-size = Dimensione degli elementi
 
 selected-files = { $count ->
     [one] { $number } file selezionato ({ $size })
@@ -1193,6 +1195,7 @@ group-code = Codice e script
 group-other = Altri
 group-disk-images = Immagini disco
 mouse-right-click = Clic destro
+mouse-ctrl-wheel = Ctrl+rotellina
 grouping-current = Raggruppato per: { $mode }
 group-size = Dimensione
 group-extension = Estensione

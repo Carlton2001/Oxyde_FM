@@ -52,10 +52,8 @@ impl OxydeApp {
         self.toggle_selection(&pane_id, path, false, false, cx);
         if let Some(pane) = self.state.find_pane(&pane_id) {
             let tab = pane.active_tab();
-            let columns = if tab.view_mode == crate::ui::workspace::ViewMode::Grid {
-                let width = self.list_bounds.get(&pane_id).map_or(self.list_width, |bounds| bounds.size.width);
-                crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::track_width()).columns
-            } else { 1 };
+            let width = self.list_bounds.get(&pane_id).map_or(self.list_width, |bounds| bounds.size.width);
+            let columns = tab.card_columns(width);
             let rows = display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, columns);
             scroll_row_into_view(tab, &rows, index);
         }

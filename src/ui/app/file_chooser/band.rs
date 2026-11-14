@@ -82,7 +82,7 @@ impl FileChooserWindow {
         let bounds = self.entries_bounds.get();
         let grid = self.options.grid;
         let header = if grid { 0.0 } else { crate::ui::style::column_header_height() };
-        let row_height = if grid { crate::ui::style::grid_card_row_height() } else { crate::ui::style::row_height() };
+        let row_height = if grid { crate::ui::style::CardLayout::grid().row_height() } else { crate::ui::style::row_height() };
         let columns = if grid { self.grid_geometry().columns.max(1) } else { 1 };
         let rows = self.shown.len().div_ceil(columns);
         let scroll = self.entries_scroll();

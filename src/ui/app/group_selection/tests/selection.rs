@@ -18,7 +18,7 @@ fn fixture() -> TabState {
     tab
 }
 fn state(tab: &TabState, group: &GroupKey) -> GroupSelection {
-    let presentation = tab.presentation(false, 1);
+    let presentation = tab.presentation(None, 1);
     GroupSelection::for_members(
         &presentation.files,
         &presentation.groups[group],
@@ -68,7 +68,7 @@ fn collapsed_groups_retain_members_in_both_presentations() {
     let archives = GroupKey::Family(FileFamily::Archives);
     tab.collapsed_groups.insert(archives.clone());
     for grid in [false, true] {
-        let presentation = tab.presentation(grid, if grid { 3 } else { 1 });
+        let presentation = tab.presentation(grid.then_some(crate::ui::style::CardLayout::Grid(crate::ui::style::GridSize::Medium)), if grid { 3 } else { 1 });
         let indices = &presentation.groups[&archives];
         assert_eq!(indices.len(), 2);
         assert!(presentation
@@ -99,9 +99,9 @@ fn filtered_out_files_are_not_selected_or_deselected_with_the_group() {
 fn selection_changes_reuse_member_snapshot_and_no_grouping_is_a_noop() {
     let mut tab = fixture();
     let archives = GroupKey::Family(FileFamily::Archives);
-    let before = tab.presentation(false, 1);
+    let before = tab.presentation(None, 1);
     toggle_group(&mut tab, &archives);
-    let after = tab.presentation(false, 1);
+    let after = tab.presentation(None, 1);
     assert!(Arc::ptr_eq(&before, &after));
     tab.group_mode = GroupMode::None;
     toggle_group(&mut tab, &archives);

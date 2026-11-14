@@ -545,14 +545,14 @@ impl OxydeApp {
                         .iter()
                         .position(|file| file.path == path)
                     {
-                        let grid = matches!(tab.view_mode, crate::ui::workspace::ViewMode::Grid);
-                        let columns = if grid { crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::track_width()).columns } else { 1 };
+                        let cards = tab.view_mode.cards();
+                        let columns = tab.card_columns(width);
                         let file = &tab.filtered_files()[index];
                         tab.collapsed_groups.remove(&crate::ui::date_groups::group_for_file(file, tab.grouping(), chrono::Local::now().date_naive()));
                         let rows = crate::ui::date_groups::display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, columns);
                         if let Some(row) = rows.iter().position(|row| matches!(row, crate::ui::date_groups::DisplayRow::Files(indices) if indices.contains(&index))) {
-                            if grid {
-                                let y = crate::ui::date_groups::content_height(&rows[..row], true);
+                            if cards.is_some() {
+                                let y = crate::ui::date_groups::content_height(&rows[..row], cards);
                                 tab.list_scroll.0.borrow().base_handle.set_offset(point(px(0.0), px(-y)));
                             } else {
                                 tab.list_scroll.scroll_to_item(row, gpui::ScrollStrategy::Top);
@@ -575,9 +575,7 @@ pub(super) fn reveal_renamed_item(tab: &mut crate::ui::workspace::TabState, widt
     let Some(index) = tab.filtered_files().iter().position(|file| file.path == path) else { return; };
     let group = crate::ui::date_groups::group_for_file(&tab.filtered_files()[index], tab.grouping(), chrono::Local::now().date_naive());
     tab.collapsed_groups.remove(&group);
-    let columns = if tab.view_mode == crate::ui::workspace::ViewMode::Grid {
-        crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::track_width()).columns
-    } else { 1 };
+    let columns = tab.card_columns(width);
     let rows = crate::ui::date_groups::display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, columns);
     super::selection::scroll_row_into_view(tab, &rows, index);
 }

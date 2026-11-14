@@ -1,13 +1,13 @@
-use super::presentation::{file_type_display, network_category, network_entry, selection_checkbox, size_loading};
-use super::thumbnails::render_grid_thumbnail;
+use super::card_body::{self, CardBody};
+use super::presentation::selection_checkbox;
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, FileDragData, FileDragPreview, FileDropTargetExt, OxydeApp};
 use crate::ui::components::{with_grid_sort, oxyde_context_menu_items};
 use crate::ui::paths::paths_match;
-use crate::ui::components::icons::render_file_icon;
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::components::tooltip::hover::SharedTooltipExt;
-use crate::ui::i18n::{I18nContext, Message};
-use crate::ui::scale::logical;
+use crate::ui::i18n::I18nContext;
+use crate::ui::scale::{logical, rem_pixels};
+use crate::ui::style::{CardLayout, CARD_BORDER, CARD_MARGIN};
 use crate::ui::theme::OxydeTheme;
 use gpui::prelude::*;
 use gpui::*;
@@ -38,6 +38,9 @@ pub(super) struct GridCardParams<'a> {
     pub(super) show_grid_thumbnails: bool,
     pub(super) use_system_icons: bool,
     pub(super) show_checkboxes: bool,
+    pub(super) layout: CardLayout,
+    /// The card is under the pointer or selected alone: a grid card shows its whole name.
+    pub(super) expanded: bool,
 }
 
 pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stateful<Div> {
@@ -66,7 +69,18 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
         show_grid_thumbnails,
         use_system_icons,
         show_checkboxes,
+        layout,
+        expanded,
     } = params;
+    let grid = matches!(layout, CardLayout::Grid(_));
+    let pane_fill = if active { theme.active_background } else { theme.background };
+    let border = if has_rename_error {
+        theme.error
+    } else if is_selected {
+        theme.accent
+    } else {
+        theme.border.opacity(0.0)
+    };
     let can_browse = is_dir || file.is_navigable_archive() || file.needs_mount_for_browsing();
     let can_drop = is_dir || file.is_writable_archive();
     let loading_size = calculating_sizes && is_dir && !file.is_calculated;
@@ -79,30 +93,12 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
             ).absolute().left(rems(0.0625)).right(rems(0.0625)).top(rems(0.0625)).bottom(rems(0.0625))
         ))
         .w(px(card_width - logical(4.0)))
-        .h(px(crate::ui::style::grid_card_row_height() - logical(4.0)))
-        .m_0p5()
-        .p_1()
-        .flex()
-        .flex_col()
-        .items_center()
-        .justify_center()
-        .gap_0p5()
+        .h(px(layout.row_height() - 2.0 * rem_pixels(CARD_MARGIN).as_f32()))
+        .m(CARD_MARGIN)
         .rounded_md()
-        .border(rems(0.0625))
-        .border_color(if has_rename_error {
-            theme.error
-        } else if is_selected {
-            theme.accent
-        } else {
-            theme.border.opacity(0.0)
-        })
-        .bg(if is_selected {
-            theme.selected
-        } else if active {
-            theme.active_background
-        } else {
-            theme.background
-        })
+        .border(CARD_BORDER)
+        .border_color(border)
+        .bg(if is_selected { theme.selected } else { pane_fill })
         .group("file-grid-card")
         .relative().when(!is_selected, |d| d.hover(|d| d.bg(theme.hover)))
         .when(show_tooltips, |d| d.file_tooltip(h.clone(), pid.clone(), path.clone(), cx, Tooltip::for_item(file.clone(), search_results, show_media_previews, provisional_size)))
@@ -241,105 +237,31 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
             },
         )
         .external_drag_payload(crate::ui::app::outgoing_drag(h.clone()))
-        .child(
-            div()
-                .relative()
-                .w_full()
-                .h(rems(4.25))
-                .when(file.is_hidden || file.is_system, |d| d.opacity(0.75))
-                .child(
-                    div()
-                        .absolute()
-                        .inset_0()
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .when(loading_size, |icon| icon.opacity(0.3))
-                        .child(if show_grid_thumbnails
-                            && !is_dir
-                            && super::thumbnails::supports_thumbnail(file)
-                        {
-                            render_grid_thumbnail(file, &pid, icon, theme, use_system_icons).into_any_element()
-                        } else {
-                            render_file_icon(path.clone(), icon, rems(4.0), &theme, use_system_icons, true)
-                        }),
-                )
-                .when(loading_size, |area| {
-                    area.child(
-                        div()
-                            .absolute()
-                            .inset_0()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .child(size_loading(&path, theme.accent)),
-                    )
-                })
-                .when(has_subdirectories, |row| {
-                    row.child(
-                        div()
-                            .absolute()
-                            .right_0()
-                            .top_0()
-                            .h_full()
-                            .flex()
-                            .items_center()
-                            .child(svg().path("icons/chevron-right.svg").size_3().text_color(theme.text).opacity(0.5)),
-                    )
-                }),
-        )
-        .child(
-            div()
-                .w_full()
-                .px_1()
-                .text_center()
-                .text_size(rems(0.75))
-                .text_color(theme.text)
-                .h(rems(1.125))
-                .text_ellipsis()
-                .overflow_hidden()
-                .when(file.is_hidden || file.is_system, |d| d.opacity(0.75))
-                .child(match editing_view {
-                    Some(editing_view) => {
-                        editing_view.into_any_element()
-                    }
-                    None => {
-                        let h_click = h.clone();
-                        let click_path = path.clone();
-                        div()
-                            .id(SharedString::from(format!("rename-name-{path}")))
-                            .font_weight(FontWeight::MEDIUM)
-                            .child(name.clone())
-                            .on_click(move |event, window, cx| {
-                                h_click.update(cx, |this, cx| {
-                                    this.handle_slow_rename_click(
-                                        click_path.clone(),
-                                        is_dir,
-                                        event,
-                                        window,
-                                        cx,
-                                    );
-                                });
-                            })
-                            .into_any_element()
-                    }
-                }),
-        )
-        .child(
-            div()
-                .id(SharedString::from(format!("size-provisional-grid-{path}")))
-                .text_size(rems(0.625))
-                .text_color(if provisional_size { theme.accent } else { theme.text_muted })
-                .text_ellipsis()
-                .when(file.is_hidden || file.is_system, |d| d.opacity(0.75))
-                .child(if network_entry(file) {
-                    network_category(file, cx.i18n())
-                } else if file.is_dir {
-                    cx.i18n().text(Message::FileTypeFolder).to_uppercase()
-                } else {
-                    file_type_display(file, cx.i18n())
-                }),
-        );
+        .when(grid, |card| card.child(hover_tracker(&h, &pid, &path)));
+    let body = CardBody {
+        file,
+        path: path.clone(),
+        name,
+        is_dir,
+        has_subdirectories,
+        is_selected,
+        h: h.clone(),
+        pid: pid.clone(),
+        icon,
+        editing_view,
+        theme,
+        loading_size,
+        provisional_size,
+        show_grid_thumbnails,
+        use_system_icons,
+        show_checkboxes,
+        expanded,
+        border,
+        // A hovered card's fill replaces its own; the overlay lays it over the pane's.
+        fill: if is_selected { theme.selected } else if expanded { theme.hover } else { pane_fill },
+        pane_fill,
+    };
+    card = if grid { card_body::grid(card, body, layout, cx) } else { card_body::tile(card, body, layout, cx) };
     if can_drop {
         card = card
             .external_file_drop(h.clone(), path.clone())
@@ -377,9 +299,22 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                 }
             });
     }
-    card.when(show_checkboxes, |d| d.child(
+    card.when(grid && show_checkboxes, |d| d.child(
         div().absolute().top(rems(0.375)).left(rems(0.375))
             .when(!is_selected, |d| d.opacity(0.0).group_hover("file-grid-card", |s| s.opacity(1.0)))
             .child(selection_checkbox(is_selected, path.clone(), pid.clone(), h.clone(), theme))
     ))
+}
+
+/// Notes the card under the pointer, whose whole name then shows. GPUI keeps one hover
+/// listener per element and the card's own holds its tooltip.
+fn hover_tracker(h: &Entity<OxydeApp>, pane_id: &str, path: &str) -> Stateful<Div> {
+    let (h, pane_id, path) = (h.clone(), pane_id.to_string(), path.to_string());
+    div()
+        .id(SharedString::from(format!("file-card-hover-{path}")))
+        .absolute()
+        .inset_0()
+        .on_hover(move |hovered, _, cx| {
+            h.update(cx, |this, cx| this.set_hovered_card(&pane_id, &path, *hovered, cx));
+        })
 }

@@ -15,12 +15,12 @@ fn repeated_large_pane_snapshots_reuse_files_rows_and_geometry() {
             .collect::<Vec<_>>()
             .into();
         tab.update_cache();
-        let initial = tab.presentation(false, 1);
+        let initial = tab.presentation(None, 1);
         let second = tab.clone();
         let started = Instant::now();
         for _ in 0..1000 {
-            assert!(Arc::ptr_eq(&initial, &tab.presentation(false, 1)));
-            assert!(Arc::ptr_eq(&initial, &second.presentation(false, 1)));
+            assert!(Arc::ptr_eq(&initial, &tab.presentation(None, 1)));
+            assert!(Arc::ptr_eq(&initial, &second.presentation(None, 1)));
         }
         let reuse = started.elapsed();
         let started = Instant::now();
@@ -35,21 +35,21 @@ fn repeated_large_pane_snapshots_reuse_files_rows_and_geometry() {
         );
         assert!(Arc::ptr_eq(&initial.files, &tab.cached_filtered_files));
         tab.selected_paths.insert("C:/fixture/file-0".into());
-        assert!(Arc::ptr_eq(&initial, &tab.presentation(false, 1)));
-        let grid = tab.presentation(true, 4);
-        let resized = tab.presentation(true, 7);
+        assert!(Arc::ptr_eq(&initial, &tab.presentation(None, 1)));
+        let grid = tab.presentation(Some(crate::ui::style::CardLayout::Grid(crate::ui::style::GridSize::Medium)), 4);
+        let resized = tab.presentation(Some(crate::ui::style::CardLayout::Grid(crate::ui::style::GridSize::Medium)), 7);
         assert!(!Arc::ptr_eq(&grid.rows, &resized.rows));
         assert!(Arc::ptr_eq(&grid.files, &resized.files));
         tab.group_mode = crate::ui::date_groups::GroupMode::Date;
-        let grouped = tab.presentation(true, 7);
+        let grouped = tab.presentation(Some(crate::ui::style::CardLayout::Grid(crate::ui::style::GridSize::Medium)), 7);
         tab.collapsed_groups.insert(GroupKey::Date(crate::ui::date_groups::DateGroup::Older));
-        let collapsed = tab.presentation(true, 7);
+        let collapsed = tab.presentation(Some(crate::ui::style::CardLayout::Grid(crate::ui::style::GridSize::Medium)), 7);
         assert!(collapsed.rows.len() < grouped.rows.len());
         let old = Arc::downgrade(&collapsed);
         drop(collapsed);
         tab.clear_files();
         assert!(old.upgrade().is_none());
         assert_eq!(initial.files.len(), count);
-        assert!(tab.presentation(false, 1).rows.is_empty());
+        assert!(tab.presentation(None, 1).rows.is_empty());
     }
 }

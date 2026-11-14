@@ -68,17 +68,22 @@ impl TabState {
             .unwrap_or_else(|| self.path.clone())
     }
 
+    /// Entries per display row in a pane `width` wide: a line of cards, or one row.
+    pub(crate) fn card_columns(&self, width: f32) -> usize {
+        self.view_mode.cards().map_or(1, |layout| crate::ui::style::GridGeometry::for_viewport(layout, width, crate::ui::components::scrollbar::track_width()).columns)
+    }
+
     pub(crate) fn reveal_pending_item(&mut self, width: f32) {
         let Some(path) = self.pending_reveal.take() else { return; };
         let Some(index) = self.filtered_files().iter().position(|file| file.path == path) else { return; };
         let group = crate::ui::date_groups::group_for_file(&self.filtered_files()[index], self.grouping(), chrono::Local::now().date_naive());
         self.collapsed_groups.remove(&group);
-        let grid = self.view_mode == ViewMode::Grid;
-        let columns = if grid { crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::track_width()).columns } else { 1 };
+        let cards = self.view_mode.cards();
+        let columns = self.card_columns(width);
         let rows = crate::ui::date_groups::display_rows(self.filtered_files(), self.grouping(), &self.collapsed_groups, columns);
         if let Some(row) = rows.iter().position(|row| matches!(row, crate::ui::date_groups::DisplayRow::Files(indices) if indices.contains(&index))) {
-            if grid {
-                let y = crate::ui::date_groups::content_height(&rows[..row], true);
+            if cards.is_some() {
+                let y = crate::ui::date_groups::content_height(&rows[..row], cards);
                 self.list_scroll.0.borrow().base_handle.set_offset(gpui::point(gpui::px(0.0), gpui::px(-y)));
             } else { self.list_scroll.scroll_to_item(row, gpui::ScrollStrategy::Top); }
         }

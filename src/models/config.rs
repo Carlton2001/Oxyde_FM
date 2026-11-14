@@ -71,6 +71,9 @@ pub struct AppConfig {
     pub default_turbo_mode: bool,
     #[serde(default)]
     pub show_grid_thumbnails: bool,
+    /// Card size of the grid view, `small` or `large`; empty for the default.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub grid_size: String,
     #[serde(default)]
     pub show_checkboxes: bool,
     /// Octal Permissions column of the details view, offered on Unix only.
@@ -153,6 +156,7 @@ impl Default for AppConfig {
             search_limit: 3000,
             default_turbo_mode: true,
             show_grid_thumbnails: false,
+            grid_size: String::new(),
             show_checkboxes: false,
             show_permissions_column: false,
             sync_sidebar_with_path: false,

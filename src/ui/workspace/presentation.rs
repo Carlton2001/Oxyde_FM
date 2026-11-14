@@ -11,7 +11,7 @@ pub(crate) struct Presentation {
     pub heights: Vec<f32>,
     pub folders: usize,
     pub histogram_total: u64,
-    grid: bool,
+    cards: Option<crate::ui::style::CardLayout>,
     columns: usize,
     grouped: crate::ui::date_groups::GroupMode,
     collapsed: HashSet<GroupKey>,
@@ -21,15 +21,15 @@ pub(crate) struct Presentation {
 }
 
 impl TabState {
-    pub(crate) fn presentation(&self, grid: bool, columns: usize) -> Arc<Presentation> {
+    pub(crate) fn presentation(&self, cards: Option<crate::ui::style::CardLayout>, columns: usize) -> Arc<Presentation> {
         let columns = columns.max(1);
         let calendar = self.grouping().is_calendar().then(CalendarReference::current);
         let row_height = crate::ui::style::row_height();
-        let grid_height = crate::ui::style::grid_card_row_height();
+        let grid_height = cards.map_or(0.0, |layout| layout.row_height());
         let mut cache = self.presentation_cache.borrow_mut();
         if let Some(previous) = cache.as_ref() {
             if Arc::ptr_eq(&previous.files, &self.cached_filtered_files)
-                && previous.grid == grid
+                && previous.cards == cards
                 && previous.columns == columns
                 && previous.grouped == self.grouping()
                 && previous.collapsed == self.collapsed_groups
@@ -47,7 +47,7 @@ impl TabState {
         let mut heights = Vec::with_capacity(rows.len() + 1);
         heights.push(0.0);
         for row in rows.iter() {
-            heights.push(heights.last().unwrap() + crate::ui::date_groups::row_height(row, grid));
+            heights.push(heights.last().unwrap() + crate::ui::date_groups::row_height(row, cards));
         }
         let folders = files.iter().filter(|file| file.is_dir).count();
         let histogram_total = if files.iter().all(|file| !file.is_dir || file.is_calculated) {
@@ -64,7 +64,7 @@ impl TabState {
             heights,
             folders,
             histogram_total,
-            grid,
+            cards,
             columns,
             grouped: self.grouping(),
             collapsed: self.collapsed_groups.clone(),

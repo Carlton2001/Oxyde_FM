@@ -3,6 +3,9 @@ use gpui::*;
 use lazy_static::lazy_static;
 use std::sync::Arc;
 
+mod cards;
+pub use cards::*;
+
 lazy_static! {
     pub static ref TNUM: FontFeatures = FontFeatures(Arc::new(vec![("tnum".to_string(), 1)]));
 }
@@ -59,14 +62,6 @@ pub const ROW_HEIGHT: Rems = rems(1.75);
 pub fn row_height() -> f32 {
     rem_pixels(ROW_HEIGHT).as_f32()
 }
-pub const GRID_CARD_MIN_WIDTH: Rems = rems(7.25);
-pub fn grid_card_min_width() -> f32 {
-    rem_pixels(GRID_CARD_MIN_WIDTH).as_f32()
-}
-pub const GRID_CARD_ROW_HEIGHT: Rems = rems(8.5);
-pub fn grid_card_row_height() -> f32 {
-    rem_pixels(GRID_CARD_ROW_HEIGHT).as_f32()
-}
 
 pub const DETAILS_HORIZONTAL_PADDING: Rems = rems(1.75);
 pub fn details_horizontal_padding() -> f32 {
@@ -98,12 +93,13 @@ pub struct GridGeometry {
 }
 
 impl GridGeometry {
-    pub fn for_viewport(viewport: f32, scrollbar_width: f32) -> Self {
-        let columns = ((viewport - logical(20.0)) / grid_card_min_width())
+    pub fn for_viewport(layout: CardLayout, viewport: f32, scrollbar_width: f32) -> Self {
+        let min_width = layout.min_width();
+        let columns = ((viewport - logical(20.0)) / min_width)
             .floor()
             .max(1.0) as usize;
         let content_width =
-            (viewport - logical(20.0) - scrollbar_width).max(grid_card_min_width() + logical(4.0));
+            (viewport - logical(20.0) - scrollbar_width).max(min_width + logical(4.0));
         Self {
             columns,
             content_width,
@@ -191,7 +187,7 @@ pub fn h_flex() -> Div {
 
 #[cfg(test)]
 mod tests {
-    use super::{grid_card_row_height, logical, row_height, DetailsColumnWidths, GridGeometry};
+    use super::{logical, row_height, CardLayout, DetailsColumnWidths, GridGeometry, GridSize};
     use crate::ui::scale::set_reference;
 
     #[test]
@@ -236,19 +232,20 @@ mod tests {
     #[test]
     fn grid_and_detail_geometry_follow_the_reference_without_double_scaling() {
         set_reference(16);
-        let base_grid = GridGeometry::for_viewport(1000.0, logical(12.0));
+        let medium = CardLayout::Grid(GridSize::Medium);
+        let base_grid = GridGeometry::for_viewport(medium, 1000.0, logical(12.0));
         let base_columns = DetailsColumnWidths::for_viewport(600.0, 140.0, 100.0, 180.0);
         for reference in [10, 20, 24, 32] {
             set_reference(reference);
             let factor = reference as f32 / 16.0;
-            let grid = GridGeometry::for_viewport(1000.0 * factor, logical(12.0));
+            let grid = GridGeometry::for_viewport(medium, 1000.0 * factor, logical(12.0));
             assert_eq!(grid.columns, base_grid.columns);
             assert!((grid.cell_width - base_grid.cell_width * factor).abs() < 0.01);
             let columns = DetailsColumnWidths::for_viewport(600.0 * factor, 140.0, 100.0, 180.0);
             assert!((columns.total() - base_columns.total() * factor).abs() < 0.01);
             assert!((columns.name - base_columns.name * factor).abs() < 0.01);
             assert_eq!(row_height(), 28.0 * factor);
-            assert_eq!(grid_card_row_height(), 136.0 * factor);
+            assert_eq!(medium.row_height(), 126.0 * factor);
         }
         set_reference(16);
     }

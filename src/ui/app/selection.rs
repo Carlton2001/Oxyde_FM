@@ -1,7 +1,6 @@
 use crate::ui::app::{DragTarget, OxydeApp, ToutSelectionner};
 use crate::ui::scale::logical;
 
-use crate::ui::workspace::ViewMode;
 use gpui::*;
 
 /// Height of the band near each edge where rectangle selection starts scrolling.
@@ -47,11 +46,8 @@ impl OxydeApp {
         let width = self.list_bounds.get(&pane_id).map_or(self.list_width, |bounds| bounds.size.width);
         let Some(pane) = self.state.find_pane(&pane_id) else { return; };
         let tab = pane.active_tab();
-        let grid = tab.view_mode == ViewMode::Grid;
-        if !grid && matches!(key, "left" | "right") { return; }
-        let columns = if grid {
-            crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::track_width()).columns
-        } else { 1 };
+        if tab.view_mode.cards().is_none() && matches!(key, "left" | "right") { return; }
+        let columns = tab.card_columns(width);
         let rows = display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, columns);
         let file_rows: Vec<_> = rows.iter().filter_map(|row| match row {
             DisplayRow::Files(indices) => Some(indices.as_slice()), _ => None,
@@ -84,9 +80,7 @@ impl OxydeApp {
         if let Some(pane) = self.state.find_pane(&pane_id) {
             let tab = pane.active_tab();
             let Some(index) = tab.filtered_files().iter().position(|file| file.path == path) else { return; };
-            let columns = if tab.view_mode == ViewMode::Grid {
-                crate::ui::style::GridGeometry::for_viewport(width, crate::ui::components::scrollbar::track_width()).columns
-            } else { 1 };
+            let columns = tab.card_columns(width);
             let rows = display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, columns);
             scroll_row_into_view(tab, &rows, index);
         }
@@ -108,8 +102,10 @@ impl OxydeApp {
                 },
             });
             let scroll_y = tab.list_scroll.0.borrow().base_handle.offset().y.as_f32();
-            let grid_mode = tab.view_mode == ViewMode::Grid;
+            let cards = tab.view_mode.cards();
+            let grid_mode = cards.is_some();
             let grid = crate::ui::style::GridGeometry::for_viewport(
+                cards.unwrap_or(crate::ui::style::CardLayout::Tiles),
                 bounds.size.width,
                 crate::ui::components::scrollbar::track_width(),
             );
@@ -155,7 +151,7 @@ impl OxydeApp {
                 let visible_list_h = if grid_mode { bounds.size.height.max(1.0) }
                     else { (bounds.size.height - crate::ui::style::column_header_height()).max(1.0) };
                 let trailing_height = crate::ui::style::row_height();
-                let content_h = (crate::ui::date_groups::content_height(&rows, grid_mode) + trailing_height).max(1.0);
+                let content_h = (crate::ui::date_groups::content_height(&rows, cards) + trailing_height).max(1.0);
                 let max_scroll = (content_h - visible_list_h).max(0.0);
 
                 new_scroll_y = new_scroll_y.clamp(-max_scroll, 0.0);
@@ -195,7 +191,7 @@ impl OxydeApp {
                 let mut top = bounds.origin.y + scroll_y + if grid_mode { 0.0 } else { crate::ui::style::column_header_height() };
                 let mut current_rect_paths = std::collections::HashSet::new();
                 for row in &rows {
-                    let height = crate::ui::date_groups::row_height(row, grid_mode);
+                    let height = crate::ui::date_groups::row_height(row, cards);
                     if let crate::ui::date_groups::DisplayRow::Files(indices) = row {
                         for (column, index) in indices.iter().enumerate() {
                             let left = bounds.origin.x + logical(8.0) + column as f32 * card_width;
@@ -332,10 +328,10 @@ pub(crate) fn rectangle_selection<T: Clone + Eq + std::hash::Hash>(
 /// Scrolls the least distance that shows the row holding `index`.
 pub(super) fn scroll_row_into_view(tab: &crate::ui::workspace::TabState, rows: &[crate::ui::date_groups::DisplayRow], index: usize) {
     use crate::ui::date_groups::DisplayRow;
-    let grid = tab.view_mode == ViewMode::Grid;
+    let cards = tab.view_mode.cards();
     let mut top = 0.0;
     for row in rows {
-        let height = crate::ui::date_groups::row_height(row, grid);
+        let height = crate::ui::date_groups::row_height(row, cards);
         if matches!(row, DisplayRow::Files(indices) if indices.contains(&index)) {
             let handle = &tab.list_scroll.0.borrow().base_handle;
             let offset = handle.offset();

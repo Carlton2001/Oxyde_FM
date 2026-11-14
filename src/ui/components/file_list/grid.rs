@@ -14,7 +14,7 @@ use crate::ui::format::{format_number, format_size};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::scale::logical;
 use crate::ui::theme::{OxydeTheme, ThemeContext};
-use crate::ui::workspace::{TabLoadStatus, ViewMode};
+use crate::ui::workspace::TabLoadStatus;
 use crate::ui::style::TabularFigures;
 use gpui::prelude::*;
 use gpui::*;
@@ -54,10 +54,17 @@ pub(super) fn render_grid_file_list(
         .max(1.0);
     // Keep the grid inside the panel's padded viewport and leave a clear lane
     // for the overlay scrollbar, especially in the rightmost split pane.
-    let grid = crate::ui::style::GridGeometry::for_viewport(pane_width, crate::ui::components::scrollbar::track_width());
+    let layout = tab.view_mode.cards().unwrap_or_else(crate::ui::style::CardLayout::grid);
+    let grid = crate::ui::style::GridGeometry::for_viewport(layout, pane_width, crate::ui::components::scrollbar::track_width());
     let columns = grid.columns;
     let card_width = grid.cell_width - logical(4.0);
-    let presentation = tab.presentation(true, columns);
+    let presentation = tab.presentation(Some(layout), columns);
+    // A single selection shows its whole name, as the card under the pointer does,
+    // except while a rectangle selects.
+    let selecting = matches!(view.drag_target, Some(DragTarget::SelectionRectangle { .. }));
+    let hovered_card = view.hovered_card.as_ref()
+        .filter(|(pane, _)| *pane == pane_id && !selecting)
+        .map(|(_, path)| path.clone());
     let rows = presentation.rows.clone();
     let histogram_total = if tab.show_size_histogram { presentation.histogram_total } else { 0 };
     let protected_folder = matches!(&tab.load_status, TabLoadStatus::Error(Message::PathAccessDenied));
@@ -153,6 +160,7 @@ pub(super) fn render_grid_file_list(
                 let editing_view = editing_view.clone();
                 let rename_error = rename_error.clone();
                 let folder_subdirectory_flags = folder_subdirectory_flags.clone();
+                let hovered_card = hovered_card.clone();
                 move |range: std::ops::Range<usize>, cx: &mut App| {
                     range
                         .map(|row_index| {
@@ -190,6 +198,8 @@ pub(super) fn render_grid_file_list(
                                     let rename_error =
                                         inline_editing.then(|| rename_error.clone()).flatten();
                                     let has_rename_error = rename_error.is_some();
+                                    let expanded = hovered_card.as_deref() == Some(path.as_str())
+                                        || (is_selected && selected.len() == 1);
                                     render_grid_card(GridCardParams {
                                         file,
                                         path,
@@ -215,13 +225,15 @@ pub(super) fn render_grid_file_list(
                                         show_grid_thumbnails,
                                         use_system_icons,
                                         show_checkboxes,
+                                        layout,
+                                        expanded,
                                     }, cx)
                                 })
                                 .collect::<Vec<_>>();
                             div()
                                 .w_full()
                                 .flex_none()
-                                .h(px(crate::ui::style::grid_card_row_height()))
+                                .h(px(layout.row_height()))
                                 .flex()
                                 .items_start()
                                 .children(cells)
@@ -238,11 +250,15 @@ pub(super) fn render_grid_file_list(
             if scroll.offset().y.as_f32() != -offset {
                 scroll.set_offset(point(px(0.0), px(-offset)));
             }
-            let visible = super::grid_scroll::visible_prefix(&presentation.heights, tab.is_grouped(), offset, if actual_viewport > 0.0 { actual_viewport } else { viewport });
+            let visible = super::grid_scroll::visible_prefix(&presentation.heights, tab.is_grouped(), layout.row_height(), offset, if actual_viewport > 0.0 { actual_viewport } else { viewport });
             let scroll_handle = handle.clone();
             div().id(SharedString::from(if tab.is_grouped() { format!("file-grid-grouped-{pane_id}") } else { format!("file-grid-{pane_id}") }))
                 .flex_1().min_h_0().flex().flex_col().pt_1().overflow_y_scroll().track_scroll(&scroll)
-                .on_scroll_wheel(move |_, _, cx| scroll_handle.update(cx, |_, cx| cx.notify()))
+                .on_scroll_wheel(move |_, _, cx| scroll_handle.update(cx, |this, cx| {
+                    // The content moves under a still pointer: the hovered card is no longer known.
+                    this.hovered_card = None;
+                    cx.notify();
+                }))
                 .child(div().h(px(visible.top)).flex_none())
                 .children(render_rows(visible.range, cx))
                 .child(div().h(px((*presentation.heights.last().unwrap() - visible.bottom).max(0.0))).flex_none())
@@ -532,6 +548,6 @@ pub(super) fn render_grid_file_list(
                     )
                 })
                 .child(div().flex_1())
-                .child(status_actions(&pane_id, tab.show_size_histogram, tab.is_grouped(), ViewMode::Grid, status_corner, handle.clone(), theme, cx)),
+                .child(status_actions(&pane_id, tab.show_size_histogram, tab.is_grouped(), tab.view_mode, status_corner, handle.clone(), theme, cx)),
         )
 }

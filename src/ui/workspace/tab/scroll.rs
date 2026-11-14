@@ -1,6 +1,6 @@
 use crate::ui::date_groups::{display_rows, row_height, DisplayRow};
 use crate::ui::scale::rem_pixels;
-use crate::ui::workspace::{TabState, ViewMode};
+use crate::ui::workspace::TabState;
 use gpui::*;
 
 #[cfg(test)]
@@ -23,16 +23,16 @@ impl TabState {
         else {
             return;
         };
-        let grid = self.view_mode == ViewMode::Grid;
-        let columns = if grid {
+        let cards = self.view_mode.cards();
+        let grid = cards.is_some();
+        let columns = cards.map_or(1, |layout| {
             crate::ui::style::GridGeometry::for_viewport(
+                layout,
                 pane_size.width,
                 crate::ui::components::scrollbar::track_width(),
             )
             .columns
-        } else {
-            1
-        };
+        });
         let rows = display_rows(
             self.filtered_files(),
             self.grouping(),
@@ -57,7 +57,7 @@ impl TabState {
         .max(1.0);
         let mut top = 0.0;
         for row in &rows {
-            let height = row_height(row, grid);
+            let height = row_height(row, cards);
             if matches!(row, DisplayRow::Files(indices) if indices.contains(&index)) {
                 let scroll = &self.list_scroll.0.borrow().base_handle;
                 let visible_top = -scroll.offset().y.as_f32();

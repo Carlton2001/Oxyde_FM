@@ -8,6 +8,7 @@ use crate::ui::components::tooltip::hover::SharedTooltipExt;
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::scale::{logical, rem_pixels};
+use crate::ui::style::{CARD_BORDER, CARD_DETAIL_HEIGHT, CARD_MARGIN, CARD_NAME_HEIGHT, GRID_CARD_GAP, GRID_CARD_PADDING_X, GRID_CARD_PADDING_Y};
 use crate::ui::theme::{OxydeTheme, ThemeContext};
 use gpui::prelude::*;
 use gpui::*;
@@ -33,19 +34,21 @@ impl FileChooserWindow {
             Some(owner) => card.shared_tooltip(owner, super::FILES_REGION, path.clone(), cx, Tooltip::for_item(file.clone(), false, self.media_previews, false)),
             None => card,
         };
+        let spec = crate::ui::style::CardLayout::grid().spec();
+        let dimmed = file.is_hidden || file.is_system;
         card
             .relative()
             .w(px(card_width - logical(4.0)))
-            .h(px(crate::ui::style::grid_card_row_height() - logical(4.0)))
-            .m_0p5()
-            .p_1()
+            .h(px(crate::ui::style::CardLayout::grid().row_height() - 2.0 * rem_pixels(CARD_MARGIN).as_f32()))
+            .m(CARD_MARGIN)
+            .px(GRID_CARD_PADDING_X)
+            .py(GRID_CARD_PADDING_Y)
             .flex()
             .flex_col()
             .items_center()
-            .justify_center()
-            .gap_0p5()
+            .gap(GRID_CARD_GAP)
             .rounded_md()
-            .border(rems(0.0625))
+            .border(CARD_BORDER)
             .border_color(if self.rename_refused(&path) { theme.error } else if is_selected { theme.accent } else { theme.border.opacity(0.0) })
             .bg(if is_selected { theme.selected } else { theme.active_background })
             .when(!is_selected, |d| d.hover(|d| d.bg(theme.hover)))
@@ -54,8 +57,9 @@ impl FileChooserWindow {
                 div()
                     .relative()
                     .w_full()
-                    .h(rems(4.25))
-                    .when(file.is_hidden || file.is_system, |d| d.opacity(0.75))
+                    .h(spec.media)
+                    .flex_none()
+                    .when(dimmed, |d| d.opacity(0.75))
                     .child(
                         div()
                             .absolute()
@@ -64,9 +68,9 @@ impl FileChooserWindow {
                             .items_center()
                             .justify_center()
                             .child(if self.thumbnails && !is_dir && crate::ui::components::file_list::supports_thumbnail(file) {
-                                crate::ui::components::file_list::render_grid_thumbnail(file, &pane, icon, theme, self.system_icons).into_any_element()
+                                crate::ui::components::file_list::render_grid_thumbnail(file, &pane, icon, theme, self.system_icons, spec).into_any_element()
                             } else {
-                                render_file_icon(path.clone(), icon, rems(4.0), &theme, self.system_icons, true)
+                                render_file_icon(path.clone(), icon, spec.icon, &theme, self.system_icons, true)
                             }),
                     )
                     .when(has_subdirectories, |row| {
@@ -85,14 +89,14 @@ impl FileChooserWindow {
             .child(
                 div()
                     .w_full()
-                    .px_1()
                     .text_center()
                     .text_size(rems(0.75))
                     .text_color(theme.text)
-                    .h(rems(1.125))
-                    .text_ellipsis()
+                    .h(CARD_NAME_HEIGHT)
+                    .line_height(CARD_NAME_HEIGHT)
+                    .text_ellipsis_middle()
                     .overflow_hidden()
-                    .when(file.is_hidden || file.is_system, |d| d.opacity(0.75))
+                    .when(dimmed, |d| d.opacity(0.75))
                     .child(match self.render_rename(&path, None, theme, cx) {
                         Some(field) => field,
                         None => div().font_weight(FontWeight::MEDIUM).child(name).into_any_element(),
@@ -100,10 +104,15 @@ impl FileChooserWindow {
             )
             .child(
                 div()
+                    .w_full()
+                    .h(CARD_DETAIL_HEIGHT)
+                    .line_height(CARD_DETAIL_HEIGHT)
+                    .text_center()
                     .text_size(rems(0.625))
                     .text_color(theme.text_muted)
                     .text_ellipsis()
-                    .when(file.is_hidden || file.is_system, |d| d.opacity(0.75))
+                    .overflow_hidden()
+                    .when(dimmed, |d| d.opacity(0.75))
                     .child(kind),
             )
             .into_any_element()
@@ -128,7 +137,7 @@ impl FileChooserWindow {
                 .on_mouse_down(MouseButton::Left, cx.listener(|this, event, window, cx| this.press_background(event, window, cx)))
                 .into_any_element()
         } else {
-            let row_height = crate::ui::style::grid_card_row_height();
+            let row_height = crate::ui::style::CardLayout::grid().row_height();
             let rows = self.shown.len().div_ceil(columns);
             let rows_height = rows as f32 * row_height;
             let scroll = self.grid_scroll.clone();

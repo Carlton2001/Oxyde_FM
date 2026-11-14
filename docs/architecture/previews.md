@@ -101,7 +101,7 @@ The exit button appears at the slightest move and fades after two seconds still,
 
 Reused tooltips and hover previews go to the top of their owned window family at each appearance, above this surface. From the integrated panel, a temporary window hosts fullscreen and returns content to the panel on close. An existing secondary window keeps its role on leaving fullscreen.
 
-The wheel anywhere on the image's surface zooms around the pointer (1 to 32 times the fitted size); returning to 1 resets panning. Once enlarged, holding the left button pans. Changing file resets this framing. On Windows, native cursors use the official Lucide `search.svg` and `hand-grab.svg`: a magnifier briefly during zoom, a hand during drag. Ctrl+wheel keeps interface zoom.
+The wheel anywhere on the image's surface zooms around the pointer (1 to 32 times the fitted size); returning to 1 resets panning. Once enlarged, holding the left button pans. Changing file resets this framing. On Windows, native cursors use the official Lucide `search.svg` and `hand-grab.svg`: a magnifier briefly during zoom, a hand during drag. Ctrl+wheel does nothing there: it only sizes the grid's cards, over a grid.
 
 ## Caches and lifetime
 

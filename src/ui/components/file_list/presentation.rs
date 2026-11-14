@@ -182,7 +182,7 @@ pub(super) fn selection_checkbox(
 }
 
 /// The buttons closing the status bar, full-height cells parted by separators: the
-/// size bars, the grouping menu, then the switch between details and grid. The last
+/// size bars, the grouping menu, then the switch between details, tiles and grid. The last
 /// cell reaches the bar's edge: `corner` rounds it where the bar meets the window's corner.
 pub(super) fn status_actions(
     pane_id: &str,
@@ -206,7 +206,8 @@ pub(super) fn status_actions(
         .child(view_mode_switch(pane_id, active_mode, corner, handle, theme, cx))
 }
 
-/// Details and grid as two status bar cells, the current one selected.
+/// Details, tiles and grid as status bar cells, the current one selected. The grid's
+/// tooltip tells how its cards change size.
 fn view_mode_switch(
     pane_id: &str,
     active_mode: ViewMode,
@@ -218,6 +219,7 @@ fn view_mode_switch(
     let mut switch = div().h_full().flex().flex_none();
     for (mode, name, icon, tooltip) in [
         (ViewMode::Details, "details", "icons/list.svg", Message::ViewDetails),
+        (ViewMode::Tiles, "tiles", "icons/layout-list.svg", Message::ViewTiles),
         (ViewMode::Grid, "grid", "icons/layout-grid.svg", Message::ViewGrid),
     ] {
         let selected = mode == active_mode;
@@ -231,13 +233,22 @@ fn view_mode_switch(
             bar_button::fill(cell, true, selected, theme)
             // GPUI clips to rectangles: the fill rounds itself in the window's corner.
             .when(mode == ViewMode::Grid, |cell| cell.rounded_br(corner))
-            .fixed_tooltip(Tooltip::text(cx.i18n().text(tooltip)))
+            .map(|cell| if mode == ViewMode::Grid {
+                cell.fixed_tooltip(Tooltip::with_secondary_action(
+                    cx.i18n().text(tooltip),
+                    cx.i18n().text(Message::GridCardSize),
+                    cx.i18n().text(Message::MouseCtrlWheel),
+                ))
+            } else {
+                cell.fixed_tooltip(Tooltip::text(cx.i18n().text(tooltip)))
+            })
             .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                 cx.stop_propagation();
                 handle.update(cx, |this, cx| {
                     if let Some(pane) = this.state.find_pane_mut(&pane_id) {
                         pane.active_tab_mut().view_mode = mode;
                     }
+                    this.hovered_card = None;
                     this.save_workspace(cx);
                     cx.notify();
                 });
