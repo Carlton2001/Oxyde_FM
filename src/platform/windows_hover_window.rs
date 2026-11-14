@@ -7,7 +7,7 @@ use std::{
 };
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::Graphics::Dwm::{
-    DwmSetWindowAttribute, DWMNCRP_DISABLED, DWMWA_CLOAK, DWMWA_NCRENDERING_POLICY, DWMWA_TRANSITIONS_FORCEDISABLED,
+    DwmSetWindowAttribute, DWMNCRP_DISABLED, DWMWA_CLOAK, DWMWA_NCRENDERING_POLICY,
 };
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
@@ -290,19 +290,6 @@ unsafe extern "system" fn subclass(
                 )
             } {
                 log::warn!("Cannot disable native hover decoration: {error}");
-            }
-            // DWM animates a shown window, a growing zoom that reads as a resize: a tooltip or a
-            // menu appears at once, as native ones do.
-            let disabled = windows::core::BOOL::from(true);
-            if let Err(error) = unsafe {
-                DwmSetWindowAttribute(
-                    window,
-                    DWMWA_TRANSITIONS_FORCEDISABLED,
-                    std::ptr::from_ref(&disabled).cast(),
-                    std::mem::size_of_val(&disabled) as u32,
-                )
-            } {
-                log::warn!("Cannot disable hover window transitions: {error}");
             }
             // Ownership supplies stacking without being globally topmost.
             // Run outside the GPUI App borrow, just like movement and resize.
@@ -592,11 +579,6 @@ fn place_now(window: HWND, size: Option<(f32, f32, f32)>, scale: f32) -> Result<
             );
             if shown.is_ok() {
                 SendMessageW(window, WM_PAINT, None, None);
-                // Until DWM has taken that frame: uncloaked sooner, it composes the swap chain's
-                // previous image, the last tooltip, for a frame.
-                if let Err(error) = windows::Win32::Graphics::Dwm::DwmFlush() {
-                    log::warn!("Cannot wait for hover window composition: {error}");
-                }
             }
             cloak(window, false);
             CLOAKED.with(|cloaked| cloaked.borrow_mut().remove(&(window.0 as isize)));
