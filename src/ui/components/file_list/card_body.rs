@@ -14,7 +14,7 @@ use oxyde_lib::models::FileEntry;
 
 /// The radius of `rounded_md`, which the card and its name's overlay share.
 const CARD_RADIUS: Rems = rems(0.375);
-/// Lines a long name takes in its overlay before it is cut in the middle.
+/// Lines a long name takes in its overlay before it is cut.
 const NAME_OVERLAY_LINES: usize = 4;
 
 pub(super) struct CardBody<'a> {
@@ -194,7 +194,8 @@ fn name_overlay(body: &CardBody<'_>, spec: CardSpec, kind: String) -> impl IntoE
                 .font_weight(FontWeight::MEDIUM)
                 .text_color(body.theme.text)
                 .line_clamp(NAME_OVERLAY_LINES)
-                .text_ellipsis_middle()
+                // GPUI cuts a middle ellipsis to a single line, even with several allowed.
+                .text_ellipsis()
                 .when(body.dimmed(), |d| d.opacity(0.75))
                 .child(body.name.clone()))
             .child(body.kind_line(kind).relative().text_center()),
