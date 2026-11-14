@@ -682,21 +682,19 @@ advanced-settings = Impostazioni
 
 advanced-help = Aiuto
 
-advanced-search-for = Cerca
+advanced-search-for = Nome
 
-advanced-search-for-placeholder = *.* o nomefile.txt
+advanced-search-for-placeholder = *.pdf o rapporto
 
-advanced-search-in = Cerca in
+advanced-search-in = Cartella
 
-advanced-search-subfolders = Cerca nelle sottocartelle
+advanced-search-subfolders = Sottocartelle
 
-advanced-search-in-archives = Cerca negli archivi
+advanced-search-in-archives = Archivi
 
-advanced-find-text = Trova testo nel file
+advanced-find-text = Contenuto
 
-advanced-find-text-placeholder = Cerca nei contenuti (non binari)...
-
-advanced-global-options = Opzioni globali
+advanced-find-text-placeholder = Testo nei file non binari
 
 advanced-case-sensitive = Distingui maiuscole
 
@@ -706,57 +704,39 @@ advanced-reset = Ripristina
 
 advanced-search = Cerca
 
-advanced-regex-help-title = Modelli comuni
+advanced-regex-help-title = Espressioni regolari
+
+advanced-section-location = Posizione
+
+advanced-section-filters = Filtri
+
+advanced-wildcards-title = Caratteri jolly (senza espressione regolare)
+
+advanced-help-any-sequence = Qualsiasi sequenza
+
+advanced-help-one-char = Un carattere qualsiasi
+
+advanced-help-literal-dot = Un punto letterale
+
+advanced-help-digit = Una cifra
+
+advanced-help-one-or-more = Una o più volte
+
+advanced-help-optional = Facoltativo
+
+advanced-help-start-end = Inizio / fine del nome
+
+advanced-help-either-or = L'uno o l'altro
+
+advanced-help-one-of = Uno di questi
+
+advanced-help-none-of = Nessuno di questi
+
+advanced-help-count = Esattamente n volte
+
+advanced-help-use-example = Usa questo esempio
 
 advanced-use-regex = Espressione regolare
-
-advanced-regex-any-char = Qualsiasi carattere
-
-advanced-regex-any-char-desc = Corrisponde a qualsiasi carattere singolo. Esempio: "b.t" trova "bat", "bit", "but".
-
-advanced-regex-digit = Cifre
-
-advanced-regex-digit-desc = Corrisponde a qualsiasi numero da 0 a 9.
-
-advanced-regex-word-char = Caratteri alfanumerici
-
-advanced-regex-word-char-desc = Corrisponde a lettere, numeri e trattini bassi.
-
-advanced-regex-start-line = Inizio riga
-
-advanced-regex-start-line-desc = Corrisponde solo all'inizio del nome.
-
-advanced-regex-end-line = Fine riga
-
-advanced-regex-end-line-desc = Corrisponde solo alla fine del nome.
-
-advanced-regex-one-or-more = Uno o più
-
-advanced-regex-one-or-more-desc = Corrisponde a una o più occorrenze del carattere precedente.
-
-advanced-regex-optional = Opzionale
-
-advanced-regex-optional-desc = Corrisponde a zero o una occorrenza del carattere precedente.
-
-advanced-regex-either-or = O l'uno o l'altro
-
-advanced-regex-either-or-desc = Corrisponde alla parte sinistra o destra.
-
-advanced-regex-range = Intervallo caratteri
-
-advanced-regex-range-desc = Corrisponde a qualsiasi carattere tra le parentesi quadre.
-
-advanced-regex-negated-set = Insieme negato
-
-advanced-regex-negated-set-desc = Corrisponde a qualsiasi carattere NON presente tra le parentesi.
-
-advanced-regex-group = Gruppo
-
-advanced-regex-group-desc = Raggruppa più simboli.
-
-advanced-regex-count-exact = Conteggio esatto
-
-advanced-regex-count-exact-desc = Corrisponde esattamente n volte.
 
 advanced-size = Dimensione
 

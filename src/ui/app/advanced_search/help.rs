@@ -1,4 +1,5 @@
 use super::AdvancedSearchWindow;
+use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::{
     components::scrollbar::{render_scrollbar_with_pointer, ScrollbarAxis},
     i18n::{I18nContext, Message},
@@ -7,7 +8,108 @@ use crate::ui::{
 use gpui::prelude::*;
 use gpui::*;
 
+/// Name-field syntax without a regular expression: the pattern, its meaning, an example.
+const WILDCARDS: [(&str, Message, &str); 2] = [
+    ("*", Message::AdvancedHelpAnySequence, "*.pdf"),
+    ("?", Message::AdvancedHelpOneChar, "photo?.jpg"),
+];
+
+/// Regular expressions match anywhere in the name unless anchored.
+const REGEX: [(&str, Message, &str); 11] = [
+    (".", Message::AdvancedHelpOneChar, "t.t"),
+    (".*", Message::AdvancedHelpAnySequence, "IMG.*2024"),
+    (r"\.", Message::AdvancedHelpLiteralDot, r"\.txt$"),
+    (r"\d", Message::AdvancedHelpDigit, r"IMG_\d"),
+    ("+", Message::AdvancedHelpOneOrMore, r"IMG_\d+"),
+    ("?", Message::AdvancedHelpOptional, r"\.jpe?g$"),
+    ("^  $", Message::AdvancedHelpStartEnd, "^IMG"),
+    ("a|b", Message::AdvancedHelpEitherOr, r"\.(jpg|png)$"),
+    ("[abc]", Message::AdvancedHelpOneOf, "v[0-9]"),
+    ("[^abc]", Message::AdvancedHelpNoneOf, "^[^.]+$"),
+    ("x{n}", Message::AdvancedHelpCount, r"\d{4}"),
+];
+
+fn help_heading(title: SharedString, cx: &App) -> Div {
+    div()
+        .flex()
+        .flex_none()
+        .items_center()
+        .justify_between()
+        .pb(rems(0.25))
+        .mb(rems(0.25))
+        .border_b(rems(0.0625))
+        .border_color(cx.theme().border)
+        .text_color(cx.theme().text_muted)
+        .child(title)
+}
+
+/// A pattern, its meaning, and an example that fills the name field when clicked.
+fn help_row(
+    index: usize,
+    pattern: &'static str,
+    label: Message,
+    example: &'static str,
+    regex: bool,
+    handle: Entity<AdvancedSearchWindow>,
+    cx: &App,
+) -> Div {
+    let theme = *cx.theme();
+    div()
+        .flex()
+        .flex_none()
+        .w_full()
+        .min_w_0()
+        .items_center()
+        .gap(rems(0.75))
+        .py(rems(0.1875))
+        .child(
+            div()
+                .w(rems(3.5))
+                .flex_none()
+                .font_family("JetBrains Mono")
+                .text_color(theme.accent)
+                .child(pattern),
+        )
+        .child(div().flex_1().min_w_0().truncate().child(cx.i18n().text(label)))
+        .child(
+            div()
+                .id(("advanced-help-example", index))
+                .flex_none()
+                .px(rems(0.5))
+                .py(rems(0.125))
+                .rounded_md()
+                .bg(theme.header)
+                .border(rems(0.0625))
+                .border_color(theme.border)
+                .font_family("JetBrains Mono")
+                .hover(move |style| style.bg(theme.control_hover))
+                .child(example)
+                .fixed_tooltip(crate::ui::components::tooltip::Tooltip::text(
+                    cx.i18n().text(Message::AdvancedHelpUseExample),
+                ))
+                .on_click(move |_, window, cx| {
+                    handle.update(cx, |this, cx| this.use_help_example(example, regex, window, cx));
+                }),
+        )
+}
+
 impl AdvancedSearchWindow {
+    /// Puts the example in the name field, with the matching syntax, and returns to it.
+    fn use_help_example(&mut self, example: &str, regex: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(d) = &mut self.advanced_search else {
+            return;
+        };
+        d.flags[0] = regex;
+        d.help = false;
+        d.error = false;
+        d.values[0] = example.into();
+        let input = d.inputs[0].clone();
+        input.update(cx, |input, cx| input.set_content(example.to_string(), cx));
+        let focus = input.read(cx).focus_handle.clone();
+        window.focus(&focus, cx);
+        cx.notify();
+    }
+
     fn drag_advanced_help(&mut self, position: Point<Pixels>, cx: &mut App) {
         let Some(d) = &mut self.advanced_search else {
             return;
@@ -34,54 +136,24 @@ impl AdvancedSearchWindow {
     ) -> Div {
         let d = self.advanced_search.as_ref().unwrap();
         let theme = *cx.theme();
-        let patterns = [
-            ".", "\\d", "\\w", "^", "$", "+", "?", "|", "[abc]", "[^abc]", "()", "{n}",
-        ];
-        let labels = [
-            Message::AdvancedRegexAnyChar,
-            Message::AdvancedRegexDigit,
-            Message::AdvancedRegexWordChar,
-            Message::AdvancedRegexStartLine,
-            Message::AdvancedRegexEndLine,
-            Message::AdvancedRegexOneOrMore,
-            Message::AdvancedRegexOptional,
-            Message::AdvancedRegexEitherOr,
-            Message::AdvancedRegexRange,
-            Message::AdvancedRegexNegatedSet,
-            Message::AdvancedRegexGroup,
-            Message::AdvancedRegexCountExact,
-        ];
-        let descriptions = [
-            Message::AdvancedRegexAnyCharDesc,
-            Message::AdvancedRegexDigitDesc,
-            Message::AdvancedRegexWordCharDesc,
-            Message::AdvancedRegexStartLineDesc,
-            Message::AdvancedRegexEndLineDesc,
-            Message::AdvancedRegexOneOrMoreDesc,
-            Message::AdvancedRegexOptionalDesc,
-            Message::AdvancedRegexEitherOrDesc,
-            Message::AdvancedRegexRangeDesc,
-            Message::AdvancedRegexNegatedSetDesc,
-            Message::AdvancedRegexGroupDesc,
-            Message::AdvancedRegexCountExactDesc,
-        ];
-        body = body.child(
-            div()
-                .flex()
-                .justify_between()
-                .child(
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap(rems(0.5))
-                        .child(
-                            svg()
-                                .path("icons/code.svg")
-                                .size(rems(0.875))
-                                .text_color(theme.text),
-                        )
-                        .child(cx.i18n().text(Message::AdvancedRegexHelpTitle)),
-                )
+        let refresh = handle.clone();
+        let mut rows = div()
+            .id("advanced-help-scroll")
+            .h_full()
+            .w_full()
+            .pr(rems(0.75))
+            .track_scroll(&d.help_scroll)
+            .overflow_y_scroll()
+            .flex()
+            .flex_col()
+            .on_scroll_wheel(move |_, _, cx| refresh.update(cx, |_, cx| cx.notify()))
+            .child(help_heading(cx.i18n().text(Message::AdvancedWildcardsTitle), cx));
+        for (index, &(pattern, label, example)) in WILDCARDS.iter().enumerate() {
+            rows = rows.child(help_row(index, pattern, label, example, false, handle.clone(), cx));
+        }
+        rows = rows.child(
+            help_heading(cx.i18n().text(Message::AdvancedRegexHelpTitle), cx)
+                .mt(rems(0.75))
                 .child(
                     div()
                         .id("regex-link")
@@ -105,59 +177,8 @@ impl AdvancedSearchWindow {
                         }),
                 ),
         );
-        let refresh = handle.clone();
-        let mut rows = div()
-            .id("advanced-help-scroll")
-            .h_full()
-            .w_full()
-            .pr(rems(0.75))
-            .track_scroll(&d.help_scroll)
-            .overflow_y_scroll()
-            .flex()
-            .flex_col()
-            .on_scroll_wheel(move |_, _, cx| refresh.update(cx, |_, cx| cx.notify()));
-        for i in 0..patterns.len() {
-            rows = rows.child(
-                div()
-                    .flex()
-                    .flex_none()
-                    .w_full()
-                    .min_w_0()
-                    .items_center()
-                    .gap(rems(0.75))
-                    .py(rems(0.625))
-                    .border_b(rems(0.0625))
-                    .border_color(theme.border)
-                    .child(
-                        div()
-                            .w(rems(4.0))
-                            .flex_none()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .rounded_md()
-                            .bg(theme.header)
-                            .border(rems(0.0625))
-                            .border_color(theme.border)
-                            .py(rems(0.25))
-                            .text_color(theme.accent)
-                            .child(patterns[i]),
-                    )
-                    .child(
-                        div()
-                            .w(rems(10.0))
-                            .flex_none()
-                            .child(cx.i18n().text(labels[i])),
-                    )
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .whitespace_normal()
-                            .text_color(theme.text_muted)
-                            .child(cx.i18n().text(descriptions[i])),
-                    ),
-            );
+        for (index, &(pattern, label, example)) in REGEX.iter().enumerate() {
+            rows = rows.child(help_row(WILDCARDS.len() + index, pattern, label, example, true, handle.clone(), cx));
         }
         let measure = handle.clone();
         let mouse = handle.clone();

@@ -44,6 +44,8 @@ impl OxydeApp {
                 recursive: true,
                 ..Default::default()
             });
+        // Wide enough for the text fields; short values keep their own width.
+        let rem = self.ui_rem_size() as f32;
         let owner = cx.entity().downgrade();
         let title = cx.i18n().text(Message::ToolSearch);
         // A new window draws synchronously; defer until the owner update ends.
@@ -57,7 +59,7 @@ impl OxydeApp {
                     window_decorations: crate::ui::window_decorations(),
                     window_bounds: Some(crate::ui::app::tool_geometry::restore("icons/search.svg", Bounds::new(
                         point(px(160.0), px(140.0)),
-                        size(px(760.0), px(520.0)),
+                        size(px(rem * 35.0), px(520.0)),
                     ), cx)),
                     is_resizable: false,
                     is_minimizable: false,
@@ -159,7 +161,8 @@ impl AdvancedSearchWindow {
                     },
                     TextInputOptions {
                         appearance: InputAppearance::Embedded,
-                        clearable: true,
+                        // Sizes and dates are too short to spare room for a clear button.
+                        clearable: index < 3,
                         ..Default::default()
                     },
                     window,

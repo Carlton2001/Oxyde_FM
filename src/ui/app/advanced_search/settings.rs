@@ -14,7 +14,21 @@ use gpui::prelude::*;
 use gpui::*;
 
 fn form_row(label: SharedString, value: impl IntoElement, compact: bool, cx: &App) -> impl IntoElement {
-    responsive_form_row(label, value, rems(9.0), compact, cx)
+    responsive_form_row(label, value, rems(6.5), compact, cx)
+}
+
+/// A muted title followed by a rule, separating groups of rows.
+fn section(label: SharedString, cx: &App) -> Div {
+    let theme = cx.theme();
+    div()
+        .flex()
+        .items_center()
+        .gap(rems(0.5))
+        .pt(rems(0.25))
+        .text_size(rems(0.75))
+        .text_color(theme.text_muted)
+        .child(label)
+        .child(div().flex_1().h(rems(0.0625)).bg(theme.border))
 }
 
 impl AdvancedSearchWindow {
@@ -28,81 +42,26 @@ impl AdvancedSearchWindow {
     ) -> Div {
         let d = self.advanced_search.as_ref().unwrap();
         let theme = *cx.theme();
-        let compact = window.viewport_size().width < rems(40.0).to_pixels(window.rem_size());
+        let compact = window.viewport_size().width < rems(30.0).to_pixels(window.rem_size());
         for (index, label, placeholder) in [
-            (
-                0,
-                Message::AdvancedSearchFor,
-                Message::AdvancedSearchForPlaceholder,
-            ),
-            (1, Message::AdvancedSearchIn, Message::PathPlaceholder),
-            (
-                2,
-                Message::AdvancedFindText,
-                Message::AdvancedFindTextPlaceholder,
-            ),
+            (0, Message::AdvancedSearchFor, Message::AdvancedSearchForPlaceholder),
+            (2, Message::AdvancedFindText, Message::AdvancedFindTextPlaceholder),
         ] {
-            d.inputs[index].update(cx, |input, cx| {
-                input.set_placeholder(cx.i18n().text(placeholder), cx)
-            });
-            let mut field = input::field_frame(&d.inputs[index], window, cx);
-            if index != 1 {
-                field = field.child(self.advanced_toggle(
-                    if index == 0 { 0 } else { 1 },
-                    Message::AdvancedUseRegex,
-                    true,
-                    handle.clone(),
-                    window,
-                    cx,
-                ));
-            } else {
-                field = field.child(input::field_icon("icons/folder.svg", FieldEdge::Leading, &theme));
-            }
-            let regex_enabled = match index {
-                0 => d.flags[0],
-                2 => d.flags[1],
-                _ => false,
-            };
-            field = field.child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .h_full()
-                    .font_family(if regex_enabled {
-                        "JetBrains Mono"
-                    } else {
-                        "Inter"
-                    })
-                    .child(d.inputs[index].clone()),
-            );
+            let field = self.advanced_text_field(index, placeholder, handle.clone(), window, cx);
             body = body.child(form_row(cx.i18n().text(label), field, compact, cx));
-            if index == 1 {
-                body = body.child(form_row(
-                    "".into(),
-                    div()
-                        .flex()
-                        .flex_wrap()
-                        .gap(rems(0.75))
-                        .child(self.advanced_toggle(
-                            2,
-                            Message::AdvancedSearchSubfolders,
-                            false,
-                            handle.clone(),
-                            window,
-                            cx,
-                        ))
-                        .child(self.advanced_toggle(
-                            3,
-                            Message::AdvancedSearchInArchives,
-                            false,
-                            handle.clone(),
-                            window,
-                            cx,
-                        )),
-                    compact, cx,
-                ));
-            }
         }
+        body = body.child(form_row("".into(), self.advanced_toggles(
+            [(4, Message::AdvancedCaseSensitive), (5, Message::AdvancedIgnoreAccents)],
+            handle.clone(), window, cx,
+        ), compact, cx));
+        body = body.child(section(cx.i18n().text(Message::AdvancedSectionLocation), cx));
+        let folder = self.advanced_text_field(1, Message::PathPlaceholder, handle.clone(), window, cx);
+        body = body.child(form_row(cx.i18n().text(Message::AdvancedSearchIn), folder, compact, cx));
+        body = body.child(form_row("".into(), self.advanced_toggles(
+            [(2, Message::AdvancedSearchSubfolders), (3, Message::AdvancedSearchInArchives)],
+            handle.clone(), window, cx,
+        ), compact, cx));
+        body = body.child(section(cx.i18n().text(Message::AdvancedSectionFilters), cx));
         let unit_handle = handle.clone();
         let mut unit = Some(
             crate::ui::components::select_menu::trigger("advanced-unit", units[d.unit], d.controls[8].is_focused(window), true, cx)
@@ -175,9 +134,11 @@ impl AdvancedSearchWindow {
                 if index != start && !compact {
                     fields = fields.child("–");
                 }
+                // Short values keep a width fitting them; stacked rows take the full width.
                 let mut field = input::field_frame(&d.inputs[index], window, cx)
-                    .flex_1()
-                    .when(compact, |field| field.flex_none().w_full())
+                    .flex_none()
+                    .w(if start == 5 { rems(9.5) } else { rems(5.0) })
+                    .when(compact, |field| field.w_full())
                     .min_w_0()
                     .child(
                         div()
@@ -241,31 +202,55 @@ impl AdvancedSearchWindow {
             }
             body = body.child(form_row(cx.i18n().text(label), fields, compact, cx));
         }
-        body = body.child(form_row(
-            cx.i18n().text(Message::AdvancedGlobalOptions),
-            div()
-                .flex()
-                .flex_wrap()
-                .gap(rems(0.75))
-                .child(self.advanced_toggle(
-                    4,
-                    Message::AdvancedCaseSensitive,
-                    false,
-                    handle.clone(),
-                    window,
-                    cx,
-                ))
-                .child(self.advanced_toggle(
-                    5,
-                    Message::AdvancedIgnoreAccents,
-                    false,
-                    handle.clone(),
-                    window,
-                    cx,
-                )),
-            compact, cx,
-        ));
         body
+    }
+
+    fn advanced_text_field(
+        &self,
+        index: usize,
+        placeholder: Message,
+        handle: Entity<Self>,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let d = self.advanced_search.as_ref().unwrap();
+        let theme = *cx.theme();
+        d.inputs[index].update(cx, |input, cx| {
+            input.set_placeholder(cx.i18n().text(placeholder), cx)
+        });
+        let regex = match index {
+            0 => Some(0),
+            2 => Some(1),
+            _ => None,
+        };
+        let field = input::field_frame(&d.inputs[index], window, cx);
+        let field = match regex {
+            Some(flag) => field.child(self.advanced_toggle(flag, Message::AdvancedUseRegex, true, handle, window, cx)),
+            None => field.child(input::field_icon("icons/folder.svg", FieldEdge::Leading, &theme)),
+        };
+        let mono = regex.is_some_and(|flag| d.flags[flag]);
+        field.child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .h_full()
+                .font_family(if mono { "JetBrains Mono" } else { "Inter" })
+                .child(d.inputs[index].clone()),
+        )
+    }
+
+    fn advanced_toggles(
+        &self,
+        toggles: [(usize, Message); 2],
+        handle: Entity<Self>,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let mut row = div().flex().flex_wrap().gap_x(rems(1.25)).gap_y(rems(0.5));
+        for (index, message) in toggles {
+            row = row.child(self.advanced_toggle(index, message, false, handle.clone(), window, cx));
+        }
+        row
     }
 
     fn advanced_toggle(

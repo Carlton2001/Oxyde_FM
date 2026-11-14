@@ -682,21 +682,19 @@ advanced-settings = Configuración
 
 advanced-help = Ayuda
 
-advanced-search-for = Buscar por
+advanced-search-for = Nombre
 
-advanced-search-for-placeholder = *.* o nombre.txt
+advanced-search-for-placeholder = *.pdf o informe
 
-advanced-search-in = Buscar en
+advanced-search-in = Carpeta
 
-advanced-search-subfolders = Buscar en subcarpetas
+advanced-search-subfolders = Subcarpetas
 
-advanced-search-in-archives = Buscar dentro de archivos
+advanced-search-in-archives = Archivos comprimidos
 
-advanced-find-text = Buscar texto en el archivo
+advanced-find-text = Contenido
 
-advanced-find-text-placeholder = Buscar dentro de archivos (no binarios)...
-
-advanced-global-options = Opciones globales
+advanced-find-text-placeholder = Texto en archivos no binarios
 
 advanced-case-sensitive = Distinguir mayúsculas
 
@@ -706,57 +704,39 @@ advanced-reset = Restablecer
 
 advanced-search = Buscar
 
-advanced-regex-help-title = Patrones comunes
+advanced-regex-help-title = Expresiones regulares
+
+advanced-section-location = Ubicación
+
+advanced-section-filters = Filtros
+
+advanced-wildcards-title = Comodines (sin expresión regular)
+
+advanced-help-any-sequence = Cualquier secuencia
+
+advanced-help-one-char = Un carácter cualquiera
+
+advanced-help-literal-dot = Un punto literal
+
+advanced-help-digit = Un dígito
+
+advanced-help-one-or-more = Una o más veces
+
+advanced-help-optional = Opcional
+
+advanced-help-start-end = Inicio / fin del nombre
+
+advanced-help-either-or = Uno u otro
+
+advanced-help-one-of = Uno de estos
+
+advanced-help-none-of = Ninguno de estos
+
+advanced-help-count = Exactamente n veces
+
+advanced-help-use-example = Usar este ejemplo
 
 advanced-use-regex = Expresión regular
-
-advanced-regex-any-char = Cualquier carácter
-
-advanced-regex-any-char-desc = Coincide con cualquier carácter. Ejemplo: "b.t" coincide con "bat", "bit", "but".
-
-advanced-regex-digit = Dígitos
-
-advanced-regex-digit-desc = Coincide con cualquier número del 0 al 9. Ejemplo: "archivo\d" coincide con "archivo1".
-
-advanced-regex-word-char = Caracteres de palabra
-
-advanced-regex-word-char-desc = Coincide con letras, números y guiones bajos.
-
-advanced-regex-start-line = Inicio de línea
-
-advanced-regex-start-line-desc = Coincide solo al principio del nombre.
-
-advanced-regex-end-line = Fin de línea
-
-advanced-regex-end-line-desc = Coincide solo al final del nombre.
-
-advanced-regex-one-or-more = Uno o más
-
-advanced-regex-one-or-more-desc = Coincide con uno o más del carácter anterior.
-
-advanced-regex-optional = Opcional
-
-advanced-regex-optional-desc = Coincide con cero o uno del carácter anterior.
-
-advanced-regex-either-or = Uno u otro
-
-advanced-regex-either-or-desc = Coincide con la parte izquierda o derecha.
-
-advanced-regex-range = Rango de caracteres
-
-advanced-regex-range-desc = Coincide con cualquier carácter dentro de los corchetes.
-
-advanced-regex-negated-set = Conjunto negado
-
-advanced-regex-negated-set-desc = Coincide con cualquier carácter QUE NO esté en los corchetes.
-
-advanced-regex-group = Grupo
-
-advanced-regex-group-desc = Agrupa múltiples símbolos.
-
-advanced-regex-count-exact = Recuento exacto
-
-advanced-regex-count-exact-desc = Coincide exactamente n veces.
 
 advanced-size = Tamaño
 

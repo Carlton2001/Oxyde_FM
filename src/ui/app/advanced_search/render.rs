@@ -79,7 +79,7 @@ impl AdvancedSearchWindow {
         let cancel = handle.clone();
         let submit = handle.clone();
         let keyboard = handle.clone();
-        let compact = window.viewport_size().width < rems(40.0).to_pixels(window.rem_size());
+        let compact = window.viewport_size().width < rems(30.0).to_pixels(window.rem_size());
         let height_limit = crate::ui::components::tool_window::content_height_limit(window, cx);
         let body = crate::ui::components::scroll_area::scroll_area("advanced-form-scroll-state",
             div().when(d.help, |frame| frame.flex_1()),
@@ -259,11 +259,13 @@ impl AdvancedSearchWindow {
                                     order.extend([
                                         d.controls[0].clone(),
                                         d.inputs[0].read(cx).focus_handle.clone(),
+                                        d.controls[1].clone(),
+                                        d.inputs[2].read(cx).focus_handle.clone(),
+                                        d.controls[4].clone(),
+                                        d.controls[5].clone(),
                                         d.inputs[1].read(cx).focus_handle.clone(),
                                         d.controls[2].clone(),
                                         d.controls[3].clone(),
-                                        d.controls[1].clone(),
-                                        d.inputs[2].read(cx).focus_handle.clone(),
                                         d.inputs[3].read(cx).focus_handle.clone(),
                                         d.inputs[4].read(cx).focus_handle.clone(),
                                         d.controls[8].clone(),
@@ -271,8 +273,6 @@ impl AdvancedSearchWindow {
                                         d.controls[9].clone(),
                                         d.inputs[6].read(cx).focus_handle.clone(),
                                         d.controls[10].clone(),
-                                        d.controls[4].clone(),
-                                        d.controls[5].clone(),
                                     ]);
                                 }
                                 order.extend(d.controls[11..].iter().cloned());
