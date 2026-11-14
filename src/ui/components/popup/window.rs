@@ -57,6 +57,22 @@ fn owner_origin(state: &Surfaces, mut id: WindowId) -> Point<Pixels> {
     origin
 }
 
+/// How many menus stand between this surface and the window that holds them.
+fn depth(state: &Surfaces, mut id: WindowId) -> usize {
+    let mut depth = 0;
+    while let Some(parent) = state.logical_owners.get(&id) {
+        depth += 1;
+        id = parent.window_id();
+    }
+    depth
+}
+
+/// A compositor only lets the topmost popup be destroyed, and refusing is a fatal
+/// protocol error: submenus go before the menus that hold them.
+fn sort_deepest_first(state: &Surfaces, windows: &mut [WindowHandle<MenuWindow>]) {
+    windows.sort_by_key(|handle| std::cmp::Reverse(depth(state, handle.window_id())));
+}
+
 /// Only the topmost menu may take a compositor grab, and asking otherwise is a fatal protocol
 /// error: close the menus that the new one does not descend from.
 #[cfg(not(target_os = "windows"))]
@@ -66,11 +82,12 @@ fn close_unrelated(parent: AnyWindowHandle, cx: &mut App) {
     while let Some(next) = state.logical_owners.get(ancestors.last().unwrap()) {
         ancestors.push(next.window_id());
     }
-    let keys: Vec<_> = state.windows.iter()
+    let mut unrelated: Vec<_> = state.windows.iter()
         .filter(|(_, handle)| !ancestors.contains(&handle.window_id()))
-        .map(|(key, _)| key.clone())
+        .map(|(key, handle)| (key.clone(), *handle))
         .collect();
-    for key in keys {
+    unrelated.sort_by_key(|(_, handle)| std::cmp::Reverse(depth(state, handle.window_id())));
+    for (key, _) in unrelated {
         let Some(&handle) = cx.default_global::<Surfaces>().windows.get(&key) else { continue };
         let Ok(spec) = handle.read(cx).map(|root| root.spec.clone()) else { continue };
         if !spec.interactive {
@@ -304,8 +321,11 @@ fn restore(spec: &Spec, cx: &mut App) {
 
 pub(crate) fn close_all(cx: &mut App) {
     cx.default_global::<Surfaces>().pending.clear();
-    let windows = std::mem::take(&mut cx.default_global::<Surfaces>().windows);
-    for (_, handle) in windows {
+    let state = cx.default_global::<Surfaces>();
+    let mut windows: Vec<_> = state.windows.values().copied().collect();
+    sort_deepest_first(state, &mut windows);
+    state.windows.clear();
+    for handle in windows {
         let _ = handle.update(cx, |_, window, cx| {
             crate::ui::components::tooltip::hover::close_for(window, cx);
             window.remove_window();
