@@ -4,6 +4,7 @@ impl Render for TextInput {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let focus_handle = self.focus_handle.clone();
         let is_focused = focus_handle.is_focused(window);
+        self.sync_blinking(is_focused, cx);
         let theme = *cx.theme();
         if !is_focused || self.completions.is_empty() {
             self.completion_anchor = None;

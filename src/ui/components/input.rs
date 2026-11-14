@@ -57,6 +57,8 @@ pub struct TextInput {
     on_context_menu: Box<dyn Fn(Entity<TextInput>, bool, Point<Pixels>, &mut Window, &mut App)>,
     cursor_visible: bool,
     blink_epoch: usize,
+    /// A blink timer runs for the current epoch.
+    blinking: bool,
     options: TextInputOptions,
     password: bool,
     path_submit: bool,
@@ -230,6 +232,7 @@ impl TextInput {
 
         cx.on_focus_out(&focus_handle, window, |this, _, _, cx| {
             this.blink_epoch += 1;
+            this.blinking = false;
             this.cursor_visible = true;
             this.dismiss_completions(cx);
         })
@@ -266,6 +269,7 @@ impl TextInput {
             on_context_menu: Box::new(on_context_menu),
             cursor_visible: true,
             blink_epoch: 0,
+            blinking: false,
             options,
         }
     }
@@ -293,11 +297,30 @@ impl TextInput {
     }
 
     fn reset_blinking(&mut self, cx: &mut Context<Self>) {
-        self.blink_epoch += 1;
-        self.cursor_visible = true; // Rétablit la visibilité immédiate
+        self.restart_blinking(cx);
         cx.notify();
+    }
+
+    /// Shows the caret and blinks it from now on.
+    fn restart_blinking(&mut self, cx: &mut Context<Self>) {
+        self.blink_epoch += 1;
+        self.blinking = true;
+        self.cursor_visible = true;
         let epoch = self.blink_epoch;
         self.blink_cursors(epoch, cx);
+    }
+
+    /// Focus events miss a field created in one window and shown in another, or focused
+    /// before its listeners are active: each render starts or stops the blink by the focus
+    /// it finds.
+    pub(super) fn sync_blinking(&mut self, focused: bool, cx: &mut Context<Self>) {
+        if focused && !self.blinking {
+            self.restart_blinking(cx);
+        } else if !focused && self.blinking {
+            self.blink_epoch += 1;
+            self.blinking = false;
+            self.cursor_visible = true;
+        }
     }
 
     fn byte_offset_for_utf16(&self, utf16_offset: usize) -> usize {
