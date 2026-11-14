@@ -154,14 +154,16 @@ fn header_cell(
                 .child(label.to_string()),
         )
         .children(funnel)
-        .child(
-            div()
-                .w(rems(1.0))
-                .flex_none()
-                .flex()
-                .justify_center()
-                .when(is_active, |s| {
-                    s.child(
+        // The sort arrow takes the right edge only on the sorted column; elsewhere the
+        // funnel keeps it.
+        .when(is_active, |cell| {
+            cell.child(
+                div()
+                    .w(rems(1.0))
+                    .flex_none()
+                    .flex()
+                    .justify_center()
+                    .child(
                         svg()
                             .path(if direction == SortDirection::Ascending {
                                 "icons/arrow-up.svg"
@@ -170,9 +172,9 @@ fn header_cell(
                             })
                             .size_3()
                             .text_color(theme.accent),
-                    )
-                }),
-        )
+                    ),
+            )
+        })
         .child(
             canvas(
                 |bounds, _, _| bounds,
