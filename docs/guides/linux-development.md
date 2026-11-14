@@ -4,7 +4,7 @@ Linux and Windows share `main` and are released together. System calls go throug
 
 ## Setup on Fedora Workstation
 
-Recent Linux Rust (CI pins 1.99.1; Fedora 44 and later), then:
+Recent Linux Rust (CI pins 1.100.0; Fedora 44 and later), then:
 
 ```bash
 sudo dnf install gcc gcc-c++ make pkgconf-pkg-config \

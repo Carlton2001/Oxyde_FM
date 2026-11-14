@@ -112,4 +112,4 @@ The single instance, the default file manager (`org.freedesktop.FileManager1`) a
 - **tests** on `ubuntu-24.04`: warning-free compile, full suite, then `preview_jobs` separately, whose 2 s timeouts fail when the whole suite loads the machine. The AppArmor restriction is lifted so confinement tests run.
 - **distribution**, `_linux-distribution.yml`, also run by `release.yml`: on `ubuntu-24.04`, builds the DEB and the archive from the same executables, installs the DEB, installs the archive twice for a user then removes it; in a `fedora:44` container, builds and installs the RPM. Signing happens only in the release job.
 
-Rust is pinned to 1.99.1 and `cargo-about` verified by hash. Containers forbid bubblewrap, so they do not exercise confinement.
+Rust is pinned to 1.100.0 and `cargo-about` verified by hash. Containers forbid bubblewrap, so they do not exercise confinement.
