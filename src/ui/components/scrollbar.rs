@@ -280,7 +280,7 @@ pub(crate) fn render_scrollbar_on_track<T: ScrollbarState + 'static>(
             cx.stop_propagation();
             let delta = event.delta.pixel_delta(window.line_height());
             // A vertical wheel also moves a horizontal rail, as GTK and Windows do.
-            let step = if is_v { delta.y } else if delta.x.is_zero() { delta.y } else { delta.x };
+            let step = if is_v || delta.x.is_zero() { delta.y } else { delta.x };
             if step.is_zero() {
                 return;
             }

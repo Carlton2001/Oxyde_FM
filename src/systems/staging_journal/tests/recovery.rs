@@ -28,7 +28,7 @@ fn an_ended_process_leaves_nothing_after_the_next_start() {
     let (path, entry) = stage(root.path(), &notes, ".oxyde-copy-ended");
     end(entry);
     let recovered = recover_in(&notes);
-    assert_eq!(recovered.removed, [path.clone()]);
+    assert_eq!(recovered.removed, std::slice::from_ref(&path));
     assert!(recovered.kept.is_empty());
     assert!(!path.exists());
     assert_eq!(std::fs::read_dir(&notes).unwrap().count(), 0);

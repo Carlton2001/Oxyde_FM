@@ -40,10 +40,8 @@ pub(crate) fn render(
                     }
                 }
                 // Enter in a field saves, as the default button.
-                "enter" => {
-                    if this.trash_settings.as_ref().is_some_and(|dialog| !dialog.loading && !dialog.busy) {
-                        this.save_trash_settings(cx);
-                    }
+                "enter" if this.trash_settings.as_ref().is_some_and(|dialog| !dialog.loading && !dialog.busy) => {
+                    this.save_trash_settings(cx);
                 }
                 _ => {}
             });
