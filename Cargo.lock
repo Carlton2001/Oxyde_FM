@@ -4436,7 +4436,7 @@ dependencies = [
 
 [[package]]
 name = "oxyde"
-version = "2.2.1"
+version = "2.2.2"
 dependencies = [
  "async-io",
  "base64",
