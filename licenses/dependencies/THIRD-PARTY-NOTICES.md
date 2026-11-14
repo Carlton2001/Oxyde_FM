@@ -2761,7 +2761,7 @@ express Statement of Purpose.
 
 ## GNU General Public License v3.0 only
 
-- oxyde 2.1.0
+- oxyde 2.2.1
 
 ```text
 GNU GENERAL PUBLIC LICENSE
