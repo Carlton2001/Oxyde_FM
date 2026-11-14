@@ -1,6 +1,6 @@
 //! The filter panel of a details column: the column's name and Clear, its field, its values
-//! with their counts, the custom range of Size and Date, and the choice to keep the filters
-//! from folder to folder. Every change applies at once.
+//! with their counts, the custom range of Size and Date, Clear filters, and the choice to
+//! keep the filters from folder to folder. Every change applies at once.
 use crate::ui::app::context_menus::context_menu_contains_point;
 use crate::ui::app::filters::{ColumnFilterPanel, RangeEditor};
 use crate::ui::app::{DragTarget, OxydeApp};
@@ -108,6 +108,8 @@ impl OxydeApp {
         if let Some(tab) = tab {
             footer = footer
                 .child(crate::ui::elements::separator::horizontal(theme.menu_border))
+                // Clear filters, as the grid view's menu offers, once another column filters too.
+                .when(other_column_set(tab, panel.column), |footer| footer.child(clear_all_row(panel.pane_id.clone(), h.clone(), theme, cx)))
                 .child(keep_row(tab.keep_filters, panel.pane_id.clone(), h.clone(), theme, cx));
         }
 
@@ -291,6 +293,7 @@ fn panel_min_width(column: FilterColumn, tab: Option<&TabState>, window: &Window
         + text_width(&i18n.text(Message::FilterClear), rems(0.75), FontWeight::NORMAL, window)
         + rem_pixels(rems(2.0)).as_f32();
     let keep = text_width(&i18n.text(Message::FilterKeep), rems(0.8125), FontWeight::NORMAL, window)
+        .max(text_width(&i18n.text(Message::FilterClearAll), rems(0.8125), FontWeight::NORMAL, window))
         + rem_pixels(rems(2.5)).as_f32();
     // The menu's own padding, border and scrollbar gutter.
     let chrome = rem_pixels(rems(0.75)).as_f32();
@@ -311,6 +314,12 @@ fn column_set(tab: &TabState, column: FilterColumn) -> bool {
     }
 }
 
+/// Whether a column other than `column` holds a filter.
+fn other_column_set(tab: &TabState, column: FilterColumn) -> bool {
+    use FilterColumn::*;
+    [Name, Location, Type, Size, Permissions, Date, Deleted].into_iter().any(|other| other != column && column_set(tab, other))
+}
+
 /// « Filter by » the column, as the panel's title reads.
 fn filter_title_message(column: FilterColumn, tab: Option<&TabState>) -> Message {
     match column {
@@ -323,6 +332,28 @@ fn filter_title_message(column: FilterColumn, tab: Option<&TabState>) -> Message
         FilterColumn::Date => Message::FilterTitleModified,
         FilterColumn::Deleted => Message::FilterTitleDeleted,
     }
+}
+
+/// « Clear filters », drawn as a menu entry, its cross in the checkbox's place.
+fn clear_all_row(pane_id: String, h: Entity<OxydeApp>, theme: OxydeTheme, cx: &Context<OxydeApp>) -> impl IntoElement {
+    let action: crate::ui::components::popup::keyboard::Action = Rc::new(move |_, cx| {
+        h.update(cx, |this, cx| this.clear_column_filters(&pane_id, cx));
+    });
+    let click = action.clone();
+    let row = div()
+        .id("filter-clear-all")
+        .w_full()
+        .h(px(crate::ui::style::menu_item_height()))
+        .px(rems(0.5))
+        .flex()
+        .items_center()
+        .rounded(rems(0.3125))
+        .hover(|style| style.bg(theme.menu_hover))
+        .child(div().flex_none().mr(rems(0.5)).size(rems(1.0)).flex().items_center().justify_center()
+            .child(svg().path("icons/x.svg").size(rems(0.875)).text_color(theme.text_muted)))
+        .child(div().text_size(rems(0.8125)).text_color(theme.text).child(cx.i18n().text(Message::FilterClearAll)))
+        .on_click(move |_, window, cx| click(window, cx));
+    crate::ui::components::popup::keyboard::item(row, action, None, None)
 }
 
 /// « Keep when changing folders », drawn as a menu entry.

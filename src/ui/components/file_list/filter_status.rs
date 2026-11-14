@@ -10,7 +10,7 @@ use crate::ui::workspace::TabState;
 use gpui::prelude::*;
 use gpui::*;
 
-/// « 12 hidden » and its clear button while a column filter is set, its tooltip listing them.
+/// « 12 hidden », clearing the filters when clicked, while a column filter is set, its tooltip listing them.
 pub(super) fn chip(tab: &TabState, pane_id: &str, handle: Entity<OxydeApp>, theme: OxydeTheme, cx: &App) -> Option<impl IntoElement> {
     if !tab.has_column_filters() {
         return None;
@@ -33,21 +33,22 @@ pub(super) fn chip(tab: &TabState, pane_id: &str, handle: Entity<OxydeApp>, them
             .rounded(rems(0.3125))
             .bg(theme.selected)
             .text_color(theme.accent)
-            .fixed_tooltip(Tooltip::text(summary))
+            .group("filter-chip")
+            // The whole chip clears the filters, its cross showing it under the pointer.
+            .fixed_tooltip(Tooltip::text(format!("{summary}
+{}", cx.i18n().text(Message::FilterClearAll))))
+            .on_click(move |_, _, cx| handle.update(cx, |this, cx| this.clear_column_filters(&pane_id, cx)))
             .child(svg().path("icons/funnel.svg").size(rems(0.875)).flex_none().text_color(theme.accent))
             .child(cx.i18n().text_with_args(Message::FilterHidden, &args))
             .child(
                 div()
-                    .id(SharedString::from(format!("filter-chip-clear-{pane_id}")))
                     .size(rems(1.5))
                     .flex()
                     .items_center()
                     .justify_center()
                     .rounded(rems(0.3125))
-                    .hover(move |style| style.bg(theme.control_hover))
-                    .child(svg().path("icons/x.svg").size(rems(0.875)).text_color(theme.accent))
-                    .fixed_tooltip(Tooltip::text(cx.i18n().text(Message::FilterClearAll)))
-                    .on_click(move |_, _, cx| handle.update(cx, |this, cx| this.clear_column_filters(&pane_id, cx))),
+                    .group_hover("filter-chip", move |style| style.bg(theme.control_hover))
+                    .child(svg().path("icons/x.svg").size(rems(0.875)).text_color(theme.accent)),
             ),
     )
 }
