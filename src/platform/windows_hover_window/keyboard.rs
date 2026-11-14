@@ -50,6 +50,18 @@ pub(super) fn remove(window: HWND) {
     }
 }
 
+/// Whether `menu` takes the keyboard, rather than leaving it to a field.
+pub(super) fn interactive(menu: HWND) -> bool {
+    ROUTING.with(|routing| routing.borrow().menus.iter().any(|(window, _)| *window == menu.0 as isize))
+}
+
+/// The menu under a wheel turned at `screen`, which Windows gives the form holding the
+/// focus when inactive windows do not scroll: the form would scroll what lies beneath.
+fn menu_under(screen: POINT) -> Option<HWND> {
+    let window = unsafe { WindowFromPoint(screen) };
+    MENUS.with(|menus| menus.borrow().contains(&(window.0 as isize))).then_some(window)
+}
+
 fn target(owner: HWND) -> Option<HWND> {
     let menus = ROUTING.with(|routing| routing.borrow().menus.clone());
     menus.into_iter().rev().find_map(|(menu, source)| {
@@ -78,6 +90,11 @@ unsafe extern "system" fn route(code: i32, wparam: WPARAM, lparam: LPARAM) -> LR
                 | WM_IME_CHAR
         ) {
             if let Some(menu) = target(message.hwnd) {
+                message.hwnd = menu;
+            }
+        } else if matches!(message.message, WM_MOUSEWHEEL | WM_MOUSEHWHEEL) {
+            let screen = POINT { x: message.lParam.0 as i16 as i32, y: (message.lParam.0 >> 16) as i16 as i32 };
+            if let Some(menu) = menu_under(screen).filter(|menu| *menu != message.hwnd) {
                 message.hwnd = menu;
             }
         }

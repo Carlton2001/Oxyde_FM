@@ -1,5 +1,6 @@
 //! Deferred Win32 placement, hit testing and ownership for transient GPUI surfaces.
 mod keyboard;
+mod pointer;
 use raw_window_handle::RawWindowHandle;
 use std::{
     cell::RefCell,
@@ -90,6 +91,11 @@ unsafe extern "system" fn owner_subclass(
             | WM_CLOSE
     ) {
         let menus: Vec<_> = MENUS.with(|menus| menus.borrow().iter().copied().collect());
+        // A form's own press that closes an interactive menu only closes it; one in a
+        // menu goes on to its row, as a submenu closes under the click on its parent.
+        let release = pointer::dismissing_release(message)
+            .filter(|_| !MENUS.with(|menus| menus.borrow().contains(&(window.0 as isize))));
+        let mut dismissed = false;
         for menu in menus {
             let menu = HWND(menu as *mut _);
             if unsafe { GetWindow(menu, GW_OWNER) }.ok() == Some(window) {
@@ -121,11 +127,19 @@ unsafe extern "system" fn owner_subclass(
                 }
                 // Close before the owner handles the click, so a newly opened
                 // menu cannot be dismissed by a delayed close of its predecessor.
+                dismissed |= keyboard::interactive(menu) && unsafe { IsWindowVisible(menu) }.as_bool();
                 unsafe {
                     SendMessageW(menu, WM_CLOSE, None, None);
                 }
             }
         }
+        if let (true, Some(release)) = (dismissed, release) {
+            pointer::swallow(window, release);
+            return LRESULT(0);
+        }
+    }
+    if pointer::swallowed(window, message) {
+        return LRESULT(0);
     }
     if message == WM_NCDESTROY {
         keyboard::remove(window);
@@ -321,31 +335,11 @@ unsafe extern "system" fn subclass(
             if !MENUS.with(|menus| menus.borrow().contains(&(window.0 as isize))) {
                 return LRESULT(HTTRANSPARENT as isize);
             }
-            let inset = INSETS
-                .with(|insets| insets.borrow().get(&(window.0 as isize)).copied())
-                .unwrap_or(0.0);
-            let scale = unsafe { windows::Win32::UI::HiDpi::GetDpiForWindow(window) } as f32 / 96.0;
-            let inset = (inset * scale).round() as i32;
-            let mut point = POINT {
+            let point = POINT {
                 x: lparam.0 as i16 as i32,
                 y: (lparam.0 >> 16) as i16 as i32,
             };
-            let mut client = windows::Win32::Foundation::RECT::default();
-            unsafe {
-                let _ = windows::Win32::Graphics::Gdi::ScreenToClient(window, &mut point);
-                let _ = GetClientRect(window, &mut client);
-            }
-            return LRESULT(
-                if point.x >= inset
-                    && point.y >= inset
-                    && point.x < client.right - inset
-                    && point.y < client.bottom - inset
-                {
-                    HTCLIENT as isize
-                } else {
-                    HTTRANSPARENT as isize
-                },
-            );
+            return pointer::hit(window, point, keyboard::interactive(window));
         }
         WM_MOUSEACTIVATE => {
             return LRESULT(MA_NOACTIVATE as isize)
