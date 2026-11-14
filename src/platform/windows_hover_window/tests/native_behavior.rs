@@ -95,7 +95,7 @@ fn hover_is_passive_owned_mouse_transparent_and_not_globally_topmost() {
         );
         place(hover.raw(), None, 1.0).unwrap();
         apply_pending(hover.0);
-        assert!(!IsWindowVisible(hover.0).as_bool());
+        assert!(!shown(hover.0));
     }
 }
 
@@ -105,7 +105,7 @@ fn placements_are_deferred_coalesced_and_cancelled_by_hide() {
     configure(hover.raw()).unwrap();
     place(hover.raw(), Some((120.0, 80.0, 0.0)), 1.0).unwrap();
     place(hover.raw(), Some((180.0, 100.0, 0.0)), 1.0).unwrap();
-    assert!(!unsafe { IsWindowVisible(hover.0) }.as_bool());
+    assert!(!shown(hover.0));
     PENDING.with(|pending| {
         assert_eq!(
             pending.borrow().get(&(hover.0 .0 as isize)).unwrap().size,
@@ -122,7 +122,7 @@ fn placements_are_deferred_coalesced_and_cancelled_by_hide() {
     place(hover.raw(), Some((200.0, 120.0, 0.0)), 1.0).unwrap();
     place(hover.raw(), None, 1.0).unwrap();
     apply_pending(hover.0);
-    assert!(!unsafe { IsWindowVisible(hover.0) }.as_bool());
+    assert!(!shown(hover.0));
     PENDING.with(|pending| assert!(!pending.borrow().contains_key(&(hover.0 .0 as isize))));
 }
 

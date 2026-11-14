@@ -7,7 +7,7 @@ use std::{
 };
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::Graphics::Dwm::{
-    DwmSetWindowAttribute, DWMNCRP_DISABLED, DWMWA_NCRENDERING_POLICY,
+    DwmSetWindowAttribute, DWMNCRP_DISABLED, DWMWA_CLOAK, DWMWA_NCRENDERING_POLICY, DWMWA_TRANSITIONS_FORCEDISABLED,
 };
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
@@ -37,6 +37,8 @@ thread_local! {
     static MENUS: RefCell<HashSet<isize>> = RefCell::new(HashSet::new());
     static COORDINATE_OWNERS: RefCell<HashMap<isize, isize>> = RefCell::new(HashMap::new());
     static INSETS: RefCell<HashMap<isize, f32>> = RefCell::new(HashMap::new());
+    // Tooltips hidden by cloaking: still visible to Windows, never composed.
+    static CLOAKED: RefCell<HashSet<isize>> = RefCell::new(HashSet::new());
 }
 
 pub(super) fn configure_menu(
@@ -289,6 +291,19 @@ unsafe extern "system" fn subclass(
             } {
                 log::warn!("Cannot disable native hover decoration: {error}");
             }
+            // DWM animates a shown window, a growing zoom that reads as a resize: a tooltip or a
+            // menu appears at once, as native ones do.
+            let disabled = windows::core::BOOL::from(true);
+            if let Err(error) = unsafe {
+                DwmSetWindowAttribute(
+                    window,
+                    DWMWA_TRANSITIONS_FORCEDISABLED,
+                    std::ptr::from_ref(&disabled).cast(),
+                    std::mem::size_of_val(&disabled) as u32,
+                )
+            } {
+                log::warn!("Cannot disable hover window transitions: {error}");
+            }
             // Ownership supplies stacking without being globally topmost.
             // Run outside the GPUI App borrow, just like movement and resize.
             if let Err(error) = unsafe {
@@ -354,6 +369,7 @@ unsafe extern "system" fn subclass(
             MENUS.with(|menus| menus.borrow_mut().remove(&(window.0 as isize)));
             COORDINATE_OWNERS.with(|owners| owners.borrow_mut().remove(&(window.0 as isize)));
             INSETS.with(|insets| insets.borrow_mut().remove(&(window.0 as isize)));
+            CLOAKED.with(|cloaked| cloaked.borrow_mut().remove(&(window.0 as isize)));
             PENDING.with(|pending| pending.borrow_mut().remove(&(window.0 as isize)));
             let _ = RemoveWindowSubclass(window, Some(subclass), SUBCLASS);
         },
@@ -427,11 +443,34 @@ fn axis_origin(cursor: i32, extent: i32, minimum: i32, maximum: i32, gap: i32, i
     origin.clamp(minimum, maximum - extent)
 }
 
+/// Visible on screen: shown, and not hidden by cloaking.
+fn shown(window: HWND) -> bool {
+    unsafe { IsWindowVisible(window) }.as_bool()
+        && !CLOAKED.with(|cloaked| cloaked.borrow().contains(&(window.0 as isize)))
+}
+
+fn cloak(window: HWND, cloaked: bool) {
+    let value = windows::core::BOOL::from(cloaked);
+    if let Err(error) = unsafe {
+        DwmSetWindowAttribute(window, DWMWA_CLOAK, std::ptr::from_ref(&value).cast(), std::mem::size_of_val(&value) as u32)
+    } {
+        log::warn!("Cannot {} hover window: {error}", if cloaked { "cloak" } else { "uncloak" });
+    }
+}
+
 fn place_now(window: HWND, size: Option<(f32, f32, f32)>, scale: f32) -> Result<(), String> {
     unsafe {
         let Some((width, height, inset)) = size else {
-            if IsWindowVisible(window).as_bool() {
+            if !shown(window) {
+                return Ok(());
+            }
+            if MENUS.with(|menus| menus.borrow().contains(&(window.0 as isize))) {
                 let _ = ShowWindow(window, SW_HIDE);
+            } else {
+                // A hidden tooltip stays cloaked rather than hidden: once hidden, DWM could
+                // compose a previous tooltip at its former place until the next one appeared.
+                cloak(window, true);
+                CLOAKED.with(|cloaked| cloaked.borrow_mut().insert(window.0 as isize));
             }
             return Ok(());
         };
@@ -528,7 +567,7 @@ fn place_now(window: HWND, size: Option<(f32, f32, f32)>, scale: f32) -> Result<
         // Do not generate redundant native resize/paint events on each tick.
         let mut current = windows::Win32::Foundation::RECT::default();
         GetWindowRect(window, &mut current).map_err(|error| error.to_string())?;
-        if IsWindowVisible(window).as_bool()
+        if shown(window)
             && current.left == x
             && current.top == y
             && current.right - current.left == width
@@ -538,18 +577,42 @@ fn place_now(window: HWND, size: Option<(f32, f32, f32)>, scale: f32) -> Result<
         }
         // A reused hover keeps its creation rank among the owner's popups;
         // raise it when shown so a later native surface (Viewer video) is below.
-        let showing = !IsWindowVisible(window).as_bool();
+        let showing = !shown(window);
+        if showing {
+            // Shown cloaked, sized, placed and painted before DWM composes it.
+            cloak(window, true);
+            let shown = SetWindowPos(
+                window,
+                Some(HWND_TOP),
+                x,
+                y,
+                width,
+                height,
+                SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW,
+            );
+            if shown.is_ok() {
+                SendMessageW(window, WM_PAINT, None, None);
+                // Until DWM has taken that frame: uncloaked sooner, it composes the swap chain's
+                // previous image, the last tooltip, for a frame.
+                if let Err(error) = windows::Win32::Graphics::Dwm::DwmFlush() {
+                    log::warn!("Cannot wait for hover window composition: {error}");
+                }
+            }
+            cloak(window, false);
+            CLOAKED.with(|cloaked| cloaked.borrow_mut().remove(&(window.0 as isize)));
+            shown.map_err(|error| error.to_string())?;
+            return Ok(());
+        }
         SetWindowPos(
             window,
-            showing.then_some(HWND_TOP),
+            None,
             x,
             y,
             width,
             height,
             SWP_NOACTIVATE
                 | SWP_NOOWNERZORDER
-                | if showing { SET_WINDOW_POS_FLAGS(0) } else { SWP_NOZORDER }
-                | SWP_SHOWWINDOW
+                | SWP_NOZORDER
                 | if current.right - current.left == width && current.bottom - current.top == height
                 {
                     SWP_NOSIZE
