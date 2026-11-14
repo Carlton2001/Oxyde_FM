@@ -60,6 +60,7 @@ pub(crate) fn filter_entries(tab: &TabState, column: FilterColumn, i18n: &I18n) 
         FilterColumn::Type => tab.filter_types.iter().cloned().map(FilterValue::Type).collect(),
         FilterColumn::Size => tab.filter_sizes.iter().copied().map(FilterValue::Size).collect(),
         FilterColumn::Date => tab.filter_dates.iter().copied().map(FilterValue::Date).collect(),
+        FilterColumn::Deleted => tab.filter_deleted.iter().copied().map(FilterValue::Deleted).collect(),
         FilterColumn::Permissions => tab.filter_permissions.iter().copied().map(FilterValue::Permissions).collect(),
         FilterColumn::Name | FilterColumn::Location => Vec::new(),
     };
@@ -75,7 +76,7 @@ pub(crate) fn filter_entries(tab: &TabState, column: FilterColumn, i18n: &I18n) 
             label: match &value {
                 FilterValue::Type(label) => type_label(label, i18n),
                 FilterValue::Size(category) => i18n.text(category.message()).to_string(),
-                FilterValue::Date(group) => i18n.text(group.message()).to_string(),
+                FilterValue::Date(group) | FilterValue::Deleted(group) => i18n.text(group.message()).to_string(),
                 FilterValue::Permissions(mode) => crate::ui::format::permissions::paired(*mode),
             },
             count: counts.get(&value).copied().unwrap_or(0),
@@ -120,13 +121,13 @@ pub(crate) fn filter_summary(tab: &TabState, column: FilterColumn, i18n: &I18n, 
                 sizes.into_iter().map(|category| i18n.text(category.message()).to_string()).collect::<Vec<_>>().join(", ")
             }
         },
-        FilterColumn::Date => match tab.filter_date_range {
+        FilterColumn::Date | FilterColumn::Deleted => match if column == FilterColumn::Date { tab.filter_date_range } else { tab.filter_deleted_range } {
             Some(range) => {
                 let day = |date: Option<chrono::NaiveDate>| date.map(|date| date.format(crate::ui::format::date_pattern(format)).to_string());
                 bounds(day(range.from), day(range.to))
             }
             None => {
-                let mut groups: Vec<_> = tab.filter_dates.iter().copied().collect();
+                let mut groups: Vec<_> = if column == FilterColumn::Date { &tab.filter_dates } else { &tab.filter_deleted }.iter().copied().collect();
                 groups.sort();
                 groups.into_iter().map(|group| i18n.text(group.message()).to_string()).collect::<Vec<_>>().join(", ")
             }
@@ -145,6 +146,7 @@ pub(crate) fn filters_summary(tab: &TabState, i18n: &I18n, format: crate::ui::fo
         (FilterColumn::Size, Message::TooltipSize),
         (FilterColumn::Permissions, Message::TooltipPermissions),
         (FilterColumn::Date, Message::TooltipModified),
+        (FilterColumn::Deleted, Message::TooltipDeleted),
     ]
     .into_iter()
     .filter_map(|(column, message)| {
@@ -162,6 +164,7 @@ fn value_of(file: &oxyde_lib::models::FileEntry, column: FilterColumn, today: ch
         FilterColumn::Type => Some(FilterValue::Type(file_type_label(file))),
         FilterColumn::Size => SizeCategory::ALL.into_iter().find(|category| category.matches(file.size)).map(FilterValue::Size),
         FilterColumn::Date => Some(FilterValue::Date(DateGroup::for_timestamp(file.modified, today))),
+        FilterColumn::Deleted => crate::ui::workspace::deleted_ms(file).map(|ms| FilterValue::Deleted(DateGroup::for_timestamp(ms, today))),
         FilterColumn::Permissions => file.mode.map(FilterValue::Permissions),
         FilterColumn::Name | FilterColumn::Location => None,
     }
@@ -175,7 +178,7 @@ fn order_key(value: &FilterValue) -> (usize, String) {
             None => (KINDS.len(), label.clone()),
         },
         FilterValue::Size(category) => (SizeCategory::ALL.iter().position(|c| c == category).unwrap_or(0), String::new()),
-        FilterValue::Date(group) => (DateGroup::ALL.iter().position(|g| g == group).unwrap_or(0), String::new()),
+        FilterValue::Date(group) | FilterValue::Deleted(group) => (DateGroup::ALL.iter().position(|g| g == group).unwrap_or(0), String::new()),
         FilterValue::Permissions(mode) => (*mode as usize, String::new()),
     }
 }

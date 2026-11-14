@@ -167,7 +167,10 @@ pub(super) fn sync(parent: &mut Window, cx: &mut App) {
     let view =
         session.and_then(|(scope, view)| scope.filter(|scope| scope.valid(parent, cx)).and(view));
     let ordinary = cx.default_global::<NativeWindows>().ordinary.get(&id).cloned();
-    let view = if parent.is_window_active() && parent.is_window_hovered() { ordinary.or(view) } else { None };
+    // A menu never takes activation: its form's stands for it.
+    let active = parent.is_window_active() || crate::ui::components::popup::owner(parent, cx)
+        .is_some_and(|owner| owner.update(cx, |_, window, _| window.is_window_active()).unwrap_or(false));
+    let view = if active && parent.is_window_hovered() { ordinary.or(view) } else { None };
     let rem = parent.rem_size();
     #[cfg(not(target_os = "windows"))]
     {

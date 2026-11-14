@@ -81,8 +81,8 @@ impl OxydeApp {
         self.change_filters(pane_id, cx, |tab| tab.set_size_range(range));
     }
 
-    pub(crate) fn set_date_range(&mut self, pane_id: &str, range: DateRange, cx: &mut Context<Self>) {
-        self.change_filters(pane_id, cx, |tab| tab.set_date_range(range));
+    pub(crate) fn set_date_range(&mut self, pane_id: &str, column: FilterColumn, range: DateRange, cx: &mut Context<Self>) {
+        self.change_filters(pane_id, cx, |tab| tab.set_date_range(column, range));
     }
 
     pub(crate) fn toggle_keep_filters(&mut self, pane_id: &str, cx: &mut Context<Self>) {

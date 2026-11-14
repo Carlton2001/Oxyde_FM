@@ -164,6 +164,11 @@ pub(crate) fn is_menu(window: &Window, cx: &App) -> bool {
     window::owner(window, cx).is_some()
 }
 
+/// The form a menu belongs to; `None` outside menus.
+pub(crate) fn owner(window: &Window, cx: &App) -> Option<AnyWindowHandle> {
+    window::owner(window, cx)
+}
+
 pub(crate) fn owner_point(window: &Window, cx: &App, position: Point<Pixels>) -> Point<Pixels> {
     window::owner_point(window, cx, position)
 }

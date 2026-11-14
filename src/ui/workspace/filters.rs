@@ -31,6 +31,7 @@ pub(crate) struct ColumnFilterFlags {
     pub sizes: bool,
     pub permissions: bool,
     pub dates: bool,
+    pub deleted: bool,
 }
 
 impl SizeCategory {
@@ -73,6 +74,8 @@ impl FileFilters {
             filter_permissions: tab.filter_permissions.clone(),
             filter_dates: tab.filter_dates.clone(),
             filter_date_range: tab.filter_date_range,
+            filter_deleted: tab.filter_deleted.clone(),
+            filter_deleted_range: tab.filter_deleted_range,
         }
     }
     fn is_empty(&self) -> bool {
@@ -85,6 +88,8 @@ impl FileFilters {
             && self.filter_permissions.is_empty()
             && self.filter_dates.is_empty()
             && self.filter_date_range.is_none()
+            && self.filter_deleted.is_empty()
+            && self.filter_deleted_range.is_none()
     }
     pub(super) fn snapshot(&self, files: &std::sync::Arc<Vec<FileEntry>>, today: chrono::NaiveDate) -> std::sync::Arc<Vec<FileEntry>> {
         if self.is_empty() { files.clone() } else { self.filtered_files_on(files, today).into() }
@@ -132,18 +137,29 @@ impl CompiledFilters<'_> {
         let matches_date = !kept(FilterColumn::Date)
             || ((filters.filter_dates.is_empty() || filters.filter_dates.contains(&DateGroup::for_timestamp(f.modified, self.today)))
                 && filters.filter_date_range.is_none_or(|range| range.contains(f.modified)));
+        let matches_deleted = !kept(FilterColumn::Deleted)
+            || (filters.filter_deleted.is_empty() && filters.filter_deleted_range.is_none())
+            || deleted_ms(f).is_some_and(|ms| {
+                (filters.filter_deleted.is_empty() || filters.filter_deleted.contains(&DateGroup::for_timestamp(ms, self.today)))
+                    && filters.filter_deleted_range.is_none_or(|range| range.contains(ms))
+            });
+        // In the trash, where an entry was deleted from; in search results, its folder.
         let matches_location = !kept(FilterColumn::Location) || self.location.is_empty()
-            || f.original_path
-                .as_deref()
-                .and_then(|path| std::path::Path::new(path).parent())
+            || std::path::Path::new(f.original_path.as_deref().unwrap_or(&f.path))
+                .parent()
                 .is_some_and(|path| path.to_string_lossy().to_lowercase().contains(&self.location));
         let matches_search = match &self.search {
             Some(Ok(pattern)) => pattern.matches(&f.name.to_lowercase()),
             Some(Err(_)) => false,
             None => filters.trash_search.is_empty() || f.name.to_lowercase().contains(&filters.trash_search),
         };
-        matches_type && matches_name && matches_search && matches_size && matches_permissions && matches_date && matches_location
+        matches_type && matches_name && matches_search && matches_size && matches_permissions && matches_date && matches_deleted && matches_location
     }
+}
+
+/// When `f` went to the trash, in milliseconds since the epoch.
+pub(crate) fn deleted_ms(f: &FileEntry) -> Option<u64> {
+    f.deleted_time.and_then(|time| u64::try_from(time).ok())
 }
 
 impl CalendarFilterRequest {
@@ -174,6 +190,10 @@ impl TabState {
         let dates = self.filter_date_range.is_some() || !self.filter_dates.is_empty() &&
             crate::ui::date_groups::counts_by_date(&self.files, chrono::Local::now().date_naive())
                 .keys().any(|group| !self.filter_dates.contains(group));
+        let deleted = self.filter_deleted_range.is_some() || !self.filter_deleted.is_empty() && {
+            let today = chrono::Local::now().date_naive();
+            self.files.iter().filter_map(deleted_ms).any(|ms| !self.filter_deleted.contains(&DateGroup::for_timestamp(ms, today)))
+        };
         ColumnFilterFlags {
             name: !self.filter_name.is_empty(),
             location: !self.filter_original_location.is_empty(),
@@ -181,6 +201,7 @@ impl TabState {
             sizes,
             permissions,
             dates,
+            deleted,
         }
     }
 
@@ -194,6 +215,8 @@ impl TabState {
             || !self.filter_permissions.is_empty()
             || !self.filter_dates.is_empty()
             || self.filter_date_range.is_some()
+            || !self.filter_deleted.is_empty()
+            || self.filter_deleted_range.is_some()
     }
 
     pub(crate) fn clear_column_filter(&mut self, column: FilterColumn) {
@@ -210,6 +233,10 @@ impl TabState {
                 self.filter_dates.clear();
                 self.filter_date_range = None;
             }
+            FilterColumn::Deleted => {
+                self.filter_deleted.clear();
+                self.filter_deleted_range = None;
+            }
         }
     }
 
@@ -218,6 +245,7 @@ impl TabState {
             FilterValue::Type(label) => self.filter_types.contains(label),
             FilterValue::Size(category) => self.filter_sizes.contains(category),
             FilterValue::Date(group) => self.filter_dates.contains(group),
+            FilterValue::Deleted(group) => self.filter_deleted.contains(group),
             FilterValue::Permissions(mode) => self.filter_permissions.contains(mode),
         }
     }
@@ -237,6 +265,10 @@ impl TabState {
                 self.filter_date_range = None;
                 set(&mut self.filter_dates, group, checked);
             }
+            FilterValue::Deleted(group) => {
+                self.filter_deleted_range = None;
+                set(&mut self.filter_deleted, group, checked);
+            }
             FilterValue::Permissions(mode) => set(&mut self.filter_permissions, mode, checked),
         }
     }
@@ -247,14 +279,21 @@ impl TabState {
         self.filter_size_range = (!range.is_open()).then_some(range);
     }
 
-    /// Custom days replace the checked periods; an open range removes the filter.
-    pub(crate) fn set_date_range(&mut self, range: DateRange) {
-        self.filter_dates.clear();
-        self.filter_date_range = (!range.is_open()).then_some(range);
+    /// Custom days of `column`, Date or Deleted, replace its checked periods; an open range
+    /// removes the filter.
+    pub(crate) fn set_date_range(&mut self, column: FilterColumn, range: DateRange) {
+        let range = (!range.is_open()).then_some(range);
+        if column == FilterColumn::Deleted {
+            self.filter_deleted.clear();
+            self.filter_deleted_range = range;
+        } else {
+            self.filter_dates.clear();
+            self.filter_date_range = range;
+        }
     }
 
     pub(crate) fn clear_column_filters(&mut self) {
-        for column in [FilterColumn::Name, FilterColumn::Location, FilterColumn::Type, FilterColumn::Size, FilterColumn::Permissions, FilterColumn::Date] {
+        for column in [FilterColumn::Name, FilterColumn::Location, FilterColumn::Type, FilterColumn::Size, FilterColumn::Permissions, FilterColumn::Date, FilterColumn::Deleted] {
             self.clear_column_filter(column);
         }
     }
@@ -293,7 +332,7 @@ impl TabState {
         &self,
         reference: &CalendarReference,
     ) -> Option<CalendarFilterRequest> {
-        if self.filter_dates.is_empty() || self.calendar_reference.as_ref() == Some(reference) {
+        if (self.filter_dates.is_empty() && self.filter_deleted.is_empty()) || self.calendar_reference.as_ref() == Some(reference) {
             return None;
         }
         Some(CalendarFilterRequest {

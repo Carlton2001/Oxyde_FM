@@ -140,10 +140,11 @@ impl OxydeApp {
                 let unit = size_unit(&range);
                 Some((tab.filter_size_range.is_some(), [size_text(range.min, unit, language), size_text(range.max, unit, language)], unit, [Message::FilterMin, Message::FilterMax]))
             }
-            FilterColumn::Date => {
-                let range = tab.filter_date_range.unwrap_or_default();
+            FilterColumn::Date | FilterColumn::Deleted => {
+                let set = if column == FilterColumn::Date { tab.filter_date_range } else { tab.filter_deleted_range };
+                let range = set.unwrap_or_default();
                 let day = |date: Option<NaiveDate>| date.map(|date| date.format(crate::ui::format::date_pattern(format)).to_string()).unwrap_or_default();
-                Some((tab.filter_date_range.is_some(), [day(range.from), day(range.to)], 2, [Message::FilterFrom, Message::FilterTo]))
+                Some((set.is_some(), [day(range.from), day(range.to)], 2, [Message::FilterFrom, Message::FilterTo]))
             }
             _ => None,
         };
@@ -252,7 +253,7 @@ impl OxydeApp {
         let pane_id = panel.pane_id.clone();
         match panel.column {
             FilterColumn::Size => if let Some(sizes) = range.size_range() { self.set_size_range(&pane_id, sizes, cx) },
-            FilterColumn::Date => if let Some(days) = range.date_range(format) { self.set_date_range(&pane_id, days, cx) },
+            column @ (FilterColumn::Date | FilterColumn::Deleted) => if let Some(days) = range.date_range(format) { self.set_date_range(&pane_id, column, days, cx) },
             _ => {}
         }
         cx.notify();

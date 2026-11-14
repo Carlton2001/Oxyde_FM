@@ -36,13 +36,18 @@ pub(super) fn render_headers(
     }
     let flags = tab.column_filter_flags();
     let trash = tab.path == "trash://";
-    // The funnel of a filterable column, lit while its filter hides entries.
+    // The funnel of a filterable column, lit while its filter hides entries. A right click
+    // on the header opens the filter; the tooltip says so, under what the filter keeps.
+    let hint = i18n.text(Message::FilterRightClick).to_string();
     let filter = |column: FilterColumn, active: bool| Some(HeaderFilter {
         pane_id: pane_id.clone(),
         column,
         active,
-        tooltip: if active { super::filter_summary(tab, column, i18n, date_format) } else { None }
-            .unwrap_or_else(|| i18n.text(Message::FilterAction).to_string()),
+        tooltip: match if active { super::filter_summary(tab, column, i18n, date_format) } else { None } {
+            Some(summary) => format!("{summary}
+{hint}"),
+            None => hint.clone(),
+        },
     });
     let sort = |column: SortColumn| {
         let handle = handle.clone();
@@ -63,8 +68,7 @@ pub(super) fn render_headers(
         .when(tab.quick_search.is_some() || trash, |headers| headers.child(header_cell(
             i18n.text(if trash { Message::TrashOriginalLocation } else { Message::ColumnLocation }).as_ref(), location_w,
             current_col == location_sort, current_dir,
-            // Search results have no location filter.
-            if trash { filter(FilterColumn::Location, flags.location) } else { None },
+            filter(FilterColumn::Location, flags.location),
             theme, handle.clone(), format!("filter-{pane_id}-location"), sort(location_sort),
         )))
         .child(header_cell(i18n.text(Message::ColumnType).as_ref(), type_w, current_col == SortColumn::Type, current_dir,
@@ -78,7 +82,7 @@ pub(super) fn render_headers(
             filter(FilterColumn::Date, flags.dates), theme, handle.clone(), format!("filter-{pane_id}-date"), sort(SortColumn::Modified))))
         .when(deleted_w > 0.0, |row| row.child(header_cell(
             i18n.text(Message::TrashDeletedAt).as_ref(), deleted_w, current_col == SortColumn::DeletedAt,
-            current_dir, None, theme, handle.clone(), format!("trash-deleted-{pane_id}"), sort(SortColumn::DeletedAt),
+            current_dir, filter(FilterColumn::Deleted, flags.deleted), theme, handle.clone(), format!("trash-deleted-{pane_id}"), sort(SortColumn::DeletedAt),
         )))
 }
 
@@ -116,7 +120,6 @@ fn header_cell(
     let anchor_handle = handle.clone();
     let theme = *theme;
     let funnel = filter.as_ref().map(|filter| {
-        let (handle, pane_id, column, key) = (handle.clone(), filter.pane_id.clone(), filter.column, anchor_key.clone());
         div()
             .id(SharedString::from(format!("{anchor_key}-funnel")))
             .flex_none()
@@ -128,13 +131,8 @@ fn header_cell(
             .rounded(rems(0.25))
             // At rest only a set filter shows its funnel; hovering the header shows the others.
             .when(!filter.active, |funnel| funnel.opacity(0.0).group_hover("column-header", |style| style.opacity(1.0)))
-            .hover(move |style| style.bg(theme.control_hover))
             .child(svg().path("icons/funnel.svg").size_3().text_color(if filter.active { theme.accent } else { theme.text_muted }))
             .fixed_tooltip(Tooltip::text(filter.tooltip.clone()))
-            .on_mouse_down(MouseButton::Left, move |event, window, cx| {
-                cx.stop_propagation();
-                open_filter(&handle, &pane_id, column, &key, event.position, window, cx);
-            })
     });
     let context = filter.map(|filter| (handle.clone(), filter.pane_id, filter.column, anchor_key.clone()));
     div()
@@ -193,7 +191,7 @@ fn header_cell(
         )
         .hover(move |s| s.bg(theme.hover))
         .on_mouse_down(MouseButton::Left, on_click)
-        // A right click opens the filter too, as before the funnel existed.
+        // Only a right click opens the filter: the funnel shows it, a left click sorts.
         .when_some(context, |cell, (handle, pane_id, column, key)| cell.on_mouse_down(MouseButton::Right, move |event, window, cx| {
             open_filter(&handle, &pane_id, column, &key, event.position, window, cx);
         }))

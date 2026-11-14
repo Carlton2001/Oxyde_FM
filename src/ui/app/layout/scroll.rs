@@ -82,10 +82,13 @@ impl OxydeApp {
 
         // Clamp ContextMenu scrolls
         for instance in &self.context_menus {
+            // A filter panel's list measures itself; GPUI clamps its offset.
+            if matches!(instance.content, crate::ui::app::ContextMenuContent::ColumnFilter(_)) {
+                continue;
+            }
             let item_count = match &instance.content {
                 crate::ui::app::ContextMenuContent::Items(items) => items.iter().filter(|item| !matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count(),
                 crate::ui::app::ContextMenuContent::NativeItems { items, .. } => items.len(),
-                // Its list measures itself.
                 crate::ui::app::ContextMenuContent::ColumnFilter(_) => 0,
             };
             let separators = match &instance.content {

@@ -15,8 +15,10 @@ use gpui::prelude::*;
 use gpui::*;
 use std::rc::Rc;
 
-/// Narrowest panel, room for a date field and the calendar.
+/// Narrowest panel, room for two size fields and the calendar.
 const PANEL_MIN_WIDTH: Rems = rems(16.0);
+/// Narrowest date panel, room for two dates side by side with their calendar buttons.
+const DATE_PANEL_MIN_WIDTH: Rems = rems(20.0);
 
 impl OxydeApp {
     #[allow(clippy::too_many_arguments)]
@@ -39,10 +41,15 @@ impl OxydeApp {
         };
         let searchable = panel.column == FilterColumn::Type && entries.len() > crate::ui::app::filters::TYPE_SEARCH_THRESHOLD;
         let field = panel.field.clone().filter(|_| panel.column != FilterColumn::Type || searchable);
+        // The menu window takes the keyboard once open: the field asks for it until it holds it.
         if let Some(field) = &field {
             if !panel.focused.get() {
-                panel.focused.set(true);
-                window.focus(&field.read(cx).focus_handle.clone(), cx);
+                let handle = field.read(cx).focus_handle.clone();
+                if handle.is_focused(window) {
+                    panel.focused.set(true);
+                } else {
+                    window.focus(&handle, cx);
+                }
             }
         }
         let query = field.as_ref().filter(|_| searchable).map(|field| field.read(cx).content().to_lowercase()).unwrap_or_default();
@@ -112,7 +119,7 @@ impl OxydeApp {
             is_context_menu: true,
             scroll_handle,
             width: None,
-            min_width: Some(rem_pixels(PANEL_MIN_WIDTH).as_f32()),
+            min_width: Some(panel_min_width(panel.column, tab, window, cx)),
             max_height: logical(320.0),
             on_close: {
                 let h = h.clone();
@@ -161,15 +168,7 @@ impl OxydeApp {
 
     /// The column's name, with Clear while it filters.
     fn filter_title(&self, panel: &ColumnFilterPanel, tab: Option<&TabState>, h: Entity<Self>, theme: OxydeTheme, cx: &Context<Self>) -> Div {
-        let title = match panel.column {
-            FilterColumn::Name => Message::ColumnName,
-            FilterColumn::Location if tab.is_some_and(|tab| tab.path == "trash://") => Message::TrashOriginalLocation,
-            FilterColumn::Location => Message::ColumnLocation,
-            FilterColumn::Type => Message::ColumnType,
-            FilterColumn::Size => Message::ColumnSize,
-            FilterColumn::Permissions => Message::ColumnPermissions,
-            FilterColumn::Date => Message::ColumnModified,
-        };
+        let title = filter_title_message(panel.column, tab);
         let set = tab.is_some_and(|tab| column_set(tab, panel.column));
         let (pane_id, column) = (panel.pane_id.clone(), panel.column);
         div()
@@ -178,6 +177,7 @@ impl OxydeApp {
             .flex()
             .items_center()
             .justify_between()
+            .gap(rems(0.5))
             .child(div().text_size(rems(0.75)).font_weight(FontWeight::SEMIBOLD).text_color(theme.text_muted).child(cx.i18n().text(title)))
             .when(set, |row| row.child(
                 div()
@@ -199,10 +199,11 @@ impl OxydeApp {
     #[allow(clippy::too_many_arguments)]
     fn filter_field(&self, panel: &ColumnFilterPanel, field: &Entity<input::TextInput>, tab: Option<&TabState>, h: Entity<Self>, theme: OxydeTheme, window: &Window, cx: &Context<Self>) -> Div {
         let frame = input::field_frame(field, window, cx).w_full();
-        let editor = div().flex_1().min_w_0().h_full().child(field.clone());
+        let regex = panel.column == FilterColumn::Name && tab.is_some_and(|tab| tab.filter_name_regex);
+        // An expression reads in the monospace face, as in advanced search.
+        let editor = div().flex_1().min_w_0().h_full().font_family(if regex { "JetBrains Mono" } else { "Inter" }).child(field.clone());
         match panel.column {
             FilterColumn::Name => {
-                let regex = tab.is_some_and(|tab| tab.filter_name_regex);
                 let valid = tab.is_none_or(|tab| NameMatcher::is_valid(&tab.filter_name, tab.filter_name_regex));
                 let pane_id = panel.pane_id.clone();
                 frame
@@ -223,15 +224,18 @@ impl OxydeApp {
     /// Two bounds, then the unit of sizes or the calendar of the date being picked.
     fn range_editor(&self, column: FilterColumn, range: &RangeEditor, h: Entity<Self>, theme: OxydeTheme, window: &Window, cx: &Context<Self>) -> Div {
         let format = crate::ui::format::date_format(cx);
-        let date = column == FilterColumn::Date;
+        let date = matches!(column, FilterColumn::Date | FilterColumn::Deleted);
         let mut editor = div().w_full().flex().flex_col().gap(rems(0.25)).pt(rems(0.25));
+        // Both bounds share a line, the calendar opening below it.
+        let mut bounds = div().w_full().flex().gap(rems(0.25));
         for index in 0..2 {
             let valid = if date { range.date_bound(index, format).is_ok() } else { range.size_bound(index).is_ok() };
             let open = range.calendar.is_some_and(|(open, _)| open == index);
             let toggle = h.clone();
-            editor = editor.child(
+            bounds = bounds.child(
                 input::field_frame(&range.inputs[index], window, cx)
-                    .w_full()
+                    .flex_1()
+                    .min_w_0()
                     .when(!valid, |frame| frame.border_color(theme.error))
                     .child(div().flex_1().min_w_0().h_full().child(range.inputs[index].clone()))
                     .when(date, |frame| frame.child(
@@ -241,6 +245,7 @@ impl OxydeApp {
                     )),
             );
         }
+        editor = editor.child(bounds);
         if let Some((_, day)) = range.calendar {
             let (pick, step) = (h.clone(), h.clone());
             editor = editor.child(div().flex().justify_center().child(crate::ui::components::calendar::month(
@@ -265,10 +270,32 @@ impl OxydeApp {
                         .on_click(move |_, _, cx| pick.update(cx, |this, cx| this.set_range_unit(unit, cx))),
                 );
             }
-            editor = editor.child(choice.w_full());
+            // The menu sets no size of its own: the units take the interface's.
+            editor = editor.child(choice.w_full().text_size(rems(0.8125)));
         }
         editor
     }
+}
+
+/// Width of `text` at `size`, in the interface's face.
+fn text_width(text: &str, size: Rems, weight: FontWeight, window: &Window) -> f32 {
+    let font = Font { weight, ..font("Inter") };
+    let run = TextRun { len: text.len(), font, color: Hsla::default(), background_color: None, underline: None, strikethrough: None };
+    window.text_system().shape_line(text.to_string().into(), rem_pixels(size), &[run], None).width.as_f32()
+}
+
+/// Outer width fitting the title with Clear and the keep row, never under the floor of its column.
+fn panel_min_width(column: FilterColumn, tab: Option<&TabState>, window: &Window, cx: &Context<OxydeApp>) -> f32 {
+    let i18n = cx.i18n();
+    let title = text_width(&i18n.text(filter_title_message(column, tab)), rems(0.75), FontWeight::SEMIBOLD, window)
+        + text_width(&i18n.text(Message::FilterClear), rems(0.75), FontWeight::NORMAL, window)
+        + rem_pixels(rems(2.0)).as_f32();
+    let keep = text_width(&i18n.text(Message::FilterKeep), rems(0.8125), FontWeight::NORMAL, window)
+        + rem_pixels(rems(2.5)).as_f32();
+    // The menu's own padding, border and scrollbar gutter.
+    let chrome = rem_pixels(rems(0.75)).as_f32();
+    let floor = if matches!(column, FilterColumn::Date | FilterColumn::Deleted) { DATE_PANEL_MIN_WIDTH } else { PANEL_MIN_WIDTH };
+    rem_pixels(floor).as_f32().max(title.max(keep) + chrome)
 }
 
 /// Whether the column holds a filter, even one keeping every entry: Clear then shows.
@@ -280,6 +307,21 @@ fn column_set(tab: &TabState, column: FilterColumn) -> bool {
         FilterColumn::Size => !tab.filter_sizes.is_empty() || tab.filter_size_range.is_some(),
         FilterColumn::Permissions => !tab.filter_permissions.is_empty(),
         FilterColumn::Date => !tab.filter_dates.is_empty() || tab.filter_date_range.is_some(),
+        FilterColumn::Deleted => !tab.filter_deleted.is_empty() || tab.filter_deleted_range.is_some(),
+    }
+}
+
+/// « Filter by » the column, as the panel's title reads.
+fn filter_title_message(column: FilterColumn, tab: Option<&TabState>) -> Message {
+    match column {
+        FilterColumn::Name => Message::FilterTitleName,
+        FilterColumn::Location if tab.is_some_and(|tab| tab.path == "trash://") => Message::FilterTitleOriginalLocation,
+        FilterColumn::Location => Message::FilterTitleLocation,
+        FilterColumn::Type => Message::FilterTitleType,
+        FilterColumn::Size => Message::FilterTitleSize,
+        FilterColumn::Permissions => Message::FilterTitlePermissions,
+        FilterColumn::Date => Message::FilterTitleModified,
+        FilterColumn::Deleted => Message::FilterTitleDeleted,
     }
 }
 

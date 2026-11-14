@@ -1,5 +1,5 @@
 use crate::ui::date_groups::DateGroup;
-use crate::ui::workspace::{DateRange, FilterValue, SizeCategory, SizeRange, TabState};
+use crate::ui::workspace::{DateRange, FilterColumn, FilterValue, SizeCategory, SizeRange, TabState};
 use oxyde_lib::models::FileEntry;
 
 fn tab(files: Vec<FileEntry>) -> TabState {
@@ -67,7 +67,7 @@ fn ranges_include_their_bounds_and_replace_checked_values() {
     assert_eq!(tab.filter_size_range, None);
 
     let date = |d: u32| chrono::NaiveDate::from_ymd_opt(2026, 3, d);
-    tab.set_date_range(DateRange { from: date(2), to: date(2) });
+    tab.set_date_range(FilterColumn::Date, DateRange { from: date(2), to: date(2) });
     assert_eq!(kept(&mut tab), ["b"]);
     tab.set_value_checked(FilterValue::Date(DateGroup::Older), true);
     assert_eq!(tab.filter_date_range, None);
@@ -78,11 +78,42 @@ fn clearing_a_column_keeps_the_others() {
     let mut tab = tab(vec![FileEntry { name: "a.txt".into(), ..Default::default() }]);
     tab.filter_name = "a".into();
     tab.filter_types.insert("TXT".into());
-    tab.set_date_range(DateRange { from: chrono::NaiveDate::from_ymd_opt(2026, 1, 1), to: None });
+    tab.set_date_range(FilterColumn::Date, DateRange { from: chrono::NaiveDate::from_ymd_opt(2026, 1, 1), to: None });
     assert!(tab.has_column_filters());
     tab.clear_column_filter(crate::ui::workspace::FilterColumn::Date);
     assert_eq!(tab.filter_date_range, None);
     assert_eq!(tab.filter_name, "a");
     tab.clear_column_filters();
     assert!(!tab.has_column_filters());
+}
+
+#[test]
+fn deletion_days_filter_the_trash_apart_from_modification() {
+    use chrono::TimeZone;
+    let day = |d: u32| chrono::Local.with_ymd_and_hms(2026, 3, d, 12, 0, 0).single().unwrap().timestamp_millis();
+    let mut tab = tab(vec![
+        FileEntry { name: "a".into(), modified: day(1) as u64, deleted_time: Some(day(5)), ..Default::default() },
+        FileEntry { name: "b".into(), modified: day(5) as u64, deleted_time: Some(day(6)), ..Default::default() },
+        FileEntry { name: "c".into(), ..Default::default() },
+    ]);
+    let date = |d: u32| chrono::NaiveDate::from_ymd_opt(2026, 3, d);
+    tab.set_date_range(FilterColumn::Deleted, DateRange { from: date(5), to: date(5) });
+    assert_eq!(tab.filter_date_range, None);
+    assert_eq!(kept(&mut tab), ["a"]);
+    tab.set_value_checked(FilterValue::Deleted(DateGroup::Older), true);
+    assert_eq!(tab.filter_deleted_range, None);
+    assert_eq!(kept(&mut tab), ["a", "b"]);
+    tab.clear_column_filter(FilterColumn::Deleted);
+    assert_eq!(kept(&mut tab).len(), 3);
+}
+
+#[test]
+fn location_filters_search_results_by_their_folder() {
+    let mut tab = tab(vec![
+        FileEntry { name: "a.txt".into(), path: "/work/a.txt".into(), ..Default::default() },
+        FileEntry { name: "b.txt".into(), path: "/home/b.txt".into(), ..Default::default() },
+        FileEntry { name: "c.txt".into(), path: "/trash/c.txt".into(), original_path: Some("/work/c.txt".into()), ..Default::default() },
+    ]);
+    tab.filter_original_location = "work".into();
+    assert_eq!(kept(&mut tab), ["a.txt", "c.txt"]);
 }

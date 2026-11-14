@@ -306,7 +306,6 @@ operations-dismiss = Rimuovi
 operations-empty = Nessuna operazione
 
 name-filter-placeholder = Filtra per nome
-filter-action = Filtra
 filter-clear = Cancella
 filter-clear-all = Cancella i filtri
 filter-all = Tutto
@@ -318,6 +317,15 @@ filter-to = Al
 filter-min = Min
 filter-max = Max
 filter-regex = Espressione regolare
+filter-title-name = Filtra per nome
+filter-title-location = Filtra per posizione
+filter-title-original-location = Filtra per posizione originale
+filter-title-type = Filtra per tipo
+filter-title-size = Filtra per dimensione
+filter-title-permissions = Filtra per permessi
+filter-title-modified = Filtra per data di modifica
+filter-title-deleted = Filtra per data di eliminazione
+filter-right-click = Clic destro per filtrare
 filter-summary-name = Nome: { $value }
 filter-hidden = { $count ->
     [one] { $number } nascosto

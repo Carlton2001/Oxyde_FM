@@ -11,7 +11,7 @@ pub(crate) use preparation::{resolve_native_kinds, FileUpdate};
 pub(crate) use folder_sizes::SIZE_FLASH_DURATION;
 pub(crate) use sorting::sort_files;
 pub use filters::{DateRange, FilterColumn, FilterValue, SizeRange};
-pub(crate) use filters::NameMatcher;
+pub(crate) use filters::{deleted_ms, NameMatcher};
 #[cfg(test)]
 pub(crate) use filters::ColumnFilterFlags;
 mod tree;
@@ -187,6 +187,10 @@ pub struct TabState {
     pub filter_dates: std::collections::HashSet<DateGroup>,
     /// Custom days, set instead of `filter_dates`.
     pub filter_date_range: Option<DateRange>,
+    /// Periods of deletion kept in the trash.
+    pub filter_deleted: std::collections::HashSet<DateGroup>,
+    /// Custom days of deletion, set instead of `filter_deleted`.
+    pub filter_deleted_range: Option<DateRange>,
     /// Column filters survive navigating to another folder.
     pub keep_filters: bool,
     pub selected_paths: std::collections::HashSet<String>,
@@ -231,6 +235,8 @@ struct FileFilters {
     filter_permissions: std::collections::HashSet<u32>,
     filter_dates: std::collections::HashSet<DateGroup>,
     filter_date_range: Option<DateRange>,
+    filter_deleted: std::collections::HashSet<DateGroup>,
+    filter_deleted_range: Option<DateRange>,
 }
 pub(crate) struct CalendarFilterRequest {
     tab_id: String,

@@ -11,6 +11,8 @@ pub enum FilterColumn {
     Size,
     Permissions,
     Date,
+    /// When an entry went to the trash.
+    Deleted,
 }
 
 /// One checkable value of a column filter.
@@ -20,6 +22,7 @@ pub enum FilterValue {
     Type(String),
     Size(super::SizeCategory),
     Date(crate::ui::date_groups::DateGroup),
+    Deleted(crate::ui::date_groups::DateGroup),
     Permissions(u32),
 }
 

@@ -114,6 +114,8 @@ impl TabState {
             filter_permissions: std::collections::HashSet::new(),
             filter_dates: std::collections::HashSet::new(),
             filter_date_range: None,
+            filter_deleted: std::collections::HashSet::new(),
+            filter_deleted_range: None,
             keep_filters: false,
             selected_paths: std::collections::HashSet::new(),
             selection_anchor: None,
