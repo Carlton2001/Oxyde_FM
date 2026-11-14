@@ -2,8 +2,10 @@ use crate::ui::elements::motion;
 use crate::ui::theme::OxydeTheme;
 use gpui::{prelude::*, *};
 
-const WIDTH: f32 = 1.875;
 const HEIGHT: f32 = 1.0;
+/// How far the thumb slides: the track's 1.875 rem width less its height. One
+/// length rounded once to device pixels, so the thumb rests as far from either end.
+const TRAVEL: f32 = 1.875 - HEIGHT;
 const BORDER: f32 = 0.0625;
 const INSET: f32 = 0.0625;
 /// The track shares the corners of fields and checkboxes.
@@ -31,7 +33,6 @@ pub(crate) fn toggle(id: impl Into<ElementId>, value: bool, theme: OxydeTheme) -
     };
     let on = if value { 1.0 } else { 0.0 };
     div()
-        .w(rems(WIDTH))
         .h(rems(HEIGHT))
         .flex_none()
         .flex()
@@ -43,28 +44,21 @@ pub(crate) fn toggle(id: impl Into<ElementId>, value: bool, theme: OxydeTheme) -
             track
                 .bg(mix(off_track, theme.accent, progress))
                 .border_color(mix(off_outline, theme.accent, progress))
-                // The thumb takes the snapped height left inside the track, and
-                // two spacers share the rest: whatever the display scale, its
-                // margins stay even and it sits flush at either end.
-                .child(spacer(progress))
+                // The thumb takes the snapped height left inside the track and the
+                // travel follows it, so the track's width is their snapped sum: whatever
+                // the display scale, the thumb's margins stay even at either end.
                 .child(
                     div()
                         .h_full()
                         .aspect_square()
                         .flex_none()
+                        .relative()
+                        .left(rems(TRAVEL * progress))
                         .rounded(rems(THUMB_RADIUS))
                         .bg(mix(off_thumb, theme.text_on_accent, progress)),
                 )
-                .child(spacer(1.0 - progress))
+                .child(div().flex_none().w(rems(TRAVEL)))
         })
-}
-
-/// Takes `share` of the room the thumb leaves free.
-fn spacer(share: f32) -> Div {
-    let mut spacer = div().flex_basis(px(0.0));
-    spacer.style().flex_grow = Some(share);
-    spacer.style().flex_shrink = Some(1.0);
-    spacer
 }
 
 /// Color `progress` of the way from `from` to `to`.
