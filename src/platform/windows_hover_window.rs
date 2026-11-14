@@ -525,7 +525,10 @@ fn place_now(window: HWND, size: Option<(f32, f32, f32)>, scale: f32) -> Result<
             } else {
                 cursor.x - inset
             };
-            let y = if beside {
+            let y = if beside && above {
+                // Its last entry level with the row, rising from there.
+                cursor.y - height + inset
+            } else if beside {
                 anchor_top - inset
             } else if !above && cursor.y + gap - inset + height <= work.bottom {
                 cursor.y + gap - inset

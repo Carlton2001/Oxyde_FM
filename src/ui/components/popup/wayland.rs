@@ -61,7 +61,7 @@ pub(crate) fn positioner(x: Axis, y: Axis) -> (Bounds<Pixels>, Corner, Gravity, 
 
 fn axes(anchor: &PopupAnchor, bounds: Bounds<Pixels>, inset: Pixels) -> (Axis, Axis) {
     if anchor.beside {
-        (flip_axis(bounds.left(), bounds.right(), px(0.0), inset, !anchor.open_left), slide_axis(bounds.top(), bounds.bottom(), inset, true))
+        (flip_axis(bounds.left(), bounds.right(), px(0.0), inset, !anchor.open_left), slide_axis(bounds.top(), bounds.bottom(), inset, !anchor.above))
     } else {
         let gap = if bounds.size.height > px(0.0) { ELEMENT_GAP } else { px(0.0) };
         (slide_axis(bounds.left(), bounds.right(), inset, !anchor.open_left), flip_axis(bounds.top(), bounds.bottom(), gap, inset, !anchor.above))

@@ -23,7 +23,8 @@ pub(super) fn render(view: &OxydeApp, handle: Entity<OxydeApp>, window: &mut Win
             });
         })
         .child(anchored().position(origin).snap_to_window().child(panel::render(view, handle.clone(), window, cx)));
-    if let (Some(kind), Some(bounds)) = (view.settings_picker, submenu_anchor(view)) {
+    if let Some((kind, anchor)) = view.settings_picker.and_then(|kind| Some((kind, submenu_anchor(view, kind)?))) {
+        let bounds = anchor.bounds;
         let submenu = submenu::render(view, handle, kind, window, cx);
         let margin = crate::ui::scale::rem_pixels(rems(0.375));
         let width = crate::ui::components::popup::available_size(window, cx).width;
@@ -32,8 +33,13 @@ pub(super) fn render(view: &OxydeApp, handle: Entity<OxydeApp>, window: &mut Win
         let open_left = bounds.right() + submenu_width + margin > width && bounds.left() - submenu_width >= margin;
         overlay = overlay.child(
             anchored()
-                .position(point(if open_left { bounds.left() } else { bounds.right() }, bounds.top()))
-                .anchor(if open_left { Anchor::TopRight } else { Anchor::TopLeft })
+                .position(point(if open_left { bounds.left() } else { bounds.right() }, if anchor.above { bounds.bottom() } else { bounds.top() }))
+                .anchor(match (open_left, anchor.above) {
+                    (false, false) => Anchor::TopLeft,
+                    (true, false) => Anchor::TopRight,
+                    (false, true) => Anchor::BottomLeft,
+                    (true, true) => Anchor::BottomRight,
+                })
                 .snap_to_window()
                 .child(submenu),
         );

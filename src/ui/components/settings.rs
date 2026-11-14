@@ -28,11 +28,13 @@ pub(crate) enum SettingsPicker {
 }
 
 /// Where a submenu opens: beside the row that opened it, its first entry level with
-/// that row, as GTK's.
-fn submenu_anchor(view: &OxydeApp) -> Option<Bounds<Pixels>> {
+/// that row, as GTK's. About, the panel's last row, rises from it instead.
+fn submenu_anchor(view: &OxydeApp, kind: SettingsPicker) -> Option<PopupAnchor> {
     let row = view.settings_submenu_bounds?;
     let chrome = crate::ui::scale::rem_pixels(crate::ui::components::select_menu::chrome()) / 2.0;
-    Some(Bounds::new(point(row.left(), row.top() - chrome), row.size))
+    let above = kind == SettingsPicker::About;
+    let shift = if above { chrome } else { -chrome };
+    Some(PopupAnchor::beside(Bounds::new(point(row.left(), row.top() + shift), row.size), false).above(above))
 }
 
 /// A move rightward more than up or down.
@@ -58,8 +60,8 @@ pub fn render_settings_panel(view: &OxydeApp, handle: Entity<OxydeApp>, window: 
 
 /// The panel in its own surface, which opens the submenu as a surface of its own.
 fn render_native_panel(view: &OxydeApp, handle: Entity<OxydeApp>, window: &mut Window, cx: &mut Context<OxydeApp>) -> AnyElement {
-    if let (Some(kind), Some(bounds)) = (view.settings_picker, submenu_anchor(view)) {
-        popup::show("settings-picker", PopupAnchor::beside(bounds, false), handle.clone(), window, cx,
+    if let Some((kind, anchor)) = view.settings_picker.and_then(|kind| Some((kind, submenu_anchor(view, kind)?))) {
+        popup::show("settings-picker", anchor, handle.clone(), window, cx,
             move |view| view.settings_open && view.settings_picker == Some(kind),
             move |view, window, cx| submenu::render(view, cx.entity(), kind, window, cx).into_any_element(),
             |view, _, cx| { view.close_settings_submenu(); cx.notify(); });
