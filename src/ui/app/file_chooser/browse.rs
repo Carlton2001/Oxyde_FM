@@ -211,9 +211,9 @@ impl FileChooserWindow {
         self.refresh(cx);
     }
 
-    pub(super) fn set_grid(&mut self, grid: bool, cx: &mut Context<Self>) {
-        if self.options.grid != grid {
-            self.options.grid = grid;
+    pub(super) fn set_view(&mut self, view: crate::ui::workspace::ViewMode, cx: &mut Context<Self>) {
+        if self.options.view != view {
+            self.options.view = view;
             if let Some(position) = self.selection.cursor() {
                 self.reveal(position);
             }
@@ -221,26 +221,36 @@ impl FileChooserWindow {
         }
     }
 
-    /// Cards per grid row, from the pane's width as the main grid computes it.
+    /// The card layout of the grid or the tiles; the details have rows.
+    pub(super) fn cards(&self) -> Option<crate::ui::style::CardLayout> {
+        self.options.view.cards()
+    }
+
+    /// The card layout shown, the grid's when the details are.
+    pub(super) fn card_layout(&self) -> crate::ui::style::CardLayout {
+        self.cards().unwrap_or_else(crate::ui::style::CardLayout::grid)
+    }
+
+    /// Cards per row, from the pane's width as the main grid computes it.
     pub(super) fn grid_geometry(&self) -> crate::ui::style::GridGeometry {
-        crate::ui::style::GridGeometry::for_viewport(crate::ui::style::CardLayout::grid(), self.pane_width.get().max(1.0), crate::ui::components::scrollbar::track_width())
+        crate::ui::style::GridGeometry::for_viewport(self.card_layout(), self.pane_width.get().max(1.0), crate::ui::components::scrollbar::track_width())
     }
 
     /// Rows of positions as the arrows move through them: one entry per details row,
     /// a line of cards in the grid.
     pub(super) fn position_rows(&self) -> Vec<Vec<usize>> {
-        let columns = if self.options.grid { self.grid_geometry().columns.max(1) } else { 1 };
+        let columns = if self.cards().is_some() { self.grid_geometry().columns.max(1) } else { 1 };
         (0..self.shown.len()).collect::<Vec<_>>().chunks(columns).map(<[usize]>::to_vec).collect()
     }
 
     /// Scrolls the entry into view, as `scroll_row_into_view` does.
     fn reveal(&self, position: usize) {
-        if !self.options.grid {
+        if self.cards().is_none() {
             self.list.scroll_to_item(position, ScrollStrategy::Nearest);
             return;
         }
         let row = position / self.grid_geometry().columns.max(1);
-        let height = crate::ui::style::CardLayout::grid().row_height();
+        let height = self.card_layout().row_height();
         // The grid's list starts below a 0.25 rem top padding.
         let top = row as f32 * height + crate::ui::scale::rem_pixels(rems(0.25)).as_f32();
         let handle = &self.grid_scroll;

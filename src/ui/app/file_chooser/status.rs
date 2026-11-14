@@ -1,6 +1,6 @@
 //! The status bar under the entries and what an empty folder says, copies of the main
 //! window's (`file_list/details.rs`, `grid.rs`, `presentation.rs`): folders and files
-//! shown, the selection's summary, and the switch between details and grid. Choosing
+//! shown, the selection's summary, and the switch between details, tiles and grid. Choosing
 //! has no size bars or grouping, so their buttons are left out.
 use super::{FileChooserWindow, Listing};
 use crate::ui::components::tooltip::{NativeTooltipExt, Tooltip};
@@ -29,20 +29,25 @@ impl FileChooserWindow {
     fn view_mode_switch(&self, theme: OxydeTheme, cx: &mut Context<Self>) -> impl IntoElement {
         let mut switch = crate::ui::elements::segmented::segmented("file-chooser-view-mode", None, theme);
         use crate::ui::elements::segmented::SegmentPlace;
-        for (grid, name, icon, tooltip) in [
-            (false, "file-chooser-view-details", "icons/list.svg", Message::ViewDetails),
-            (true, "file-chooser-view-grid", "icons/layout-grid.svg", Message::ViewGrid),
-        ] {
-            let selected = grid == self.options.grid;
+        use crate::ui::workspace::ViewMode;
+        // In the main window's order (`presentation.rs`).
+        let modes = [
+            (ViewMode::Details, "file-chooser-view-details", "icons/list.svg", Message::ViewDetails),
+            (ViewMode::Tiles, "file-chooser-view-tiles", "icons/layout-list.svg", Message::ViewTiles),
+            (ViewMode::Grid, "file-chooser-view-grid", "icons/layout-grid.svg", Message::ViewGrid),
+        ];
+        let count = modes.len();
+        for (index, (mode, name, icon, tooltip)) in modes.into_iter().enumerate() {
+            let selected = mode == self.options.view;
             switch = switch.child(
                 crate::ui::elements::segmented::segment(name, selected, true, theme)
-                    .place(usize::from(grid), 2)
+                    .place(index, count)
                     .w(rems(1.75))
                     .px_0()
                     .fixed_tooltip(Tooltip::text(cx.i18n().text(tooltip)))
                     .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, _, cx| {
                         cx.stop_propagation();
-                        this.set_grid(grid, cx);
+                        this.set_view(mode, cx);
                     }))
                     .child(svg().path(icon).size(rems(0.875)).text_color(if selected { theme.accent } else { theme.text })),
             );

@@ -3,17 +3,18 @@
 //! choices kept between windows: view, sort, the sidebar's width and the folder the
 //! last one ended in. The request decides beside them which files appear: none when
 //! choosing folders, else those of the type filter shown, as GTK's filters match them.
-use crate::ui::workspace::{SortColumn, SortDirection};
+use crate::ui::workspace::{SortColumn, SortDirection, ViewMode};
 use oxyde_lib::models::FileEntry;
 use oxyde_lib::platform::{FileTypeFilter, FileTypePattern};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 /// Kept in the preferences as `file_chooser_options`.
-#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub(super) struct Options {
-    pub(super) grid: bool,
+    /// The details unless chosen otherwise, unlike the main window's tabs.
+    pub(super) view: ViewMode,
     pub(super) sort: SortColumn,
     pub(super) direction: SortDirection,
     pub(super) folder: Option<String>,
@@ -23,12 +24,23 @@ pub(super) struct Options {
     pub(super) clients: Vec<(String, String)>,
 }
 
+impl Default for Options {
+    fn default() -> Self {
+        Self { view: ViewMode::Details, sort: Default::default(), direction: Default::default(), folder: None, sidebar: None, clients: Vec::new() }
+    }
+}
+
 /// How many applications' folders are kept.
 const CLIENTS: usize = 32;
 
 impl Options {
     pub(super) fn from_value(value: Option<&serde_json::Value>) -> Self {
-        value.and_then(|value| serde_json::from_value(value.clone()).ok()).unwrap_or_default()
+        let mut options: Self = value.and_then(|value| serde_json::from_value(value.clone()).ok()).unwrap_or_default();
+        // Before the tiles, the view was kept as `grid: bool`.
+        if value.is_some_and(|value| value.get("view").is_none() && value.get("grid") == Some(&serde_json::Value::Bool(true))) {
+            options.view = ViewMode::Grid;
+        }
+        options
     }
 
     pub(super) fn to_value(&self) -> Option<serde_json::Value> {

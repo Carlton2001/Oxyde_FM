@@ -51,12 +51,13 @@ fn the_filter_matches_names_without_regard_to_case_and_columns_measure_everythin
 
 #[test]
 fn options_survive_the_preferences_and_default_when_unreadable() {
-    let options = Options { grid: true, sort: SortColumn::Modified, direction: SortDirection::Descending, folder: Some("/home/a".into()), sidebar: Some(212.5), clients: vec![("app".into(), "/home/a/b".into())] };
+    let options = Options { view: crate::ui::workspace::ViewMode::Tiles, sort: SortColumn::Modified, direction: SortDirection::Descending, folder: Some("/home/a".into()), sidebar: Some(212.5), clients: vec![("app".into(), "/home/a/b".into())] };
     let value = options.to_value().unwrap();
     assert_eq!(value["sort"], "modified");
     assert_eq!(Options::from_value(Some(&value)), options);
     assert_eq!(Options::from_value(Some(&serde_json::json!({"sort": "nonsense"}))), Options::default());
-    assert!(Options::from_value(Some(&serde_json::json!({"grid": true}))).grid);
+    assert_eq!(Options::from_value(Some(&serde_json::json!({"grid": true}))).view, crate::ui::workspace::ViewMode::Grid);
+    assert_eq!(Options::from_value(Some(&serde_json::json!({"grid": false}))).view, crate::ui::workspace::ViewMode::Details);
 }
 
 #[test]

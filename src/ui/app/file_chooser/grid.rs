@@ -1,4 +1,4 @@
-//! The grid view, a copy of the main window's (`file_list/grid.rs`, `grid_card.rs`,
+//! The grid and tiles views, a copy of the main window's (`file_list/grid.rs`, `grid_card.rs`,
 //! `grid_scroll.rs`): cards laid out by `GridGeometry`, only the visible rows built,
 //! the measured scrollbar and the status bar. Choosing needs no menus, drags or
 //! renaming.
@@ -8,7 +8,7 @@ use crate::ui::components::tooltip::hover::SharedTooltipExt;
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::scale::{logical, rem_pixels};
-use crate::ui::style::{CARD_BORDER, CARD_DETAIL_HEIGHT, CARD_MARGIN, CARD_NAME_HEIGHT, GRID_CARD_GAP, GRID_CARD_PADDING_X, GRID_CARD_PADDING_Y};
+use crate::ui::style::{TabularFigures, CARD_BORDER, CARD_DETAIL_HEIGHT, CARD_MARGIN, CARD_NAME_HEIGHT, GRID_CARD_GAP, GRID_CARD_PADDING_X, GRID_CARD_PADDING_Y, TILE_PADDING_X, TILE_PADDING_Y};
 use crate::ui::theme::{OxydeTheme, ThemeContext};
 use gpui::prelude::*;
 use gpui::*;
@@ -34,56 +34,54 @@ impl FileChooserWindow {
             Some(owner) => card.shared_tooltip(owner, super::FILES_REGION, path.clone(), cx, Tooltip::for_item(file.clone(), false, self.media_previews, false)),
             None => card,
         };
-        let spec = crate::ui::style::CardLayout::grid().spec();
+        let layout = self.card_layout();
+        let spec = layout.spec();
         let dimmed = file.is_hidden || file.is_system;
-        card
+        let card = card
             .relative()
             .w(px(card_width - logical(4.0)))
-            .h(px(crate::ui::style::CardLayout::grid().row_height() - 2.0 * rem_pixels(CARD_MARGIN).as_f32()))
+            .h(px(layout.row_height() - 2.0 * rem_pixels(CARD_MARGIN).as_f32()))
             .m(CARD_MARGIN)
+            .rounded_md()
+            .border(CARD_BORDER)
+            .border_color(if self.rename_refused(&path) { theme.error } else if is_selected { theme.accent } else { theme.border.opacity(0.0) })
+            .bg(if is_selected { theme.selected } else { theme.active_background })
+            .when(!is_selected, |d| d.hover(|d| d.bg(theme.hover)))
+            .on_mouse_down(MouseButton::Left, press);
+        let media = div()
+            .relative()
+            .flex_none()
+            .when(dimmed, |d| d.opacity(0.75))
+            .child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(if self.thumbnails && !is_dir && crate::ui::components::file_list::supports_thumbnail(file) {
+                        crate::ui::components::file_list::render_grid_thumbnail(file, &pane, icon, theme, self.system_icons, spec).into_any_element()
+                    } else {
+                        render_file_icon(path.clone(), icon, spec.icon, &theme, self.system_icons, true)
+                    }),
+            );
+        let chevron = || svg().path("icons/chevron-right.svg").size_3().text_color(theme.text).opacity(0.5);
+        if layout == crate::ui::style::CardLayout::Tiles {
+            return self.render_tile(card, media.size(spec.media), chevron, file, name, kind, has_subdirectories, dimmed, theme, cx);
+        }
+        card
             .px(GRID_CARD_PADDING_X)
             .py(GRID_CARD_PADDING_Y)
             .flex()
             .flex_col()
             .items_center()
             .gap(GRID_CARD_GAP)
-            .rounded_md()
-            .border(CARD_BORDER)
-            .border_color(if self.rename_refused(&path) { theme.error } else if is_selected { theme.accent } else { theme.border.opacity(0.0) })
-            .bg(if is_selected { theme.selected } else { theme.active_background })
-            .when(!is_selected, |d| d.hover(|d| d.bg(theme.hover)))
-            .on_mouse_down(MouseButton::Left, press)
             .child(
-                div()
-                    .relative()
+                media
                     .w_full()
                     .h(spec.media)
-                    .flex_none()
-                    .when(dimmed, |d| d.opacity(0.75))
-                    .child(
-                        div()
-                            .absolute()
-                            .inset_0()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .child(if self.thumbnails && !is_dir && crate::ui::components::file_list::supports_thumbnail(file) {
-                                crate::ui::components::file_list::render_grid_thumbnail(file, &pane, icon, theme, self.system_icons, spec).into_any_element()
-                            } else {
-                                render_file_icon(path.clone(), icon, spec.icon, &theme, self.system_icons, true)
-                            }),
-                    )
                     .when(has_subdirectories, |row| {
-                        row.child(
-                            div()
-                                .absolute()
-                                .right_0()
-                                .top_0()
-                                .h_full()
-                                .flex()
-                                .items_center()
-                                .child(svg().path("icons/chevron-right.svg").size_3().text_color(theme.text).opacity(0.5)),
-                        )
+                        row.child(div().absolute().right_0().top_0().h_full().flex().items_center().child(chevron()))
                     }),
             )
             .child(
@@ -118,6 +116,92 @@ impl FileChooserWindow {
             .into_any_element()
     }
 
+    /// The tile, as the main window's (`card_body::tile`): the icon beside the name,
+    /// the size with the modification date, and the type.
+    #[allow(clippy::too_many_arguments)]
+    fn render_tile(
+        &self,
+        card: Stateful<Div>,
+        media: Div,
+        chevron: impl Fn() -> Svg,
+        file: &oxyde_lib::models::FileEntry,
+        name: String,
+        kind: String,
+        has_subdirectories: bool,
+        dimmed: bool,
+        theme: OxydeTheme,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let language = cx.i18n().language();
+        let size = if file.is_dir && !file.is_calculated {
+            None
+        } else if file.is_dir && file.size == 0 {
+            Some(cx.i18n().text(Message::FolderSizeEmpty).to_string())
+        } else {
+            Some(crate::ui::format::format_size(file.size, file.is_dir, file.is_calculated, language))
+        };
+        let date = crate::ui::format::format_date(file.modified, crate::ui::format::date_format(cx));
+        let details = div()
+            .w_full()
+            .h(CARD_DETAIL_HEIGHT)
+            .flex()
+            .items_center()
+            .gap(rems(0.25))
+            .overflow_hidden()
+            .text_size(rems(0.6875))
+            .line_height(CARD_DETAIL_HEIGHT)
+            .text_color(theme.text_muted)
+            .tabular_figures()
+            .when(dimmed, |d| d.opacity(0.75))
+            .when_some(size, |line, size| line.child(div().flex_none().child(size)).child(div().flex_none().child("•")))
+            .child(div().min_w_0().truncate().child(date));
+        card.px(TILE_PADDING_X)
+            .py(TILE_PADDING_Y)
+            .flex()
+            .flex_row()
+            .items_center()
+            .gap(rems(0.625))
+            .child(media)
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .flex_col()
+                    .justify_center()
+                    .child(
+                        div()
+                            .w_full()
+                            .h(CARD_NAME_HEIGHT)
+                            .line_height(CARD_NAME_HEIGHT)
+                            .text_size(rems(0.8125))
+                            .text_color(theme.text)
+                            .text_ellipsis_middle()
+                            .overflow_hidden()
+                            .when(dimmed, |d| d.opacity(0.75))
+                            .child(match self.render_rename(&file.path, None, theme, cx) {
+                                Some(field) => field,
+                                None => div().font_weight(FontWeight::MEDIUM).child(name).into_any_element(),
+                            }),
+                    )
+                    .child(details)
+                    .child(
+                        div()
+                            .w_full()
+                            .h(CARD_DETAIL_HEIGHT)
+                            .line_height(CARD_DETAIL_HEIGHT)
+                            .text_size(rems(0.6875))
+                            .text_color(theme.text_muted)
+                            .text_ellipsis()
+                            .overflow_hidden()
+                            .when(dimmed, |d| d.opacity(0.75))
+                            .child(kind),
+                    ),
+            )
+            .when(has_subdirectories, |card| card.child(div().flex_none().child(chevron())))
+            .into_any_element()
+    }
+
     pub(super) fn render_grid(&self, theme: OxydeTheme, cx: &mut Context<Self>) -> AnyElement {
         let status_bar_height = rem_pixels(crate::ui::style::STATUS_BAR_HEIGHT).as_f32();
         let grid = self.grid_geometry();
@@ -137,7 +221,7 @@ impl FileChooserWindow {
                 .on_mouse_down(MouseButton::Left, cx.listener(|this, event, window, cx| this.press_background(event, window, cx)))
                 .into_any_element()
         } else {
-            let row_height = crate::ui::style::CardLayout::grid().row_height();
+            let row_height = self.card_layout().row_height();
             let rows = self.shown.len().div_ceil(columns);
             let rows_height = rows as f32 * row_height;
             let scroll = self.grid_scroll.clone();

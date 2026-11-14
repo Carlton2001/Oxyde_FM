@@ -31,7 +31,7 @@ impl FileChooserWindow {
                 }
             }, |_, _, _, _| {}).absolute().size_full())
             .child(self.render_navbar(theme, cx))
-            .child(if self.options.grid { self.render_grid(theme, cx) } else { self.render_details(theme, cx) })
+            .child(if self.cards().is_some() { self.render_grid(theme, cx) } else { self.render_details(theme, cx) })
     }
 }
 

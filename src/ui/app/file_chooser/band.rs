@@ -30,7 +30,7 @@ pub(super) struct Band {
 impl FileChooserWindow {
     /// The list and grid scroll their own handles.
     fn entries_scroll(&self) -> ScrollHandle {
-        if self.options.grid { self.grid_scroll.clone() } else { self.list.0.borrow().base_handle.clone() }
+        if self.cards().is_some() { self.grid_scroll.clone() } else { self.list.0.borrow().base_handle.clone() }
     }
 
     /// A press beside the entries: nothing selected unless Ctrl or Shift keeps it, and
@@ -80,9 +80,9 @@ impl FileChooserWindow {
     /// while it is held.
     pub(super) fn apply_band(&mut self, cx: &mut Context<Self>) {
         let bounds = self.entries_bounds.get();
-        let grid = self.options.grid;
+        let grid = self.cards().is_some();
         let header = if grid { 0.0 } else { crate::ui::style::column_header_height() };
-        let row_height = if grid { crate::ui::style::CardLayout::grid().row_height() } else { crate::ui::style::row_height() };
+        let row_height = if grid { self.card_layout().row_height() } else { crate::ui::style::row_height() };
         let columns = if grid { self.grid_geometry().columns.max(1) } else { 1 };
         let rows = self.shown.len().div_ceil(columns);
         let scroll = self.entries_scroll();
@@ -157,7 +157,7 @@ impl FileChooserWindow {
         let origin = self.entries_bounds.get().origin.map(|value| value.as_f32());
         let (start, current) = (band.start.map(|value| value.as_f32()), band.current.map(|value| value.as_f32()));
         // Below the column headers, within the entries' area, while the press scrolled away.
-        let header = if self.options.grid { 0.0 } else { crate::ui::style::column_header_height() };
+        let header = if self.cards().is_some() { 0.0 } else { crate::ui::style::column_header_height() };
         let height = self.entries_bounds.get().size.height.as_f32();
         let top = (start.y.min(current.y) - origin.y).clamp(header, height);
         let bottom = (start.y.max(current.y) - origin.y).clamp(header, height);
