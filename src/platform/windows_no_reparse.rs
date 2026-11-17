@@ -80,7 +80,9 @@ fn drive_links_refused() -> Option<bool> {
     static REFUSED: std::sync::OnceLock<Option<bool>> = std::sync::OnceLock::new();
     *REFUSED.get_or_init(|| {
         let drive = std::env::var_os("SystemDrive").unwrap_or_else(|| "C:".into());
-        let root = Path::new(&drive).join("\\");
+        let mut root = std::ffi::OsString::from(&drive);
+        root.push("\\");
+        let root = std::path::PathBuf::from(root);
         // FILE_READ_ATTRIBUTES, all sharing, FILE_OPEN.
         match open_name(native_name(&root), std::ptr::null_mut(), Some(true), 0x80, 7, 1, true) {
             Ok(_) => Some(false),

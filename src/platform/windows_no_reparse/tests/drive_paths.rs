@@ -10,7 +10,9 @@ fn absolute_drive_paths_open_below_the_volume_root() {
     std::fs::write(folder.join("file.txt"), b"x").unwrap();
     open(&folder, true, 0x80, 7, 1).unwrap();
     open(&folder.join("file.txt"), false, 0x80, 7, 1).unwrap();
-    let volume = std::path::Path::new(&folder.components().next().unwrap().as_os_str().to_owned()).join("\\");
+    let mut volume = folder.components().next().unwrap().as_os_str().to_owned();
+    volume.push("\\");
+    let volume = std::path::PathBuf::from(volume);
     open(&volume, true, 0x80, 7, 1).unwrap();
 }
 

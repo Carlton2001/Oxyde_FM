@@ -129,7 +129,7 @@ fn row_fills(accent: Hsla, rows: &[Hsla], text: Hsla) -> Option<(f32, f32, Hsla)
             if share >= HOVER_TARGET {
                 return Some((bar, selected, fill));
             }
-            if best.map_or(true, |(.., kept)| share > kept + 0.02) {
+            if best.is_none_or(|(.., kept)| share > kept + 0.02) {
                 best = Some((bar, selected, fill, share));
             }
         }
