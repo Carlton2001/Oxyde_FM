@@ -92,7 +92,14 @@ impl OxydeApp {
                     ..Default::default()
                 },
                 move |window, cx| {
-                    window.on_window_should_close(cx, |window, cx| { crate::ui::components::tool_window::close_transients(window, cx); true });
+                    window.on_window_should_close(cx, |window, cx| {
+                        // Closing while permissions are being applied would stop them half-way.
+                        let saving = window.root::<PropertiesWindow>().flatten()
+                            .is_some_and(|view| view.read(cx).properties_dialog.as_ref().is_some_and(|dialog| dialog.saving));
+                        if saving { return false; }
+                        crate::ui::components::tool_window::close_transients(window, cx);
+                        true
+                    });
                     if let (Some(owner), Ok(handle)) = (
                         native_owner, raw_window_handle::HasWindowHandle::window_handle(window),
                     ) {
