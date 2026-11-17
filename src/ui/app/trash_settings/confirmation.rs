@@ -5,6 +5,9 @@ use crate::ui::elements::button::ButtonVariant;
 use crate::ui::i18n::FluentArgs;
 use crate::ui::theme::ThemeContext;
 
+/// Names listed before « and N others ».
+pub(super) const SHOWN_NAMES: usize = 3;
+
 pub(crate) fn render_delete_confirmation(
     view: &OxydeApp,
     handle: Entity<OxydeApp>,
@@ -17,12 +20,20 @@ pub(crate) fn render_delete_confirmation(
     }
     let tone = if pending.permanent_prompt { confirmation::Tone::Danger } else { confirmation::Tone::Neutral };
     let body = delete_body(pending, tone, cx);
-    let title = cx.i18n().text(if pending.permanent_prompt { Message::TrashDeletePermanent } else { Message::Delete });
+    let title = cx.i18n().text(match pending.target {
+        DeleteTarget::WholeTrash | DeleteTarget::TrashItems { all: true } => Message::TrashDeleteAll,
+        _ if pending.permanent_prompt => Message::TrashDeletePermanent,
+        _ => Message::Delete,
+    });
     let answer = move |handle: &Entity<OxydeApp>, confirm: bool, window: &mut Window, cx: &mut App| {
         handle.update(cx, |this, cx| {
             if let Some(pending) = this.pending_trash_delete.take() {
                 if confirm {
-                    this.queue_trash_delete(pending.paths, pending.permanent, cx);
+                    match pending.target {
+                        DeleteTarget::Files { permanent } => this.queue_trash_delete(pending.paths, permanent, cx),
+                        DeleteTarget::TrashItems { .. } => this.run_trash_action(false, pending.paths, cx),
+                        DeleteTarget::WholeTrash => this.empty_trash_confirmed(cx),
+                    }
                 }
             }
             window.focus(&this.focus_handle, cx);
@@ -67,33 +78,28 @@ pub(crate) fn render_delete_confirmation(
 /// The question, the first names concerned, and what follows: a way back from the
 /// trash, or a warning when nothing will be kept.
 fn delete_body(pending: &PendingDelete, tone: confirmation::Tone, cx: &App) -> Div {
-    const SHOWN: usize = 3;
     let theme = *cx.theme();
     let language = cx.i18n().language();
-    let count = pending.paths.len();
+    let count = pending.count;
     let mut args = FluentArgs::new();
     args.set("count", count as i64);
-    args.set("number", crate::ui::format::format_number(count as u64, language));
+    args.set("number", crate::ui::format::format_number(count, language));
     let question = cx.i18n().text_with_args(
         if pending.permanent_prompt { Message::DeletePermanentPromptCount } else { Message::DeletePromptCount },
         &args,
     );
     let mut details: Vec<AnyElement> = pending
-        .paths
+        .names
         .iter()
-        .take(SHOWN)
-        .map(|path| {
-            let name = std::path::Path::new(path)
-                .file_name()
-                .map(|name| oxyde_lib::utils::path_text::display(&name.to_string_lossy()))
-                .unwrap_or_else(|| path.clone());
-            div().min_w_0().truncate().child(name).into_any_element()
-        })
+        .take(SHOWN_NAMES)
+        .map(|name| div().min_w_0().truncate().child(name.clone()).into_any_element())
         .collect();
-    if count > SHOWN {
+    // The whole trash names no item: its count alone says what goes.
+    let shown = details.len() as u64;
+    if shown > 0 && count > shown {
         let mut args = FluentArgs::new();
-        args.set("count", (count - SHOWN) as i64);
-        args.set("number", crate::ui::format::format_number((count - SHOWN) as u64, language));
+        args.set("count", (count - shown) as i64);
+        args.set("number", crate::ui::format::format_number(count - shown, language));
         details.push(confirmation::detail(cx.i18n().text_with_args(Message::DeleteMore, &args), theme));
     }
     if !pending.permanent_prompt {

@@ -44,15 +44,11 @@ pub(super) fn check_conflicts_real(
     Ok(conflicts)
 }
 
-// Outside Windows a link is copied as a link: a broken link still takes its
-// name, and a link to a folder is one item rather than a merged folder.
-#[cfg(not(target_os = "windows"))]
+// A broken link still takes its name: publishing there would be refused, so
+// the user is asked. Outside Windows a link is also copied as a link, and a link
+// to a folder is one item rather than a merged folder.
 fn occupied(path: &std::path::Path) -> bool {
     path.symlink_metadata().is_ok()
-}
-#[cfg(target_os = "windows")]
-fn occupied(path: &std::path::Path) -> bool {
-    path.exists()
 }
 #[cfg(not(target_os = "windows"))]
 fn copied_as_link(path: &std::path::Path) -> bool {

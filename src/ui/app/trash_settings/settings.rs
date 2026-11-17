@@ -258,13 +258,24 @@ impl OxydeApp {
     }
 
     pub(crate) fn empty_trash_from_settings(&mut self, cx: &mut Context<Self>) {
-        let Some(dialog) = &mut self.trash_settings else {
+        let Some(dialog) = &self.trash_settings else {
             return;
         };
         if dialog.busy || dialog.loading || dialog.usage.1 == 0 {
             return;
         }
-        dialog.busy = true;
+        let count = dialog.usage.1;
+        self.prompt_empty_trash(count, cx);
+    }
+
+    /// Runs once the prompt is accepted, even if Properties closed meanwhile.
+    pub(super) fn empty_trash_confirmed(&mut self, cx: &mut Context<Self>) {
+        if let Some(dialog) = &mut self.trash_settings {
+            if dialog.busy {
+                return;
+            }
+            dialog.busy = true;
+        }
         cx.notify();
         cx.spawn(async move |this, cx| {
             let result = tokio::task::spawn_blocking(|| {

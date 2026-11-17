@@ -70,3 +70,25 @@ fn links_conflict_as_single_items_including_broken_targets() {
     let names: Vec<_> = conflicts.iter().map(|conflict| conflict.name.as_str()).collect();
     assert_eq!(names, ["folder", "broken"]);
 }
+
+#[cfg(windows)]
+#[test]
+fn a_broken_link_at_the_destination_is_a_conflict_on_windows_too() {
+    let root = tempfile::tempdir().unwrap();
+    let (source, target) = (root.path().join("source"), root.path().join("target"));
+    std::fs::create_dir_all(&source).unwrap();
+    std::fs::create_dir_all(&target).unwrap();
+    std::fs::write(source.join("report.pdf"), b"source").unwrap();
+    if let Err(error) = std::os::windows::fs::symlink_file(root.path().join("missing"), target.join("report.pdf")) {
+        eprintln!("symbolic links unavailable: {error}");
+        return;
+    }
+    // Publishing onto the link would be refused: the user is asked first.
+    let conflicts = check_conflicts_real(
+        vec![source.join("report.pdf").to_string_lossy().into_owned()],
+        target.to_string_lossy().into_owned(),
+    )
+    .unwrap();
+    assert_eq!(conflicts.len(), 1);
+    assert!(conflicts[0].target.is_symlink);
+}

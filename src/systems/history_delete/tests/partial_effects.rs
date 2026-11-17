@@ -15,6 +15,7 @@ fn initial_failed_folder_delete_journals_only_confirmed_children() {
         &mut |_, _| {
             fs::rename(&child, temp.path().join("saved")).unwrap();
             crate::platform::ShellDeleteOutcome {
+                destroyed: false,
                 completed: false,
                 error: Some("root failed".into()),
                 effects: vec![HistoryDeletedItem::new(
@@ -46,6 +47,7 @@ fn failed_redo_keeps_child_receipts_in_shared_journal_through_root_retry() {
     assert!(redo_reporting(std::slice::from_ref(&entry), &mut |_, _| {
         fs::rename(&child, temp.path().join("saved-child")).unwrap();
         crate::platform::ShellDeleteOutcome {
+            destroyed: false,
             completed: false,
             error: Some("root failed".into()),
             effects: vec![HistoryDeletedItem::new(

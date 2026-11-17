@@ -3,15 +3,16 @@ use std::os::windows::ffi::OsStrExt;
 use std::path::{Component, PathBuf, Prefix};
 
 /// Explicit selections must never acquire unselected Shell-connected items.
+/// A recycle Windows can only honor by destroying the item asks first, as in Explorer.
 pub(super) fn operation_flags(recycle: bool) -> u16 {
     use windows::Win32::UI::Shell::{
         FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_NO_CONNECTED_ELEMENTS, FOF_NO_UI,
-        FOF_SILENT,
+        FOF_SILENT, FOF_WANTNUKEWARNING,
     };
     let mut flags =
         FOF_NOCONFIRMATION.0 | FOF_NOERRORUI.0 | FOF_SILENT.0 | FOF_NO_CONNECTED_ELEMENTS.0;
     if recycle {
-        flags |= FOF_ALLOWUNDO.0;
+        flags |= FOF_ALLOWUNDO.0 | FOF_WANTNUKEWARNING.0;
     } else {
         flags |= FOF_NO_UI.0;
     }
@@ -85,7 +86,7 @@ mod tests {
 
     #[test]
     fn html_selection_never_packs_its_companion_and_both_modes_disable_connected_items() {
-        use windows::Win32::UI::Shell::{FOF_ALLOWUNDO, FOF_NO_CONNECTED_ELEMENTS};
+        use windows::Win32::UI::Shell::{FOF_ALLOWUNDO, FOF_NO_CONNECTED_ELEMENTS, FOF_WANTNUKEWARNING};
         let source = PathBuf::from(r"C:\fixtures\Page.html");
         let buffer = source_buffer(&[source]).unwrap();
         assert_eq!(
@@ -96,6 +97,8 @@ mod tests {
             let flags = u32::from(operation_flags(recycle));
             assert_ne!(flags & FOF_NO_CONNECTED_ELEMENTS.0, 0);
             assert_eq!(flags & FOF_ALLOWUNDO.0 != 0, recycle);
+            // Recycling never destroys an item silently.
+            assert_eq!(flags & FOF_WANTNUKEWARNING.0 != 0, recycle);
         }
     }
 

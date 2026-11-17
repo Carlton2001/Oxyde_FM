@@ -125,6 +125,9 @@ impl std::error::Error for ShellDeleteFailure {}
 pub enum ShellDeleteCause {
     InUse,
     AccessDenied,
+    /// Windows could not recycle the item: kept when refused or declined, destroyed
+    /// when the failure still reports a completed deletion.
+    NotRecyclable,
 }
 
 impl ShellDeleteFailure {
@@ -138,6 +141,9 @@ impl ShellDeleteFailure {
                 0x8027_0027 | 0x8027_0028 | 0x8007_0020 | 0x8007_0021 => return Some(ShellDeleteCause::InUse),
                 // COPYENGINE_E_ACCESS_DENIED_SRC/DEST, E_ACCESSDENIED.
                 0x8027_0021 | 0x8027_0022 | 0x8007_0005 => return Some(ShellDeleteCause::AccessDenied),
+                // COPYENGINE_E_RECYCLE_*, and COPYENGINE_S_USER_IGNORED: with confirmations
+                // off, the only question Windows asks is whether to destroy what it cannot recycle.
+                0x8027_0035..=0x8027_003A | 0x0027_0005 => return Some(ShellDeleteCause::NotRecyclable),
                 _ => {}
             }
         }

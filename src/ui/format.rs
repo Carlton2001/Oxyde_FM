@@ -535,12 +535,12 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
     if let Some(completed) = oxyde_lib::models::error::ShellDeleteFailure::from_message(detail) {
         use oxyde_lib::models::error::{ShellDeleteCause, ShellDeleteFailure};
         // A refusal Windows explains is actionable; only unexplained ones stay generic.
-        if !completed {
-            match ShellDeleteFailure::cause(detail) {
-                Some(ShellDeleteCause::InUse) => return i18n.text(Message::ShellDeleteInUse).to_string(),
-                Some(ShellDeleteCause::AccessDenied) => return i18n.text(Message::ShellDeleteAccessDenied).to_string(),
-                None => {}
-            }
+        match (completed, ShellDeleteFailure::cause(detail)) {
+            (false, Some(ShellDeleteCause::InUse)) => return i18n.text(Message::ShellDeleteInUse).to_string(),
+            (false, Some(ShellDeleteCause::AccessDenied)) => return i18n.text(Message::ShellDeleteAccessDenied).to_string(),
+            (false, Some(ShellDeleteCause::NotRecyclable)) => return i18n.text(Message::ShellDeleteNotRecyclable).to_string(),
+            (true, Some(ShellDeleteCause::NotRecyclable)) => return i18n.text(Message::ShellDeleteDestroyed).to_string(),
+            _ => {}
         }
         return i18n.text(if completed { Message::ShellDeleteCompletedError } else { Message::ShellDeleteUnconfirmed }).to_string();
     }

@@ -26,7 +26,8 @@ pub(super) struct DetailsRowParams<'a> {
     pub(super) editing_view: Option<Entity<crate::ui::components::input::TextInput>>,
     pub(super) rename_error: Option<SharedString>,
     pub(super) rename_shake_id: u64,
-    pub(super) selected_paths: &'a std::collections::HashSet<String>,
+    /// Selected entries the list shows, in display order: what a drag carries.
+    pub(super) selection: &'a [String],
     pub(super) theme: OxydeTheme,
     pub(super) histogram_total: u64,
     pub(super) total_w: f32,
@@ -63,7 +64,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
         editing_view,
         rename_error,
         rename_shake_id,
-        selected_paths,
+        selection,
         theme,
         histogram_total,
         total_w,
@@ -201,15 +202,15 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                  }
              })
             .on_drag({
-                let drag_paths = if is_selected && !selected_paths.is_empty() {
-                    selected_paths.iter().cloned().collect::<Vec<_>>()
+                let drag_paths = if is_selected && !selection.is_empty() {
+                    selection.to_vec()
                 } else {
                     vec![path.clone()]
                 };
                 FileDragData { paths: drag_paths.clone(), source_pane_id: p_id.clone() }
             }, {
-                let drag_paths = if is_selected && !selected_paths.is_empty() {
-                    selected_paths.iter().cloned().collect::<Vec<_>>()
+                let drag_paths = if is_selected && !selection.is_empty() {
+                    selection.to_vec()
                 } else {
                     vec![path.clone()]
                 };

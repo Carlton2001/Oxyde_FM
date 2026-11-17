@@ -77,7 +77,8 @@ impl OxydeApp {
             return;
         };
         let tab = pane.active_tab();
-        let paths = compression_sources(tab.files.iter().filter(|file| tab.selected_paths.contains(&file.path)).cloned());
+        // Only what the filters show: a hidden selected entry never joins the archive.
+        let paths = compression_sources(tab.filtered_files().iter().filter(|file| tab.selected_paths.contains(&file.path)).cloned());
         let Some(first) = paths.first() else {
             return;
         };

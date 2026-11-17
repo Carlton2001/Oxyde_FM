@@ -83,11 +83,10 @@ impl FileOperationManager {
         let update_destination = matches!(op.lock().unwrap().op_type, FileOpType::Compress);
         let destination_parents =
             crate::systems::path_parents::HeldParents::new(&requested).map_err(|error| error.to_string())?;
-        let target = Self::unique_archive_path(
-            &destination_parents
-                .resolved_path(&requested)
-                .map_err(|error| error.to_string())?,
-        );
+        let base = destination_parents
+            .resolved_path(&requested)
+            .map_err(|error| error.to_string())?;
+        let (target, mut index) = Self::free_archive_path(&base, 0);
         #[cfg(not(test))]
         let budget = ArchiveBudget::new(_limits.unwrap_or(if retained.is_some() { ArchiveLimits::WORKSPACE } else { ArchiveLimits::EXTRACTION }));
         #[cfg(not(test))]
@@ -268,7 +267,9 @@ impl FileOperationManager {
             match output.publish(&destination_parents, &final_target) {
                 Ok(()) => break,
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                    final_target = Self::unique_archive_path(&final_target);
+                    // Each refusal moves past the taken name, from the original one.
+                    Self::archive_checkpoint(op)?;
+                    (final_target, index) = Self::free_archive_path(&base, index + 1);
                 }
                 Err(error) => return Err(error.to_string()),
             }

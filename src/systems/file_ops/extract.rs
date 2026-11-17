@@ -42,12 +42,13 @@ impl FileOperationManager {
         #[cfg(target_os = "windows")]
         tree.verify_owned(&inner, &file)?;
         tree.release();
-        let mut published = Self::unique_archive_path(&parents.resolved_directory().join(name));
+        let base = parents.resolved_directory().join(name);
+        let (mut published, mut index) = Self::free_archive_path(&base, 0);
         loop {
             match parents.rename(&file, &inner, &published, false) {
                 Ok(()) => return Ok(published),
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                    published = Self::unique_archive_path(&published);
+                    (published, index) = Self::free_archive_path(&base, index + 1);
                 }
                 Err(error) => return Err(error),
             }
@@ -83,15 +84,19 @@ impl FileOperationManager {
                 ),
                 _ => None,
             };
-            let mut target = if stream.is_some() {
+            let base = if stream.is_some() {
                 target_parents.resolved_directory().join(format!(".oxyde-extract-{}", uuid::Uuid::new_v4()))
             } else {
-                Self::unique_archive_path(&target_parents.resolved_path(&requested).map_err(|e| e.to_string())?)
+                target_parents.resolved_path(&requested).map_err(|e| e.to_string())?
             };
+            let (mut target, mut index) = Self::free_archive_path(&base, 0);
             let tracking = loop {
                 match platform().create_journal_directory(target_parents.directory(), &target, stream.is_some()) {
                     Ok(file) => break file,
-                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => target = Self::unique_archive_path(&target),
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                        checkpoint().map_err(|e| e.to_string())?;
+                        (target, index) = Self::free_archive_path(&base, index + 1);
+                    }
                     Err(error) => return Err(error.to_string()),
                 }
             };
@@ -112,12 +117,12 @@ impl FileOperationManager {
         }
         #[cfg(test)]
         {
-        let mut target = Self::unique_archive_path(&requested);
+        let (mut target, mut index) = Self::free_archive_path(&requested, 0);
         loop {
             match std::fs::create_dir(&target) {
                 Ok(()) => break,
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                    target = Self::unique_archive_path(&target);
+                    (target, index) = Self::free_archive_path(&requested, index + 1);
                 }
                 Err(error) => return Err(error.to_string()),
             }

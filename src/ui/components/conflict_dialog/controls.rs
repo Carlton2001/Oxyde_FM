@@ -123,17 +123,30 @@ pub(super) fn button_with_label(
         )
     })
     .child(label.unwrap_or_else(|| cx.i18n().text(message)))
-    .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-        click_callback(&handle, cx);
-        restore_focus(&handle, window, cx);
-    })
-    .on_key_down(move |event, window, cx| {
-        if event.keystroke.key == "enter" || event.keystroke.key == "space" {
-            cx.stop_propagation();
-            callback(&keyboard_handle, cx);
-            restore_focus(&keyboard_handle, window, cx);
+    // Keys are handled below, on press.
+    .on_click(move |event, window, cx| {
+        if accepts_click(event.is_keyboard(), event.click_count()) {
+            click_callback(&handle, cx);
+            restore_focus(&handle, window, cx);
         }
     })
+    .on_key_down(move |event, window, cx| {
+        if is_activation_key(&event.keystroke.key) {
+            cx.stop_propagation();
+            if !event.is_held {
+                callback(&keyboard_handle, cx);
+                restore_focus(&keyboard_handle, window, cx);
+            }
+        }
+    })
+}
+/// A choice moves on to the next conflict, under the pointer: the second click of a
+/// double-click would answer a conflict the user has not seen.
+fn accepts_click(keyboard: bool, click_count: usize) -> bool {
+    !keyboard && click_count <= 1
+}
+fn is_activation_key(key: &str) -> bool {
+    matches!(key, "enter" | "space")
 }
 /// Conflict dialog tag, in the tinted style of the operation badges.
 pub(super) fn tag(message: Message, color: Hsla, cx: &App) -> Div {
@@ -152,3 +165,7 @@ pub(super) fn tag(message: Message, color: Hsla, cx: &App) -> Div {
 pub(super) fn automatic_badge(cx: &App) -> impl IntoElement {
     tag(Message::ConflictAutomatic, cx.theme().text_muted, cx)
 }
+
+#[cfg(test)]
+#[path = "controls/tests/activation.rs"]
+mod tests;

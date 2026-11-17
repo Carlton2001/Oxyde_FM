@@ -181,6 +181,20 @@ impl TabState {
         &self.cached_filtered_files
     }
 
+    /// The selected entries an action applies to, in display order: what the filters
+    /// show, members of collapsed groups included. A selected path hidden by a filter or
+    /// gone from the listing is never copied, moved, compressed or deleted.
+    pub(crate) fn actionable_selection(&self) -> Vec<String> {
+        if self.selected_paths.is_empty() {
+            return Vec::new();
+        }
+        self.filtered_files()
+            .iter()
+            .filter(|file| self.selected_paths.contains(&file.path))
+            .map(|file| file.path.clone())
+            .collect()
+    }
+
     #[cfg(test)]
     pub fn sort_files(&mut self) {
         super::sorting::sort_files(std::sync::Arc::make_mut(&mut self.files).as_mut_slice(), self.sort_column, self.sort_direction);
@@ -194,3 +208,7 @@ mod grouping_tests;
 #[cfg(test)]
 #[path = "tab/tests/renamed_selection.rs"]
 mod renamed_selection_tests;
+
+#[cfg(test)]
+#[path = "tab/tests/actionable_selection.rs"]
+mod actionable_selection_tests;
