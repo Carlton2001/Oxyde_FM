@@ -230,3 +230,9 @@ fn table_rows_carry_their_column_alignment() {
     assert!(matches!(&blocks[1].kind, Kind::TableRow(false, alignments)
         if alignments[..] == [Alignment::Left, Alignment::Center, Alignment::Right]));
 }
+
+#[test]
+fn unclosed_tag_ending_with_multibyte_char_does_not_panic() {
+    assert_eq!(html_code_block("<pre>a <é", false).as_deref(), Some("a <é"));
+    assert_eq!(html_code_block("<pre>x <", false).as_deref(), Some("x <"));
+}

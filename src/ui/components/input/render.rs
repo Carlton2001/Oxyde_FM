@@ -82,6 +82,9 @@ impl Render for TextInput {
                             h_clear.update(cx, |this, cx| {
                                 this.content.clear();
                                 this.selected_range = 0..0;
+                                this.selection_anchor = 0;
+                                this.selection_reversed = false;
+                                this.last_layout = None;
                                 (this.on_change)("", window, cx);
                                 cx.notify();
                             });

@@ -34,7 +34,11 @@ pub(crate) fn render(
                 "escape" => this.close_trash_settings(window, cx),
                 "tab" => {
                     if let Some(dialog) = &this.trash_settings {
-                        let order = [dialog.focus.clone(), dialog.input.read(cx).focus_handle.clone(), dialog.save_focus.clone()];
+                        // The field is drawn, and focusable, only while it is editable.
+                        let editable = !dialog.loading && !dialog.busy && !dialog.configs.get(dialog.selected).is_none_or(|config| config.nuke_on_delete);
+                        let mut order = vec![dialog.focus.clone()];
+                        if editable { order.push(dialog.input.read(cx).focus_handle.clone()); }
+                        order.push(dialog.save_focus.clone());
                         crate::ui::components::dialog::cycle(&order, event.keystroke.modifiers.shift, window, cx);
                     }
                 }

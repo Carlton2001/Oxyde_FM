@@ -206,6 +206,8 @@ pub(crate) struct PendingFileOperation {
 pub struct FileDragData {
     pub paths: Vec<String>,
     pub source_pane_id: String,
+    /// Set when the drag starts: the active tab may change before the pointer leaves the window.
+    pub from_trash: bool,
 }
 
 pub struct FileDragPreview {
@@ -333,6 +335,10 @@ pub struct OxydeApp {
     pub(crate) network_dialog: Option<network::NetworkDialog>,
     pub(crate) remote_login: Option<remote::RemoteLogin>,
     pub(crate) archive_password: Option<archive_password::ArchivePasswordPrompt>,
+    /// Requests refused while a prompt was open: asked once it is closed.
+    /// Clipboard writes and reads run one after the other, in the order they were asked.
+    pub(crate) clipboard_gate: std::sync::Arc<tokio::sync::Mutex<()>>,
+    pub(crate) archive_password_queue: Vec<archive_password::QueuedAsk>,
     pub(crate) open_with: Option<open_with::OpenWithPrompt>,
     /// Servers and network lists connected this session, listed by URI.
     pub(super) browsable_remotes: std::collections::HashSet<String>,
@@ -554,6 +560,8 @@ impl OxydeApp {
             network_dialog: None,
             remote_login: None,
             archive_password: None,
+            clipboard_gate: Default::default(),
+            archive_password_queue: Vec::new(),
             open_with: None,
             browsable_remotes: std::collections::HashSet::new(),
             remote_connections: std::collections::HashMap::new(),

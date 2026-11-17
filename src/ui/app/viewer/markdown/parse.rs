@@ -479,8 +479,10 @@ fn html_code_block(value: &str, continued: bool) -> Option<String> {
     while let Some(start) = rest.find('<') {
         text.push_str(&rest[..start]);
         let tail = &rest[start..];
-        let end = tail.find('>').map(|end| end + 1).unwrap_or(tail.len());
-        let tag = tail[1..end.saturating_sub(1).max(1)].trim_start_matches('/');
+        let closed = tail.find('>');
+        let end = closed.map(|end| end + 1).unwrap_or(tail.len());
+        // Without a `>`, the tag runs to the end: do not cut inside its last character.
+        let tag = tail[1..closed.unwrap_or(tail.len())].trim_start_matches('/');
         let name = tag.split(|c: char| c.is_whitespace() || c == '/').next().unwrap_or("");
         if !(name.eq_ignore_ascii_case("pre") || CODE_TAGS.iter().any(|code| name.eq_ignore_ascii_case(code))) {
             text.push_str(&tail[..end]);

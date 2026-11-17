@@ -6,6 +6,7 @@ use dashmap::DashMap;
 use glob::Pattern;
 use once_cell::sync::Lazy;
 use regex::RegexBuilder;
+#[cfg(test)]
 use std::fs::File;
 use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -457,7 +458,7 @@ fn is_binary_file(path: &std::path::Path) -> bool {
         return false;
     }
 
-    let mut file = match File::open(path) {
+    let mut file = match crate::utils::open_regular::open_regular(path) {
         Ok(f) => f,
         Err(_) => return true,
     };
@@ -536,7 +537,7 @@ fn read_file_and_check(
     ignore_accents: bool,
     cancellation: &AtomicBool,
 ) -> bool {
-    let file = match File::open(path) {
+    let file = match crate::utils::open_regular::open_regular(path) {
         Ok(f) => f,
         Err(_) => return false,
     };

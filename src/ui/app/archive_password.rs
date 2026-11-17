@@ -9,6 +9,13 @@ use std::path::{Path, PathBuf};
 
 type Retry = Box<dyn FnOnce(&mut OxydeApp, &mut Context<OxydeApp>)>;
 
+/// A password request that came while another prompt was open.
+pub(crate) struct QueuedAsk {
+    archive: PathBuf,
+    wrong: bool,
+    retry: Retry,
+}
+
 pub(crate) struct ArchivePasswordPrompt {
     pub archive: PathBuf,
     /// The previous password was refused.
@@ -104,13 +111,14 @@ impl OxydeApp {
         if wrong {
             archive_password::forget(archive);
         }
-        // One prompt at a time; a refusal meanwhile keeps its error.
+        let archive = archive.to_path_buf();
+        let retry: Retry = Box::new(retry);
+        // One prompt at a time: the others wait for it.
         if self.archive_password.is_some() {
+            self.archive_password_queue.push(QueuedAsk { archive, wrong, retry });
             return true;
         }
         let Some(window) = self.main_window else { return false };
-        let archive = archive.to_path_buf();
-        let retry: Retry = Box::new(retry);
         cx.spawn(async move |this, cx| {
             let _ = window.update(cx, |_, window, cx| {
                 let _ = this.update(cx, |this, cx| this.show_archive_password(archive, wrong, retry, window, cx));
@@ -129,6 +137,7 @@ impl OxydeApp {
         cx: &mut Context<Self>,
     ) {
         if self.archive_password.is_some() {
+            self.archive_password_queue.push(QueuedAsk { archive, wrong, retry });
             return;
         }
         let handle = cx.entity();
@@ -173,9 +182,12 @@ impl OxydeApp {
     /// dialog open: the field shakes, empties and says so, as the path bar does.
     pub(crate) fn answer_archive_password(&mut self, cancel: bool, window: &mut Window, cx: &mut Context<Self>) {
         if cancel {
-            if self.archive_password.take().is_some() {
+            if let Some(prompt) = self.archive_password.take() {
                 self.context_menus.clear();
                 window.focus(&self.focus_handle, cx);
+                // Declining an archive declines every request waiting for it.
+                self.archive_password_queue.retain(|ask| ask.archive != prompt.archive);
+                self.ask_next_queued_password(cx);
                 cx.notify();
             }
             return;
@@ -229,6 +241,28 @@ impl OxydeApp {
         cx.notify();
         if let Some(retry) = prompt.retry.take() {
             retry(self, cx);
+        }
+        self.ask_next_queued_password(cx);
+    }
+
+    /// Runs the waiting requests the new password unlocks, then prompts for the next archive.
+    fn ask_next_queued_password(&mut self, cx: &mut Context<Self>) {
+        while self.archive_password.is_none() && !self.archive_password_queue.is_empty() {
+            let ask = self.archive_password_queue.remove(0);
+            if archive_password::for_archive(&ask.archive).is_some() {
+                (ask.retry)(self, cx);
+                continue;
+            }
+            let Some(window) = self.main_window else { return };
+            let QueuedAsk { archive, wrong, retry } = ask;
+            // Marks the prompt as taken until the spawned task shows it.
+            cx.spawn(async move |this, cx| {
+                let _ = window.update(cx, |_, window, cx| {
+                    let _ = this.update(cx, |this, cx| this.show_archive_password(archive, wrong, retry, window, cx));
+                });
+            })
+            .detach();
+            return;
         }
     }
 

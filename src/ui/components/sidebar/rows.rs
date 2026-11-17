@@ -396,7 +396,7 @@ pub(super) fn render_sidebar_rows(
                     })
                     // Drag source
                     .on_drag(
-                        FileDragData { paths: vec![path.clone()], source_pane_id: "sidebar".to_string() },
+                        FileDragData { paths: vec![path.clone()], source_pane_id: "sidebar".to_string(), from_trash: false },
                         {
                             let drag_path = path.clone();
                             let h_drag    = h.clone();
@@ -407,7 +407,7 @@ pub(super) fn render_sidebar_rows(
                             }
                         }
                     )
-                    .external_drag_payload(crate::ui::app::outgoing_drag(h.clone()))
+                    .external_drag_payload(crate::ui::app::outgoing_drag())
                     // Drag target
                     .external_file_drop(h.clone(), path.clone())
                     .drag_over::<FileDragData>({

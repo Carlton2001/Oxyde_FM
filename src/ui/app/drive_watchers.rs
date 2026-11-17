@@ -113,7 +113,10 @@ impl OxydeApp {
                 // Release watches and wait for their handles to close: an open handle keeps
                 // the volume busy.
                 for (watched_path, watcher) in watchers {
-                    watcher.release(&watched_path).map_err(VolumeError::Other)?;
+                    // A watch already gone (deleted folder) does not keep the volume busy.
+                    if let Err(error) = watcher.release(&watched_path) {
+                        log::warn!("Releasing watcher on {watched_path} failed: {error}");
+                    }
                 }
                 let volumes = oxyde_lib::platform::platform().volumes();
                 if eject { volumes.eject(&path)? } else { volumes.unmount(&path)? }
@@ -206,6 +209,8 @@ impl OxydeApp {
                     Ok(Err(error)) => { log::warn!("Drive notifications unavailable: {error}"); None }
                     Err(error) => { log::warn!("Drive notification worker failed: {error}"); None }
                 };
+                // Drives absent from the previous survey: one transient survey does not remove a drive.
+                let mut suspect: Vec<String> = Vec::new();
                 let mut schedule = drive_watchers::DriveRefreshSchedule::new(
                     _registration.is_some(), std::time::Instant::now());
                 loop {
@@ -228,6 +233,17 @@ impl OxydeApp {
                             h.update(&mut cx, |this, cx| {
                                 if this.ejecting_drive || this.drive_refresh_epoch != epoch
                                     || revision.load(Ordering::Acquire) != observed { return; }
+                                let mut roots = roots;
+                                let missing: Vec<_> = this.state.drives.iter()
+                                    .filter(|old| !roots.iter().any(|root| paths_match(&root.path, &old.path)))
+                                    .cloned()
+                                    .collect();
+                                for old in &missing {
+                                    if !suspect.contains(&old.path) {
+                                        roots.push(old.clone());
+                                    }
+                                }
+                                suspect = missing.into_iter().map(|old| old.path).collect();
                                 let changed = roots.len() != this.state.drives.len()
                                     || roots.iter().any(|root| !this.state.drives.iter()
                                         .any(|old| old.path == root.path && old.drive_type == root.drive_type));
@@ -283,7 +299,11 @@ impl OxydeApp {
                             cx.notify();
                         }
                     });
-                    let changed = if let Ok(mut q) = changes.lock() {
+                    // Changes wait in the queue while a drive is being released.
+                    let ejecting = h.update(&mut cx, |this, _| this.ejecting_drive);
+                    let changed = if ejecting {
+                        HashMap::new()
+                    } else if let Ok(mut q) = changes.lock() {
                         std::mem::take(&mut *q)
                     } else {
                         HashMap::new()

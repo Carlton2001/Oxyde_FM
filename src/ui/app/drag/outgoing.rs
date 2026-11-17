@@ -2,8 +2,8 @@
 //! gesture to Wayland, whose compositor then shows no preview of it; the receiver does
 //! the copy or the move itself, as from Nautilus. Its X11 backend cannot offer files, so
 //! a drag there stays inside Oxyde; Windows has its own OLE session.
-use super::super::{FileDragData, OxydeApp};
-use gpui::{App, Entity, ExternalDragPayload, FileDragPaths, Window};
+use super::super::FileDragData;
+use gpui::{App, ExternalDragPayload, FileDragPaths, Window};
 use std::path::{Path, PathBuf};
 
 /// Everything or nothing: a partial drop would look complete. Lexical, on the UI thread:
@@ -21,13 +21,11 @@ fn offered_paths(paths: &[String]) -> Option<Vec<PathBuf>> {
 }
 
 /// Called at most once per drag, when the pointer leaves the window.
-pub(crate) fn resolver(app: Entity<OxydeApp>)
+pub(crate) fn resolver()
     -> impl Fn(&FileDragData, &mut Window, &mut App) -> Option<ExternalDragPayload> + 'static {
-    move |data, _, cx| {
+    move |data, _, _| {
         // Other applications would take a trashed item's content without its record.
-        let from_trash = app.read(cx).state.find_pane(&data.source_pane_id)
-            .is_some_and(|pane| pane.active_tab().path == "trash://");
-        if from_trash {
+        if data.from_trash {
             return None;
         }
         // The flag tells macOS about folders; Wayland only sends URIs.

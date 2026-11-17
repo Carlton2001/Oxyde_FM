@@ -27,6 +27,20 @@ fn actionable_drop_paths(mut paths: Vec<String>, target: &str) -> Vec<String> {
 #[path = "drag/tests/drop_paths.rs"]
 mod drop_paths_tests;
 
+/// New weight of the left pane of a pair, keeping both at 0.1 or more.
+/// A pair lighter than 0.2 is split in half instead of panicking in `clamp`.
+fn resized_pair_weight(initial: f32, pair_total: f32, delta: f32) -> f32 {
+    const MIN: f32 = 0.1;
+    if pair_total <= 2.0 * MIN {
+        return pair_total / 2.0;
+    }
+    (initial + delta).clamp(MIN, pair_total - MIN)
+}
+
+#[cfg(test)]
+#[path = "drag/tests/pane_weights.rs"]
+mod pane_weight_tests;
+
 fn drag_copy_override(modifiers: Modifiers) -> Option<bool> {
     if modifiers.control {
         Some(true)
@@ -494,8 +508,11 @@ impl OxydeApp {
                             if i < weights.len() && j < weights.len() {
                                 let total_pair_weight =
                                     initial_weights[i] + initial_weights[j];
-                                let new_wi = (initial_weights[i] + delta_weight)
-                                    .clamp(0.1, total_pair_weight - 0.1);
+                                let new_wi = resized_pair_weight(
+                                    initial_weights[i],
+                                    total_pair_weight,
+                                    delta_weight,
+                                );
                                 let new_wj = total_pair_weight - new_wi;
 
                                 weights[i] = new_wi;

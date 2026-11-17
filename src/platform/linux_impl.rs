@@ -31,7 +31,7 @@ impl Platform for LinuxPlatform {
         super::linux_archive_list::verify(path)
     }
     fn open_archive_source(&self, path: &std::path::Path, _allow_changes: bool) -> std::io::Result<std::fs::File> {
-        let file = std::fs::File::open(path)?;
+        let file = crate::utils::open_regular::open_regular(path)?;
         if !file.metadata()?.is_file() {return Err(std::io::Error::other("Archive source is not a regular file"));}
         Ok(file)
     }

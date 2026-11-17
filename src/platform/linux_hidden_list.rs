@@ -8,7 +8,7 @@ use std::path::Path;
 const MAX_LIST_BYTES: u64 = 1024 * 1024;
 
 pub(super) fn read(directory: &Path) -> HashSet<String> {
-    let Ok(file) = std::fs::File::open(directory.join(".hidden")) else {
+    let Ok(file) = crate::utils::open_regular::open_regular(&directory.join(".hidden")) else {
         return HashSet::new();
     };
     if !file.metadata().is_ok_and(|metadata| metadata.is_file() && metadata.len() <= MAX_LIST_BYTES) {

@@ -368,6 +368,13 @@ impl TextInput {
     }
 
     fn select_word_at(&mut self, byte_index: usize) {
+        // A masked field hides its word boundaries: select everything.
+        if self.password {
+            self.selected_range = 0..self.content.len();
+            self.selection_anchor = 0;
+            self.selection_reversed = false;
+            return;
+        }
         if self.content.is_empty() {
             self.selected_range = 0..0;
             self.selection_anchor = 0;
@@ -449,7 +456,7 @@ impl TextInput {
         cx.stop_propagation();
         let input = cx.entity();
         let position = crate::ui::components::popup::owner_point(window, cx, event.position);
-        crate::ui::components::popup::with_owner(window, cx, |window, cx| (self.on_context_menu)(input, self.has_selection(), position, window, cx));
+        crate::ui::components::popup::with_owner(window, cx, |window, cx| (self.on_context_menu)(input, self.has_selection() && !self.password, position, window, cx));
     }
 
     pub fn has_selection(&self) -> bool {
@@ -457,6 +464,10 @@ impl TextInput {
     }
 
     pub fn copy_selected_text(&self, cx: &mut Context<Self>) {
+        // A masked field never gives its text to the clipboard.
+        if self.password {
+            return;
+        }
         if let Some(text) = self.content.get(self.selected_range.clone()) {
             if !text.is_empty() {
                 cx.write_to_clipboard(ClipboardItem::new_string(text.to_string()));
@@ -465,7 +476,7 @@ impl TextInput {
     }
 
     pub fn cut_selected_text(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if !self.selected_range.is_empty() {
+        if !self.selected_range.is_empty() && !self.password {
             self.copy_selected_text(cx);
             self.replace_text_in_range(None, "", window, cx);
         }
@@ -755,6 +766,9 @@ impl EntityInputHandler for TextInput {
     ) -> Option<String> {
         let range = self.range_from_utf16(range_utf16);
         actual_range.replace(self.range_to_utf16(range.clone()));
+        if self.password {
+            return None;
+        }
         self.content.get(range).map(|s| s.to_string())
     }
     fn selected_text_range(

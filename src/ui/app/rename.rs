@@ -27,7 +27,13 @@ impl OxydeApp {
         let pane_id = self.state.active_pane_id.clone();
         let selected = self.state.layout.find_pane(&pane_id).and_then(|pane| {
             let tab = pane.active_tab();
-            tab.selected_paths.iter().next().cloned().map(|path| {
+            // The keyboard cursor, when selected, is the item F2 targets.
+            let target = tab
+                .keyboard_cursor
+                .as_ref()
+                .filter(|cursor| tab.selected_paths.contains(*cursor))
+                .or_else(|| tab.selected_paths.iter().min());
+            target.cloned().map(|path| {
                 let is_dir = tab
                     .files
                     .iter()
@@ -90,6 +96,18 @@ impl OxydeApp {
         }
     }
 
+    /// The trash and the network list hold no folder where a name can be changed or created.
+    fn location_is_virtual(path: &str) -> bool {
+        matches!(path, "trash://" | "__network_vincinity__")
+    }
+
+    fn active_location_is_virtual(&self) -> bool {
+        self.state
+            .layout
+            .find_pane(&self.state.active_pane_id)
+            .is_some_and(|pane| Self::location_is_virtual(&pane.active_tab().path))
+    }
+
     pub(super) fn begin_rename(
         &mut self,
         path: String,
@@ -110,6 +128,9 @@ impl OxydeApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.active_location_is_virtual() {
+            return;
+        }
         // Rename and breadcrumb editing share the same input entity.
         if self.breadcrumb_editing {
             self.cancel_breadcrumb_edit(cx);
@@ -407,7 +428,7 @@ impl OxydeApp {
     fn create_new_item(&mut self, pane_id: &str, is_dir: bool, cx: &mut Context<Self>) {
         if let Some(pane) = self.state.layout.find_pane(pane_id) {
             let current_path = pane.active_tab().path.clone();
-            if current_path.starts_with("search://") { return; }
+            if current_path.starts_with("search://") || Self::location_is_virtual(&current_path) { return; }
             let (name_key, numbered_key) = if is_dir {
                 (Message::NewFolderName, Message::NewFolderNumbered)
             } else {

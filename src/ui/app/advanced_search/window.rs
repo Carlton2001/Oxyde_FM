@@ -22,13 +22,26 @@ impl OxydeApp {
     pub(crate) fn open_advanced_search(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         self.context_menus.clear();
         self.close_settings();
+        let active_pane = self.state.active_pane_id.clone();
         for handle in cx.windows() {
             if let Some(handle) = handle.downcast::<AdvancedSearchWindow>() {
-                cx.defer(move |cx| {
-                    let _ = handle.update(cx, |_, window, _| window.activate_window());
+                // A window opened from another pane would validate into that pane: replace it.
+                let same_pane = handle
+                    .update(cx, |window, _, _| {
+                        window.advanced_search.as_ref().is_some_and(|dialog| dialog.pane == active_pane)
+                    })
+                    .unwrap_or(false);
+                if same_pane {
+                    cx.defer(move |cx| {
+                        let _ = handle.update(cx, |_, window, _| window.activate_window());
+                    });
+                    cx.notify();
+                    return;
+                }
+                let _ = handle.update(cx, |_, window, cx| {
+                    crate::ui::components::tool_window::close_transients(window, cx);
+                    window.remove_window()
                 });
-                cx.notify();
-                return;
             }
         }
         let pane = self.state.active_pane_id.clone();
