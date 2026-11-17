@@ -196,9 +196,11 @@ fn html_code_elements_render_as_code() {
 fn task_items_replace_the_bullet_with_their_box() {
     let (blocks, _) = parse("- [ ] todo\n- [x] done\n  - [ ] nested\n- plain", "C:/docs/readme.md");
     let texts: Vec<_> = blocks.iter().map(|block| block.text.as_str()).collect();
-    assert!(texts.contains(&"☐ todo"));
-    assert!(texts.contains(&"☑ done"));
-    assert!(texts.contains(&"  ☐ nested"));
+    let task = |text: &str| blocks.iter().find(|block| block.text == text).and_then(|block| block.task);
+    assert_eq!(task("todo"), Some(Task { checked: false, depth: 0 }));
+    assert_eq!(task("done"), Some(Task { checked: true, depth: 0 }));
+    assert_eq!(task("nested"), Some(Task { checked: false, depth: 1 }));
+    assert_eq!(task("• plain"), None);
     assert!(texts.contains(&"• plain"));
 }
 

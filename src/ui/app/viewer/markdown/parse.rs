@@ -37,6 +37,15 @@ pub(super) struct Block {
     pub(super) kind: Kind,
     pub(super) text: String,
     pub(super) spans: Vec<Span>,
+    /// A task list item, drawn with its box icon in place of the bullet.
+    pub(super) task: Option<Task>,
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub(super) struct Task {
+    pub(super) checked: bool,
+    /// The list nesting level, counted from zero.
+    pub(super) depth: usize,
 }
 
 fn local_image(base: &str, destination: &str) -> Option<String> {
@@ -85,6 +94,7 @@ struct Builder<'a> {
     /// The number of the footnote definition being read; its blocks go last.
     footnote: Option<usize>,
     notes: Vec<(usize, Block)>,
+    task: Option<Task>,
     language: String,
     started: Instant,
 }
@@ -113,6 +123,7 @@ impl Builder<'_> {
             kind: self.kind.clone(),
             text,
             spans,
+            task: self.task.take(),
         };
         if let Some(number) = self.footnote {
             self.notes.push((number, block));
@@ -233,6 +244,7 @@ pub(super) fn parse_progressively(
         footnotes: HashMap::new(),
         footnote: None,
         notes: Vec::new(),
+        task: None,
         language: String::new(),
         started: Instant::now(),
     };
@@ -384,15 +396,16 @@ pub(super) fn parse_progressively(
             ),
             Event::HardBreak => builder.append("\n", false),
             Event::TaskListMarker(checked) => {
-                let marker = if checked { "☑ " } else { "☐ " };
-                // A task item shows its box in place of the bullet, like GitHub
-                // and Zed. Both markers have the same byte length, so the
-                // spans already recorded stay valid.
-                if builder.text.ends_with("• ") {
-                    let start = builder.text.len() - "• ".len();
-                    builder.text.replace_range(start.., marker);
+                // A task item shows its box icon in place of the bullet, like
+                // GitHub and Zed: the view draws it from the block's task.
+                let prefix = builder.text.strip_suffix("• ").filter(|indent| indent.bytes().all(|byte| byte == b' '));
+                if let Some(indent) = prefix {
+                    let depth = indent.len() / 2;
+                    builder.text.clear();
+                    builder.spans.clear();
+                    builder.task = Some(Task { checked, depth });
                 } else {
-                    builder.append(marker, false);
+                    builder.append(if checked { "☑ " } else { "☐ " }, false);
                 }
             }
             Event::Rule => {
@@ -433,7 +446,7 @@ pub(super) fn parse_progressively(
         // Footnotes close the document, in reference order, like on GitHub.
         let mut notes = std::mem::take(&mut builder.notes);
         notes.sort_by_key(|(number, _)| *number);
-        builder.blocks.push(Block { kind: Kind::Rule, text: String::new(), spans: Vec::new() });
+        builder.blocks.push(Block { kind: Kind::Rule, text: String::new(), spans: Vec::new(), task: None });
         builder.blocks.extend(notes.into_iter().map(|(_, block)| block));
     }
     if !builder.stopped && !cancelled() && !builder.blocks.is_empty() {

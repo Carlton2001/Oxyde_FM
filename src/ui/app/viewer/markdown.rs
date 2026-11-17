@@ -406,6 +406,21 @@ impl Viewer {
                     )
                     .into_any_element();
             }
+            if let Some(task) = block.task {
+                // The shared checkbox, centered on the first line: the text
+                // takes the same explicit line height.
+                let check = crate::ui::elements::checkbox::checkbox(theme.clone(), task.checked, false);
+                let line = rems(1.5);
+                return frame
+                    .flex()
+                    .items_start()
+                    .gap(rems(0.5))
+                    .pl(rems(2.0 + task.depth as f32 * 0.5))
+                    .line_height(line)
+                    .child(div().flex_none().h(line).flex().items_center().child(check))
+                    .child(div().flex_1().min_w_0().child(text))
+                    .into_any_element();
+            }
             frame
                 .child(text)
                 .into_any_element()

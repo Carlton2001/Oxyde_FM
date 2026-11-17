@@ -19,6 +19,7 @@ fn batch(count: usize) -> Vec<super::super::Block> {
             kind: super::super::Kind::Paragraph,
             text: format!("Row {index}: {}", "wrapped content ".repeat(5 + index % 20)),
             spans: Vec::new(),
+            task: None,
         })
         .collect()
 }

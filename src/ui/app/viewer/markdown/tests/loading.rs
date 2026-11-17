@@ -7,6 +7,7 @@ fn batch(count: usize) -> Vec<super::super::Block> {
             kind: super::super::Kind::Paragraph,
             text: index.to_string(),
             spans: Vec::new(),
+            task: None,
         })
         .collect()
 }
