@@ -18,6 +18,7 @@ pub mod archive_codec;
 pub mod disk_image;
 pub mod path_security;
 pub mod path_text;
+pub mod open_regular;
 pub mod preview;
 pub mod preview_protocol;
 pub mod audio_metadata;

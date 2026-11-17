@@ -90,7 +90,7 @@ pub(super) fn open_file(parent: &File, path: &Path, read: bool) -> io::Result<Fi
     if rustix::fs::FileType::from_raw_mode(stat.st_mode) != rustix::fs::FileType::RegularFile {
         return Err(io::Error::other("Operation source is not an ordinary file"));
     }
-    let access = if read { OFlags::RDONLY } else { OFlags::PATH };
+    let access = if read { OFlags::RDONLY | OFlags::NONBLOCK } else { OFlags::PATH };
     let file = File::from(rustix::fs::openat(parent, name, access | OFlags::NOFOLLOW | OFlags::CLOEXEC, Mode::empty())?);
     if !file.metadata()?.is_file() {
         return Err(io::Error::other("Operation source is not an ordinary file"));
@@ -101,7 +101,7 @@ pub(super) fn open_file(parent: &File, path: &Path, read: bool) -> io::Result<Fi
 /// Reads a copy without updating the access date it kept, when the owner may ask so.
 pub(super) fn open_copy(parent: &File, path: &Path) -> io::Result<File> {
     let name = leaf(path)?;
-    let flags = OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC;
+    let flags = OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC | OFlags::NONBLOCK;
     let file = match rustix::fs::openat(parent, name, flags | OFlags::NOATIME, Mode::empty()) {
         Err(Errno::PERM) => rustix::fs::openat(parent, name, flags, Mode::empty())?,
         result => result?,

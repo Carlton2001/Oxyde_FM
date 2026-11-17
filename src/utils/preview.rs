@@ -6,7 +6,7 @@ const MAX_TEXT_CHARACTERS: usize = 4096;
 const MAX_TEXT_LINES: usize = 15;
 
 pub fn read_text_preview(path: &Path) -> io::Result<String> {
-    text_preview(std::fs::File::open(path)?)
+    text_preview(crate::utils::open_regular::open_regular(path)?)
 }
 
 fn text_preview(reader: impl Read) -> io::Result<String> {
