@@ -217,6 +217,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
             FileDragData {
                 paths: paths.clone(),
                 source_pane_id: pid.clone(),
+                from_trash: h.read(cx).state.find_pane(&pid).is_some_and(|pane| pane.active_tab().path == "trash://"),
             },
             {
                 let h = h.clone();
@@ -236,7 +237,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                 }
             },
         )
-        .external_drag_payload(crate::ui::app::outgoing_drag(h.clone()))
+        .external_drag_payload(crate::ui::app::outgoing_drag())
         .when(grid, |card| card.child(hover_tracker(&h, &pid, &path)));
     let body = CardBody {
         file,

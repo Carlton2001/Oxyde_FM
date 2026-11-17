@@ -207,7 +207,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                 } else {
                     vec![path.clone()]
                 };
-                FileDragData { paths: drag_paths.clone(), source_pane_id: p_id.clone() }
+                FileDragData { paths: drag_paths.clone(), source_pane_id: p_id.clone(), from_trash: trash_panel }
             }, {
                 let drag_paths = if is_selected && !selection.is_empty() {
                     selection.to_vec()
@@ -221,7 +221,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                     cx.new(|cx| FileDragPreview::new(paths, cursor_offset, is_dir, app, window, cx))
                 }
             })
-            .external_drag_payload(crate::ui::app::outgoing_drag(h.clone()))
+            .external_drag_payload(crate::ui::app::outgoing_drag())
             .when(can_drop, |row| {
                 let h_drop = h.clone();
                 let target_path = path.clone();

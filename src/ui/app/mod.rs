@@ -206,6 +206,8 @@ pub(crate) struct PendingFileOperation {
 pub struct FileDragData {
     pub paths: Vec<String>,
     pub source_pane_id: String,
+    /// Set when the drag starts: the active tab may change before the pointer leaves the window.
+    pub from_trash: bool,
 }
 
 pub struct FileDragPreview {
