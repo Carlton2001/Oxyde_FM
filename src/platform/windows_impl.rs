@@ -1034,6 +1034,12 @@ pub(super) fn read_recycle_bin_config(drive_path: String) -> Result<TrashSystemC
         }
     }
 
+    // The « Do not move deleted files to the Recycle Bin » policy wins over every volume
+    // setting, from HKLM or HKCU: Windows then deletes instead of recycling.
+    if unsafe { windows::Win32::UI::Shell::SHRestricted(windows::Win32::UI::Shell::REST_BITBUCKNUKEONDELETE) } != 0 {
+        nuke_on_delete = true;
+    }
+
     Ok(TrashSystemConfig {
         drive_path,
         max_size_mb,
