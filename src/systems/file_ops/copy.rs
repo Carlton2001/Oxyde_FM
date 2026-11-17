@@ -384,7 +384,8 @@ impl FileOperationManager {
                     links_to_create.push((link.clone(), dest_path, replace_existing));
                     continue;
                 }
-                let replace_existing = !self_transfer && dest_path.exists();
+                // A broken link occupies the name too: never publish blindly onto it.
+                let replace_existing = !self_transfer && dest_path.symlink_metadata().is_ok();
                 if replace_existing
                     && resolutions
                         .as_ref()
