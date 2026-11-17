@@ -72,9 +72,23 @@ fn capacity_percent(max_size_mb: u64, total_bytes: u64) -> u64 {
 }
 
 
+/// What a confirmed delete prompt runs.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum DeleteTarget {
+    /// Selected files of a folder, sent to the trash or deleted.
+    Files { permanent: bool },
+    /// Items listed in the trash view, purged; `all` when every listed item is.
+    TrashItems { all: bool },
+    /// The trash of every volume, emptied from its Properties.
+    WholeTrash,
+}
+
 pub(crate) struct PendingDelete {
+    pub target: DeleteTarget,
     pub paths: Vec<String>,
-    pub permanent: bool,
+    /// Names shown in the prompt, in the order of `paths`.
+    pub names: Vec<String>,
+    pub count: u64,
     pub permanent_prompt: bool,
     pub focus: FocusHandle,
     pub confirm_focus: FocusHandle,

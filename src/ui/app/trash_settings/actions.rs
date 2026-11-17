@@ -1,15 +1,72 @@
 use super::*;
+use oxyde_lib::models::FileEntry;
+use super::confirmation::SHOWN_NAMES;
+use std::collections::HashSet;
+
+/// Paths and shown names of the trash items an action applies to.
+fn trash_targets(files: &[FileEntry], selected: &HashSet<String>, all: bool) -> (Vec<String>, Vec<String>) {
+    files
+        .iter()
+        .filter(|file| all || selected.contains(&file.path))
+        .map(|file| (file.path.clone(), oxyde_lib::utils::path_text::display(&file.name)))
+        .unzip()
+}
+
+/// Emptying the whole trash always asks, as the system does; purging a selection
+/// follows the preference, like a permanent delete elsewhere.
+fn purge_needs_confirmation(all: bool, confirm_delete: bool) -> bool {
+    all || confirm_delete
+}
+
+fn display_name(path: &str) -> String {
+    std::path::Path::new(path)
+        .file_name()
+        .map(|name| oxyde_lib::utils::path_text::display(&name.to_string_lossy()))
+        .unwrap_or_else(|| path.to_string())
+}
 
 impl OxydeApp {
+    fn prompt_delete(
+        &mut self,
+        target: DeleteTarget,
+        paths: Vec<String>,
+        names: Vec<String>,
+        count: u64,
+        permanent_prompt: bool,
+        cx: &mut Context<Self>,
+    ) {
+        self.pending_trash_delete = Some(PendingDelete {
+            target, paths, names, count, permanent_prompt,
+            focus: cx.focus_handle(), confirm_focus: cx.focus_handle(),
+        });
+        cx.notify();
+    }
+
+    /// Ask before emptying every volume's trash from its Properties.
+    pub(super) fn prompt_empty_trash(&mut self, count: u64, cx: &mut Context<Self>) {
+        if self.pending_trash_delete.is_none() {
+            self.prompt_delete(DeleteTarget::WholeTrash, Vec::new(), Vec::new(), count, true, cx);
+        }
+    }
+
     pub(crate) fn execute_trash_action(&mut self, restore: bool, all: bool, cx: &mut Context<Self>) {
-        if self.trash_busy { return; }
+        if self.trash_busy || self.pending_trash_delete.is_some() { return; }
         let Some(pane) = self.state.find_pane(&self.state.active_pane_id) else { return; };
         let tab = pane.active_tab();
         if tab.path != "trash://" { return; }
-        let paths: Vec<_> = tab.files.iter()
-            .filter(|file| all || tab.selected_paths.contains(&file.path))
-            .map(|file| file.path.clone()).collect();
+        let (paths, names) = trash_targets(&tab.files, &tab.selected_paths, all);
         if paths.is_empty() { return; }
+        if !restore && purge_needs_confirmation(all, self.config.confirm_delete) {
+            let count = paths.len() as u64;
+            self.prompt_delete(DeleteTarget::TrashItems { all }, paths, names, count, true, cx);
+            return;
+        }
+        self.run_trash_action(restore, paths, cx);
+    }
+
+    /// Restore or purge trash items; a purge has been confirmed when the preference asks.
+    pub(super) fn run_trash_action(&mut self, restore: bool, paths: Vec<String>, cx: &mut Context<Self>) {
+        if self.trash_busy || paths.is_empty() { return; }
         let count = paths.len();
         self.trash_busy = true;
         cx.notify();
@@ -88,11 +145,9 @@ impl OxydeApp {
                     let _ = this.update(cx, |this, cx| {
                         this.trash_delete_check_pending = false;
                         if this.pending_trash_delete.is_none() {
-                            this.pending_trash_delete = Some(trash_settings::PendingDelete {
-                                paths, permanent, permanent_prompt,
-                                focus: cx.focus_handle(), confirm_focus: cx.focus_handle(),
-                            });
-                            cx.notify();
+                            let names = paths.iter().take(SHOWN_NAMES).map(|path| display_name(path)).collect();
+                            let count = paths.len() as u64;
+                            this.prompt_delete(DeleteTarget::Files { permanent }, paths, names, count, permanent_prompt, cx);
                         }
                     });
                 }).detach();
@@ -135,3 +190,7 @@ impl OxydeApp {
     }
 
 }
+
+#[cfg(test)]
+#[path = "actions/tests/purge.rs"]
+mod tests;
