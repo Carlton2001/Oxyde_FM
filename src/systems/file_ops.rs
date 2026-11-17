@@ -385,8 +385,22 @@ impl FileOperationManager {
         operation.status = if operation.cancel_flag.load(Ordering::Relaxed) && !completed && !recovery { OpStatus::Cancelled } else { result };
     }
 
-    fn unique_archive_path(path: &Path) -> PathBuf {
-        if !path.exists() {
+    /// The first name from `from` on that no entry occupies, and its index: 0 is `path`
+    /// itself, then « name (1).ext »… A broken link or an unreadable entry occupies its
+    /// name, so a publication refused there moves on instead of retrying it forever.
+    fn free_archive_path(path: &Path, from: usize) -> (PathBuf, usize) {
+        let occupied = |candidate: &Path| {
+            !matches!(std::fs::symlink_metadata(candidate), Err(error) if error.kind() == std::io::ErrorKind::NotFound)
+        };
+        (from..)
+            .map(|index| (Self::archive_candidate(path, index), index))
+            .find(|(candidate, _)| !occupied(candidate))
+            .expect("an unbounded range always yields a free name")
+    }
+
+    /// `path` for index 0, « name (index).ext » after, compound TAR suffixes kept whole.
+    fn archive_candidate(path: &Path, index: usize) -> PathBuf {
+        if index == 0 {
             return path.to_path_buf();
         }
         let parent = path.parent().unwrap_or_else(|| Path::new("."));
@@ -403,17 +417,10 @@ impl FileOperationManager {
                 path.extension().map(|s| s.to_string_lossy().into_owned()),
             )
         };
-        for index in 1.. {
-            let name = match &extension {
-                Some(ext) => format!("{stem} ({index}).{ext}"),
-                None => format!("{stem} ({index})"),
-            };
-            let candidate = parent.join(name);
-            if !candidate.exists() {
-                return candidate;
-            }
-        }
-        unreachable!()
+        parent.join(match &extension {
+            Some(ext) => format!("{stem} ({index}).{ext}"),
+            None => format!("{stem} ({index})"),
+        })
     }
 
     pub fn set_turbo(&self, id: &str, enabled: bool) {

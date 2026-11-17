@@ -14,6 +14,7 @@ fn operation() -> Arc<Mutex<FileOperation>> {
 mod archive_preparation;
 mod progress;
 mod archives;
+mod archive_names;
 mod scheduler;
 mod archive_moves;
 mod native_copy;
