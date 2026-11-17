@@ -289,3 +289,7 @@ fn open_name_with_attributes(
     }
     Ok((file, status.information == 2)) // FILE_CREATED, from this native call.
 }
+
+#[cfg(test)]
+#[path = "windows_no_reparse/tests/drive_paths.rs"]
+mod tests;
