@@ -143,15 +143,6 @@ fn main() {
         restore_folder_handler();
         return;
     }
-    // The task of the taskbar menu: a shortcut cannot ask for elevation itself.
-    #[cfg(target_os = "windows")]
-    if std::env::args_os().any(|argument| argument == oxyde_lib::platform::AS_ADMINISTRATOR) {
-        if let Err(error) = oxyde_lib::platform::platform().start_as_administrator() {
-            log::warn!("Cannot start as administrator: {error}");
-        }
-        log::logger().flush();
-        return;
-    }
     let startup_locations = oxyde_lib::platform::platform().startup_locations();
     let for_file_chooser = oxyde_lib::platform::platform().started_for_file_chooser();
     // A later launch hands its locations to the running Oxyde and opens no window.

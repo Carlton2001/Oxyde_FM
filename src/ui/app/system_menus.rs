@@ -14,7 +14,6 @@ impl OxydeApp {
         TaskbarMenu {
             category: i18n.text(Message::SidebarQuickAccess).to_string(),
             pinned: self.state.pinned_items.iter().filter(|item| !item.name.is_empty()).map(|item| (item.name.clone(), item.path.clone())).collect(),
-            administrator: i18n.text(Message::TaskbarRunAsAdministrator).to_string(),
         }
     }
 

@@ -468,7 +468,6 @@ settings-default-file-manager-description = Wenn eine andere Anwendung einen Ord
 settings-default-file-manager-description-windows = Wenn eine andere Anwendung einen Ordner öffnet oder „Im Ordner anzeigen“ anbietet, zeigt Oxyde ihn an, ebenso beim Tastenkürzel Windows+E. Anwendungen, die den Datei-Explorer selbst starten, öffnen ihn weiterhin.
 settings-default-file-manager-error = Der Standard-Dateimanager konnte nicht geändert werden.
 shell-open-in-oxyde = In Oxyde öffnen
-taskbar-run-as-administrator = Als Administrator ausführen
 settings-file-chooser = Dialoge zum Öffnen und Speichern
 settings-file-chooser-description = Wenn eine andere Anwendung nach einer Datei zum Öffnen oder einem Speicherort fragt, erscheint das Fenster von Oxyde. Anwendungen mit eigenem Fenster behalten es.
 settings-file-chooser-windows = Dialoge zum Öffnen und Speichern (experimentell)

@@ -113,7 +113,6 @@ impl Platform for WindowsPlatform {
             log::warn!("Cannot list the taskbar menu: {error}");
         }
     }
-    fn start_as_administrator(&self) -> std::io::Result<()> { super::windows_jump_list::start_as_administrator() }
     fn refresh_folder_menus(&self, label: &str) {
         super::windows_folder_handler::refresh_menu(label);
         // At start too: Win+E, which Explorer takes back on Windows 11 26H2.

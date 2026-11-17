@@ -74,7 +74,7 @@ Oxyde runs on **Windows 10 and 11** and, since version 2.1, on **Linux** (x86-64
 
 - **Default file manager** (Preferences › System integration, off by default): folders opened by other applications, and their "Show in folder", open in Oxyde in a new tab of the running window, with the file selected. On Windows, Windows + E opens Oxyde too, while folders opened inside a File Explorer window stay there. Turning the option off gives folders back to the application they opened with before.
 - **Open and Save dialogs** (off by default): applications that ask for a file to open or a place to save get an Oxyde window. On Linux this goes through the desktop portal (Firefox, Chrome, Flatpak applications). On Windows it is **experimental** and installer-only: applications that add their own options to the dialog, run as administrator or are 32-bit keep the Windows dialog, and security software may flag the registration it relies on (see [System integration](docs/architecture/system-integration.md#windows-dialogs-experimental)).
-- **Windows menus**: the installed copy adds **Open in Oxyde** to the menus of folders while it is not the default file manager, and Oxyde's taskbar menu lists the pinned folders and **Run as administrator**.
+- **Windows menus**: the installed copy adds **Open in Oxyde** to the menus of folders while it is not the default file manager, and Oxyde's taskbar menu lists the pinned folders.
 - **Details**: [system integration](docs/architecture/system-integration.md).
 
 ### Security

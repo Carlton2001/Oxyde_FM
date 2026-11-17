@@ -1,16 +1,14 @@
-//! The menu of Oxyde's taskbar button: the pinned folders, each opened as a tab, and a
-//! task that starts Oxyde as administrator. The list belongs to an application
-//! identity, the one the Setup gives its shortcuts: the process takes it at start, so
-//! that the button and its menu are the same however Oxyde was started. Entries are
-//! shortcuts to this program; a shortcut cannot ask for elevation, so the task runs
-//! Oxyde with a switch that makes it start itself elevated.
+//! The menu of Oxyde's taskbar button: the pinned folders, each opened as a tab. The
+//! list belongs to an application identity, the one the Setup gives its shortcuts: the
+//! process takes it at start, so that the button and its menu are the same however
+//! Oxyde was started. Entries are shortcuts to this program.
 //!
 //! Windows refuses an application's own categories when the user turned off recently
 //! opened items in Start and jump lists; tasks are not concerned. The pinned folders
-//! are then listed as tasks, above the one that starts Oxyde as administrator.
+//! are then listed as tasks.
 use super::windows_com::ComApartment;
 use super::TaskbarMenu;
-use windows::core::{w, Interface, HSTRING, PCWSTR};
+use windows::core::{Interface, HSTRING, PCWSTR};
 use windows::Win32::Foundation::PROPERTYKEY;
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
@@ -18,13 +16,10 @@ use windows::Win32::UI::Shell::Common::{IObjectArray, IObjectCollection};
 use windows::Win32::UI::Shell::PropertiesSystem::{IPropertyStore, PSCoerceToCanonicalValue};
 use windows::Win32::UI::Shell::{
     DestinationList, EnumerableObjectCollection, ICustomDestinationList, IShellLinkW, SHGetStockIconInfo,
-    SetCurrentProcessExplicitAppUserModelID, ShellExecuteW, ShellLink,
-    SHGSI_ICONLOCATION, SHSTOCKICONID, SHSTOCKICONINFO, SIID_FOLDER, SIID_SHIELD,
+    SetCurrentProcessExplicitAppUserModelID, ShellLink,
+    SHGSI_ICONLOCATION, SHSTOCKICONINFO, SIID_FOLDER,
 };
-use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
-/// The switch of the task: Oxyde starts itself again, elevated.
-pub const AS_ADMINISTRATOR: &str = "--run-as-administrator";
 /// The identity of the Setup's shortcuts (`AppUserModelID` in `oxyde.iss`); a debug
 /// build keeps a button and a menu of its own.
 const IDENTITY: &str = if cfg!(debug_assertions) { "Oxyde.GPUI.Windows.Devel" } else { "Oxyde.GPUI.Windows" };
@@ -52,13 +47,13 @@ fn listed<'a>(pinned: &'a [(String, String)], removed: &[String]) -> Vec<&'a (St
 struct Program(HSTRING);
 
 impl Program {
-    fn shortcut(&self, arguments: &str, title: &str, icon: SHSTOCKICONID) -> windows::core::Result<IShellLinkW> {
+    fn shortcut(&self, arguments: &str, title: &str) -> windows::core::Result<IShellLinkW> {
         unsafe {
             let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)?;
             link.SetPath(&self.0)?;
             link.SetArguments(&HSTRING::from(arguments))?;
             let mut stock = SHSTOCKICONINFO { cbSize: std::mem::size_of::<SHSTOCKICONINFO>() as u32, ..Default::default() };
-            if SHGetStockIconInfo(icon, SHGSI_ICONLOCATION, &mut stock).is_ok() {
+            if SHGetStockIconInfo(SIID_FOLDER, SHGSI_ICONLOCATION, &mut stock).is_ok() {
                 link.SetIconLocation(PCWSTR(stock.szPath.as_ptr()), stock.iIcon)?;
             }
             let mut value = PROPVARIANT::from(title);
@@ -109,7 +104,7 @@ fn write(menu: &TaskbarMenu, identity: &str) -> windows::core::Result<()> {
         let mut shown = 0u32;
         let removed = removed(&list.BeginList::<IObjectArray>(&mut shown)?);
         let folders = listed(&menu.pinned, &removed).into_iter()
-            .map(|(name, path)| program.shortcut(&arguments(path), name, SIID_FOLDER))
+            .map(|(name, path)| program.shortcut(&arguments(path), name))
             .collect::<windows::core::Result<Vec<_>>>()?;
         let category = collection()?;
         for folder in &folders {
@@ -127,18 +122,11 @@ fn write(menu: &TaskbarMenu, identity: &str) -> windows::core::Result<()> {
                 }
             }
         }
-        tasks.AddObject(&program.shortcut(AS_ADMINISTRATOR, &menu.administrator, SIID_SHIELD)?)?;
-        list.AddUserTasks(&tasks.cast::<IObjectArray>()?)?;
+        if tasks.GetCount()? > 0 {
+            list.AddUserTasks(&tasks.cast::<IObjectArray>()?)?;
+        }
         list.CommitList()
     }
-}
-
-/// Starts this program again as administrator, after the user's consent.
-pub(super) fn start_as_administrator() -> std::io::Result<()> {
-    let program = HSTRING::from(std::env::current_exe()?.as_os_str());
-    let started = unsafe { ShellExecuteW(None, w!("runas"), &program, None, None, SW_SHOWNORMAL) };
-    // Above 32 the program started; anything else is an error, a refused consent included.
-    if started.0 as usize > 32 { Ok(()) } else { Err(std::io::Error::last_os_error()) }
 }
 
 #[cfg(test)]

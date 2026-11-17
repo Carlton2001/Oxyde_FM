@@ -29,7 +29,7 @@ fn the_shell_accepts_the_menu() {
     use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
     use windows::Win32::UI::Shell::{DestinationList, ICustomDestinationList};
     let identity = "Oxyde.Test.JumpList";
-    let menu = super::TaskbarMenu { category: "Quick access".into(), pinned: pinned(), administrator: "Run as administrator".into() };
+    let menu = super::TaskbarMenu { category: "Quick access".into(), pinned: pinned() };
     super::write(&menu, identity).unwrap();
     let _apartment = super::ComApartment::sta_or_existing().unwrap();
     unsafe {

@@ -132,8 +132,6 @@ pub struct TaskbarMenu {
     pub category: String,
     /// Name and path of each pinned folder.
     pub pinned: Vec<(String, String)>,
-    /// The task that starts Oxyde as administrator.
-    pub administrator: String,
 }
 
 /// What another process asks the running Oxyde to show: a second launch, a program
@@ -429,8 +427,6 @@ pub trait Platform: Send + Sync {
     fn identify_process(&self) {}
     /// Lists `menu` under Oxyde's taskbar button. Blocking.
     fn set_taskbar_menu(&self, _menu: &TaskbarMenu) {}
-    /// Starts Oxyde again as administrator, which the taskbar menu's task asks for.
-    fn start_as_administrator(&self) -> std::io::Result<()> { Err(std::io::Error::from(std::io::ErrorKind::Unsupported)) }
     /// Lists Oxyde under `label` in the menus of the system's folders where this copy
     /// should be, and removes it where it should not. Blocking.
     fn refresh_folder_menus(&self, _label: &str) {}
@@ -1356,9 +1352,6 @@ mod windows_explorer_browse;
 mod windows_shell_window;
 #[cfg(target_os = "windows")]
 mod windows_jump_list;
-/// The switch Oxyde's taskbar task runs it with, to start itself as administrator.
-#[cfg(target_os = "windows")]
-pub use windows_jump_list::AS_ADMINISTRATOR;
 #[cfg(target_os = "windows")]
 mod windows_folder_launcher;
 #[cfg(target_os = "windows")]

@@ -306,7 +306,6 @@ settings-default-file-manager-description = When another application opens a fol
 settings-default-file-manager-description-windows = When another application opens a folder, or offers “Show in folder”, Oxyde shows it, as it does for the Windows+E shortcut. Applications that start File Explorer themselves still open it.
 settings-default-file-manager-error = Could not change the default file manager.
 shell-open-in-oxyde = Open in Oxyde
-taskbar-run-as-administrator = Run as administrator
 settings-file-chooser = Open and Save dialogs
 settings-file-chooser-description = When another application asks for a file to open or a place to save, the window is Oxyde’s. Applications that draw their own window keep it.
 settings-file-chooser-windows = Open and Save dialogs (experimental)

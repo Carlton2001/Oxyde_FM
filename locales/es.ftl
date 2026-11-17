@@ -468,7 +468,6 @@ settings-default-file-manager-description = Cuando otra aplicación abre una car
 settings-default-file-manager-description-windows = Cuando otra aplicación abre una carpeta, u ofrece «Mostrar en la carpeta», Oxyde la muestra, igual que con el atajo Windows+E. Las aplicaciones que inician ellas mismas el Explorador de archivos lo siguen abriendo.
 settings-default-file-manager-error = No se ha podido cambiar el gestor de archivos predeterminado.
 shell-open-in-oxyde = Abrir en Oxyde
-taskbar-run-as-administrator = Ejecutar como administrador
 settings-file-chooser = Diálogos Abrir y Guardar
 settings-file-chooser-description = Cuando otra aplicación pide un archivo para abrir o un lugar donde guardar, la ventana es la de Oxyde. Las aplicaciones que dibujan su propia ventana la conservan.
 settings-file-chooser-windows = Diálogos Abrir y Guardar (experimental)

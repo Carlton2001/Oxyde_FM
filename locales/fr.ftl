@@ -312,7 +312,6 @@ settings-default-file-manager-description = Quand une autre application ouvre un
 settings-default-file-manager-description-windows = Quand une autre application ouvre un dossier, ou propose « Afficher dans le dossier », c’est Oxyde qui l’affiche, comme pour le raccourci Windows+E. Les applications qui lancent elles-mêmes l’Explorateur de fichiers l’ouvrent toujours.
 settings-default-file-manager-error = Impossible de changer le gestionnaire de fichiers par défaut.
 shell-open-in-oxyde = Ouvrir dans Oxyde
-taskbar-run-as-administrator = Exécuter en tant qu’administrateur
 settings-file-chooser = Fenêtres Ouvrir et Enregistrer
 settings-file-chooser-description = Quand une autre application demande un fichier à ouvrir ou un endroit où enregistrer, la fenêtre est celle d’Oxyde. Les applications qui dessinent leur propre fenêtre la gardent.
 settings-file-chooser-windows = Fenêtres Ouvrir et Enregistrer (expérimental)
