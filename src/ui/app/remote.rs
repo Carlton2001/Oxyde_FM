@@ -24,6 +24,8 @@ pub(crate) struct RemoteLogin {
     /// Anonymous, password saving, cancel and connect.
     pub controls: Vec<FocusHandle>,
     reply: Option<oneshot::Sender<RemoteAnswer>>,
+    /// The connection asking: leaving its address closes the prompt.
+    connection: Arc<AtomicBool>,
 }
 
 enum Progress {
@@ -117,12 +119,21 @@ impl OxydeApp {
     pub(super) fn cancel_remote_connection(&mut self, tab_id: &str) {
         if let Some((_, cancel)) = self.remote_connections.remove(tab_id) {
             cancel.store(true, Ordering::Release);
+            // Its credentials prompt would otherwise stay up and block the worker.
+            if self.remote_login.as_ref().is_some_and(|login| Arc::ptr_eq(&login.connection, &cancel)) {
+                self.dismiss_remote_login();
+            }
         }
     }
 
     fn show_remote_login(
-        &mut self, prompt: RemotePrompt, reply: oneshot::Sender<RemoteAnswer>, window: &mut Window, cx: &mut Context<Self>,
+        &mut self, prompt: RemotePrompt, reply: oneshot::Sender<RemoteAnswer>, connection: Arc<AtomicBool>,
+        window: &mut Window, cx: &mut Context<Self>,
     ) {
+        if connection.load(Ordering::Acquire) {
+            let _ = reply.send(RemoteAnswer::Cancel);
+            return;
+        }
         // One prompt at a time; a second connection asking meanwhile gives up.
         if self.remote_login.is_some() {
             let _ = reply.send(RemoteAnswer::Cancel);
@@ -143,6 +154,7 @@ impl OxydeApp {
                 focus: cx.focus_handle(),
                 controls,
                 reply: Some(reply),
+                connection: connection.clone(),
             });
             cx.notify();
             return;
@@ -192,6 +204,7 @@ impl OxydeApp {
             focus: cx.focus_handle(),
             controls: (0..4).map(|_| cx.focus_handle()).collect(),
             reply: Some(reply),
+                connection: connection.clone(),
         });
         cx.notify();
     }
@@ -262,6 +275,7 @@ impl OxydeApp {
 async fn connect(handle: &Entity<OxydeApp>, cx: &mut AsyncApp, uri: String, cancel: Arc<AtomicBool>) -> Result<RemoteLocation, RemoteError> {
     let (sender, mut receiver) = mpsc::unbounded_channel();
     let target = uri.clone();
+    let worker_cancel = cancel.clone();
     tokio::task::spawn_blocking(move || {
         let result = oxyde_lib::platform::platform().connect_remote(&target, &mut |prompt| {
             let (reply, answer) = oneshot::channel();
@@ -269,7 +283,7 @@ async fn connect(handle: &Entity<OxydeApp>, cx: &mut AsyncApp, uri: String, canc
                 return RemoteAnswer::Cancel;
             }
             answer.blocking_recv().unwrap_or(RemoteAnswer::Cancel)
-        }, &cancel);
+        }, &worker_cancel);
         let _ = sender.send(Progress::Done(result));
     });
     while let Some(progress) = receiver.recv().await {
@@ -278,8 +292,9 @@ async fn connect(handle: &Entity<OxydeApp>, cx: &mut AsyncApp, uri: String, canc
                 // A dropped reply answers Cancel.
                 let Some(window) = handle.update(cx, |this, _| this.main_window) else { continue };
                 let handle = handle.clone();
+                let cancel = cancel.clone();
                 let _ = window.update(cx, |_, window, cx| {
-                    handle.update(cx, |this, cx| this.show_remote_login(prompt, reply, window, cx));
+                    handle.update(cx, |this, cx| this.show_remote_login(prompt, reply, cancel, window, cx));
                 });
             }
             Progress::Done(result) => return result,
