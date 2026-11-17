@@ -29,7 +29,9 @@ impl OxydeApp {
         let paths = pane.active_tab().actionable_selection();
         if paths.is_empty() { return; }
         let text = paths.join("\n");
+        let gate = self.clipboard_gate.clone();
         cx.spawn(async move |this, cx| {
+            let _turn = gate.lock().await;
             let result = tokio::task::spawn_blocking(move || oxyde_lib::platform::platform().file_clipboard().set_files(paths, cut)).await;
             let _ = this.update(cx, |this, cx| {
                 // Applications the platform cannot offer files to receive their paths.
@@ -66,7 +68,10 @@ impl OxydeApp {
             }
             system.and_then(|item| item.text())
         };
+        let gate = self.clipboard_gate.clone();
         cx.spawn(async move |this, cx| {
+            // A copy or cut asked before this paste finishes writing first.
+            let _turn = gate.lock().await;
             let target = target_dir.clone();
             let result = tokio::task::spawn_blocking(move || {
                 let clipboard = oxyde_lib::platform::platform().file_clipboard();
