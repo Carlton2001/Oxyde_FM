@@ -1,8 +1,8 @@
 //! Interaction fills that must stay apart from each other in every palette: rest, hover,
 //! size histogram and selection. Distances are measured in Oklab, where equal steps look
 //! equal whatever the hue or lightness. Selection and histogram keep the accent hue and
-//! only change strength; hovers take a hint of the accent and give it up when it would
-//! bring them too close to the selection or the histogram.
+//! only change strength. Hovers keep the contrast of a neutral hover and add accent, up to
+//! half the selection's colorfulness, while keeping clear of the selection and the histogram.
 
 use super::legibility::{contrast, CONTROL, ROW_HOVER};
 use super::OxydeTheme;
@@ -22,12 +22,17 @@ pub(super) const BAR_ON_SELECTION: f32 = 0.01;
 pub(super) const SELECTION_GAP: f32 = 0.05;
 /// Hover against a histogram bar.
 pub(super) const BAR_GAP: f32 = 0.03;
-/// Usual histogram strength, raised only where the accent is too pale to show.
-const BAR_SHARE: f32 = 0.1;
+/// Share of the selection's colorfulness a hover may carry.
+const HOVER_CHROMA: f32 = 0.5;
+/// Usual histogram strength, fainter than the hover so a partial bar never reads as one.
+const BAR_SHARE: f32 = 0.08;
+/// Colorfulness a row hover must reach, as a share of the selection's; the selection
+/// strengthens and the histogram strays from its usual strength to make room for it.
+pub(super) const HOVER_TARGET: f32 = 0.35;
+/// Strongest histogram bar.
+const BAR_MAX: f32 = 0.2;
 /// Largest accent share in a hover.
-const HOVER_TINT: f32 = 0.1;
-/// How much heavier than the neutral hover a tinted one may be.
-const HOVER_SLACK: f32 = 0.01;
+const HOVER_TINT: f32 = 0.5;
 
 fn oklab(color: Hsla) -> [f32; 3] {
     let color: Rgba = color.into();
@@ -49,75 +54,108 @@ pub(super) fn distance(a: Hsla, b: Hsla) -> f32 {
     a.iter().zip(b).map(|(x, y)| (x - y).powi(2)).sum::<f32>().sqrt()
 }
 
+/// Colorfulness of `color` relative to `pane`: the Oklab distance across hue and chroma only.
+pub(super) fn chroma(color: Hsla, pane: Hsla) -> f32 {
+    let (c, p) = (oklab(color), oklab(pane));
+    ((c[1] - p[1]).powi(2) + (c[2] - p[2]).powi(2)).sqrt()
+}
+
 /// Opacity steps of one percent from `from` to `to`.
 fn shares(from: f32, to: f32) -> impl DoubleEndedIterator<Item = f32> {
     ((from * 100.0).round() as u32..=(to * 100.0).round() as u32).map(|step| step as f32 / 100.0)
 }
 
-/// Lightest fill over `panes`, with `tint` of accent, that reaches `min` contrast toward the text.
-fn legible(panes: &[Hsla], text: Hsla, accent: Hsla, tint: f32, min: f32) -> Hsla {
-    let base = panes[panes.len() - 1].blend(accent.opacity(tint));
+/// Neutral hover over `panes`: the lightest shift toward the text reaching `min` contrast.
+fn neutral(panes: &[Hsla], text: Hsla, min: f32) -> Hsla {
+    let base = panes[panes.len() - 1];
     shares(0.0, 0.6)
         .map(|share| base.blend(text.opacity(share)))
         .find(|c| panes.iter().all(|pane| contrast(*c, *pane) >= min))
         .unwrap_or(text)
 }
 
-/// Hover fill over `panes`: the strongest accent hint that keeps it legible, no heavier than
-/// the neutral hover, and apart from every fill in `avoid`; otherwise the neutral hover.
-fn hover(panes: &[Hsla], text: Hsla, accent: Hsla, min: f32, avoid: &[(Hsla, f32)]) -> Hsla {
-    let neutral = legible(panes, text, accent, 0.0, min);
+/// Hover over `panes` with `tint` of accent: the lightest shift toward the text that keeps
+/// the `min` contrast and stands out at least as much as the neutral hover.
+fn tinted(panes: &[Hsla], text: Hsla, accent: Hsla, tint: f32, min: f32, reach: f32) -> Option<Hsla> {
+    let base = panes[panes.len() - 1].blend(accent.opacity(tint));
+    shares(0.0, 0.6)
+        .map(|share| base.blend(text.opacity(share)))
+        .find(|c| panes.iter().all(|pane| contrast(*c, *pane) >= min && distance(*c, *pane) >= reach))
+}
+
+/// Hover over `panes`: the most accent that stays within `HOVER_CHROMA` of the selection's
+/// colorfulness and apart from every fill in `avoid`, or `None` when even the neutral hover
+/// is too close to one of them.
+fn hover(panes: &[Hsla], text: Hsla, accent: Hsla, min: f32, selected: Hsla, avoid: &[(Hsla, f32)]) -> Option<Hsla> {
+    let plain = neutral(panes, text, min);
     let base = panes[panes.len() - 1];
-    let weight = distance(neutral, base) + HOVER_SLACK;
+    let reach = panes.iter().map(|pane| distance(plain, *pane)).fold(f32::INFINITY, f32::min);
+    let ceiling = HOVER_CHROMA * chroma(base.blend(selected), base);
     let apart = |c: Hsla| panes.iter().all(|pane| avoid.iter().all(|(fill, gap)| distance(c, pane.blend(*fill)) >= *gap));
     shares(0.01, HOVER_TINT)
         .rev()
-        .map(|tint| legible(panes, text, accent, tint, min))
-        .find(|c| distance(*c, base) <= weight && apart(*c))
-        .unwrap_or(neutral)
+        .filter_map(|tint| tinted(panes, text, accent, tint, min, reach))
+        .chain([plain])
+        .find(|c| chroma(*c, base) <= ceiling && apart(*c))
 }
 
-/// Selection and histogram strengths over the row panes for one accent, if any fit. The
-/// selection and the bar also clear the neutral `hover`, so a hover always fits between them.
-fn accent_fills(accent: Hsla, rows: &[Hsla], hover: Hsla) -> Option<(f32, f32)> {
+/// Whether a selection of `selected` and a histogram of `bar` show on the row panes and
+/// stay apart from each other.
+fn fits(accent: Hsla, rows: &[Hsla], bar: f32, selected: f32) -> bool {
     let on = |pane: Hsla, share: f32| pane.blend(accent.opacity(share));
-    // Closest strength to the usual one that shows on the pane and differs from the hover.
-    let mut strengths: Vec<f32> = shares(0.04, 0.3).collect();
-    strengths.sort_by(|a, b| (a - BAR_SHARE).abs().total_cmp(&(b - BAR_SHARE).abs()));
-    let bar = strengths.into_iter().find(|b| {
-        rows.iter().all(|pane| distance(*pane, on(*pane, *b)) >= BAR_FROM_PANE && distance(hover, on(*pane, *b)) >= BAR_GAP)
-    })?;
-    let selected = shares(0.2, 0.6).find(|s| {
-        rows.iter().all(|pane| {
-            let sel = on(*pane, *s);
-            distance(*pane, sel) >= SELECTION_FROM_PANE
-                && distance(sel, hover) >= SELECTION_GAP + HOVER_SLACK
-                && distance(sel, on(*pane, bar)) >= SELECTION_GAP
-                && distance(sel, sel.blend(accent.opacity(bar))) >= BAR_ON_SELECTION
-        })
-    })?;
-    Some((bar, selected))
+    rows.iter().all(|pane| {
+        let sel = on(*pane, selected);
+        distance(*pane, on(*pane, bar)) >= BAR_FROM_PANE
+            && distance(*pane, sel) >= SELECTION_FROM_PANE
+            && distance(sel, on(*pane, bar)) >= SELECTION_GAP
+            && distance(sel, sel.blend(accent.opacity(bar))) >= BAR_ON_SELECTION
+    })
+}
+
+/// Histogram, selection and row hover for one accent: the weakest selection, then the
+/// histogram nearest its usual strength, that leave the hover `HOVER_TARGET` of the
+/// selection's colorfulness; failing that, the pair leaving the most colorful hover.
+fn row_fills(accent: Hsla, rows: &[Hsla], text: Hsla) -> Option<(f32, f32, Hsla)> {
+    let mut bars: Vec<f32> = shares(0.04, BAR_MAX).collect();
+    bars.sort_by(|a, b| (a - BAR_SHARE).abs().total_cmp(&(b - BAR_SHARE).abs()));
+    let base = rows[rows.len() - 1];
+    let mut best: Option<(f32, f32, Hsla, f32)> = None;
+    for selected in shares(0.2, 0.6) {
+        let ceiling = chroma(base.blend(accent.opacity(selected)), base);
+        for &bar in bars.iter().filter(|bar| fits(accent, rows, **bar, selected)) {
+            let avoid = [(accent.opacity(selected), SELECTION_GAP), (accent.opacity(bar), BAR_GAP)];
+            let Some(fill) = hover(rows, text, accent, ROW_HOVER, accent.opacity(selected), &avoid) else { continue };
+            let share = chroma(fill, base) / ceiling;
+            if share >= HOVER_TARGET {
+                return Some((bar, selected, fill));
+            }
+            if best.map_or(true, |(.., kept)| share > kept + 0.02) {
+                best = Some((bar, selected, fill, share));
+            }
+        }
+    }
+    best.map(|(bar, selected, fill, _)| (bar, selected, fill))
 }
 
 pub(super) fn derive(theme: &mut OxydeTheme) {
     let t = *theme;
-    let (accent, text) = (t.accent, t.text);
+    let text = t.text;
     let rows = [t.background, t.active_background];
-    let neutral = legible(&rows, text, accent, 0.0, ROW_HOVER);
     // A pale accent cannot mark a selection on its own: it then leans toward the text.
-    let (fill, (bar, selected)) = shares(0.0, 1.0)
+    let (fill, (bar, selected, row_hover)) = shares(0.0, 1.0)
         .step_by(10)
-        .map(|share| accent.blend(text.opacity(share)))
-        .find_map(|fill| accent_fills(fill, &rows, neutral).map(|shares| (fill, shares)))
-        .unwrap_or((text, (0.06, 0.2)));
+        .map(|share| t.accent.blend(text.opacity(share)))
+        .find_map(|fill| row_fills(fill, &rows, text).map(|fills| (fill, fills)))
+        .unwrap_or((text, (0.06, 0.2, neutral(&rows, text, ROW_HOVER))));
     theme.size_bar = fill.opacity(bar);
     theme.selected = fill.opacity(selected);
     theme.selection_hover = fill.opacity(selected + 0.1);
-    let row_avoid = [(theme.selected, SELECTION_GAP), (theme.size_bar, BAR_GAP)];
-    theme.hover = hover(&rows, text, accent, ROW_HOVER, &row_avoid);
-    let control_avoid = [(theme.selected, SELECTION_GAP)];
+    theme.hover = row_hover;
+    let sel = theme.selected;
+    let avoid = [(sel, SELECTION_GAP)];
     let holders = [t.active_background, t.header, t.menu_surface, t.surface];
-    theme.control_hover = hover(&holders, text, accent, CONTROL, &control_avoid);
-    theme.menu_hover = hover(&[t.menu_surface], text, accent, CONTROL, &control_avoid);
-    theme.tab_close_hover = hover(&[t.surface], text, accent, 1.45, &[]);
+    let other = |panes: &[Hsla], min: f32, avoid: &[(Hsla, f32)]| hover(panes, text, fill, min, sel, avoid).unwrap_or_else(|| neutral(panes, text, min));
+    theme.control_hover = other(&holders, CONTROL, &avoid);
+    theme.menu_hover = other(&[t.menu_surface], CONTROL, &avoid);
+    theme.tab_close_hover = other(&[t.surface], 1.45, &[]);
 }

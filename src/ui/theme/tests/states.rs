@@ -1,5 +1,5 @@
 use super::super::{ColorVision, OxydeTheme, ThemeId};
-use super::{distance, BAR_FROM_PANE, BAR_GAP, BAR_ON_SELECTION, SELECTION_FROM_PANE, SELECTION_GAP};
+use super::{chroma, distance, HOVER_TARGET, BAR_FROM_PANE, BAR_GAP, BAR_ON_SELECTION, SELECTION_FROM_PANE, SELECTION_GAP};
 
 /// Built-in palettes plus user palettes with a pale, a saturated and a dark accent.
 fn palettes() -> Vec<(String, OxydeTheme)> {
@@ -35,9 +35,10 @@ fn rest_hover_histogram_and_selection_stay_apart_in_every_palette() {
 }
 
 #[test]
-fn hovers_keep_a_hint_of_the_accent_when_room_allows() {
-    let t = OxydeTheme::for_id(ThemeId::SolarizedLight);
-    let neutral = t.active_background.blend(t.text.opacity(0.1));
-    assert!(distance(t.hover, neutral) > 0.005, "Solarized hover should not be plain grey");
+fn row_hovers_carry_the_accent_in_every_palette() {
+    for (name, t) in palettes() {
+        let pane = t.active_background;
+        let share = chroma(t.hover, pane) / chroma(pane.blend(t.selected), pane);
+        assert!(share >= HOVER_TARGET, "{name} hover keeps {share:.2} of the selection's color");
+    }
 }
-
