@@ -266,6 +266,7 @@ These shortcuts apply while the file pane has keyboard focus.
 | Select the file starting with a letter | Type its first letters |
 | Open quick search | Ctrl + F |
 | Add a pane | Ctrl + N |
+| Open / Close the Viewer | Alt + V |
 | Open a folder in a new tab | Middle click |
 | Open a terminal here (Linux) | Ctrl + . |
 

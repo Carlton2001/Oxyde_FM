@@ -36,7 +36,7 @@ pub fn render_title_bar(
             .when(!active, |d| d.hover(move |s| s.bg(btn_hover_bg)))
             .native_tooltip(Tooltip::anchored(Tooltip::with_shortcut(
                 cx.i18n().text(label),
-                match label { Message::Refresh => Some("F5 / Ctrl+R".into()), Message::NewPanel => Some("Ctrl+N".into()), _ => None },
+                match label { Message::Refresh => Some("F5 / Ctrl+R".into()), Message::NewPanel => Some("Ctrl+N".into()), Message::ViewerOpen | Message::ViewerClose => Some("Alt+V".into()), _ => None },
             ), bounds))
             .child(canvas(move |rect, _, _| measured.set(rect), |_, _, _, _| {}).absolute().left_0().top_0().size_full())
             .child(svg().path(icon).size_4().text_color(if active { theme.accent } else { icon_color }))

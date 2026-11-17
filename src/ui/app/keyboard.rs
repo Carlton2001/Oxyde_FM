@@ -34,7 +34,7 @@ impl OxydeApp {
         let recognized = matches!((key.key.as_str(), m.control, m.alt, m.shift),
             ("up" | "down" | "left" | "right" | "delete" | "tab", false, false, _)
             | ("enter" | "f2" | "backspace" | "f5", false, false, false)
-            | ("enter" | "up", false, true, false)
+            | ("enter" | "up" | "v", false, true, false)
             | ("c" | "z" | "n" | "tab" | "pageup" | "pagedown" | "+" | "=" | "add" | ".", true, false, _)
             | ("a" | "x" | "v" | "y" | "r" | "f" | "-" | "subtract" | "0", true, false, false)
             | ("a", true, false, true)
@@ -74,6 +74,7 @@ impl OxydeApp {
             }
             ("f5", false, false, false) | ("r", true, false, false) => self.refresh_active_view(window, cx),
             ("s", false, true, true) => self.calculate_sizes(cx),
+            ("v", false, true, false) => self.toggle_viewer(cx),
             ("enter", false, false, false) => self.execute_ouvrir(cx),
             ("f2", false, false, false) => self.execute_renommer(window, cx),
             ("enter", false, true, false) => {
