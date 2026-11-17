@@ -39,6 +39,8 @@ impl Drop for Apartment {
 
 #[derive(Default)]
 struct Receipt {
+    /// The item is sent to the Recycle Bin rather than deleted.
+    recycle: bool,
     preflight: bool,
     completed: bool,
     error: Option<String>,
@@ -66,6 +68,14 @@ impl Receipt {
         }
     }
     fn outcome(&mut self, result: windows::core::Result<()>, aborted: bool) -> ShellDeleteOutcome {
+        // A recycled item has its place in the Recycle Bin; without it, Windows destroyed it.
+        let destroyed = self.recycle && self.completed && self.payload.is_none();
+        if destroyed {
+            self.fail(format!(
+                "Windows deleted the item permanently instead of recycling it (0x{:08X})",
+                COPYENGINE_E_RECYCLE_FORCE_NUKE.0 as u32
+            ));
+        }
         if let Err(error) = result {
             self.fail(error.to_string());
         }
@@ -79,8 +89,15 @@ impl Receipt {
             completed: self.completed,
             error: self.error.take(),
             effects: self.effects.take(self.completed, self.payload.as_deref()),
+            destroyed,
         }
     }
+}
+
+/// The Shell announces before deleting whether it can recycle the item; a volume
+/// without a Recycle Bin (network share, SUBST drive) never gets that flag.
+fn refuses_recycling(recycle: bool, flags: u32) -> bool {
+    recycle && flags & TSF_DELETE_RECYCLE_IF_POSSIBLE.0 as u32 == 0
 }
 
 fn check_source(path: &Path, proof: Option<HistoryFileIdentity>) -> Result<(), String> {
@@ -154,12 +171,20 @@ impl IFileOperationProgressSink_Impl for DeleteSink_Impl {
         }
         Ok(())
     }
-    fn PreDeleteItem(&self, _: u32, item: Ref<IShellItem>) -> windows::core::Result<()> {
+    fn PreDeleteItem(&self, flags: u32, item: Ref<IShellItem>) -> windows::core::Result<()> {
         self.checkpoint()?;
         if self
             .root_item(&item)
             .map_err(|e| self.record_failure(e.to_string()))?
         {
+            let recycle = self.receipt.lock().unwrap_or_else(|p| p.into_inner()).recycle;
+            if refuses_recycling(recycle, flags) {
+                // Keep the item: Windows would destroy it instead.
+                return Err(self.record_failure(format!(
+                    "Windows cannot move the item to the Recycle Bin (0x{:08X})",
+                    COPYENGINE_E_RECYCLE_BIN_NOT_FOUND.0 as u32
+                )));
+            }
             let started = std::time::Instant::now();
             let checked = check_source(&self.path, self.proof);
             self.receipt.lock().unwrap_or_else(|p| p.into_inner()).proof_time += started.elapsed();
@@ -320,10 +345,11 @@ fn delete(
                 completed: false,
                 error: Some(error),
                 effects: Vec::new(),
+                destroyed: false,
             }
         }
     };
-    let receipt = Arc::new(Mutex::new(Receipt::default()));
+    let receipt = Arc::new(Mutex::new(Receipt { recycle, ..Default::default() }));
     if let Some(control) = &control {
         control.follow_turbo();
     }
@@ -386,11 +412,13 @@ pub(super) fn run_controlled(
             completed: false,
             error: Some("Windows deletion worker failed".into()),
             effects: Vec::new(),
+            destroyed: false,
         }),
         Err(error) => ShellDeleteOutcome {
             completed: false,
             error: Some(error.to_string()),
             effects: Vec::new(),
+            destroyed: false,
         },
     }
 }
@@ -600,6 +628,46 @@ mod tests {
         })
         .join()
         .unwrap();
+    }
+
+    #[test]
+    fn recycling_never_proceeds_without_the_shell_promise_to_recycle() {
+        let promised = TSF_DELETE_RECYCLE_IF_POSSIBLE.0 as u32;
+        // Flags observed on Windows 11: 0x282 on NTFS, 0x202 on a SUBST drive.
+        assert!(!refuses_recycling(true, 0x282));
+        assert!(refuses_recycling(true, 0x202));
+        assert!(refuses_recycling(true, 0x282 & !promised));
+        assert!(!refuses_recycling(false, 0x202));
+    }
+
+    #[test]
+    fn a_recycle_without_recycle_bin_destination_is_a_destruction() {
+        let completed = |recycle, payload: Option<PathBuf>| {
+            let mut receipt = Receipt { recycle, preflight: true, payload, ..Default::default() };
+            receipt.post(S_OK);
+            receipt.outcome(Ok(()), false)
+        };
+        let destroyed = completed(true, None);
+        assert!(destroyed.completed && destroyed.destroyed);
+        let error = destroyed.error.unwrap();
+        assert_eq!(crate::models::error::ShellDeleteFailure::cause(&error), Some(crate::models::error::ShellDeleteCause::NotRecyclable));
+        let recycled = completed(true, Some(PathBuf::from(r"C:\$Recycle.Bin\S-1\$RABC.txt")));
+        assert!(recycled.completed && !recycled.destroyed && recycled.error.is_none());
+        // A permanent delete has no destination by design.
+        let deleted = completed(false, None);
+        assert!(deleted.completed && !deleted.destroyed && deleted.error.is_none());
+    }
+
+    #[test]
+    fn a_declined_destruction_keeps_the_item_and_names_the_cause() {
+        let mut receipt = Receipt { recycle: true, preflight: true, ..Default::default() };
+        receipt.post(COPYENGINE_S_USER_IGNORED);
+        let outcome = receipt.outcome(Ok(()), false);
+        assert!(!outcome.completed && !outcome.destroyed);
+        assert_eq!(
+            crate::models::error::ShellDeleteFailure::cause(&outcome.error.unwrap()),
+            Some(crate::models::error::ShellDeleteCause::NotRecyclable)
+        );
     }
 
     #[test]

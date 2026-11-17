@@ -8,6 +8,7 @@ fn failure(message: &str) -> ShellDeleteOutcome {
         completed: false,
         error: Some(message.into()),
         effects: Vec::new(),
+        destroyed: false,
     }
 }
 
@@ -38,7 +39,7 @@ fn execute(
     let mut native = std::time::Duration::ZERO;
     let receipts: Vec<_> = files
         .iter()
-        .map(|_| Arc::new(Mutex::new(Receipt::default())))
+        .map(|(_, recycle, _)| Arc::new(Mutex::new(Receipt { recycle: *recycle, ..Default::default() })))
         .collect();
     let result = (|| -> windows::core::Result<bool> {
         let _apartment = Apartment::new()?;

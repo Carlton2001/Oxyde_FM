@@ -116,10 +116,13 @@ impl PreparedDelete {
         self.recycle_reporting(&mut |path, proof| platform().shell_delete_tracked_controlled(path, proof, control.clone()), completed)
     }
     pub(super) fn record_outcome(&self, outcome: crate::platform::ShellDeleteOutcome, completed: &mut dyn FnMut(HistoryDeletedItem)) -> Result<(), CommandError> {
+        // A destroyed item has nothing to restore: Undo must not promise it back.
         if outcome.completed {
-            let entry = HistoryDeletedItem::new(self.path.to_string_lossy().into_owned(), self.identity);
-            entry.remember_partial(outcome.effects);
-            completed(entry);
+            if !outcome.destroyed {
+                let entry = HistoryDeletedItem::new(self.path.to_string_lossy().into_owned(), self.identity);
+                entry.remember_partial(outcome.effects);
+                completed(entry);
+            }
         } else {
             for effect in outcome.effects { completed(effect); }
         }
@@ -564,6 +567,7 @@ mod tests {
                 assert!(proof.is_some());
                 fs::rename(source, &saved).unwrap();
                 crate::platform::ShellDeleteOutcome {
+                    destroyed: false,
                     completed: true,
                     error: Some("late injected failure".into()),
                     effects: Vec::new(),
@@ -598,6 +602,7 @@ mod tests {
             assert_eq!(path, first);
             fs::rename(path, path.with_extension("saved")).unwrap();
             crate::platform::ShellDeleteOutcome {
+                destroyed: false,
                 completed: true,
                 error: Some("late injected failure".into()),
                 effects: Vec::new(),
@@ -627,6 +632,7 @@ mod tests {
         assert!(prepared
             .recycle_reporting(
                 &mut |_, _| crate::platform::ShellDeleteOutcome {
+                    destroyed: false,
                     completed: false,
                     error: None,
                     effects: Vec::new(),
@@ -638,6 +644,7 @@ mod tests {
         let entries = [selected(&path)];
         assert!(
             redo_reporting(&entries, &mut |_, _| crate::platform::ShellDeleteOutcome {
+                destroyed: false,
                 completed: false,
                 error: None,
                 effects: Vec::new(),

@@ -133,6 +133,9 @@ impl FileOperationManager {
                         || !locked.moved_links.is_empty()
                         || !locked.renamed_dirs.is_empty()
                 }
+                // Windows journals only what reached the Recycle Bin.
+                #[cfg(target_os = "windows")]
+                FileOpType::Trash => !locked.deleted_items.is_empty(),
                 _ => true,
             };
             if let Some(t_type) = tx_type.filter(|_| has_undoable_effects) {

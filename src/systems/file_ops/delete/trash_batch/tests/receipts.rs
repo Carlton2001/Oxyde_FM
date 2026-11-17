@@ -39,6 +39,7 @@ fn every_confirmed_success_is_journaled_despite_an_earlier_batch_error() {
         ShellDeleteOutcome::from_result(Err("first failed".into())),
         ShellDeleteOutcome::from_result(Ok(())),
         ShellDeleteOutcome {
+            destroyed: false,
             completed: true,
             error: Some("later cancellation".into()),
             effects: Vec::new(),
@@ -77,4 +78,27 @@ fn directories_stay_outside_the_flat_batch() {
     assert!(directory.batch_file().is_none());
     let selected = selection(root.path());
     assert!(selected[0].batch_file().is_some());
+}
+
+#[test]
+fn an_item_destroyed_instead_of_recycled_is_reported_and_never_journaled() {
+    let root = tempfile::tempdir().unwrap();
+    let selected = selection(root.path());
+    let outcomes = vec![
+        ShellDeleteOutcome::from_result(Ok(())),
+        ShellDeleteOutcome {
+            completed: true,
+            error: Some("Windows deleted the item permanently instead of recycling it (0x80270036)".into()),
+            effects: Vec::new(),
+            destroyed: true,
+        },
+        ShellDeleteOutcome::from_result(Ok(())),
+    ];
+    let mut journal = Vec::new();
+    let failures = record_batch_receipts(&selected, outcomes, &mut |entry| journal.push(entry));
+    // Undo restores only what reached the Recycle Bin.
+    assert_eq!(failures.len(), 1);
+    assert_eq!(failures[0].0, selected[1].path());
+    let journaled: Vec<_> = journal.iter().map(|entry| entry.path.clone()).collect();
+    assert_eq!(journaled, [selected[0].path().to_string_lossy(), selected[2].path().to_string_lossy()]);
 }
