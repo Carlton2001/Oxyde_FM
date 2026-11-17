@@ -54,7 +54,9 @@ impl OxydeApp {
         let Some(pane) = self.state.find_pane(&self.state.active_pane_id) else { return; };
         let tab = pane.active_tab();
         if tab.path != "trash://" { return; }
-        let (paths, names) = trash_targets(&tab.files, &tab.selected_paths, all);
+        // « All » names the whole trash; a selection is only what the filters show.
+        let listed = if all { tab.files.as_slice() } else { tab.filtered_files() };
+        let (paths, names) = trash_targets(listed, &tab.selected_paths, all);
         if paths.is_empty() { return; }
         if !restore && purge_needs_confirmation(all, self.config.confirm_delete) {
             let count = paths.len() as u64;
@@ -130,7 +132,7 @@ impl OxydeApp {
         }
         let pane_id = self.state.active_pane_id.clone();
         if let Some(pane) = self.state.layout.find_pane(&pane_id) {
-            let paths: Vec<String> = pane.active_tab().selected_paths.iter().cloned().collect();
+            let paths = pane.active_tab().actionable_selection();
             if paths.is_empty() {
                 return;
             }

@@ -26,7 +26,7 @@ impl OxydeApp {
     pub fn execute_couper(&mut self, cx: &mut Context<Self>) { self.copy_files_to_clipboard(true, cx); }
     fn copy_files_to_clipboard(&mut self, cut: bool, cx: &mut Context<Self>) {
         let Some(pane) = self.state.find_pane(&self.state.active_pane_id) else { return; };
-        let paths: Vec<_> = pane.active_tab().selected_paths.iter().cloned().collect();
+        let paths = pane.active_tab().actionable_selection();
         if paths.is_empty() { return; }
         let text = paths.join("\n");
         cx.spawn(async move |this, cx| {

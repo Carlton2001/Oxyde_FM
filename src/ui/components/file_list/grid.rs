@@ -33,6 +33,8 @@ pub(super) fn render_grid_file_list(
     let calculating_sizes = tab.size_calculation.is_some() || tab.folder_sizes.has_pending() || tab.folder_sizes.has_ready();
     let files = tab.cached_filtered_files.clone();
     let selected = tab.selected_paths.clone();
+    // A drag carries only what the filters show, never a hidden or vanished entry.
+    let drag_selection = std::rc::Rc::new(tab.actionable_selection());
     let inline_rename = view.inline_rename;
     let editing_path = view.editing_path.clone();
     let editing_view = view.editing_view.clone();
@@ -154,6 +156,7 @@ pub(super) fn render_grid_file_list(
                 let collapsed = tab.collapsed_groups.clone();
                 let provisional_sizes = tab.folder_sizes.provisional_paths();
                 let selected = selected.clone();
+                let drag_selection = drag_selection.clone();
                 let pane_id = pane_id.clone();
                 let handle = handle.clone();
                 let editing_path = editing_path.clone();
@@ -185,8 +188,8 @@ pub(super) fn render_grid_file_list(
                                     let is_selected = selected.contains(&path);
                                     let h = handle.clone();
                                     let pid = pane_id.clone();
-                                    let paths = if is_selected && selected.len() > 1 {
-                                        selected.iter().cloned().collect::<Vec<_>>()
+                                    let paths = if is_selected && drag_selection.len() > 1 {
+                                        drag_selection.to_vec()
                                     } else {
                                         vec![path.clone()]
                                     };

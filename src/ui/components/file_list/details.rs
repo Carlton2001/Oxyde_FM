@@ -102,6 +102,8 @@ pub(super) fn render_details_file_list(
         .iter()
         .filter(|file| selected_paths.contains(&file.path))
         .collect() };
+    // A drag carries only what the filters show, never a hidden or vanished entry.
+    let drag_selection: std::rc::Rc<Vec<String>> = std::rc::Rc::new(selected_entries.iter().map(|file| file.path.clone()).collect());
     let selected_folders = selected_entries.iter().filter(|file| file.is_dir).count();
     let selected_files = selected_entries.len().saturating_sub(selected_folders);
     let selected_bytes: u64 = selected_entries
@@ -205,6 +207,7 @@ pub(super) fn render_details_file_list(
                                     let h_inner = handle.clone();
                                     let p_id_for_list = pane_id.clone();
                                     let selected_paths = selected_paths.clone();
+                                    let drag_selection = drag_selection.clone();
                                     let size_flashes = active_tab.folder_sizes.size_flashes();
                                     let provisional_sizes = active_tab.folder_sizes.provisional_paths();
                                     let folder_subdirectory_flags = folder_subdirectory_flags.clone();
@@ -249,7 +252,7 @@ pub(super) fn render_details_file_list(
                                                 editing_view,
                                                 rename_error,
                                                 rename_shake_id,
-                                                selected_paths: &selected_paths,
+                                                selection: &drag_selection,
                                                 theme,
                                                 histogram_total,
                                                 total_w,
