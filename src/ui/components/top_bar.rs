@@ -592,7 +592,7 @@ pub fn render_top_bar(
                             .items_center()
                             .justify_center()
                             .flex_none()
-                            .child(svg().path(root_icon).size_4().text_color(theme.text)),
+                            .child(svg().path(root_icon).size_4().text_color(crumb_parent)),
                     )
                     .child(div()
                         .relative()
