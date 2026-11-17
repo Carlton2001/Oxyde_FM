@@ -55,9 +55,50 @@ pub(super) fn open(
     disposition: u32,
 ) -> io::Result<File> {
     let absolute = std::path::absolute(path)?;
-    // `\??\C:` is an object manager link; Windows 10 refuses it under
-    // OBJ_DONT_REPARSE. Open the volume root alone, then refuse reparse points
-    // component by component below it.
+    // One native lookup where the kernel accepts drive links (Windows 11);
+    // Windows 10 walks from the volume root directly.
+    match drive_links_refused() {
+        Some(true) => open_by_components(&absolute, directory, access, sharing, disposition),
+        Some(false) => open_name(native_name(&absolute), std::ptr::null_mut(), Some(directory), access, sharing, disposition, true),
+        // Unknown kernel: a refusal may be the drive link or a real reparse
+        // point, and the walk decides.
+        None => match open_name(native_name(&absolute), std::ptr::null_mut(), Some(directory), access, sharing, disposition, true) {
+            Err(error) if error.raw_os_error() == Some(ERROR_REPARSE_POINT_ENCOUNTERED) => {
+                open_by_components(&absolute, directory, access, sharing, disposition)
+            }
+            result => result,
+        },
+    }
+}
+
+const ERROR_REPARSE_POINT_ENCOUNTERED: i32 = 4395;
+
+/// Windows 10 refuses the `\??\C:` object manager link under OBJ_DONT_REPARSE.
+/// A volume root is never a reparse point, so that refusal on the system
+/// drive's root tells the kernel's behavior, probed once per process.
+fn drive_links_refused() -> Option<bool> {
+    static REFUSED: std::sync::OnceLock<Option<bool>> = std::sync::OnceLock::new();
+    *REFUSED.get_or_init(|| {
+        let drive = std::env::var_os("SystemDrive").unwrap_or_else(|| "C:".into());
+        let root = Path::new(&drive).join("\\");
+        // FILE_READ_ATTRIBUTES, all sharing, FILE_OPEN.
+        match open_name(native_name(&root), std::ptr::null_mut(), Some(true), 0x80, 7, 1, true) {
+            Ok(_) => Some(false),
+            Err(error) if error.raw_os_error() == Some(ERROR_REPARSE_POINT_ENCOUNTERED) => Some(true),
+            Err(_) => None,
+        }
+    })
+}
+
+/// Opens the volume root alone, then refuses reparse points component by
+/// component below it.
+fn open_by_components(
+    absolute: &Path,
+    directory: bool,
+    access: u32,
+    sharing: u32,
+    disposition: u32,
+) -> io::Result<File> {
     let mut root = std::path::PathBuf::new();
     let mut names = Vec::new();
     for component in absolute.components() {
