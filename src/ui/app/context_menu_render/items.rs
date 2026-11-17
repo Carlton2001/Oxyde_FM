@@ -217,7 +217,8 @@ impl OxydeApp {
                                 h_inner.update(cx, |this, cx| {
                                     this.submenu_timer = None;
                                     this.submenu_close_timer = None;
-                                    if this.context_menus.len() > m_idx + 1 && !this.menu_stays_open(m_idx + 1) {
+                                    // Hovering a sibling closes even the submenus that survive the pointer leaving.
+                                    if this.context_menus.len() > m_idx + 1 {
                                         this.context_menus.truncate(m_idx + 1);
                                         cx.notify();
                                     }
@@ -230,7 +231,7 @@ impl OxydeApp {
                             h_close.update(cx, |this, cx| {
                                 this.submenu_timer = None;
                                 this.submenu_close_timer = None;
-                                if this.context_menus.len() > m_idx + 1 && !this.menu_stays_open(m_idx + 1) {
+                                if this.context_menus.len() > m_idx + 1 {
                                     this.context_menus.truncate(m_idx + 1);
                                     cx.notify();
                                 }
