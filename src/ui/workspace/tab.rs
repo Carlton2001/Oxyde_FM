@@ -101,6 +101,7 @@ impl TabState {
             pending_reveal: None,
             pending_rename_reveal: None,
             restored: false,
+            opened_at: None,
             path: path.clone(),
             archive_root: None,
             files: Default::default(),

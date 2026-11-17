@@ -130,10 +130,10 @@ impl WorkspaceState {
         let id = format!("tab-{}", self.next_tab_id);
         self.next_tab_id = self.next_tab_id.wrapping_add(1);
 
-        let new_tab = TabState::new(id, path);
+        let mut new_tab = TabState::new(id, path);
+        new_tab.opened_at = Some(std::time::Instant::now());
 
         if let Some(pane) = self.find_pane_mut(pane_id) {
-            let mut new_tab = new_tab;
             let current = pane.active_tab();
             new_tab.view_mode = current.view_mode;
             // The sort follows the tab it opens from, unless its column is missing here:

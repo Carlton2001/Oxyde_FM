@@ -166,6 +166,8 @@ pub struct TabState {
     /// Restored from the saved workspace and not listed yet: a location that
     /// vanished meanwhile, such as an unmounted volume, falls back home.
     pub restored: bool,
+    /// When the tab was created by the user, for its opening flash. Never saved.
+    pub opened_at: Option<std::time::Instant>,
     pub id: String,
     pub path: String,
     pub archive_root: Option<std::path::PathBuf>,

@@ -218,6 +218,7 @@ impl OxydeApp {
                 label.clone(),
             )
             .selected(is_tab_active)
+            .opened_at(tab_data.opened_at)
             // Internal locations show their translated name, never their technical path.
             .when(self.context_menus.is_empty(), |tab| tab.tooltip_path(if is_virtual { label.clone() } else { tab_data.path.clone() }))
             .position(position)

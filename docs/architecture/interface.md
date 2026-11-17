@@ -105,3 +105,5 @@ Every resize separator is `elements::resize_separator`: a 1 px line, a 7 px hit 
 On Linux, an inactive window fades its title bar content to half opacity over 200 ms, as GNOME headers do (`components/backdrop.rs`). Open menus and modal prompts count as part of their owner, which keeps an active header while they hold the keyboard.
 
 A computed folder size that changes signals the update with an accent background fading over 300 ms in the Size cell, an exception to the appearance duration. The initial calculation and identical results stay unanimated; an offscreen cell does not replay the flash when it appears.
+
+A tab the user creates (new tab, folder opened in a tab, duplicate) flashes once in the accent, fading out over 700 ms with a squared curve so it ends on the tab's color without a step (`tabs/tab.rs`, `TabState::opened_at`, never saved), so it is spotted at first glance. This is an exception to the appearance duration, as the size flash; restored tabs and tabs that are scrolled into view later do not flash.

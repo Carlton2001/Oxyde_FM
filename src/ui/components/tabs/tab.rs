@@ -96,7 +96,11 @@ pub struct Tab {
     on_close: Option<Box<dyn Fn(&mut Window, &mut App) + 'static>>,
     drag_refinement: Option<Box<dyn FnOnce(Stateful<Div>) -> Stateful<Div> + 'static>>,
     is_dragging: bool,
+    opened_at: Option<std::time::Instant>,
 }
+
+/// How long a new tab's flash takes to fade, so it is spotted at first glance.
+pub const OPENING_FLASH_DURATION: std::time::Duration = std::time::Duration::from_millis(700);
 
 impl Tab {
     pub fn new(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Self {
@@ -114,7 +118,14 @@ impl Tab {
             on_close: None,
             drag_refinement: None,
             is_dragging: false,
+            opened_at: None,
         }
+    }
+
+    /// The moment the tab was created: it flashes from then on.
+    pub fn opened_at(mut self, opened_at: Option<std::time::Instant>) -> Self {
+        self.opened_at = opened_at;
+        self
     }
 
     pub fn selected(mut self, selected: bool) -> Self {
@@ -314,6 +325,32 @@ impl RenderOnce for Tab {
                     )
                 }),
         );
+
+        // Tabs listed again later (scroll, restart of the view) must not flash again.
+        if let Some(started) = self.opened_at.filter(|started| started.elapsed() < OPENING_FLASH_DURATION) {
+            let duration = OPENING_FLASH_DURATION;
+            let accent = theme.accent;
+            container = container.child(
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .with_animation(
+                        SharedString::from(format!("tab-flash-{:?}-{started:?}", self.id)),
+                        Animation::new(duration),
+                        move |overlay, progress| {
+                            // GPUI also supplies the final frame immediately for reduced motion.
+                            let fade = if progress >= 1.0 { 0.0 } else {
+                                (1.0 - started.elapsed().as_secs_f32() / duration.as_secs_f32()).clamp(0.0, 1.0)
+                            };
+                            // Squared: the slope reaches zero with the opacity, so the fade ends
+                            // on the tab's own color without a visible step.
+                            overlay.bg(accent.opacity(0.5 * fade * fade))
+                        },
+                    ),
+            );
+        }
 
         if let Some(on_bounds) = self.on_bounds {
             container = container.child(
