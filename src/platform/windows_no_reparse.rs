@@ -55,7 +55,38 @@ pub(super) fn open(
     disposition: u32,
 ) -> io::Result<File> {
     let absolute = std::path::absolute(path)?;
-    let dos: Vec<u16> = absolute.as_os_str().encode_wide().collect();
+    // `\??\C:` is an object manager link; Windows 10 refuses it under
+    // OBJ_DONT_REPARSE. Open the volume root alone, then refuse reparse points
+    // component by component below it.
+    let mut root = std::path::PathBuf::new();
+    let mut names = Vec::new();
+    for component in absolute.components() {
+        match component {
+            std::path::Component::Prefix(_) | std::path::Component::RootDir => {
+                root.push(component.as_os_str())
+            }
+            std::path::Component::Normal(name) => names.push(name),
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "Native path is not normalized",
+                ))
+            }
+        }
+    }
+    let Some((last, parents)) = names.split_last() else {
+        return open_name(native_name(&root), std::ptr::null_mut(), Some(directory), access, sharing, disposition, false);
+    };
+    // FILE_TRAVERSE | FILE_READ_ATTRIBUTES, all sharing.
+    let mut parent = open_name(native_name(&root), std::ptr::null_mut(), Some(true), 0x20 | 0x80, 7, 1, false)?;
+    for name in parents {
+        parent = open_relative(&parent, name, true, 0x20 | 0x80, 7, 1)?;
+    }
+    open_relative(&parent, last, directory, access, sharing, disposition)
+}
+
+fn native_name(path: &Path) -> Vec<u16> {
+    let dos: Vec<u16> = path.as_os_str().encode_wide().collect();
     let prefix: Vec<u16> = "\\??\\".encode_utf16().collect();
     let extended: Vec<u16> = "\\\\?\\".encode_utf16().collect();
     let unc: Vec<u16> = "\\\\".encode_utf16().collect();
@@ -68,15 +99,7 @@ pub(super) fn open(
     } else {
         name.extend(dos);
     }
-    open_name(
-        name,
-        std::ptr::null_mut(),
-        Some(directory),
-        access,
-        sharing,
-        disposition,
-        true,
-    )
+    name
 }
 
 pub(super) fn leaf_name(leaf: &OsStr) -> io::Result<Vec<u16>> {
