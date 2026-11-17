@@ -89,7 +89,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
             crate::ui::elements::rounded_fill::rounded_fill(
                 (file.size as f64 / histogram_total as f64) as f32,
                 rems(0.3125),
-                theme.accent.opacity(0.12),
+                theme.size_bar,
             ).absolute().left(rems(0.0625)).right(rems(0.0625)).top(rems(0.0625)).bottom(rems(0.0625))
         ))
         .w(px(card_width - logical(4.0)))

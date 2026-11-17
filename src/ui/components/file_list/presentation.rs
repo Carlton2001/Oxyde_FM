@@ -260,7 +260,7 @@ fn view_mode_switch(
 }
 
 pub(super) fn size_histogram(size: u64, total: u64, color: Hsla) -> Div {
-    div().absolute().left_0().top_0().bottom_0().w(relative((size as f64 / total as f64).clamp(0.0, 1.0) as f32)).bg(color.opacity(0.12))
+    div().absolute().left_0().top_0().bottom_0().w(relative((size as f64 / total as f64).clamp(0.0, 1.0) as f32)).bg(color)
 }
 
 pub(super) fn size_loading(path: &str, color: Hsla) -> AnyElement {

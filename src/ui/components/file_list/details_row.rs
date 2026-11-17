@@ -92,7 +92,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
     {
         let is_dimmed = file.is_hidden || file.is_system;
         div()
-            .id(SharedString::from(format!("file-row-{}", path))).relative().when(histogram_total > 0, |d| d.child(size_histogram(file.size, histogram_total, theme.accent))).when(is_selected, |d| d.child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent)))
+            .id(SharedString::from(format!("file-row-{}", path))).relative().when(histogram_total > 0, |d| d.child(size_histogram(file.size, histogram_total, theme.size_bar))).when(is_selected, |d| d.child(div().absolute().left_0().top_0().bottom_0().w(rems(0.1875)).bg(theme.accent)))
             .flex()
             .items_center()
             .h(px(crate::ui::style::row_height()))

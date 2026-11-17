@@ -2,6 +2,7 @@ use gpui::Render;
 mod file_colors;
 mod legibility;
 mod seed;
+mod states;
 pub(crate) use seed::ThemeSeed;
 pub use oxyde_lib::models::custom_theme::{CustomTheme, ThemeChoice};
 use gpui::*;
@@ -48,6 +49,7 @@ pub struct OxydeTheme {
     pub tab_close_hover: Hsla,
     pub selection_hover: Hsla,
     pub drag_hover: Hsla,
+    pub size_bar: Hsla,          // Histogramme des tailles, distinct du survol et de la sélection
     pub scrollbar_thumb: Hsla,
     pub scrollbar_thumb_hover: Hsla,
     pub scrollbar_thumb_drag: Hsla,
@@ -116,6 +118,7 @@ impl OxydeTheme {
         let icons = file_colors::derive([seed.background, seed.active_background], seed.accent, light, vision);
         let mut theme = seed::derive(seed, light, icons, vision);
         legibility::enforce(&mut theme);
+        states::derive(&mut theme);
         theme
     }
 
