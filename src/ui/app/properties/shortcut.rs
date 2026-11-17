@@ -99,12 +99,15 @@ pub(super) fn run_menu(
         let bounds = dialog.run_bounds.unwrap_or(Bounds::new(position, size(px(0.0), px(0.0))));
         crate::ui::components::popup::show("shortcut-run", crate::ui::components::popup::PopupAnchor::element(bounds), handle.clone(), window, cx,
             |view| view.properties_dialog.as_ref().is_some_and(|dialog| dialog.run_menu.is_some() && dialog.tab == super::PropertiesTab::Shortcut),
-            |view, _, cx| run_choices(&cx.entity(), *cx.theme(), view.properties_dialog.as_ref().map_or(1, |dialog| dialog.run_window), cx).into_any_element(),
+            |view, _, cx| {
+                let (mode, width) = view.properties_dialog.as_ref().map_or((1, px(0.0)), |dialog| (dialog.run_window, dialog.run_bounds.map_or(px(0.0), |bounds| bounds.size.width)));
+                run_choices(&cx.entity(), *cx.theme(), mode, width, cx).into_any_element()
+            },
             |view, _, cx| { if let Some(dialog) = &mut view.properties_dialog { dialog.run_menu = None; cx.notify(); } });
         return body;
     }
     if let Some(position) = dialog.run_menu {
-        let menu = run_choices(handle, theme, dialog.run_window, cx);
+        let menu = run_choices(handle, theme, dialog.run_window, dialog.run_bounds.map_or(px(0.0), |bounds| bounds.size.width), cx);
         let close = handle.clone();
         body = body.child(deferred(
             anchored()
@@ -126,15 +129,13 @@ pub(super) fn run_menu(
     body
 }
 
-fn run_choices(handle: &Entity<PropertiesWindow>, theme: OxydeTheme, selected_mode: i32, cx: &mut Context<PropertiesWindow>) -> Div {
+fn run_choices(handle: &Entity<PropertiesWindow>, theme: OxydeTheme, selected_mode: i32, width: Pixels, cx: &mut Context<PropertiesWindow>) -> Div {
         let mut menu = crate::ui::components::select_menu::surface(theme)
             .on_any_mouse_down(|_, _, cx| cx.stop_propagation())
             .on_mouse_up(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_mouse_move(|_, _, cx| cx.stop_propagation())
             .on_scroll_wheel(|_, _, cx| cx.stop_propagation())
-            .w(crate::ui::components::select_menu::list_width(
-                handle.read(cx).properties_dialog.as_ref().and_then(|dialog| dialog.run_bounds).map_or(px(0.0), |bounds| bounds.size.width),
-            ));
+            .w(crate::ui::components::select_menu::list_width(width));
         for mode in [1, 3, 7] {
             let choice = handle.clone();
             let key_choice = handle.clone();
