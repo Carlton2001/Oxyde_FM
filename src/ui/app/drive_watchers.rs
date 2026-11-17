@@ -209,6 +209,8 @@ impl OxydeApp {
                     Ok(Err(error)) => { log::warn!("Drive notifications unavailable: {error}"); None }
                     Err(error) => { log::warn!("Drive notification worker failed: {error}"); None }
                 };
+                // Drives absent from the previous survey: one transient survey does not remove a drive.
+                let mut suspect: Vec<String> = Vec::new();
                 let mut schedule = drive_watchers::DriveRefreshSchedule::new(
                     _registration.is_some(), std::time::Instant::now());
                 loop {
@@ -231,6 +233,17 @@ impl OxydeApp {
                             h.update(&mut cx, |this, cx| {
                                 if this.ejecting_drive || this.drive_refresh_epoch != epoch
                                     || revision.load(Ordering::Acquire) != observed { return; }
+                                let mut roots = roots;
+                                let missing: Vec<_> = this.state.drives.iter()
+                                    .filter(|old| !roots.iter().any(|root| paths_match(&root.path, &old.path)))
+                                    .cloned()
+                                    .collect();
+                                for old in &missing {
+                                    if !suspect.contains(&old.path) {
+                                        roots.push(old.clone());
+                                    }
+                                }
+                                suspect = missing.into_iter().map(|old| old.path).collect();
                                 let changed = roots.len() != this.state.drives.len()
                                     || roots.iter().any(|root| !this.state.drives.iter()
                                         .any(|old| old.path == root.path && old.drive_type == root.drive_type));
