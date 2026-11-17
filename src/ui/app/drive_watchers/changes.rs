@@ -184,14 +184,18 @@ impl DirectoryWatcher {
     }
 
     pub(in crate::ui::app) fn release(mut self, path: &str) -> Result<(), String> {
-        self.watcher
+        // A failed unwatch must not skip the barrier below: the watcher is dropped anyway.
+        let unwatched = self
+            .watcher
             .unwatch(&decode(path))
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| error.to_string());
         // The configure reply is a FIFO barrier for Windows' queued unwatch.
-        self.watcher
+        let configured = self
+            .watcher
             .configure(Config::default())
-            .map_err(|error| error.to_string())?;
-        Ok(())
+            .map(|_| ())
+            .map_err(|error| error.to_string());
+        unwatched.and(configured)
     }
 }
 

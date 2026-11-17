@@ -113,7 +113,10 @@ impl OxydeApp {
                 // Release watches and wait for their handles to close: an open handle keeps
                 // the volume busy.
                 for (watched_path, watcher) in watchers {
-                    watcher.release(&watched_path).map_err(VolumeError::Other)?;
+                    // A watch already gone (deleted folder) does not keep the volume busy.
+                    if let Err(error) = watcher.release(&watched_path) {
+                        log::warn!("Releasing watcher on {watched_path} failed: {error}");
+                    }
                 }
                 let volumes = oxyde_lib::platform::platform().volumes();
                 if eject { volumes.eject(&path)? } else { volumes.unmount(&path)? }
@@ -283,7 +286,11 @@ impl OxydeApp {
                             cx.notify();
                         }
                     });
-                    let changed = if let Ok(mut q) = changes.lock() {
+                    // Changes wait in the queue while a drive is being released.
+                    let ejecting = h.update(&mut cx, |this, _| this.ejecting_drive);
+                    let changed = if ejecting {
+                        HashMap::new()
+                    } else if let Ok(mut q) = changes.lock() {
                         std::mem::take(&mut *q)
                     } else {
                         HashMap::new()
