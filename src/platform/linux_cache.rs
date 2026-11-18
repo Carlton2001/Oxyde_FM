@@ -29,16 +29,17 @@ fn checked(result: c_int) -> io::Result<c_int> {
 }
 
 /// Opens a cache entry for eviction without following links. A regular file comes
-/// back leased; one still open elsewhere is refused with `WouldBlock`, after two short
+/// back leased; one still open elsewhere is refused with `WouldBlock`, after short
 /// retries for transient holders such as a process being spawned, which shares every
-/// descriptor until it executes.
+/// descriptor until it executes. Under load that can last beyond 10 ms: the retries
+/// back off up to 75 ms in all, paid only by an entry that stays held.
 pub(super) fn open_cleanup(path: &Path, directory: bool) -> io::Result<File> {
     let mut attempt = 0;
     loop {
         match open_once(path, directory) {
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock && attempt < 2 => {
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock && attempt < 4 => {
+                std::thread::sleep(std::time::Duration::from_millis(5 << attempt));
                 attempt += 1;
-                std::thread::sleep(std::time::Duration::from_millis(5));
             }
             result => return result,
         }

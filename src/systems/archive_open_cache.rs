@@ -11,6 +11,8 @@ const OWNER: &str = ".owner.json";
 const MAX_SCAN_NODES: usize = 65_536;
 const MAX_SCAN_DEPTH: usize = 80;
 const MAX_PENDING_ENTRIES: usize = 4;
+/// Longest a preparation can run, pauses included, before it counts as abandoned.
+const PREPARATION_WINDOW: Duration = Duration::from_secs(60 * 60);
 #[cfg(target_os = "windows")]
 pub(crate) mod recovery;
 
@@ -307,8 +309,10 @@ fn base() -> io::Result<PathBuf> {
         fs::create_dir_all(&base)?;
         Ok(base)
     }
+    // The cache's proof key and entries need access rights: a portable
+    // temporary folder on FAT or exFAT has none.
     #[cfg(not(target_os = "linux"))]
-    crate::app_paths::temporary_dir()
+    platform().protected_temporary_dir()
 }
 
 fn seconds(time: SystemTime) -> io::Result<u64> {
@@ -389,10 +393,14 @@ impl Session {
                 continue;
             }
             let owner = read_owner(&path).ok();
-            if owner
-                .as_ref()
-                .is_some_and(|owner| matches!(owner.version, 2..=4) && owner.original.is_none())
-            {
+            if owner.as_ref().is_some_and(|owner| {
+                matches!(owner.version, 2..=4)
+                    && owner.original.is_none()
+                    // A preparation ends within its own time limits. An older
+                    // one was cut by a crash, maybe with data the recovery
+                    // cannot prove, and must not hold a pending slot forever.
+                    && now.saturating_sub(owner.created) < PREPARATION_WINDOW.as_secs()
+            }) {
                 // A live preparation keeps its marker and directory open.
                 // Traversing it would race decoder writes and TempDir cleanup.
                 // These at most four entries have their own extraction limits;
@@ -676,6 +684,10 @@ impl Scan {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "archive_open_cache/tests/pending.rs"]
+mod pending_tests;
 
 #[cfg(test)]
 mod tests {

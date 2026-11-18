@@ -37,6 +37,15 @@ pub fn create_archive_directory_with_quality(
     crate::systems::archive_workspace::create_directory(path, quality)
 }
 
+/// Creates the first free name among `names` in `parent`, a folder of an archive.
+pub fn create_numbered_archive_directory(
+    parent: &Path,
+    names: &mut dyn Iterator<Item = String>,
+    quality: &str,
+) -> Result<PathBuf, std::io::Error> {
+    crate::systems::archive_workspace::create_numbered_directory(parent, names, quality)
+}
+
 /// Checks the password remembered for `path` before the action it unlocks.
 pub fn verify_archive_password(path: &Path) -> Result<(), CommandError> {
     #[cfg(test)]
@@ -449,15 +458,14 @@ pub(crate) fn extract_open_archive_with_budget(
                 checkpoint,
                 budget,
             });
-            for entry in archive.entries()? {
+            for entry in crate::utils::tar_members::members(archive.entries()?) {
                 let mut entry = entry?;
                 budget.checkpoint(checkpoint)?;
-                let kind = entry.header().entry_type();
-                if !kind.is_file() && !kind.is_dir() {
+                let Some(directory) = crate::utils::tar_members::directory(&mut entry)? else {
                     return Err(CommandError::ArchiveError(
                         "Archive links and special files are not supported".into(),
                     ));
-                }
+                };
                 let name = entry
                     .path()?
                     .to_str()
@@ -465,9 +473,9 @@ pub(crate) fn extract_open_archive_with_budget(
                         CommandError::ArchiveError("Invalid archive entry encoding".into())
                     })?
                     .to_owned();
-                budget.entry(&name, if kind.is_file() { entry.size() } else { 0 })?;
-                let destination = root.destination(&name, kind.is_dir())?;
-                if kind.is_file() {
+                budget.entry(&name, if directory { 0 } else { entry.size() })?;
+                let destination = root.destination(&name, directory)?;
+                if !directory {
                     let mut output = platform().create_archive_file(&destination.path)?;
                     budget.copy(&mut entry, &mut output, checkpoint)?;
                     if let Some(data) = provenance.as_deref() {

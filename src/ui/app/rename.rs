@@ -271,7 +271,7 @@ impl OxydeApp {
             // The encoder finds the new archive's password where a rebuild finds its own;
             // an older archive's password must not protect a new unprotected one.
             match secret {
-                Some(secret) => oxyde_lib::utils::archive_password::remember(&destination, secret),
+                Some(secret) => oxyde_lib::utils::archive_password::remember_new(&destination, secret),
                 None => oxyde_lib::utils::archive_password::forget(&destination),
             }
             self.cancel_rename(cx);
@@ -448,21 +448,30 @@ impl OxydeApp {
                         move || {
                             let i18n = I18n::for_language(language);
                             let in_archive = oxyde_lib::utils::archive::resolve_virtual_path(std::path::Path::new(&current_path)).is_some();
-                            for counter in 0.. {
-                                let name = if counter == 0 {
+                            let name = |counter: usize| {
+                                if counter == 0 {
                                     i18n.text(name_key).to_string()
                                 } else {
                                     let mut args = FluentArgs::new();
                                     args.set("number", counter);
                                     i18n.text_with_args(numbered_key, &args)
                                         .replace(['\u{2068}', '\u{2069}'], "")
-                                };
-                                let path = std::path::Path::new(&current_path).join(name);
+                                }
+                            };
+                            if is_dir && in_archive {
+                                // One extraction and one rebuild, whichever name is free.
+                                return oxyde_lib::commands::archive::create_numbered_archive_directory(
+                                    std::path::Path::new(&current_path),
+                                    &mut (0..).map(name),
+                                    &quality,
+                                )
+                                .map(|path| (path, None, true));
+                            }
+                            for counter in 0.. {
+                                let path = std::path::Path::new(&current_path).join(name(counter));
                                 let created = if !is_dir {
                                     // Archives only receive folders from here.
                                     oxyde_lib::commands::io::create_local_file(&path).map(|()| None)
-                                } else if in_archive {
-                                    oxyde_lib::commands::archive::create_archive_directory_with_quality(&path, &quality).map(|()| None)
                                 } else {
                                     oxyde_lib::commands::io::create_local_folder(&path)
                                 };

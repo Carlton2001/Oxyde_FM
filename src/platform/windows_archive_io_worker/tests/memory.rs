@@ -8,6 +8,7 @@ fn only_seven_encoding_uses_the_larger_envelope_and_navigation_stays_reserved() 
         bytes: 1024,
         depth: 8,
         seconds: 30,
+        decoded: 1024,
     };
     for format in [Format::Zip, Format::SevenZip, Format::Tar, Format::TarZst] {
         let operation = Operation::Encode {

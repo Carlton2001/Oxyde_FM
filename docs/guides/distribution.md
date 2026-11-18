@@ -54,7 +54,7 @@ TEMP, TMP and TMPDIR are redirected to `data/temp` before threads start, and chi
 
 To move the application, move the whole `Oxyde_FM` folder, `data` included; stored paths to user files are not rewritten. Removing `data` turns portable mode off at next start. Clearing the cache in settings keeps configuration, logs and session. No shortcut or uninstall entry is created.
 
-This isolation covers files Oxyde manages, not traces left by Windows, external tools or file operations the user requests. Ephemeral AppContainer profiles are still used and removed as usual; protections are not reduced in portable mode.
+This isolation covers files Oxyde manages, not traces left by Windows, external tools or file operations the user requests. Ephemeral AppContainer profiles are still used and removed as usual; protections are not reduced in portable mode. On a medium without access rights (FAT32, exFAT), the worker sandbox and the cache of files opened from archives cannot protect their files in `data/temp`: they use the system temporary folder instead, for transient files only.
 
 ## Installer
 

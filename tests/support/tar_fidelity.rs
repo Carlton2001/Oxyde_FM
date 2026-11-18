@@ -117,3 +117,45 @@ fn real_tar_worker_preserves_posix_pax_paths_and_long_encoder_names_under_indepe
         assert!(entries.next().is_none());
     });
 }
+
+#[test]
+fn git_archive_global_header_extracts_through_the_worker_and_the_verifier() {
+    native(|| {
+        let root = tempfile::tempdir().unwrap();
+        let mut builder = tar::Builder::new(Vec::new());
+        // `git archive`, and so GitHub "Source code" archives, start with this.
+        let comment = b"52 comment=0123456789abcdef0123456789abcdef01234567\n";
+        let mut global = tar::Header::new_ustar();
+        global.set_entry_type(tar::EntryType::XGlobalHeader);
+        global.set_size(comment.len() as u64);
+        global.set_cksum();
+        builder
+            .append_data(&mut global, "pax_global_header", &comment[..])
+            .unwrap();
+        let mut header = tar::Header::new_ustar();
+        header.set_entry_type(tar::EntryType::Continuous);
+        header.set_size(4);
+        header.set_mode(0o644);
+        header.set_mtime(123);
+        header.set_cksum();
+        builder
+            .append_data(&mut header, "project/readme", &b"safe"[..])
+            .unwrap();
+        let bytes = builder.into_inner().unwrap();
+        let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+        gz.write_all(&bytes).unwrap();
+        for (name, bytes) in [("source.tar", bytes.clone()), ("source.tar.gz", gz.finish().unwrap())] {
+            let source = root.path().join(name);
+            fs::write(&source, bytes).unwrap();
+            let destination = root.path().join(format!("{name}-output"));
+            FileOperationManager::perform_extract(
+                &operation(FileOpType::Extract),
+                vec![source],
+                Some(destination.clone()),
+            )
+            .unwrap();
+            assert_eq!(fs::read(destination.join("project/readme")).unwrap(), b"safe");
+            assert!(!destination.join("pax_global_header").exists());
+        }
+    });
+}

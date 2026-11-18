@@ -82,6 +82,9 @@ struct Builder {
     paragraph: String,
     tag: &'static str,
     cells: Vec<String>,
+    /// The current cell lies past `MAX_CELLS`: its text is dropped, not
+    /// appended to the last kept cell.
+    dropped: bool,
     table_depth: usize,
     in_text: bool,
     /// Speaker notes and other non-body ODF text.
@@ -96,7 +99,7 @@ impl Builder {
         let text = std::mem::take(&mut self.paragraph);
         let tag = std::mem::replace(&mut self.tag, "p");
         if self.table_depth > 0 {
-            if let Some(cell) = self.cells.last_mut() {
+            if let Some(cell) = self.cells.last_mut().filter(|_| !self.dropped) {
                 if !cell.is_empty() && !text.trim().is_empty() {
                     cell.push(' ');
                 }
@@ -120,9 +123,14 @@ impl Builder {
         self.output.push('\n');
     }
     fn cell(&mut self) {
-        if self.cells.len() < MAX_CELLS {
+        self.dropped = self.cells.len() >= MAX_CELLS;
+        if !self.dropped {
             self.cells.push(String::new());
         }
+    }
+    fn start_row(&mut self) {
+        self.cells.clear();
+        self.dropped = false;
     }
     fn end_row(&mut self) {
         let mut cells = std::mem::take(&mut self.cells);
@@ -266,7 +274,7 @@ fn parse_word(builder: &mut Builder, name: &str, tag: &str, closing: bool) {
         ("w:p", true) => builder.end_paragraph(),
         ("w:tbl", false) => builder.table_depth += 1,
         ("w:tbl", true) => builder.table_depth = builder.table_depth.saturating_sub(1),
-        ("w:tr", false) if builder.table_depth == 1 => builder.cells.clear(),
+        ("w:tr", false) if builder.table_depth == 1 => builder.start_row(),
         ("w:tr", true) if builder.table_depth == 1 => builder.end_row(),
         ("w:tc", false) if builder.table_depth == 1 => builder.cell(),
         _ => {}
@@ -311,7 +319,7 @@ fn parse_odf(builder: &mut Builder, kind: Odf, name: &str, tag: &str, closing: b
             builder.table_depth += 1;
         }
         ("table:table", true) => builder.table_depth = builder.table_depth.saturating_sub(1),
-        ("table:table-row", false) if builder.table_depth == 1 => builder.cells.clear(),
+        ("table:table-row", false) if builder.table_depth == 1 => builder.start_row(),
         ("table:table-row", true) if builder.table_depth == 1 => builder.end_row(),
         ("table:table-cell" | "table:covered-table-cell", false) if builder.table_depth == 1 => {
             let repeated = attribute(tag, "table:number-columns-repeated")
@@ -326,6 +334,9 @@ fn parse_odf(builder: &mut Builder, kind: Odf, name: &str, tag: &str, closing: b
     }
 }
 
+#[cfg(test)]
+#[path = "office_document/tests/columns.rs"]
+mod column_tests;
 #[cfg(test)]
 #[path = "office_document/tests/parse.rs"]
 mod tests;

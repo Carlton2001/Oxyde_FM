@@ -412,6 +412,8 @@ mod tests {
         ArchiveLimits {
             max_bytes: 4,
             max_entries: 4,
+            // The decoded stream bound follows the output one, as when extracting.
+            max_decoded: None,
             ..ArchiveLimits::OPEN_FILE
         }
     }
@@ -687,6 +689,10 @@ mod tests {
                 "a\0b",
                 "a\\selected.txt",
             ] {
+                // Windows naming rules only apply on Windows.
+                if !cfg!(windows) && matches!(name, "C:outside" | "file:stream" | "NUL.txt") {
+                    continue;
+                }
                 let fixture = tempfile::tempdir().unwrap();
                 let archive = fixture.path().join("selection.7z");
                 write_archive(

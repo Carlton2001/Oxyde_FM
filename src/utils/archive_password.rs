@@ -53,8 +53,11 @@ impl std::fmt::Debug for ArchiveSecret {
     }
 }
 
-fn store() -> &'static Mutex<HashMap<PathBuf, ArchiveSecret>> {
-    static STORE: OnceLock<Mutex<HashMap<PathBuf, ArchiveSecret>>> = OnceLock::new();
+/// Each password under its archive's key, with the key it was remembered under.
+type Store = HashMap<PathBuf, (ArchiveSecret, PathBuf)>;
+
+fn store() -> &'static Mutex<Store> {
+    static STORE: OnceLock<Mutex<Store>> = OnceLock::new();
     STORE.get_or_init(Default::default)
 }
 
@@ -77,16 +80,42 @@ fn key(archive: &Path) -> PathBuf {
     archive.to_path_buf()
 }
 
-/// Remembers `secret` for `archive` until Oxyde exits.
+/// Remembers `secret` for `archive` until Oxyde exits, under the displayed path
+/// and the resolved one operations open: a mapped drive's share, a SUBST
+/// target, links followed. Resolving reads the disk: never on the UI thread.
 pub fn remember(archive: &Path, secret: ArchiveSecret) {
+    let resolved = std::fs::canonicalize(archive).ok();
+    remember_as(archive, resolved.as_deref(), secret);
+}
+
+/// Remembers `secret` for an archive not created yet, under its displayed path
+/// only: nothing to resolve, and no disk read on the UI thread.
+pub fn remember_new(archive: &Path, secret: ArchiveSecret) {
+    remember_as(archive, None, secret);
+}
+
+fn remember_as(archive: &Path, resolved: Option<&Path>, secret: ArchiveSecret) {
+    let origin = key(archive);
+    let resolved = resolved.map(key);
     if let Ok(mut store) = store().lock() {
-        store.insert(key(archive), secret);
+        forget_in(&mut store, &origin);
+        if let Some(resolved) = resolved.filter(|resolved| *resolved != origin) {
+            store.insert(resolved, (secret.clone(), origin.clone()));
+        }
+        store.insert(origin.clone(), (secret, origin));
     }
 }
 
+/// Forgets the password found for `archive` under every path it was remembered.
 pub fn forget(archive: &Path) {
     if let Ok(mut store) = store().lock() {
-        store.remove(&key(archive));
+        forget_in(&mut store, &key(archive));
+    }
+}
+
+fn forget_in(store: &mut Store, key: &Path) {
+    if let Some((_, origin)) = store.remove(key) {
+        store.retain(|_, (_, other)| *other != origin);
     }
 }
 
@@ -95,7 +124,7 @@ pub fn for_archive(archive: &Path) -> Option<ArchiveSecret> {
     if let Some(secret) = WORKER.get() {
         return secret.clone();
     }
-    store().lock().ok()?.get(&key(archive)).cloned()
+    store().lock().ok()?.get(&key(archive)).map(|(secret, _)| secret.clone())
 }
 
 /// Parent side: sent once after the start gate, empty without a password.

@@ -18,6 +18,12 @@ incremental = false
 [profile.dev.package."*"]
 opt-level = 2
 
+# zlib-rs keeps zlib's `uLong` byte counters, 32 bits on Windows, and adds to
+# some of them without wrapping. Release builds wrap as zlib does; with overflow
+# checks, a ZIP member past 4 GiB panicked the archive worker.
+[profile.dev.package.zlib-rs]
+overflow-checks = false
+
 # Same pinned GPUI Windows backend, with full-size atlas initialization fixed.
 # Provenance and the small native patch: vendor/gpui_windows/README.oxyde.md.
 [patch."https://github.com/zed-industries/zed"]

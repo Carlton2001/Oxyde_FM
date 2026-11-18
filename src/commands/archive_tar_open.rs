@@ -69,22 +69,21 @@ fn preflight<R: Read>(
     budget: &ArchiveBudget,
 ) -> Result<Selection, CommandError> {
     let mut selected = None;
-    for (index, entry) in entries.enumerate() {
+    for (index, entry) in crate::utils::tar_members::members(entries).enumerate() {
         let mut entry = entry?;
         budget.check_time()?;
-        let kind = entry.header().entry_type();
-        if !kind.is_file() && !kind.is_dir() {
+        let Some(directory) = crate::utils::tar_members::directory(&mut entry)? else {
             return Err(archive_error(
                 "Archive links and special files are not supported",
             ));
-        }
+        };
         let name = entry.path()?;
         let name = name
             .to_str()
             .ok_or_else(|| archive_error("Invalid archive entry encoding"))?;
         budget.entry(name, 0)?;
         if relative_archive_path(name)? == requested {
-            if selected.is_some() || !kind.is_file() {
+            if selected.is_some() || directory {
                 return Err(archive_error("Ambiguous archive file"));
             }
             budget.declare_bytes(entry.size())?;
@@ -106,7 +105,7 @@ fn preflight<R: Read>(
 }
 
 fn copy_selected<R: Read>(
-    mut entries: tar::Entries<'_, R>,
+    entries: tar::Entries<'_, R>,
     selected: &Selection,
     requested: &Path,
     root: &ExtractionRoot,
@@ -116,6 +115,7 @@ fn copy_selected<R: Read>(
 ) -> Result<PathBuf, CommandError> {
     // Iterator::skip would discard errors while crossing preceding members,
     // hiding decoded/deadline failures behind "file not found".
+    let mut entries = crate::utils::tar_members::members(entries);
     for _ in 0..selected.index {
         entries
             .next()
@@ -124,11 +124,12 @@ fn copy_selected<R: Read>(
     let mut entry = entries
         .next()
         .ok_or_else(|| archive_error("Archive file not found"))??;
+    let file = crate::utils::tar_members::directory(&mut entry)? == Some(false);
     let name = entry.path()?;
     let name = name
         .to_str()
         .ok_or_else(|| archive_error("Invalid archive entry encoding"))?;
-    if !entry.header().entry_type().is_file()
+    if !file
         || relative_archive_path(name)? != requested
         || entry.size() != selected.size
     {
@@ -324,6 +325,8 @@ mod tests {
         ArchiveLimits {
             max_bytes: 4,
             max_entries: 4,
+            // The decoded stream bound follows the output one, as when extracting.
+            max_decoded: None,
             ..ArchiveLimits::OPEN_FILE
         }
     }
@@ -472,6 +475,10 @@ mod tests {
                 ("hardlink", tar::EntryType::Link),
                 ("fifo", tar::EntryType::Fifo),
             ] {
+                // Windows naming rules only apply on Windows.
+                if !cfg!(windows) && matches!(name, "file:stream" | "C:victim.txt" | "NUL.txt") {
+                    continue;
+                }
                 let folder = tempfile::tempdir().unwrap();
                 let archive = write_archive(
                     folder.path(),

@@ -13,6 +13,7 @@ fn timing() -> Timing {
             bytes: 1024,
             depth: 10,
             seconds: 10,
+            decoded: 1024,
         },
     })
 }

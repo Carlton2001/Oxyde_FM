@@ -219,7 +219,8 @@ fn zip_full_extraction_validates_late_entries_before_writing_early_files() {
     let temp = tempfile::tempdir().unwrap();
     let archive = temp.path().join("unsafe.zip");
     let mut zip = zip::ZipWriter::new(std::fs::File::create(&archive).unwrap());
-    for name in ["early.txt", "file:stream"] {
+    let late = if cfg!(windows) { "file:stream" } else { "../late" };
+    for name in ["early.txt", late] {
         zip.start_file(name, zip::write::SimpleFileOptions::default()).unwrap();
         zip.write_all(b"safe").unwrap();
     }
@@ -237,6 +238,10 @@ fn zip_full_extraction_validates_late_entries_before_writing_early_files() {
 fn zip_operations_reject_windows_escape_and_alternate_stream_names() {
     use super::*;
     for name in ["a/C:victim.txt", "a/../C:victim.txt", "file.txt:extra"] {
+        // Windows naming rules only apply on Windows.
+        if !cfg!(windows) && matches!(name, "a/C:victim.txt" | "file.txt:extra") {
+            continue;
+        }
         let temp = tempfile::tempdir().unwrap();
         let archive = temp.path().join("unsafe.zip");
         let mut writer = zip::ZipWriter::new(std::fs::File::create(&archive).unwrap());

@@ -82,16 +82,19 @@ pub(super) fn xlsx(archive: &mut Archive) -> Result<String, CommandError> {
         let mut value = String::new();
         let mut kind = String::new();
         let mut in_value = false;
+        // Index of the open cell, `None` past the kept columns.
+        let mut current = None;
         tags(&xml, |text, name, tag, closing| {
             if in_value {
                 push_text(&mut value, text);
             }
             match (name, closing) {
-                ("row", false) => builder.cells.clear(),
+                ("row", false) => builder.start_row(),
                 ("row", true) => builder.end_row(),
                 ("c", false) => {
                     let target = attribute(tag, "r").and_then(column).unwrap_or(builder.cells.len());
-                    while builder.cells.len() <= target.min(MAX_CELLS) && builder.cells.len() < MAX_CELLS {
+                    current = (target < MAX_CELLS).then_some(target);
+                    while builder.cells.len() <= target && builder.cells.len() < MAX_CELLS {
                         builder.cell();
                     }
                     kind = attribute(tag, "t").unwrap_or_default().to_owned();
@@ -105,7 +108,7 @@ pub(super) fn xlsx(archive: &mut Archive) -> Result<String, CommandError> {
                         "b" => if value.trim() == "1" { "TRUE".into() } else { "FALSE".into() },
                         _ => value.clone(),
                     };
-                    if let Some(cell) = builder.cells.last_mut() {
+                    if let Some(cell) = current.and_then(|index| builder.cells.get_mut(index)) {
                         *cell = shown.trim().to_owned();
                     }
                 }

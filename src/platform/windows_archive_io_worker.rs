@@ -418,6 +418,7 @@ mod tests {
             bytes: 4,
             depth: 1,
             seconds: 2,
+            decoded: 4,
         };
         let operation = Operation::Encode {
             format: Format::Zip,
@@ -485,6 +486,7 @@ mod tests {
                 bytes: 1,
                 depth: 1,
                 seconds: 1,
+                decoded: 1,
             },
         };
         assert_eq!(

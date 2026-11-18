@@ -5,6 +5,8 @@ struct StoragePaths {
     config: Option<PathBuf>,
     cache: Option<PathBuf>,
     temporary: PathBuf,
+    /// The system's temporary folder, which portable mode replaces.
+    system_temporary: PathBuf,
     portable: bool,
 }
 
@@ -52,13 +54,14 @@ impl StoragePaths {
                 let data = real_path(&data);
                 Ok(Self {
                     config: Some(data.clone()), cache: Some(data.join("cache")),
-                    temporary: data.join("temp"), portable: true,
+                    temporary: data.join("temp"), system_temporary: temporary, portable: true,
                 })
             }
             Ok(_) => Err(io::Error::other("Portable data path is not a directory")),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(Self {
                 config: config.map(|root| root.join("Oxyde")),
-                cache: cache.map(|root| root.join("Oxyde")), temporary, portable: false,
+                cache: cache.map(|root| root.join("Oxyde")), system_temporary: temporary.clone(), temporary,
+                portable: false,
             }),
             Err(error) => Err(error),
         }
@@ -93,6 +96,8 @@ pub fn cache_dir() -> Option<PathBuf> { paths().ok()?.cache.clone() }
 /// True when a `data` folder beside the executable holds all application files.
 pub fn is_portable() -> bool { paths().is_ok_and(|paths| paths.portable) }
 pub fn temporary_dir() -> io::Result<PathBuf> { Ok(paths()?.temporary.clone()) }
+/// The system's temporary folder, even in portable mode.
+pub fn system_temporary_dir() -> io::Result<PathBuf> { Ok(paths()?.system_temporary.clone()) }
 
 #[cfg(test)]
 #[path = "app_paths/tests/storage.rs"]

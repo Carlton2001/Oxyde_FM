@@ -12,6 +12,10 @@ pub struct ArchiveLimits {
     pub max_bytes: u64,
     pub max_depth: usize,
     pub max_duration: Duration,
+    /// Decoded stream allowance, `max_bytes` when `None`. Opening one member
+    /// of a compressed TAR or of a solid 7z block decodes all that precedes
+    /// it, which may be far more than the member itself.
+    pub max_decoded: Option<u64>,
 }
 
 impl ArchiveLimits {
@@ -20,6 +24,7 @@ impl ArchiveLimits {
         max_bytes: 64 * 1024 * 1024 * 1024,
         max_depth: 64,
         max_duration: Duration::from_secs(30 * 60),
+        max_decoded: None,
     };
     pub const WORKSPACE: Self = Self {
         max_bytes: 8 * 1024 * 1024 * 1024,
@@ -32,8 +37,15 @@ impl ArchiveLimits {
     pub const OPEN_FILE: Self = Self {
         max_bytes: 256 * 1024 * 1024,
         max_duration: Duration::from_secs(120),
+        // A member opens wherever the listing could reach it.
+        max_decoded: Some(Self::LISTING.max_bytes),
         ..Self::EXTRACTION
     };
+
+    /// The decoded stream allowance before the headers' share.
+    pub(crate) fn decoded(&self) -> u64 {
+        self.max_decoded.unwrap_or(self.max_bytes)
+    }
 }
 
 pub(crate) struct ArchiveBudget {
@@ -221,7 +233,7 @@ impl ArchiveBudget {
     // that stream separately, with an allowance for headers of legitimate entries.
     fn decoded_limit(&self) -> u64 {
         self.limits
-            .max_bytes
+            .decoded()
             .saturating_add((self.limits.max_entries as u64).saturating_mul(4096))
     }
 }
@@ -255,6 +267,10 @@ impl<R: Read> Read for BudgetReader<'_, R> {
         Ok(count)
     }
 }
+
+#[cfg(test)]
+#[path = "archive_limits/tests/decoded.rs"]
+mod decoded_tests;
 
 #[cfg(test)]
 mod tests {

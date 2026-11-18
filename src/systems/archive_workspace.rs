@@ -234,12 +234,13 @@ impl ArchiveWorkspace {
     pub fn cleanup_owner(&self) -> std::sync::Weak<Mutex<super::archive_owned_tree::OwnedTree>> { Arc::downgrade(&self.directory.owner) }
     #[cfg(all(target_os = "windows", not(test)))]
     pub fn forget_removed(&self, path: &Path, identity: crate::platform::FileIdentity) -> std::io::Result<()> { self.directory.owner.lock().unwrap().forget_removed(path, identity) }
-    pub fn create_directory(&self, internal: &str) -> Result<(), String> {
-        let path = self.path(internal)?;
+    /// Keeps the error kind: an existing name lets the caller number the next one.
+    pub fn create_directory(&self, internal: &str) -> std::io::Result<()> {
+        let path = self.path(internal).map_err(std::io::Error::other)?;
         #[cfg(all(target_os = "windows", not(test)))]
-        { self.directory.owner.lock().unwrap().create_directory(&path).map_err(|e| e.to_string()) }
+        { self.directory.owner.lock().unwrap().create_directory(&path) }
         #[cfg(any(not(target_os = "windows"), test))]
-        { std::fs::create_dir(path).map_err(|e| e.to_string()) }
+        { std::fs::create_dir(path) }
     }
     pub fn rename(&self, source: &Path, destination: &Path, checkpoint: &mut dyn FnMut() -> std::io::Result<()>) -> std::io::Result<()> {
         #[cfg(all(target_os = "windows", not(test)))]
@@ -452,10 +453,51 @@ fn create_directory_inner(path: &Path, quality: &str) -> Result<(), std::io::Err
         return Err(std::io::Error::other("This archive format is read-only"));
     }
     let workspace = ArchiveWorkspace::open(archive).map_err(std::io::Error::other)?;
-    workspace.create_directory(&internal).map_err(std::io::Error::other)?;
+    workspace.create_directory(&internal)?;
     workspace
         .commit(&mutation_operation(quality))
         .map_err(std::io::Error::other)
+}
+
+/// Creates the first free name among `names` in `parent`, a folder of an archive,
+/// with one extraction and one rebuild however many names are taken.
+pub fn create_numbered_directory(
+    parent: &Path,
+    names: &mut dyn Iterator<Item = String>,
+    quality: &str,
+) -> Result<PathBuf, std::io::Error> {
+    super::archive_recovery::scope(|| create_numbered_directory_inner(parent, names, quality))
+}
+fn create_numbered_directory_inner(
+    parent: &Path,
+    names: &mut dyn Iterator<Item = String>,
+    quality: &str,
+) -> Result<PathBuf, std::io::Error> {
+    let Some((archive, internal)) = virtual_destination(parent) else {
+        return Err(std::io::Error::other("The folder is not inside an archive"));
+    };
+    let locks = mutation_locks([archive.clone()]).map_err(std::io::Error::other)?;
+    let _lock = locks[0]
+        .lock()
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
+    if !writable(&archive) {
+        return Err(std::io::Error::other("This archive format is read-only"));
+    }
+    let workspace = ArchiveWorkspace::open(archive).map_err(std::io::Error::other)?;
+    for name in names {
+        let child = if internal.is_empty() { name.clone() } else { format!("{internal}/{name}") };
+        match workspace.create_directory(&child) {
+            Ok(()) => {
+                workspace
+                    .commit(&mutation_operation(quality))
+                    .map_err(std::io::Error::other)?;
+                return Ok(parent.join(name));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    }
+    Err(std::io::Error::new(std::io::ErrorKind::AlreadyExists, "Every folder name is taken"))
 }
 
 /// Opens a file from an archive using a cache that survives the shell launch.
@@ -597,6 +639,10 @@ fn export_file_inner(path: &Path, folder: &Path) -> Result<PathBuf, crate::model
     }
     Err(CommandError::PathError("No unused destination name was available".into()))
 }
+
+#[cfg(test)]
+#[path = "archive_workspace/tests/directories.rs"]
+mod directory_tests;
 
 #[cfg(test)]
 mod tests {
@@ -902,6 +948,10 @@ mod tests {
             "C:/absolute",
             "folder/../../escape",
         ] {
+            // Windows naming rules only apply on Windows.
+            if !cfg!(windows) && matches!(path, "C:/absolute") {
+                continue;
+            }
             assert!(workspace.path(path).is_err());
         }
         std::fs::write(&archive, b"changed externally").unwrap();

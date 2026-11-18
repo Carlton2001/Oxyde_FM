@@ -1,7 +1,27 @@
 use super::*;
 #[path = "parallel.rs"]
 mod parallel;
+#[cfg(test)]
+#[path = "tests/zip64.rs"]
+mod zip64_tests;
 use parallel::*;
+
+/// ZIP64 headers from this size on: past 4 GiB the writer refuses a member
+/// opened without them, and DEFLATE can grow incompressible data a little.
+const ZIP64_FROM: u64 = 0xF000_0000;
+
+/// Options of one ZIP member, written whole or by a parallel job.
+pub(super) fn zip_options(entry: &Entry, level: i64) -> zip::write::SimpleFileOptions {
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated)
+        .compression_level(Some(level))
+        .large_file(entry.size >= ZIP64_FROM);
+    // Without one, the writer stamps every member with the current time.
+    match super::zip_time::to_zip(entry.modified) {
+        Some(date) => options.last_modified_time(date),
+        None => options,
+    }
+}
 
 fn turbo<T: Exchange>(connection: &Connection<T>) -> io::Result<bool> {
     Ok(connection.lock().map_err(|_| invalid())?.turbo())
@@ -66,9 +86,7 @@ pub(super) fn encode<T: Exchange>(
                     continue;
                 }
                 jobs.drain(&mut writer, checkpoint)?;
-                let options = zip::write::SimpleFileOptions::default()
-                    .compression_method(zip::CompressionMethod::Deflated)
-                    .compression_level(Some(level));
+                let options = zip_options(&entry, level);
                 if entry.directory {
                     // A folder holds no data to encrypt.
                     writer

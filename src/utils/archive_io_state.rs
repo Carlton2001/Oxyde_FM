@@ -14,6 +14,17 @@ fn exceeded(kind: ArchiveLimitKind, limit: u64) -> io::Error {
 
 pub const MAX_MANIFEST_NAMES: usize = 64 * 1024 * 1024;
 
+/// Members with equal keys would be the same file once extracted: Windows
+/// compares names without case, Linux does not (`Makefile` and `makefile`).
+pub(crate) fn name_key(path: &std::path::Path) -> String {
+    let key = path.to_string_lossy().replace('\\', "/");
+    if cfg!(windows) {
+        key.to_lowercase()
+    } else {
+        key
+    }
+}
+
 pub struct ExtractionState {
     limits: Limits,
     selected: Option<std::path::PathBuf>,
@@ -77,7 +88,7 @@ impl ExtractionState {
                 if path.components().count() as u64 > self.limits.depth {
                     return Err(exceeded(ArchiveLimitKind::Depth, self.limits.depth));
                 }
-                let key = path.to_string_lossy().replace('\\', "/").to_lowercase();
+                let key = name_key(&path);
                 if self.names.contains(&key) {
                     return Err(invalid());
                 }
@@ -192,6 +203,10 @@ impl ExtractionState {
 }
 
 #[cfg(test)]
+#[path = "archive_io_state/tests/names.rs"]
+mod name_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     fn state(selected: Option<&str>, preflight: bool) -> ExtractionState {
@@ -201,6 +216,7 @@ mod tests {
                 bytes: 4,
                 depth: 2,
                 seconds: 1,
+                decoded: 4,
             },
             selected,
             preflight,
@@ -266,7 +282,7 @@ mod tests {
         let mut state = state(None, false);
         state.accept(&entry(0, "docs/file", 4)).unwrap();
         for frame in [
-            entry(1, "DOCS\\FILE", 0),
+            entry(1, "docs\\file", 0),
             entry(2, "foreign-id", 0),
             entry(1, "a/b/c", 0),
             entry(1, "extra", 1),

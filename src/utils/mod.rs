@@ -15,6 +15,7 @@ pub mod archive_password;
 pub mod archive_volumes;
 pub mod archive_security;
 pub mod archive_codec;
+pub(crate) mod tar_members;
 pub mod disk_image;
 pub mod path_security;
 pub mod path_text;

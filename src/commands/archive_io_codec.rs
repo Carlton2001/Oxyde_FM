@@ -13,6 +13,7 @@ use std::time::Duration;
 
 mod encode;
 use encode::encode;
+pub(crate) mod zip_time;
 
 fn request<T: Exchange>(connection: &Connection<T>, frame: Frame) -> io::Result<Frame> {
     connection.lock().map_err(|_| invalid())?.exchange(frame)
@@ -38,6 +39,7 @@ fn archive_limits(limits: Limits) -> io::Result<ArchiveLimits> {
         max_bytes: limits.bytes,
         max_depth: limits.depth.try_into().map_err(|_| invalid())?,
         max_duration: Duration::from_secs(limits.seconds),
+        max_decoded: Some(limits.decoded),
     })
 }
 fn empty_entry(id: u64, name: String, directory: bool, size: u64) -> Entry {
@@ -261,12 +263,13 @@ fn decode<T: Exchange + Send + 'static>(
                 {
                     return Err(invalid().into());
                 }
-                let meta = empty_entry(
+                let mut meta = empty_entry(
                     index as u64,
                     entry.name().map_err(io::Error::other)?.into_owned(),
                     entry.is_dir(),
                     entry.size(),
                 );
+                meta.modified = zip_time::from_zip(&entry);
                 let chosen = requested.as_ref().is_none_or(|requested| {
                     relative_archive_path(&meta.name).is_ok_and(|path| path == *requested)
                 });
@@ -296,12 +299,13 @@ fn decode<T: Exchange + Send + 'static>(
                     Some(failure) => CommandError::from(failure),
                     None => io::Error::other(error).into(),
                 })?;
-                let meta = empty_entry(
+                let mut meta = empty_entry(
                     index as u64,
                     entry.name().map_err(io::Error::other)?.into_owned(),
                     entry.is_dir(),
                     entry.size(),
                 );
+                meta.modified = zip_time::from_zip(&entry);
                 let copied = copy_entry(connection, &meta, &mut entry, budget, checkpoint);
                 // ZipCrypto accepts one wrong password in 256: the checksum then refuses it.
                 if encrypted && copied.as_ref().is_err_and(|error| error.to_string().contains("Invalid checksum")) {
@@ -509,13 +513,10 @@ fn tar_reader<T: Exchange + 'static>(
         None => Err(invalid()),
     }
 }
-fn tar_meta<R: Read>(id: u64, entry: &tar::Entry<'_, R>) -> io::Result<Entry> {
-    let kind = entry.header().entry_type();
-    if !kind.is_file() && !kind.is_dir() {
-        return Err(invalid());
-    }
+fn tar_meta<R: Read>(id: u64, entry: &mut tar::Entry<'_, R>) -> io::Result<Entry> {
+    let directory = crate::utils::tar_members::directory(entry)?.ok_or_else(invalid)?;
     let name = entry.path()?.to_str().ok_or_else(invalid)?.to_owned();
-    let mut meta = empty_entry(id, name, kind.is_dir(), entry.size());
+    let mut meta = empty_entry(id, name, directory, entry.size());
     meta.mode = entry.header().mode()? & 0o7777;
     meta.modified = entry
         .header()
@@ -549,9 +550,9 @@ fn decode_tar<T: Exchange + 'static>(
         budget,
         checkpoint,
     });
-    for (index, entry) in archive.entries()?.enumerate() {
+    for (index, entry) in crate::utils::tar_members::members(archive.entries()?).enumerate() {
         let mut entry = entry?;
-        let meta = tar_meta(index as u64, &entry)?;
+        let meta = tar_meta(index as u64, &mut entry)?;
         let chosen = requested.is_none_or(|requested| {
             relative_archive_path(&meta.name).is_ok_and(|path| path == requested)
         });
@@ -589,12 +590,12 @@ fn decode_tar<T: Exchange + 'static>(
             checkpoint: &check,
         });
         let mut found = false;
-        for (index, entry) in archive.entries()?.enumerate() {
+        for (index, entry) in crate::utils::tar_members::members(archive.entries()?).enumerate() {
             let mut entry = entry?;
             if index as u64 != meta.id {
                 continue;
             }
-            if tar_meta(index as u64, &entry)? != meta {
+            if tar_meta(index as u64, &mut entry)? != meta {
                 return Err(invalid().into());
             }
             notify(connection, Frame::new(Message::Begin { id: meta.id }))?;
@@ -713,9 +714,9 @@ fn decode_plain_tar_selection<T: Exchange>(
             checkpoint,
         },
     });
-    for (index, entry) in archive.entries_with_seek()?.enumerate() {
+    for (index, entry) in crate::utils::tar_members::members(archive.entries_with_seek()?).enumerate() {
         let mut entry = entry?;
-        let meta = tar_meta(index as u64, &entry)?;
+        let meta = tar_meta(index as u64, &mut entry)?;
         let chosen = relative_archive_path(&meta.name)? == requested;
         budget.entry(&meta.name, if chosen { meta.size } else { 0 })?;
         notify(
@@ -744,12 +745,12 @@ fn decode_plain_tar_selection<T: Exchange>(
             checkpoint,
         },
     });
-    for (index, entry) in archive.entries_with_seek()?.enumerate() {
+    for (index, entry) in crate::utils::tar_members::members(archive.entries_with_seek()?).enumerate() {
         let mut entry = entry?;
         if index as u64 != meta.id {
             continue;
         }
-        if tar_meta(index as u64, &entry)? != meta {
+        if tar_meta(index as u64, &mut entry)? != meta {
             return Err(invalid().into());
         }
         notify(connection, Frame::new(Message::Begin { id: meta.id }))?;
@@ -904,6 +905,7 @@ mod tests {
             bytes,
             depth: 64,
             seconds: 120,
+            decoded: bytes,
         }
     }
     fn encoded(format: Format, quality: Quality) -> (Vec<u8>, Vec<u8>) {
@@ -1166,3 +1168,6 @@ mod tests {
 
     mod passwords;
 }
+#[cfg(test)]
+#[path = "archive_io_codec/tests/large_zip.rs"]
+mod large_zip_tests;

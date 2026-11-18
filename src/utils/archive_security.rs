@@ -14,18 +14,19 @@ pub fn relative_archive_path(name: &str) -> io::Result<PathBuf> {
         .split('/')
         .filter(|part| !part.is_empty() && *part != ".")
     {
-        if part == ".."
-            || part.ends_with(['.', ' '])
-            || part
-                .chars()
-                .any(|c| c.is_control() || "<>:\"|?*".contains(c))
-            || reserved_windows_name(part)
-        {
+        if part == ".." || part.chars().any(char::is_control) || (cfg!(windows) && windows_unsafe(part)) {
             return Err(unsafe_name(name));
         }
         path.push(part);
     }
     Ok(path)
+}
+
+/// Names Windows would read as another file, a stream, a drive or a device.
+/// Elsewhere they are ordinary names: `aux.c` in the Linux kernel sources,
+/// `12:30.log`.
+fn windows_unsafe(part: &str) -> bool {
+    part.ends_with(['.', ' ']) || part.contains(['<', '>', ':', '"', '|', '?', '*']) || reserved_windows_name(part)
 }
 
 fn reserved_windows_name(name: &str) -> bool {
@@ -112,27 +113,30 @@ impl ExtractionRoot {
 }
 
 #[cfg(test)]
+#[path = "archive_security/tests/names.rs"]
+mod name_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
 
     #[test]
     fn rejects_windows_prefixes_streams_devices_and_ambiguous_components() {
+        for name in ["../outside", "a/../C:victim.txt", "\\\\server\\share\\file", "a\0b"] {
+            assert!(relative_archive_path(name).is_err(), "accepted {name:?}");
+        }
         for name in [
-            "../outside",
-            "a/../C:victim.txt",
             "a/C:victim.txt",
             "C:/outside",
-            "\\\\server\\share\\file",
             "file:extra",
             "a/.. /file",
             "a./file",
             "NUL.txt",
             "COM1",
             "LPT¹.txt",
-            "a\0b",
         ] {
-            assert!(relative_archive_path(name).is_err(), "accepted {name:?}");
+            assert_eq!(relative_archive_path(name).is_err(), cfg!(windows), "{name:?}");
         }
         assert_eq!(
             relative_archive_path("./école\\folder/file.txt").unwrap(),

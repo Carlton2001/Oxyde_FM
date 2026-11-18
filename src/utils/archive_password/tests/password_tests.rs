@@ -50,3 +50,42 @@ fn canonical_windows_paths_find_the_displayed_archive() {
     assert_eq!(for_archive(Path::new(r"\\?\UNC\server\share\a.zip")).unwrap().expose(), "three");
     forget(Path::new(r"\\server\share\a.zip"));
 }
+
+#[test]
+fn a_linked_folder_finds_the_password_remembered_for_its_real_path() {
+    let root = tempfile::tempdir().unwrap();
+    let real = root.path().join("real");
+    std::fs::create_dir(&real).unwrap();
+    std::fs::write(real.join("locked.zip"), b"zip").unwrap();
+    // Stands for a mapped drive, a SUBST drive or a moved profile.
+    let link = root.path().join("link");
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        let shell = crate::platform::platform()
+            .system_executable(crate::platform::SystemExecutable::PowerShell)
+            .unwrap();
+        let result = std::process::Command::new(shell)
+            .args(["-NoProfile", "-NonInteractive", "-Command",
+                "New-Item -ItemType Junction -Path $env:OXYDE_TEST_LINK -Value $env:OXYDE_TEST_TARGET -ErrorAction Stop | Out-Null"])
+            .env("OXYDE_TEST_LINK", &link)
+            .env("OXYDE_TEST_TARGET", &real)
+            .creation_flags(0x08000000)
+            .output()
+            .unwrap();
+        assert!(result.status.success(), "{}", String::from_utf8_lossy(&result.stderr));
+    }
+    #[cfg(not(target_os = "windows"))]
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+    let displayed = link.join("locked.zip");
+    remember(&displayed, ArchiveSecret::new("four".into()).unwrap());
+    let opened = std::fs::canonicalize(&displayed).unwrap();
+    assert_eq!(for_archive(&opened).unwrap().expose(), "four");
+    assert_eq!(for_archive(&displayed).unwrap().expose(), "four");
+    // A wrong password found under the real path is forgotten everywhere.
+    forget(&opened);
+    assert!(for_archive(&displayed).is_none());
+    assert!(for_archive(&opened).is_none());
+    #[cfg(target_os = "windows")]
+    std::fs::remove_dir(&link).unwrap();
+}

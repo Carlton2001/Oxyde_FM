@@ -69,6 +69,7 @@ pub(crate) fn limits(value: ArchiveLimits) -> Limits {
         bytes: value.max_bytes,
         depth: value.max_depth as u64,
         seconds: value.max_duration.as_secs(),
+        decoded: value.decoded(),
     }
 }
 fn ack() -> Frame {
@@ -148,7 +149,7 @@ pub(crate) fn decode(
     let mut output: Option<File> = None;
     let mut decoded = 0u64;
     let decoded_limit = limits
-        .bytes
+        .decoded
         .checked_add(limits.entries.checked_mul(4096).ok_or_else(invalid)?)
         .and_then(|n| {
             n.checked_mul(

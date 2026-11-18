@@ -471,6 +471,11 @@ pub trait Platform: Send + Sync {
     }
     #[doc(hidden)]
     fn check_broker_pressure(&self) -> std::io::Result<()> { Ok(()) }
+    /// Temporary folder for private staging, on a volume that keeps access
+    /// rights and file identities.
+    fn protected_temporary_dir(&self) -> std::io::Result<std::path::PathBuf> {
+        crate::app_paths::temporary_dir()
+    }
     #[doc(hidden)]
     fn cache_proof_key(&self, _path: &std::path::Path) -> std::io::Result<[u8; 32]> {
         Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Persistent cache keys unavailable"))
@@ -1087,6 +1092,8 @@ pub trait Platform: Send + Sync {
     }
 }
 
+#[cfg(target_os = "windows")]
+mod windows_temporary;
 #[cfg(target_os = "windows")]
 pub mod clipboard;
 #[cfg(target_os = "windows")]
