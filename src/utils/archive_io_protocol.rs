@@ -625,6 +625,10 @@ mod tests {
             mode: 0o644,
         };
         for name in ["../escape", "C:escape", "a:b", "CON", "", "a/../b"] {
+            // Windows naming rules only apply on Windows.
+            if !cfg!(windows) && matches!(name, "C:escape" | "a:b" | "CON") {
+                continue;
+            }
             assert!(Entry {
                 name: name.into(),
                 ..entry.clone()

@@ -630,6 +630,10 @@ mod tests {
             b"ROOT.TXT;2",
             b"BAD\\XTXT;1",
         ] {
+            // Windows naming rules only apply on Windows.
+            if !cfg!(windows) && matches!(name, b"C:BADTXT;1" | b"NUL.TXT;1 ") {
+                continue;
+            }
             let (_folder, archive) = fixture();
             let mut bytes = fs::read(&archive).unwrap();
             let record = entries(&bytes, 20)[3];

@@ -473,6 +473,10 @@ mod tests {
                 ("hardlink", tar::EntryType::Link),
                 ("fifo", tar::EntryType::Fifo),
             ] {
+                // Windows naming rules only apply on Windows.
+                if !cfg!(windows) && matches!(name, "file:stream" | "C:victim.txt" | "NUL.txt") {
+                    continue;
+                }
                 let folder = tempfile::tempdir().unwrap();
                 let archive = write_archive(
                     folder.path(),

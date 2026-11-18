@@ -902,6 +902,10 @@ mod tests {
             "C:/absolute",
             "folder/../../escape",
         ] {
+            // Windows naming rules only apply on Windows.
+            if !cfg!(windows) && matches!(path, "C:/absolute") {
+                continue;
+            }
             assert!(workspace.path(path).is_err());
         }
         std::fs::write(&archive, b"changed externally").unwrap();

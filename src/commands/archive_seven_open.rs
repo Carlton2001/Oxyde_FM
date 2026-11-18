@@ -687,6 +687,10 @@ mod tests {
                 "a\0b",
                 "a\\selected.txt",
             ] {
+                // Windows naming rules only apply on Windows.
+                if !cfg!(windows) && matches!(name, "C:outside" | "file:stream" | "NUL.txt") {
+                    continue;
+                }
                 let fixture = tempfile::tempdir().unwrap();
                 let archive = fixture.path().join("selection.7z");
                 write_archive(
