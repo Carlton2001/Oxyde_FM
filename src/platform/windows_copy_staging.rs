@@ -124,9 +124,7 @@ pub(super) fn remove_output(output: &File) -> io::Result<()> {
                 "Readonly copied output has multiple links",
             ));
         }
-        let mut permissions = original.clone();
-        permissions.set_readonly(false);
-        output.set_permissions(permissions)?;
+        super::windows_file_moves::clear_readonly(output)?;
     }
     let result = super::windows_file_moves::remove(output);
     if let Err(error) = result {

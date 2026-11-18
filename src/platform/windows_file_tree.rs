@@ -275,9 +275,7 @@ fn remove_or_open(
             if current.file_attributes() & 0x400 != 0 || !current.is_file() {
                 return Err(error);
             }
-            let mut permissions = current.permissions();
-            permissions.set_readonly(false);
-            writable.set_permissions(permissions)?;
+            super::windows_file_moves::clear_readonly(&writable)?;
             super::windows_file_moves::remove(&writable)?;
             Ok(None)
         }
