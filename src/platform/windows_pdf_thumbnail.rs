@@ -103,10 +103,7 @@ const MAX_LISTED_PAGES: u32 = 100_000;
 
 pub(super) fn open(path: &str) -> Result<PdfDocument, CommandError> {
     let abs_path = std::fs::canonicalize(path)?;
-    let mut path_str = abs_path.to_string_lossy().to_string();
-    if path_str.starts_with(r"\\?\") {
-        path_str = path_str.chars().skip(4).collect();
-    }
+    let path_str = crate::utils::path_text::without_verbatim_prefix(&abs_path.to_string_lossy());
     let file =
         StorageFile::GetFileFromPathAsync(&windows::core::HSTRING::from(&path_str))?.join()?;
     Ok(PdfDocument::LoadFromFileAsync(&file)?.join()?)

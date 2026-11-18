@@ -16,10 +16,7 @@ const MAX_ITEMS: usize = 65_536;
 const MAX_NAMES: usize = 8 * 1024 * 1024;
 
 fn key(path: &Path) -> String {
-    path.to_string_lossy()
-        .replace('/', "\\")
-        .trim_start_matches("\\\\?\\")
-        .to_owned()
+    crate::utils::path_text::without_verbatim_prefix(&path.to_string_lossy().replace('/', "\\"))
 }
 pub(super) fn path(item: Ref<IShellItem>) -> Result<PathBuf, String> {
     let raw = unsafe {
@@ -169,3 +166,7 @@ impl Effects {
         roots
     }
 }
+
+#[cfg(test)]
+#[path = "tests/receipt_keys.rs"]
+mod tests;

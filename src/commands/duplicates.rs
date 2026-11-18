@@ -146,13 +146,11 @@ pub async fn find_duplicates(
                 continue;
             }
             // Keep ordinary volume paths for hardware detection and navigation.
-            let text = root.to_string_lossy();
-            let root = if let Some(unc) = text.strip_prefix(r"\\?\UNC\") {
-                PathBuf::from(format!(r"\\{unc}"))
-            } else if let Some(local) = text.strip_prefix(r"\\?\") {
-                PathBuf::from(local)
-            } else {
-                root
+            let root = match root.to_str() {
+                Some(text) if text.starts_with(r"\\?\") => {
+                    PathBuf::from(crate::utils::path_text::without_verbatim_prefix(text))
+                }
+                _ => root,
             };
             if !root.is_dir() {
                 return Err(CommandError::IoError(format!("{path}: not a directory")));
