@@ -72,3 +72,13 @@ fn similarly_named_directories_still_participate_in_duplicate_search() {
         assert_eq!(groups[0].files.len(), 3);
     }
 }
+
+#[test]
+fn a_location_out_of_reach_is_left_out_of_the_search() {
+    let root = tempfile::tempdir().unwrap();
+    for name in ["a.txt", "b.txt"] {
+        std::fs::write(root.path().join(name), b"identical").unwrap();
+    }
+    let (groups, _) = search(vec![root.path().join("unplugged"), root.path().to_path_buf()], 6);
+    assert_eq!(groups.len(), 1);
+}
