@@ -390,17 +390,21 @@ pub async fn redo_last_action(
                     ));
                 }
                 if let Some(files) = &tx.details.copied_files {
+                    let hashes: std::collections::HashMap<&String, &String> = tx
+                        .details
+                        .copied_file_hashes
+                        .as_deref()
+                        .unwrap_or_default()
+                        .iter()
+                        .rev()
+                        .map(|(path, hash)| (path, hash))
+                        .collect();
                     let files: Vec<(PathBuf, PathBuf, String)> = files
                         .iter()
                         .map(|(source, destination)| {
-                            let hash = tx
-                                .details
-                                .copied_file_hashes
-                                .as_deref()
-                                .unwrap_or_default()
-                                .iter()
-                                .find(|(path, _)| path == destination)
-                                .map(|(_, hash)| hash.clone())
+                            let hash = hashes
+                                .get(destination)
+                                .map(|hash| (*hash).clone())
                                 .ok_or_else(|| {
                                     CommandError::HistoryCopy(
                                         crate::models::error::HistoryCopyFailure {
