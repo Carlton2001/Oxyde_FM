@@ -371,7 +371,7 @@ fn scan_impl(
             .ok_or_else(failure)?;
         if (!directory && name.as_os_str().is_empty())
             || name.to_string_lossy().len() > MAX_NAME
-            || !names.insert(name.to_string_lossy().to_lowercase())
+            || !names.insert(super::archive_io_state::name_key(&name))
             || (directory && size != 0)
         {
             return Err(failure());
