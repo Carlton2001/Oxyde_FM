@@ -120,7 +120,16 @@ fn stepper_element(
                         if !hold.held.get() || hold.press.get() != press || !hold.allows(increase) {
                             break;
                         }
-                        if cx.update(|window, cx| on_step(increase, window, cx)).is_err() {
+                        // A window that lost the focus never sees the release: stop there.
+                        let stepped = cx.update(|window, cx| {
+                            let active = window.is_window_active();
+                            if active {
+                                on_step(increase, window, cx);
+                            }
+                            active
+                        });
+                        if !stepped.unwrap_or(false) {
+                            hold.release();
                             break;
                         }
                     }
