@@ -100,3 +100,12 @@ fn word_outline_levels_end_at_body_text_without_overflowing() {
     assert_eq!(parse(&paragraph("9"), None), "p\tx\n");
     assert_eq!(parse(&paragraph("255"), None), "p\tx\n");
 }
+
+#[test]
+fn an_odf_text_box_inside_a_paragraph_keeps_both_texts() {
+    let xml = r#"<office:body><office:text>
+<text:p>Before <draw:frame><draw:text-box><text:p>Boxed</text:p></draw:text-box></draw:frame> after</text:p>
+<text:p>Next</text:p>
+</office:text></office:body>"#;
+    assert_eq!(parse(xml, Some(Odf::Text)), "p\tBefore\np\tBoxed\np\t after\np\tNext\n");
+}

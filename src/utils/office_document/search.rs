@@ -178,6 +178,7 @@ fn paragraphs(
 ) -> io::Result<()> {
     let mut in_text = false;
     let mut notes = false;
+    let mut odf_depth = 0usize;
     visit(xml, checkpoint, |text, name, tag, closing| {
         if in_text && !notes {
             output.append(text)?;
@@ -186,11 +187,18 @@ fn paragraphs(
             notes = !closing;
         }
         if odf {
+            // A paragraph inside another (a text box) must not end the outer one's text.
             if matches!(name, "text:p" | "text:h") && !notes {
-                in_text = !closing && !tag.ends_with('/');
                 if closing {
                     output.end_line()?;
+                    odf_depth = odf_depth.saturating_sub(1);
+                } else if !tag.ends_with('/') {
+                    if odf_depth > 0 {
+                        output.end_line()?;
+                    }
+                    odf_depth += 1;
                 }
+                in_text = odf_depth > 0;
             }
             if matches!(name, "text:tab" | "text:s" | "text:line-break") && !closing && !notes {
                 output.append(" ")?;

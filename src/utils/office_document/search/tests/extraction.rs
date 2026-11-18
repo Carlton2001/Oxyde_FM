@@ -127,3 +127,9 @@ fn cancellation_is_checked_inside_decompression_and_missing_parts_are_not_empty_
     let invalid = package(&[("xl/worksheets/sheet1.xml", "<c t=\"s\"><v>10</v></c>")]);
     assert!(extract(invalid, "xlsx", &|| Ok(())).is_err());
 }
+
+#[test]
+fn open_document_text_after_an_anchored_text_box_is_still_searched() {
+    let text = extract(package(&[("content.xml", "<text:p>Before <draw:frame><draw:text-box><text:p>Boxed</text:p></draw:text-box></draw:frame> after</text:p>")]), "odt", &|| Ok(())).unwrap();
+    assert!(text.contains("Before") && text.contains("Boxed") && text.contains("after"), "{text:?}");
+}

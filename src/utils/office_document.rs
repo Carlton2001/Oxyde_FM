@@ -87,6 +87,8 @@ struct Builder {
     dropped: bool,
     table_depth: usize,
     in_text: bool,
+    /// ODF paragraphs open around the text: a text box anchored in a paragraph holds its own.
+    odf_depth: usize,
     /// Speaker notes and other non-body ODF text.
     skip: bool,
 }
@@ -293,19 +295,33 @@ fn parse_odf(builder: &mut Builder, kind: Odf, name: &str, tag: &str, closing: b
             push_text(&mut name, attribute(tag, "draw:name").unwrap_or_default());
             builder.line("slide", &name);
         }
+        // A paragraph inside another (a text box) ends the outer one's text so far, and
+        // the outer one goes on after it.
         ("text:h", false) => {
+            if builder.odf_depth > 0 {
+                builder.end_paragraph();
+            }
+            builder.odf_depth += 1;
             builder.in_text = true;
             builder.tag = outline(attribute(tag, "text:outline-level"));
         }
         ("text:p", false) if !self_closing => {
+            if builder.odf_depth > 0 {
+                builder.end_paragraph();
+            }
+            builder.odf_depth += 1;
             builder.in_text = true;
             if builder.tag != "li" {
                 builder.tag = "p";
             }
         }
         ("text:h" | "text:p", true) => {
-            builder.in_text = false;
             builder.end_paragraph();
+            builder.odf_depth = builder.odf_depth.saturating_sub(1);
+            builder.in_text = builder.odf_depth > 0;
+            if builder.in_text {
+                builder.tag = "p";
+            }
         }
         ("text:p", false) => builder.line("p", ""),
         ("text:list-item", false) => builder.tag = "li",
