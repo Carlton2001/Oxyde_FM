@@ -41,3 +41,5 @@ mod unread_access;
 mod linux_delete_control;
 #[cfg(target_os = "linux")]
 mod open_file_limit;
+#[cfg(target_os = "linux")]
+mod linux_trash_journal;

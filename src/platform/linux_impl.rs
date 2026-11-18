@@ -727,11 +727,8 @@ impl Platform for LinuxPlatform {
 
     fn shell_delete(&self, paths: &[std::path::PathBuf], recycle: bool) -> Result<(), String> {
         if recycle {
-            return trash::delete_all(paths).map_err(|error| match error {
-                trash::Error::FileSystem { path, source } if source.kind() == std::io::ErrorKind::PermissionDenied => {
-                    crate::models::error::DeleteAccessDenied { path: path.to_string_lossy().into_owned() }.to_string()
-                }
-                error => error.to_string(),
+            return paths.iter().try_for_each(|path| {
+                super::linux_trash::send::send(path, None).map(drop).map_err(|error| error.message(path))
             });
         }
         for path in paths {
@@ -747,6 +744,20 @@ impl Platform for LinuxPlatform {
             })?;
         }
         Ok(())
+    }
+
+    /// The trash entry is the receipt: Undo restores that entry, Redo checks the object.
+    fn shell_delete_tracked(&self, path: &std::path::Path, proof: Option<crate::models::transaction::HistoryFileIdentity>) -> super::ShellDeleteOutcome {
+        match super::linux_trash::send::send(path, proof) {
+            Ok(sent) => super::ShellDeleteOutcome {
+                completed: true,
+                error: None,
+                effects: vec![crate::models::transaction::HistoryDeletedItem::trashed(
+                    path.to_string_lossy().into_owned(), sent.identity, sent.content)],
+                destroyed: false,
+            },
+            Err(error) => super::ShellDeleteOutcome::from_result(Err(error.message(path))),
+        }
     }
 
     fn set_thread_priority(&self, _priority: ThreadPriority) {}

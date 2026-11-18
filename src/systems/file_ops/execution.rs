@@ -133,8 +133,7 @@ impl FileOperationManager {
                         || !locked.moved_links.is_empty()
                         || !locked.renamed_dirs.is_empty()
                 }
-                // Windows journals only what reached the Recycle Bin.
-                #[cfg(target_os = "windows")]
+                // Only what reached the trash is journaled.
                 FileOpType::Trash => !locked.deleted_items.is_empty(),
                 _ => true,
             };
@@ -144,7 +143,6 @@ impl FileOperationManager {
                     .iter()
                     .map(|p| p.to_string_lossy().to_string())
                     .collect();
-                #[cfg(target_os = "windows")]
                 let sources_str = if matches!(locked.op_type, FileOpType::Trash) {
                     locked.deleted_items.iter().map(|entry| entry.path.clone()).collect()
                 } else { sources_str };

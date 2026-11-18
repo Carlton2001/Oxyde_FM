@@ -43,3 +43,5 @@ pub(crate) mod archive_open_cache;
 
 #[cfg(target_os = "windows")]
 pub(crate) mod history_delete;
+#[cfg(not(target_os = "windows"))]
+pub(crate) mod linux_trash_history;

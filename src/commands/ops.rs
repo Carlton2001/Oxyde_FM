@@ -318,7 +318,10 @@ pub async fn undo_last_action(
                 #[cfg(target_os = "windows")]
                 crate::systems::history_delete::undo(&tx.details)?;
                 #[cfg(not(target_os = "windows"))]
-                restore_items(tx.details.paths.clone()).await?;
+                match crate::systems::linux_trash_history::journal(&tx.details) {
+                    Some(entries) => crate::systems::linux_trash_history::undo(entries).await?,
+                    None => drop(restore_items(tx.details.paths.clone()).await?),
+                }
             }
             TransactionType::Rename => {
                 let (Some(old), Some(new)) =
@@ -360,9 +363,9 @@ pub async fn redo_last_action(
                 #[cfg(target_os = "windows")]
                 crate::systems::history_delete::redo(&tx.details)?;
                 #[cfg(not(target_os = "windows"))]
-                {
-                    let paths: Vec<PathBuf> = tx.details.paths.iter().map(PathBuf::from).collect();
-                    recycle_history_paths(paths)?;
+                match crate::systems::linux_trash_history::journal(&tx.details) {
+                    Some(entries) => crate::systems::linux_trash_history::redo(entries)?,
+                    None => recycle_history_paths(tx.details.paths.iter().map(PathBuf::from).collect())?,
                 }
             }
             TransactionType::Copy => {
