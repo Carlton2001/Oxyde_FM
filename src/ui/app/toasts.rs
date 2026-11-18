@@ -20,6 +20,15 @@ pub(crate) struct Toast {
     leaving: bool,
 }
 
+impl Toast {
+    /// Stays until dismissed: an archive to recover, or a limit or recovery to read.
+    fn persistent(&self) -> bool {
+        self.archive_source.is_some()
+            || oxyde_lib::models::error::ArchiveLimitFailure::from_message(&self.detail).is_some()
+            || oxyde_lib::models::error::ArchiveRecoveryFailure::from_message(&self.detail).is_some()
+    }
+}
+
 /// Exit fade, shorter than the entrance so dismissal feels immediate.
 const TOAST_EXIT: std::time::Duration = std::time::Duration::from_millis(100);
 const TOAST_ENTER: std::time::Duration = std::time::Duration::from_millis(140);
@@ -104,8 +113,10 @@ impl OxydeApp {
             leaving: false,
         });
         // Bound the overlay when many independent actions finish together.
+        // A toast that waits to be read (archive recovery or limit) goes last.
         if self.toasts.len() > 5 {
-            self.toasts.remove(0);
+            let oldest = self.toasts.iter().position(|toast| !toast.persistent()).unwrap_or(0);
+            self.toasts.remove(oldest);
         }
         cx.notify();
         cx.spawn(async move |this, cx| {
@@ -117,15 +128,7 @@ impl OxydeApp {
                 }))
                 .await;
             let _ = this.update(cx, |this, cx| {
-                let expires = this.toasts.iter().any(|toast| {
-                    toast.id == id
-                        && toast.archive_source.is_none()
-                        && oxyde_lib::models::error::ArchiveLimitFailure::from_message(
-                            &toast.detail,
-                        )
-                        .is_none()
-                        && oxyde_lib::models::error::ArchiveRecoveryFailure::from_message(&toast.detail).is_none()
-                });
+                let expires = this.toasts.iter().any(|toast| toast.id == id && !toast.persistent());
                 if expires {
                     this.dismiss_toast(id, cx);
                 }
