@@ -566,9 +566,15 @@ impl Platform for WindowsPlatform {
         }
         let buffer = super::windows_shell_delete::source_buffer(paths)?;
         // Explicitly honor the per-volume setting even when the caller requests undo.
-        let immediate = |path: &std::path::PathBuf| path.ancestors().last()
-            .and_then(|root| read_recycle_bin_config(root.to_string_lossy().into_owned()).ok())
-            .is_some_and(|config| config.nuke_on_delete);
+        // One registry read per volume root, however many paths of a batch share it.
+        let roots = std::cell::RefCell::new(std::collections::HashMap::<std::path::PathBuf, bool>::new());
+        let immediate = |path: &std::path::PathBuf| path.ancestors().last().is_some_and(|root| {
+            *roots.borrow_mut().entry(root.to_path_buf()).or_insert_with(|| {
+                read_recycle_bin_config(root.to_string_lossy().into_owned())
+                    .ok()
+                    .is_some_and(|config| config.nuke_on_delete)
+            })
+        });
         if recycle && paths.len() > 1 {
             let (permanent, recyclable): (Vec<_>, Vec<_>) = paths.iter().cloned().partition(immediate);
             if !permanent.is_empty() {

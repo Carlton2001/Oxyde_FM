@@ -54,6 +54,8 @@ pub enum FileOpType {
 pub struct FileOperation {
     pub item_outcomes: HashMap<PathBuf, ItemOutcome>,
     item_progress: HashMap<PathBuf, item_outcomes::ItemProgress>,
+    /// Planned destination root of each source, to find the root holding a path by its ancestors.
+    item_destinations: HashMap<PathBuf, PathBuf>,
     item_tracking_atomic: bool,
     pub id: String,
     pub sequence: u64,
@@ -132,6 +134,7 @@ impl FileOperation {
         Self {
             item_outcomes: self.snapshot_item_outcomes(),
             item_progress: HashMap::new(),
+            item_destinations: HashMap::new(),
             item_tracking_atomic: self.item_tracking_atomic,
             id: self.id.clone(),
             sequence: self.sequence,
@@ -199,6 +202,7 @@ impl FileOperation {
     ) -> Self {
         Self {
             item_progress: sources.iter().cloned().map(|path| (path, Default::default())).collect(),
+            item_destinations: HashMap::new(),
             item_outcomes: HashMap::new(),
             item_tracking_atomic: false,
             id: Uuid::new_v4().to_string(),
@@ -406,9 +410,7 @@ impl FileOperationManager {
         let parent = path.parent().unwrap_or_else(|| Path::new("."));
         let stem = path.file_stem().unwrap_or_default().to_string_lossy();
         let file_name = path.file_name().unwrap_or_default().to_string_lossy();
-        let compound = [".tar.zst", ".tar.gz", ".tar.xz", ".tar.bz2", ".tar.lz4", ".tar.lzma"]
-            .into_iter()
-            .find_map(|suffix| Some((file_name.strip_suffix(suffix)?, &suffix[1..])));
+        let compound = crate::utils::archive::split_compound_tar_suffix(&file_name);
         let (stem, extension) = if let Some((name, suffix)) = compound {
             (name.to_string(), Some(suffix.to_string()))
         } else {

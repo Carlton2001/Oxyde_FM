@@ -45,9 +45,9 @@ impl CustomTheme {
     /// Next free identifier, stable across renames.
     pub fn next_id(existing: &[CustomTheme]) -> String {
         let next = existing.iter()
-            .filter_map(|theme| theme.id.strip_prefix("theme-")?.parse::<u32>().ok())
+            .filter_map(|theme| theme.id.strip_prefix("theme-")?.parse::<u64>().ok())
             .max()
-            .map_or(1, |last| last + 1);
+            .map_or(1, |last| last.saturating_add(1));
         format!("theme-{next}")
     }
 }

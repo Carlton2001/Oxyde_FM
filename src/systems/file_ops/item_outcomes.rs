@@ -50,7 +50,12 @@ impl FileOperation {
             progress.expected = expected;
             progress.planned = true;
             progress.skipped |= skipped;
-            progress.destination = Some(destination);
+            if let Some(previous) = progress.destination.replace(destination.clone()) {
+                if self.item_destinations.get(&previous).is_some_and(|source| source == path) {
+                    self.item_destinations.remove(&previous);
+                }
+            }
+            self.item_destinations.insert(destination, path.to_path_buf());
             progress.requires_removal = requires_removal;
         }
     }
@@ -100,23 +105,11 @@ impl FileOperation {
     }
 
     pub(super) fn item_directory(&mut self, destination: &Path, done: bool) {
-        if let Some(progress) = self
-            .item_progress
-            .values_mut()
-            .filter(|progress| {
-                progress
-                    .destination
-                    .as_ref()
-                    .is_some_and(|root| destination.starts_with(root))
-            })
-            .max_by_key(|progress| {
-                progress
-                    .destination
-                    .as_ref()
-                    .map(|root| root.components().count())
-                    .unwrap_or(0)
-            })
-        {
+        // The deepest root holding the destination is its first ancestor that is one.
+        let source = destination
+            .ancestors()
+            .find_map(|ancestor| self.item_destinations.get(ancestor));
+        if let Some(progress) = source.and_then(|source| self.item_progress.get_mut(source)) {
             progress.started = true;
             if done {
                 progress.done += 1;
@@ -131,11 +124,11 @@ impl FileOperation {
     }
 
     pub(super) fn item_directory_created(&mut self, destination: &Path) {
-        for progress in self.item_progress.values_mut() {
-            if progress
-                .destination
-                .as_ref()
-                .is_some_and(|root| destination.starts_with(root))
+        for ancestor in destination.ancestors() {
+            if let Some(progress) = self
+                .item_destinations
+                .get(ancestor)
+                .and_then(|source| self.item_progress.get_mut(source))
             {
                 progress.retained = true;
             }

@@ -48,6 +48,7 @@ fn create_data_object(paths: &[PathBuf], cut: bool) -> Result<IDataObject, Strin
         let enumerator: IEnumShellItems = folder
             .BindToHandler(None, &BHID_EnumItems)
             .map_err(|error| error.to_string())?;
+        let wanted: std::collections::HashSet<String> = paths.iter().map(|path| normalize(path)).collect();
         let mut selected = Vec::new();
         loop {
             let mut items = [None];
@@ -65,10 +66,7 @@ fn create_data_object(paths: &[PathBuf], cut: bool) -> Result<IDataObject, Strin
             let name = text.to_string().map_err(|error| error.to_string());
             CoTaskMemFree(Some(text.0.cast()));
             let name = name?;
-            if paths
-                .iter()
-                .any(|path| normalize(path) == normalize(Path::new(&name)))
-            {
+            if wanted.contains(&normalize(Path::new(&name))) {
                 selected.push(Pidl(
                     SHGetIDListFromObject(&item).map_err(|error| error.to_string())?,
                 ));

@@ -284,7 +284,7 @@
             );
             let cancellation = Arc::new(AtomicBool::new(false));
             let mut options = params();
-            options.pattern = SearchPattern::Literal("ETE".into(), false, true);
+            options.pattern = SearchPattern::literal("ETE".into(), false, true);
             options.min_size = Some(4);
             options.max_size = Some(4);
             options.min_date = Some(1_234_567_890_000);
@@ -340,7 +340,7 @@
 
     fn params() -> SearchParams {
         SearchParams {
-            pattern: SearchPattern::Literal(String::new(), false, false),
+            pattern: SearchPattern::literal(String::new(), false, false),
             min_size: None,
             max_size: None,
             min_date: None,
@@ -374,7 +374,7 @@
         super::super::archive_seven_open::block_crc_fixture_with_method(&archive, false, 0);
         let cancellation = Arc::new(AtomicBool::new(false));
         let mut params = params();
-        params.pattern = SearchPattern::Literal("SELECTED".into(), false, false);
+        params.pattern = SearchPattern::literal("SELECTED".into(), false, false);
         params.min_size = Some(4);
         params.max_size = Some(4);
         let results = search_in_archive(&archive, &params, &cancellation);
@@ -406,7 +406,7 @@
             .any(|entry| entry.is_dir && entry.name == "DOCS"));
         params.min_size = Some(5);
         params.max_size = Some(11);
-        params.pattern = SearchPattern::Literal("readme".into(), false, false);
+        params.pattern = SearchPattern::literal("readme".into(), false, false);
         let results = search_in_archive(&image, &params, &cancellation);
         assert_eq!(results.len(), 1);
         assert_eq!(

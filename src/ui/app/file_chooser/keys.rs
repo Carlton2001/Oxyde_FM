@@ -64,8 +64,8 @@ impl FileChooserWindow {
     /// The arrows, which leave left and right to the grid; Shift extends the selection.
     pub(super) fn move_selection(&mut self, key: &str, shift: bool, cx: &mut Context<Self>) {
         if self.cards().is_none() && matches!(key, "left" | "right") { return; }
-        let rows = self.position_rows();
-        let rows: Vec<&[usize]> = rows.iter().map(Vec::as_slice).collect();
+        let (positions, columns) = self.position_rows();
+        let rows: Vec<&[usize]> = positions.chunks(columns).collect();
         if let Some(position) = crate::ui::app::selection::arrow_target(&rows, self.selection.cursor(), key) {
             if shift { self.extend_to(position, cx) } else { self.select(position, cx) }
         }

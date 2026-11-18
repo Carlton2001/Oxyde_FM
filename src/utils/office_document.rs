@@ -265,7 +265,8 @@ fn parse_word(builder: &mut Builder, name: &str, tag: &str, closing: bool) {
             }
         }
         ("w:outlineLvl", false) => {
-            let level = attribute(tag, "w:val").and_then(|value| value.parse::<u8>().ok());
+            // Levels 0 to 8 are headings 1 to 9; 9 is Word's body text and keeps the paragraph as is.
+            let level = attribute(tag, "w:val").and_then(|value| value.parse::<u8>().ok()).filter(|level| *level < 9);
             if let Some(level) = level {
                 builder.tag = outline(Some(&(level + 1).to_string()));
             }

@@ -8,6 +8,8 @@ use gpui::{prelude::*, *};
 
 pub(super) struct ViewerWindow {
     viewer: Entity<Viewer>,
+    /// Title last given to the window, so a render only writes a changed one.
+    title: SharedString,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -111,6 +113,7 @@ impl Viewer {
                         });
                         ViewerWindow {
                             viewer: viewer.clone(),
+                            title: SharedString::default(),
                             _subscriptions: subscriptions,
                         }
                     })
@@ -150,7 +153,10 @@ impl Render for ViewerWindow {
         let file = self.viewer.read(cx).file.as_ref().map(|file| (file.name.clone(), file.path.clone()));
         let title: SharedString = file.as_ref().map(|(name, _)| name.clone().into())
             .unwrap_or_else(|| cx.i18n().text(Message::ViewerTitle));
-        window.set_window_title(title.as_ref());
+        if self.title != title {
+            window.set_window_title(title.as_ref());
+            self.title = title.clone();
+        }
         // The title bar carries the display options; no action bar remains.
         let options = self.viewer.update(cx, |viewer, cx| viewer.render_display_options(cx));
         let root = div()

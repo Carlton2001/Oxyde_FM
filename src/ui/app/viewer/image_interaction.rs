@@ -208,12 +208,12 @@ fn animation_clock(clock: &mut Option<(ImageId, std::time::Instant)>, image: &Re
 
 /// The frame shown after `elapsed`, looping over the frames' own delays.
 fn animation_frame(image: &RenderImage, elapsed: std::time::Duration) -> usize {
-    let delays: Vec<u128> = (0..image.frame_count())
-        .map(|index| std::time::Duration::from(image.delay(index)).as_millis().max(1))
-        .collect();
-    let mut remaining = elapsed.as_millis() % delays.iter().sum::<u128>();
-    for (index, delay) in delays.iter().enumerate() {
-        if remaining < *delay {
+    let delay = |index: usize| std::time::Duration::from(image.delay(index)).as_millis().max(1);
+    let total: u128 = (0..image.frame_count()).map(delay).sum();
+    let mut remaining = elapsed.as_millis() % total.max(1);
+    for index in 0..image.frame_count() {
+        let delay = delay(index);
+        if remaining < delay {
             return index;
         }
         remaining -= delay;

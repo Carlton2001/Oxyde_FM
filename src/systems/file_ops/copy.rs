@@ -160,11 +160,16 @@ impl FileOperationManager {
         trash_entries: &[crate::platform::TrashTransferEntry],
         deferred_moves: Option<Arc<Mutex<crate::systems::archive_move_sources::ArchiveMoveSources>>>,
     ) -> Result<(), String> {
+        // The first entry wins when a path is listed twice, as a linear search did.
+        let originals: std::collections::HashMap<&Path, &Path> = trash_entries
+            .iter()
+            .rev()
+            .map(|entry| (entry.path.as_path(), entry.original_path.as_path()))
+            .collect();
         let source_name = |source: &Path| -> Result<std::ffi::OsString, String> {
-            trash_entries
-                .iter()
-                .find(|entry| entry.path == source)
-                .map(|entry| entry.original_path.as_path())
+            originals
+                .get(source)
+                .copied()
                 .unwrap_or(source)
                 .file_name()
                 .map(|name| name.to_os_string())

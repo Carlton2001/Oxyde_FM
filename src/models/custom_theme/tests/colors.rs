@@ -34,3 +34,9 @@ fn selection_round_trips_and_missing_themes_fall_back() {
     assert_eq!(CustomTheme::next_id(&custom), "theme-3");
     assert_eq!(CustomTheme::next_id(&[]), "theme-1");
 }
+
+#[test]
+fn next_id_does_not_wrap_at_the_largest_number() {
+    let custom = vec![CustomTheme::new("theme-4294967295".into(), "Last".into(), ThemeId::Light, [0; 6])];
+    assert_eq!(CustomTheme::next_id(&custom), "theme-4294967296");
+}

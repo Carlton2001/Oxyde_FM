@@ -45,14 +45,14 @@ pub(super) fn transfer_entries(
             .trim_start_matches("\\\\?\\")
             .to_lowercase()
     };
-    let items = list_items()?;
+    let listed: std::collections::HashSet<String> = list_items()?
+        .iter()
+        .map(|item| normalize(Path::new(&item.id)))
+        .collect();
     candidates
         .into_iter()
         .map(|path| {
-            if !items
-                .iter()
-                .any(|item| normalize(Path::new(&item.id)) == normalize(path))
-            {
+            if !listed.contains(&normalize(path)) {
                 return Err(format!(
                     "Trash entry is no longer available: {}",
                     path.display()

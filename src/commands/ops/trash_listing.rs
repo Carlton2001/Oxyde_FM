@@ -47,7 +47,7 @@ pub(crate) fn list_trash_unsorted() -> Result<Vec<TrashEntry>, CommandError> {
                     name.push_str(&format!(".{}", ext_str));
                 }
             }
-            let deleted_time = (item.time_deleted.max(0) as u64) * 1000;
+            let deleted_time = (item.time_deleted.max(0) as u64).saturating_mul(1000);
 
             // Reuse one snapshot for type, size and modification time.
             let metadata = std::fs::metadata(&trash_path).ok();

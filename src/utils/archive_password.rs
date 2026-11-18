@@ -24,8 +24,12 @@ impl Serialize for ArchiveSecret {
 
 impl<'de> Deserialize<'de> for ArchiveSecret {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let mut value = Zeroizing::new(String::deserialize(deserializer)?);
-        Self::new(std::mem::take(&mut *value)).ok_or_else(|| serde::de::Error::custom("invalid archive password"))
+        // A refused value is still wiped when it drops here.
+        let value = Zeroizing::new(String::deserialize(deserializer)?);
+        if value.is_empty() || value.len() > MAX_BYTES {
+            return Err(serde::de::Error::custom("invalid archive password"));
+        }
+        Ok(Self(value))
     }
 }
 
