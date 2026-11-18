@@ -17,11 +17,24 @@ struct Target {
     window: HWND,
     callback: Box<dyn Fn(NativeFileDrop) -> FileDropEffect>,
     paths: RefCell<Vec<String>>,
+    /// The object `paths` were read from. A source that renders its files on
+    /// request (an Explorer ZIP folder extracts them) is read once per drag,
+    /// not at each entry of the pointer; the reference keeps its identity unique.
+    source: RefCell<Option<IUnknown>>,
     allowed: Cell<DROPEFFECT>,
     helper: Option<IDropTargetHelper>,
 }
 
 impl Target {
+    fn read_from(&self, object: &IDataObject) -> Option<IUnknown> {
+        let identity = object.cast::<IUnknown>().ok()?;
+        let same = self
+            .source
+            .borrow()
+            .as_ref()
+            .is_some_and(|source| source.as_raw() == identity.as_raw());
+        same.then_some(identity)
+    }
     fn dispatch(
         &self,
         phase: FileDropPhase,
@@ -73,10 +86,12 @@ impl IDropTarget_Impl for Target_Impl {
         let output = unsafe { output.as_mut() }.ok_or_else(|| Error::from(E_POINTER))?;
         self.allowed.set(*output);
         *output = DROPEFFECT_NONE;
-        self.paths.borrow_mut().clear();
         let object = object.ok()?;
-        if let Ok(paths) = data::read_paths(object) {
-            *self.paths.borrow_mut() = paths;
+        if self.read_from(object).is_none() {
+            *self.paths.borrow_mut() = data::read_paths(object).unwrap_or_default();
+            *self.source.borrow_mut() = object.cast::<IUnknown>().ok();
+        }
+        if !self.paths.borrow().is_empty() {
             *output = self.dispatch(FileDropPhase::Enter, point, keys);
         }
         if let Some(helper) = &self.helper {
@@ -121,7 +136,7 @@ impl IDropTarget_Impl for Target_Impl {
             &POINTL::default(),
             MODIFIERKEYS_FLAGS(0),
         );
-        self.paths.borrow_mut().clear();
+        // Paths stay with their source: the pointer may come back in this drag.
         if let Some(helper) = &self.helper {
             let _ = unsafe { helper.DragLeave() };
         }
@@ -137,10 +152,13 @@ impl IDropTarget_Impl for Target_Impl {
         let output = unsafe { output.as_mut() }.ok_or_else(|| Error::from(E_POINTER))?;
         *output = DROPEFFECT_NONE;
         let object = object.ok()?;
-        // Validate the final object, rather than trusting a previous DragEnter.
-        let paths = data::read_paths(object).unwrap_or_default();
-        if paths != *self.paths.borrow() {
-            self.paths.borrow_mut().clear();
+        // Validate the final object, rather than trusting a previous DragEnter
+        // made with another one.
+        if self.read_from(object).is_none() {
+            let paths = data::read_paths(object).unwrap_or_default();
+            if paths != *self.paths.borrow() {
+                self.paths.borrow_mut().clear();
+            }
         }
         let accepted = self.dispatch(FileDropPhase::Drop, point, keys);
         // Oxyde owns asynchronous copies AND moves, including conflict handling.
@@ -169,6 +187,7 @@ impl IDropTarget_Impl for Target_Impl {
         }
         self.dispatch(FileDropPhase::Leave, point, keys);
         self.paths.borrow_mut().clear();
+        self.source.borrow_mut().take();
         Ok(())
     }
 }
@@ -186,6 +205,7 @@ pub(in crate::platform) fn install_target(
         window,
         callback,
         paths: RefCell::default(),
+        source: RefCell::default(),
         allowed: Cell::new(DROPEFFECT_NONE),
         helper: unsafe { CoCreateInstance(&CLSID_DragDropHelper, None, CLSCTX_INPROC_SERVER) }.ok(),
     }

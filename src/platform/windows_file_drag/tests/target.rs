@@ -60,6 +60,7 @@ fn native_move_has_one_drop_and_never_authorizes_foreign_source_deletion() {
             FileDropEffect::Move
         }),
         paths: RefCell::default(),
+        source: RefCell::default(),
         allowed: Cell::new(DROPEFFECT_NONE),
         helper: None,
     }
@@ -102,6 +103,7 @@ fn invalid_final_object_cancels_the_drop_and_clears_the_ui_session() {
             FileDropEffect::Copy
         }),
         paths: RefCell::default(),
+        source: RefCell::default(),
         allowed: Cell::new(DROPEFFECT_NONE),
         helper: None,
     }
@@ -126,6 +128,7 @@ fn target_cannot_return_an_operation_the_source_did_not_offer() {
         window: window.0,
         callback: Box::new(|_| FileDropEffect::Move),
         paths: RefCell::default(),
+        source: RefCell::default(),
         allowed: Cell::new(DROPEFFECT_NONE),
         helper: None,
     }
@@ -135,4 +138,52 @@ fn target_cannot_return_an_operation_the_source_did_not_offer() {
     unsafe { target.DragEnter(&object, MK_LBUTTON, POINTL::default(), &mut effect) }.unwrap();
     assert_eq!(effect, DROPEFFECT_NONE);
     unsafe { target.DragLeave() }.unwrap();
+}
+
+#[test]
+fn a_source_reentering_in_the_same_drag_is_not_rendered_again() {
+    let window = TestWindow::new();
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let received = events.clone();
+    let target: IDropTarget = Target {
+        window: window.0,
+        callback: Box::new(move |event| {
+            received.borrow_mut().push((event.phase, event.paths.len()));
+            FileDropEffect::Copy
+        }),
+        paths: RefCell::default(),
+        source: RefCell::default(),
+        allowed: Cell::new(DROPEFFECT_NONE),
+        helper: None,
+    }
+    .into();
+    let formats = Rc::new(RefCell::new(std::collections::BTreeMap::from([(
+        CF_HDROP.0,
+        crate::platform::windows_clipboard_write::file_bytes(&[r"C:\one.txt".into()]),
+    )])));
+    let object: IDataObject = super::super::data::FileData {
+        formats: formats.clone(),
+    }
+    .into();
+    let point = POINTL { x: 20, y: 20 };
+    let mut effect = DROPEFFECT_COPY;
+    unsafe { target.DragEnter(&object, MK_LBUTTON, point, &mut effect) }.unwrap();
+    unsafe { target.DragLeave() }.unwrap();
+    // A second rendering would now fail: only the first read may be used.
+    formats.borrow_mut().remove(&CF_HDROP.0);
+    let mut effect = DROPEFFECT_COPY;
+    unsafe { target.DragEnter(&object, MK_LBUTTON, point, &mut effect) }.unwrap();
+    assert_eq!(effect, DROPEFFECT_COPY);
+    unsafe { target.Drop(&object, MODIFIERKEYS_FLAGS(0), point, &mut effect) }.unwrap();
+    assert_eq!(effect, DROPEFFECT_COPY);
+    assert_eq!(
+        &*events.borrow(),
+        &[
+            (FileDropPhase::Enter, 1),
+            (FileDropPhase::Leave, 0),
+            (FileDropPhase::Enter, 1),
+            (FileDropPhase::Drop, 0),
+            (FileDropPhase::Leave, 0),
+        ]
+    );
 }
