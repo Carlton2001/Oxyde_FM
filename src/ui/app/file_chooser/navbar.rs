@@ -281,7 +281,9 @@ impl FileChooserWindow {
             let is_last = index + 1 == total_parts;
             if index == 0 && share.is_some() {
                 accumulated = part.clone();
-            } else if index == 0 && part.ends_with(':') {
+            } else if index == 0 && part.ends_with(':') && current_path.contains("://") {
+                accumulated = format!("{part}//");
+            } else if index == 0 && part.ends_with(':') && cfg!(windows) {
                 accumulated = format!("{part}{separator}");
             } else {
                 if !accumulated.is_empty() && !accumulated.ends_with(separator) {
