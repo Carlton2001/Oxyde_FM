@@ -7,7 +7,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Mutex};
 use windows::Win32::Storage::FileSystem::{
-    DELETE, FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ,
+    DELETE, FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES, FILE_WRITE_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ,
     FILE_SHARE_WRITE,
 };
 
@@ -259,8 +259,30 @@ fn remove_or_open(
         return Ok(Some(Directory { object: child, reader }));
     }
     checkpoint()?;
-    super::windows_file_moves::remove(&child)?;
-    Ok(None)
+    match super::windows_file_moves::remove(&child) {
+        Ok(()) => Ok(None),
+        // A read-only file (a Git object, a file copied from an ISO) is refused by
+        // the disposition: its attribute is cleared on the same object, then it goes.
+        Err(error) if error.raw_os_error() == Some(5) && metadata.is_file() && metadata.permissions().readonly() => {
+            drop(child);
+            let writable = super::windows_no_reparse::open_entry(
+                parent,
+                name,
+                DELETE.0 | FILE_READ_ATTRIBUTES.0 | FILE_WRITE_ATTRIBUTES.0,
+                FILE_SHARE_READ.0 | FILE_SHARE_WRITE.0,
+            )?;
+            let current = writable.metadata()?;
+            if current.file_attributes() & 0x400 != 0 || !current.is_file() {
+                return Err(error);
+            }
+            let mut permissions = current.permissions();
+            permissions.set_readonly(false);
+            writable.set_permissions(permissions)?;
+            super::windows_file_moves::remove(&writable)?;
+            Ok(None)
+        }
+        Err(error) => Err(error),
+    }
 }
 
 fn traverse(
