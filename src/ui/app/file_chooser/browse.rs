@@ -178,7 +178,10 @@ impl FileChooserWindow {
                     this.column_values = Arc::new((arranged.types, arranged.sizes));
                     this.column_revision += 1;
                 }
-                this.listing = Listing::Ready;
+                // Sorting a folder that could not be listed keeps saying why.
+                if !matches!(this.listing, Listing::Failed(_)) {
+                    this.listing = Listing::Ready;
+                }
                 if let Some(position) = this.selection.cursor() {
                     this.reveal(position);
                 }
@@ -336,7 +339,9 @@ impl FileChooserWindow {
         }
         match self.selection.single() {
             Some(position) => self.open_entry(position, window, cx),
-            None => self.accept(window, cx),
+            // Enter does what the button does, and only when the button could.
+            None if self.can_accept(cx) => self.accept(window, cx),
+            None => {}
         }
     }
 
