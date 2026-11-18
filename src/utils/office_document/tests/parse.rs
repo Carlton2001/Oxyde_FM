@@ -92,3 +92,11 @@ fn open_document_sheets_and_slides_have_headers_and_bounded_cells() {
     );
     assert_eq!(slides, "slide\tOne\np\tHello\n");
 }
+
+#[test]
+fn word_outline_levels_end_at_body_text_without_overflowing() {
+    let paragraph = |level: &str| format!(r#"<w:body><w:p><w:pPr><w:outlineLvl w:val="{level}"/></w:pPr><w:r><w:t>x</w:t></w:r></w:p></w:body>"#);
+    assert_eq!(parse(&paragraph("0"), None), "h1\tx\n");
+    assert_eq!(parse(&paragraph("9"), None), "p\tx\n");
+    assert_eq!(parse(&paragraph("255"), None), "p\tx\n");
+}
