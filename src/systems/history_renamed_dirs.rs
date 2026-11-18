@@ -57,6 +57,10 @@ impl Renamed<'_> {
             .collect();
         if kept.is_empty() {
             error
+        } else if let Some(failure) = error.get_ref().and_then(|inner| inner.downcast_ref::<HistoryMoveFailure>()) {
+            // The typed cause stays readable by the caller (Incomplete, Conflict...).
+            let detail = format!("{}; folders left renamed: {}", failure.detail, kept.join("; "));
+            io::Error::new(error.kind(), HistoryMoveFailure { issue: failure.issue, detail })
         } else {
             io::Error::new(error.kind(), format!("{error}; folders left renamed: {}", kept.join("; ")))
         }
