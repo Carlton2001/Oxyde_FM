@@ -20,7 +20,13 @@ pub(super) struct Controls {
 
 impl Controls {
     pub(super) fn new() -> Result<Self, String> {
-        let mut manifest = tempfile::NamedTempFile::new().map_err(|e| e.to_string())?;
+        // A full or forbidden %TEMP% falls back to Oxyde's own storage folder.
+        let mut manifest = tempfile::NamedTempFile::new()
+            .or_else(|error| match crate::app_paths::config_dir() {
+                Some(directory) => tempfile::NamedTempFile::new_in(directory),
+                None => Err(error),
+            })
+            .map_err(|e| e.to_string())?;
         manifest.write_all(br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
 <assemblyIdentity version="1.0.0.0" processorArchitecture="*" name="Oxyde.NativeProperties" type="win32"/>
