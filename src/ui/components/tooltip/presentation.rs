@@ -28,8 +28,17 @@ pub(crate) fn frame(theme: OxydeTheme) -> Div {
         .shadow(tooltip_shadow())
 }
 
+const LINE_BREAKS: [char; 2] = ['\n', '\r'];
+
 /// Measures `text` as Inter at `size` and `weight`, before layout decides any width.
 fn shape(window: &Window, text: &SharedString, size: Rems, weight: FontWeight) -> ShapedLine {
+    // A file name may hold a line break, which a shaped line must not: a space of the
+    // same length keeps every byte index valid for the caller's ranges.
+    let text = &if text.contains(LINE_BREAKS) {
+        SharedString::from(text.replace(LINE_BREAKS, " "))
+    } else {
+        text.clone()
+    };
     let mut font = window.text_style().font();
     font.family = "Inter".into();
     font.weight = weight;
