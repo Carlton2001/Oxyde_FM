@@ -234,12 +234,13 @@ impl ArchiveWorkspace {
     pub fn cleanup_owner(&self) -> std::sync::Weak<Mutex<super::archive_owned_tree::OwnedTree>> { Arc::downgrade(&self.directory.owner) }
     #[cfg(all(target_os = "windows", not(test)))]
     pub fn forget_removed(&self, path: &Path, identity: crate::platform::FileIdentity) -> std::io::Result<()> { self.directory.owner.lock().unwrap().forget_removed(path, identity) }
-    pub fn create_directory(&self, internal: &str) -> Result<(), String> {
-        let path = self.path(internal)?;
+    /// Keeps the error kind: an existing name lets the caller number the next one.
+    pub fn create_directory(&self, internal: &str) -> std::io::Result<()> {
+        let path = self.path(internal).map_err(std::io::Error::other)?;
         #[cfg(all(target_os = "windows", not(test)))]
-        { self.directory.owner.lock().unwrap().create_directory(&path).map_err(|e| e.to_string()) }
+        { self.directory.owner.lock().unwrap().create_directory(&path) }
         #[cfg(any(not(target_os = "windows"), test))]
-        { std::fs::create_dir(path).map_err(|e| e.to_string()) }
+        { std::fs::create_dir(path) }
     }
     pub fn rename(&self, source: &Path, destination: &Path, checkpoint: &mut dyn FnMut() -> std::io::Result<()>) -> std::io::Result<()> {
         #[cfg(all(target_os = "windows", not(test)))]
@@ -452,7 +453,7 @@ fn create_directory_inner(path: &Path, quality: &str) -> Result<(), std::io::Err
         return Err(std::io::Error::other("This archive format is read-only"));
     }
     let workspace = ArchiveWorkspace::open(archive).map_err(std::io::Error::other)?;
-    workspace.create_directory(&internal).map_err(std::io::Error::other)?;
+    workspace.create_directory(&internal)?;
     workspace
         .commit(&mutation_operation(quality))
         .map_err(std::io::Error::other)
@@ -597,6 +598,10 @@ fn export_file_inner(path: &Path, folder: &Path) -> Result<PathBuf, crate::model
     }
     Err(CommandError::PathError("No unused destination name was available".into()))
 }
+
+#[cfg(test)]
+#[path = "archive_workspace/tests/directories.rs"]
+mod directory_tests;
 
 #[cfg(test)]
 mod tests {
