@@ -88,12 +88,30 @@ impl OxydeApp {
         cx.notify();
         let update_again = update.clone();
         cx.spawn(async move |this, cx| {
-            let result = tokio::task::spawn_blocking(move || {
-                let setup = updates::download(&update)?;
-                updates::launch(&setup)
-            })
-            .await
-            .unwrap_or_else(|error| Err(error.to_string()));
+            let downloaded = tokio::task::spawn_blocking(move || updates::download(&update))
+                .await
+                .unwrap_or_else(|error| Err(error.to_string()));
+            // An operation started during the download would be cut short at the close.
+            let busy = downloaded.is_ok()
+                && this.read_with(cx, |this, _| this.file_ops.operation_counts().1 > 0).unwrap_or(true);
+            if busy {
+                if let Ok(setup) = &downloaded {
+                    let setup = setup.clone();
+                    tokio::task::spawn_blocking(move || updates::discard(&setup));
+                }
+                let _ = this.update(cx, |this, cx| {
+                    this.update_status = UpdateStatus::Available(update_again);
+                    this.toast(ToastKind::Error, Message::UpdateWaitsForOperations, String::new(), 0, cx);
+                    cx.notify();
+                });
+                return;
+            }
+            let result = match downloaded {
+                Ok(setup) => tokio::task::spawn_blocking(move || updates::launch(&setup))
+                    .await
+                    .unwrap_or_else(|error| Err(error.to_string())),
+                Err(error) => Err(error),
+            };
             let _ = this.update(cx, |this, cx| match result {
                 Ok(()) => this.close_for_update(update_again, cx),
                 Err(error) => {
