@@ -30,3 +30,16 @@ fn preparations_cut_by_a_crash_stop_holding_pending_slots() {
     assert!(prepare(base.path(), policy, now).is_ok());
     drop(abandoned);
 }
+
+#[test]
+fn a_foreign_file_in_the_cache_root_is_left_alone() {
+    let base = tempfile::tempdir().unwrap();
+    let now = seconds(SystemTime::now()).unwrap();
+    let policy = Policy { max_entries: 10, ..Policy::DEFAULT };
+    let first = prepare(base.path(), policy, now).unwrap();
+    let root = first.payload().ancestors().find(|path| path.ends_with("v1") || path.ends_with("v2")).unwrap().to_path_buf();
+    drop(first);
+    fs::write(root.join("Thumbs.db"), b"x").unwrap();
+    assert!(prepare(base.path(), policy, now).is_ok());
+    assert_eq!(fs::read(root.join("Thumbs.db")).unwrap(), b"x");
+}
