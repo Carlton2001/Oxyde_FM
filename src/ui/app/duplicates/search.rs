@@ -71,6 +71,9 @@ impl DuplicateWindow {
                         }
                         Err(e) => this.error = Some(e.to_string()),
                     }
+                } else if this.groups.is_empty() {
+                    // Stopped before any result: not "no duplicates", only no search done.
+                    this.searched = false;
                 }
                 cx.notify();
             });
