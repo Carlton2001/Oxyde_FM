@@ -138,8 +138,14 @@
                             *name,
                             zip::write::SimpleFileOptions::default()
                                 .last_modified_time(
-                                    zip::DateTime::from_date_and_time(2009, 2, 13, 23, 31, 30)
-                                        .unwrap(),
+                                    // 2009-02-13 23:31:30 UTC, as a local DOS date.
+                                    crate::commands::archive_io_codec::zip_time::to_zip(Some(
+                                        crate::utils::archive_io_protocol::Timestamp {
+                                            seconds: 1_234_567_890,
+                                            nanos: 0,
+                                        },
+                                    ))
+                                    .unwrap(),
                                 )
                                 .compression_method(zip::CompressionMethod::Stored),
                         )

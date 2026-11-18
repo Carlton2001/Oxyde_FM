@@ -66,6 +66,9 @@ pub(super) fn command(executable: &Path, profile: Profile, source: Option<(&Path
     let mut arguments = Arguments::default();
     arguments.base();
     arguments.add(["--clearenv", "--setenv", "MALLOC_ARENA_MAX", "2"]);
+    if let Some(zone) = std::env::var_os("TZ") {
+        arguments.setenv("TZ", zone);
+    }
     if let Some(home) = dirs::home_dir() {
         // Libraries look for their files there; only what is bound below exists.
         arguments.setenv("HOME", home);
@@ -235,6 +238,8 @@ impl Arguments {
             }
         }
         self.bind_try(Path::new("/etc/ld.so.cache"));
+        // Local time: ZIP stores its dates that way.
+        self.bind_try(Path::new("/etc/localtime"));
     }
 
     fn reach(&mut self, reach: Reach) {

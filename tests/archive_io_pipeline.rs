@@ -1102,3 +1102,32 @@ fn production_encoding_pause_cancel_and_launch_failure_never_publish() {
         .unwrap()
     });
 }
+
+#[test]
+fn zip_members_keep_their_dates_through_compression_and_extraction() {
+    native(|| {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("dated.txt");
+        fs::write(&source, b"dated").unwrap();
+        // 2021-06-15 10:20:30 UTC; DOS dates keep even seconds.
+        let date = std::time::UNIX_EPOCH + Duration::from_secs(1_623_752_430);
+        fs::File::options()
+            .write(true)
+            .open(&source)
+            .unwrap()
+            .set_modified(date)
+            .unwrap();
+        let archive = temp.path().join("dated.zip");
+        FileOperationManager::perform_compress(
+            &operation(FileOpType::Compress),
+            vec![source],
+            Some(archive.clone()),
+        )
+        .unwrap();
+        let output = temp.path().join("output");
+        FileOperationManager::perform_extract(&operation(FileOpType::Extract), vec![archive], Some(output.clone()))
+            .unwrap();
+        let extracted = fs::metadata(output.join("dated.txt")).unwrap().modified().unwrap();
+        assert_eq!(extracted, date);
+    });
+}

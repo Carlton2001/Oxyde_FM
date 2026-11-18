@@ -151,10 +151,10 @@ pub(super) fn indexed_file(
             if !matches!(mode, 0 | 0o100000 | 0o040000) {
                 return Err(invalid("Archive links and special files are not supported"));
             }
-            let modified = file
-                .last_modified()
-                .and_then(|dt| chrono::NaiveDateTime::try_from(dt).ok())
-                .and_then(|dt| u64::try_from(dt.and_utc().timestamp_millis()).ok())
+            // The DOS date is local time, not UTC.
+            let modified = super::archive_io_codec::zip_time::from_zip(&file)
+                .and_then(|time| time.seconds.checked_mul(1000))
+                .and_then(|millis| u64::try_from(millis).ok())
                 .unwrap_or(0);
             if let Some(entry) = member(
                 &archive_origin,
@@ -267,7 +267,11 @@ mod tests {
         if path.extension().is_some_and(|extension| extension == "zip") {
             let mut writer = zip::ZipWriter::new(File::create(path).unwrap());
             let options = zip::write::SimpleFileOptions::default().last_modified_time(
-                zip::DateTime::from_date_and_time(2009, 2, 13, 23, 31, 30).unwrap(),
+                // 2009-02-13 23:31:30 UTC, as a local DOS date.
+                crate::commands::archive_io_codec::zip_time::to_zip(Some(
+                    crate::utils::archive_io_protocol::Timestamp { seconds: 1_234_567_890, nanos: 0 },
+                ))
+                .unwrap(),
             );
             for name in names {
                 if name.ends_with('/') {

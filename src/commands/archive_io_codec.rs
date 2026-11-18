@@ -13,6 +13,7 @@ use std::time::Duration;
 
 mod encode;
 use encode::encode;
+pub(crate) mod zip_time;
 
 fn request<T: Exchange>(connection: &Connection<T>, frame: Frame) -> io::Result<Frame> {
     connection.lock().map_err(|_| invalid())?.exchange(frame)
@@ -261,12 +262,13 @@ fn decode<T: Exchange + Send + 'static>(
                 {
                     return Err(invalid().into());
                 }
-                let meta = empty_entry(
+                let mut meta = empty_entry(
                     index as u64,
                     entry.name().map_err(io::Error::other)?.into_owned(),
                     entry.is_dir(),
                     entry.size(),
                 );
+                meta.modified = zip_time::from_zip(&entry);
                 let chosen = requested.as_ref().is_none_or(|requested| {
                     relative_archive_path(&meta.name).is_ok_and(|path| path == *requested)
                 });
@@ -296,12 +298,13 @@ fn decode<T: Exchange + Send + 'static>(
                     Some(failure) => CommandError::from(failure),
                     None => io::Error::other(error).into(),
                 })?;
-                let meta = empty_entry(
+                let mut meta = empty_entry(
                     index as u64,
                     entry.name().map_err(io::Error::other)?.into_owned(),
                     entry.is_dir(),
                     entry.size(),
                 );
+                meta.modified = zip_time::from_zip(&entry);
                 let copied = copy_entry(connection, &meta, &mut entry, budget, checkpoint);
                 // ZipCrypto accepts one wrong password in 256: the checksum then refuses it.
                 if encrypted && copied.as_ref().is_err_and(|error| error.to_string().contains("Invalid checksum")) {
