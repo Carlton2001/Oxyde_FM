@@ -25,6 +25,9 @@ impl DirectoryAttributes {
     }
 }
 
+/// Folders whose attributes one walk keeps, so a huge tree does not grow the cache without end.
+const MAX_CACHED_DIRECTORIES: usize = 4096;
+
 /// Loads each directory's list once during a recursive walk.
 #[derive(Default)]
 pub(crate) struct WalkAttributes {
@@ -35,6 +38,10 @@ impl WalkAttributes {
     pub(crate) fn of(&mut self, path: &std::path::Path, metadata: &std::fs::Metadata, name: &str) -> (bool, bool, bool) {
         let parent = path.parent().unwrap_or(path);
         if !self.directories.contains_key(parent) {
+            // A walk goes folder by folder: forgetting old ones only costs a reload.
+            if self.directories.len() >= MAX_CACHED_DIRECTORIES {
+                self.directories.clear();
+            }
             self.directories.insert(parent.to_path_buf(), DirectoryAttributes::load(parent));
         }
         self.directories[parent].of(metadata, name)
