@@ -103,3 +103,43 @@ fn video_overlays_show_above_an_inactive_owner_without_global_topmost() {
         assert!(!IsWindowVisible(overlay.0).as_bool());
     }
 }
+
+#[test]
+fn an_overlay_outlives_a_surface_whose_thread_ends_and_returns_to_the_ui_window() {
+    // A worker that dies takes its surface along, as a thread that ends does here.
+    // Windows does not destroy another thread's owned windows: it unowns them.
+    let owner = create();
+    let owner_handle = owner.0 .0 as isize;
+    let (shown, surface) = std::sync::mpsc::channel();
+    let (end, ended) = std::sync::mpsc::channel::<()>();
+    let worker = std::thread::spawn(move || {
+        let class = crate::platform::windows_viewer_media::surface_class().unwrap();
+        let surface = unsafe {
+            CreateWindowExW(WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, class, w!("surface"), WS_POPUP,
+                0, 0, 50, 50, Some(HWND(owner_handle as *mut _)), None, None, None).unwrap()
+        };
+        let _ = unsafe { ShowWindow(surface, SW_SHOWNOACTIVATE) };
+        shown.send(surface.0 as isize).unwrap();
+        // A live worker pumps its messages; owner changes are sent to it.
+        while ended.try_recv().is_err() {
+            let mut message = MSG::default();
+            while unsafe { PeekMessageW(&mut message, None, 0, 0, PM_REMOVE) }.as_bool() {
+                unsafe { DispatchMessageW(&message) };
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    });
+    let surface = HWND(surface.recv().unwrap() as *mut _);
+    let overlay = create();
+    place(raw(overlay.0), raw(owner.0), [0, 0, 10, 10], false, true).unwrap();
+    assert_eq!(unsafe { GetWindow(overlay.0, GW_OWNER) }.unwrap(), surface);
+    end.send(()).unwrap();
+    worker.join().unwrap();
+    unsafe {
+        assert!(!IsWindow(Some(surface)).as_bool());
+        assert!(IsWindow(Some(overlay.0)).as_bool());
+        assert!(GetWindow(overlay.0, GW_OWNER).is_err());
+    }
+    place(raw(overlay.0), raw(owner.0), [0, 0, 10, 10], false, true).unwrap();
+    assert_eq!(unsafe { GetWindow(overlay.0, GW_OWNER) }.unwrap(), owner.0);
+}
