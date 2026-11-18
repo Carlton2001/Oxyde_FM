@@ -54,16 +54,22 @@ fn id_list(path: &str) -> Result<IdList> {
                 return Ok(IdList(list));
             }
         }
-        let list = SHSimpleIDListFromPath(&name);
-        if list.is_null() { Err(E_FAIL.into()) } else { Ok(IdList(list)) }
+        simple_id_list(&name)
     }
+}
+
+/// The identifier list built from the text alone, for a path the Shell cannot parse.
+unsafe fn simple_id_list(name: &HSTRING) -> Result<IdList> {
+    let list = unsafe { SHSimpleIDListFromPath(name) };
+    if list.is_null() { Err(E_FAIL.into()) } else { Ok(IdList(list)) }
 }
 
 pub(crate) fn item(path: &str) -> Result<IShellItem> {
     let name = HSTRING::from(path);
     unsafe {
+        // The Shell already failed to parse the path: only the simple list is left to try.
         SHCreateItemFromParsingName(&name, None).or_else(|_| {
-            let list = id_list(path)?;
+            let list = simple_id_list(&name)?;
             SHCreateItemFromIDList(list.0)
         })
     }
