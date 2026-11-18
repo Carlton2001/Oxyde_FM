@@ -160,6 +160,32 @@ fn enclosed_items_change_at_every_depth_without_following_links() {
     }
 }
 
+/// A bind mount inside keeps its permissions. Only an administrator of a mount namespace
+/// can bind: `unshare --map-root-user --mount` runs these tests as one.
+#[test]
+fn a_bind_mount_inside_is_left_as_it_is() {
+    use std::os::unix::ffi::OsStrExt;
+    let (root, folder) = tree();
+    let shown = root.path().join("shown");
+    std::fs::create_dir(&shown).unwrap();
+    std::fs::write(shown.join("data"), b"d").unwrap();
+    set_mode(&shown.join("data"), 0o644);
+    let mount = folder.join("mount");
+    std::fs::create_dir(&mount).unwrap();
+    let source = std::ffi::CString::new(shown.as_os_str().as_bytes()).unwrap();
+    let target = std::ffi::CString::new(mount.as_os_str().as_bytes()).unwrap();
+    // SAFETY: two paths; no file system type nor data for a bind mount.
+    if unsafe { libc::mount(source.as_ptr(), target.as_ptr(), std::ptr::null(), libc::MS_BIND, std::ptr::null()) } != 0 {
+        return;
+    }
+    let result = enclosed(&folder, Levels { files: [None, None, Some(Access::None)], ..Default::default() });
+    // SAFETY: the path mounted above.
+    unsafe { libc::umount2(target.as_ptr(), libc::MNT_DETACH) };
+    result.unwrap();
+    assert_eq!(mode(&shown.join("data")), 0o644);
+    assert_eq!(mode(&root.path().join("folder/a.txt")), 0o640);
+}
+
 #[test]
 fn a_folder_closing_to_its_owner_is_changed_after_its_content() {
     let (root, folder) = tree();

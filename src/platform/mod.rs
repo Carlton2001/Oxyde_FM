@@ -1348,6 +1348,8 @@ mod linux_cache;
 #[cfg(target_os = "linux")]
 mod linux_file_tree;
 #[cfg(target_os = "linux")]
+mod linux_mount_place;
+#[cfg(target_os = "linux")]
 mod linux_held;
 
 #[cfg(target_os = "windows")]

@@ -1,7 +1,8 @@
 //! Permanent deletion of a tree through descriptors: links are removed, never
 //! followed; a folder goes after its content, through its held parent; another file
-//! system mounted inside is never entered. Pause and cancellation are checked before
-//! each item.
+//! system or a bind mount, inside or selected, is never entered. Pause and cancellation
+//! are checked before each item.
+use super::linux_mount_place::{status, status_of, Place};
 use rustix::{
     fs::{AtFlags, FileType, Mode, OFlags},
     io::Errno,
@@ -38,12 +39,16 @@ fn located(path: &Path, error: impl Into<io::Error>) -> io::Error {
     io::Error::new(error.kind(), format!("{}: {error}", path.display()))
 }
 
-/// Opens a child folder that `stat` described, refusing a replacement or another mount.
-fn enter(parent: &OwnedFd, name: &OsStr, path: &Path, device: u64, inode: u64) -> io::Result<Frame> {
+fn not_entered(path: &Path) -> io::Error {
+    located(path, io::Error::other("another file system is mounted here; it was not entered"))
+}
+
+/// Opens a child folder that `status` described, refusing a replacement or another mount.
+fn enter(parent: &OwnedFd, name: &OsStr, path: &Path, place: Place, inode: u64) -> io::Result<Frame> {
     let flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW | OFlags::CLOEXEC;
     let fd = rustix::fs::openat(parent, name, flags, Mode::empty()).map_err(|error| located(path, error))?;
-    let stat = rustix::fs::fstat(&fd).map_err(|error| located(path, error))?;
-    if (stat.st_dev, stat.st_ino) != (device, inode) {
+    let opened = status_of(&fd).map_err(|error| located(path, error))?;
+    if (opened.place, opened.inode) != (place, inode) {
         return Err(located(path, io::Error::other("folder changed during deletion")));
     }
     let dir = rustix::fs::Dir::read_from(&fd).map_err(|error| located(path, error))?;
@@ -53,7 +58,7 @@ fn enter(parent: &OwnedFd, name: &OsStr, path: &Path, device: u64, inode: u64) -
 /// Next child of the folder read by `dir` and held by `fd`: non-directories are
 /// removed in place, an ordinary subfolder is opened and returned. `None` once the
 /// folder is empty.
-fn next_child(dir: &mut rustix::fs::Dir, fd: &OwnedFd, folder: &Path, device: u64, checkpoint: Checkpoint) -> io::Result<Option<Option<Frame>>> {
+fn next_child(dir: &mut rustix::fs::Dir, fd: &OwnedFd, folder: &Path, boundary: Place, checkpoint: Checkpoint) -> io::Result<Option<Option<Frame>>> {
     let entry = match dir.read() {
         Some(Ok(entry)) => entry,
         Some(Err(error)) => return Err(located(folder, error)),
@@ -65,28 +70,28 @@ fn next_child(dir: &mut rustix::fs::Dir, fd: &OwnedFd, folder: &Path, device: u6
     }
     checkpoint()?;
     let path = folder.join(&name);
-    let stat = match rustix::fs::statat(fd, name.as_os_str(), AtFlags::SYMLINK_NOFOLLOW) {
-        Ok(stat) => stat,
+    let item = match status(fd, name.as_os_str()) {
+        Ok(item) => item,
         Err(Errno::NOENT) => return Ok(Some(None)),
         Err(error) => return Err(located(&path, error)),
     };
-    if FileType::from_raw_mode(stat.st_mode) != FileType::Directory {
+    if item.kind != FileType::Directory {
         return match rustix::fs::unlinkat(fd, name.as_os_str(), AtFlags::empty()) {
             Ok(()) | Err(Errno::NOENT) => Ok(Some(None)),
             Err(error) => Err(located(&path, error)),
         };
     }
-    if stat.st_dev != device {
-        return Err(located(&path, io::Error::other("another file system is mounted here; it was not entered")));
+    if !boundary.holds(item.place) {
+        return Err(not_entered(&path));
     }
-    enter(fd, &name, &path, device, stat.st_ino).map(|frame| Some(Some(frame)))
+    enter(fd, &name, &path, item.place, item.inode).map(|frame| Some(Some(frame)))
 }
 
 /// Removes `root` and everything under it; `holder` is the held parent of `root`.
-fn drain(root: Frame, holder: &OwnedFd, device: u64, checkpoint: Checkpoint) -> io::Result<()> {
+fn drain(root: Frame, holder: &OwnedFd, boundary: Place, checkpoint: Checkpoint) -> io::Result<()> {
     let mut stack = vec![root];
     while let Some(top) = stack.last_mut() {
-        match next_child(&mut top.dir, &top.fd, &top.path, device, checkpoint)? {
+        match next_child(&mut top.dir, &top.fd, &top.path, boundary, checkpoint)? {
             Some(Some(child)) => stack.push(child),
             Some(None) => {}
             None => {
@@ -110,20 +115,25 @@ pub(super) fn remove(parent: &File, path: &Path, workers: usize, checkpoint: Che
     let parent = parent.try_clone().map(OwnedFd::from)?;
     let name = path.file_name().ok_or_else(|| io::Error::other("Deletion path has no file name"))?;
     checkpoint()?;
-    let stat = rustix::fs::statat(&parent, name, AtFlags::SYMLINK_NOFOLLOW).map_err(|error| located(path, error))?;
-    if FileType::from_raw_mode(stat.st_mode) != FileType::Directory {
+    let item = status(&parent, name).map_err(|error| located(path, error))?;
+    if item.kind != FileType::Directory {
         return rustix::fs::unlinkat(&parent, name, AtFlags::empty()).map_err(|error| located(path, error));
     }
-    let root = enter(&parent, name, path, stat.st_dev, stat.st_ino)?;
-    if workers <= 1 {
-        return drain(root, &parent, stat.st_dev, checkpoint);
+    // A selected mount point would be emptied before its own removal fails.
+    let holder = status_of(&parent).map_err(|error| located(path, error))?;
+    if item.place.mounted_on(holder.place) {
+        return Err(not_entered(path));
     }
-    remove_parallel(root, &parent, stat.st_dev, workers, checkpoint)
+    let root = enter(&parent, name, path, item.place, item.inode)?;
+    if workers <= 1 {
+        return drain(root, &parent, item.place, checkpoint);
+    }
+    remove_parallel(root, &parent, item.place, workers, checkpoint)
 }
 
 /// The calling thread lists the selected folder, removing its files and opening each
 /// subfolder; a bounded pool removes those subfolders. The selected folder goes last.
-fn remove_parallel(root: Frame, holder: &OwnedFd, device: u64, workers: usize, checkpoint: Checkpoint) -> io::Result<()> {
+fn remove_parallel(root: Frame, holder: &OwnedFd, boundary: Place, workers: usize, checkpoint: Checkpoint) -> io::Result<()> {
     let Frame { mut dir, fd, path } = root;
     let stop = AtomicBool::new(false);
     let failure = Mutex::new(None::<io::Error>);
@@ -144,7 +154,7 @@ fn remove_parallel(root: Frame, holder: &OwnedFd, device: u64, workers: usize, c
                 if stop.load(Ordering::Relaxed) {
                     continue; // Release the queued folders undeleted.
                 }
-                if let Err(error) = drain(frame, &fd, device, &guarded) {
+                if let Err(error) = drain(frame, &fd, boundary, &guarded) {
                     stop.store(true, Ordering::Relaxed);
                     failure.lock().unwrap_or_else(|p| p.into_inner()).get_or_insert(error);
                 }
@@ -152,7 +162,7 @@ fn remove_parallel(root: Frame, holder: &OwnedFd, device: u64, workers: usize, c
         }
         let result = (|| -> io::Result<()> {
             loop {
-                match next_child(&mut dir, &fd, &path, device, &guarded)? {
+                match next_child(&mut dir, &fd, &path, boundary, &guarded)? {
                     Some(Some(child)) => sender.send(child).map_err(|_| io::Error::other("Deletion workers stopped"))?,
                     Some(None) => {}
                     None => return Ok(()),
