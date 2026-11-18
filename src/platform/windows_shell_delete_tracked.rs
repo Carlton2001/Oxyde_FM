@@ -45,6 +45,8 @@ struct Receipt {
     /// The item is sent to the Recycle Bin rather than deleted.
     recycle: bool,
     preflight: bool,
+    /// This item's own check refused it; a batch retries the siblings it aborted.
+    refused: bool,
     /// The root as the Shell reported it, when not in the selected form.
     root_alias: Option<IShellItem>,
     completed: bool,
@@ -235,7 +237,10 @@ impl IFileOperationProgressSink_Impl for DeleteSink_Impl {
             let started = std::time::Instant::now();
             let checked = check_source(&self.path, self.proof);
             self.receipt.lock().unwrap_or_else(|p| p.into_inner()).proof_time += started.elapsed();
-            checked.map_err(|e| self.record_failure(e))?;
+            checked.map_err(|e| {
+                self.receipt.lock().unwrap_or_else(|p| p.into_inner()).refused = true;
+                self.record_failure(e)
+            })?;
             self.receipt
                 .lock()
                 .unwrap_or_else(|p| p.into_inner())
