@@ -309,8 +309,10 @@ fn base() -> io::Result<PathBuf> {
         fs::create_dir_all(&base)?;
         Ok(base)
     }
+    // The cache's proof key and entries need access rights: a portable
+    // temporary folder on FAT or exFAT has none.
     #[cfg(not(target_os = "linux"))]
-    crate::app_paths::temporary_dir()
+    platform().protected_temporary_dir()
 }
 
 fn seconds(time: SystemTime) -> io::Result<u64> {

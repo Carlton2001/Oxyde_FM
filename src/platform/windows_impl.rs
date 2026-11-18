@@ -124,6 +124,9 @@ impl Platform for WindowsPlatform {
         super::windows_folder_handler::set(enabled, previous)
     }
     fn check_broker_pressure(&self) -> std::io::Result<()> { super::windows_resource_pressure::check() }
+    fn protected_temporary_dir(&self) -> std::io::Result<std::path::PathBuf> {
+        super::windows_temporary::protected_dir()
+    }
     fn cache_proof_key(&self, path: &std::path::Path) -> std::io::Result<[u8; 32]> {
         super::windows_cache_proof::key::load(path)
     }
