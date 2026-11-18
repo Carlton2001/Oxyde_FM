@@ -947,18 +947,22 @@ impl Platform for WindowsPlatform {
             );
             if let Ok(icon) = hicon {
                 if !hwnd.is_invalid() {
-                    let _ = SendMessageW(
-                        hwnd,
-                        WM_SETICON,
-                        Some(WPARAM(ICON_BIG as usize)),
-                        Some(LPARAM(icon.0 as isize)),
-                    );
-                    let _ = SendMessageW(
-                        hwnd,
-                        WM_SETICON,
-                        Some(WPARAM(ICON_SMALL as usize)),
-                        Some(LPARAM(icon.0 as isize)),
-                    );
+                    // The icons this function made earlier are destroyed once replaced.
+                    static MADE: std::sync::Mutex<Vec<isize>> = std::sync::Mutex::new(Vec::new());
+                    let mut made = MADE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                    for size in [ICON_BIG, ICON_SMALL] {
+                        let previous = SendMessageW(hwnd, WM_SETICON, Some(WPARAM(size as usize)), Some(LPARAM(icon.0 as isize))).0;
+                        if previous != 0 && previous != icon.0 as isize {
+                            if let Some(position) = made.iter().position(|known| *known == previous) {
+                                made.swap_remove(position);
+                                let _ = windows::Win32::UI::WindowsAndMessaging::DestroyIcon(
+                                    windows::Win32::UI::WindowsAndMessaging::HICON(previous as *mut std::ffi::c_void));
+                            }
+                        }
+                    }
+                    made.push(icon.0 as isize);
+                } else {
+                    let _ = windows::Win32::UI::WindowsAndMessaging::DestroyIcon(icon);
                 }
             }
         }
