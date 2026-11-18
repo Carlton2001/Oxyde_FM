@@ -8,9 +8,15 @@ use std::process::{Child, Command, Stdio};
 const FORMAT: &str = "x-special/gnome-copied-files";
 const PATH: &AsciiSet = &NON_ALPHANUMERIC.remove(b'/').remove(b'-').remove(b'.').remove(b'_').remove(b'~');
 
+/// Whether the session is Wayland, from the variable GPUI chooses its backend with. Under
+/// X11, `wl-copy` would accept the files, then fail without a compositor to reach.
+pub(super) fn session() -> bool {
+    std::env::var_os("WAYLAND_DISPLAY").is_some_and(|display| !display.is_empty())
+}
+
 /// Offers the files until another selection replaces them.
 pub(super) fn offer(paths: &[String], cut: bool) -> Option<Child> {
-    if paths.is_empty() {
+    if paths.is_empty() || !session() {
         return None;
     }
     let spawned = Command::new("wl-copy")
@@ -39,6 +45,9 @@ pub(super) fn offer(paths: &[String], cut: bool) -> Option<Child> {
 
 /// Files another application offers.
 pub(super) fn files() -> Option<(Vec<String>, bool)> {
+    if !session() {
+        return None;
+    }
     let output = Command::new("wl-paste")
         .args(["--no-newline", "--type", FORMAT])
         .stdin(Stdio::null())

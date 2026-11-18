@@ -27,3 +27,12 @@ fn files_use_the_gnome_clipboard_format() {
         assert_eq!(wayland::decode(text), None, "{text:?}");
     }
 }
+
+#[test]
+fn outside_wayland_files_are_not_offered_through_wl_copy() {
+    if wayland::session() {
+        return;
+    }
+    assert!(wayland::offer(&["/tmp/a".to_string()], false).is_none());
+    assert_eq!(wayland::files(), None);
+}

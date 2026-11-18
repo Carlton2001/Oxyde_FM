@@ -1,7 +1,7 @@
 //! Oxyde's own file clipboard. GPUI reaches the Wayland and X11 clipboards only with text,
-//! so files travel between Oxyde windows here, as in Zed. `wl-copy` and `wl-paste`, when
-//! installed, exchange them with file managers in their format; otherwise the interface
-//! writes their paths as text.
+//! so files travel between Oxyde windows here, as in Zed. In a Wayland session, `wl-copy`
+//! and `wl-paste`, when installed, exchange them with file managers in their format;
+//! otherwise the interface writes their paths as text.
 use super::FileClipboard;
 use std::process::Child;
 use std::sync::{Mutex, MutexGuard};
