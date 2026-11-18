@@ -333,23 +333,27 @@ fn scan_impl(
         let directory = kind == b'5';
         let sparse = kind == b'S';
         long_link = None;
-        let mut name = long_name.take().unwrap_or(text(&header[..100])?);
-        if &header[257..263] == b"ustar\0" && &header[263..265] == b"00" {
-            let prefix = text(&header[345..500])?;
-            if !prefix.is_empty() {
-                name = format!("{prefix}/{name}");
-            }
+        let extended = extended.take();
+        if sparse && extended.is_some() {
+            return Err(failure());
         }
-        if let Some((path, override_size)) = extended.take() {
-            if sparse {
-                return Err(failure());
+        let (path, override_size) = extended.unwrap_or((None, None));
+        // The header name only counts without a long one, as in the tar crate:
+        // GNU tar cuts it at 100 bytes, possibly inside a character.
+        let name = match (long_name.take(), path) {
+            (Some(name), _) | (None, Some(name)) => name,
+            (None, None) => {
+                let name = text(&header[..100])?;
+                let prefix = if &header[257..263] == b"ustar\0" && &header[263..265] == b"00" {
+                    text(&header[345..500])?
+                } else {
+                    String::new()
+                };
+                if prefix.is_empty() { name } else { format!("{prefix}/{name}") }
             }
-            if let Some(path) = path {
-                name = path;
-            }
-            if let Some(value) = override_size {
-                size = value;
-            }
+        };
+        if let Some(value) = override_size {
+            size = value;
         }
         // Stored bytes in the archive; `size` becomes the member's real size.
         let mut stored = size;

@@ -216,3 +216,24 @@ fn pax_sparse_records_are_refused_by_the_verifier_too() {
     member(&mut bytes, "GNUSparseFile.0/file", tar::EntryType::Regular, b"map");
     assert!(verified(file(bytes).as_file_mut()).is_err());
 }
+
+#[test]
+fn a_long_name_replaces_a_header_name_cut_inside_a_character() {
+    let name = format!("{}é.txt", "a".repeat(99));
+    let mut bytes = Vec::new();
+    let mut long = header("././@LongLink", tar::EntryType::GNULongName, name.len() as u64 + 1);
+    long.set_cksum();
+    bytes.extend_from_slice(long.as_bytes());
+    padded(&mut bytes, &[name.as_bytes(), b"\0"].concat());
+    // GNU tar keeps the first 100 bytes: the first byte of "é" alone.
+    let mut cut = header("placeholder", tar::EntryType::Regular, 4);
+    cut.as_mut_bytes()[..100].copy_from_slice(&name.as_bytes()[..100]);
+    cut.set_cksum();
+    bytes.extend_from_slice(cut.as_bytes());
+    padded(&mut bytes, b"safe");
+    let mut archive = file(bytes);
+    assert_eq!(decoded(archive.as_file_mut()).unwrap()[0].0, name);
+    let verified = verified(archive.as_file_mut()).unwrap();
+    assert_eq!(verified[0].0, name);
+    assert_eq!(verified[0].3, blake3::hash(b"safe"));
+}
