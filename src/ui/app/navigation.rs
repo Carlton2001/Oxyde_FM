@@ -376,6 +376,8 @@ impl OxydeApp {
                 crate::ui::workspace::TabLoadStatus::Loading
             ) && pane.active_tab().files.is_empty()
                 && pane.active_tab().quick_search.is_none()
+                // A listing still in flight (slow share) goes on rather than starting over.
+                && !self.pending_file_requests.contains_key(&pane.active_tab().id)
             {
                 load_path = Some(pane.active_tab().path.clone());
             }
@@ -397,7 +399,8 @@ impl OxydeApp {
                 && matches!(
                     pane.active_tab().load_status,
                     crate::ui::workspace::TabLoadStatus::Loading
-                ) && pane.active_tab().quick_search.is_none())
+                ) && pane.active_tab().quick_search.is_none()
+                && !self.pending_file_requests.contains_key(&pane.active_tab().id))
             .then(|| (pane.active_tab_index, pane.active_tab().path.clone()))
         });
         if let Some((index, path)) = reload {
@@ -573,6 +576,13 @@ impl OxydeApp {
                             crate::ui::workspace::FileUpdate::Listing(entries.into())
                         };
                         if !super::file_preparation::prepare(&handle, &mut cx, &owner, update).await {
+                            // Superseded or failed: a request left pending would keep later
+                            // tab switches from listing this tab again.
+                            let _ = handle.update(&mut cx, |this, _| {
+                                if this.pending_file_requests.get(&tab_id) == Some(&request_id) {
+                                    this.pending_file_requests.remove(&tab_id);
+                                }
+                            });
                             return;
                         }
                         Ok(())
