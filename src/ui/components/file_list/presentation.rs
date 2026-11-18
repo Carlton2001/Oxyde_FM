@@ -92,9 +92,11 @@ pub(crate) fn file_type_label(f: &FileEntry) -> String {
     if f.is_dir {
         return "Dossier".to_string();
     }
+    // "notes." has no extension to show, as Windows reads it.
     std::path::Path::new(&f.name)
         .extension()
         .and_then(|e| e.to_str())
+        .filter(|e| !e.is_empty())
         .map(|s| s.to_uppercase())
         .unwrap_or_else(|| "Fichier".to_string())
 }
@@ -110,7 +112,7 @@ pub(crate) fn file_type_display(f: &FileEntry, i18n: &crate::ui::i18n::I18n) -> 
         Some(Message::FileTypeJunction)
     } else if f.is_dir {
         Some(Message::FileTypeFolder)
-    } else if std::path::Path::new(&f.name).extension().is_none() {
+    } else if std::path::Path::new(&f.name).extension().is_none_or(|extension| extension.is_empty()) {
         Some(Message::FileTypeFile)
     } else {
         None

@@ -13,3 +13,9 @@ fn a_kept_or_absent_extension_and_folders_are_silent() {
     assert_eq!(extension_change(".bashrc", ".zshrc", false), None);
     assert_eq!(extension_change("photos.2024", "photos", true), None);
 }
+
+#[test]
+fn a_final_dot_alone_is_a_removed_extension() {
+    assert_eq!(extension_change("notes.txt", "notes.", false), Some(("txt".into(), None)));
+    assert_eq!(extension_change("notes.", "notes.txt", false), None);
+}
