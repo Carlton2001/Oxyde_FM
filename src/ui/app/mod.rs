@@ -204,7 +204,7 @@ pub(crate) struct PendingFileOperation {
 
 #[derive(Clone)]
 pub struct FileDragData {
-    pub paths: Vec<String>,
+    pub paths: std::rc::Rc<Vec<String>>,
     pub source_pane_id: String,
     /// Set when the drag starts: the active tab may change before the pointer leaves the window.
     pub from_trash: bool,

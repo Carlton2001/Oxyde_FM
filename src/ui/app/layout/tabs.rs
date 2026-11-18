@@ -389,7 +389,7 @@ impl OxydeApp {
                                     if target == "viewer://" { return; }
                                     let paths = data.paths.clone();
                                     h.update(cx, |this, cx| {
-                                        this.execute_file_drop(paths, target.clone(), cx);
+                                        this.execute_file_drop(paths.to_vec(), target.clone(), cx);
                                     });
                                 }
                             }),

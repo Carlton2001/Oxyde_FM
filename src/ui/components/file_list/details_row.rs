@@ -27,7 +27,7 @@ pub(super) struct DetailsRowParams<'a> {
     pub(super) rename_error: Option<SharedString>,
     pub(super) rename_shake_id: u64,
     /// Selected entries the list shows, in display order: what a drag carries.
-    pub(super) selection: &'a [String],
+    pub(super) selection: &'a std::rc::Rc<Vec<String>>,
     pub(super) theme: OxydeTheme,
     pub(super) histogram_total: u64,
     pub(super) total_w: f32,
@@ -203,21 +203,21 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
              })
             .on_drag({
                 let drag_paths = if is_selected && !selection.is_empty() {
-                    selection.to_vec()
+                    selection.clone()
                 } else {
-                    vec![path.clone()]
+                    std::rc::Rc::new(vec![path.clone()])
                 };
-                FileDragData { paths: drag_paths.clone(), source_pane_id: p_id.clone(), from_trash: trash_panel }
+                FileDragData { paths: drag_paths, source_pane_id: p_id.clone(), from_trash: trash_panel }
             }, {
                 let drag_paths = if is_selected && !selection.is_empty() {
-                    selection.to_vec()
+                    selection.clone()
                 } else {
-                    vec![path.clone()]
+                    std::rc::Rc::new(vec![path.clone()])
                 };
                 let h_drag = h.clone();
                 move |_, cursor_offset, window, cx| {
                     let app = h_drag.clone();
-                    let paths = drag_paths.clone();
+                    let paths = drag_paths.to_vec();
                     cx.new(|cx| FileDragPreview::new(paths, cursor_offset, is_dir, app, window, cx))
                 }
             })
@@ -247,7 +247,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                         let paths = data.paths.clone();
                         let target = target_path.clone();
                         h_drop.update(cx, |this, cx| {
-                            this.execute_file_drop(paths, target, cx);
+                            this.execute_file_drop(paths.to_vec(), target, cx);
                         });
                     })
             })

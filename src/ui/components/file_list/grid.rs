@@ -190,9 +190,9 @@ pub(super) fn render_grid_file_list(
                                     let h = handle.clone();
                                     let pid = pane_id.clone();
                                     let paths = if is_selected && drag_selection.len() > 1 {
-                                        drag_selection.to_vec()
+                                        drag_selection.clone()
                                     } else {
-                                        vec![path.clone()]
+                                        std::rc::Rc::new(vec![path.clone()])
                                     };
                                     let icon = crate::ui::components::icons::entry_icon(file);
                                     let inline_editing = inline_rename
@@ -441,7 +441,7 @@ pub(super) fn render_grid_file_list(
                 handle.update(cx, |app, cx| {
                     app.drag_target_default_copy = data.paths.iter().any(|path| crate::ui::app::drives_differ(path, &target));
                     app.update_drag_copy_mode(cx);
-                    app.execute_file_drop(data.paths.clone(), target.clone(), cx);
+                    app.execute_file_drop(data.paths.to_vec(), target.clone(), cx);
                 });
             }
         })

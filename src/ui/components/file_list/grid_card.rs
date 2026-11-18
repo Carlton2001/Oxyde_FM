@@ -22,7 +22,7 @@ pub(super) struct GridCardParams<'a> {
     pub(super) is_selected: bool,
     pub(super) h: Entity<OxydeApp>,
     pub(super) pid: String,
-    pub(super) paths: Vec<String>,
+    pub(super) paths: std::rc::Rc<Vec<String>>,
     pub(super) icon: crate::ui::components::icons::IconType,
     pub(super) editing_view: Option<Entity<crate::ui::components::input::TextInput>>,
     pub(super) has_rename_error: bool,
@@ -226,7 +226,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                 let h = h.clone();
                 move |_, cursor_offset, window, cx| {
                     let app = h.clone();
-                    let paths = paths.clone();
+                    let paths = paths.to_vec();
                     cx.new(|cx| {
                         FileDragPreview::new(
                             paths,
@@ -298,7 +298,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                     let paths = data.paths.clone();
                     let target = target.clone();
                     h.update(cx, |this, cx| {
-                        this.execute_file_drop(paths, target, cx);
+                        this.execute_file_drop(paths.to_vec(), target, cx);
                     });
                 }
             });

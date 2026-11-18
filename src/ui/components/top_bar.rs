@@ -483,9 +483,9 @@ pub fn render_top_bar(
                                     let target = tgt.clone();
                                     h_drop.update(cx, |this, cx| {
                                         if this.drag_copy_mode {
-                                            this.execute_file_copy(paths, target, cx);
+                                            this.execute_file_copy(paths.to_vec(), target, cx);
                                         } else {
-                                            this.execute_file_move(paths, target, cx);
+                                            this.execute_file_move(paths.to_vec(), target, cx);
                                         }
                                     });
                                 }
