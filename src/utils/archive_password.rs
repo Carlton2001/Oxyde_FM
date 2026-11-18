@@ -84,8 +84,19 @@ fn key(archive: &Path) -> PathBuf {
 /// and the resolved one operations open: a mapped drive's share, a SUBST
 /// target, links followed. Resolving reads the disk: never on the UI thread.
 pub fn remember(archive: &Path, secret: ArchiveSecret) {
+    let resolved = std::fs::canonicalize(archive).ok();
+    remember_as(archive, resolved.as_deref(), secret);
+}
+
+/// Remembers `secret` for an archive not created yet, under its displayed path
+/// only: nothing to resolve, and no disk read on the UI thread.
+pub fn remember_new(archive: &Path, secret: ArchiveSecret) {
+    remember_as(archive, None, secret);
+}
+
+fn remember_as(archive: &Path, resolved: Option<&Path>, secret: ArchiveSecret) {
     let origin = key(archive);
-    let resolved = std::fs::canonicalize(archive).ok().map(|path| key(&path));
+    let resolved = resolved.map(key);
     if let Ok(mut store) = store().lock() {
         forget_in(&mut store, &origin);
         if let Some(resolved) = resolved.filter(|resolved| *resolved != origin) {

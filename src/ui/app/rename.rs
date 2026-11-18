@@ -271,7 +271,7 @@ impl OxydeApp {
             // The encoder finds the new archive's password where a rebuild finds its own;
             // an older archive's password must not protect a new unprotected one.
             match secret {
-                Some(secret) => oxyde_lib::utils::archive_password::remember(&destination, secret),
+                Some(secret) => oxyde_lib::utils::archive_password::remember_new(&destination, secret),
                 None => oxyde_lib::utils::archive_password::forget(&destination),
             }
             self.cancel_rename(cx);
