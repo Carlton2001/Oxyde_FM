@@ -6,6 +6,8 @@
 use super::{content::Content, Viewer};
 use gpui::*;
 use std::sync::Arc;
+mod decode;
+pub(super) use decode::decode;
 mod selection;
 pub(super) use selection::word_at;
 mod syntax;
@@ -131,10 +133,7 @@ fn read(path: &str) -> std::io::Result<(String, bool)> {
     let length = file.metadata()?.len();
     let mut bytes = Vec::new();
     file.take(MAX_TEXT_BYTES).read_to_end(&mut bytes)?;
-    // Valid UTF-8 keeps its buffer; only invalid text is copied while repaired.
-    let text = String::from_utf8(bytes)
-        .unwrap_or_else(|error| String::from_utf8_lossy(error.as_bytes()).into_owned());
-    Ok((text, length > MAX_TEXT_BYTES))
+    Ok((decode(bytes), length > MAX_TEXT_BYTES))
 }
 
 /// Shared, immutable view of the wrapped rows for the list's item renderer.
