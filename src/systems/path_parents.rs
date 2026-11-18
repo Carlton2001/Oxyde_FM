@@ -22,12 +22,12 @@ impl HeldParents {
         for ancestor in parent.ancestors().collect::<Vec<_>>().into_iter().rev() {
             handles.push(platform().hold_operation_directory(ancestor)?);
         }
-        let resolved = std::fs::canonicalize(parent)?;
+        let resolved = platform().canonical_path(parent)?;
         for ancestor in resolved.ancestors().collect::<Vec<_>>().into_iter().rev() {
             handles.push(platform().hold_operation_directory(ancestor)?);
         }
         let directory = platform().hold_resolved_operation_directory(&resolved)?;
-        if std::fs::canonicalize(parent)? != resolved {
+        if platform().canonical_path(parent)? != resolved {
             return Err(io::Error::other("File parent changed during the operation"));
         }
         Ok(Self {

@@ -522,6 +522,10 @@ pub trait Platform: Send + Sync {
     fn open_archive_source(&self, path: &std::path::Path, allow_changes: bool) -> std::io::Result<std::fs::File>;
     fn file_identity(&self, file: &std::fs::File) -> std::io::Result<FileIdentity>;
     fn retained_file_path(&self, file: &std::fs::File, fallback: &std::path::Path) -> std::io::Result<std::path::PathBuf>;
+    /// `std::fs::canonicalize`; Windows also resolves volumes the mount manager does not know.
+    fn canonical_path(&self, path: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
+        std::fs::canonicalize(path)
+    }
     fn system_executable(&self, executable: SystemExecutable) -> std::io::Result<std::path::PathBuf>;
     /// Holds an ordinary directory without following a reparse point. On Windows
     /// the handle denies deletion/renaming until it is dropped.
@@ -1224,6 +1228,8 @@ mod windows_archive_source;
 mod windows_broker_cancellation;
 #[cfg(target_os = "windows")]
 mod windows_file_copy;
+#[cfg(target_os = "windows")]
+mod windows_final_path;
 #[cfg(target_os = "windows")]
 mod windows_shell;
 #[cfg(target_os = "windows")]
