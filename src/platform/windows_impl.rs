@@ -144,7 +144,10 @@ impl Platform for WindowsPlatform {
     fn file_identity(&self, file: &std::fs::File) -> std::io::Result<super::FileIdentity> {
         super::windows_archive_source::identity(file)
     }
-    fn retained_file_path(&self, file: &std::fs::File, _fallback: &std::path::Path) -> std::io::Result<std::path::PathBuf> { super::windows_archive_source::path(file) }
+    fn retained_file_path(&self, file: &std::fs::File, fallback: &std::path::Path) -> std::io::Result<std::path::PathBuf> { super::windows_final_path::of_handle(file, fallback) }
+    fn canonical_path(&self, path: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
+        super::windows_final_path::canonicalize(path)
+    }
     fn system_executable(&self, executable: super::SystemExecutable) -> std::io::Result<std::path::PathBuf> {
         super::windows_executables::resolve(executable)
     }
@@ -522,6 +525,9 @@ impl Platform for WindowsPlatform {
     fn is_network_path(&self, path: &std::path::Path) -> bool {
         super::hardware::is_network_path(path)
     }
+    fn has_recycle_bin(&self, path: &std::path::Path) -> bool {
+        super::windows_recycle_bin::available(path)
+    }
 
     fn list_network_vicinity(&self) -> Result<Vec<crate::models::FileEntry>, String> {
         super::network::list_network_vicinity().map_err(|error| error.to_string())
@@ -767,7 +773,8 @@ impl Platform for WindowsPlatform {
                 self.system_executable(super::SystemExecutable::Explorer)
                     .map_err(|error| error.to_string())?,
             );
-            command.arg(path);
+            super::windows_process_launch::explorer_path_argument(&mut command, path)
+                .map_err(|e| e.to_string())?;
             super::windows_process_launch::spawn(command).map_err(|e| e.to_string())?;
         }
         Ok(())

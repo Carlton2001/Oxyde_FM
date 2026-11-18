@@ -108,3 +108,33 @@ fn portable_process_routes_configuration_caches_and_environment_locally() {
     assert_eq!(std::fs::read(root.path().join("data/config.json")).unwrap(), b"portable session");
     assert_eq!(std::fs::read_dir(unrelated.path()).unwrap().count(), 0);
 }
+
+#[cfg(windows)]
+#[test]
+fn junctions_in_application_roots_resolve_to_plain_paths() {
+    let root = tempfile::tempdir().unwrap();
+    let real = root.path().join("real");
+    std::fs::create_dir(&real).unwrap();
+    let link = root.path().join("link");
+    let status = std::process::Command::new("cmd")
+        .args(["/C", "mklink", "/J"])
+        .arg(&link)
+        .arg(&real)
+        .output()
+        .unwrap();
+    assert!(status.status.success());
+    let resolved = real_path(&link);
+    assert!(!resolved.to_string_lossy().starts_with(r"\\?\"));
+    assert_eq!(std::fs::canonicalize(&resolved).unwrap(), std::fs::canonicalize(&real).unwrap());
+    assert_eq!(resolved.file_name(), real.file_name());
+    // A missing root stays as given.
+    assert_eq!(real_path(&root.path().join("missing")), root.path().join("missing"));
+}
+
+#[cfg(windows)]
+#[test]
+fn verbatim_prefixes_stay_where_the_plain_form_names_another_file() {
+    assert_eq!(without_verbatim_prefix(PathBuf::from(r"\\?\C:\folder\name.")), PathBuf::from(r"\\?\C:\folder\name."));
+    assert_eq!(without_verbatim_prefix(PathBuf::from(r"\\?\C:\folder\name")), PathBuf::from(r"C:\folder\name"));
+    assert_eq!(without_verbatim_prefix(PathBuf::from(r"\\?\UNC\server\share")), PathBuf::from(r"\\?\UNC\server\share"));
+}

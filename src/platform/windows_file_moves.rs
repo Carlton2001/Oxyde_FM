@@ -4,9 +4,10 @@ use std::os::windows::io::AsRawHandle;
 use std::path::Path;
 use windows::Win32::Foundation::{GENERIC_READ, HANDLE};
 use windows::Win32::Storage::FileSystem::{
-    DELETE, FILE_BASIC_INFO, FILE_DISPOSITION_INFO, FILE_READ_ATTRIBUTES, FILE_RENAME_INFO,
+    DELETE, FILE_BASIC_INFO, FILE_DISPOSITION_FLAG_DELETE, FILE_DISPOSITION_FLAG_POSIX_SEMANTICS,
+    FILE_DISPOSITION_INFO, FILE_DISPOSITION_INFO_EX, FILE_DISPOSITION_INFO_EX_FLAGS, FILE_READ_ATTRIBUTES, FILE_RENAME_INFO,
     FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_WRITE_ATTRIBUTES, FileBasicInfo,
-    FileDispositionInfo, SetFileInformationByHandle,
+    FileDispositionInfo, FileDispositionInfoEx, SetFileInformationByHandle,
 };
 
 #[repr(C)]
@@ -267,6 +268,29 @@ pub(super) fn rename_relative(
 }
 
 pub(super) fn remove(file: &File) -> Result<()> {
+    // POSIX semantics take the name away at once, even while Defender, the
+    // indexer or a thumbnailer still holds the object, so its parent can be
+    // emptied (NTFS since Windows 10 1607). Read-only files stay refused.
+    let posix = FILE_DISPOSITION_INFO_EX {
+        Flags: FILE_DISPOSITION_INFO_EX_FLAGS(
+            FILE_DISPOSITION_FLAG_DELETE.0 | FILE_DISPOSITION_FLAG_POSIX_SEMANTICS.0,
+        ),
+    };
+    let result = unsafe {
+        SetFileInformationByHandle(
+            HANDLE(file.as_raw_handle()),
+            FileDispositionInfoEx,
+            (&posix as *const FILE_DISPOSITION_INFO_EX).cast(),
+            std::mem::size_of_val(&posix) as u32,
+        )
+        .map_err(io_error)
+    };
+    match result {
+        // Older systems and other file systems (FAT, exFAT, network shares)
+        // only know the legacy disposition.
+        Err(error) if matches!(error.raw_os_error(), Some(1 | 50 | 87)) => {}
+        result => return result,
+    }
     let info = FILE_DISPOSITION_INFO { DeleteFile: true };
     unsafe {
         SetFileInformationByHandle(
@@ -278,3 +302,7 @@ pub(super) fn remove(file: &File) -> Result<()> {
         .map_err(io_error)
     }
 }
+
+#[cfg(test)]
+#[path = "windows_file_moves/tests/disposition.rs"]
+mod tests;

@@ -522,6 +522,10 @@ pub trait Platform: Send + Sync {
     fn open_archive_source(&self, path: &std::path::Path, allow_changes: bool) -> std::io::Result<std::fs::File>;
     fn file_identity(&self, file: &std::fs::File) -> std::io::Result<FileIdentity>;
     fn retained_file_path(&self, file: &std::fs::File, fallback: &std::path::Path) -> std::io::Result<std::path::PathBuf>;
+    /// `std::fs::canonicalize`; Windows also resolves volumes the mount manager does not know.
+    fn canonical_path(&self, path: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
+        std::fs::canonicalize(path)
+    }
     fn system_executable(&self, executable: SystemExecutable) -> std::io::Result<std::path::PathBuf>;
     /// Holds an ordinary directory without following a reparse point. On Windows
     /// the handle denies deletion/renaming until it is dropped.
@@ -819,6 +823,12 @@ pub trait Platform: Send + Sync {
     }
 
     fn is_network_path(&self, path: &std::path::Path) -> bool;
+    /// Whether deleting on this path's volume can recycle, known before asking:
+    /// Windows has no Recycle Bin on shares, SUBST, removable or optical drives.
+    /// Blocking; call on a background worker.
+    fn has_recycle_bin(&self, _path: &std::path::Path) -> bool {
+        true
+    }
     /// Blocking network operations; call on a background worker.
     fn map_network_drive(&self, letter: String, path: String, reconnect: bool, username: Option<String>, password: Option<String>) -> Result<(), String>;
     fn disconnect_network_drive(&self, path: String, force: bool) -> Result<(), NetworkDisconnectError>;
@@ -1224,6 +1234,10 @@ mod windows_archive_source;
 mod windows_broker_cancellation;
 #[cfg(target_os = "windows")]
 mod windows_file_copy;
+#[cfg(target_os = "windows")]
+mod windows_final_path;
+#[cfg(target_os = "windows")]
+mod windows_recycle_bin;
 #[cfg(target_os = "windows")]
 mod windows_shell;
 #[cfg(target_os = "windows")]

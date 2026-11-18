@@ -121,16 +121,14 @@ pub(super) fn copy(
             "Copy source is not an ordinary file",
         ));
     }
-    let source = wide(&std::fs::canonicalize(source)?)?;
+    let source = wide(&super::windows_final_path::canonicalize(source)?)?;
     let name = destination
         .file_name()
         .ok_or_else(|| io::Error::other("Copy destination has no name"))?;
-    let destination = std::fs::canonicalize(
-        destination
-            .parent()
-            .ok_or_else(|| io::Error::other("Copy destination has no parent"))?,
-    )?
-    .join(name);
+    let parent = destination
+        .parent()
+        .ok_or_else(|| io::Error::other("Copy destination has no parent"))?;
+    let destination = super::windows_final_path::canonicalize(parent)?.join(name);
     let target = wide(&destination)?;
     let mut context = Context {
         created,

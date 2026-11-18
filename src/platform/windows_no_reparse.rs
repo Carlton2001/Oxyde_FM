@@ -10,6 +10,9 @@ use std::{
     },
     path::Path,
 };
+
+mod mounted;
+
 #[repr(C)]
 struct UnicodeString {
     length: u16,
@@ -55,39 +58,76 @@ pub(super) fn open(
     disposition: u32,
 ) -> io::Result<File> {
     let absolute = std::path::absolute(path)?;
-    // One native lookup where the kernel accepts drive links (Windows 11);
-    // Windows 10 walks from the volume root directly.
-    match drive_links_refused() {
-        Some(true) => open_by_components(&absolute, directory, access, sharing, disposition),
-        Some(false) => open_name(native_name(&absolute), std::ptr::null_mut(), Some(directory), access, sharing, disposition, true),
-        // Unknown kernel: a refusal may be the drive link or a real reparse
-        // point, and the walk decides.
-        None => match open_name(native_name(&absolute), std::ptr::null_mut(), Some(directory), access, sharing, disposition, true) {
-            Err(error) if error.raw_os_error() == Some(ERROR_REPARSE_POINT_ENCOUNTERED) => {
-                open_by_components(&absolute, directory, access, sharing, disposition)
-            }
-            result => result,
+    match open_absolute(&absolute, directory, access, sharing, disposition) {
+        Err(error) if refuses_reparse(&error) => match mounted::rebase(&absolute) {
+            Some(rebased) => open_absolute(&rebased, directory, access, sharing, disposition),
+            None => Err(error),
         },
+        result => result,
+    }
+}
+
+fn refuses_reparse(error: &io::Error) -> bool {
+    error.raw_os_error() == Some(ERROR_REPARSE_POINT_ENCOUNTERED)
+        || error.get_ref().is_some_and(|inner| inner.to_string() == REPARSE_OBJECT_REFUSED)
+}
+
+const REPARSE_OBJECT_REFUSED: &str = "Native lookup refuses a reparse object";
+
+fn open_absolute(
+    absolute: &Path,
+    directory: bool,
+    access: u32,
+    sharing: u32,
+    disposition: u32,
+) -> io::Result<File> {
+    // Windows 10 walks from the volume root directly, and so does a kernel
+    // without OBJ_DONT_REPARSE, whose lookups must stay single components.
+    if matches!(kernel(), Kernel::DriveLinksRefused | Kernel::NoDontReparse) {
+        return open_by_components(absolute, directory, access, sharing, disposition);
+    }
+    // One native lookup elsewhere. Even where `\??\C:` is accepted (Windows 11),
+    // other links can be refused (`\??\UNC`, mapped drives): a refusal may be
+    // such a link or a real reparse point, and the walk decides.
+    match open_name(native_name(absolute), std::ptr::null_mut(), Some(directory), access, sharing, disposition, true) {
+        Err(error) if error.raw_os_error() == Some(ERROR_REPARSE_POINT_ENCOUNTERED) => {
+            open_by_components(absolute, directory, access, sharing, disposition)
+        }
+        result => result,
     }
 }
 
 const ERROR_REPARSE_POINT_ENCOUNTERED: i32 = 4395;
+const ERROR_INVALID_PARAMETER: i32 = 87;
 
-/// Windows 10 refuses the `\??\C:` object manager link under OBJ_DONT_REPARSE.
-/// A volume root is never a reparse point, so that refusal on the system
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Kernel {
+    /// Windows 11: `\??\C:` resolves under OBJ_DONT_REPARSE.
+    DriveLinksAccepted,
+    /// Windows 10 refuses the `\??\C:` object manager link under OBJ_DONT_REPARSE.
+    DriveLinksRefused,
+    /// Kernels older than OBJ_DONT_REPARSE reject the unknown attribute.
+    NoDontReparse,
+    Unknown,
+}
+
+/// A volume root is never a reparse point, so the lookup of the system
 /// drive's root tells the kernel's behavior, probed once per process.
-fn drive_links_refused() -> Option<bool> {
-    static REFUSED: std::sync::OnceLock<Option<bool>> = std::sync::OnceLock::new();
-    *REFUSED.get_or_init(|| {
+fn kernel() -> Kernel {
+    static KERNEL: std::sync::OnceLock<Kernel> = std::sync::OnceLock::new();
+    *KERNEL.get_or_init(|| {
         let drive = std::env::var_os("SystemDrive").unwrap_or_else(|| "C:".into());
         let mut root = std::ffi::OsString::from(&drive);
         root.push("\\");
         let root = std::path::PathBuf::from(root);
         // FILE_READ_ATTRIBUTES, all sharing, FILE_OPEN.
-        match open_name(native_name(&root), std::ptr::null_mut(), Some(true), 0x80, 7, 1, true) {
-            Ok(_) => Some(false),
-            Err(error) if error.raw_os_error() == Some(ERROR_REPARSE_POINT_ENCOUNTERED) => Some(true),
-            Err(_) => None,
+        match create_file(native_name(&root), std::ptr::null_mut(), Some(true), 0x80, 7, 1, true, 0x80) {
+            Ok(_) => Kernel::DriveLinksAccepted,
+            Err(error) => match error.raw_os_error() {
+                Some(ERROR_REPARSE_POINT_ENCOUNTERED) => Kernel::DriveLinksRefused,
+                Some(ERROR_INVALID_PARAMETER) => Kernel::NoDontReparse,
+                _ => Kernel::Unknown,
+            },
         }
     })
 }
@@ -276,13 +316,46 @@ fn open_name(
 
 #[allow(clippy::too_many_arguments)]
 fn open_name_with_attributes(
-    mut name: Vec<u16>,
+    name: Vec<u16>,
     root: *mut c_void,
     directory: Option<bool>,
     access: u32,
     sharing: u32,
     disposition: u32,
     reject_reparse: bool,
+    file_attributes: u32,
+) -> io::Result<(File, bool)> {
+    // Without OBJ_DONT_REPARSE, `open` only looks up single components below
+    // a retained parent: OPEN_REPARSE_POINT and the check below then refuse
+    // the same objects.
+    let dont_reparse = reject_reparse && kernel() != Kernel::NoDontReparse;
+    let (file, created) = create_file(
+        name,
+        root,
+        directory,
+        access,
+        sharing,
+        disposition,
+        dont_reparse,
+        file_attributes,
+    )?;
+    // OPEN_REPARSE_POINT can return a final reparse object without following it.
+    // Refuse that object too, including directories opened with FILE_OPEN_IF.
+    if reject_reparse && file.metadata()?.file_attributes() & 0x400 != 0 {
+        return Err(io::Error::other(REPARSE_OBJECT_REFUSED));
+    }
+    Ok((file, created))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn create_file(
+    mut name: Vec<u16>,
+    root: *mut c_void,
+    directory: Option<bool>,
+    access: u32,
+    sharing: u32,
+    disposition: u32,
+    dont_reparse: bool,
     file_attributes: u32,
 ) -> io::Result<(File, bool)> {
     if name.contains(&0) {
@@ -307,7 +380,7 @@ fn open_name_with_attributes(
         root,
         name: &mut unicode,
         // OBJ_CASE_INSENSITIVE | OBJ_DONT_REPARSE, checked during native lookup.
-        attributes: 0x40 | if reject_reparse { 0x1000 } else { 0 },
+        attributes: 0x40 | if dont_reparse { 0x1000 } else { 0 },
         security: std::ptr::null_mut(),
         qos: std::ptr::null_mut(),
     };
@@ -348,11 +421,6 @@ fn open_name_with_attributes(
         ));
     }
     let file = unsafe { File::from_raw_handle(handle) };
-    // OPEN_REPARSE_POINT can return a final reparse object without following it.
-    // Refuse that object too, including directories opened with FILE_OPEN_IF.
-    if reject_reparse && file.metadata()?.file_attributes() & 0x400 != 0 {
-        return Err(io::Error::other("Native lookup refuses a reparse object"));
-    }
     Ok((file, status.information == 2)) // FILE_CREATED, from this native call.
 }
 

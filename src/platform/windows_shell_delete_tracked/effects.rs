@@ -16,10 +16,7 @@ const MAX_ITEMS: usize = 65_536;
 const MAX_NAMES: usize = 8 * 1024 * 1024;
 
 fn key(path: &Path) -> String {
-    path.to_string_lossy()
-        .replace('/', "\\")
-        .trim_start_matches("\\\\?\\")
-        .to_owned()
+    crate::utils::path_text::without_verbatim_prefix(&path.to_string_lossy().replace('/', "\\"))
 }
 pub(super) fn path(item: Ref<IShellItem>) -> Result<PathBuf, String> {
     let raw = unsafe {
@@ -41,6 +38,9 @@ pub(super) struct Effects {
     pending: HashMap<String, (PathBuf, Option<HistoryFileIdentity>)>,
     completed: HashMap<String, (HistoryDeletedItem, Option<PathBuf>, bool)>,
     names: usize,
+    /// Descendants past the budget or without an identity proof: the deletion
+    /// goes on (stopping halfway would help no one), unrecorded.
+    untracked: usize,
 }
 impl Effects {
     pub(super) fn pre(&mut self, root: &Path, item: Ref<IShellItem>) -> Result<(), String> {
@@ -58,20 +58,23 @@ impl Effects {
         if self.pending.len() + self.completed.len() >= MAX_ITEMS
             || name.len() > MAX_NAMES.saturating_sub(self.names)
         {
-            return Err("Deletion receipt budget exceeded; remaining items were stopped".into());
+            self.untracked += 1;
+            return Ok(());
         }
         let proof = (|| -> std::io::Result<_> {
             let parents = HeldParents::new(&path)?;
             let file = super::super::platform()
                 .track_source_item(parents.directory(), &parents.resolved_path(&path)?)?;
             HistoryFileIdentity::from_file(&file)
-        })()
-        .map_err(|e| {
-            format!(
-                "Cannot capture deletion receipt for {}: {e}",
-                path.display()
-            )
-        })?;
+        })();
+        let proof = match proof {
+            Ok(proof) => proof,
+            Err(error) => {
+                log::warn!("Cannot capture deletion receipt for {}: {error}", path.display());
+                self.untracked += 1;
+                return Ok(());
+            }
+        };
         self.names += name.len();
         self.pending.insert(name, (path, Some(proof)));
         Ok(())
@@ -107,6 +110,9 @@ impl Effects {
             self.names -= name.len();
         }
         Ok(())
+    }
+    pub(super) fn untracked(&self) -> usize {
+        self.untracked
     }
     pub(super) fn take(
         &mut self,
@@ -169,3 +175,7 @@ impl Effects {
         roots
     }
 }
+
+#[cfg(test)]
+#[path = "tests/receipt_keys.rs"]
+mod tests;

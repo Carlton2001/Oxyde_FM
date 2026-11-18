@@ -1,4 +1,4 @@
-use super::shell_selection;
+use super::{shell_path, shell_selection};
 use crate::platform::windows_com::ComApartment;
 
 #[test]
@@ -121,4 +121,18 @@ fn verify_properties_identities(same_parent: bool) {
             );
         }
     }
+}
+
+// `notes.` and `notes` are two files; the Shell would only ever reach `notes`.
+#[test]
+fn names_the_shell_would_trim_are_refused() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(root.path().join("notes"), b"twin").unwrap();
+    for name in ["notes.", "notes ", r"dir.\file.txt"] {
+        let path = root.path().join(name).to_string_lossy().into_owned();
+        assert!(shell_path(&path).is_err(), "{name}");
+        assert!(shell_selection(&[path]).is_err(), "{name}");
+    }
+    let plain = root.path().join("notes").to_string_lossy().into_owned();
+    assert_eq!(shell_path(&plain).unwrap(), root.path().join("notes"));
 }

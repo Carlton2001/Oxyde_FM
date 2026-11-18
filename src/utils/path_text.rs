@@ -79,6 +79,25 @@ pub fn display(text: &str) -> String {
     decode(text).to_string_lossy().into_owned()
 }
 
+/// A Windows extended-length path in its usual form: `\\?\C:\…` as `C:\…` and
+/// `\\?\UNC\server\share\…` as `\\server\share\…`. Other verbatim forms
+/// (`\\?\Volume{…}\…`) have no usual form and stay as they are.
+pub fn without_verbatim_prefix(text: &str) -> String {
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{rest}");
+    }
+    match text.strip_prefix(r"\\?\") {
+        Some(rest) if rest.as_bytes().get(1) == Some(&b':') && rest.as_bytes()[0].is_ascii_alphabetic() => {
+            rest.to_owned()
+        }
+        _ => text.to_owned(),
+    }
+}
+
 #[cfg(test)]
 #[path = "path_text/tests/encoding.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "path_text/tests/verbatim.rs"]
+mod verbatim_tests;

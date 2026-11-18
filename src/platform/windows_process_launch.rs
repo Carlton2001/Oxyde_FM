@@ -58,6 +58,23 @@ pub(super) fn spawn_update(setup: &std::path::Path) -> io::Result<Child> {
     spawn(command)
 }
 
+/// Explorer splits its command line on commas, semicolons and equal signs as
+/// well as spaces: such a path is quoted, without a trailing separator that
+/// would escape the closing quote.
+pub(super) fn explorer_path_argument(command: &mut Command, path: &str) -> io::Result<()> {
+    use std::os::windows::process::CommandExt;
+    if path.contains('"') {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Path contains a quote"));
+    }
+    if path.contains([' ', '\t', ',', ';', '=']) {
+        let trimmed = path.trim_end_matches('\\');
+        command.raw_arg(format!("\"{trimmed}\""));
+    } else {
+        command.arg(path);
+    }
+    Ok(())
+}
+
 /// The native callers of this helper use Command::output's default streams.
 pub(super) fn output(mut command: Command) -> io::Result<Output> {
     command
@@ -70,6 +87,10 @@ pub(super) fn output(mut command: Command) -> io::Result<Output> {
 #[cfg(test)]
 #[path = "windows_process_launch/tests/cross_inherit_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "windows_process_launch/tests/explorer_arguments.rs"]
+mod explorer_argument_tests;
 
 #[cfg(test)]
 #[path = "../../tests/support/native_probe.rs"]

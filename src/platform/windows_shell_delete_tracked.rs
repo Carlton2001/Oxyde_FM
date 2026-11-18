@@ -29,6 +29,9 @@ impl Apartment {
 #[cfg(test)]
 #[path = "windows_shell_delete_tracked/tests/partial_effects.rs"]
 mod partial_effect_tests;
+#[cfg(test)]
+#[path = "windows_shell_delete_tracked/tests/root_alias.rs"]
+mod root_alias_tests;
 impl Drop for Apartment {
     fn drop(&mut self) {
         unsafe {
@@ -42,6 +45,8 @@ struct Receipt {
     /// The item is sent to the Recycle Bin rather than deleted.
     recycle: bool,
     preflight: bool,
+    /// The root as the Shell reported it, when not in the selected form.
+    root_alias: Option<IShellItem>,
     completed: bool,
     error: Option<String>,
     effects: effects::Effects,
@@ -85,6 +90,10 @@ impl Receipt {
         if !self.completed && self.error.is_none() {
             self.fail("Windows did not provide a completion receipt for the selected item".into());
         }
+        let untracked = self.effects.untracked();
+        if let Some(error) = self.error.as_mut().filter(|_| !self.completed && untracked > 0) {
+            error.push_str(&format!("; {untracked} items inside were not tracked and may be deleted"));
+        }
         ShellDeleteOutcome {
             completed: self.completed,
             error: self.error.take(),
@@ -98,6 +107,21 @@ impl Receipt {
 /// without a Recycle Bin (network share, SUBST drive) never gets that flag.
 fn refuses_recycling(recycle: bool, flags: u32) -> bool {
     recycle && flags & TSF_DELETE_RECYCLE_IF_POSSIBLE.0 as u32 == 0
+}
+
+/// Two paths open the same object, links themselves not followed.
+fn same_object(first: &Path, second: &Path) -> bool {
+    use std::os::windows::fs::OpenOptionsExt;
+    let open = |path: &Path| {
+        std::fs::OpenOptions::new()
+            .access_mode(0)
+            .share_mode(7)
+            // FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT
+            .custom_flags(0x02000000 | 0x00200000)
+            .open(path)
+            .and_then(|file| super::platform().file_identity(&file))
+    };
+    matches!((open(first), open(second)), (Ok(first), Ok(second)) if first == second)
 }
 
 fn check_source(path: &Path, proof: Option<HistoryFileIdentity>) -> Result<(), String> {
@@ -147,7 +171,28 @@ impl DeleteSink_Impl {
     }
     fn root_item(&self, item: &Ref<IShellItem>) -> windows::core::Result<bool> {
         let item = item.ok()?;
-        Ok(unsafe { item.Compare(&self.root, SICHINT_CANONICAL.0 as u32)? } == 0)
+        if unsafe { item.Compare(&self.root, SICHINT_CANONICAL.0 as u32)? } == 0 {
+            return Ok(true);
+        }
+        let receipt = self.receipt.lock().unwrap_or_else(|p| p.into_inner());
+        Ok(match &receipt.root_alias {
+            Some(alias) => (unsafe { item.Compare(alias, SICHINT_CANONICAL.0 as u32)? }) == 0,
+            None => false,
+        })
+    }
+    /// Before its preflight, the root can come under another form (SUBST or
+    /// mapped drive, path through a junction): the same opened object.
+    fn root_alias(&self, item: &Ref<IShellItem>) -> windows::core::Result<bool> {
+        let shell_item = item.ok()?;
+        let reported = unsafe { shell_item.GetDisplayName(SIGDN_FILESYSPATH) }?;
+        let path = unsafe { reported.to_string() }.map(PathBuf::from);
+        unsafe { windows::Win32::System::Com::CoTaskMemFree(Some(reported.0.cast())) };
+        let Ok(path) = path else { return Ok(false) };
+        if !same_object(&path, &self.path) {
+            return Ok(false);
+        }
+        self.receipt.lock().unwrap_or_else(|p| p.into_inner()).root_alias = Some(shell_item.clone());
+        Ok(true)
     }
     fn record_failure(&self, error: String) -> Error {
         self.receipt
@@ -173,10 +218,12 @@ impl IFileOperationProgressSink_Impl for DeleteSink_Impl {
     }
     fn PreDeleteItem(&self, flags: u32, item: Ref<IShellItem>) -> windows::core::Result<()> {
         self.checkpoint()?;
-        if self
+        let preflight = self.receipt.lock().unwrap_or_else(|p| p.into_inner()).preflight;
+        let root = self
             .root_item(&item)
-            .map_err(|e| self.record_failure(e.to_string()))?
-        {
+            .and_then(|root| Ok(root || (!preflight && self.root_alias(&item)?)))
+            .map_err(|e| self.record_failure(e.to_string()))?;
+        if root {
             let recycle = self.receipt.lock().unwrap_or_else(|p| p.into_inner()).recycle;
             if refuses_recycling(recycle, flags) {
                 // Keep the item: Windows would destroy it instead.

@@ -73,12 +73,11 @@ fn next_name(reader: &File, buffer: &mut [u32], restart: bool) -> io::Result<Opt
             restart as u8,
         )
     };
+    if end_of_listing(result, restart) {
+        return Ok(None);
+    }
     if result < 0 {
-        let error = unsafe { RtlNtStatusToDosError(result) };
-        if error == 18 {
-            return Ok(None);
-        } // ERROR_NO_MORE_FILES
-        return Err(io::Error::from_raw_os_error(error as i32));
+        return Err(io::Error::from_raw_os_error(unsafe { RtlNtStatusToDosError(result) } as i32));
     }
     let size = status.information;
     if !(12..=capacity).contains(&size) {
@@ -102,6 +101,15 @@ fn next_name(reader: &File, buffer: &mut [u32], restart: bool) -> io::Result<Opt
         .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
         .collect();
     Ok(Some(OsString::from_wide(&wide)))
+}
+
+/// STATUS_NO_MORE_FILES ends every listing. Redirectors, WinFsp or Dokan
+/// answer the first query of an empty folder (without `.` and `..`) with
+/// STATUS_NO_SUCH_FILE instead.
+fn end_of_listing(status: i32, restart: bool) -> bool {
+    const STATUS_NO_MORE_FILES: u32 = 0x8000_0006;
+    const STATUS_NO_SUCH_FILE: u32 = 0xC000_000F;
+    status as u32 == STATUS_NO_MORE_FILES || (restart && status as u32 == STATUS_NO_SUCH_FILE)
 }
 
 pub(super) fn enumerate(
@@ -281,3 +289,7 @@ fn traverse(
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "windows_file_tree/tests/listing_end.rs"]
+mod tests;
