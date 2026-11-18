@@ -352,6 +352,10 @@ impl Platform for WindowsPlatform {
                 PCWSTR::default(),
                 SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND,
             )
+            .or_else(|error| {
+                // Already emptied elsewhere: the Shell answers E_UNEXPECTED, and the goal is met.
+                if error.code() == windows::Win32::Foundation::E_UNEXPECTED { Ok(()) } else { Err(error) }
+            })
             .map_err(|error| format!("Failed to empty recycle bin: {error}"))
         }
     }
