@@ -319,7 +319,7 @@ impl Platform for WindowsPlatform {
         super::windows_file_moves::replace(file, destination)
     }
     fn list_trash_items(&self) -> Result<Vec<trash::TrashItem>, String> {
-        trash::os_limited::list().map_err(|error| error.to_string())
+        super::windows_trash::list_items()
     }
     fn list_trash_entries(&self) -> Result<Option<Vec<crate::models::TrashEntry>>, String> {
         super::windows_trash::listing::list().map(Some)
