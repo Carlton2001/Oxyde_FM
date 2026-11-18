@@ -10,7 +10,7 @@ fn worker() -> PathBuf {
 }
 
 fn limits() -> Limits {
-    Limits { entries: 10, bytes: 16 * 1024 * 1024, depth: 64, seconds: 120 }
+    Limits { entries: 10, bytes: 16 * 1024 * 1024, depth: 64, seconds: 120, decoded: 16 * 1024 * 1024 }
 }
 
 fn entry(size: u64) -> Entry {
