@@ -430,6 +430,14 @@ impl OxydeApp {
             if let Some(previous) = previous {
                 previous.await;
             }
+            // A newer save is queued behind this one with a newer snapshot: a burst of
+            // changes (wheel notches, pane widths) then costs one write, not one each.
+            if this
+                .read_with(cx, |this, _| this.preferences_save_generation != generation)
+                .unwrap_or(false)
+            {
+                return;
+            }
             log::info!("preferences write started; generation={generation}");
             let result = cx
                 .background_executor()
