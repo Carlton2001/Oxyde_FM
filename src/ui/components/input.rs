@@ -1035,26 +1035,29 @@ impl Element for TextInputElement {
             });
             let offset = input.horizontal_offset;
             window.with_content_mask(Some(ContentMask { bounds }), |window| {
+                // A lost device or a full atlas skips this frame's text instead of ending Oxyde.
                 if !selected_range.is_empty() {
-                    line.paint_background(
+                    if let Err(error) = line.paint_background(
                         bounds.origin + point(-offset, y_offset),
                         line_h,
                         TextAlign::Left,
                         None,
                         window,
                         cx,
-                    )
-                    .unwrap();
+                    ) {
+                        log::warn!("Cannot paint the input selection: {error}");
+                    }
                 }
-                line.paint(
+                if let Err(error) = line.paint(
                     bounds.origin + point(-offset, y_offset),
                     line_h,
                     TextAlign::Left,
                     None,
                     window,
                     cx,
-                )
-                .unwrap();
+                ) {
+                    log::warn!("Cannot paint the input text: {error}");
+                }
                 if focus_handle.is_focused(window) && cursor_visible && selected_range.is_empty() {
                     let cursor_x = line.x_for_index(cursor_index);
                     let cursor_h = line_h * 0.8;
