@@ -331,6 +331,8 @@ impl Platform for LinuxPlatform {
         let result = (|| {
             write(&mut file)?;
             file.sync_all()?;
+            #[cfg(target_os = "linux")]
+            let _lease = super::linux_preview_quota::admit_beside(&path, &temporary, file.metadata()?.len())?;
             drop(file);
             std::fs::rename(&temporary, &path)
         })();

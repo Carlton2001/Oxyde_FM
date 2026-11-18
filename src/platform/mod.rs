@@ -1229,6 +1229,8 @@ mod windows_icon_persistence;
 mod windows_preview_cache;
 #[cfg(target_os = "windows")]
 mod windows_preview_quota;
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+mod preview_cache_names;
 #[cfg(target_os = "windows")]
 mod windows_pdf_thumbnail;
 #[cfg(target_os = "windows")]
@@ -1345,6 +1347,8 @@ mod linux_file_names;
 mod linux_access;
 #[cfg(target_os = "linux")]
 mod linux_cache;
+#[cfg(target_os = "linux")]
+mod linux_preview_quota;
 #[cfg(target_os = "linux")]
 mod linux_file_tree;
 #[cfg(target_os = "linux")]
