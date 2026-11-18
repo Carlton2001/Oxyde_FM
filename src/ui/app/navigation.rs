@@ -611,6 +611,20 @@ impl OxydeApp {
                                 tab.reveal_pending_item(pane_width);
                                 super::rename::reveal_renamed_item(tab, pane_width);
                             }
+                            // A refresh of a folder already shown that fails for a passing
+                            // reason (network drop, busy volume) keeps its list; a folder
+                            // gone, refused or locked still says so.
+                            Err(error)
+                                if !reset_scroll
+                                    && matches!(tab.load_status, crate::ui::workspace::TabLoadStatus::Ready)
+                                    && !tab.files.is_empty()
+                                    && matches!(
+                                        crate::ui::errors::path_load_status(&error),
+                                        crate::ui::workspace::TabLoadStatus::Error(Message::PathLoadFailed)
+                                    ) =>
+                            {
+                                log::warn!("Cannot refresh {}, keeping its list: {error:?}", path);
+                            }
                             Err(error) => {
                                 tab.clear_files();
                                 tab.load_status = crate::ui::errors::path_load_status(&error);
