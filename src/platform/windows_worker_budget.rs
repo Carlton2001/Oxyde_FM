@@ -9,7 +9,9 @@ use windows::Win32::System::JobObjects::*;
 
 pub(super) const MEMORY_BYTES: usize = 5 * 512 * 1024 * 1024;
 const INTERACTIVE_RESERVE: usize = 512 * 1024 * 1024;
-const MAX_WORKERS: usize = 4;
+/// Five persistent sessions (image, PDF, audio, archive, icon) each hold one: one more
+/// must stay free for a one-shot Office preview, a listing or a video.
+const MAX_WORKERS: usize = 6;
 const ADMISSION_TIME: Duration = Duration::from_secs(30);
 
 #[derive(Default)]
