@@ -459,6 +459,47 @@ fn create_directory_inner(path: &Path, quality: &str) -> Result<(), std::io::Err
         .map_err(std::io::Error::other)
 }
 
+/// Creates the first free name among `names` in `parent`, a folder of an archive,
+/// with one extraction and one rebuild however many names are taken.
+pub fn create_numbered_directory(
+    parent: &Path,
+    names: &mut dyn Iterator<Item = String>,
+    quality: &str,
+) -> Result<PathBuf, std::io::Error> {
+    super::archive_recovery::scope(|| create_numbered_directory_inner(parent, names, quality))
+}
+fn create_numbered_directory_inner(
+    parent: &Path,
+    names: &mut dyn Iterator<Item = String>,
+    quality: &str,
+) -> Result<PathBuf, std::io::Error> {
+    let Some((archive, internal)) = virtual_destination(parent) else {
+        return Err(std::io::Error::other("The folder is not inside an archive"));
+    };
+    let locks = mutation_locks([archive.clone()]).map_err(std::io::Error::other)?;
+    let _lock = locks[0]
+        .lock()
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
+    if !writable(&archive) {
+        return Err(std::io::Error::other("This archive format is read-only"));
+    }
+    let workspace = ArchiveWorkspace::open(archive).map_err(std::io::Error::other)?;
+    for name in names {
+        let child = if internal.is_empty() { name.clone() } else { format!("{internal}/{name}") };
+        match workspace.create_directory(&child) {
+            Ok(()) => {
+                workspace
+                    .commit(&mutation_operation(quality))
+                    .map_err(std::io::Error::other)?;
+                return Ok(parent.join(name));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    }
+    Err(std::io::Error::new(std::io::ErrorKind::AlreadyExists, "Every folder name is taken"))
+}
+
 /// Opens a file from an archive using a cache that survives the shell launch.
 /// A new extraction gets its own directory; applications can keep files open.
 pub fn external_file(path: &Path) -> Result<PathBuf, crate::models::CommandError> {

@@ -37,6 +37,15 @@ pub fn create_archive_directory_with_quality(
     crate::systems::archive_workspace::create_directory(path, quality)
 }
 
+/// Creates the first free name among `names` in `parent`, a folder of an archive.
+pub fn create_numbered_archive_directory(
+    parent: &Path,
+    names: &mut dyn Iterator<Item = String>,
+    quality: &str,
+) -> Result<PathBuf, std::io::Error> {
+    crate::systems::archive_workspace::create_numbered_directory(parent, names, quality)
+}
+
 /// Checks the password remembered for `path` before the action it unlocks.
 pub fn verify_archive_password(path: &Path) -> Result<(), CommandError> {
     #[cfg(test)]
