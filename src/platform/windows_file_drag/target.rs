@@ -210,9 +210,14 @@ pub(in crate::platform) fn install_target(
         helper: unsafe { CoCreateInstance(&CLSID_DragDropHelper, None, CLSCTX_INPROC_SERVER) }.ok(),
     }
     .into();
-    unsafe {
-        RevokeDragDrop(window).map_err(|error| error.to_string())?;
-        RegisterDragDrop(window, &target).map_err(|error| error.to_string())
+    // Windows cannot swap targets in one call. Keep GPUI's target unless it is
+    // really gone, and retry once if the window is left without any.
+    match unsafe { RevokeDragDrop(window) } {
+        Err(error) if error.code() != DRAGDROP_E_NOTREGISTERED => return Err(error.to_string()),
+        _ => {}
     }
+    unsafe { RegisterDragDrop(window, &target) }
+        .or_else(|_| unsafe { RegisterDragDrop(window, &target) })
+        .map_err(|error| format!("{error}; this window accepts no file drop"))
     // GPUI revokes the replacement target when destroying its HWND.
 }
