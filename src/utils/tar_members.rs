@@ -23,8 +23,10 @@ pub(crate) fn members<'a, R: Read>(
 pub(crate) fn directory<R: Read>(entry: &mut tar::Entry<'_, R>) -> io::Result<Option<bool>> {
     let kind = entry.header().entry_type();
     if let Some(extensions) = entry.pax_extensions()? {
-        for extension in extensions {
-            if extension?.key_bytes().starts_with(b"GNU.sparse.") {
+        // The crate splits records on newlines, so a binary attribute value
+        // reads as malformed records, which it ignores everywhere else too.
+        for extension in extensions.flatten() {
+            if extension.key_bytes().starts_with(b"GNU.sparse.") {
                 return Err(io::Error::new(
                     io::ErrorKind::Unsupported,
                     "PAX sparse TAR members are not supported",

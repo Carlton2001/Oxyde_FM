@@ -92,23 +92,31 @@ fn pax(bytes: &[u8]) -> io::Result<(Option<String>, Option<u64>)> {
         if length <= space + 2 || length > rest.len() || rest[length - 1] != b'\n' {
             return Err(failure());
         }
-        let field = std::str::from_utf8(&rest[space + 1..length - 1]).map_err(|_| failure())?;
-        let (key, value) = field.split_once('=').ok_or_else(failure)?;
+        let field = &rest[space + 1..length - 1];
+        let equal = field.iter().position(|byte| *byte == b'=').ok_or_else(failure)?;
+        let key = std::str::from_utf8(&field[..equal]).map_err(|_| failure())?;
+        // Values may be binary (extended attributes): only decode the used ones.
+        let value = || std::str::from_utf8(&field[equal + 1..]).map_err(|_| failure());
         match key {
             "path" if path.is_none() => {
+                let value = value()?;
                 if value.len() > MAX_NAME {
                     return Err(failure());
                 }
                 path = Some(value.to_owned());
             }
-            "size" if size.is_none() => size = Some(value.parse().map_err(|_| failure())?),
+            "size" if size.is_none() => size = Some(value()?.parse().map_err(|_| failure())?),
             "path" | "size" => return Err(failure()),
-            _ => {
+            key if key.starts_with("GNU.sparse.") => {
                 return Err(io::Error::new(
                     io::ErrorKind::Unsupported,
-                    "Unsupported TAR extension for independent fidelity verification",
+                    "PAX sparse TAR members are not supported",
                 ))
             }
+            // Owners, times, comments and extended attributes change neither
+            // the member's name, type, size nor content; the codecs ignore
+            // them too (the date comes from the header).
+            _ => {}
         }
         offset += length;
     }
@@ -202,6 +210,7 @@ fn scan_impl(
     let mut names = HashSet::new();
     let mut name_bytes = 0usize;
     let mut long_name = None;
+    let mut long_link = None;
     let mut extended = None;
     let mut buffer = [0u8; 64 * 1024];
     loop {
@@ -214,7 +223,11 @@ fn scan_impl(
         file.read_exact(&mut header)?;
         offset += 512;
         if header == [0; 512] {
-            if long_name.is_some() || extended.is_some() || length.saturating_sub(offset) < 512 {
+            if long_name.is_some()
+                || long_link.is_some()
+                || extended.is_some()
+                || length.saturating_sub(offset) < 512
+            {
                 return Err(failure());
             }
             file.read_exact(&mut header)?;
@@ -266,7 +279,7 @@ fn scan_impl(
         let kind = header[156];
         if kind == b'g' {
             // A PAX global header describes the archive, not a member.
-            if canonical || long_name.is_some() || extended.is_some() {
+            if canonical || long_name.is_some() || long_link.is_some() || extended.is_some() {
                 return Err(failure());
             }
             offset = offset
@@ -276,11 +289,18 @@ fn scan_impl(
                 .ok_or_else(failure)?;
             continue;
         }
-        if matches!(kind, b'L' | b'x') {
-            if canonical && kind == b'x' {
+        if matches!(kind, b'L' | b'K' | b'x') {
+            if canonical && kind != b'L' {
                 return Err(failure());
             }
-            if size > (MAX_NAME * 2 + 1024) as u64 || long_name.is_some() || extended.is_some() {
+            // Extended attributes can make PAX records longer than a name.
+            let limit = if kind == b'x' { 64 * 1024 } else { MAX_NAME * 2 + 1024 };
+            let pending = match kind {
+                b'L' => long_name.is_some() || extended.is_some(),
+                b'K' => long_link.is_some(),
+                _ => long_name.is_some() || extended.is_some(),
+            };
+            if size > limit as u64 || pending {
                 return Err(failure());
             }
             let end = offset
@@ -290,10 +310,11 @@ fn scan_impl(
                 .ok_or_else(failure)?;
             let mut bytes = vec![0; size as usize];
             file.read_exact(&mut bytes)?;
-            if kind == b'L' {
-                long_name = Some(text(&bytes)?);
-            } else {
-                extended = Some(pax(&bytes)?);
+            match kind {
+                b'L' => long_name = Some(text(&bytes)?),
+                // A long link target only matters to links, which are refused.
+                b'K' => long_link = Some(()),
+                _ => extended = Some(pax(&bytes)?),
             }
             if canonical {
                 let padding = (end - offset - size) as usize;
@@ -311,6 +332,7 @@ fn scan_impl(
         }
         let directory = kind == b'5';
         let sparse = kind == b'S';
+        long_link = None;
         let mut name = long_name.take().unwrap_or(text(&header[..100])?);
         if &header[257..263] == b"ustar\0" && &header[263..265] == b"00" {
             let prefix = text(&header[345..500])?;

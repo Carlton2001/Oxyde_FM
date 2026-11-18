@@ -174,3 +174,45 @@ fn pax_sparse_members_and_links_are_refused() {
     let mut entries = members(archive.entries().unwrap());
     assert_eq!(directory(&mut entries.next().unwrap().unwrap()).unwrap(), None);
 }
+
+#[test]
+fn informational_pax_records_and_long_link_names_do_not_refuse_the_archive() {
+    let mut bytes = Vec::new();
+    // macOS and GNU tar --xattrs: times, owners and binary attribute values.
+    pax(
+        &mut bytes,
+        tar::EntryType::XHeader,
+        &[
+            ("path", "docs/chosen".as_bytes()),
+            ("mtime", b"123.456789"),
+            ("uname", b"user"),
+            ("SCHILY.xattr.com.apple.FinderInfo", &[0, 159, 255, 10, 61]),
+            ("LIBARCHIVE.xattr.user.note", b"bm90ZQ"),
+        ],
+    );
+    member(&mut bytes, "ignored", tar::EntryType::Regular, b"safe");
+    // A GNU long link name before a member that is not a link.
+    let mut long_link = header("././@LongLink", tar::EntryType::GNULongLink, 9);
+    long_link.set_cksum();
+    bytes.extend_from_slice(long_link.as_bytes());
+    padded(&mut bytes, b"elsewhere");
+    member(&mut bytes, "plain", tar::EntryType::Regular, b"plain");
+    let mut archive = file(bytes);
+    let decoded = decoded(archive.as_file_mut()).unwrap();
+    assert_eq!(decoded.len(), 2);
+    assert_eq!(decoded[0].0, "docs/chosen");
+    let verified = verified(archive.as_file_mut()).unwrap();
+    assert_eq!(
+        verified.iter().map(|record| (record.2, record.3)).collect::<Vec<_>>(),
+        decoded.iter().map(|record| (record.2, record.3)).collect::<Vec<_>>()
+    );
+    assert_eq!(verified[0].0.replace('\\', "/"), "docs/chosen");
+}
+
+#[test]
+fn pax_sparse_records_are_refused_by_the_verifier_too() {
+    let mut bytes = Vec::new();
+    pax(&mut bytes, tar::EntryType::XHeader, &[("GNU.sparse.major", b"1")]);
+    member(&mut bytes, "GNUSparseFile.0/file", tar::EntryType::Regular, b"map");
+    assert!(verified(file(bytes).as_file_mut()).is_err());
+}
