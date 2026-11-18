@@ -16,22 +16,35 @@ fn file() -> Option<PathBuf> {
     dirs::config_dir().map(|config| config.join("gtk-4.0").join("servers"))
 }
 
-/// The bookmark file, loaded when present, freed when dropped.
-struct Bookmarks(&'static Gio, *mut c_void);
+/// The bookmark file, loaded when present, freed when dropped. `whole` unless a file was
+/// there that could not be read: saving would then replace every server it lists.
+struct Bookmarks(&'static Gio, *mut c_void, bool);
 
 impl Bookmarks {
     fn load(gio: &'static Gio, path: &std::path::Path) -> Self {
         // SAFETY: a new bookmark file; a missing or unreadable file leaves it empty.
-        unsafe {
-            let bookmarks = Self(gio, (gio.g_bookmark_file_new)());
+        let (bookmarks, failure) = unsafe {
+            let bookmarks = (gio.g_bookmark_file_new)();
             let mut error: *mut GError = std::ptr::null_mut();
-            (gio.g_bookmark_file_load_from_file)(bookmarks.1, path_text(path).as_ptr(), &mut error);
+            (gio.g_bookmark_file_load_from_file)(bookmarks, path_text(path).as_ptr(), &mut error);
+            let failure = (!error.is_null()).then(|| borrowed((*error).message));
             free(gio, error);
-            bookmarks
+            (bookmarks, failure)
+        };
+        // GLib refuses an empty file, which lists nothing to lose.
+        let absent = std::fs::metadata(path).map_or_else(|error| error.kind() == std::io::ErrorKind::NotFound, |file| file.len() == 0);
+        let whole = failure.is_none() || absent;
+        if let (Some(failure), false) = (failure, whole) {
+            log::warn!("Cannot read recent servers, they are left unchanged: {failure}");
         }
+        Self(gio, bookmarks, whole)
     }
 
+    /// Writes the file unless it was read partly or not at all.
     fn save(&self, path: &std::path::Path) {
+        if !self.2 {
+            return;
+        }
         if let Some(parent) = path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }

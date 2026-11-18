@@ -101,6 +101,14 @@ fn recent_servers_round_trip_through_the_gtk_bookmark_file() {
     servers::forget("smb://nas/data");
     servers::forget("smb://unknown/");
     assert_eq!(servers::recent().len(), 1);
+    // A file GLib cannot read is never replaced; an empty one lists nothing to lose.
+    let file = config.join("gtk-4.0/servers");
+    std::fs::write(&file, b"<xbel version=\"1.0\"><bookmark href=").unwrap();
+    servers::remember("ftp://other/", None);
+    assert_eq!(std::fs::read(&file).unwrap(), b"<xbel version=\"1.0\"><bookmark href=");
+    std::fs::write(&file, b"").unwrap();
+    servers::remember("ftp://other/", None);
+    assert_eq!(servers::recent().len(), 1);
     let _ = std::fs::remove_dir_all(&config);
 }
 
