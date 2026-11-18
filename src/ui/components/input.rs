@@ -374,7 +374,8 @@ impl TextInput {
         if self.password {
             masked_byte_index(&self.content, index)
         } else {
-            index.min(self.content.len())
+            // The layout may predate the last keystroke: never land inside a character.
+            self.content.floor_char_boundary(index)
         }
     }
 
