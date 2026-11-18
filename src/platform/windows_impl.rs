@@ -846,8 +846,11 @@ impl Platform for WindowsPlatform {
                 ..Default::default()
             };
 
-            unsafe {
-                let _ = ShellExecuteExW(&mut info);
+            // The Shell's handlers need COM, and this thread ends right after the call.
+            let _apartment = super::windows_com::ComApartment::sta_or_existing();
+            info.fMask |= windows::Win32::UI::Shell::SEE_MASK_NOASYNC;
+            if let Err(error) = unsafe { ShellExecuteExW(&mut info) } {
+                log::warn!("Cannot show the properties of {normalized}: {error}");
             }
         });
     }
