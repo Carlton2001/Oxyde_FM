@@ -354,10 +354,13 @@ impl SourceWalk {
                         return Err(io::Error::new(io::ErrorKind::InvalidData, crate::models::error::ArchiveLimitFailure { kind: crate::models::error::ArchiveLimitKind::Entries, limit: limit as u64 }));
                     }
                 }
-                children.push(SelectedEntry::child(
-                    entry.path.join(name),
-                    Arc::clone(&directory),
-                )?);
+                match SelectedEntry::child(entry.path.join(name), Arc::clone(&directory)) {
+                    Ok(child) => children.push(child),
+                    // Removed between the listing and its capture (a browser cache, a build
+                    // folder): it is no longer part of the source, and the rest still is.
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                    Err(error) => return Err(error),
+                }
                 Ok(())
             })?;
             self.stack.extend(children.into_iter().rev());
@@ -369,6 +372,10 @@ impl SourceWalk {
         Ok(entry)
     }
 }
+
+#[cfg(test)]
+#[path = "source_selection/tests/vanished.rs"]
+mod vanished_tests;
 
 #[cfg(all(test, target_os = "windows"))]
 mod tests {
