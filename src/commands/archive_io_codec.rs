@@ -1168,3 +1168,6 @@ mod tests {
 
     mod passwords;
 }
+#[cfg(test)]
+#[path = "archive_io_codec/tests/large_zip.rs"]
+mod large_zip_tests;
