@@ -4,7 +4,7 @@
 use super::actions::volume_error;
 use super::udisks::{self, Block};
 use crate::platform::{MountedDiskImage, VolumeError};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 const FILESYSTEM: &str = "org.freedesktop.UDisks2.Filesystem";
@@ -93,14 +93,26 @@ fn probed_volumes(device: &str) -> Result<Vec<String>, VolumeError> {
     }
 }
 
+/// The image a backing file names: the kernel, and UDisks2 after it, add " (deleted)" to
+/// one deleted since.
+fn image_of(backing: &Path) -> &Path {
+    use std::os::unix::ffi::OsStrExt;
+    let bytes = backing.as_os_str().as_bytes();
+    Path::new(std::ffi::OsStr::from_bytes(bytes.strip_suffix(b" (deleted)").unwrap_or(bytes)))
+}
+
+/// Whether a loop device reads one of `images`.
+fn reads(block: &Block, images: &[PathBuf]) -> bool {
+    block.loop_backing.as_deref().is_some_and(|backing| images.iter().any(|image| image_of(Path::new(backing)) == image))
+}
+
 /// Unmounts every filesystem of each loop device reading the image, then detaches them.
+/// `path` is the image or the backing file UDisks2 names, which still finds the device once
+/// the image is deleted or moved.
 pub(super) fn unmount(path: &Path) -> Result<(), VolumeError> {
-    let path = std::fs::canonicalize(path).map_err(|error| VolumeError::Other(error.to_string()))?;
+    let images: Vec<PathBuf> = std::iter::once(image_of(path).to_path_buf()).chain(std::fs::canonicalize(path).ok()).collect();
     let blocks = udisks::blocks().map_err(volume_error)?;
-    let devices: Vec<&Block> = blocks
-        .iter()
-        .filter(|block| block.loop_backing.as_deref().is_some_and(|backing| Path::new(backing) == path))
-        .collect();
+    let devices: Vec<&Block> = blocks.iter().filter(|block| reads(block, &images)).collect();
     if devices.is_empty() {
         return Err(VolumeError::Other(format!("{} is not mounted", path.display())));
     }
@@ -118,10 +130,7 @@ pub(super) fn unmount(path: &Path) -> Result<(), VolumeError> {
     let deadline = Instant::now() + DETACH_TIMEOUT;
     loop {
         let blocks = udisks::blocks().map_err(volume_error)?;
-        let attached: Vec<&Block> = blocks
-            .iter()
-            .filter(|block| block.loop_backing.as_deref().is_some_and(|backing| Path::new(backing) == path))
-            .collect();
+        let attached: Vec<&Block> = blocks.iter().filter(|block| reads(block, &images)).collect();
         if attached.is_empty() {
             return Ok(());
         }
