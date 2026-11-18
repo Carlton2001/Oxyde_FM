@@ -430,7 +430,7 @@ pub fn list_drives(skip_hardware_info: bool) -> Vec<DriveInfo> {
                     .is_ok()
                     {
                         remote_path = Some(
-                            String::from_utf16_lossy(&buffer[..size as usize - 1])
+                            String::from_utf16_lossy(&buffer[..(size as usize).saturating_sub(1).min(buffer.len())])
                                 .trim_matches(char::from(0))
                                 .to_string(),
                         );
