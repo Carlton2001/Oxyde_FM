@@ -3,6 +3,14 @@ use crate::ui::paths::paths_match;
 use crate::ui::i18n::Message;
 use gpui::*;
 
+/// Whether a mounted image is the file at `path`, under any of its names
+/// (SUBST or mapped letter, folder mount point).
+pub(crate) fn image_named(image: &oxyde_lib::platform::MountedDiskImage, path: &str) -> bool {
+    std::iter::once(&image.image_path)
+        .chain(&image.aliases)
+        .any(|name| paths_match(name, path))
+}
+
 impl OxydeApp {
     pub(crate) fn mounted_image_for_drive(&self, path: &str) -> Option<String> {
         self.mounted_disk_images
@@ -113,7 +121,7 @@ impl OxydeApp {
             let roots = self
                 .mounted_disk_images
                 .iter()
-                .find(|image| paths_match(&image.image_path, &path))
+                .find(|image| image_named(image, &path))
                 .map(|image| image.roots.as_slice())
                 .unwrap_or_default();
             if image_operations_in_progress(&self.file_ops.list_operations(), roots) {

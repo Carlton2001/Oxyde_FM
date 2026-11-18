@@ -41,6 +41,10 @@ pub use thread_priority::{apply_thread_priority, follow_turbo_priority, RestoreN
 pub struct MountedDiskImage {
     pub image_path: String,
     pub roots: Vec<String>,
+    /// Other spellings of `image_path`: other mount points of its volume, SUBST
+    /// and mapped drive letters.
+    #[serde(default)]
+    pub aliases: Vec<String>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -320,10 +324,20 @@ pub enum InstanceClaim {
 
 /// Parent of the WSL distributions, which Explorer calls "Linux".
 pub const WSL_ROOT: &str = r"\\wsl.localhost";
+/// The only name of that root for the WSL built into Windows 10.
+pub const WSL_LEGACY_ROOT: &str = r"\\wsl$";
+
+/// The part of a WSL path after its root, under either name of the root.
+pub fn wsl_relative(path: &str) -> Option<&str> {
+    [WSL_ROOT, WSL_LEGACY_ROOT].into_iter().find_map(|root| {
+        let rest = path.get(root.len()..)?;
+        (path[..root.len()].eq_ignore_ascii_case(root) && rest.chars().next().is_none_or(|next| next == '\\'))
+            .then_some(rest)
+    })
+}
 
 pub fn is_wsl_path(path: &str) -> bool {
-    path.get(..WSL_ROOT.len()).is_some_and(|root| root.eq_ignore_ascii_case(WSL_ROOT))
-        && path[WSL_ROOT.len()..].chars().next().is_none_or(|next| next == '\\')
+    wsl_relative(path).is_some()
 }
 
 /// What delivered the running Oxyde, which decides how a newer release reaches it.
@@ -502,7 +516,9 @@ pub trait Platform: Send + Sync {
     fn run_archive_io_worker(&self, operation: crate::utils::archive_io_protocol::Operation,
         controls: &dyn Fn() -> std::io::Result<crate::utils::archive_io_protocol::Control>,
         handler: &mut dyn FnMut(crate::utils::archive_io_protocol::Frame) -> std::io::Result<crate::utils::archive_io_protocol::Frame>) -> std::io::Result<std::time::Duration>;
-    fn list_archive_directory(&self, path: &std::path::Path, internal: &str) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError>;
+    /// Lists one folder of an archive; `checkpoint` stops the wait and the worker
+    /// once the listing is no longer wanted.
+    fn list_archive_directory(&self, path: &std::path::Path, internal: &str, checkpoint: &dyn Fn() -> std::io::Result<()>) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError>;
     fn index_archive_contents(&self, path: &std::path::Path, checkpoint: &dyn Fn() -> std::io::Result<()>) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError>;
     /// Checks the password remembered for an encrypted archive in a confined worker.
     fn verify_archive_password(&self, path: &std::path::Path) -> Result<(), crate::models::CommandError>;

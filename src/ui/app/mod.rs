@@ -227,6 +227,8 @@ pub struct OxydeApp {
     pub(crate) next_file_request: u64,
     pub(crate) next_native_menu_request: u64,
     pub(crate) pending_file_requests: std::collections::HashMap<String, u64>,
+    /// Set when a tab's listing is superseded, so an archive listing gives up.
+    pub(crate) listing_cancels: std::collections::HashMap<String, std::sync::Arc<std::sync::atomic::AtomicBool>>,
     pending_preparations: std::collections::HashMap<String, (u64, Task<()>)>,
     next_preparation: u64,
     pub folder_has_subdirs: std::sync::Arc<std::collections::HashMap<String, bool>>,
@@ -470,6 +472,7 @@ impl OxydeApp {
             next_file_request: 0,
             next_native_menu_request: 0,
             pending_file_requests: std::collections::HashMap::new(),
+            listing_cancels: Default::default(),
             folder_has_subdirs: Default::default(),
             pending_preparations: Default::default(),
             next_preparation: 0,

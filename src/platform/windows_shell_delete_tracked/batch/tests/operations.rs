@@ -66,8 +66,27 @@ fn wrong_identity_prevents_deleting_the_replaced_item_and_reports_other_receipts
     assert!(files[0].0.exists());
     assert!(!outcomes[0].completed);
     assert!(outcomes[0].error.is_some());
+    // The refusal aborts the native operation; the siblings run in the next one.
+    for (path, _, _) in &files[1..] {
+        assert!(!path.exists(), "{path:?}");
+    }
     for ((path, _, _), outcome) in files.iter().zip(outcomes) {
         assert_eq!(outcome.completed, !path.exists());
+    }
+}
+
+#[test]
+fn a_file_that_vanished_before_the_batch_does_not_stop_the_others() {
+    let root = tempfile::tempdir().unwrap();
+    let files = files_with_count(root.path(), 4);
+    fs::remove_file(&files[2].0).unwrap();
+    let outcomes = run_files(files.clone(), control());
+    assert_eq!(outcomes.len(), files.len());
+    assert!(!outcomes[2].completed && outcomes[2].error.is_some());
+    for index in [0, 1, 3] {
+        assert!(outcomes[index].completed, "{index}: {:?}", outcomes[index].error);
+        assert!(outcomes[index].error.is_none(), "{index}: {:?}", outcomes[index].error);
+        assert!(!files[index].0.exists());
     }
 }
 

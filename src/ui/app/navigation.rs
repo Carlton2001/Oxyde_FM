@@ -4,7 +4,7 @@ use crate::ui::app::OxydeApp;
 use crate::ui::components::input::{InputAppearance, TextInput, TextInputOptions};
 use crate::ui::i18n::{I18nContext, Message};
 use gpui::*;
-use oxyde_lib::commands::io::list_dir_unsorted as list_dir;
+use oxyde_lib::commands::io::list_dir_unsorted_until as list_dir;
 
 mod trash_loading;
 
@@ -526,6 +526,10 @@ impl OxydeApp {
         let request_id = self.next_file_request;
         self.pending_file_requests
             .insert(tab_id.clone(), request_id);
+        let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        if let Some(previous) = self.listing_cancels.insert(tab_id.clone(), cancelled.clone()) {
+            previous.store(true, std::sync::atomic::Ordering::Release);
+        }
         self.cancel_remote_connection(&tab_id);
         let show_hidden = self.show_hidden;
         let show_system = self.show_system;
@@ -550,6 +554,7 @@ impl OxydeApp {
                     path.clone(),
                     Some(show_hidden),
                     Some(show_system),
+                    cancelled.clone(),
                 )
                 .await;
                 let result = match result {
@@ -576,6 +581,9 @@ impl OxydeApp {
                 };
                 let handle_for_subdirectory_check = handle.clone();
                 handle.update(&mut cx, move |this, cx| {
+                    if this.listing_cancels.get(&tab_id).is_some_and(|flag| std::sync::Arc::ptr_eq(flag, &cancelled)) {
+                        this.listing_cancels.remove(&tab_id);
+                    }
                     if this.pending_file_requests.get(&tab_id) != Some(&request_id) {
                         return;
                     }

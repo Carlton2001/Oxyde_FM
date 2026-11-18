@@ -24,8 +24,8 @@ impl Platform for LinuxPlatform {
     fn index_archive_contents(&self, path: &std::path::Path, checkpoint: &dyn Fn() -> std::io::Result<()>) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError> {
         super::linux_archive_list::index(path, checkpoint)
     }
-    fn list_archive_directory(&self, path: &std::path::Path, internal: &str) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError> {
-        super::linux_archive_list::list(path, internal)
+    fn list_archive_directory(&self, path: &std::path::Path, internal: &str, checkpoint: &dyn Fn() -> std::io::Result<()>) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError> {
+        super::linux_archive_list::list(path, internal, checkpoint)
     }
     fn verify_archive_password(&self, path: &std::path::Path) -> Result<(), crate::models::CommandError> {
         super::linux_archive_list::verify(path)

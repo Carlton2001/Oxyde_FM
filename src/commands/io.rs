@@ -9,15 +9,32 @@ pub async fn list_dir(
     show_hidden: Option<bool>,
     show_system: Option<bool>,
 ) -> Result<Vec<FileEntry>, CommandError> {
-    list_dir_impl(path, show_hidden, show_system, true).await
+    list_dir_impl(path, show_hidden, show_system, true, None).await
 }
 
 /// UI preparation supplies its own stable sort in the background.
 pub async fn list_dir_unsorted(path: String, show_hidden: Option<bool>, show_system: Option<bool>) -> Result<Vec<FileEntry>, CommandError> {
-    list_dir_impl(path, show_hidden, show_system, false).await
+    list_dir_impl(path, show_hidden, show_system, false, None).await
 }
 
-async fn list_dir_impl(path: String, show_hidden: Option<bool>, show_system: Option<bool>, ordered: bool) -> Result<Vec<FileEntry>, CommandError> {
+/// Like [`list_dir_unsorted`], given up once `cancelled` is set: an archive
+/// listing then stops waiting for its worker slot and stops its worker.
+pub async fn list_dir_unsorted_until(
+    path: String,
+    show_hidden: Option<bool>,
+    show_system: Option<bool>,
+    cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) -> Result<Vec<FileEntry>, CommandError> {
+    list_dir_impl(path, show_hidden, show_system, false, Some(cancelled)).await
+}
+
+async fn list_dir_impl(
+    path: String,
+    show_hidden: Option<bool>,
+    show_system: Option<bool>,
+    ordered: bool,
+    cancelled: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+) -> Result<Vec<FileEntry>, CommandError> {
     let show_hidden = show_hidden.unwrap_or(false);
     let show_system = show_system.unwrap_or(false);
 
@@ -71,7 +88,7 @@ async fn list_dir_impl(path: String, show_hidden: Option<bool>, show_system: Opt
     }
 
     tokio::task::spawn_blocking(move || {
-        list_dir_blocking(path, show_hidden, show_system, ordered)
+        list_dir_blocking(path, show_hidden, show_system, ordered, cancelled)
     })
     .await
     .map_err(|e| CommandError::IoError(e.to_string()))?
@@ -98,13 +115,21 @@ fn list_dir_blocking(
     show_hidden: bool,
     show_system: bool,
     ordered: bool,
+    cancelled: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 ) -> Result<Vec<FileEntry>, CommandError> {
     let path_buf = crate::utils::path_text::decode(&path);
     if let Some((archive, internal)) = crate::utils::archive::resolve_virtual_path(&path_buf) {
         if archive.is_file() {
-            let mut entries = crate::commands::archive::list_archive_contents(
+            let checkpoint = || match &cancelled {
+                Some(flag) if flag.load(std::sync::atomic::Ordering::Acquire) => Err(
+                    std::io::Error::new(std::io::ErrorKind::Interrupted, "Listing no longer wanted"),
+                ),
+                _ => Ok(()),
+            };
+            let mut entries = crate::commands::archive::list_archive_contents_checked(
                 archive.to_string_lossy().into_owned(),
                 internal,
+                &checkpoint,
             )?;
             if ordered { sort_file_entries(&mut entries); }
             return Ok(entries);

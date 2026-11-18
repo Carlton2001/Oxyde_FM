@@ -1,6 +1,20 @@
 use super::*;
 
 #[test]
+fn an_image_is_also_named_through_subst_and_mapped_letters() {
+    let substitutes = [
+        ("S:\\".to_string(), "C:\\Données".to_string()),
+        ("Z:\\".to_string(), "\\\\server\\share\\".to_string()),
+        ("T:\\".to_string(), "C:\\Don".to_string()),
+    ];
+    let paths = [
+        "C:\\DONNÉES\\Disques\\Été.iso".to_string(),
+        "\\\\SERVER\\Share\\x.iso".to_string(),
+    ];
+    assert_eq!(substituted(&paths, &substitutes), ["S:\\Disques\\Été.iso", "Z:\\x.iso"]);
+}
+
+#[test]
 fn roots_match_all_partitions_and_keep_disk_and_cdrom_numbers_distinct() {
     let disk = STORAGE_DEVICE_NUMBER {
         DeviceType: 7,

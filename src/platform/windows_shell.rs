@@ -37,6 +37,18 @@ fn canonical_verb(
     })
 }
 
+/// The command ID stored on a popup item, which GetMenuItemID does not report.
+fn popup_id(menu: windows::Win32::UI::WindowsAndMessaging::HMENU, position: i32) -> Option<u32> {
+    use windows::Win32::UI::WindowsAndMessaging::{GetMenuItemInfoW, MENUITEMINFOW, MIIM_ID};
+    let mut info = MENUITEMINFOW {
+        cbSize: std::mem::size_of::<MENUITEMINFOW>() as u32,
+        fMask: MIIM_ID,
+        ..Default::default()
+    };
+    unsafe { GetMenuItemInfoW(menu, u32::try_from(position).ok()?, true, &mut info) }.ok()?;
+    Some(info.wID)
+}
+
 fn localized_pin_label(label: &str, is_unpin: bool) -> bool {
     let clean: String = crate::utils::remove_accents(&label.to_lowercase())
         .chars()
@@ -282,8 +294,13 @@ pub(super) fn get_native_context_menu_items(
                     let is_new_menu =
                         label.to_lowercase().contains("nouveau") || label.to_lowercase() == "new";
 
-                    // Filter standard verbs
-                    let verb = canonical_verb(context_menu, id);
+                    // Filter standard verbs. GetMenuItemID has no ID for a popup, but
+                    // its item can carry one with a canonical verb, whatever the
+                    // language: "openas" for Open with.
+                    let verb = canonical_verb(
+                        context_menu,
+                        if submenu.is_invalid() { id } else { popup_id(hmenu, i).unwrap_or(id) },
+                    );
                     // "Open in Oxyde" (`windows_folder_handler/menu.rs`) means nothing inside Oxyde.
                     if verb.as_deref().is_some_and(|verb| verb.eq_ignore_ascii_case("Oxyde")) {
                         continue;
@@ -827,5 +844,18 @@ function New-Object {{ param($ComObject) return $global:shell }}
             .is_err());
             assert!(!IsMenu(menu).as_bool());
         }
+    }
+
+    #[test]
+    fn open_with_popup_carries_its_canonical_verb_in_any_language() {
+        let folder = tempfile::tempdir().unwrap();
+        let file = folder.path().join("sample.txt");
+        std::fs::write(&file, b"sample").unwrap();
+        let items = get_native_context_menu_items(vec![file.to_string_lossy().into_owned()], false).unwrap();
+        assert!(
+            items.iter().any(|item| item.has_submenu && item.verb.as_deref() == Some("openas")),
+            "{:?}",
+            items.iter().map(|item| (&item.label, &item.verb)).collect::<Vec<_>>()
+        );
     }
 }

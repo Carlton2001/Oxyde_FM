@@ -36,8 +36,8 @@ fn an_image_lists_the_mount_points_of_its_filesystems_or_partitions() {
     ];
     let images = mounted(&blocks);
     assert_eq!(images, [
-        MountedDiskImage { image_path: "/home/me/disc.iso".into(), roots: vec!["/run/media/me/DISC".into()] },
-        MountedDiskImage { image_path: "/home/me/card.img".into(), roots: vec!["/run/media/me/boot".into()] },
+        MountedDiskImage { image_path: "/home/me/disc.iso".into(), roots: vec!["/run/media/me/DISC".into()], aliases: Vec::new() },
+        MountedDiskImage { image_path: "/home/me/card.img".into(), roots: vec!["/run/media/me/boot".into()], aliases: Vec::new() },
     ]);
     assert_eq!(image_at(&blocks, "/run/media/me/boot").as_deref(), Some("/home/me/card.img"));
     assert_eq!(image_at(&blocks, "/run/media/me/DISC").as_deref(), Some("/home/me/disc.iso"));

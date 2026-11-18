@@ -79,9 +79,8 @@ fn is_open_with_submenu(item: &oxyde_lib::models::WinMenuItem) -> bool {
     if !item.has_submenu {
         return false;
     }
-    // GetMenuItemID returns -1 for popup entries, so Windows often supplies
-    // no canonical verb for Open with. Its label follows the OS language,
-    // independently of Oxyde's language setting.
+    // The scrape reads the popup's own "openas" verb in any language. The label,
+    // in the OS language, remains for a handler whose popup carries no verb.
     let label = item.label.split('\t').next().unwrap_or_default().replace('&', "");
     let label = oxyde_lib::utils::remove_accents(&label.to_lowercase());
     matches!(

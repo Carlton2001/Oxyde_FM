@@ -9,7 +9,7 @@ use windows::Win32::Foundation::{
     HANDLE, WIN32_ERROR,
 };
 use windows::Win32::Storage::FileSystem::{
-    CreateFileW, GetLogicalDrives, GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
+    CreateFileW, GetDriveTypeW, GetLogicalDrives, GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
     FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
 };
 use windows::Win32::Storage::Vhd::*;
@@ -135,12 +135,23 @@ fn device_number(handle: &DiskHandle) -> Result<STORAGE_DEVICE_NUMBER, String> {
     Ok(number)
 }
 
-fn drive_numbers() -> Vec<(String, STORAGE_DEVICE_NUMBER)> {
+/// Letters of local volumes. A network letter is never an image's volume, and
+/// opening it can wait for the network timeout.
+fn local_letters() -> impl Iterator<Item = char> {
     let mask = unsafe { GetLogicalDrives() };
-    (0..26)
-        .filter(|index| mask & (1 << index) != 0)
-        .filter_map(|index| {
-            let letter = (b'A' + index) as char;
+    (0..26u8)
+        .filter(move |index| mask & (1 << index) != 0)
+        .map(|index| (b'A' + index) as char)
+        .filter(|letter| {
+            let root: Vec<u16> = format!("{letter}:\\").encode_utf16().chain([0]).collect();
+            // DRIVE_NO_ROOT_DIR (1) and DRIVE_REMOTE (4)
+            !matches!(unsafe { GetDriveTypeW(PCWSTR(root.as_ptr())) }, 1 | 4)
+        })
+}
+
+fn drive_numbers() -> Vec<(String, STORAGE_DEVICE_NUMBER)> {
+    local_letters()
+        .filter_map(|letter| {
             let handle = open_device(&format!(r"\\.\{letter}:")).ok()?;
             Some((format!("{letter}:\\"), device_number(&handle).ok()?))
         })
@@ -254,10 +265,11 @@ fn device_names() -> Result<Vec<String>, String> {
     }
 }
 
-fn host_path(volume: &str) -> String {
+/// Every mount point of a volume, shortest first; the volume name if it has none.
+fn host_paths(volume: &str) -> Vec<String> {
     let volume_root = format!("{}\\", volume.trim_end_matches('\\'));
     let Ok(name) = wide(Path::new(&volume_root)) else {
-        return volume.to_string();
+        return vec![volume.to_string()];
     };
     let mut buffer = vec![0u16; 512];
     loop {
@@ -270,9 +282,12 @@ fn host_path(volume: &str) -> String {
             )
         } {
             Ok(()) => {
-                return multi_strings(&buffer)
-                    .min_by_key(String::len)
-                    .unwrap_or_else(|| volume.to_string())
+                let mut paths: Vec<_> = multi_strings(&buffer).collect();
+                paths.sort_by_key(String::len);
+                if paths.is_empty() {
+                    paths.push(volume.to_string());
+                }
+                return paths;
             }
             Err(error)
                 if error.code() == ERROR_MORE_DATA.to_hresult()
@@ -281,7 +296,7 @@ fn host_path(volume: &str) -> String {
             {
                 buffer.resize(required as usize, 0)
             }
-            Err(_) => return volume.to_string(),
+            Err(_) => return vec![volume.to_string()],
         }
     }
 }
@@ -303,7 +318,8 @@ fn dependency_string(buffer: &[usize], pointer: PWSTR) -> Result<String, String>
     String::from_utf16(&text[..length]).map_err(|error| error.to_string())
 }
 
-fn image_path(handle: &DiskHandle) -> Result<Option<String>, String> {
+/// The image under each mount point of its host volume, the shortest first.
+fn image_path(handle: &DiskHandle) -> Result<Option<Vec<String>>, String> {
     let mut buffer = vec![0usize; 512];
     loop {
         let info = buffer.as_mut_ptr().cast::<STORAGE_DEPENDENCY_INFO>();
@@ -355,38 +371,86 @@ fn image_path(handle: &DiskHandle) -> Result<Option<String>, String> {
         };
         let host = dependency_string(&buffer, entry.HostVolumeName)?;
         let relative = dependency_string(&buffer, entry.DependentVolumeRelativePath)?;
-        return Ok(Some(format!(
-            "{}\\{}",
-            host_path(&host).trim_end_matches('\\'),
-            relative.trim_start_matches('\\')
-        )));
+        return Ok(Some(
+            host_paths(&host)
+                .iter()
+                .map(|root| format!("{}\\{}", root.trim_end_matches('\\'), relative.trim_start_matches('\\')))
+                .collect(),
+        ));
     }
+}
+
+/// Letters that open a folder under another name: SUBST drives (`\??\C:\folder`)
+/// and mapped network drives (`\\server\share`).
+fn substitutes() -> Vec<(String, String)> {
+    use windows::Win32::NetworkManagement::WNet::WNetGetConnectionW;
+    let mask = unsafe { GetLogicalDrives() };
+    (0..26u8)
+        .filter(|index| mask & (1 << index) != 0)
+        .filter_map(|index| {
+            let drive: Vec<u16> = format!("{}:", (b'A' + index) as char).encode_utf16().chain([0]).collect();
+            let mut buffer = vec![0u16; 1024];
+            let length = unsafe { QueryDosDeviceW(PCWSTR(drive.as_ptr()), Some(&mut buffer)) } as usize;
+            let device = multi_strings(&buffer[..length.min(buffer.len())]).next().unwrap_or_default();
+            let target = if let Some(folder) = device.strip_prefix(r"\??\").filter(|folder| !folder.starts_with(r"UNC\")) {
+                folder.to_string()
+            } else {
+                // Remembered mappings come from the registry: no network access.
+                let mut size = buffer.len() as u32;
+                unsafe { WNetGetConnectionW(PCWSTR(drive.as_ptr()), Some(PWSTR(buffer.as_mut_ptr())), &mut size) }.ok().ok()?;
+                let end = buffer.iter().position(|unit| *unit == 0).unwrap_or(buffer.len());
+                String::from_utf16_lossy(&buffer[..end])
+            };
+            Some((format!("{}:\\", (b'A' + index) as char), target))
+        })
+        .collect()
+}
+
+/// The same paths reached through a substitute letter.
+fn substituted(paths: &[String], substitutes: &[(String, String)]) -> Vec<String> {
+    let mut aliases = Vec::new();
+    for path in paths {
+        let lower = path.to_lowercase();
+        for (root, target) in substitutes {
+            let prefix = format!("{}\\", target.trim_end_matches('\\').to_lowercase());
+            // Lowercasing can change the length of non-ASCII text: cut by characters.
+            if lower.starts_with(&prefix) {
+                let rest: String = path.chars().skip(prefix.chars().count()).collect();
+                aliases.push(format!("{root}{rest}"));
+            }
+        }
+    }
+    aliases
 }
 
 pub(super) fn mounted_images() -> Result<Vec<MountedDiskImage>, String> {
     let drives = drive_numbers();
+    let substitutes = substitutes();
     let mut images: Vec<MountedDiskImage> = Vec::new();
     for device in device_names()? {
         let Ok(handle) = open_device(&format!(r"\\.\{device}")) else {
             continue;
         };
         // One device that cannot be asked does not hide the other images.
-        let Ok(Some(image_path)) = image_path(&handle) else {
+        let Ok(Some(mut paths)) = image_path(&handle) else {
             continue;
         };
+        let aliases = substituted(&paths, &substitutes);
+        paths.extend(aliases);
+        let image_path = paths.remove(0);
         let Ok(number) = device_number(&handle) else {
             continue;
         };
         let roots = roots_for(&number, &drives);
         if let Some(image) = images
             .iter_mut()
-            .find(|image| image.image_path.eq_ignore_ascii_case(&image_path))
+            .find(|image| image.image_path.to_lowercase() == image_path.to_lowercase())
         {
             image.roots.extend(roots);
             image.roots.sort();
             image.roots.dedup();
         } else {
-            images.push(MountedDiskImage { image_path, roots });
+            images.push(MountedDiskImage { image_path, roots, aliases: paths });
         }
     }
     images.sort_by_key(|image| image.image_path.to_lowercase());

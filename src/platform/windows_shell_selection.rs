@@ -123,7 +123,12 @@ fn properties_ui_object<T: windows::core::Interface>(paths: &[String]) -> Result
     }
 }
 
-pub(super) fn show_properties(paths: &[String]) -> Result<(), CommandError> {
+/// Reports the opening through `opened`, then keeps this thread alive while the
+/// sheet holds it, which a leaking property handler can make last until exit.
+pub(super) fn show_properties(
+    paths: &[String],
+    opened: impl FnOnce(&Result<(), CommandError>),
+) -> Result<(), CommandError> {
     use windows::core::{PCSTR, PSTR};
     use windows::Win32::UI::Shell::{CMINVOKECOMMANDINFO, GCS_VERBA, SEE_MASK_NOASYNC};
     use windows::Win32::UI::WindowsAndMessaging::{CreatePopupMenu, DestroyMenu, SW_SHOWNORMAL};
@@ -173,6 +178,7 @@ pub(super) fn show_properties(paths: &[String]) -> Result<(), CommandError> {
         })();
         let _ = DestroyMenu(popup);
         drop(menu);
+        opened(&result);
         shell_thread.wait();
         result
     }

@@ -396,7 +396,7 @@ impl Platform for WindowsPlatform {
 
     fn recycle_bin_usage(&self) -> Result<(u64, u64), String> {
         use windows::core::PCWSTR;
-        use windows::Win32::Storage::FileSystem::GetLogicalDriveStringsW;
+        use windows::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDriveStringsW};
         use windows::Win32::UI::Shell::{SHQueryRecycleBinW, SHQUERYRBINFO};
 
         let mut total_size = 0u64;
@@ -412,6 +412,11 @@ impl Platform for WindowsPlatform {
                         .encode_utf16()
                         .chain(std::iter::once(0))
                         .collect();
+                    // Only the drives the settings list: removable (2) and fixed (3).
+                    // A network drive has no bin here and can wait for its timeout.
+                    if !matches!(GetDriveTypeW(PCWSTR(wide_path.as_ptr())), 2 | 3) {
+                        continue;
+                    }
 
                     let mut info = SHQUERYRBINFO {
                         cbSize: std::mem::size_of::<SHQUERYRBINFO>() as u32,
@@ -464,7 +469,7 @@ impl Platform for WindowsPlatform {
         &super::windows_volumes::WindowsVolumes
     }
     fn list_network_shares(&self, server: &str) -> Result<Vec<crate::models::FileEntry>, String> {
-        if server.eq_ignore_ascii_case(super::WSL_ROOT) {
+        if super::wsl_relative(server).is_some_and(|rest| rest.trim_matches('\\').is_empty()) {
             return Ok(super::windows_wsl::entries());
         }
         super::network::list_network_entries(Some(server.to_string())).map_err(|error| error.to_string())
@@ -638,8 +643,8 @@ impl Platform for WindowsPlatform {
         super::windows_preview_worker::run(mode, path)
     }
 
-    fn list_archive_directory(&self, path: &std::path::Path, internal: &str) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError> {
-        super::windows_archive_worker::run(path, internal)
+    fn list_archive_directory(&self, path: &std::path::Path, internal: &str, checkpoint: &dyn Fn() -> std::io::Result<()>) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError> {
+        super::windows_archive_worker::run(path, internal, checkpoint)
     }
     fn index_archive_contents(&self, path: &std::path::Path, checkpoint: &dyn Fn() -> std::io::Result<()>) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError> {
         super::windows_archive_worker::index(path, checkpoint)
@@ -808,9 +813,19 @@ impl Platform for WindowsPlatform {
             return Ok(());
         }
         let paths = paths.to_vec();
-        std::thread::spawn(move || super::windows_shell_selection::show_properties(&paths))
-            .join().map_err(|_| "Shell properties thread failed".to_string())?
-            .map_err(|error| error.to_string())
+        // The caller waits for the opening only: the sheet keeps its own thread.
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::Builder::new()
+            .name("oxyde-shell-properties".into())
+            .spawn(move || {
+                let opened = sender.clone();
+                let result = super::windows_shell_selection::show_properties(&paths, move |result| {
+                    let _ = opened.send(result.as_ref().map(|_| ()).map_err(|error| error.to_string()));
+                });
+                let _ = sender.send(result.map_err(|error| error.to_string()));
+            })
+            .map_err(|error| error.to_string())?;
+        receiver.recv().map_err(|_| "Shell properties thread failed".to_string())?
     }
 
     fn show_properties_dialog(&self, path: &str) {
@@ -1311,8 +1326,8 @@ fn bulk_expand_excluded(
         return true;
     }
     // Kernel pseudo-files, and the Windows drives under /mnt.
-    if super::is_wsl_path(path)
-        && path[super::WSL_ROOT.len()..].split('\\').filter(|part| !part.is_empty()).count() == 2
+    if super::wsl_relative(path)
+        .is_some_and(|rest| rest.split('\\').filter(|part| !part.is_empty()).count() == 2)
         && matches!(name.as_str(), "proc" | "sys" | "dev" | "run" | "mnt")
     {
         return true;
