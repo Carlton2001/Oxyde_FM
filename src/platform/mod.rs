@@ -41,6 +41,10 @@ pub use thread_priority::{apply_thread_priority, follow_turbo_priority, RestoreN
 pub struct MountedDiskImage {
     pub image_path: String,
     pub roots: Vec<String>,
+    /// Other spellings of `image_path`: other mount points of its volume, SUBST
+    /// and mapped drive letters.
+    #[serde(default)]
+    pub aliases: Vec<String>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]

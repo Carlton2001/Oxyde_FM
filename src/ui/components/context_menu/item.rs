@@ -2,7 +2,6 @@
 
 use super::{dropdown, trash_context_menu_items, without_unavailable_shell_menu};
 use crate::ui::i18n::{I18n, Message};
-use crate::ui::paths::paths_match;
 use gpui::*;
 
 pub(super) fn oxyde_context_menu_items_raw(
@@ -134,7 +133,7 @@ pub(super) fn oxyde_context_menu_items_raw(
         let mounted = view
             .mounted_disk_images
             .iter()
-            .any(|image| paths_match(&image.image_path, &path));
+            .any(|image| crate::ui::app::disk_images::image_named(image, &path));
         let handle = h_app.clone();
         let image_path = path.clone();
         items.push(

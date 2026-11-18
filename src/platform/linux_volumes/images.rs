@@ -34,6 +34,7 @@ pub(super) fn mounted(blocks: &[Block]) -> Vec<MountedDiskImage> {
                 .into_iter()
                 .flat_map(|block| block.mount_points.iter().flatten().cloned())
                 .collect(),
+            aliases: Vec::new(),
         })
         .collect()
 }
