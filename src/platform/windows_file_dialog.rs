@@ -140,7 +140,11 @@ fn answer_text(answer: Option<&FileChooserAnswer>) -> String {
     if let Some(filter) = answer.filter {
         text.push_str(&format!("filter\t{}\n", filter + 1));
     }
-    for path in answer.paths.iter().filter_map(|path| path.to_str()).filter(|path| !path.contains(['\r', '\n'])) {
+    for path in &answer.paths {
+        let Some(path) = path.to_str().filter(|path| !path.contains(['\r', '\n'])) else {
+            log::warn!("Left a path out of the answer that the dialog's protocol cannot carry: {}", path.display());
+            continue;
+        };
         text.push_str(&format!("path\t{path}\n"));
     }
     for (id, value) in answer.choices.iter().filter(|(id, value)| !id.contains(['\t', '\r', '\n']) && !value.contains(['\t', '\r', '\n'])) {
@@ -209,9 +213,11 @@ fn reply(name: String, showing: oneshot::Receiver<()>, answered: oneshot::Receiv
 /// closed its dialog, or gave Oxyde up for the system's.
 fn watch(launcher: u32, withdraw: Withdraw) {
     unsafe {
-        let Ok(process) = OpenProcess(PROCESS_SYNCHRONIZE, false, launcher) else { return };
-        WaitForSingleObject(process, INFINITE);
-        let _ = CloseHandle(process);
+        // A launcher that cannot be opened is gone already (or never was): nobody waits.
+        if let Ok(process) = OpenProcess(PROCESS_SYNCHRONIZE, false, launcher) {
+            WaitForSingleObject(process, INFINITE);
+            let _ = CloseHandle(process);
+        }
     }
     if let Some(withdraw) = withdraw.lock().ok().and_then(|mut withdraw| withdraw.take()) {
         let _ = withdraw.send(());
