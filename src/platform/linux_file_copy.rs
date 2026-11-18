@@ -43,7 +43,7 @@ pub(super) fn copy(
         output.sync_all()?;
     }
     super::linux_extended_attributes::copy(input, &output, source);
-    output.set_permissions(Permissions::from_mode(mode(&metadata, &output.metadata()?)))?;
+    set_mode(&output, mode(&metadata, &output.metadata()?))?;
     output.set_times(
         FileTimes::new()
             .set_accessed(metadata.accessed()?)
@@ -97,13 +97,24 @@ fn copy_remaining(
 pub(super) fn restore_directory(directory: &File, source: &super::DirectoryAttributes) -> io::Result<()> {
     let extended = super::linux_extended_attributes::write(directory, &source.extended);
     let metadata = &source.metadata;
-    directory.set_permissions(Permissions::from_mode(mode(metadata, &directory.metadata()?) | 0o700))?;
+    set_mode(directory, mode(metadata, &directory.metadata()?) | 0o700)?;
     directory.set_times(
         FileTimes::new()
             .set_accessed(metadata.accessed()?)
             .set_modified(metadata.modified()?),
     )?;
     extended
+}
+
+/// FAT and exFAT refuse setuid, setgid and sticky bits with `EPERM`, and keep no other
+/// bit: the copy goes on without them, as file managers copy to such volumes.
+fn set_mode(file: &File, mode: u32) -> io::Result<()> {
+    match file.set_permissions(Permissions::from_mode(mode)) {
+        Err(error) if error.kind() == io::ErrorKind::PermissionDenied && mode & 0o7000 != 0 => {
+            file.set_permissions(Permissions::from_mode(mode & 0o777))
+        }
+        result => result,
+    }
 }
 
 /// The source's mode; setuid and setgid only for a copy with the same owner and group.
