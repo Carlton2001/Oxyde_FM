@@ -134,17 +134,27 @@ impl Selection {
         Ok(())
     }
 }
+/// Selections held at once. Each keeps files and two parent chains open, and
+/// thousands would cross the handle threshold that refuses parser workers.
+const BATCH: usize = 64;
+
 pub(super) fn restore(items: Vec<trash::TrashItem>) -> Result<(), String> {
-    // Preflight every selected pair before starting a batch. Each native rename
-    // remains exclusive if a destination appears after this preparation.
-    let selected = items
-        .iter()
-        .map(Selection::new)
-        .collect::<io::Result<Vec<_>>>()
-        .map_err(|error| error.to_string())?;
-    for item in selected {
-        item.restore(&mut || Ok(()))
+    // Preflight every selected pair before starting a batch, without keeping
+    // the checks open. Each chunk is checked again just before its moves, and
+    // each native rename remains exclusive if a destination appears meanwhile.
+    for item in &items {
+        Selection::new(item).map_err(|error| error.to_string())?;
+    }
+    for chunk in items.chunks(BATCH) {
+        let selected = chunk
+            .iter()
+            .map(Selection::new)
+            .collect::<io::Result<Vec<_>>>()
             .map_err(|error| error.to_string())?;
+        for item in selected {
+            item.restore(&mut || Ok(()))
+                .map_err(|error| error.to_string())?;
+        }
     }
     Ok(())
 }
@@ -154,9 +164,21 @@ pub(super) fn restore_history(
     journal: &[crate::models::transaction::HistoryDeletedItem],
 ) -> Result<(), String> {
     use crate::systems::history_delete::failure as history_failure;
+    use crate::models::transaction::HistoryDeletedItem;
+    // The recorded object among the items, still the one the journal names.
+    let recorded = |entry: &HistoryDeletedItem, item: &trash::TrashItem| -> Result<Option<Selection>, String> {
+        let expected = entry
+            .identity
+            .ok_or_else(|| history_failure(&entry.path, false).to_string())?;
+        let candidate = Selection::new(item).map_err(|error| error.to_string())?;
+        let matches = expected
+            .matches(&candidate.payload)
+            .map_err(|_| history_failure(&entry.path, false).to_string())?;
+        Ok(matches.then_some(candidate))
+    };
     let mut selected = Vec::new();
     for entry in journal.iter().filter(|entry| !entry.is_restored()) {
-        let expected = entry
+        entry
             .identity
             .ok_or_else(|| history_failure(&entry.path, false).to_string())?;
         let mut matching = Vec::new();
@@ -164,23 +186,27 @@ pub(super) fn restore_history(
             .iter()
             .filter(|item| normalized(&item.original_path()) == normalized(Path::new(&entry.path)))
         {
-            let candidate = Selection::new(item).map_err(|error| error.to_string())?;
-            if expected
-                .matches(&candidate.payload)
-                .map_err(|_| history_failure(&entry.path, false).to_string())?
-            {
-                matching.push(candidate);
+            if recorded(entry, item)?.is_some() {
+                matching.push(item);
             }
         }
         if matching.len() != 1 {
             return Err(history_failure(&entry.path, true).to_string());
         }
-        selected.push((entry, matching.pop().unwrap()));
+        selected.push((entry, matching[0]));
     }
-    for (entry, item) in selected {
-        item.restore(&mut || Ok(()))
-            .map_err(|error| error.to_string())?;
-        entry.set_restored(true);
+    for chunk in selected.chunks(BATCH) {
+        let mut prepared = Vec::with_capacity(chunk.len());
+        for (entry, item) in chunk {
+            let selection = recorded(entry, item)?
+                .ok_or_else(|| history_failure(&entry.path, true).to_string())?;
+            prepared.push((entry, selection));
+        }
+        for (entry, item) in prepared {
+            item.restore(&mut || Ok(()))
+                .map_err(|error| error.to_string())?;
+            entry.set_restored(true);
+        }
     }
     Ok(())
 }
@@ -533,6 +559,30 @@ mod tests {
         assert!(fixture.sidecar.exists());
         assert_eq!(fs::read(&fixture.original).unwrap(), b"selected contents");
         assert_eq!(fs::read(linked).unwrap(), original_bytes);
+    }
+    #[test]
+    fn native_restore_preflights_and_restores_a_batch_larger_than_one_chunk() {
+        let fixtures: Vec<_> = (0..=BATCH)
+            .map(|index| Fixture::new(&format!("item-{index}.txt"), 2))
+            .collect();
+        let items: Vec<_> = fixtures.iter().map(|fixture| fixture.item.clone()).collect();
+        fs::write(&fixtures[BATCH].sidecar, b"invalid").unwrap();
+        assert!(restore(items.clone()).is_err());
+        fixtures.iter().for_each(Fixture::preserved);
+        fs::write(&fixtures[BATCH].sidecar, metadata(&fixtures[BATCH].original, 2)).unwrap();
+        restore(items).unwrap();
+        for fixture in &fixtures {
+            assert_eq!(fs::read(&fixture.original).unwrap(), b"selected contents");
+            assert!(!fixture.sidecar.exists());
+        }
+        let entries: Vec<_> = (0..=BATCH)
+            .map(|index| Fixture::new(&format!("entry-{index}.txt"), 2))
+            .collect();
+        let recorded: Vec<_> = entries.iter().map(journal).collect();
+        let items = entries.iter().map(|fixture| fixture.item.clone()).collect();
+        restore_history(items, &recorded).unwrap();
+        assert!(recorded.iter().all(crate::models::transaction::HistoryDeletedItem::is_restored));
+        assert!(entries.iter().all(|fixture| fixture.original.exists()));
     }
     #[test]
     fn native_restore_preflights_the_whole_batch_without_touching_the_real_bin() {
