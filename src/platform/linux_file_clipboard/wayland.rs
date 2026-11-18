@@ -1,46 +1,15 @@
-//! Files on the Wayland clipboard in the GNOME format file managers share
-//! (`x-special/gnome-copied-files`: `copy` or `cut`, then one `file://` URI per line),
-//! through the `wl-copy` and `wl-paste` processes.
-use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, percent_decode_str, utf8_percent_encode};
-use std::io::Write;
-use std::process::{Child, Command, Stdio};
+//! Files other applications put on the Wayland clipboard, in the GNOME format file
+//! managers share (`x-special/gnome-copied-files`: `copy` or `cut`, then one `file://` URI
+//! per line), read through the `wl-paste` process.
+use percent_encoding::percent_decode_str;
+use std::process::{Command, Stdio};
 
 const FORMAT: &str = "x-special/gnome-copied-files";
-const PATH: &AsciiSet = &NON_ALPHANUMERIC.remove(b'/').remove(b'-').remove(b'.').remove(b'_').remove(b'~');
 
 /// Whether the session is Wayland, from the variable GPUI chooses its backend with. Under
-/// X11, `wl-copy` would accept the files, then fail without a compositor to reach.
+/// X11, `wl-paste` has no compositor to reach.
 pub(super) fn session() -> bool {
     std::env::var_os("WAYLAND_DISPLAY").is_some_and(|display| !display.is_empty())
-}
-
-/// Offers the files until another selection replaces them.
-pub(super) fn offer(paths: &[String], cut: bool) -> Option<Child> {
-    if paths.is_empty() || !session() {
-        return None;
-    }
-    let spawned = Command::new("wl-copy")
-        .args(["--foreground", "--type", FORMAT])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn();
-    let mut server = match spawned {
-        Ok(server) => server,
-        Err(error) => {
-            static REPORTED: std::sync::Once = std::sync::Once::new();
-            REPORTED.call_once(|| log::info!("wl-copy unavailable, files are offered as text: {error}"));
-            return None;
-        }
-    };
-    // Closing stdin lets wl-copy take the selection.
-    let written = server.stdin.take().map(|mut stdin| stdin.write_all(encode(paths, cut).as_bytes()));
-    if !matches!(written, Some(Ok(()))) {
-        let _ = server.kill();
-        let _ = server.wait();
-        return None;
-    }
-    Some(server)
 }
 
 /// Files another application offers.
@@ -55,15 +24,6 @@ pub(super) fn files() -> Option<(Vec<String>, bool)> {
         .output()
         .ok()?;
     output.status.success().then(|| decode(&String::from_utf8_lossy(&output.stdout)))?
-}
-
-pub(super) fn encode(paths: &[String], cut: bool) -> String {
-    let mut text = if cut { "cut" } else { "copy" }.to_string();
-    for path in paths {
-        text.push_str("\nfile://");
-        text.extend(utf8_percent_encode(path, PATH));
-    }
-    text
 }
 
 pub(super) fn decode(text: &str) -> Option<(Vec<String>, bool)> {

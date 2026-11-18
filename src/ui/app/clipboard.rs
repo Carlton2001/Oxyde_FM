@@ -29,6 +29,8 @@ impl OxydeApp {
         let paths = pane.active_tab().actionable_selection();
         if paths.is_empty() { return; }
         let text = paths.join("\n");
+        let offers_files = oxyde_lib::platform::platform().file_clipboard().interface_offers_files(&paths);
+        let item = if offers_files { files_item(&paths, text, cut) } else { ClipboardItem::new_string(text) };
         let gate = self.clipboard_gate.clone();
         cx.spawn(async move |this, cx| {
             let _turn = gate.lock().await;
@@ -36,7 +38,7 @@ impl OxydeApp {
             let _ = this.update(cx, |this, cx| {
                 // Applications the platform cannot offer files to receive their paths.
                 if matches!(result, Ok(Ok(true))) {
-                    cx.write_to_clipboard(ClipboardItem::new_string(text));
+                    cx.write_to_clipboard(item);
                 }
                 match result {
                     Ok(Ok(_)) => this.toast(ToastKind::Info, if cut { Message::ToastCut } else { Message::ToastCopied }, String::new(), 0, cx),
@@ -60,9 +62,9 @@ impl OxydeApp {
         #[cfg(not(target_os = "windows"))]
         let text = {
             let system = cx.read_from_clipboard();
-            // Files another application offers through GPUI come first, as in Zed; Linux
-            // GPUI offers none yet.
-            if let Some(paths) = system.as_ref().and_then(external_paths) {
+            // Files another application offers through GPUI come first, as in Zed. Oxyde's
+            // own files go through its file clipboard, which knows whether they are cut.
+            if let Some(paths) = system.as_ref().filter(|item| !own_files(item)).and_then(external_paths) {
                 self.execute_file_copy(paths, target_dir, cx);
                 return;
             }
@@ -93,6 +95,28 @@ impl OxydeApp {
             });
         }).detach();
     }
+}
+
+/// The text entry's metadata of files Oxyde offers; GPUI's Wayland clipboard reads "cut".
+const COPIED: &str = "copy";
+const CUT: &str = "cut";
+
+/// The paths as text, and as files for the platforms whose GPUI clipboard offers them.
+fn files_item(paths: &[String], text: String, cut: bool) -> ClipboardItem {
+    let metadata = if cut { CUT } else { COPIED };
+    ClipboardItem {
+        entries: vec![
+            ClipboardEntry::String(ClipboardString { text, metadata: Some(metadata.into()) }),
+            ClipboardEntry::ExternalPaths(ExternalPaths(paths.iter().map(Into::into).collect())),
+        ],
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn own_files(item: &ClipboardItem) -> bool {
+    item.entries().iter().any(|entry| {
+        matches!(entry, ClipboardEntry::String(text) if matches!(text.metadata.as_deref(), Some(COPIED | CUT)))
+    })
 }
 
 #[cfg(not(target_os = "windows"))]
