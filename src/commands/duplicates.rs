@@ -91,7 +91,16 @@ fn calculate_hash<P: AsRef<Path>>(
 
         let mut reader = BufReader::new(file);
         let mut buffer = vec![0; limit];
-        let bytes_read = reader.read(&mut buffer)?;
+        // A share or a FUSE mount may return less than asked in one read.
+        let mut bytes_read = 0;
+        while bytes_read < limit {
+            match reader.read(&mut buffer[bytes_read..]) {
+                Ok(0) => break,
+                Ok(read) => bytes_read += read,
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(error) => return Err(error),
+            }
+        }
         hasher.update(&buffer[..bytes_read]);
     } else {
         let mut reader = BufReader::new(file);
