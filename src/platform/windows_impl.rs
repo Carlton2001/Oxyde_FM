@@ -396,7 +396,7 @@ impl Platform for WindowsPlatform {
 
     fn recycle_bin_usage(&self) -> Result<(u64, u64), String> {
         use windows::core::PCWSTR;
-        use windows::Win32::Storage::FileSystem::GetLogicalDriveStringsW;
+        use windows::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDriveStringsW};
         use windows::Win32::UI::Shell::{SHQueryRecycleBinW, SHQUERYRBINFO};
 
         let mut total_size = 0u64;
@@ -412,6 +412,11 @@ impl Platform for WindowsPlatform {
                         .encode_utf16()
                         .chain(std::iter::once(0))
                         .collect();
+                    // Only the drives the settings list: removable (2) and fixed (3).
+                    // A network drive has no bin here and can wait for its timeout.
+                    if !matches!(GetDriveTypeW(PCWSTR(wide_path.as_ptr())), 2 | 3) {
+                        continue;
+                    }
 
                     let mut info = SHQUERYRBINFO {
                         cbSize: std::mem::size_of::<SHQUERYRBINFO>() as u32,
