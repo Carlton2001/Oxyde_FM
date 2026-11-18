@@ -142,7 +142,7 @@ impl Dialog {
     /// What the application asked for, as Oxyde reads it.
     unsafe fn asked(&self, options: FILEOPENDIALOGOPTIONS, owner: HWND) -> Asked {
         let save_as = self.save_as.borrow().clone();
-        let typed = self.inner.GetFileName().ok().and_then(|name| {
+        let typed = self.inner.GetFileName().ok().filter(|name| !name.is_null()).and_then(|name| {
             let read = name.to_string().ok();
             windows::Win32::System::Com::CoTaskMemFree(Some(name.0.cast()));
             read
