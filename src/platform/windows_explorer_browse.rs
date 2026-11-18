@@ -135,8 +135,8 @@ fn origin<T: PartialEq>(windows: &[T], foreground: &T) -> Option<usize> {
 /// A new Explorer window on `folder`. Named on Explorer's command line, a folder does
 /// not go through the verb Oxyde replaced.
 fn open_window(folder: &str) -> std::io::Result<()> {
-    let root = std::env::var_os("SystemRoot").ok_or_else(|| std::io::Error::other("SystemRoot is not set"))?;
-    let mut command = std::process::Command::new(std::path::Path::new(&root).join("explorer.exe"));
+    // The system's own explorer.exe, not whatever a parent put in SystemRoot.
+    let mut command = std::process::Command::new(super::windows_executables::resolve(super::SystemExecutable::Explorer)?);
     super::windows_process_launch::explorer_path_argument(&mut command, folder)?;
     command.spawn().map(drop)
 }
