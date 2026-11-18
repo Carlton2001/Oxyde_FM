@@ -190,9 +190,8 @@ fn extraction_jobs(paths: Vec<oxyde_lib::models::FileEntry>) -> Vec<(std::path::
             return seen.insert(first.clone()).then_some((first, destination));
         }
         let name = source.file_name().unwrap_or_default().to_string_lossy();
-        let stem = [".tar.gz", ".tar.xz", ".tar.zst", ".tar.bz2", ".tar.lz4", ".tar.lzma"]
-            .iter()
-            .find_map(|suffix| name.strip_suffix(suffix))
+        let stem = oxyde_lib::utils::archive::split_compound_tar_suffix(&name)
+            .map(|(stem, _)| stem)
             .or_else(|| source.file_stem().and_then(|stem| stem.to_str()))
             .unwrap_or("archive");
         let destination = parent.join(stem);

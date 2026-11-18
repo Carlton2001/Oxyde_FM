@@ -36,6 +36,16 @@ const TAR_SUFFIXES: [(&str, ArchiveFormat); 14] = [
     (".tar", ArchiveFormat::Tar),
 ];
 
+/// A name split before its compound TAR suffix, whatever the case: `Backup.TAR.GZ`
+/// gives `("Backup", "TAR.GZ")`. None when the name has no such suffix.
+pub fn split_compound_tar_suffix(name: &str) -> Option<(&str, &str)> {
+    const COMPOUND: [&str; 6] = [".tar.zst", ".tar.gz", ".tar.xz", ".tar.bz2", ".tar.lz4", ".tar.lzma"];
+    let lower = name.to_ascii_lowercase();
+    let suffix = COMPOUND.iter().find(|suffix| lower.ends_with(**suffix))?;
+    let (stem, suffix) = name.split_at(name.len() - suffix.len());
+    Some((stem, &suffix[1..]))
+}
+
 impl ArchiveFormat {
     pub fn from_path(path: &Path) -> Option<Self> {
         let name = path.file_name()?.to_str()?.to_lowercase();

@@ -49,3 +49,10 @@ fn the_single_member_takes_the_name_without_its_suffix() {
     assert_eq!(stream_member_name(Path::new("/x/notes.txt.gz")).as_deref(), Some("notes.txt"));
     assert_eq!(stream_member_name(Path::new("/x/vmlinuz.xz")).as_deref(), Some("vmlinuz"));
 }
+
+#[test]
+fn compound_tar_suffixes_split_whatever_their_case() {
+    assert_eq!(split_compound_tar_suffix("Backup.TAR.GZ"), Some(("Backup", "TAR.GZ")));
+    assert_eq!(split_compound_tar_suffix("a.b.tar.zst"), Some(("a.b", "tar.zst")));
+    assert_eq!(split_compound_tar_suffix("notes.gz"), None);
+}

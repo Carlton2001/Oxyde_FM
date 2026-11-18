@@ -410,9 +410,7 @@ impl FileOperationManager {
         let parent = path.parent().unwrap_or_else(|| Path::new("."));
         let stem = path.file_stem().unwrap_or_default().to_string_lossy();
         let file_name = path.file_name().unwrap_or_default().to_string_lossy();
-        let compound = [".tar.zst", ".tar.gz", ".tar.xz", ".tar.bz2", ".tar.lz4", ".tar.lzma"]
-            .into_iter()
-            .find_map(|suffix| Some((file_name.strip_suffix(suffix)?, &suffix[1..])));
+        let compound = crate::utils::archive::split_compound_tar_suffix(&file_name);
         let (stem, extension) = if let Some((name, suffix)) = compound {
             (name.to_string(), Some(suffix.to_string()))
         } else {
