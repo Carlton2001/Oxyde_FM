@@ -33,6 +33,18 @@ pub(super) fn open(path: &Path, allow_changes: bool) -> io::Result<File> {
     Ok(file)
 }
 
+/// FAT32 and exFAT give their root directory the ID 0. A volume's root cannot
+/// be renamed or replaced, so the volume itself identifies it.
+fn root_identity(file: &File, volume: u64) -> io::Result<FileIdentity> {
+    if super::windows_final_path::is_volume_root(file)? {
+        return Ok(FileIdentity { volume, value: [0; 16], kind: 3 });
+    }
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "Filesystem did not provide a stable file identity",
+    ))
+}
+
 pub(super) fn identity(file: &File) -> io::Result<FileIdentity> {
     let handle = HANDLE(file.as_raw_handle());
     let mut extended = FILE_ID_INFO::default();
@@ -45,10 +57,9 @@ pub(super) fn identity(file: &File) -> io::Result<FileIdentity> {
         )
     };
     match result.map_err(io_error) {
-        Ok(()) if extended.FileId.Identifier == [0; 16] => Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "Filesystem did not provide a stable file identity",
-        )),
+        Ok(()) if extended.FileId.Identifier == [0; 16] => {
+            root_identity(file, extended.VolumeSerialNumber)
+        }
         Ok(()) => Ok(FileIdentity { volume: extended.VolumeSerialNumber, value: extended.FileId.Identifier, kind: 1 }),
         // Older filesystem drivers may provide only the legacy 64-bit identity.
         Err(error) if matches!(error.raw_os_error(), Some(1 | 50 | 87)) => {
@@ -56,10 +67,7 @@ pub(super) fn identity(file: &File) -> io::Result<FileIdentity> {
             unsafe { GetFileInformationByHandle(handle, &mut basic) }.map_err(io_error)?;
             let id = (u64::from(basic.nFileIndexHigh) << 32) | u64::from(basic.nFileIndexLow);
             if id == 0 {
-                return Err(io::Error::new(
-                    io::ErrorKind::Unsupported,
-                    "Filesystem did not provide a stable file identity",
-                ));
+                return root_identity(file, u64::from(basic.dwVolumeSerialNumber));
             }
             let mut value = [0u8; 16];
             value[..8].copy_from_slice(&id.to_le_bytes());
@@ -76,3 +84,6 @@ pub(super) fn identity(file: &File) -> io::Result<FileIdentity> {
 #[cfg(test)]
 #[path = "windows_archive_source/tests/retention.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "windows_archive_source/tests/roots.rs"]
+mod root_tests;

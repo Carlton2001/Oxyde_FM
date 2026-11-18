@@ -97,6 +97,12 @@ fn dos_form(native: &str, drive: Option<(char, &str)>) -> Option<String> {
     Some(format!(r"\\?\{letter}:{}", if rest.is_empty() { "\\" } else { rest }))
 }
 
+/// Whether the handle is the root directory of its volume.
+pub(super) fn is_volume_root(file: &File) -> io::Result<bool> {
+    // VOLUME_NAME_NONE: the path below the volume, `\` for its root.
+    Ok(final_name(file, GETFINALPATHNAMEBYHANDLE_FLAGS(0x4))? == "\\")
+}
+
 fn final_name(file: &File, flags: GETFINALPATHNAMEBYHANDLE_FLAGS) -> io::Result<OsString> {
     let mut buffer = vec![0u16; 32768];
     let count = unsafe { GetFinalPathNameByHandleW(HANDLE(file.as_raw_handle()), &mut buffer, flags) } as usize;
