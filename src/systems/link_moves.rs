@@ -37,13 +37,15 @@ pub(crate) fn move_link(
                 let undone = if replace {
                     Err(io::Error::other("it replaced the destination"))
                 } else {
-                    let identity = crate::models::transaction::HistoryFileIdentity::from_file(&created)?;
-                    platform().remove_link(destination_parent, destination, &mut |current| {
-                        if identity.matches(current)? {
-                            Ok(())
-                        } else {
-                            Err(io::Error::other("Destination link changed"))
-                        }
+                    // A failure here is reported with the removal error, never instead of it.
+                    crate::models::transaction::HistoryFileIdentity::from_file(&created).and_then(|identity| {
+                        platform().remove_link(destination_parent, destination, &mut |current| {
+                            if identity.matches(current)? {
+                                Ok(())
+                            } else {
+                                Err(io::Error::other("Destination link changed"))
+                            }
+                        })
                     })
                 };
                 return Err(match undone {
