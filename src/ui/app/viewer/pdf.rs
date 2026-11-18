@@ -85,7 +85,8 @@ impl Pdf {
         let viewport = self.list.viewport_bounds().size;
         let (width, height) = self.sizes.get(top).copied().unwrap_or((1.0, 1.0));
         let page = (viewport.width.as_f32() * height / width.max(1.0)).max(1.0);
-        let count = (viewport.height.as_f32() / page).ceil() as usize + 1;
+        // The range, with its margin pages, must fit the cache or pages evict each other in a loop.
+        let count = ((viewport.height.as_f32() / page).ceil() as usize + 1).min(MAX_PAGES.saturating_sub(2).max(1));
         self.visible = top.saturating_sub(1)..top + count + 1;
         let visible = self.visible.clone();
         self.pending.retain(|index, cancelled| {
