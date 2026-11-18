@@ -770,7 +770,8 @@ impl Platform for WindowsPlatform {
                 self.system_executable(super::SystemExecutable::Explorer)
                     .map_err(|error| error.to_string())?,
             );
-            command.arg(path);
+            super::windows_process_launch::explorer_path_argument(&mut command, path)
+                .map_err(|e| e.to_string())?;
             super::windows_process_launch::spawn(command).map_err(|e| e.to_string())?;
         }
         Ok(())

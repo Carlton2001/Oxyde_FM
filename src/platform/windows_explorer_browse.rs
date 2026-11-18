@@ -134,7 +134,9 @@ fn origin<T: PartialEq>(windows: &[T], foreground: &T) -> Option<usize> {
 /// not go through the verb Oxyde replaced.
 fn open_window(folder: &str) -> std::io::Result<()> {
     let root = std::env::var_os("SystemRoot").ok_or_else(|| std::io::Error::other("SystemRoot is not set"))?;
-    std::process::Command::new(std::path::Path::new(&root).join("explorer.exe")).arg(folder).spawn().map(drop)
+    let mut command = std::process::Command::new(std::path::Path::new(&root).join("explorer.exe"));
+    super::windows_process_launch::explorer_path_argument(&mut command, folder)?;
+    command.spawn().map(drop)
 }
 
 /// Keeps `folder` in Explorer when it was opened from one of its tabs.
