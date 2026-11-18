@@ -554,6 +554,11 @@ impl TextInput {
     }
 
     fn backspace(&mut self, _: &Backspace, window: &mut Window, cx: &mut Context<Self>) {
+        // Nothing to erase: no change to announce (a filter would sort the list again).
+        if self.selected_range.is_empty() && self.selected_range.start == 0 {
+            self.reset_blinking(cx);
+            return;
+        }
         if self.selected_range.is_empty() && self.selected_range.start > 0 {
             let prev = self
                 .content
@@ -579,6 +584,10 @@ impl TextInput {
     }
 
     fn delete(&mut self, _: &Delete, window: &mut Window, cx: &mut Context<Self>) {
+        if self.selected_range.is_empty() && self.selected_range.end >= self.content.len() {
+            self.reset_blinking(cx);
+            return;
+        }
         if self.selected_range.is_empty() && self.selected_range.end < self.content.len() {
             let next = self
                 .content
