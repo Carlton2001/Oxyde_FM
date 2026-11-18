@@ -447,12 +447,7 @@ impl Viewer {
             return;
         }
         use crate::ui::components::icons::{AUDIO_EXTENSIONS, VIDEO_EXTENSIONS};
-        let extension = file
-            .name
-            .rsplit('.')
-            .next()
-            .unwrap_or("")
-            .to_ascii_lowercase();
+        let extension = media_overlay::file_extension(&file.name);
         self.audio = AUDIO_EXTENSIONS.contains(extension.as_str())
             || file.native_kind == Some(oxyde_lib::models::file_entry::NativeFileKind::Audio);
         self.native_media = self.audio
