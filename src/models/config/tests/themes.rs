@@ -35,11 +35,17 @@ fn themes_stored_in_older_configurations_move_to_their_own_file() {
 }
 
 #[test]
-fn a_corrupt_themes_file_is_reported_and_left_untouched() {
+fn a_corrupt_themes_file_is_set_aside_and_the_settings_still_load() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("config.json");
+    std::fs::write(&path, r#"{"show_hidden": true}"#).unwrap();
     let themes = ConfigManager::themes_path(&path);
     std::fs::write(&themes, "{broken").unwrap();
-    assert!(ConfigManager::read_from_path(&path).is_err());
-    assert_eq!(std::fs::read_to_string(&themes).unwrap(), "{broken");
+    let config = ConfigManager::read_from_path(&path).unwrap();
+    assert!(config.show_hidden);
+    assert!(config.custom_themes.is_empty());
+    // The user's file is kept, not replaced by the next write.
+    assert_eq!(std::fs::read_to_string(themes.with_file_name("themes.json.invalid")).unwrap(), "{broken");
+    ConfigManager::write_to_path(&path, &config).unwrap();
+    assert_eq!(std::fs::read_to_string(themes.with_file_name("themes.json.invalid")).unwrap(), "{broken");
 }
