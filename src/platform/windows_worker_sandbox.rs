@@ -94,6 +94,9 @@ impl Runtime {
         checkpoint: &dyn Fn() -> io::Result<()>,
     ) -> io::Result<Self> {
         checkpoint()?;
+        // The executable's own links (Scoop `current`) are resolved once;
+        // the ancestors held below must then be ordinary folders.
+        let source = &crate::app_paths::real_path(source);
         let mut parents = retain_parents(source)?;
         let mut source_file = retain(source, false)?;
         const MAX_RUNTIME_BYTES: u64 = 128 * 1024 * 1024;
