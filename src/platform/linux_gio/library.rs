@@ -12,6 +12,8 @@ pub(super) struct GList {
 }
 
 pub(super) type ReadyCallback = unsafe extern "C" fn(source: Object, result: Object, data: *mut c_void);
+/// Runs in a child GLib spawns, between fork and exec.
+pub(super) type ChildSetup = unsafe extern "C" fn(data: *mut c_void);
 
 library! { Gio from "libgio-2.0.so.0" {
     g_free: fn(*mut c_void);
@@ -73,11 +75,12 @@ library! { Gio from "libgio-2.0.so.0" {
     g_app_info_get_display_name: fn(Object) -> *const c_char;
     g_app_info_get_icon: fn(Object) -> Object;
     g_app_info_should_show: fn(Object) -> c_int;
-    g_app_info_launch_uris: fn(Object, *mut GList, Object, *mut *mut GError) -> c_int;
     g_app_info_set_as_default_for_type: fn(Object, *const c_char, *mut *mut GError) -> c_int;
     g_app_info_set_as_last_used_for_type: fn(Object, *const c_char, *mut *mut GError) -> c_int;
     g_app_info_reset_type_associations: fn(*const c_char);
     g_desktop_app_info_new: fn(*const c_char) -> Object;
+    g_desktop_app_info_launch_uris_as_manager: fn(Object, *mut GList, Object, c_uint, Option<ChildSetup>, *mut c_void,
+        *const c_void, *mut c_void, *mut *mut GError) -> c_int;
     g_app_launch_context_new: fn() -> Object;
     g_app_launch_context_unsetenv: fn(Object, *const c_char);
     g_icon_to_string: fn(Object) -> *mut c_char;

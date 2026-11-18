@@ -128,6 +128,7 @@ fn is_script(path: &Path) -> bool {
 fn relaunch_after(process: u32, executable: &Path) -> io::Result<()> {
     let mut command = Command::new("sh");
     super::linux_gpu::leave_out_of(&mut command);
+    super::linux_open_files::leave_out_of(&mut command);
     command
         .arg("-c").arg(r#"while kill -0 "$1" 2>/dev/null; do sleep 0.2; done; exec "$2""#)
         .arg("oxyde-relaunch").arg(process.to_string()).arg(executable)

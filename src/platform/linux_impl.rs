@@ -766,6 +766,10 @@ impl Platform for LinuxPlatform {
         super::linux_gpu::prefer_display_gpu()
     }
 
+    fn raise_open_file_limit(&self) -> Option<String> {
+        super::linux_open_files::raise()
+    }
+
     fn installation(&self) -> super::Installation {
         super::linux_update::installation()
     }
@@ -826,6 +830,7 @@ impl Platform for LinuxPlatform {
         use std::process::Stdio;
         let mut command = std::process::Command::new("xdg-open");
         super::linux_gpu::leave_out_of(&mut command);
+        super::linux_open_files::leave_out_of(&mut command);
         let mut child = command
             .arg(path)
             .stdin(Stdio::null())

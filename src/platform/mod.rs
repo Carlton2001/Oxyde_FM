@@ -434,6 +434,9 @@ pub trait Platform: Send + Sync {
     /// Keeps GPUs the desktop does not render with asleep; returns what it disabled and
     /// why. Changes the process environment: call it while the process has a single thread.
     fn prefer_display_gpu(&self) -> Option<String> { None }
+    /// Raises the open file limit where it is too low for large copies; returns what it
+    /// did, for the log. Before the first thread.
+    fn raise_open_file_limit(&self) -> Option<String> { None }
     /// Locations the desktop asked this launch to open, instead of the saved tabs.
     fn startup_locations(&self) -> Vec<String> { Vec::new() }
     /// Becomes the session's Oxyde, or hands `locations` to the one already running.
@@ -1131,6 +1134,8 @@ pub mod icons;
 mod linux_impl;
 #[cfg(not(target_os = "windows"))]
 mod linux_gpu;
+#[cfg(not(target_os = "windows"))]
+mod linux_open_files;
 #[cfg(not(target_os = "windows"))]
 mod linux_hidden_list;
 #[cfg(not(target_os = "windows"))]

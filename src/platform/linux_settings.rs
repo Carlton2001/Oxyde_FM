@@ -33,6 +33,7 @@ pub(super) fn open_network_settings() {
         for (program, arguments) in network_settings(&desktop) {
             let mut command = Command::new(program);
             super::linux_gpu::leave_out_of(&mut command);
+            super::linux_open_files::leave_out_of(&mut command);
             command.args(arguments).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
             match command.spawn() {
                 Ok(mut child) => {

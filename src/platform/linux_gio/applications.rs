@@ -227,15 +227,23 @@ pub(in crate::platform) fn launch(id: &str, paths: &[String], remember: bool) ->
     let mut error = std::ptr::null_mut();
     let list = if cells.is_empty() { std::ptr::null_mut() } else { base };
     let context = context.as_ref().map_or(std::ptr::null_mut(), |context| context.1);
-    // SAFETY: the application, the list and the context outlive the call; GIO reaps the
-    // spawned process itself, or asks a D-Bus activatable application to open the files.
-    let launched = unsafe { (gio.g_app_info_launch_uris)(app.1, list, context, &mut error) };
+    // SAFETY: the application, a desktop entry, the list and the context outlive the call;
+    // GIO reaps the spawned process itself, or asks a D-Bus activatable application to open
+    // the files. The setup only restores the open file limit, by system calls.
+    let launched = unsafe {
+        (gio.g_desktop_app_info_launch_uris_as_manager)(app.1, list, context, SPAWN_SEARCH_PATH,
+            Some(crate::platform::linux_open_files::restore_in_child), std::ptr::null_mut(),
+            std::ptr::null(), std::ptr::null_mut(), &mut error)
+    };
     if launched == 0 {
         // SAFETY: GIO filled the error on failure.
         return Err(if error.is_null() { format!("{id} did not start") } else { unsafe { failure(gio, error) }.message });
     }
     Ok(())
 }
+
+/// `G_SPAWN_SEARCH_PATH`, the flags `g_app_info_launch_uris` spawns with.
+const SPAWN_SEARCH_PATH: std::ffi::c_uint = 1 << 2;
 
 /// Oxyde's desktop entry, as its packages and install.sh name it.
 const OXYDE_ENTRY: &str = "io.github.Carlton2001.Oxyde.desktop";
