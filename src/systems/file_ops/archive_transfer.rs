@@ -46,7 +46,8 @@ impl FileOperationManager {
         if target_archive.as_ref().is_some_and(|archive| {
             sources
                 .iter()
-                .any(|source| std::fs::canonicalize(source).is_ok_and(|source| source == *archive))
+                // The archive itself, or a folder that holds it: its copy would contain an older self.
+                .any(|source| std::fs::canonicalize(source).is_ok_and(|source| archive.starts_with(&source)))
         }) {
             return Err("Cannot put an archive inside itself".into());
         }
