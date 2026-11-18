@@ -97,7 +97,7 @@ impl DuplicateWindow {
                     .await;
             }
             let snapshot = groups.clone();
-            let needle = query.trim().to_string();
+            let needle = query.trim().to_lowercase();
             let (indices, rows) = cx
                 .background_executor()
                 .spawn(async move {
