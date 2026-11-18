@@ -84,8 +84,8 @@ fn open_document_sheets_and_slides_have_headers_and_bounded_cells() {
         r#"<office:spreadsheet><table:table table:name="Data"><table:table-row><table:table-cell><text:p>a</text:p></table:table-cell><table:table-cell table:number-columns-repeated="16384"/><table:table-cell><text:p>b</text:p></table:table-cell></table:table-row></table:table></office:spreadsheet>"#,
         Some(Odf::Sheet),
     );
-    assert!(sheet.starts_with("sheet\tData\ntr\ta\u{1f}"));
-    assert_eq!(sheet.lines().nth(1).unwrap().split('\u{1f}').count(), MAX_CELLS);
+    // "b" lies past the kept columns, the repeated empty cells never expand.
+    assert_eq!(sheet, "sheet\tData\ntr\ta\n");
     let slides = parse(
         r#"<office:presentation><draw:page draw:name="One"><draw:frame><draw:text-box><text:p>Hello</text:p></draw:text-box></draw:frame><presentation:notes><text:p>secret</text:p></presentation:notes></draw:page></office:presentation>"#,
         Some(Odf::Slides),

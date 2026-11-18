@@ -65,7 +65,7 @@ pub(super) fn pptx(archive: &mut Archive) -> Result<String, CommandError> {
                 ("a:br", false) => builder.paragraph.push(' '),
                 ("a:tbl", false) => builder.table_depth += 1,
                 ("a:tbl", true) => builder.table_depth = builder.table_depth.saturating_sub(1),
-                ("a:tr", false) if builder.table_depth == 1 => builder.cells.clear(),
+                ("a:tr", false) if builder.table_depth == 1 => builder.start_row(),
                 ("a:tr", true) if builder.table_depth == 1 => builder.end_row(),
                 ("a:tc", false) if builder.table_depth == 1 => builder.cell(),
                 ("a:p", true) => {
