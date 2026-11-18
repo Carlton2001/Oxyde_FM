@@ -28,12 +28,12 @@ fn get_sidebar_nodes_blocking(path: String) -> Result<Vec<SidebarNode>, CommandE
             Err(_) => continue,
         };
 
-        if !metadata.is_dir() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let (is_hidden, is_system, is_reparse_point) = attributes.of(&metadata, &name);
+        // A junction or a folder link is a folder of the tree, as in the listing.
+        if !metadata.is_dir() && !crate::models::file_entry::is_directory_link(&metadata, is_reparse_point) {
             continue;
         }
-
-        let name = entry.file_name().to_string_lossy().to_string();
-        let (is_hidden, is_system, _) = attributes.of(&metadata, &name);
 
         // Efficiently check for subdirectories
         let mut node_has_subdirs = false;
@@ -111,13 +111,12 @@ fn get_subtree_nodes_blocking(
                 Err(_) => continue,
             };
 
-            if !metadata.is_dir() {
-                continue;
-            }
-
             let name = entry.file_name().to_string_lossy().to_string();
             let (is_hidden, is_system, is_reparse_point) =
                 attributes.of(&metadata, &name);
+            if !metadata.is_dir() && !crate::models::file_entry::is_directory_link(&metadata, is_reparse_point) {
+                continue;
+            }
 
             let node_path = entry.path();
             let mut node_has_subdirs = false;

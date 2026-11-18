@@ -270,7 +270,8 @@ pub(crate) fn file_entry_from_metadata(path: &Path, metadata: &std::fs::Metadata
     let target = is_symlink.then(|| std::fs::metadata(path).ok()).flatten();
     #[cfg(target_os = "windows")]
     let target: Option<std::fs::Metadata> = None;
-    let is_dir = target.as_ref().map_or(metadata.is_dir(), std::fs::Metadata::is_dir);
+    let is_dir = target.as_ref().map_or(metadata.is_dir(), std::fs::Metadata::is_dir)
+        || is_directory_link(metadata, is_reparse_point);
 
     // On Windows, junctions are reparse points that are dirs but (historically) returned false for is_symlink in older Rust,
     // but modern Rust might return true.
@@ -309,6 +310,21 @@ pub(crate) fn file_entry_from_metadata(path: &Path, metadata: &std::fs::Metadata
         network_details: None,
         deleted_time: None,
         mode: unix_mode(target.as_ref().unwrap_or(metadata)),
+    }
+}
+
+/// Whether a Windows junction or folder link, which Rust does not report as a directory.
+pub(crate) fn is_directory_link(metadata: &std::fs::Metadata, is_reparse_point: bool) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
+        is_reparse_point && metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY != 0
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (metadata, is_reparse_point);
+        false
     }
 }
 
