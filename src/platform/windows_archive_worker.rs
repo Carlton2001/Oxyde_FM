@@ -15,16 +15,23 @@ fn failed() -> CommandError {
     CommandError::ArchiveError(ArchiveListingFailure::WorkerFailed.to_string())
 }
 
-pub(super) fn run(path: &Path, internal: &str) -> Result<Vec<FileEntry>, CommandError> {
-    let _slot = SLOT.lock().map_err(|_| failed())?;
+/// Navigation stops waiting, and stops its worker, when `checkpoint` refuses:
+/// a listing the user left no longer holds the slot for the next one.
+pub(super) fn run(
+    path: &Path,
+    internal: &str,
+    checkpoint: &dyn Fn() -> std::io::Result<()>,
+) -> Result<Vec<FileEntry>, CommandError> {
+    let _slot = admission(&SLOT, checkpoint)?;
     let executable = executable()?;
-    run_in(&executable, path, internal, DEADLINE)
+    run_in(&executable, path, internal, DEADLINE, checkpoint)
 }
 pub(super) fn run_in(
     executable: &Path,
     path: &Path,
     internal: &str,
     deadline: Duration,
+    checkpoint: &dyn Fn() -> std::io::Result<()>,
 ) -> Result<Vec<FileEntry>, CommandError> {
     let mut command = Command::new(executable);
     command
@@ -32,7 +39,7 @@ pub(super) fn run_in(
         .arg("directory")
         .arg(path)
         .arg(internal);
-    let bytes = confined(command, path, deadline, &|| Ok(()))?;
+    let bytes = confined(command, path, deadline, checkpoint)?;
     archive_listing_protocol::decode(&bytes, path, internal)
 }
 pub(super) fn supervise(
@@ -67,12 +74,13 @@ pub(super) fn supervise(
     archive_listing_protocol::decode(&bytes, path, internal)
 }
 
-fn search_admission(
+fn admission(
+    slot: &'static Mutex<()>,
     checkpoint: &dyn Fn() -> std::io::Result<()>,
 ) -> Result<MutexGuard<'static, ()>, CommandError> {
     loop {
         checkpoint()?;
-        match SEARCH_SLOT.try_lock() {
+        match slot.try_lock() {
             Ok(slot) => return Ok(slot),
             Err(TryLockError::Poisoned(_)) => return Err(failed()),
             Err(TryLockError::WouldBlock) => std::thread::sleep(Duration::from_millis(10)),
@@ -83,7 +91,7 @@ pub(super) fn index(
     path: &Path,
     checkpoint: &dyn Fn() -> std::io::Result<()>,
 ) -> Result<Vec<FileEntry>, CommandError> {
-    let _slot = search_admission(checkpoint)?;
+    let _slot = admission(&SEARCH_SLOT, checkpoint)?;
     let executable = executable()?;
     index_in(&executable, path, DEADLINE, checkpoint)
 }
@@ -212,9 +220,18 @@ mod tests {
                 Ok(())
             }
         };
-        assert!(search_admission(&checkpoint).is_err());
+        assert!(admission(&SEARCH_SLOT, &checkpoint).is_err());
         assert_eq!(calls.get(), 3);
         drop(slot);
-        assert!(search_admission(&|| Ok(())).is_ok());
+        assert!(admission(&SEARCH_SLOT, &|| Ok(())).is_ok());
+    }
+    #[test]
+    fn a_listing_the_user_left_stops_waiting_for_the_navigation_slot() {
+        let slot = SLOT.lock().unwrap();
+        let left = || Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "left"));
+        let started = std::time::Instant::now();
+        assert!(run(Path::new(r"C:\absent.zip"), "", &left).is_err());
+        assert!(started.elapsed() < Duration::from_secs(5));
+        drop(slot);
     }
 }

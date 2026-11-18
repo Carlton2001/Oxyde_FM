@@ -7,7 +7,7 @@ use crate::models::{CommandError, FileEntry};
 use crate::utils::{archive::ArchiveFormat, archive_listing_protocol};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, TryLockError};
+use std::sync::{Mutex, MutexGuard, TryLockError};
 use std::time::{Duration, Instant};
 
 const MEMORY_BYTES: u64 = 512 * 1024 * 1024;
@@ -27,20 +27,25 @@ fn executable() -> Result<PathBuf, CommandError> {
     Ok(std::env::current_exe().map_err(|_| failed())?.with_file_name("oxyde-archive-list-worker"))
 }
 
-pub(super) fn list(path: &Path, internal: &str) -> Result<Vec<FileEntry>, CommandError> {
-    let _slot = SLOT.lock().map_err(|_| failed())?;
-    list_in(&executable()?, path, internal, DEADLINE)
-}
-
-pub(super) fn index(path: &Path, checkpoint: &dyn Fn() -> io::Result<()>) -> Result<Vec<FileEntry>, CommandError> {
-    let _slot = loop {
+fn admission(slot: &'static Mutex<()>, checkpoint: &dyn Fn() -> io::Result<()>) -> Result<MutexGuard<'static, ()>, CommandError> {
+    loop {
         checkpoint()?;
-        match SEARCH_SLOT.try_lock() {
-            Ok(slot) => break slot,
+        match slot.try_lock() {
+            Ok(slot) => return Ok(slot),
             Err(TryLockError::Poisoned(_)) => return Err(failed()),
             Err(TryLockError::WouldBlock) => std::thread::sleep(Duration::from_millis(10)),
         }
-    };
+    }
+}
+
+/// A listing the user left stops waiting and stops its worker, freeing the slot.
+pub(super) fn list(path: &Path, internal: &str, checkpoint: &dyn Fn() -> io::Result<()>) -> Result<Vec<FileEntry>, CommandError> {
+    let _slot = admission(&SLOT, checkpoint)?;
+    list_in(&executable()?, path, internal, DEADLINE, checkpoint)
+}
+
+pub(super) fn index(path: &Path, checkpoint: &dyn Fn() -> io::Result<()>) -> Result<Vec<FileEntry>, CommandError> {
+    let _slot = admission(&SEARCH_SLOT, checkpoint)?;
     index_in(&executable()?, path, DEADLINE, checkpoint)
 }
 
@@ -55,8 +60,8 @@ fn verify_in(executable: &Path, path: &Path, deadline: Duration) -> Result<(), C
     archive_listing_protocol::decode_index(&bytes, path, &|| Ok(())).map(drop)
 }
 
-fn list_in(executable: &Path, path: &Path, internal: &str, deadline: Duration) -> Result<Vec<FileEntry>, CommandError> {
-    let bytes = confined(executable, LIST_FLAG, Some(internal), path, deadline, &|| Ok(()))?;
+fn list_in(executable: &Path, path: &Path, internal: &str, deadline: Duration, checkpoint: &dyn Fn() -> io::Result<()>) -> Result<Vec<FileEntry>, CommandError> {
+    let bytes = confined(executable, LIST_FLAG, Some(internal), path, deadline, checkpoint)?;
     archive_listing_protocol::decode(&bytes, path, internal).map(|entries| stream_member(path, entries))
 }
 

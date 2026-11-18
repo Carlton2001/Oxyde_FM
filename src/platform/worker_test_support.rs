@@ -80,7 +80,7 @@ pub mod archive_listing {
         internal: &str,
         deadline: Duration,
     ) -> Result<Vec<FileEntry>, CommandError> {
-        native::run_in(executable, path, internal, deadline)
+        native::run_in(executable, path, internal, deadline, &|| Ok(()))
     }
     pub fn index_in(
         executable: &Path,

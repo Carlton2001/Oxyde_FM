@@ -29,9 +29,9 @@ fn listings_and_indexes_come_from_the_worker_with_real_paths() {
         writer.write_all(b"safe").unwrap();
     }
     writer.finish().unwrap();
-    let root = list_in(&worker(), &archive, "", DEADLINE).unwrap();
+    let root = list_in(&worker(), &archive, "", DEADLINE, &|| Ok(())).unwrap();
     assert_eq!(root.len(), 2);
-    let nested = list_in(&worker(), &archive, "docs", DEADLINE).unwrap();
+    let nested = list_in(&worker(), &archive, "docs", DEADLINE, &|| Ok(())).unwrap();
     assert_eq!(nested[0].path, archive.join("docs/école.txt").to_string_lossy());
     assert_eq!(nested[0].size, 4);
     let all = index_in(&worker(), &archive, DEADLINE, &|| Ok(())).unwrap();
@@ -48,7 +48,7 @@ fn compressed_tars_and_seven_zip_keep_their_format_in_the_sandbox() {
     for (name, bytes) in [("a.tar", plain.clone()), ("a.tar.gz", gzip.finish().unwrap()), ("a.tar.zst", zst)] {
         let path = directory.path().join(name);
         std::fs::write(&path, bytes).unwrap();
-        assert_eq!(list_in(&worker(), &path, "docs", DEADLINE).unwrap()[0].name, "note.txt", "{name}");
+        assert_eq!(list_in(&worker(), &path, "docs", DEADLINE, &|| Ok(())).unwrap()[0].name, "note.txt", "{name}");
     }
     let path = directory.path().join("a.7z");
     let mut writer = sevenz_rust2::ArchiveWriter::create(&path).unwrap();
@@ -69,10 +69,10 @@ fn a_hostile_name_or_damaged_archive_is_refused() {
     writer.start_file("../outside.txt", zip::write::SimpleFileOptions::default()).unwrap();
     writer.write_all(b"safe").unwrap();
     writer.finish().unwrap();
-    assert!(list_in(&worker(), &archive, "", DEADLINE).is_err());
+    assert!(list_in(&worker(), &archive, "", DEADLINE, &|| Ok(())).is_err());
     let damaged = directory.path().join("cassé.zip");
     std::fs::write(&damaged, b"PK not an archive").unwrap();
-    assert!(list_in(&worker(), &damaged, "", DEADLINE).is_err());
+    assert!(list_in(&worker(), &damaged, "", DEADLINE, &|| Ok(())).is_err());
 }
 
 #[test]

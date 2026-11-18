@@ -851,6 +851,9 @@ impl OxydeApp {
         tab.load_status = crate::ui::workspace::TabLoadStatus::Loading;
         let id = tab.id.clone();
         self.pending_file_requests.remove(&id);
+        if let Some(listing) = self.listing_cancels.remove(&id) {
+            listing.store(true, std::sync::atomic::Ordering::Release);
+        }
         let receiver = if let Some(options) = options {
             oxyde_lib::commands::search::advanced_search(
                 root,

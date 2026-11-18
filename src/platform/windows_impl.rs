@@ -638,8 +638,8 @@ impl Platform for WindowsPlatform {
         super::windows_preview_worker::run(mode, path)
     }
 
-    fn list_archive_directory(&self, path: &std::path::Path, internal: &str) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError> {
-        super::windows_archive_worker::run(path, internal)
+    fn list_archive_directory(&self, path: &std::path::Path, internal: &str, checkpoint: &dyn Fn() -> std::io::Result<()>) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError> {
+        super::windows_archive_worker::run(path, internal, checkpoint)
     }
     fn index_archive_contents(&self, path: &std::path::Path, checkpoint: &dyn Fn() -> std::io::Result<()>) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError> {
         super::windows_archive_worker::index(path, checkpoint)

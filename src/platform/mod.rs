@@ -512,7 +512,9 @@ pub trait Platform: Send + Sync {
     fn run_archive_io_worker(&self, operation: crate::utils::archive_io_protocol::Operation,
         controls: &dyn Fn() -> std::io::Result<crate::utils::archive_io_protocol::Control>,
         handler: &mut dyn FnMut(crate::utils::archive_io_protocol::Frame) -> std::io::Result<crate::utils::archive_io_protocol::Frame>) -> std::io::Result<std::time::Duration>;
-    fn list_archive_directory(&self, path: &std::path::Path, internal: &str) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError>;
+    /// Lists one folder of an archive; `checkpoint` stops the wait and the worker
+    /// once the listing is no longer wanted.
+    fn list_archive_directory(&self, path: &std::path::Path, internal: &str, checkpoint: &dyn Fn() -> std::io::Result<()>) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError>;
     fn index_archive_contents(&self, path: &std::path::Path, checkpoint: &dyn Fn() -> std::io::Result<()>) -> Result<Vec<crate::models::FileEntry>, crate::models::CommandError>;
     /// Checks the password remembered for an encrypted archive in a confined worker.
     fn verify_archive_password(&self, path: &std::path::Path) -> Result<(), crate::models::CommandError>;

@@ -153,20 +153,29 @@ pub fn list_archive_contents(
     archive_path: String,
     internal_path: String,
 ) -> Result<Vec<FileEntry>, CommandError> {
+    list_archive_contents_checked(archive_path, internal_path, &|| Ok(()))
+}
+
+/// Like [`list_archive_contents`], given up as soon as `checkpoint` refuses.
+pub fn list_archive_contents_checked(
+    archive_path: String,
+    internal_path: String,
+    checkpoint: &dyn Fn() -> io::Result<()>,
+) -> Result<Vec<FileEntry>, CommandError> {
     // Library unit fixtures exercise parser/operations locally: their executable
     // is Rust's test harness, not the headless app. Integration tests launch the
     // actual binary with the production Windows supervisor and protocol.
     #[cfg(test)]
-    { list_archive_contents_local(archive_path, internal_path) }
+    { checkpoint()?; list_archive_contents_local(archive_path, internal_path) }
     #[cfg(not(test))]
     {
         let path = validate_path(&archive_path)?;
         relative_archive_path(&internal_path)?;
         if crate::utils::archive_volumes::is_rar_volume_set(&path) {
-            let entries = crate::systems::archive_volumes::index_rar_set(&path, &|| Ok(()))?;
+            let entries = crate::systems::archive_volumes::index_rar_set(&path, checkpoint)?;
             return directory_entries(&path, &internal_path, entries);
         }
-        platform().list_archive_directory(&path, &internal_path)
+        platform().list_archive_directory(&path, &internal_path, checkpoint)
     }
 }
 
