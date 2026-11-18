@@ -5,6 +5,9 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 
+/// Opening more at once launches that many applications; Explorer asks past 15.
+const MAX_OPENED_AT_ONCE: usize = 20;
+
 impl OxydeApp {
     pub fn on_action_ouvrir(&mut self, _: &Ouvrir, _: &mut Window, cx: &mut Context<Self>) {
         self.execute_ouvrir(cx);
@@ -94,6 +97,10 @@ impl OxydeApp {
             let paths: Vec<(String, bool)> = tab.files.iter()
                 .filter(|entry| tab.selected_paths.contains(&entry.path))
                 .map(|entry| (entry.path.clone(), entry.is_dir)).collect();
+            if paths.len() > MAX_OPENED_AT_ONCE {
+                self.toast(ToastKind::Error, Message::OpenTooManyItems, String::new(), 0, cx);
+                return;
+            }
             for (path, is_dir) in paths {
                 self.open_file_item(&pane_id, path, is_dir, cx);
             }
@@ -142,6 +149,15 @@ impl OxydeApp {
                             .eq(items.iter().map(|i| (&i.path, &i.name)))
                         {
                             this.state.pinned_items = items;
+                            // A folder unpinned during a press or a reorder ends it, or the layer would stay.
+                            if let Some((path, _)) = &this.pinned_press {
+                                if !this.state.pinned_items.iter().any(|item| item.path == *path) {
+                                    this.pinned_press = None;
+                                }
+                            }
+                            if this.pinned_reorder.as_ref().is_some_and(|reorder| !this.state.pinned_items.iter().any(|item| item.path == reorder.path)) {
+                                this.pinned_reorder = None;
+                            }
                             this.state.refresh_sidebar();
                             this.refresh_system_menus(cx);
                             cx.notify();

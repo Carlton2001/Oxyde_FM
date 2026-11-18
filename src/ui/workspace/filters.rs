@@ -298,13 +298,13 @@ impl TabState {
         }
     }
 
-    /// Calls `visit` with each entry the other filters keep, to count the values of `column`
-    /// as a spreadsheet does: a value hidden by another column counts zero.
-    pub(crate) fn visit_faceted(&self, column: FilterColumn, today: chrono::NaiveDate, mut visit: impl FnMut(&FileEntry)) {
+    /// Visits every file once, telling whether the other filters keep it, to count the values
+    /// of `column` as a spreadsheet does: a value hidden by another column counts zero.
+    pub(crate) fn visit_all_faceted(&self, column: FilterColumn, today: chrono::NaiveDate, mut visit: impl FnMut(&FileEntry, bool)) {
         let filters = FileFilters::from_tab(self);
         let compiled = filters.compile(today);
-        for file in self.files.iter().filter(|file| compiled.matches(file, Some(column))) {
-            visit(file);
+        for file in self.files.iter() {
+            visit(file, compiled.matches(file, Some(column)));
         }
     }
 

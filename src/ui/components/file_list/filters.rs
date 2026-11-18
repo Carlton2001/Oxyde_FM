@@ -38,23 +38,24 @@ pub(crate) fn type_label(value: &str, i18n: &I18n) -> String {
 pub(crate) fn filter_entries(tab: &TabState, column: FilterColumn, i18n: &I18n) -> Vec<FilterEntry> {
     let today = chrono::Local::now().date_naive();
     let mut counts = HashMap::<FilterValue, u64>::new();
-    tab.visit_faceted(column, today, |file| {
-        if let Some(value) = value_of(file, column, today) {
-            *counts.entry(value).or_default() += 1;
-        }
-    });
     let mut present = Vec::<FilterValue>::new();
     let mut samples = HashMap::<String, (String, IconType)>::new();
     let mut seen = std::collections::HashSet::new();
-    for file in tab.files.iter() {
-        let Some(value) = value_of(file, column, today) else { continue };
+    // One pass: every value present, and those counted among the entries the other filters keep.
+    tab.visit_all_faceted(column, today, |file, kept| {
+        let Some(value) = value_of(file, column, today) else { return };
         if let FilterValue::Type(label) = &value {
-            samples.entry(label.clone()).or_insert_with(|| (file.path.clone(), crate::ui::components::icons::entry_icon(file)));
+            if !samples.contains_key(label) {
+                samples.insert(label.clone(), (file.path.clone(), crate::ui::components::icons::entry_icon(file)));
+            }
+        }
+        if kept {
+            *counts.entry(value.clone()).or_default() += 1;
         }
         if seen.insert(value.clone()) {
             present.push(value);
         }
-    }
+    });
     // Values checked in another folder stay listed, to be unchecked.
     let checked: Vec<FilterValue> = match column {
         FilterColumn::Type => tab.filter_types.iter().cloned().map(FilterValue::Type).collect(),

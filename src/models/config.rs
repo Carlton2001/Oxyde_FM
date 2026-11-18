@@ -284,11 +284,16 @@ impl ConfigManager {
         // Without `themes.json`, themes stored by older versions in `config.json` are kept
         // and move to `themes.json` at the next write.
         match fs::read_to_string(Self::themes_path(path)) {
-            Ok(content) => {
-                let file: ThemesFile = serde_json::from_str(&content)
-                    .map_err(|e| CommandError::Other(e.to_string()))?;
-                config.custom_themes = file.themes;
-            }
+            Ok(content) => match serde_json::from_str::<ThemesFile>(&content) {
+                Ok(file) => config.custom_themes = file.themes,
+                // The settings do not depend on the themes: set the unreadable file aside, as
+                // the next write would replace it, and go on without those themes.
+                Err(error) => {
+                    log::warn!("themes.json is unreadable and set aside: {error}");
+                    let themes = Self::themes_path(path);
+                    let _ = fs::rename(&themes, themes.with_file_name("themes.json.invalid"));
+                }
+            },
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
             Err(error) => return Err(CommandError::IoError(error.to_string())),
         }

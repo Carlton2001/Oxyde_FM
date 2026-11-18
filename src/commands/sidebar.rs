@@ -28,12 +28,12 @@ fn get_sidebar_nodes_blocking(path: String) -> Result<Vec<SidebarNode>, CommandE
             Err(_) => continue,
         };
 
-        if !metadata.is_dir() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        let (is_hidden, is_system, is_reparse_point) = attributes.of(&metadata, &name);
+        // A junction or a folder link is a folder of the tree, as in the listing.
+        if !metadata.is_dir() && !crate::models::file_entry::is_directory_link(&metadata, is_reparse_point) {
             continue;
         }
-
-        let name = entry.file_name().to_string_lossy().to_string();
-        let (is_hidden, is_system, _) = attributes.of(&metadata, &name);
 
         // Efficiently check for subdirectories
         let mut node_has_subdirs = false;
@@ -65,18 +65,23 @@ pub async fn get_subtree_nodes(
     show_hidden: bool,
     show_system: bool,
 ) -> Result<std::collections::HashMap<String, Vec<SidebarNode>>, CommandError> {
-    let pb = validate_path(&path)?;
-    if !pb.is_dir() {
-        return Err(CommandError::PathError(format!(
-            "Path is not a directory: {}",
-            path
-        )));
-    }
-
-    tokio::task::spawn_blocking(move || get_subtree_nodes_blocking(pb, show_hidden, show_system))
+    // The path checks touch the file system, which may stall on a disconnected share.
+    tokio::task::spawn_blocking(move || {
+        let pb = validate_path(&path)?;
+        if !pb.is_dir() {
+            return Err(CommandError::PathError(format!(
+                "Path is not a directory: {}",
+                path
+            )));
+        }
+        get_subtree_nodes_blocking(pb, show_hidden, show_system)
+    })
         .await
         .map_err(|error| CommandError::IoError(error.to_string()))?
 }
+
+/// Folders read by one « Expand all », so a root of the whole disk stays bounded.
+const MAX_BULK_FOLDERS: usize = 20_000;
 
 fn get_subtree_nodes_blocking(
     pb: std::path::PathBuf,
@@ -87,6 +92,10 @@ fn get_subtree_nodes_blocking(
     let mut stack = vec![pb];
 
     while let Some(current_pb) = stack.pop() {
+        // « Expand all » on a huge tree returns what it has found so far.
+        if result.len() >= MAX_BULK_FOLDERS {
+            break;
+        }
         let current_path_str = current_pb.to_string_lossy().to_string();
 
         let entries = match fs::read_dir(&current_pb) {
@@ -102,13 +111,12 @@ fn get_subtree_nodes_blocking(
                 Err(_) => continue,
             };
 
-            if !metadata.is_dir() {
-                continue;
-            }
-
             let name = entry.file_name().to_string_lossy().to_string();
             let (is_hidden, is_system, is_reparse_point) =
                 attributes.of(&metadata, &name);
+            if !metadata.is_dir() && !crate::models::file_entry::is_directory_link(&metadata, is_reparse_point) {
+                continue;
+            }
 
             let node_path = entry.path();
             let mut node_has_subdirs = false;

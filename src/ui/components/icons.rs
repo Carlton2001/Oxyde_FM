@@ -398,8 +398,12 @@ pub(crate) fn prepare_system_folder_icons(enabled: bool) -> SystemFolderImages {
     }
 }
 
-pub(crate) fn invalidate_file_icon(path: &str, cx: &mut App) {
+/// Drops the cached icons of a file: reset the folder images once, then call this for each path.
+pub(crate) fn reset_folder_images(cx: &mut App) {
     cx.set_global(SystemFolderImages::default());
+}
+
+pub(crate) fn invalidate_file_icon_assets(path: &str, cx: &mut App) {
     for large in [false, true] {
         cx.remove_asset::<SystemIconAsset>(&(SharedString::from(path.to_string()), large));
         for (is_dir, preserve_path) in [(false, false), (true, false), (false, true)] {

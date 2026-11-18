@@ -127,6 +127,30 @@ pub(super) fn restore_journal_directory(
     }
 }
 
+/// Clears the read-only attribute of an open file. Written as attributes, with
+/// NORMAL when nothing else is set: zero means "unchanged" to the system, and
+/// `Permissions::set_readonly(false)` then silently leaves a read-only-only file as it is.
+pub(super) fn clear_readonly(file: &File) -> Result<()> {
+    use std::os::windows::fs::MetadataExt;
+    let mut attributes = file.metadata()?.file_attributes() & (0x2 | 0x4 | 0x20 | 0x100 | 0x1000 | 0x2000);
+    if attributes == 0 {
+        attributes = 0x80;
+    }
+    let info = FILE_BASIC_INFO {
+        FileAttributes: attributes,
+        ..Default::default()
+    };
+    unsafe {
+        SetFileInformationByHandle(
+            HANDLE(file.as_raw_handle()),
+            FileBasicInfo,
+            (&info as *const FILE_BASIC_INFO).cast(),
+            std::mem::size_of_val(&info) as u32,
+        )
+        .map_err(io_error)
+    }
+}
+
 pub(super) fn remove_empty_directory(
     parent: &File,
     path: &Path,

@@ -143,19 +143,6 @@ fn evict(source: &Source, cx: &mut App) {
     }
 }
 
-pub(super) fn invalidate(path: &str, cx: &mut App) {
-    let sources: Vec<_> = cx
-        .default_global::<Owners>()
-        .sources
-        .keys()
-        .filter(|source| source.path.as_ref() == path)
-        .cloned()
-        .collect();
-    for source in sources {
-        evict(&source, cx);
-    }
-}
-
 pub(crate) fn clear_grid_thumbnails(cx: &mut App) {
     crate::ui::audio_covers::clear();
     let sources = cx.default_global::<Owners>().reset();

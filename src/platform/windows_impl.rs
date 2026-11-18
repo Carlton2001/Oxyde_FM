@@ -109,6 +109,16 @@ impl Platform for WindowsPlatform {
     fn withdraw_from_file_choosers(&self) { super::windows_file_dialog::registration::withdraw() }
     fn identify_process(&self) { super::windows_jump_list::identify() }
     fn set_taskbar_menu(&self, menu: &super::TaskbarMenu) {
+        // Calls come from detached tasks: one at a time, and an older menu never
+        // replaces a newer one that was written first.
+        static ISSUED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        static WRITTEN: std::sync::Mutex<u64> = std::sync::Mutex::new(0);
+        let ticket = ISSUED.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        let mut written = WRITTEN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if ticket < *written {
+            return;
+        }
+        *written = ticket;
         if let Err(error) = super::windows_jump_list::set(menu) {
             log::warn!("Cannot list the taskbar menu: {error}");
         }
@@ -319,7 +329,7 @@ impl Platform for WindowsPlatform {
         super::windows_file_moves::replace(file, destination)
     }
     fn list_trash_items(&self) -> Result<Vec<trash::TrashItem>, String> {
-        trash::os_limited::list().map_err(|error| error.to_string())
+        super::windows_trash::list_items()
     }
     fn list_trash_entries(&self) -> Result<Option<Vec<crate::models::TrashEntry>>, String> {
         super::windows_trash::listing::list().map(Some)
@@ -352,6 +362,10 @@ impl Platform for WindowsPlatform {
                 PCWSTR::default(),
                 SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND,
             )
+            .or_else(|error| {
+                // Already emptied elsewhere: the Shell answers E_UNEXPECTED, and the goal is met.
+                if error.code() == windows::Win32::Foundation::E_UNEXPECTED { Ok(()) } else { Err(error) }
+            })
             .map_err(|error| format!("Failed to empty recycle bin: {error}"))
         }
     }
@@ -842,8 +856,11 @@ impl Platform for WindowsPlatform {
                 ..Default::default()
             };
 
-            unsafe {
-                let _ = ShellExecuteExW(&mut info);
+            // The Shell's handlers need COM, and this thread ends right after the call.
+            let _apartment = super::windows_com::ComApartment::sta_or_existing();
+            info.fMask |= windows::Win32::UI::Shell::SEE_MASK_NOASYNC;
+            if let Err(error) = unsafe { ShellExecuteExW(&mut info) } {
+                log::warn!("Cannot show the properties of {normalized}: {error}");
             }
         });
     }
@@ -940,18 +957,22 @@ impl Platform for WindowsPlatform {
             );
             if let Ok(icon) = hicon {
                 if !hwnd.is_invalid() {
-                    let _ = SendMessageW(
-                        hwnd,
-                        WM_SETICON,
-                        Some(WPARAM(ICON_BIG as usize)),
-                        Some(LPARAM(icon.0 as isize)),
-                    );
-                    let _ = SendMessageW(
-                        hwnd,
-                        WM_SETICON,
-                        Some(WPARAM(ICON_SMALL as usize)),
-                        Some(LPARAM(icon.0 as isize)),
-                    );
+                    // The icons this function made earlier are destroyed once replaced.
+                    static MADE: std::sync::Mutex<Vec<isize>> = std::sync::Mutex::new(Vec::new());
+                    let mut made = MADE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                    for size in [ICON_BIG, ICON_SMALL] {
+                        let previous = SendMessageW(hwnd, WM_SETICON, Some(WPARAM(size as usize)), Some(LPARAM(icon.0 as isize))).0;
+                        if previous != 0 && previous != icon.0 as isize {
+                            if let Some(position) = made.iter().position(|known| *known == previous) {
+                                made.swap_remove(position);
+                                let _ = windows::Win32::UI::WindowsAndMessaging::DestroyIcon(
+                                    windows::Win32::UI::WindowsAndMessaging::HICON(previous as *mut std::ffi::c_void));
+                            }
+                        }
+                    }
+                    made.push(icon.0 as isize);
+                } else {
+                    let _ = windows::Win32::UI::WindowsAndMessaging::DestroyIcon(icon);
                 }
             }
         }
@@ -998,44 +1019,31 @@ pub(super) fn read_recycle_bin_config(drive_path: String) -> Result<TrashSystemC
                     )
                     .0 == 0
                     {
-                        // Read MaxCapacity
-                        let mut data = 0u32;
-                        let mut data_size = std::mem::size_of::<u32>() as u32;
-                        let mut key_type =
-                            windows::Win32::System::Registry::REG_VALUE_TYPE::default();
-                        let wide_cap: Vec<u16> = "MaxCapacity"
-                            .encode_utf16()
-                            .chain(std::iter::once(0))
-                            .collect();
-                        if RegQueryValueExW(
-                            hkey,
-                            PCWSTR(wide_cap.as_ptr()),
-                            None,
-                            Some(&mut key_type as *mut _),
-                            Some(&mut data as *mut _ as *mut u8),
-                            Some(&mut data_size as *mut _),
-                        )
-                        .0 == 0
-                        {
-                            max_size_mb = data as u64;
+                        // A value is taken only as a DWORD that fits the buffer: it may be written as
+                        // a QWORD or a string, and a size left by one read must not bound the next.
+                        let read_dword = |name: &str| -> Option<u32> {
+                            let wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+                            let mut data = 0u32;
+                            let mut data_size = std::mem::size_of::<u32>() as u32;
+                            let mut key_type = windows::Win32::System::Registry::REG_VALUE_TYPE::default();
+                            let status = RegQueryValueExW(
+                                hkey,
+                                PCWSTR(wide.as_ptr()),
+                                None,
+                                Some(&mut key_type as *mut _),
+                                Some(&mut data as *mut _ as *mut u8),
+                                Some(&mut data_size as *mut _),
+                            );
+                            (status.0 == 0
+                                && key_type == windows::Win32::System::Registry::REG_DWORD
+                                && data_size == std::mem::size_of::<u32>() as u32)
+                                .then_some(data)
+                        };
+                        if let Some(capacity) = read_dword("MaxCapacity") {
+                            max_size_mb = capacity as u64;
                         }
-
-                        // Read NukeOnDelete
-                        let wide_nuke: Vec<u16> = "NukeOnDelete"
-                            .encode_utf16()
-                            .chain(std::iter::once(0))
-                            .collect();
-                        if RegQueryValueExW(
-                            hkey,
-                            PCWSTR(wide_nuke.as_ptr()),
-                            None,
-                            Some(&mut key_type as *mut _),
-                            Some(&mut data as *mut _ as *mut u8),
-                            Some(&mut data_size as *mut _),
-                        )
-                        .0 == 0
-                        {
-                            nuke_on_delete = data == 1;
+                        if let Some(nuke) = read_dword("NukeOnDelete") {
+                            nuke_on_delete = nuke == 1;
                         }
                         let _ = windows::Win32::System::Registry::RegCloseKey(hkey);
                     }

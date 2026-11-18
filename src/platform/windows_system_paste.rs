@@ -16,7 +16,7 @@ use windows::{
                 CMINVOKECOMMANDINFO,
             },
             WindowsAndMessaging::{
-                DispatchMessageW, PeekMessageW, TranslateMessage, MSG, PM_REMOVE, SW_SHOWNORMAL,
+                DispatchMessageW, FindWindowW, GetWindowThreadProcessId, PeekMessageW, TranslateMessage, MSG, PM_REMOVE, SW_SHOWNORMAL,
             },
         },
     },
@@ -24,6 +24,17 @@ use windows::{
 
 /// The shell may finish its transfer on this thread's messages after the verb returns.
 const PUMP_AFTER_PASTE: Duration = Duration::from_secs(30);
+/// While the shell's progress window of this process is open, the transfer goes on.
+const PUMP_WHILE_TRANSFERRING: Duration = Duration::from_secs(12 * 3600);
+
+fn transferring() -> bool {
+    let window = unsafe { FindWindowW(windows::core::w!("OperationStatusWindow"), None) };
+    let mut process = 0u32;
+    window.is_ok_and(|window| {
+        unsafe { GetWindowThreadProcessId(window, Some(&mut process)) };
+        process == std::process::id()
+    })
+}
 
 fn virtual_files_offered() -> bool {
     let format = unsafe { RegisterClipboardFormatW(windows::core::w!("FileGroupDescriptorW")) };
@@ -50,7 +61,7 @@ fn invoke_paste(target: &str) -> windows::core::Result<()> {
 
 fn pump_messages(duration: Duration) {
     let started = Instant::now();
-    while started.elapsed() < duration {
+    while started.elapsed() < duration || (started.elapsed() < PUMP_WHILE_TRANSFERRING && transferring()) {
         let mut message = MSG::default();
         while unsafe { PeekMessageW(&mut message, None, 0, 0, PM_REMOVE) }.as_bool() {
             unsafe {

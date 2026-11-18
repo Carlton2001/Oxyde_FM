@@ -167,7 +167,7 @@ impl Viewer {
                         .iter()
                         .enumerate()
                         .take_while(|(offset, row)| matches!(row.kind, Kind::TableRow(false, _)) || *offset == 0)
-                        .map(|(_, row)| row.text.trim_end_matches('\t'))
+                        .map(|(_, row)| row.text.strip_suffix('\t').unwrap_or(&row.text))
                         .collect::<Vec<_>>()
                         .join("\n");
                     let done = copied == Some(index);
@@ -192,7 +192,7 @@ impl Viewer {
                     .w_full()
                     .px(rems(2.0))
                     .flex()
-                    .children(block.text.trim_end_matches('\t').split('\t').enumerate().map(|(column, cell)| {
+                    .children(block.text.strip_suffix('\t').unwrap_or(&block.text).split('\t').enumerate().map(|(column, cell)| {
                         let alignment = alignments.get(column).copied().unwrap_or(Alignment::None);
                         div()
                             .flex_1()

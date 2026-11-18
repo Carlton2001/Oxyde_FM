@@ -86,6 +86,7 @@ impl OxydeApp {
         }
         self.update_status = UpdateStatus::Downloading;
         cx.notify();
+        let update_again = update.clone();
         cx.spawn(async move |this, cx| {
             let result = tokio::task::spawn_blocking(move || {
                 let setup = updates::download(&update)?;
@@ -94,7 +95,7 @@ impl OxydeApp {
             .await
             .unwrap_or_else(|error| Err(error.to_string()));
             let _ = this.update(cx, |this, cx| match result {
-                Ok(()) => this.close_for_update(cx),
+                Ok(()) => this.close_for_update(update_again, cx),
                 Err(error) => {
                     log::warn!("Update installation failed: {error}");
                     this.update_status = UpdateStatus::Failed;
@@ -105,12 +106,22 @@ impl OxydeApp {
         .detach();
     }
 
-    /// Setup waits for nothing: close normally so preferences and session are saved.
-    fn close_for_update(&mut self, cx: &mut Context<Self>) {
+    /// Setup waits for nothing: close normally so preferences and session are saved. When the
+    /// close is refused (exit confirmation), the update is offered again instead of staying
+    /// "Downloading" while the installer waits.
+    fn close_for_update(&mut self, update: Update, cx: &mut Context<Self>) {
         let (Some(window), Some(handle)) = (self.main_window, self.handle.clone()) else { return; };
         cx.defer(move |cx| {
             let _ = window.update(cx, |_, window, cx| {
-                crate::ui::components::title_bar::close_main_window(&handle, "update installation", window, cx);
+                let quits = handle.update(cx, |view, cx| view.may_quit(window, cx));
+                if quits {
+                    crate::ui::components::title_bar::close_main_window_now(&handle, "update installation", window, cx);
+                } else {
+                    handle.update(cx, |view, cx| {
+                        view.update_status = UpdateStatus::Available(update);
+                        cx.notify();
+                    });
+                }
             });
         });
     }

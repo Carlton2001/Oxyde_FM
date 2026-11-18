@@ -338,7 +338,10 @@ pub fn render_top_bar(
                             accumulated_path = current_path.clone();
                         } else if index == 0 && share.is_some() {
                             accumulated_path = part.to_string();
-                        } else if index == 0 && part.ends_with(':') {
+                        } else if index == 0 && part.ends_with(':') && current_path.contains("://") {
+                            // A scheme (smb:, sftp:) keeps both slashes of its URI.
+                            accumulated_path = format!("{part}//");
+                        } else if index == 0 && part.ends_with(':') && cfg!(windows) {
                             accumulated_path = format!("{}{separator}", part);
                         } else {
                             if !accumulated_path.is_empty() && !accumulated_path.ends_with(separator) {
@@ -480,9 +483,9 @@ pub fn render_top_bar(
                                     let target = tgt.clone();
                                     h_drop.update(cx, |this, cx| {
                                         if this.drag_copy_mode {
-                                            this.execute_file_copy(paths, target, cx);
+                                            this.execute_file_copy(paths.to_vec(), target, cx);
                                         } else {
-                                            this.execute_file_move(paths, target, cx);
+                                            this.execute_file_move(paths.to_vec(), target, cx);
                                         }
                                     });
                                 }

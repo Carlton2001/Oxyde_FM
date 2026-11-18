@@ -36,7 +36,7 @@ pub(super) fn check_conflicts_real(
             }
             if occupied(&target_path) {
                 // Initial top-level conflict found
-                add_conflict_recursive(&source_path, &target_path, &mut conflicts, &mut summaries)?;
+                add_conflict_recursive(&source_path, &target_path, &mut conflicts, &mut summaries, 0)?;
             }
         }
     }
@@ -59,11 +59,15 @@ fn copied_as_link(_path: &std::path::Path) -> bool {
     false
 }
 
+/// Folders nested deeper are not compared, which also bounds a loop through a junction.
+const MAX_CONFLICT_DEPTH: usize = 128;
+
 fn add_conflict_recursive(
     source_path: &std::path::Path,
     target_path: &std::path::Path,
     conflicts: &mut Vec<ConflictEntry>,
     summaries: &mut TreeSummaries,
+    depth: usize,
 ) -> Result<(), CommandError> {
     let mut source_entry = get_file_entry_from_path(source_path)?;
     let mut target_entry = get_file_entry_from_path(target_path)?;
@@ -83,15 +87,28 @@ fn add_conflict_recursive(
             target: target_entry,
         });
 
-        // Now recursively check children for conflicts
-        for entry in std::fs::read_dir(source_path)? {
-            let entry = entry?;
+        // Now recursively check children for conflicts. A folder looping back on itself, or
+        // nested absurdly deep, stops at the limit; an unreadable subfolder is left unchecked
+        // (its conflicts surface when it is copied) rather than blocking the whole transfer.
+        if depth >= MAX_CONFLICT_DEPTH {
+            return Ok(());
+        }
+        let children = match std::fs::read_dir(source_path) {
+            Ok(children) => children,
+            Err(error) if depth > 0 => {
+                log::debug!("Conflicts not checked in {}: {error}", source_path.display());
+                return Ok(());
+            }
+            Err(error) => return Err(error.into()),
+        };
+        for entry in children {
+            let Ok(entry) = entry else { continue };
             let entry_path = entry.path();
             let entry_name = entry.file_name();
             let target_child_path = target_path.join(&entry_name);
 
             if occupied(&target_child_path) {
-                add_conflict_recursive(&entry_path, &target_child_path, conflicts, summaries)?;
+                add_conflict_recursive(&entry_path, &target_child_path, conflicts, summaries, depth + 1)?;
             }
         }
     } else {

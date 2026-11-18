@@ -45,8 +45,9 @@ const TIMER: usize = 1;
 /// usually asks at once; Files waits as long for those that look for the window late.
 const PATIENCE: u32 = 10_000;
 /// How long after an item the next one of the same selection may come. The Shell asks
-/// for them in one go, a call each; the user waits this long to see the selection.
-const SETTLE: u32 = 20;
+/// for them in one go, a call each, but a network folder may answer each slowly; the user
+/// waits this long to see the selection.
+const SETTLE: u32 = 150;
 
 /// A Shell item identifier list, freed with the Shell's allocator.
 struct IdList(*mut ITEMIDLIST);
@@ -294,11 +295,8 @@ impl Standing {
             let window = if index == 0 { Ok(clock) } else { hidden_window() };
             match window.and_then(|window| Listed::new(window, list, selection.clone(), &windows)) {
                 Ok(window) => listed.push(window),
-                // Without its first window the clock would be nobody's to destroy.
-                Err(error) if index == 0 => {
-                    unsafe { let _ = DestroyWindow(clock); }
-                    return Err(error);
-                }
+                // Listed::new destroys the window it was given when it fails, the clock included.
+                Err(error) if index == 0 => return Err(error),
                 Err(error) => log::warn!("Cannot stand for {folder} under its other identifier list: {error}"),
             }
         }

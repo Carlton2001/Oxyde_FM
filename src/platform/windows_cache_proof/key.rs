@@ -99,6 +99,13 @@ fn dacl_text(descriptor: &Descriptor) -> io::Result<String> {
     unsafe { allocation.0.to_string() }.map_err(|error| io::Error::other(error.to_string()))
 }
 pub(in crate::platform) fn load(path: &Path) -> io::Result<[u8; 32]> {
+    load_once(path, true)
+}
+
+/// `repair`: a key file that cannot be read back (created, then Oxyde stopped before it was
+/// written; or sealed for another user profile) is replaced once. Only the cache proofs
+/// signed with it are lost, and those are checked again.
+fn load_once(path: &Path, repair: bool) -> io::Result<[u8; 32]> {
     let expected = format!(
         "D:P(A;;FA;;;{})(A;;FA;;;SY)",
         super::super::windows_worker_sandbox::parent_user_sid()?
@@ -149,9 +156,24 @@ pub(in crate::platform) fn load(path: &Path) -> io::Result<[u8; 32]> {
             check_permissions(&file, &expected)?;
             let mut encrypted = Vec::new();
             (&mut file).take(4097).read_to_end(&mut encrypted)?;
-            let key = dpapi(&encrypted, false)?;
-            key.try_into()
-                .map_err(|_| io::Error::other("Invalid cache signing key length"))
+            let key = if encrypted.is_empty() {
+                Err(io::Error::other("Empty cache signing key file"))
+            } else {
+                dpapi(&encrypted, false)
+            }
+            .and_then(|key| {
+                <[u8; 32]>::try_from(key)
+                    .map_err(|_| io::Error::other("Invalid cache signing key length"))
+            });
+            match key {
+                Err(error) if repair => {
+                    log::warn!("Replacing an unreadable cache signing key: {error}");
+                    drop(file);
+                    std::fs::remove_file(path)?;
+                    load_once(path, false)
+                }
+                other => other,
+            }
         }
         Err(error) => Err(error),
     }

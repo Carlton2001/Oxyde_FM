@@ -8,7 +8,7 @@ use windows::core::{HSTRING, PCWSTR, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, SetHandleInformation, HANDLE, HANDLE_FLAG_INHERIT, HWND, LPARAM, WAIT_OBJECT_0, WAIT_TIMEOUT};
 use windows::Win32::Security::SECURITY_ATTRIBUTES;
 use windows::Win32::Storage::FileSystem::{ReadFile, WriteFile};
-use windows::Win32::System::Pipes::CreatePipe;
+use windows::Win32::System::Pipes::{CreatePipe, PeekNamedPipe};
 use windows::Win32::System::Threading::{
     CreateProcessW, DeleteProcThreadAttributeList, GetExitCodeProcess, InitializeProcThreadAttributeList, TerminateProcess,
     UpdateProcThreadAttribute, WaitForSingleObject, CREATE_NO_WINDOW, EXTENDED_STARTUPINFO_PRESENT, INFINITE,
@@ -115,11 +115,26 @@ fn write_all(handle: HANDLE, mut bytes: &[u8]) -> bool {
     true
 }
 
-/// Everything the launcher writes, until it closes its end.
-fn read_all(handle: Handle) -> Vec<u8> {
+/// Everything the launcher writes, until it closes its end or ends. Another process
+/// that inherited the write end by accident does not keep this waiting.
+fn read_all(handle: Handle, process: isize) -> Vec<u8> {
     let mut read = Vec::new();
     let mut chunk = [0u8; 8192];
+    let mut ending = false;
     loop {
+        let mut available = 0u32;
+        if unsafe { PeekNamedPipe(handle.0, None, 0, None, Some(&mut available), None) }.is_err() {
+            return read;
+        }
+        if available == 0 {
+            let ended = unsafe { WaitForSingleObject(HANDLE(process as *mut core::ffi::c_void), 0) } != WAIT_TIMEOUT;
+            // One more look once it ended: its last write may have come after the first.
+            if ended && std::mem::replace(&mut ending, true) {
+                return read;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+            continue;
+        }
         let mut count = 0u32;
         if unsafe { ReadFile(handle.0, Some(&mut chunk), Some(&mut count), None) }.is_err() || count == 0 {
             return read;
@@ -216,7 +231,7 @@ pub(crate) fn ask(request: &str, owner: HWND, showing: &Cell<isize>) -> Outcome 
         unsafe { let _ = TerminateProcess(process.0, 1); }
         return Outcome::Unavailable;
     }
-    let Ok(reader) = std::thread::Builder::new().name("oxyde-file-dialog".into()).spawn(move || read_all(output)) else {
+    let Ok(reader) = std::thread::Builder::new().name("oxyde-file-dialog".into()).spawn({ let process = process.0 .0 as isize; move || read_all(output, process) }) else {
         unsafe { let _ = TerminateProcess(process.0, 1); }
         return Outcome::Unavailable;
     };

@@ -108,12 +108,15 @@ impl OxydeApp {
                 this.clearing_cache = false;
                 this.toast(if result.is_ok() { super::ToastKind::Success } else { super::ToastKind::Error }, if result.is_ok() { Message::SettingsCacheCleared } else { Message::SettingsCacheError }, String::new(), 0, cx);
                 if let Err(error) = result { log::warn!("Cache cleanup failed: {error}"); }
+                // The grid thumbnails are all dropped at once; per file, only the icons and the
+                // tooltip previews remain, without scanning the thumbnails again for each.
                 crate::ui::components::file_list::clear_grid_thumbnails(cx);
+                crate::ui::components::icons::reset_folder_images(cx);
                 this.state.layout.visit_panes(&mut |pane| {
                     for tab in &pane.tabs {
                         for file in tab.files.iter() {
-                            crate::ui::components::icons::invalidate_file_icon(&file.path, cx);
-                            crate::ui::components::file_list::invalidate_thumbnail(&file.path, cx);
+                            crate::ui::components::icons::invalidate_file_icon_assets(&file.path, cx);
+                            crate::ui::components::tooltip::invalidate_media_preview(&file.path);
                         }
                     }
                 });

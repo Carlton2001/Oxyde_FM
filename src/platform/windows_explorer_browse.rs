@@ -21,6 +21,8 @@ use windows::Win32::UI::Shell::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{FindWindowExW, GetAncestor, GetClassNameW, GetForegroundWindow, GA_ROOT};
 
+/// How long Explorer has to answer before the folder is Oxyde's.
+const EXPLORER_DEADLINE: std::time::Duration = std::time::Duration::from_secs(3);
 const EXPLORER_TAB: PCWSTR = w!("ShellTabWindowClass");
 /// The desktop and the taskbar, which are Explorer's too: a folder opened there is
 /// Oxyde's, even when an Explorer window has it selected.
@@ -133,8 +135,8 @@ fn origin<T: PartialEq>(windows: &[T], foreground: &T) -> Option<usize> {
 /// A new Explorer window on `folder`. Named on Explorer's command line, a folder does
 /// not go through the verb Oxyde replaced.
 fn open_window(folder: &str) -> std::io::Result<()> {
-    let root = std::env::var_os("SystemRoot").ok_or_else(|| std::io::Error::other("SystemRoot is not set"))?;
-    let mut command = std::process::Command::new(std::path::Path::new(&root).join("explorer.exe"));
+    // The system's own explorer.exe, not whatever a parent put in SystemRoot.
+    let mut command = std::process::Command::new(super::windows_executables::resolve(super::SystemExecutable::Explorer)?);
     super::windows_process_launch::explorer_path_argument(&mut command, folder)?;
     command.spawn().map(drop)
 }
@@ -161,9 +163,24 @@ pub(super) fn browse_where_opened(folder: &str) -> bool {
     if DESKTOP_WINDOWS.contains(&class_name(foreground).as_str()) || !started_by_explorer() {
         return false;
     }
-    let Ok(_apartment) = ComApartment::sta() else { return false };
-    keep(folder, foreground).unwrap_or_else(|error| {
-        log::warn!("Cannot keep {folder} in the Explorer window: {error}");
+    // Explorer's windows are asked across processes with no timeout of their own:
+    // one stuck on an offline share must not keep the folder from opening in Oxyde.
+    let (sender, answer) = std::sync::mpsc::channel();
+    let folder_owned = folder.to_string();
+    let window = foreground.0 as isize;
+    let spawned = std::thread::Builder::new().name("explorer-browse".into()).spawn(move || {
+        let Ok(_apartment) = ComApartment::sta() else { return };
+        let kept = keep(&folder_owned, HWND(window as *mut core::ffi::c_void)).unwrap_or_else(|error| {
+            log::warn!("Cannot keep {folder_owned} in the Explorer window: {error}");
+            false
+        });
+        let _ = sender.send(kept);
+    });
+    if spawned.is_err() {
+        return false;
+    }
+    answer.recv_timeout(EXPLORER_DEADLINE).unwrap_or_else(|_| {
+        log::warn!("Explorer did not answer for {folder} in time");
         false
     })
 }

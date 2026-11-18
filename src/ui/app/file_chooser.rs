@@ -173,6 +173,8 @@ pub struct FileChooserWindow {
     window_handle: AnyWindowHandle,
     listing_task: Option<Task<()>>,
     arrange_task: Option<Task<()>>,
+    /// An arrangement runs in the background: the shown entries and selection are not final.
+    arranging: bool,
     subfolder_task: Option<Task<()>>,
     _withdrawal: Task<()>,
     _owner_changes: Option<Subscription>,
@@ -468,6 +470,7 @@ impl FileChooserWindow {
             extras,
             listing_task: None,
             arrange_task: None,
+            arranging: false,
             subfolder_task: None,
             _withdrawal: withdrawal,
             _owner_changes: owner_changes,

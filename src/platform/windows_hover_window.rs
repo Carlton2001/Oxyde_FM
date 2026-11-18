@@ -158,7 +158,7 @@ pub(super) fn point_to_owner(
     let window = hwnd(window)?;
     let owner = hwnd(owner)?;
     unsafe {
-        let scale = windows::Win32::UI::HiDpi::GetDpiForWindow(window) as f32 / 96.0;
+        let scale = windows::Win32::UI::HiDpi::GetDpiForWindow(window).max(96) as f32 / 96.0;
         let owner_scale = windows::Win32::UI::HiDpi::GetDpiForWindow(owner) as f32 / 96.0;
         let mut point = POINT {
             x: (point.0 * scale).round() as i32,

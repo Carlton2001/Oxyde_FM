@@ -45,7 +45,7 @@ pub(super) fn transfer_entries(
             .trim_start_matches("\\\\?\\")
             .to_lowercase()
     };
-    let items = trash::os_limited::list().map_err(|error| error.to_string())?;
+    let items = list_items()?;
     candidates
         .into_iter()
         .map(|path| {
@@ -396,4 +396,16 @@ mod tests {
             }
         }
     }
+}
+
+/// The trash crate leaves COM initialized as a single-threaded apartment on
+/// the calling thread for good, so the call runs on a thread of its own that
+/// ends right after, instead of on a pool thread other work reuses.
+pub(super) fn list_items() -> Result<Vec<trash::TrashItem>, String> {
+    std::thread::Builder::new()
+        .name("oxyde-trash-list".into())
+        .spawn(|| trash::os_limited::list().map_err(|error| error.to_string()))
+        .map_err(|error| error.to_string())?
+        .join()
+        .map_err(|_| "Recycle Bin listing panicked".to_string())?
 }

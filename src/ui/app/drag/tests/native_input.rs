@@ -15,7 +15,7 @@ impl Render for Probe {
             div().id("drag-probe-source").absolute().top_0().left_0().size(px(80.0))
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                 .on_drag(super::super::FileDragData {
-                    paths: vec!["C:/probe.txt".into()], source_pane_id: "probe".into(), from_trash: false,
+                    paths: std::rc::Rc::new(vec!["C:/probe.txt".into()]), source_pane_id: "probe".into(), from_trash: false,
                 }, move |_, offset, window, cx| {
                     let ghost = cx.new(|cx| FileDragPreview::new(
                         vec!["C:/probe.txt".into()], offset, false, app.clone(), window, cx,

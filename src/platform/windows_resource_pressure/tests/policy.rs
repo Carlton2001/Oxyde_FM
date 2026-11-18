@@ -5,6 +5,7 @@ fn measured_thresholds_refuse_each_exhausted_resource_and_accept_recovery() {
         parent_commit: PARENT_COMMIT - 1,
         parent_handles: PARENT_HANDLES - 1,
         available_physical: MIN_AVAILABLE,
+        total_physical: 16 * 1024 * 1024 * 1024,
         available_commit: MIN_AVAILABLE,
     };
     assert!(healthy.admitted());
@@ -53,4 +54,17 @@ fn native_worker_handle_saturation_stops_work_and_allows_a_subsequent_worker() {
         Duration::from_secs(15)
     ).unwrap();
     assert_eq!(reply, [1]);
+}
+
+#[test]
+fn a_small_machine_needs_a_smaller_physical_floor() {
+    let small = Sample {
+        parent_commit: 0,
+        parent_handles: 0,
+        available_physical: 300 * 1024 * 1024,
+        total_physical: 4 * 1024 * 1024 * 1024,
+        available_commit: MIN_AVAILABLE,
+    };
+    assert!(small.admitted());
+    assert!(!Sample { available_physical: 200 * 1024 * 1024, ..small }.admitted());
 }

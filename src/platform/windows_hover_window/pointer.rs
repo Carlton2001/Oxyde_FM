@@ -36,7 +36,8 @@ pub(super) fn swallowed(window: HWND, message: u32) -> bool {
     SWALLOWED_RELEASE.with(|swallowed| {
         let mut swallowed = swallowed.borrow_mut();
         let matches = *swallowed == Some((window.0 as isize, message));
-        if matches || swallowed.is_some_and(|(owner, _)| owner == window.0 as isize) {
+        // The release may come on another window (the pointer left): it is spent all the same.
+        if matches || swallowed.is_some_and(|(_, release)| release == message) {
             *swallowed = None;
         }
         matches

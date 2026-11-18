@@ -15,7 +15,7 @@ use windows::{
         Foundation::*,
         System::{Com::IDataObject, Ole::*, SystemServices::*},
         UI::{
-            Input::KeyboardAndMouse::{GetAsyncKeyState, GetCapture, ReleaseCapture, VK_LBUTTON},
+            Input::KeyboardAndMouse::{GetAsyncKeyState, GetCapture, ReleaseCapture, VK_LBUTTON, VK_RBUTTON},
             Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass},
             WindowsAndMessaging::*,
         },
@@ -336,7 +336,9 @@ fn run(window: HWND, pending: Pending) {
     };
     // Release can arrive between promotion and this posted message. Never start a
     // new drag after that release, including after switching applications.
-    if unsafe { GetAsyncKeyState(VK_LBUTTON.0 as i32) } < 0
+    // The primary button, which is the physical right one when the buttons are swapped.
+    let primary = if unsafe { GetSystemMetrics(SM_SWAPBUTTON) } != 0 { VK_RBUTTON } else { VK_LBUTTON };
+    if unsafe { GetAsyncKeyState(primary.0 as i32) } < 0
         && unsafe { IsWindow(Some(window)) }.as_bool()
     {
         if unsafe { GetCapture() } == window {

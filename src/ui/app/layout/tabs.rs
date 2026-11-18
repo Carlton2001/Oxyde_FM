@@ -136,7 +136,8 @@ impl OxydeApp {
                 move |_, cx| {
                     h.update(cx, |this, cx| {
                         let path = if cfg!(target_os = "windows") {
-                            "C:/".to_string()
+                            // The system drive, which is not always C:.
+                            format!("{}/", std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into()))
                         } else {
                             crate::ui::workspace::WorkspaceState::home_location()
                         };
@@ -389,7 +390,7 @@ impl OxydeApp {
                                     if target == "viewer://" { return; }
                                     let paths = data.paths.clone();
                                     h.update(cx, |this, cx| {
-                                        this.execute_file_drop(paths, target.clone(), cx);
+                                        this.execute_file_drop(paths.to_vec(), target.clone(), cx);
                                     });
                                 }
                             }),

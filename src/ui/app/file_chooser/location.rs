@@ -105,6 +105,13 @@ impl FileChooserWindow {
             self.cancel_location(window, cx);
             return;
         }
+        // The current folder's own path again (an outside click, Enter) changes nothing: it must
+        // not reload the folder and lose the selection.
+        let current = crate::ui::components::input::native_path_text(&oxyde_lib::utils::path_text::display(&self.folder));
+        if text == current {
+            self.cancel_location(window, cx);
+            return;
+        }
         let home = dirs::home_dir();
         let path = typed_path(&text, &oxyde_lib::utils::path_text::decode(&self.folder), home.as_deref());
         // Saving one file, a free name without extension takes one, as in the name field.

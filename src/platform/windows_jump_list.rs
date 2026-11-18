@@ -75,7 +75,7 @@ fn removed(shortcuts: &IObjectArray) -> Vec<String> {
     unsafe {
         (0..shortcuts.GetCount().unwrap_or(0)).filter_map(|index| {
             let link: IShellLinkW = shortcuts.GetAt(index).ok()?;
-            let mut arguments = [0u16; 1024];
+            let mut arguments = vec![0u16; 32768];
             link.GetArguments(&mut arguments).ok()?;
             let length = arguments.iter().position(|unit| *unit == 0).unwrap_or(arguments.len());
             Some(String::from_utf16_lossy(&arguments[..length]))

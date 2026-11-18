@@ -6,7 +6,10 @@ pub struct WindowsQuickAccess;
 
 impl QuickAccess for WindowsQuickAccess {
     fn items(&self) -> Vec<QuickAccessItem> {
-        super::windows_shell::get_quick_access_items().unwrap_or_default()
+        super::windows_shell::get_quick_access_items().unwrap_or_else(|error| {
+            log::warn!("Cannot read Quick access: {error}");
+            Vec::new()
+        })
     }
 
     fn pin(&self, path: &str) -> Result<(), CommandError> {

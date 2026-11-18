@@ -284,4 +284,5 @@ pub struct PreviewTask {
     message: Option<Message>,
     loading_delay_elapsed: bool,
     _video_cancellation: Option<Arc<CancelVideoPreview>>,
+    _load_task: Option<Arc<Task<()>>>,
 }

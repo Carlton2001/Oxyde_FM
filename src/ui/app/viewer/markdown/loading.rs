@@ -3,6 +3,10 @@ use super::{parse, Content, Markdown, Viewer};
 use gpui::*;
 use std::{cell::RefCell, collections::HashMap, io::Read, rc::Rc, sync::atomic::Ordering};
 
+/// A document is parsed whole, then rendered: a larger file shows its beginning, at a bounded
+/// cost in memory and in the Viewer's single queue.
+const MAX_MARKDOWN_BYTES: u64 = 16 * 1024 * 1024;
+
 impl Viewer {
     pub(in super::super) fn load_markdown(&mut self, path: String, cx: &mut Context<Self>) {
         let generation = self.generation;
@@ -16,7 +20,7 @@ impl Viewer {
                 return Ok(false);
             }
             let file = std::fs::File::open(&path)?;
-            let limit = super::super::text::MAX_TEXT_BYTES;
+            let limit = MAX_MARKDOWN_BYTES;
             let truncated = file.metadata()?.len() > limit;
             let mut bytes = Vec::new();
             let mut reader = file.take(limit);
@@ -31,8 +35,7 @@ impl Viewer {
                 }
                 bytes.extend_from_slice(&buffer[..count]);
             }
-            let source = String::from_utf8(bytes)
-                .unwrap_or_else(|error| String::from_utf8_lossy(error.as_bytes()).into_owned());
+            let source = super::super::text::decode(bytes);
             parse::parse_progressively(&source, &path, &cancelled, &mut |batch| {
                 !cancelled() && sender.blocking_send(batch).is_ok()
             });

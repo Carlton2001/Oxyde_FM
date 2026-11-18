@@ -2,9 +2,58 @@ use super::{
     FileOpType, FileOperation, FileOperationManager, OpStatus, OperationScheduler, ScheduledOperation,
 };
 use crate::models::HistoryManager;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
+
+/// Reserved paths indexed to tell, in linear time, whether others equal one, lie under one
+/// or hold one: the lists can hold tens of thousands of files.
+struct PathSet<'a> {
+    exact: HashSet<&'a str>,
+    /// Every folder above a path, up to its root.
+    ancestors: HashSet<&'a str>,
+}
+
+impl<'a> PathSet<'a> {
+    fn new(paths: &'a [String]) -> Self {
+        let mut ancestors = HashSet::new();
+        for path in paths {
+            for (index, _) in path.match_indices('/') {
+                ancestors.insert(&path[..index]);
+            }
+        }
+        Self { exact: paths.iter().map(String::as_str).collect(), ancestors }
+    }
+
+    fn overlaps(&self, others: &[String]) -> bool {
+        others.iter().any(|path| {
+            self.exact.contains(path.as_str())
+                || self.ancestors.contains(path.as_str())
+                || path.match_indices('/').any(|(index, _)| self.exact.contains(&path[..index]))
+        })
+    }
+}
+
+/// Releases an operation's reservation and wakes the others, even if its task panics.
+struct Reservation {
+    scheduler: Arc<OperationScheduler>,
+    id: String,
+}
+
+impl Drop for Reservation {
+    fn drop(&mut self) {
+        let mut waiting = self.scheduler.waiting.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        waiting.remove(&self.id);
+        drop(waiting);
+        self.scheduler
+            .running_paths
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(&self.id);
+        self.scheduler.changed.notify_waiters();
+    }
+}
 
 impl OperationScheduler {
     pub(super) fn enqueue(&self, operation: Arc<Mutex<FileOperation>>, paths: Vec<String>) {
@@ -34,6 +83,11 @@ impl OperationScheduler {
                     waiting.remove(id);
                     return None;
                 }
+                // Built once per pass: each waiting operation is then compared in linear time.
+                let running_sets: Vec<(&String, PathSet)> = running
+                    .iter()
+                    .map(|(active_id, paths)| (active_id, PathSet::new(paths)))
+                    .collect();
                 let next = waiting
                     .iter()
                     .filter_map(|(candidate_id, entry)| {
@@ -42,9 +96,8 @@ impl OperationScheduler {
                             || FileOperationManager::is_final(&operation.status)
                             || (operation.pause_flag.load(Ordering::Relaxed)
                                 && !operation.resume_requested)
-                            || running.iter().any(|(active_id, paths)| {
-                                active_id != candidate_id
-                                    && FileOperationManager::paths_overlap(&entry.paths, paths)
+                            || running_sets.iter().any(|(active_id, set)| {
+                                *active_id != candidate_id && set.overlaps(&entry.paths)
                             })
                         {
                             return None;
@@ -139,6 +192,7 @@ impl FileOperationManager {
                 op_clone.lock().unwrap().status = OpStatus::Cancelled;
                 return;
             };
+            let _reservation = Reservation { scheduler: scheduler.clone(), id: scheduled_id.clone() };
             let mut permit = Some(initial_permit);
             let operation = op_clone.clone();
             let mut execution = Box::pin(async move {
@@ -220,14 +274,8 @@ impl FileOperationManager {
                     }
                 }
             }
-            scheduler.waiting.lock().unwrap().remove(&scheduled_id);
-            scheduler
-                .running_paths
-                .lock()
-                .unwrap()
-                .remove(&scheduled_id);
             drop(permit);
-            scheduler.changed.notify_waiters();
+            // `_reservation` releases the paths and wakes the others as it drops.
         });
 
         op_id
@@ -272,12 +320,9 @@ impl FileOperationManager {
             .collect()
     }
 
+    #[cfg(test)]
     pub(super) fn paths_overlap(left: &[String], right: &[String]) -> bool {
-        left.iter().any(|a| {
-            right.iter().any(|b| {
-                a == b || a.starts_with(&format!("{b}/")) || b.starts_with(&format!("{a}/"))
-            })
-        })
+        PathSet::new(right).overlaps(left)
     }
 
     /// Names that are not UTF-8 are refused before any effect: the operations

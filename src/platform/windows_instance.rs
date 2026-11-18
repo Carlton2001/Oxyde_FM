@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 use std::time::Duration;
 use windows::core::{HSTRING, PCWSTR, PWSTR};
-use windows::Win32::Foundation::{CloseHandle, LocalFree, ERROR_NO_DATA, ERROR_PIPE_BUSY, ERROR_PIPE_CONNECTED, HANDLE, HLOCAL};
+use windows::Win32::Foundation::{CloseHandle, LocalFree, ERROR_BROKEN_PIPE, ERROR_NO_DATA, ERROR_PIPE_BUSY, ERROR_PIPE_CONNECTED, HANDLE, HLOCAL};
 use windows::Win32::Security::Authorization::{
     ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, GetSecurityInfo, SDDL_REVISION_1, SE_KERNEL_OBJECT,
 };
@@ -157,15 +157,22 @@ pub(super) fn create(name: &str) -> Option<Pipe> {
     (!handle.is_invalid()).then_some(Pipe(handle))
 }
 
-/// One message, read until its sender closes the pipe.
+/// One message, read until its sender closes the pipe. One that is too long, or whose
+/// sender was cut off, is not a message: acting on its first part would be a partial one.
 fn receive(pipe: &Pipe) -> Option<String> {
     let mut message = Vec::new();
     let mut chunk = [0u8; 8192];
     loop {
         let mut read = 0u32;
-        let more = unsafe { ReadFile(pipe.0, Some(&mut chunk), Some(&mut read), None) }.is_ok() && read > 0;
-        if !more || message.len() + read as usize > LIMIT {
-            break;
+        match unsafe { ReadFile(pipe.0, Some(&mut chunk), Some(&mut read), None) } {
+            Ok(()) if read > 0 => {}
+            // The sender closed its end after writing everything.
+            Err(error) if error.code() == ERROR_BROKEN_PIPE.to_hresult() => break,
+            Ok(()) => break,
+            Err(_) => return None,
+        }
+        if message.len() + read as usize > LIMIT {
+            return None;
         }
         message.extend_from_slice(&chunk[..read as usize]);
     }
@@ -194,20 +201,26 @@ fn serve(pipe: Pipe, sender: UnboundedSender<InstanceMessage>, released: &Atomic
             log::warn!("Ignoring a message that is not a later launch's");
             continue;
         };
-        let request = if header == CHOOSE {
-            match super::windows_file_dialog::request(&locations, sender_process) {
-                Some(request) => InstanceRequest::ChooseFile(Box::new(request)),
-                None => {
-                    log::warn!("Ignoring a dialog that names no pipe to answer on");
-                    continue;
+        // Resolving locations reads the disk, which may be a share that does not
+        // answer: that must not keep the pipe from taking the next launch.
+        let later = sender.clone();
+        let resolved = std::thread::Builder::new().name("instance-request".into()).spawn(move || {
+            let request = if header == CHOOSE {
+                match super::windows_file_dialog::request(&locations, sender_process) {
+                    Some(request) => InstanceRequest::ChooseFile(Box::new(request)),
+                    None => {
+                        log::warn!("Ignoring a dialog that names no pipe to answer on");
+                        return;
+                    }
                 }
-            }
-        } else if header == SELECT {
-            InstanceRequest::Items(super::windows_startup::items(&locations))
-        } else {
-            InstanceRequest::Folders(super::windows_startup::folders(&locations))
-        };
-        if sender.unbounded_send(InstanceMessage { request, activation_token: None }).is_err() {
+            } else if header == SELECT {
+                InstanceRequest::Items(super::windows_startup::items(&locations))
+            } else {
+                InstanceRequest::Folders(super::windows_startup::folders(&locations))
+            };
+            let _ = later.unbounded_send(InstanceMessage { request, activation_token: None });
+        });
+        if resolved.is_err() || sender.is_closed() {
             return;
         }
     }

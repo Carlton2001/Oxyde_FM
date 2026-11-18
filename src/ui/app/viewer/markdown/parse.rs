@@ -254,6 +254,8 @@ pub(super) fn parse_progressively(
         | Options::ENABLE_FOOTNOTES
         | Options::ENABLE_GFM;
     let mut image = None::<(Option<String>, String)>;
+    // The block an image interrupts: a heading or a table row goes on after it.
+    let mut image_context = Kind::Paragraph;
     for event in Parser::new_ext(source, options) {
         if builder.stopped || cancelled() {
             return;
@@ -273,6 +275,9 @@ pub(super) fn parse_progressively(
                     builder.kind = Kind::Image(path);
                     builder.append(&alt, false);
                     builder.flush();
+                    if matches!(image_context, Kind::Heading(_) | Kind::TableRow(..)) {
+                        builder.kind = image_context.clone();
+                    }
                 }
                 Event::Text(value) | Event::Code(value) => alt.push_str(&value),
                 Event::SoftBreak | Event::HardBreak => alt.push(' '),
@@ -297,6 +302,7 @@ pub(super) fn parse_progressively(
                 };
             }
             Event::Start(Tag::Image { dest_url, .. }) => {
+                image_context = builder.kind.clone();
                 builder.flush();
                 image = Some((local_image(path, &dest_url), String::new()));
             }

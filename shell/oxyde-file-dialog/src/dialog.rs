@@ -28,7 +28,7 @@ use windows::Win32::UI::Shell::{
     IFileOpenDialog, IFileOpenDialog_Vtbl, IFileSaveDialog, IFileSaveDialog_Vtbl, IModalWindow, IModalWindow_Vtbl, IShellItem,
     CDCONTROLSTATEF, FDAP, FDAP_TOP, FILEOPENDIALOGOPTIONS, FOS_ALLNONSTORAGEITEMS, FOS_ALLOWMULTISELECT, FOS_DONTADDTORECENT, FOS_FORCESHOWHIDDEN,
     FOS_HIDEPINNEDPLACES, FOS_NODEREFERENCELINKS, FOS_NOREADONLYRETURN, FOS_OKBUTTONNEEDSINTERACTION, FOS_OVERWRITEPROMPT, FOS_PICKFOLDERS,
-    FOS_STRICTFILETYPES,
+    FOS_STRICTFILETYPES, FDEOR_DEFAULT, FDEOR_REFUSE,
 };
 
 /// How often a choice the application refuses is asked again before giving up.
@@ -142,7 +142,7 @@ impl Dialog {
     /// What the application asked for, as Oxyde reads it.
     unsafe fn asked(&self, options: FILEOPENDIALOGOPTIONS, owner: HWND) -> Asked {
         let save_as = self.save_as.borrow().clone();
-        let typed = self.inner.GetFileName().ok().and_then(|name| {
+        let typed = self.inner.GetFileName().ok().filter(|name| !name.is_null()).and_then(|name| {
             let read = name.to_string().ok();
             windows::Win32::System::Com::CoTaskMemFree(Some(name.0.cast()));
             read
@@ -223,6 +223,19 @@ impl Dialog {
     /// Whether every listener lets the dialog close on the choice just made.
     unsafe fn accepted(&self) -> bool {
         let listeners: Vec<IFileDialogEvents> = self.events.borrow().iter().map(|(_, listener)| listener.clone()).collect();
+        if self.saving() {
+            // An application may refuse to overwrite a file, as it can in the system's dialog.
+            let existing = self.answer.borrow().as_ref().and_then(|answer| answer.paths.first().cloned()).filter(|path| std::path::Path::new(path).exists());
+            if let Some(item) = existing.and_then(|path| items::item(&path).ok()) {
+                for listener in &listeners {
+                    let mut response = FDEOR_DEFAULT;
+                    let result = (Interface::vtable(listener).OnOverwrite)(Interface::as_raw(listener), self.face(0), Interface::as_raw(&item), &mut response);
+                    if result.is_ok() && response == FDEOR_REFUSE {
+                        return false;
+                    }
+                }
+            }
+        }
         listeners.iter().all(|listener| (Interface::vtable(listener).OnFileOk)(Interface::as_raw(listener), self.face(0)) != S_FALSE)
     }
 

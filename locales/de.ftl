@@ -1020,6 +1020,7 @@ quit-operations-stay = Nicht beenden
 quit-operations-confirm = Abbrechen und beenden
 quit-operations-cancelling = Vorgänge werden abgebrochen…
 update-waits-for-operations = Schließen Sie laufende Vorgänge ab oder brechen Sie sie ab, bevor Sie das Update installieren.
+open-too-many-items = Zu viele Elemente zum gleichzeitigen Öffnen: Wählen Sie höchstens 20 aus.
 interrupted-output-removed = { $count ->
     [one] Teildatei eines unterbrochenen Vorgangs in { $detail } entfernt
    *[other] { $number } Teildateien unterbrochener Vorgänge in { $detail } entfernt

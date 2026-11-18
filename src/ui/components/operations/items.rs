@@ -230,6 +230,7 @@ impl OperationsPanelView {
         let outcomes = operation.item_outcomes.clone();
         let shared_folder = operation.source_parent.is_some();
         let (query, sort, direction) = (items.query.clone(), items.sort, items.direction);
+        let launched = query.clone();
         items.load_task = Some(cx.spawn(async move |this, cx| {
             let (rows, shown) = cx
                 .background_executor()
@@ -250,6 +251,10 @@ impl OperationsPanelView {
                 this.items.shown = shown;
                 this.items.loading = false;
                 this.items.revision += 1;
+                // A filter or a sort typed while loading was not applied to these rows.
+                if (&this.items.query, this.items.sort, this.items.direction) != (&launched, sort, direction) {
+                    this.arrange_items(cx);
+                }
                 cx.notify();
             });
         }));

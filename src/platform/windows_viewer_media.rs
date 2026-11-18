@@ -32,6 +32,8 @@ use windows::{
 mod info;
 
 const DEADLINE: Duration = Duration::from_secs(15);
+/// A source not on this disk (OneDrive, a slow share) may take longer to give its metadata.
+const LOAD_DEADLINE: Duration = Duration::from_secs(60);
 
 pub(super) fn supervise(path: &Path, control: &ViewerMediaControl) -> io::Result<()> {
     supervise_in(&std::env::current_exe()?, path, control)
@@ -417,6 +419,8 @@ pub(super) fn run(path: &Path) -> io::Result<()> {
         let mut checked_video = false;
         let mut applied_seek = 0;
         // Read once the engine has opened the file, so a failed open reports first.
+        // The headers are read on another thread: a slow share must not freeze the surface's input.
+        let mut info_request: Option<std::sync::mpsc::Receiver<_>> = None;
         let mut info_sent = false;
         while !closed.load(Ordering::Acquire) {
             let mut message = MSG::default();
@@ -454,7 +458,7 @@ pub(super) fn run(path: &Path) -> io::Result<()> {
                 }
             }
             let value = status.load(Ordering::Acquire);
-            if value == MEDIA_FAILED || (value == 0 && started.elapsed() > DEADLINE) {
+            if value == MEDIA_FAILED || (value == 0 && started.elapsed() > LOAD_DEADLINE) {
                 output.write_all(&encode_media_report(MEDIA_FAILED, 0, 0, [0, 0]))?;
                 output.flush()?;
                 return Err(io::Error::other("System media playback failed"));
@@ -530,9 +534,19 @@ pub(super) fn run(path: &Path) -> io::Result<()> {
                 }
                 paused = command.paused;
             }
-            if checked_video && !info_sent {
+            if checked_video && !info_sent && info_request.is_none() {
+                let (sender, receiver) = std::sync::mpsc::channel();
+                let source = path.to_path_buf();
+                if std::thread::Builder::new().name("media-info".into()).spawn(move || { let _ = sender.send(info::read(&source)); }).is_ok() {
+                    info_request = Some(receiver);
+                } else {
+                    info_sent = true;
+                }
+            }
+            if let Some(Ok(read)) = info_request.as_ref().map(|receiver| receiver.try_recv()) {
+                info_request = None;
                 info_sent = true;
-                output.write_all(&super::viewer_media::encode_media_info(&info::read(path)))?;
+                output.write_all(&super::viewer_media::encode_media_info(&read))?;
                 output.flush()?;
             }
             if heartbeat.elapsed() >= Duration::from_millis(100) {

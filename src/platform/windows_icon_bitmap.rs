@@ -196,6 +196,12 @@ impl DibSurface {
         })
     }
 
+    /// Paints every pixel with `value`, before drawing over it.
+    fn fill(&self, value: u32, layout: &IconLayout) {
+        // The surface owns `pixel_count` aligned 32bpp pixels, and nothing else uses them now.
+        unsafe { std::slice::from_raw_parts_mut(self.bits.as_ptr(), layout.pixel_count) }.fill(value);
+    }
+
     fn draw(&self, icon: HICON, layout: &IconLayout) -> Result<(), String> {
         unsafe {
             DrawIconEx(
@@ -242,12 +248,32 @@ pub(super) fn into_image(icon: HICON, target: i32) -> Result<RgbaImage, String> 
     // The initialized, aligned allocation covers all checked 32bpp pixels and
     // remains owned by the live surface; draw() has synchronized GDI access.
     let pixels = unsafe { std::slice::from_raw_parts(surface.bits.as_ptr(), layout.pixel_count) };
-    for &pixel in pixels {
+    // DrawIconEx writes no alpha for an icon without one (legacy .ico and .exe): the mask
+    // then decides what is transparent. Drawn again over white, a pixel that differs from
+    // its first drawing over black was not covered by the icon.
+    let legacy = pixels.iter().all(|pixel| pixel >> 24 == 0);
+    let white = if legacy {
+        let over_white = DibSurface::new(&layout)?;
+        over_white.fill(0x00ff_ffff, &layout);
+        over_white.draw(icon.0, &layout)?;
+        Some(over_white)
+    } else {
+        None
+    };
+    let over_white = white.as_ref().map(|surface| unsafe {
+        std::slice::from_raw_parts(surface.bits.as_ptr(), layout.pixel_count)
+    });
+    for (index, &pixel) in pixels.iter().enumerate() {
+        let alpha = match over_white {
+            Some(white) if (white[index] ^ pixel) & 0x00ff_ffff == 0 => 0xff,
+            Some(_) => 0,
+            None => ((pixel >> 24) & 0xff) as u8,
+        };
         rgba.extend_from_slice(&[
             ((pixel >> 16) & 0xff) as u8,
             ((pixel >> 8) & 0xff) as u8,
             (pixel & 0xff) as u8,
-            ((pixel >> 24) & 0xff) as u8,
+            alpha,
         ]);
     }
     RgbaImage::from_raw(layout.width as u32, layout.height as u32, rgba)
@@ -315,6 +341,8 @@ mod tests {
         let image = into_image(icon, 32).unwrap();
         assert_eq!((image.width(), image.height()), (16, 4));
         assert!(image.pixels().all(|pixel| pixel.0[0..3] == [0, 0, 0]));
+        // An icon without alpha is opaque where its mask covers it, not empty.
+        assert!(image.pixels().all(|pixel| pixel.0[3] == 255));
         assert!(IconBitmaps::for_icon(icon).is_err());
     }
 

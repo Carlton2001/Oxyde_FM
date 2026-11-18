@@ -38,17 +38,22 @@ pub(super) fn cache_key(path: &str, size: &str) -> String {
     format!("{}_{}", blake3::hash(path.as_bytes()).to_hex(), size)
 }
 
+/// The drive Windows is on, which is not always C:.
+fn system_drive() -> String {
+    std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into())
+}
+
 pub fn get_file_icon(path: String, size: String) -> Result<RgbaImage, CommandError> {
     // Breadcrumbs use forward slashes; Shell APIs require Windows separators.
     let path = shell_icon_path(&path);
 
     // Virtual path logic (copying the folder "C:\Windows" spirit)
     let (real_path, use_attributes) = if let Some(ext) = path.strip_prefix("oxyde_ext_") {
-        (format!("C:\\template.{}", ext), true)
+        (format!("{}\\template.{}", system_drive(), ext), true)
     } else if path == "oxyde_file_generic" {
-        ("C:\\template".to_string(), true)
+        (format!("{}\\template", system_drive()), true)
     } else if path == "oxyde_dir_generic" {
-        ("C:\\Windows".to_string(), false)
+        (std::env::var("SystemRoot").unwrap_or_else(|_| format!("{}\\Windows", system_drive())), false)
     } else {
         (path.clone(), false)
     };

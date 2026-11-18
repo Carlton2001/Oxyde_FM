@@ -20,11 +20,6 @@ pub(crate) fn supports_thumbnail(file: &oxyde_lib::models::FileEntry) -> bool {
 }
 
 struct GridThumbnailAsset;
-pub(crate) fn invalidate_thumbnail(path: &str, cx: &mut App) {
-    crate::ui::components::tooltip::invalidate_media_preview(path);
-    lifecycle::invalidate(path, cx);
-}
-
 impl Asset for GridThumbnailAsset {
     type Source = Source;
     type Output = Result<std::sync::Arc<RenderImage>, ImageCacheError>;

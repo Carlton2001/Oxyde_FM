@@ -729,6 +729,7 @@ quit-operations-stay = Ne pas quitter
 quit-operations-confirm = Annuler et quitter
 quit-operations-cancelling = Annulation des opérations…
 update-waits-for-operations = Terminez ou annulez les opérations en cours avant d’installer la mise à jour.
+open-too-many-items = Trop d’éléments à ouvrir en une fois : sélectionnez-en 20 au plus.
 interrupted-output-removed = { $count ->
     [one] Fichier partiel d’une opération interrompue supprimé dans { $detail }
    *[other] { $number } fichiers partiels d’opérations interrompues supprimés dans { $detail }

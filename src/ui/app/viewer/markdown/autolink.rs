@@ -58,14 +58,19 @@ fn domain(text: &str, start: usize) -> Option<usize> {
 
 /// Removes trailing punctuation, unbalanced closing parentheses and a final entity reference.
 fn trim(text: &str, minimum: usize, mut end: usize) -> usize {
+    // Counted once: only the ')' removed below change them, so a long run of them stays linear.
+    let tail = text.get(minimum..end).unwrap_or_default();
+    let (opening, mut closing) = (tail.matches('(').count(), tail.matches(')').count());
     loop {
         let link = &text[..end];
         let Some(last) = link.chars().next_back() else { return end };
         if end <= minimum {
             return end;
         }
-        let unbalanced = || link[minimum..].matches('(').count() < link[minimum..].matches(')').count();
-        if matches!(last, '?' | '!' | '.' | ',' | ':' | '*' | '_' | '~' | '\'' | '"') || (last == ')' && unbalanced()) {
+        if last == ')' && opening < closing {
+            closing -= 1;
+            end -= 1;
+        } else if matches!(last, '?' | '!' | '.' | ',' | ':' | '*' | '_' | '~' | '\'' | '"') {
             end -= 1;
         } else if last == ';' {
             let entity = link[..end - 1].rfind('&').filter(|amp| {

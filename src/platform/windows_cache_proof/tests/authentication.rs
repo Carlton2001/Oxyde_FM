@@ -28,6 +28,17 @@ fn unknown_key_file_is_preserved_and_never_reinitialized_by_its_reserved_name() 
 }
 
 #[test]
+fn a_key_file_cut_short_before_it_was_written_is_replaced() {
+    let fixture = tempfile::tempdir().unwrap();
+    let path = fixture.path().join(".cache-proof-key");
+    key::load(&path).unwrap();
+    // Oxyde stopped between creating the file and writing the key.
+    std::fs::OpenOptions::new().write(true).open(&path).unwrap().set_len(0).unwrap();
+    let replacement = key::load(&path).unwrap();
+    assert_eq!(key::load(&path).unwrap(), replacement);
+}
+
+#[test]
 fn signing_key_lookup_refuses_an_ancestor_junction_without_touching_its_target() {
     let fixture = tempfile::tempdir().unwrap();
     let outside = fixture.path().join("outside");

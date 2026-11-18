@@ -339,7 +339,7 @@ pub(super) fn render_details_file_list(
                                             .map(|p| p.active_tab().path.clone())
                                             .unwrap_or_default();
                                         if !target.is_empty() {
-                                            this.execute_file_drop(paths, target, cx);
+                                            this.execute_file_drop(paths.to_vec(), target, cx);
                                         }
                                     });
                                 }

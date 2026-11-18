@@ -186,7 +186,7 @@ pub(super) fn render_sidebar_rows(
                         move |data: &FileDragData, _, cx| {
                             let paths = data.paths.clone();
                             h.update(cx, |this, cx| {
-                                this.execute_file_drop(paths, tgt.clone(), cx);
+                                this.execute_file_drop(paths.to_vec(), tgt.clone(), cx);
                             });
                         }
                     });
@@ -315,7 +315,7 @@ pub(super) fn render_sidebar_rows(
                         move |data: &FileDragData, _, cx| {
                             let paths = data.paths.clone();
                             h.update(cx, |this, cx| {
-                                this.execute_file_drop(paths, tgt.clone(), cx);
+                                this.execute_file_drop(paths.to_vec(), tgt.clone(), cx);
                             });
                         }
                     })
@@ -396,7 +396,7 @@ pub(super) fn render_sidebar_rows(
                     })
                     // Drag source
                     .on_drag(
-                        FileDragData { paths: vec![path.clone()], source_pane_id: "sidebar".to_string(), from_trash: false },
+                        FileDragData { paths: std::rc::Rc::new(vec![path.clone()]), source_pane_id: "sidebar".to_string(), from_trash: false },
                         {
                             let drag_path = path.clone();
                             let h_drag    = h.clone();
@@ -413,7 +413,7 @@ pub(super) fn render_sidebar_rows(
                     .drag_over::<FileDragData>({
                         let h = h.clone(); let tgt = path.clone(); let self_path = path.clone();
                         move |style, data, _, cx| {
-                            if data.paths == vec![self_path.clone()] { return style; }
+                            if *data.paths == vec![self_path.clone()] { return style; }
                             let default_copy = data.paths.first()
                                 .map(|s| crate::ui::app::drives_differ(s, &tgt))
                                 .unwrap_or(false);
@@ -429,10 +429,10 @@ pub(super) fn render_sidebar_rows(
                     .on_drop({
                         let h = h.clone(); let tgt = path.clone(); let self_path = path.clone();
                         move |data: &FileDragData, _, cx| {
-                            if data.paths == vec![self_path.clone()] { return; }
+                            if *data.paths == vec![self_path.clone()] { return; }
                             let paths = data.paths.clone();
                             h.update(cx, |this, cx| {
-                                this.execute_file_drop(paths, tgt.clone(), cx);
+                                this.execute_file_drop(paths.to_vec(), tgt.clone(), cx);
                             });
                         }
                     })

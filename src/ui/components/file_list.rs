@@ -15,7 +15,7 @@ mod thumbnails;
 
 pub(crate) use filters::{filter_entries, filter_summary, filters_summary, FilterEntry};
 pub(crate) use presentation::{file_type_display, file_type_label, network_category, network_entry};
-pub(crate) use thumbnails::{invalidate_thumbnail, clear_grid_thumbnails, render_grid_thumbnail, supports_thumbnail};
+pub(crate) use thumbnails::{clear_grid_thumbnails, render_grid_thumbnail, supports_thumbnail};
 
 use crate::ui::app::OxydeApp;
 use crate::ui::i18n::I18nContext;

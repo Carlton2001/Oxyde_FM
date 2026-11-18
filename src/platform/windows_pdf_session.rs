@@ -171,9 +171,21 @@ impl super::PdfSession for Session {
         if self.worker.is_none() || index == CLOSE_DOCUMENT {
             return Err(CommandError::Other("PDF session is closed or page is out of range".into()));
         }
-        self.input.write_all(&index.to_le_bytes())?;
-        self.input.flush()?;
-        match self.reply(DEADLINE)? {
+        let sent = self.input.write_all(&index.to_le_bytes()).and_then(|()| self.input.flush());
+        let reply = match sent {
+            Ok(()) => self.reply(DEADLINE),
+            Err(error) => Err(error.into()),
+        };
+        let reply = match reply {
+            Ok(reply) => reply,
+            Err(error) => {
+                // A late answer would be read as the reply to the next page,
+                // so a transport failure ends the session instead of leaving it open.
+                drop(self.worker.take());
+                return Err(error);
+            }
+        };
+        match reply {
             Reply::Images { mut frames, .. } if frames.len() == 1 => Ok(frames.remove(0).into_buffer()),
             Reply::Error { detail, .. } => Err(CommandError::Other(detail)),
             _ => Err(CommandError::Other("Unexpected PDF session reply".into())),

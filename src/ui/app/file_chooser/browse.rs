@@ -95,6 +95,7 @@ impl FileChooserWindow {
     pub(super) fn list_folder(&mut self, keep: Kept, cx: &mut Context<Self>) {
         self.listing = Listing::Loading;
         self.arrange_task = None;
+        self.arranging = false;
         let folder = self.folder.clone();
         let (show_hidden, show_system) = (self.show_hidden, self.show_system);
         let typed = !self.directory && self.filters.iter().any(super::arrange::names_mime_types);
@@ -150,12 +151,14 @@ impl FileChooserWindow {
         let filter = self.filter.text.clone();
         let admission = self.admission.clone();
         let (sort, direction) = (self.options.sort, self.options.direction);
+        self.arranging = true;
         self.arrange_task = Some(cx.spawn(async move |this, cx| {
             let arranged = cx.background_spawn(async move {
                 let platform = oxyde_lib::platform::platform();
                 super::arrange::arrange(&entries, &filter, &admission, &|mime, pattern| platform.content_type_matches(mime, pattern), sort, direction)
             }).await;
             let _ = this.update(cx, |this, cx| {
+                this.arranging = false;
                 let filtered = !this.filter.text.is_empty();
                 this.selection = Selection::restore(&keep, &arranged.shown);
                 // Filtering, the first match is ready for Enter.
@@ -320,6 +323,10 @@ impl FileChooserWindow {
 
     /// Enter: a single entry opens, as on a double press; several are chosen.
     pub(super) fn activate(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // Before the filter or sort is applied, the list and selection are the previous ones.
+        if self.arranging {
+            return;
+        }
         match self.selection.single() {
             Some(position) => self.open_entry(position, window, cx),
             None => self.accept(window, cx),
