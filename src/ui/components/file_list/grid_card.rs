@@ -35,6 +35,8 @@ pub(super) struct GridCardParams<'a> {
     pub(super) show_tooltips: bool,
     pub(super) show_media_previews: bool,
     pub(super) search_results: bool,
+    /// The pane lists the trash: a drag from it moves items out instead of copying.
+    pub(super) trash_panel: bool,
     pub(super) show_grid_thumbnails: bool,
     pub(super) use_system_icons: bool,
     pub(super) show_checkboxes: bool,
@@ -66,6 +68,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
         show_tooltips,
         show_media_previews,
         search_results,
+        trash_panel,
         show_grid_thumbnails,
         use_system_icons,
         show_checkboxes,
@@ -217,7 +220,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
             FileDragData {
                 paths: paths.clone(),
                 source_pane_id: pid.clone(),
-                from_trash: h.read(cx).state.find_pane(&pid).is_some_and(|pane| pane.active_tab().path == "trash://"),
+                from_trash: trash_panel,
             },
             {
                 let h = h.clone();

@@ -30,6 +30,7 @@ pub(super) fn render_grid_file_list(
     let pane = view.state.layout.find_pane(&pane_id).expect("pane exists");
     let tab = pane.active_tab();
     let search_results = tab.quick_search.is_some();
+    let trash_panel = tab.path == "trash://";
     let calculating_sizes = tab.size_calculation.is_some() || tab.folder_sizes.has_pending() || tab.folder_sizes.has_ready();
     let files = tab.cached_filtered_files.clone();
     let selected = tab.selected_paths.clone();
@@ -225,6 +226,7 @@ pub(super) fn render_grid_file_list(
                                         show_tooltips,
                                         show_media_previews,
                                         search_results,
+                                        trash_panel,
                                         show_grid_thumbnails,
                                         use_system_icons,
                                         show_checkboxes,
