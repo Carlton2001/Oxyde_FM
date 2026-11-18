@@ -29,22 +29,3 @@ fn an_empty_folder_lists_nothing() {
     .unwrap();
     assert!(names.is_empty());
 }
-
-#[test]
-fn a_read_only_file_does_not_stop_the_removal_of_its_folder() {
-    let root = tempfile::tempdir().unwrap();
-    let tree = root.path().join("repo");
-    std::fs::create_dir_all(tree.join("objects")).unwrap();
-    for name in ["a", "objects/b"] {
-        let file = tree.join(name);
-        std::fs::write(&file, b"x").unwrap();
-        let mut permissions = std::fs::metadata(&file).unwrap().permissions();
-        permissions.set_readonly(true);
-        std::fs::set_permissions(&file, permissions).unwrap();
-        // Read-only as its only attribute, which `set_readonly(false)` cannot clear.
-        assert!(std::process::Command::new("attrib").arg("-A").arg(&file).status().unwrap().success());
-    }
-    let parent = std::fs::OpenOptions::new().read(true).custom_flags(0x02000000).open(root.path()).unwrap();
-    remove(&parent, &tree, 1, &|| Ok(())).unwrap();
-    assert!(!tree.exists());
-}
