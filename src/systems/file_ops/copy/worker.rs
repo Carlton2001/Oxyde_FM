@@ -140,7 +140,7 @@ impl FileOperationManager {
                 .or_else(|| copy_source.as_ref().map(|(_, file)| file))
                 .expect("selected copy source is held");
             let resolved_source = selected.resolved_path();
-            log::info!(target: "oxyde_lib::copy_timing",
+            log::debug!(target: "oxyde_lib::copy_timing",
                 "copy_prepare op={} worker={} source={:?} destination_parent_s={:.6} source_open_s={:.6}",
                 operation.lock().unwrap().id, thread_idx, src,
                 destination_prepare.as_secs_f64(), source_started.elapsed().as_secs_f64());

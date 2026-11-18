@@ -10,6 +10,8 @@ Get-Content "$env:APPDATA\oxyde\oxyde.log" | Select-String 'copy_timing'
 
 The `copy_concurrency_benchmark DESTINATION...` example compares the production policy at 1, 2 and 4 workers on generated files (large, medium, small); `COPY_BENCH_SET` limits the set. Compare several normal/Turbo runs in alternating order, with the same files, destination and media. The Windows cache stays active. A small batch and a batch of large files are enough for a first diagnosis.
 
+Per-file lines (`copy_file`, `copy_prepare`) are written at debug level, so that a copy of tens of thousands of files does not fill the log: start Oxyde with `RUST_LOG=oxyde_lib::copy_timing=debug` to get them.
+
 ## Reading phases
 
 Target: `oxyde_lib::copy_timing`, durations in seconds. For the exact inventory, see `src/systems/copy_diagnostics.rs` and search `copy_timing` in `src/`.
@@ -19,7 +21,7 @@ Target: `oxyde_lib::copy_timing`, durations in seconds. For the exact inventory,
 | `copy_operation_start` / `copy_operation_end` | Operation, Turbo mode, duration and result |
 | `copy_source_selection` | Root capture and overlap check |
 | `copy_plan_traversal` | Traversal and plan/conflict preparation, pauses included |
-| `copy_file` | One file, from copy to publication/cleanup |
+| `copy_file`, `copy_prepare` | One file, from copy to publication/cleanup (debug level: see below) |
 
 | Per-file fields | Meaning |
 | --- | --- |

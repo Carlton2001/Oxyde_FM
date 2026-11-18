@@ -157,7 +157,7 @@ impl Drop for FileTiming {
         WORKER.with(|worker| {
             let worker = worker.borrow();
             let (operation, index) = worker.as_ref().map_or(("unattributed", 0), |(id, index)| (id.as_str(), *index));
-            log::info!(target: TARGET,
+            log::debug!(target: TARGET,
                 "copy_file op={} worker={} source={:?} destination={:?} bytes={} published={} wall_s={:.6} active_s={:.6} pause_s={:.6} native_s={:.6} flush_s={:.6} flush_calls={} hash_s={:.6} publish_s={:.6} parents_s={:.6} staging_create_s={:.6} writer_release_s={:.6} output_open_s={:.6} checks_s={:.6} cleanup_s={:.6} remaining_s={:.6}",
                 operation, index, self.source, self.destination, self.bytes, self.published,
                 elapsed.as_secs_f64(), elapsed.saturating_sub(metrics.pause).as_secs_f64(),
