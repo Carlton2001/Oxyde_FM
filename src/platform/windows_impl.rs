@@ -998,44 +998,31 @@ pub(super) fn read_recycle_bin_config(drive_path: String) -> Result<TrashSystemC
                     )
                     .0 == 0
                     {
-                        // Read MaxCapacity
-                        let mut data = 0u32;
-                        let mut data_size = std::mem::size_of::<u32>() as u32;
-                        let mut key_type =
-                            windows::Win32::System::Registry::REG_VALUE_TYPE::default();
-                        let wide_cap: Vec<u16> = "MaxCapacity"
-                            .encode_utf16()
-                            .chain(std::iter::once(0))
-                            .collect();
-                        if RegQueryValueExW(
-                            hkey,
-                            PCWSTR(wide_cap.as_ptr()),
-                            None,
-                            Some(&mut key_type as *mut _),
-                            Some(&mut data as *mut _ as *mut u8),
-                            Some(&mut data_size as *mut _),
-                        )
-                        .0 == 0
-                        {
-                            max_size_mb = data as u64;
+                        // A value is taken only as a DWORD that fits the buffer: it may be written as
+                        // a QWORD or a string, and a size left by one read must not bound the next.
+                        let read_dword = |name: &str| -> Option<u32> {
+                            let wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+                            let mut data = 0u32;
+                            let mut data_size = std::mem::size_of::<u32>() as u32;
+                            let mut key_type = windows::Win32::System::Registry::REG_VALUE_TYPE::default();
+                            let status = RegQueryValueExW(
+                                hkey,
+                                PCWSTR(wide.as_ptr()),
+                                None,
+                                Some(&mut key_type as *mut _),
+                                Some(&mut data as *mut _ as *mut u8),
+                                Some(&mut data_size as *mut _),
+                            );
+                            (status.0 == 0
+                                && key_type == windows::Win32::System::Registry::REG_DWORD
+                                && data_size == std::mem::size_of::<u32>() as u32)
+                                .then_some(data)
+                        };
+                        if let Some(capacity) = read_dword("MaxCapacity") {
+                            max_size_mb = capacity as u64;
                         }
-
-                        // Read NukeOnDelete
-                        let wide_nuke: Vec<u16> = "NukeOnDelete"
-                            .encode_utf16()
-                            .chain(std::iter::once(0))
-                            .collect();
-                        if RegQueryValueExW(
-                            hkey,
-                            PCWSTR(wide_nuke.as_ptr()),
-                            None,
-                            Some(&mut key_type as *mut _),
-                            Some(&mut data as *mut _ as *mut u8),
-                            Some(&mut data_size as *mut _),
-                        )
-                        .0 == 0
-                        {
-                            nuke_on_delete = data == 1;
+                        if let Some(nuke) = read_dword("NukeOnDelete") {
+                            nuke_on_delete = nuke == 1;
                         }
                         let _ = windows::Win32::System::Registry::RegCloseKey(hkey);
                     }
