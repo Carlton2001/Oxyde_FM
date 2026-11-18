@@ -126,8 +126,16 @@ fn recover_in(folder: &Path) -> Recovered {
             .and_then(|_| serde_json::from_str::<Record>(&text).ok());
         if let Some(record) = record {
             match clean(&record) {
-                Ok(true) => recovered.removed.push(record.path),
-                Ok(false) => {}
+                Ok(Cleaned::Removed) => recovered.removed.push(record.path),
+                Ok(Cleaned::Gone) => {}
+                // A USB key unplugged since: the note waits for a start that reaches it,
+                // unless it has waited long enough for the volume to be given up.
+                Ok(Cleaned::Unreachable) if !expired(&path) => {
+                    log::info!("Interrupted staging out of reach for now: {}", record.path.display());
+                    drop(lock);
+                    continue;
+                }
+                Ok(Cleaned::Unreachable) => {}
                 Err(error) => {
                     log::warn!("Interrupted staging kept at {}: {error}", record.path.display());
                     recovered.kept.push(record.path);
@@ -139,8 +147,27 @@ fn recover_in(folder: &Path) -> Recovered {
     recovered
 }
 
-/// Removes the noted folder if it is still the one created; false when it is gone.
-fn clean(record: &Record) -> io::Result<bool> {
+/// How long a note waits for its unreachable volume to come back.
+const UNREACHABLE_KEPT: std::time::Duration = std::time::Duration::from_secs(90 * 24 * 60 * 60);
+
+fn expired(note: &Path) -> bool {
+    std::fs::metadata(note)
+        .and_then(|metadata| metadata.modified())
+        .ok()
+        .and_then(|written| written.elapsed().ok())
+        .is_some_and(|age| age > UNREACHABLE_KEPT)
+}
+
+enum Cleaned {
+    Removed,
+    /// The folder no longer exists where its parent still does.
+    Gone,
+    /// Neither the folder nor its parent can be reached (volume unplugged).
+    Unreachable,
+}
+
+/// Removes the noted folder if it is still the one created.
+fn clean(record: &Record) -> io::Result<Cleaned> {
     let named = record
         .path
         .file_name()
@@ -151,7 +178,8 @@ fn clean(record: &Record) -> io::Result<bool> {
     }
     let directory = match platform().open_copy_staging(&record.path) {
         Ok(directory) => directory,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(_) if !record.path.parent().is_some_and(Path::exists) => return Ok(Cleaned::Unreachable),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Cleaned::Gone),
         Err(error) => return Err(error),
     };
     if platform().file_identity(&directory)? != record.directory {
@@ -169,5 +197,5 @@ fn clean(record: &Record) -> io::Result<bool> {
         Err(error) => return Err(error),
     }
     platform().remove_copy_staging(&directory, pin, &record.path)?;
-    Ok(true)
+    Ok(Cleaned::Removed)
 }

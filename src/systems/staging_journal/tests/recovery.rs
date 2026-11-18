@@ -68,3 +68,23 @@ fn unknown_content_or_a_replaced_folder_is_left_in_place() {
     // Reported once: the notes are gone.
     assert_eq!(std::fs::read_dir(&notes).unwrap().count(), 0);
 }
+
+#[test]
+fn a_staging_on_an_unplugged_volume_is_cleaned_once_it_is_back() {
+    let root = tempfile::tempdir().unwrap();
+    let notes = root.path().join("notes");
+    let volume = root.path().join("volume");
+    std::fs::create_dir(&volume).unwrap();
+    let (path, entry) = stage(&volume, &notes, ".oxyde-copy-unplugged");
+    end(entry);
+    let away = root.path().join("away");
+    std::fs::rename(&volume, &away).unwrap();
+    let recovered = recover_in(&notes);
+    assert!(recovered.removed.is_empty() && recovered.kept.is_empty());
+    assert_eq!(std::fs::read_dir(&notes).unwrap().count(), 1);
+    std::fs::rename(&away, &volume).unwrap();
+    let recovered = recover_in(&notes);
+    assert_eq!(recovered.removed, std::slice::from_ref(&path));
+    assert!(!path.exists());
+    assert_eq!(std::fs::read_dir(&notes).unwrap().count(), 0);
+}
