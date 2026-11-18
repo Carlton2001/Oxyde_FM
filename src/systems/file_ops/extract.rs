@@ -102,7 +102,16 @@ impl FileOperationManager {
             };
             let mut tree = match crate::systems::archive_owned_tree::OwnedTree::created(&target, &tracking) {
                 Ok(tree) => tree,
-                Err(error) => { let _ = platform().remove_empty_operation_directory(target_parents.directory(), &target, platform().file_identity(&tracking).map_err(|e| e.to_string())?); return Err(error.to_string()); }
+                // The cause is reported; a failed cleanup of the empty folder is only logged.
+                Err(error) => {
+                    let removed = platform().file_identity(&tracking).and_then(|identity| {
+                        platform().remove_empty_operation_directory(target_parents.directory(), &target, identity)
+                    });
+                    if let Err(cleanup) = removed {
+                        log::warn!("Empty extraction folder kept at {}: {cleanup}", target.display());
+                    }
+                    return Err(error.to_string());
+                }
             };
             { let mut op = op.lock().unwrap(); op.destination = Some(target); op.total_files = 0; op.total_bytes = 0; op.status = OpStatus::Running; }
             crate::systems::archive_io::decode(&source, file, &mut tree, None, &budget, Some(op)).map_err(|e| e.to_string())?;
