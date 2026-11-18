@@ -294,11 +294,8 @@ impl Standing {
             let window = if index == 0 { Ok(clock) } else { hidden_window() };
             match window.and_then(|window| Listed::new(window, list, selection.clone(), &windows)) {
                 Ok(window) => listed.push(window),
-                // Without its first window the clock would be nobody's to destroy.
-                Err(error) if index == 0 => {
-                    unsafe { let _ = DestroyWindow(clock); }
-                    return Err(error);
-                }
+                // Listed::new destroys the window it was given when it fails, the clock included.
+                Err(error) if index == 0 => return Err(error),
                 Err(error) => log::warn!("Cannot stand for {folder} under its other identifier list: {error}"),
             }
         }
