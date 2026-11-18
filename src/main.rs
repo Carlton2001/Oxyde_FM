@@ -71,10 +71,22 @@ fn initialize_logging() {
         let directory = config.parent()?;
         std::fs::create_dir_all(directory).ok()?;
         let path = directory.join("oxyde.log");
-        if std::fs::metadata(&path).is_ok_and(|metadata| metadata.len() > 2 * 1024 * 1024) {
+        // Only when no other Oxyde writes the log: a later launch handed to the running
+        // one must not rename the file under it.
+        let writers = std::fs::OpenOptions::new().create(true).truncate(false).write(true)
+            .open(directory.join("oxyde.log.lock")).ok();
+        let alone = writers.as_ref().is_some_and(|lock| lock.try_lock().is_ok());
+        if alone && std::fs::metadata(&path).is_ok_and(|metadata| metadata.len() > 2 * 1024 * 1024) {
             let previous = directory.join("oxyde.previous.log");
             let _ = std::fs::remove_file(&previous);
             let _ = std::fs::rename(&path, previous);
+        }
+        // Each process writing the log holds the lock shared until it exits.
+        if let Some(lock) = writers {
+            let _ = lock.unlock();
+            if lock.lock_shared().is_ok() {
+                std::mem::forget(lock);
+            }
         }
         std::fs::OpenOptions::new().create(true).append(true).open(&path).ok().map(|file| (path, file))
     });
