@@ -384,7 +384,12 @@ pub(super) fn remove_verified_output_checked(
 }
 
 fn check_replacement(path: &Path) -> io::Result<()> {
-    let metadata = std::fs::symlink_metadata(path)?;
+    let metadata = match std::fs::symlink_metadata(path) {
+        // Removed since the conflict was answered: there is nothing left to replace, and
+        // the publication creates the file instead of ending the whole operation.
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        result => result?,
+    };
     if !metadata.is_file()
         || metadata.file_type().is_symlink()
         || platform().file_attributes(&metadata, "").2
