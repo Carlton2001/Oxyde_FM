@@ -61,3 +61,48 @@ fn the_component_walk_opens_plain_paths_and_refuses_junctions() {
 fn the_kernel_probe_reaches_a_verdict_on_the_system_drive() {
     assert!(drive_links_refused().is_some());
 }
+
+/// An existing local path reached through the loopback administrative
+/// share, or None where that share is not reachable. The SMB client caches
+/// missing names, so the path must predate the test.
+fn loopback_share(path: &std::path::Path) -> Option<std::path::PathBuf> {
+    let text = path.to_str()?;
+    let (drive, rest) = text.split_once(":\\")?;
+    let shared = std::path::PathBuf::from(format!(r"\\localhost\{drive}$\{rest}"));
+    std::fs::metadata(&shared).ok().map(|_| shared)
+}
+
+// Windows 11 accepts `\??\C:` but refuses the `\??\UNC` link under
+// OBJ_DONT_REPARSE (error 4395): network paths must fall back to the walk.
+#[test]
+fn network_paths_open_whatever_the_kernel_verdict() {
+    let crate_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let Some(shared) = loopback_share(crate_root) else {
+        return;
+    };
+    open(&shared, true, 0x80, 7, 1).unwrap();
+    open(&shared.join("Cargo.toml"), false, 0x80, 7, 1).unwrap();
+    let mut verbatim = std::ffi::OsString::from(r"\\?\UNC\");
+    verbatim.push(&shared.to_str().unwrap()[2..]);
+    let verbatim = std::path::PathBuf::from(verbatim);
+    open(&verbatim.join("Cargo.toml"), false, 0x80, 7, 1).unwrap();
+}
+
+// `Default User` is a junction every Windows profile folder carries.
+#[test]
+fn junctions_on_network_paths_are_still_refused() {
+    let Some(profiles) = std::env::var_os("PUBLIC")
+        .and_then(|public| std::path::Path::new(&public).parent().map(|path| path.to_path_buf()))
+    else {
+        return;
+    };
+    let junction = profiles.join("Default User");
+    if !std::fs::symlink_metadata(&junction).is_ok_and(|metadata| metadata.file_attributes() & 0x400 != 0) {
+        return;
+    }
+    let Some(shared) = loopback_share(&junction) else {
+        return;
+    };
+    assert!(open(&shared, true, 0x80, 7, 1).is_err());
+    assert!(open(&shared.join("NTUSER.DAT"), false, 0x80, 7, 1).is_err());
+}

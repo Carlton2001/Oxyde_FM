@@ -55,19 +55,18 @@ pub(super) fn open(
     disposition: u32,
 ) -> io::Result<File> {
     let absolute = std::path::absolute(path)?;
-    // One native lookup where the kernel accepts drive links (Windows 11);
     // Windows 10 walks from the volume root directly.
-    match drive_links_refused() {
-        Some(true) => open_by_components(&absolute, directory, access, sharing, disposition),
-        Some(false) => open_name(native_name(&absolute), std::ptr::null_mut(), Some(directory), access, sharing, disposition, true),
-        // Unknown kernel: a refusal may be the drive link or a real reparse
-        // point, and the walk decides.
-        None => match open_name(native_name(&absolute), std::ptr::null_mut(), Some(directory), access, sharing, disposition, true) {
-            Err(error) if error.raw_os_error() == Some(ERROR_REPARSE_POINT_ENCOUNTERED) => {
-                open_by_components(&absolute, directory, access, sharing, disposition)
-            }
-            result => result,
-        },
+    if drive_links_refused() == Some(true) {
+        return open_by_components(&absolute, directory, access, sharing, disposition);
+    }
+    // One native lookup elsewhere. Even where `\??\C:` is accepted (Windows 11),
+    // other links can be refused (`\??\UNC`, mapped drives): a refusal may be
+    // such a link or a real reparse point, and the walk decides.
+    match open_name(native_name(&absolute), std::ptr::null_mut(), Some(directory), access, sharing, disposition, true) {
+        Err(error) if error.raw_os_error() == Some(ERROR_REPARSE_POINT_ENCOUNTERED) => {
+            open_by_components(&absolute, directory, access, sharing, disposition)
+        }
+        result => result,
     }
 }
 
