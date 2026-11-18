@@ -10,6 +10,9 @@ use std::{
     },
     path::Path,
 };
+
+mod mounted;
+
 #[repr(C)]
 struct UnicodeString {
     length: u16,
@@ -55,17 +58,40 @@ pub(super) fn open(
     disposition: u32,
 ) -> io::Result<File> {
     let absolute = std::path::absolute(path)?;
+    match open_absolute(&absolute, directory, access, sharing, disposition) {
+        Err(error) if refuses_reparse(&error) => match mounted::rebase(&absolute) {
+            Some(rebased) => open_absolute(&rebased, directory, access, sharing, disposition),
+            None => Err(error),
+        },
+        result => result,
+    }
+}
+
+fn refuses_reparse(error: &io::Error) -> bool {
+    error.raw_os_error() == Some(ERROR_REPARSE_POINT_ENCOUNTERED)
+        || error.get_ref().is_some_and(|inner| inner.to_string() == REPARSE_OBJECT_REFUSED)
+}
+
+const REPARSE_OBJECT_REFUSED: &str = "Native lookup refuses a reparse object";
+
+fn open_absolute(
+    absolute: &Path,
+    directory: bool,
+    access: u32,
+    sharing: u32,
+    disposition: u32,
+) -> io::Result<File> {
     // Windows 10 walks from the volume root directly, and so does a kernel
     // without OBJ_DONT_REPARSE, whose lookups must stay single components.
     if matches!(kernel(), Kernel::DriveLinksRefused | Kernel::NoDontReparse) {
-        return open_by_components(&absolute, directory, access, sharing, disposition);
+        return open_by_components(absolute, directory, access, sharing, disposition);
     }
     // One native lookup elsewhere. Even where `\??\C:` is accepted (Windows 11),
     // other links can be refused (`\??\UNC`, mapped drives): a refusal may be
     // such a link or a real reparse point, and the walk decides.
-    match open_name(native_name(&absolute), std::ptr::null_mut(), Some(directory), access, sharing, disposition, true) {
+    match open_name(native_name(absolute), std::ptr::null_mut(), Some(directory), access, sharing, disposition, true) {
         Err(error) if error.raw_os_error() == Some(ERROR_REPARSE_POINT_ENCOUNTERED) => {
-            open_by_components(&absolute, directory, access, sharing, disposition)
+            open_by_components(absolute, directory, access, sharing, disposition)
         }
         result => result,
     }
@@ -316,7 +342,7 @@ fn open_name_with_attributes(
     // OPEN_REPARSE_POINT can return a final reparse object without following it.
     // Refuse that object too, including directories opened with FILE_OPEN_IF.
     if reject_reparse && file.metadata()?.file_attributes() & 0x400 != 0 {
-        return Err(io::Error::other("Native lookup refuses a reparse object"));
+        return Err(io::Error::other(REPARSE_OBJECT_REFUSED));
     }
     Ok((file, created))
 }
