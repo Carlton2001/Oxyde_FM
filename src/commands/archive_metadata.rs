@@ -222,13 +222,12 @@ fn tar_files<R: Read>(
     checkpoint: &dyn Fn() -> io::Result<()>,
 ) -> Result<Vec<FileEntry>, CommandError> {
     let mut files = Vec::new();
-    for entry in entries {
-        let entry = entry?;
+    for entry in crate::utils::tar_members::members(entries) {
+        let mut entry = entry?;
         budget.checkpoint(checkpoint)?;
-        let kind = entry.header().entry_type();
-        if !kind.is_file() && !kind.is_dir() {
+        let Some(directory) = crate::utils::tar_members::directory(&mut entry)? else {
             return Err(invalid("Archive links and special files are not supported"));
-        }
+        };
         let name = entry.path()?;
         let name = name
             .to_str()
@@ -241,7 +240,7 @@ fn tar_files<R: Read>(
         if let Some(entry) = member(
             archive_path,
             name,
-            kind.is_dir(),
+            directory,
             entry.size(),
             modified,
             budget,

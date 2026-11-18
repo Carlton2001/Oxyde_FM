@@ -115,6 +115,61 @@ fn pax(bytes: &[u8]) -> io::Result<(Option<String>, Option<u64>)> {
     Ok((path, size))
 }
 
+/// GNU sparse map (`S`): four blocks in the header, then 21 per extension
+/// header while the extension flag is set. Calls `visit` with each data
+/// block's offset in the file and its length, after the same checks as the
+/// tar crate. Returns the extension header count and the real size.
+fn sparse_map(
+    file: &mut File,
+    header: &[u8; 512],
+    start: u64,
+    length: u64,
+    stored: u64,
+    visit: &mut dyn FnMut(&mut File, u64, u64) -> io::Result<()>,
+) -> io::Result<(u64, u64)> {
+    if &header[257..265] != b"ustar  \0" {
+        return Err(failure());
+    }
+    let real = number(&header[483..495])?;
+    let (mut current, mut remaining) = (0u64, stored);
+    let mut block = |file: &mut File, entry: &[u8]| -> io::Result<()> {
+        // An empty slot has a NUL first byte in either field.
+        if entry[0] == 0 || entry[12] == 0 {
+            return Ok(());
+        }
+        let (start, size) = (number(&entry[..12])?, number(&entry[12..24])?);
+        if (size != 0 && (stored - remaining) % 512 != 0) || start < current {
+            return Err(failure());
+        }
+        current = start.checked_add(size).ok_or_else(failure)?;
+        remaining = remaining.checked_sub(size).ok_or_else(failure)?;
+        visit(file, start, size)
+    };
+    for entry in header[386..482].chunks(24) {
+        block(file, entry)?;
+    }
+    let mut extended = header[482] != 0;
+    let mut extensions = 0u64;
+    let mut buffer = [0u8; 512];
+    while extended {
+        let position = start.checked_add(extensions * 512).ok_or_else(failure)?;
+        if length.saturating_sub(position) < 512 {
+            return Err(failure());
+        }
+        file.seek(SeekFrom::Start(position))?;
+        file.read_exact(&mut buffer)?;
+        extensions += 1;
+        for entry in buffer[..504].chunks(24) {
+            block(file, entry)?;
+        }
+        extended = buffer[504] != 0;
+    }
+    if current != real || remaining != 0 {
+        return Err(failure());
+    }
+    Ok((extensions, real))
+}
+
 pub(crate) fn scan(
     file: &mut File,
     limits: ArchiveLimits,
@@ -209,6 +264,18 @@ fn scan_impl(
         }
         let mut size = number(&header[124..136])?;
         let kind = header[156];
+        if kind == b'g' {
+            // A PAX global header describes the archive, not a member.
+            if canonical || long_name.is_some() || extended.is_some() {
+                return Err(failure());
+            }
+            offset = offset
+                .checked_add(size)
+                .and_then(|n| n.checked_add((512 - size % 512) % 512))
+                .filter(|end| *end <= length)
+                .ok_or_else(failure)?;
+            continue;
+        }
         if matches!(kind, b'L' | b'x') {
             if canonical && kind == b'x' {
                 return Err(failure());
@@ -238,10 +305,12 @@ fn scan_impl(
             offset = end;
             continue;
         }
-        if !matches!(kind, 0 | b'0' | b'5') {
+        // Contiguous (`7`) and GNU sparse (`S`) members are files.
+        if !matches!(kind, 0 | b'0' | b'5' | b'7' | b'S') || (kind == b'S' && canonical) {
             return Err(failure());
         }
         let directory = kind == b'5';
+        let sparse = kind == b'S';
         let mut name = long_name.take().unwrap_or(text(&header[..100])?);
         if &header[257..263] == b"ustar\0" && &header[263..265] == b"00" {
             let prefix = text(&header[345..500])?;
@@ -250,12 +319,24 @@ fn scan_impl(
             }
         }
         if let Some((path, override_size)) = extended.take() {
+            if sparse {
+                return Err(failure());
+            }
             if let Some(path) = path {
                 name = path;
             }
             if let Some(value) = override_size {
                 size = value;
             }
+        }
+        // Stored bytes in the archive; `size` becomes the member's real size.
+        let mut stored = size;
+        let headers = offset;
+        if sparse {
+            let (extensions, real) =
+                sparse_map(file, &header, offset, length, size, &mut |_, _, _| Ok(()))?;
+            offset = offset.checked_add(extensions * 512).ok_or_else(failure)?;
+            (stored, size) = (size, real);
         }
         let name = relative_archive_path(&name)?;
         name_bytes = name_bytes
@@ -272,12 +353,41 @@ fn scan_impl(
         let chosen = selected.as_ref().is_none_or(|selected| *selected == name);
         budget.entry(&name.to_string_lossy(), if chosen { size } else { 0 })?;
         let end = offset
-            .checked_add(size)
-            .and_then(|n| n.checked_add((512 - size % 512) % 512))
+            .checked_add(stored)
+            .and_then(|n| n.checked_add((512 - stored % 512) % 512))
             .filter(|end| *end <= length)
             .ok_or_else(failure)?;
         let mut hash = blake3::Hasher::new();
-        if contents && chosen && !directory {
+        if contents && chosen && sparse {
+            let data = offset;
+            let (mut expanded, mut read) = (0u64, 0u64);
+            let fill = |hash: &mut blake3::Hasher, mut count: u64| -> io::Result<()> {
+                let zeros = [0u8; 64 * 1024];
+                while count != 0 {
+                    budget.checkpoint(checkpoint)?;
+                    let step = count.min(zeros.len() as u64) as usize;
+                    hash.update(&zeros[..step]);
+                    count -= step as u64;
+                }
+                Ok(())
+            };
+            sparse_map(file, &header, headers, length, stored, &mut |file, start, count| {
+                fill(&mut hash, start - expanded)?;
+                file.seek(SeekFrom::Start(data + read))?;
+                let mut remaining = count;
+                while remaining != 0 {
+                    budget.checkpoint(checkpoint)?;
+                    let step = remaining.min(buffer.len() as u64) as usize;
+                    file.read_exact(&mut buffer[..step])?;
+                    hash.update(&buffer[..step]);
+                    remaining -= step as u64;
+                }
+                read += count;
+                expanded = start + count;
+                Ok(())
+            })?;
+            fill(&mut hash, size - expanded)?;
+        } else if contents && chosen && !directory {
             let mut remaining = size;
             while remaining != 0 {
                 budget.checkpoint(checkpoint)?;
@@ -298,7 +408,7 @@ fn scan_impl(
             hash: (contents && chosen).then(|| hash.finalize()),
         });
         if canonical {
-            let padding = (end - offset - size) as usize;
+            let padding = (end - offset - stored) as usize;
             file.read_exact(&mut buffer[..padding])?;
             if buffer[..padding].iter().any(|byte| *byte != 0) {
                 return Err(failure());
