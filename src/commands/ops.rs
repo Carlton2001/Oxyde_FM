@@ -124,6 +124,7 @@ pub async fn purge_recycle_bin(paths: Vec<String>) -> Result<(), CommandError> {
         .map(|item| (normalize(&PathBuf::from(&item.id)), item))
         .collect();
 
+    let mut unavailable = 0usize;
     for path_str in paths {
         let path = PathBuf::from(&path_str);
         let normalized_target = normalize(&path);
@@ -131,6 +132,7 @@ pub async fn purge_recycle_bin(paths: Vec<String>) -> Result<(), CommandError> {
         if let Some(item) = trash_map.get(&normalized_target) {
             items_to_purge.push(item.clone());
         } else {
+            unavailable += 1;
             log::warn!(target: "oxyde_lib::trash_purge", "stage=selection_unavailable id={path_str:?}");
         }
     }
@@ -146,7 +148,18 @@ pub async fn purge_recycle_bin(paths: Vec<String>) -> Result<(), CommandError> {
     }
 
     info!(target: "oxyde_lib::trash_purge", "stage=end mode=selected wall_s={:.6}", started.elapsed().as_secs_f64());
-    Ok(())
+    unavailable_selection(unavailable)
+}
+
+/// A selection the Recycle Bin no longer holds (restored or purged meanwhile) was not
+/// purged: the caller must not announce it as done.
+pub(crate) fn unavailable_selection(count: usize) -> Result<(), CommandError> {
+    if count == 0 {
+        return Ok(());
+    }
+    Err(CommandError::TrashError(format!(
+        "{count} selected item(s) are no longer in the Recycle Bin and were not purged"
+    )))
 }
 
 mod conflicts;

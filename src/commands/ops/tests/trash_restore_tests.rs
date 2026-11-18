@@ -36,7 +36,8 @@
             .map(|entry| entry.path.clone())
             .collect();
         let restored = runtime.block_on(restore_items(remaining));
-        purged.unwrap();
+        // The ordinary file was never in the Recycle Bin: reported, not purged.
+        assert!(purged.unwrap_err().to_string().contains("no longer in the Recycle Bin"));
         restored.unwrap();
         assert!(!selected_still_present);
         assert!(sibling_still_present);
