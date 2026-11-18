@@ -1,10 +1,12 @@
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write};
 use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
+use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Storage::FileSystem::{
-    FILE_ATTRIBUTE_DIRECTORY, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
-    FILE_SHARE_READ, FILE_SHARE_WRITE,
+    GetVolumeInformationByHandleW, FILE_ATTRIBUTE_DIRECTORY, FILE_FLAG_BACKUP_SEMANTICS,
+    FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
 };
 
 const MAX_PROVENANCE_BYTES: u64 = 16 * 1024;
@@ -86,7 +88,41 @@ fn provenance_path(path: &Path) -> PathBuf {
     PathBuf::from(name)
 }
 
+/// FAT, exFAT, the WSL share and some SMB servers have no alternate streams:
+/// a file there carries no Internet mark, and Windows itself drops the mark
+/// when copying to them. Opening `name:Zone.Identifier` there fails with
+/// "invalid name", or names an ordinary sibling file on the WSL share.
+fn has_named_streams(file: &File) -> io::Result<bool> {
+    const FILE_NAMED_STREAMS: u32 = 0x0004_0000;
+    let mut flags = 0;
+    unsafe {
+        GetVolumeInformationByHandleW(
+            HANDLE(file.as_raw_handle()),
+            None,
+            None,
+            None,
+            Some(&mut flags),
+            None,
+        )
+    }
+    .map_err(io::Error::from)?;
+    Ok(flags & FILE_NAMED_STREAMS != 0)
+}
+
 pub(super) fn read_provenance(path: &Path) -> io::Result<Option<Vec<u8>>> {
+    let main = OpenOptions::new()
+        .access_mode(0x80) // FILE_READ_ATTRIBUTES
+        .share_mode(FILE_SHARE_READ.0 | FILE_SHARE_WRITE.0 | FILE_SHARE_DELETE.0)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS.0)
+        .open(path);
+    let main = match main {
+        Ok(main) => main,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    if !has_named_streams(&main)? {
+        return Ok(None);
+    }
     let file = match File::open(provenance_path(path)) {
         Ok(file) => file,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
@@ -121,6 +157,10 @@ pub(super) fn write_provenance(path: &Path, data: &[u8]) -> io::Result<()> {
         return Err(io::Error::other(
             "Cannot mark a non-ordinary archive output",
         ));
+    }
+    if !has_named_streams(&held)? {
+        log::info!("Internet mark dropped on a volume without alternate streams");
+        return Ok(());
     }
     let mut stream = OpenOptions::new()
         .write(true)
@@ -161,6 +201,10 @@ pub(super) fn write_output_provenance(
     if super::platform().file_identity(&selected)? != super::platform().file_identity(file)? {
         return Err(io::Error::other("Archive provenance output changed"));
     }
+    if !has_named_streams(file)? {
+        log::info!("Internet mark dropped on a volume without alternate streams");
+        return Ok(());
+    }
     let mut stream =
         super::windows_no_reparse::open_provenance_stream(parent, leaf).map_err(|error| {
             io::Error::new(
@@ -188,6 +232,7 @@ pub(super) fn read_output_provenance(parent: &File, file: &File, path: &Path) ->
     let selected = super::windows_source_selection::track(parent, path)?;
     let identity = super::platform().file_identity(file)?;
     if super::platform().file_identity(&selected)? != identity { return Err(io::Error::other("Archive provenance source changed")); }
+    if !has_named_streams(file)? { return Ok(None); }
     let stream = match super::windows_no_reparse::read_provenance_stream(parent, leaf) {
         Ok(stream) => stream,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
@@ -199,6 +244,10 @@ pub(super) fn read_output_provenance(parent: &File, file: &File, path: &Path) ->
     if data.len() as u64 > MAX_PROVENANCE_BYTES { return Err(io::Error::new(io::ErrorKind::InvalidData, "Internet provenance exceeds the size limit")); }
     Ok(Some(data))
 }
+
+#[cfg(test)]
+#[path = "windows_archive_security/tests/streams.rs"]
+mod stream_tests;
 
 #[cfg(test)]
 mod tests {
