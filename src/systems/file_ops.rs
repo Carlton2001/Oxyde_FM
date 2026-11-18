@@ -54,6 +54,8 @@ pub enum FileOpType {
 pub struct FileOperation {
     pub item_outcomes: HashMap<PathBuf, ItemOutcome>,
     item_progress: HashMap<PathBuf, item_outcomes::ItemProgress>,
+    /// Planned destination root of each source, to find the root holding a path by its ancestors.
+    item_destinations: HashMap<PathBuf, PathBuf>,
     item_tracking_atomic: bool,
     pub id: String,
     pub sequence: u64,
@@ -132,6 +134,7 @@ impl FileOperation {
         Self {
             item_outcomes: self.snapshot_item_outcomes(),
             item_progress: HashMap::new(),
+            item_destinations: HashMap::new(),
             item_tracking_atomic: self.item_tracking_atomic,
             id: self.id.clone(),
             sequence: self.sequence,
@@ -199,6 +202,7 @@ impl FileOperation {
     ) -> Self {
         Self {
             item_progress: sources.iter().cloned().map(|path| (path, Default::default())).collect(),
+            item_destinations: HashMap::new(),
             item_outcomes: HashMap::new(),
             item_tracking_atomic: false,
             id: Uuid::new_v4().to_string(),
