@@ -43,8 +43,9 @@ pub(super) fn medium(bytes: &[u8]) -> Result<STGMEDIUM> {
     let handle = unsafe { GlobalAlloc(GMEM_MOVEABLE, bytes.len()) }?;
     let pointer = unsafe { GlobalLock(handle) }.cast::<u8>();
     if pointer.is_null() {
+        let error = Error::from_thread();
         let _ = unsafe { GlobalFree(Some(handle)) };
-        return Err(Error::from_thread());
+        return Err(error);
     }
     unsafe {
         std::ptr::copy_nonoverlapping(bytes.as_ptr(), pointer, bytes.len());
