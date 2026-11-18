@@ -139,7 +139,7 @@ pub fn get_clipboard_files() -> Result<(Vec<String>, bool), CommandError> {
     if unsafe { OpenClipboard(None) }.is_err() {
         return Ok((Vec::new(), false));
     }
-    let _session = ClipboardReadSession;
+    let session = ClipboardReadSession;
     let files = match unsafe { GetClipboardData(CF_HDROP.0 as u32) } {
         Ok(handle) if !handle.is_invalid() => {
             let data = unsafe { LockedClipboardData::new(handle) }?;
@@ -159,6 +159,9 @@ pub fn get_clipboard_files() -> Result<(Vec<String>, bool), CommandError> {
             is_cut = parse_drop_effect(data.bytes())?;
         }
     }
+    // Closed before the checks below: a path on a slow share must not keep every other
+    // application from reading or writing the clipboard while it times out.
+    drop(session);
     // A source may publish paths before writing them (VMware Tools stages host
     // folders only when the shell pastes): leave those to the shell's Paste. Some
     // missing among existing ones is a stale selection, which Oxyde's paste reports.
