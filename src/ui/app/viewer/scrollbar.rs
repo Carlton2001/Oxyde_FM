@@ -57,8 +57,9 @@ impl Viewer {
     }
 
     fn drag_to(&mut self, position: Point<Pixels>) {
-        let Some((axis, track, viewport, content)) = self.scroll.drag.clone() else { return };
-        let Some(origin) = self.scroll.origins.get(&track).copied() else { return };
+        let Some((axis, track, viewport, content)) = &self.scroll.drag else { return };
+        let (axis, viewport, content) = (*axis, *viewport, *content);
+        let Some(origin) = self.scroll.origins.get(track).copied() else { return };
         match axis {
             ScrollbarAxis::Vertical => {
                 let offset = crate::ui::components::scrollbar::drag_scrolled(viewport, content, viewport, position.y.as_f32() - origin.y, self.scroll.grab);
