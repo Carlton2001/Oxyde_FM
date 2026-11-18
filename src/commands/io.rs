@@ -131,11 +131,26 @@ fn read_local_entries(
         _ => CommandError::IoError(error.to_string()),
     })?;
     let attributes = crate::utils::visibility::DirectoryAttributes::load(path_buf);
+    let mut unreadable = 0;
     for entry in dir {
-        let entry = entry.map_err(|e| CommandError::IoError(e.to_string()))?;
-        let metadata = entry
-            .metadata()
-            .map_err(|e| CommandError::IoError(e.to_string()))?;
+        // An entry that cannot be read, or that vanished before its metadata (a temporary
+        // file), is left out; the others are still listed.
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(error) => {
+                log::debug!("Skipping an unreadable entry of {path}: {error}");
+                unreadable += 1;
+                if unreadable > 64 { break; }
+                continue;
+            }
+        };
+        let metadata = match entry.metadata() {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                log::debug!("Skipping {:?}: {error}", entry.path());
+                continue;
+            }
+        };
         let name = entry.file_name().to_string_lossy().to_string();
 
         let (is_hidden, is_system, _) = attributes.of(&metadata, &name);
