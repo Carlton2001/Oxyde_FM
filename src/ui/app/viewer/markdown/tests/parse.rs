@@ -236,3 +236,11 @@ fn unclosed_tag_ending_with_multibyte_char_does_not_panic() {
     assert_eq!(html_code_block("<pre>a <é", false).as_deref(), Some("a <é"));
     assert_eq!(html_code_block("<pre>x <", false).as_deref(), Some("x <"));
 }
+
+#[test]
+fn a_heading_goes_on_after_an_image_it_starts_with() {
+    let (blocks, _) = parse("# ![badge](https://example.org/b.svg) Title", "C:/docs/readme.md");
+    assert!(matches!(blocks[0].kind, Kind::Image(None)));
+    assert!(matches!(blocks[1].kind, Kind::Heading(1)));
+    assert_eq!(blocks[1].text.trim(), "Title");
+}
