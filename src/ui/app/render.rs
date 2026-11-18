@@ -237,7 +237,7 @@ impl Render for OxydeApp {
             })
             .child({
                 // ── Horizontal content area (sidebar + panes) ─────────────
-                let layout_tree = self.state.layout.clone();
+                let layout_tree = &self.state.layout;
                 div()
                     .flex()
                     .flex_1()
@@ -271,7 +271,7 @@ impl Render for OxydeApp {
                             .min_w_0()
                             .h_full()
                             .overflow_hidden()
-                            .child(self.render_layout_node(&layout_tree, handle.clone(), cx)),
+                            .child(self.render_layout_node(layout_tree, handle.clone(), cx)),
                     )
             });
 
