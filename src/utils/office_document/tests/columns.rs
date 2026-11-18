@@ -56,3 +56,23 @@ fn wide_word_and_open_document_tables_drop_the_extra_columns() {
     );
     assert_eq!(odf, format!("sheet\tWide\ntr\t{}\n", kept()));
 }
+
+#[test]
+fn an_empty_shared_string_keeps_the_index_of_the_next_ones() {
+    use std::io::Write;
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("shared.xlsx");
+    let mut writer = zip::ZipWriter::new(std::fs::File::create(&path).unwrap());
+    for (name, content) in [
+        ("xl/workbook.xml", r#"<workbook><sheets><sheet name="S" r:id="rId1"/></sheets></workbook>"#),
+        ("xl/_rels/workbook.xml.rels", r#"<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>"#),
+        ("xl/sharedStrings.xml", r#"<sst><si><t>first</t></si><si/><si><t>third</t></si></sst>"#),
+        ("xl/worksheets/sheet1.xml", r#"<worksheet><sheetData><row><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>2</v></c></row></sheetData></worksheet>"#),
+    ] {
+        writer.start_file(name, zip::write::SimpleFileOptions::default()).unwrap();
+        writer.write_all(content.as_bytes()).unwrap();
+    }
+    writer.finish().unwrap();
+    let output = document(std::fs::File::open(&path).unwrap(), "xlsx").unwrap();
+    assert_eq!(output, "sheet\tS\ntr\tfirst\u{1f}third\n");
+}

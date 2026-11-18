@@ -21,6 +21,8 @@ fn shared_strings(archive: &mut Archive) -> Vec<String> {
             ("rPh", false) => phonetic = true,
             ("rPh", true) => phonetic = false,
             ("si", true) => strings.push(std::mem::take(&mut current)),
+            // `<si/>`: an empty string still takes its index, or later cells shift.
+            ("si", false) if tag.ends_with('/') => strings.push(String::new()),
             _ => {}
         }
         strings.len() < MAX_SHARED_STRINGS
