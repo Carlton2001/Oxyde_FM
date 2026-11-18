@@ -320,10 +320,20 @@ pub enum InstanceClaim {
 
 /// Parent of the WSL distributions, which Explorer calls "Linux".
 pub const WSL_ROOT: &str = r"\\wsl.localhost";
+/// The only name of that root for the WSL built into Windows 10.
+pub const WSL_LEGACY_ROOT: &str = r"\\wsl$";
+
+/// The part of a WSL path after its root, under either name of the root.
+pub fn wsl_relative(path: &str) -> Option<&str> {
+    [WSL_ROOT, WSL_LEGACY_ROOT].into_iter().find_map(|root| {
+        let rest = path.get(root.len()..)?;
+        (path[..root.len()].eq_ignore_ascii_case(root) && rest.chars().next().is_none_or(|next| next == '\\'))
+            .then_some(rest)
+    })
+}
 
 pub fn is_wsl_path(path: &str) -> bool {
-    path.get(..WSL_ROOT.len()).is_some_and(|root| root.eq_ignore_ascii_case(WSL_ROOT))
-        && path[WSL_ROOT.len()..].chars().next().is_none_or(|next| next == '\\')
+    wsl_relative(path).is_some()
 }
 
 /// What delivered the running Oxyde, which decides how a newer release reaches it.

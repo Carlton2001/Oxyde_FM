@@ -464,7 +464,7 @@ impl Platform for WindowsPlatform {
         &super::windows_volumes::WindowsVolumes
     }
     fn list_network_shares(&self, server: &str) -> Result<Vec<crate::models::FileEntry>, String> {
-        if server.eq_ignore_ascii_case(super::WSL_ROOT) {
+        if super::wsl_relative(server).is_some_and(|rest| rest.trim_matches('\\').is_empty()) {
             return Ok(super::windows_wsl::entries());
         }
         super::network::list_network_entries(Some(server.to_string())).map_err(|error| error.to_string())
@@ -1321,8 +1321,8 @@ fn bulk_expand_excluded(
         return true;
     }
     // Kernel pseudo-files, and the Windows drives under /mnt.
-    if super::is_wsl_path(path)
-        && path[super::WSL_ROOT.len()..].split('\\').filter(|part| !part.is_empty()).count() == 2
+    if super::wsl_relative(path)
+        .is_some_and(|rest| rest.split('\\').filter(|part| !part.is_empty()).count() == 2)
         && matches!(name.as_str(), "proc" | "sys" | "dev" | "run" | "mnt")
     {
         return true;
