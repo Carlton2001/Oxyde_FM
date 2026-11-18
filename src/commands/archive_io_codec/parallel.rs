@@ -98,9 +98,7 @@ impl ZipJobs {
                     let mut writer = zip::ZipWriter::new(Cursor::new(Vec::with_capacity(
                         bytes.len() + bytes.len() / 100 + 65536,
                     )));
-                    let options = zip::write::SimpleFileOptions::default()
-                        .compression_method(zip::CompressionMethod::Deflated)
-                        .compression_level(Some(level));
+                    let options = super::zip_options(&entry, level);
                     if entry.directory {
                         writer
                             .add_directory(
