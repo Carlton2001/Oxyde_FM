@@ -509,13 +509,28 @@ fn content_lock<'a>(
     }
 }
 
+/// A file whose content is not on this disk: reading it would download it, so a content
+/// search leaves it out (OneDrive Files On-Demand, offline files).
+#[cfg(windows)]
+fn is_cloud_placeholder(path: &std::path::Path) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const OFFLINE: u32 = 0x1000;
+    const RECALL_ON_OPEN: u32 = 0x40000;
+    const RECALL_ON_DATA_ACCESS: u32 = 0x400000;
+    std::fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_attributes() & (OFFLINE | RECALL_ON_OPEN | RECALL_ON_DATA_ACCESS) != 0)
+}
+#[cfg(not(windows))]
+fn is_cloud_placeholder(_path: &std::path::Path) -> bool {
+    false
+}
+
 fn file_contains_content(
     path: &std::path::Path,
     pattern: &ContentPattern,
     ignore_accents: bool,
     cancellation: &AtomicBool,
 ) -> std::io::Result<bool> {
-    if cancellation.load(Ordering::Relaxed) || is_binary_file(path) {
+    if cancellation.load(Ordering::Relaxed) || is_binary_file(path) || is_cloud_placeholder(path) {
         return Ok(false);
     }
     let vol_id = get_physical_disk_id(path);
