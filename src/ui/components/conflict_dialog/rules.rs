@@ -68,15 +68,21 @@ impl ConflictDialogState {
         resolutions
     }
 }
+/// FAT and exFAT keep modification times to 2 s: a copy there is not "newer" for it.
+pub(super) const SAME_TIME_MS: u64 = 2_000;
+
 pub(super) fn category(c: &ConflictEntry) -> usize {
-    if c.source.modified == c.target.modified && c.source.size == c.target.size {
+    let same_time = c.source.modified.abs_diff(c.target.modified) <= SAME_TIME_MS;
+    // A folder's size is not its content, often not even computed: never "identical".
+    let files = !c.source.is_dir && !c.target.is_dir;
+    if same_time && files && c.source.size == c.target.size {
         1
+    } else if same_time {
+        0
     } else if c.source.modified > c.target.modified {
         2
-    } else if c.source.modified < c.target.modified {
-        3
     } else {
-        0
+        3
     }
 }
 pub(super) fn parent(path: &str) -> &str {
@@ -135,11 +141,17 @@ mod tests {
     }
     #[test]
     fn categories_compare_source_to_target_and_require_equal_sizes() {
-        assert_eq!(category(&conflict("a", 2, 1, 10)), 2);
-        assert_eq!(category(&conflict("a", 1, 2, 10)), 3);
+        assert_eq!(category(&conflict("a", 10_000, 1, 10)), 2);
+        assert_eq!(category(&conflict("a", 1, 10_000, 10)), 3);
         assert_eq!(category(&conflict("a", 1, 1, 10)), 1);
+        // A copy to FAT rounds its time up to 2 s.
+        assert_eq!(category(&conflict("a", 10_000, 11_990, 10)), 1);
         let mut c = conflict("a", 1, 1, 10);
         c.target.size = 20;
+        assert_eq!(category(&c), 0);
+        let mut c = conflict("a", 1, 1, 0);
+        c.source.is_dir = true;
+        c.target.is_dir = true;
         assert_eq!(category(&c), 0);
     }
     #[test]
@@ -166,8 +178,8 @@ mod tests {
     #[test]
     fn filtered_rows_keep_original_indices_and_collapsed_descendants_are_hidden() {
         let conflicts = vec![
-            conflict("root/older", 1, 2, 10),
-            conflict("root/newer", 2, 1, 10),
+            conflict("root/older", 1, 10_000, 10),
+            conflict("root/newer", 10_000, 1, 10),
         ];
         let mut state = ConflictDialogState {
             filter: 2,
