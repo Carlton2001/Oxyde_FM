@@ -216,6 +216,7 @@ mod tests {
                 bytes: 4,
                 depth: 2,
                 seconds: 1,
+                decoded: 4,
             },
             selected,
             preflight,

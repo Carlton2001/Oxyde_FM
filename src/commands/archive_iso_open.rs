@@ -522,6 +522,8 @@ mod tests {
         ArchiveLimits {
             max_bytes: 4,
             max_entries: 16,
+            // The decoded stream bound follows the output one, as when extracting.
+            max_decoded: None,
             ..ArchiveLimits::OPEN_FILE
         }
     }

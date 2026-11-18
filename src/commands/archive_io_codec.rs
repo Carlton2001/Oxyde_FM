@@ -39,6 +39,7 @@ fn archive_limits(limits: Limits) -> io::Result<ArchiveLimits> {
         max_bytes: limits.bytes,
         max_depth: limits.depth.try_into().map_err(|_| invalid())?,
         max_duration: Duration::from_secs(limits.seconds),
+        max_decoded: Some(limits.decoded),
     })
 }
 fn empty_entry(id: u64, name: String, directory: bool, size: u64) -> Entry {
@@ -904,6 +905,7 @@ mod tests {
             bytes,
             depth: 64,
             seconds: 120,
+            decoded: bytes,
         }
     }
     fn encoded(format: Format, quality: Quality) -> (Vec<u8>, Vec<u8>) {

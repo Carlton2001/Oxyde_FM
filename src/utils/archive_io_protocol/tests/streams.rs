@@ -11,7 +11,7 @@ fn start(format: Format, stream_name: Option<&str>) -> io::Result<()> {
             volumes: Vec::new(),
             manifest_only: false,
             password: None,
-            limits: Limits { entries: 1, bytes: 1, depth: 1, seconds: 1 },
+            limits: Limits { entries: 1, bytes: 1, depth: 1, seconds: 1, decoded: 1 },
         },
     })
     .validate()
@@ -37,7 +37,7 @@ fn encoders_exist_for_writable_tar_codecs_only() {
                 entries: 1,
                 output_limit: 1,
                 password: None,
-                limits: Limits { entries: 1, bytes: 1, depth: 1, seconds: 1 },
+                limits: Limits { entries: 1, bytes: 1, depth: 1, seconds: 1, decoded: 1 },
             },
         })
         .validate()
@@ -62,7 +62,7 @@ fn only_a_rar_carries_volumes_or_asks_for_its_manifest_alone() {
                 password: None,
                 volumes,
                 manifest_only,
-                limits: Limits { entries: 1, bytes: 1, depth: 1, seconds: 1 },
+                limits: Limits { entries: 1, bytes: 1, depth: 1, seconds: 1, decoded: 1 },
             },
         })
         .validate()

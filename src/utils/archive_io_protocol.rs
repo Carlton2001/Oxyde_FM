@@ -105,6 +105,8 @@ pub struct Limits {
     pub bytes: u64,
     pub depth: u64,
     pub seconds: u64,
+    /// Decoded stream allowance, before the headers' share.
+    pub decoded: u64,
 }
 
 /// Volumes of one RAR set, the first included.

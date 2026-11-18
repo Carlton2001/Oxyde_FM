@@ -28,6 +28,7 @@ fn limits() -> Limits {
         bytes: 1024 * 1024,
         depth: 64,
         seconds: 120,
+        decoded: 1024 * 1024,
     }
 }
 fn entry(size: u64) -> Entry {
