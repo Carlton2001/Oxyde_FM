@@ -116,6 +116,7 @@ impl Runtime {
             ));
         }
         parents.push(temp_handle);
+        sweep_stale_runtimes(&temporary);
         let root = tempfile::Builder::new()
             .prefix("oxyde-archive-lpac-")
             .tempdir_in(&temporary)?
@@ -759,3 +760,30 @@ mod identity_tests;
 #[cfg(test)]
 #[path = "windows_worker_sandbox/tests/object_identity_tests.rs"]
 mod object_identity_tests;
+
+/// Once per run, removes the runtime copies a crash or a forced stop left behind.
+/// A copy whose executable is still running (another Oxyde) cannot be deleted
+/// and stays; nothing else is touched.
+fn sweep_stale_runtimes(temporary: &std::path::Path) {
+    static SWEPT: std::sync::Once = std::sync::Once::new();
+    SWEPT.call_once(|| {
+        let Ok(entries) = std::fs::read_dir(temporary) else { return };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let stale = entry.file_name().to_string_lossy().starts_with("oxyde-archive-lpac-")
+                && entry.file_type().is_ok_and(|kind| kind.is_dir() && !kind.is_symlink())
+                && entry.metadata().is_ok_and(|metadata| metadata.file_attributes() & 0x400 == 0);
+            if !stale {
+                continue;
+            }
+            let binary = path.join("worker.exe");
+            let released = match std::fs::remove_file(&binary) {
+                Ok(()) => true,
+                Err(error) => error.kind() == std::io::ErrorKind::NotFound,
+            };
+            if released {
+                let _ = std::fs::remove_dir_all(&path);
+            }
+        }
+    });
+}
