@@ -194,20 +194,26 @@ fn serve(pipe: Pipe, sender: UnboundedSender<InstanceMessage>, released: &Atomic
             log::warn!("Ignoring a message that is not a later launch's");
             continue;
         };
-        let request = if header == CHOOSE {
-            match super::windows_file_dialog::request(&locations, sender_process) {
-                Some(request) => InstanceRequest::ChooseFile(Box::new(request)),
-                None => {
-                    log::warn!("Ignoring a dialog that names no pipe to answer on");
-                    continue;
+        // Resolving locations reads the disk, which may be a share that does not
+        // answer: that must not keep the pipe from taking the next launch.
+        let later = sender.clone();
+        let resolved = std::thread::Builder::new().name("instance-request".into()).spawn(move || {
+            let request = if header == CHOOSE {
+                match super::windows_file_dialog::request(&locations, sender_process) {
+                    Some(request) => InstanceRequest::ChooseFile(Box::new(request)),
+                    None => {
+                        log::warn!("Ignoring a dialog that names no pipe to answer on");
+                        return;
+                    }
                 }
-            }
-        } else if header == SELECT {
-            InstanceRequest::Items(super::windows_startup::items(&locations))
-        } else {
-            InstanceRequest::Folders(super::windows_startup::folders(&locations))
-        };
-        if sender.unbounded_send(InstanceMessage { request, activation_token: None }).is_err() {
+            } else if header == SELECT {
+                InstanceRequest::Items(super::windows_startup::items(&locations))
+            } else {
+                InstanceRequest::Folders(super::windows_startup::folders(&locations))
+            };
+            let _ = later.unbounded_send(InstanceMessage { request, activation_token: None });
+        });
+        if resolved.is_err() || sender.is_closed() {
             return;
         }
     }
