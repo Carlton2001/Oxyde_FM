@@ -81,6 +81,7 @@ impl Render for TextInput {
                             cx.stop_propagation();
                             h_clear.update(cx, |this, cx| {
                                 this.content.clear();
+                                this.marked_range = None;
                                 this.selected_range = 0..0;
                                 this.selection_anchor = 0;
                                 this.selection_reversed = false;

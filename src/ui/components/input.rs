@@ -1,4 +1,5 @@
 mod completion_menu;
+mod composition;
 mod field;
 mod options;
 mod render;
@@ -44,6 +45,8 @@ pub struct TextInput {
     content: String,
     placeholder: SharedString,
     selected_range: std::ops::Range<usize>,
+    /// The text an input method is composing, part of `content` until it commits.
+    marked_range: Option<std::ops::Range<usize>>,
     selection_anchor: usize,
     selection_reversed: bool,
     is_selecting: bool,
@@ -186,6 +189,7 @@ impl TextInput {
 
     pub fn set_content(&mut self, content: String, cx: &mut Context<Self>) {
         self.content = content;
+        self.marked_range = None;
         self.selected_range = self.content.len()..self.content.len();
         self.selection_anchor = self.content.len();
         self.selection_reversed = false;
@@ -234,6 +238,10 @@ impl TextInput {
             this.blink_epoch += 1;
             this.blinking = false;
             this.cursor_visible = true;
+            // Leaving the field keeps the composed text as typed, as a click elsewhere does
+            // in native fields: the owner already has it, and the input method no longer
+            // delivers its commit once no field is focused.
+            this.marked_range = None;
             this.dismiss_completions(cx);
         })
         .detach();
@@ -256,6 +264,7 @@ impl TextInput {
             content: initial_text,
             placeholder: placeholder.into(),
             selected_range,
+            marked_range: None,
             selection_anchor,
             selection_reversed: false,
             is_selecting: false,
@@ -338,8 +347,10 @@ impl TextInput {
         self.content.len()
     }
 
+    /// A range from the system, ordered even when it comes reversed.
     fn range_from_utf16(&self, range: std::ops::Range<usize>) -> std::ops::Range<usize> {
-        self.byte_offset_for_utf16(range.start)..self.byte_offset_for_utf16(range.end)
+        let (start, end) = (self.byte_offset_for_utf16(range.start), self.byte_offset_for_utf16(range.end));
+        start.min(end)..start.max(end)
     }
 
     fn utf16_offset_for_byte(&self, byte_offset: usize) -> usize {
@@ -478,15 +489,29 @@ impl TextInput {
     pub fn cut_selected_text(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if !self.selected_range.is_empty() && !self.password {
             self.copy_selected_text(cx);
-            self.replace_text_in_range(None, "", window, cx);
+            self.replace_selection("", window, cx);
         }
     }
 
     pub fn paste_from_clipboard(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
             let text = text.replace(['\r', '\n'], " ");
-            self.replace_text_in_range(None, &text, window, cx);
+            self.replace_selection(&text, window, cx);
         }
+    }
+
+    /// Replaces the selection with `text`, as typing over it does.
+    fn replace_selection(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let range = self.selected_range.clone();
+        self.splice(range.clone(), text);
+        let caret = range.start + text.len();
+        self.selected_range = caret..caret;
+        self.selection_anchor = caret;
+        self.selection_reversed = false;
+        self.is_selecting = false;
+        (self.on_change)(&self.content, window, cx);
+        self.refresh_completions(cx);
+        self.reset_blinking(cx);
     }
 
     pub fn select_all_text(&mut self, cx: &mut Context<Self>) {
@@ -536,14 +561,13 @@ impl TextInput {
                 .find(|(i, _)| *i < self.selected_range.start)
                 .map(|(i, _)| i)
                 .unwrap_or(0);
-            self.content
-                .replace_range(prev..self.selected_range.start, "");
+            self.splice(prev..self.selected_range.start, "");
             self.selected_range = prev..prev;
             self.selection_anchor = prev;
             self.selection_reversed = false;
         } else {
             let cursor = self.selected_range.start;
-            self.content.replace_range(self.selected_range.clone(), "");
+            self.splice(self.selected_range.clone(), "");
             self.selected_range = cursor..cursor;
             self.selection_anchor = cursor;
             self.selection_reversed = false;
@@ -561,14 +585,13 @@ impl TextInput {
                 .find(|(i, _)| *i > self.selected_range.start)
                 .map(|(i, _)| i)
                 .unwrap_or(self.content.len());
-            self.content
-                .replace_range(self.selected_range.start..next, "");
+            self.splice(self.selected_range.start..next, "");
             self.selected_range = self.selected_range.start..self.selected_range.start;
             self.selection_anchor = self.selected_range.start;
             self.selection_reversed = false;
         } else {
             let cursor = self.selected_range.start;
-            self.content.replace_range(self.selected_range.clone(), "");
+            self.splice(self.selected_range.clone(), "");
             self.selected_range = cursor..cursor;
             self.selection_anchor = cursor;
             self.selection_reversed = false;
@@ -582,6 +605,7 @@ impl TextInput {
         if self.completion_chosen {
             if let Some(path) = self.completions.get(self.completion_index).cloned() {
                 self.content = path;
+                self.marked_range = None;
                 let end = self.content.len();
                 self.selected_range = end..end;
                 self.selection_anchor = end;
@@ -621,6 +645,9 @@ impl TextInput {
         self.completions.clear();
         self.completion_index = 0;
         self.completion_chosen = false;
+        if self.marked_range.is_some() {
+            return;
+        }
         let text = self.content.clone();
         let Some((parent, prefix, separator)) = completion_parts(&text) else {
             return;
@@ -690,6 +717,7 @@ impl TextInput {
 
     fn accept_completion(&mut self, path: String, window: &mut Window, cx: &mut Context<Self>) {
         self.content = path;
+        self.marked_range = None;
         let end = self.content.len();
         self.selected_range = end..end;
         self.selection_anchor = end;
@@ -787,9 +815,11 @@ impl EntityInputHandler for TextInput {
         _: &mut Window,
         _: &mut Context<Self>,
     ) -> Option<std::ops::Range<usize>> {
-        None
+        self.marked_range.clone().map(|range| self.range_to_utf16(range))
     }
-    fn unmark_text(&mut self, _: &mut Window, _: &mut Context<Self>) {}
+    fn unmark_text(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+        self.ime_unmark(cx);
+    }
     fn replace_text_in_range(
         &mut self,
         range_utf16: Option<std::ops::Range<usize>>,
@@ -797,28 +827,17 @@ impl EntityInputHandler for TextInput {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let range = range_utf16
-            .map(|range| self.range_from_utf16(range))
-            .unwrap_or(self.selected_range.clone());
-        self.content.replace_range(range.clone(), new_text);
-        let new_pos = range.start + new_text.len();
-        self.selected_range = new_pos..new_pos;
-        self.selection_anchor = new_pos;
-        self.selection_reversed = false;
-        self.is_selecting = false;
-        (self.on_change)(&self.content, window, cx);
-        self.refresh_completions(cx);
-        self.reset_blinking(cx);
+        self.ime_commit(range_utf16, new_text, window, cx);
     }
     fn replace_and_mark_text_in_range(
         &mut self,
-        range: Option<std::ops::Range<usize>>,
+        range_utf16: Option<std::ops::Range<usize>>,
         new_text: &str,
-        _: Option<std::ops::Range<usize>>,
+        new_selected_range_utf16: Option<std::ops::Range<usize>>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.replace_text_in_range(range, new_text, window, cx);
+        self.ime_compose(range_utf16, new_text, new_selected_range_utf16, window, cx);
     }
     fn bounds_for_range(
         &mut self,
@@ -929,46 +948,29 @@ impl Element for TextInputElement {
             style.color
         };
 
-        let mut runs = Vec::with_capacity(3);
-        if !input.content.is_empty() && !selected_range.is_empty() {
-            if selected_range.start > 0 {
-                runs.push(TextRun {
-                    len: selected_range.start,
-                    font: style.font(),
-                    color,
-                    background_color: None,
-                    underline: None,
-                    strikethrough: None,
-                });
-            }
-            runs.push(TextRun {
-                len: selected_range.end - selected_range.start,
-                font: style.font(),
-                color: selection_foreground,
-                background_color: Some(selection_background),
-                underline: None,
-                strikethrough: None,
-            });
-            if selected_range.end < content.len() {
-                runs.push(TextRun {
-                    len: content.len() - selected_range.end,
-                    font: style.font(),
-                    color,
-                    background_color: None,
-                    underline: None,
-                    strikethrough: None,
-                });
-            }
-        } else {
-            runs.push(TextRun {
-                len: content.len(),
+        let run = |len: usize, selected: bool, composing: bool| {
+            let color = if selected { selection_foreground } else { color };
+            TextRun {
+                len,
                 font: style.font(),
                 color,
-                background_color: None,
-                underline: None,
+                background_color: selected.then_some(selection_background),
+                underline: composing.then_some(UnderlineStyle { color: Some(color), thickness: px(1.0), wavy: false }),
                 strikethrough: None,
-            });
-        }
+            }
+        };
+        let runs: Vec<TextRun> = if input.content.is_empty() {
+            vec![run(content.len(), false, false)]
+        } else {
+            let marked = input
+                .marked_range
+                .as_ref()
+                .map(|range| input.display_index(range.start)..input.display_index(range.end));
+            composition::spans(content.len(), &selected_range, marked.as_ref())
+                .into_iter()
+                .map(|span| run(span.len, span.selected, span.composing))
+                .collect()
+        };
 
         let line = window.text_system().shape_line(
             content.clone(),
