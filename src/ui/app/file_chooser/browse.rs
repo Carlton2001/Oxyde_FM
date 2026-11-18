@@ -248,9 +248,9 @@ impl FileChooserWindow {
 
     /// Rows of positions as the arrows move through them: one entry per details row,
     /// a line of cards in the grid.
-    pub(super) fn position_rows(&self) -> Vec<Vec<usize>> {
+    pub(super) fn position_rows(&self) -> (Vec<usize>, usize) {
         let columns = if self.cards().is_some() { self.grid_geometry().columns.max(1) } else { 1 };
-        (0..self.shown.len()).collect::<Vec<_>>().chunks(columns).map(<[usize]>::to_vec).collect()
+        ((0..self.shown.len()).collect(), columns)
     }
 
     /// Scrolls the entry into view, as `scroll_row_into_view` does.
