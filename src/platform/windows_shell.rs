@@ -9,7 +9,6 @@ impl Drop for PopupMenuGuard {
 
 use super::windows_com::{take_string, ComApartment, TaskMemory};
 use crate::models::{CommandError, QuickAccessItem, WinMenuItem};
-use crate::utils::path_security::validate_path;
 
 fn read_verb_with(read: impl FnOnce(&mut [u8]) -> windows::core::Result<()>) -> Option<String> {
     let mut buffer = [0u8; 128];
@@ -187,7 +186,7 @@ pub(super) fn get_native_context_menu_items(
 
     let path = paths.first().ok_or_else(|| CommandError::SystemError("Empty Shell selection".into()))?;
     if is_background && paths.len() != 1 { return Err(CommandError::SystemError("Background menu requires one folder".into())); }
-    let pb = validate_path(path)?;
+    let pb = super::windows_shell_selection::shell_path(path)?;
     let path_norm = pb.to_string_lossy().replace("/", "\\");
     let path_u16: Vec<u16> = path_norm.encode_utf16().chain(std::iter::once(0)).collect();
 
@@ -350,7 +349,7 @@ pub(super) fn execute_native_menu_item(
 
     let path = paths.first().ok_or_else(|| CommandError::SystemError("Empty Shell selection".into()))?;
     if is_background && paths.len() != 1 { return Err(CommandError::SystemError("Background menu requires one folder".into())); }
-    let pb = validate_path(path)?;
+    let pb = super::windows_shell_selection::shell_path(path)?;
     let path_norm = pb.to_string_lossy().replace("/", "\\");
     let path_u16: Vec<u16> = path_norm.encode_utf16().chain(std::iter::once(0)).collect();
 
@@ -538,7 +537,7 @@ pub(super) fn execute_shell_verb_by_canonical_name(
         GetMenuItemCount, GetMenuItemID, GetMenuStringW, MF_BYPOSITION,
     };
 
-    let pb = validate_path(path)?;
+    let pb = super::windows_shell_selection::shell_path(path)?;
     let mut path_norm = pb.to_string_lossy().replace("/", "\\");
     if path_norm.len() == 2 && path_norm.ends_with(':') {
         path_norm.push('\\');

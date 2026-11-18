@@ -22,12 +22,27 @@ pub(super) fn selection_context_menu(paths: &[String]) -> Result<IContextMenu, C
     }
 }
 
+/// The Shell parses Win32 paths, which drop trailing dots and spaces: for
+/// `notes.` it would act on its twin `notes`. Such names are refused instead.
+pub(super) fn shell_path(path: &str) -> Result<std::path::PathBuf, CommandError> {
+    let unaddressable = std::path::Path::new(path).components().any(|component| {
+        matches!(component, std::path::Component::Normal(name)
+            if name.to_string_lossy().ends_with(['.', ' ']))
+    });
+    if unaddressable {
+        return Err(CommandError::PathError(format!(
+            "The Windows Shell cannot address a name ending with a dot or a space: {path}"
+        )));
+    }
+    validate_path(path)
+}
+
 fn shell_selection(paths: &[String]) -> Result<IShellItemArray, CommandError> {
     unsafe {
         let mut allocations = Vec::with_capacity(paths.len());
         let mut pidls = Vec::with_capacity(paths.len());
         for path in paths {
-            let normalized = validate_path(path)?.to_string_lossy().replace('/', "\\");
+            let normalized = shell_path(path)?.to_string_lossy().replace('/', "\\");
             let wide: Vec<_> = normalized.encode_utf16().chain(Some(0)).collect();
             let mut pidl = std::ptr::null_mut();
             SHParseDisplayName(PCWSTR(wide.as_ptr()), None, &mut pidl, 0, None)
@@ -68,7 +83,7 @@ fn properties_ui_object<T: windows::core::Interface>(paths: &[String]) -> Result
         let mut pidls = Vec::with_capacity(paths.len());
         let mut parents = Vec::with_capacity(paths.len());
         for path in paths {
-            let validated = validate_path(path)?;
+            let validated = shell_path(path)?;
             parents.push(
                 validated
                     .parent()

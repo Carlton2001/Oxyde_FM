@@ -13,8 +13,12 @@ pub fn validate_path(path_str: &str) -> Result<PathBuf, CommandError> {
         )));
     }
 
+    // Win32 drops trailing dots and spaces; a verbatim `\\?\` path keeps
+    // them, and there `foo.` and `foo` are two files.
     #[cfg(target_os = "windows")]
-    let path = {
+    let path = if path_str.starts_with(r"\\?\") {
+        path
+    } else {
         let mut path = path;
         let mut needs_update = None;
         if let Some(file_name) = path.file_name() {
@@ -32,6 +36,10 @@ pub fn validate_path(path_str: &str) -> Result<PathBuf, CommandError> {
 
     Ok(path)
 }
+
+#[cfg(all(test, target_os = "windows"))]
+#[path = "path_security/tests/verbatim.rs"]
+mod verbatim_tests;
 
 #[cfg(test)]
 mod tests {
