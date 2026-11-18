@@ -105,7 +105,7 @@ fn verify_property_sheet(names: [&str; 2]) {
     let failed = Arc::new(AtomicBool::new(false));
     let failure = failed.clone();
     let worker = std::thread::spawn(move || {
-        let result = super::show_properties(&paths);
+        let result = super::show_properties(&paths, |_| {});
         failure.store(result.is_err(), Ordering::Release);
         completed.store(true, Ordering::Release);
         result

@@ -808,9 +808,19 @@ impl Platform for WindowsPlatform {
             return Ok(());
         }
         let paths = paths.to_vec();
-        std::thread::spawn(move || super::windows_shell_selection::show_properties(&paths))
-            .join().map_err(|_| "Shell properties thread failed".to_string())?
-            .map_err(|error| error.to_string())
+        // The caller waits for the opening only: the sheet keeps its own thread.
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::Builder::new()
+            .name("oxyde-shell-properties".into())
+            .spawn(move || {
+                let opened = sender.clone();
+                let result = super::windows_shell_selection::show_properties(&paths, move |result| {
+                    let _ = opened.send(result.as_ref().map(|_| ()).map_err(|error| error.to_string()));
+                });
+                let _ = sender.send(result.map_err(|error| error.to_string()));
+            })
+            .map_err(|error| error.to_string())?;
+        receiver.recv().map_err(|_| "Shell properties thread failed".to_string())?
     }
 
     fn show_properties_dialog(&self, path: &str) {
