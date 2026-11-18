@@ -90,6 +90,10 @@ impl Receipt {
         if !self.completed && self.error.is_none() {
             self.fail("Windows did not provide a completion receipt for the selected item".into());
         }
+        let untracked = self.effects.untracked();
+        if let Some(error) = self.error.as_mut().filter(|_| !self.completed && untracked > 0) {
+            error.push_str(&format!("; {untracked} items inside were not tracked and may be deleted"));
+        }
         ShellDeleteOutcome {
             completed: self.completed,
             error: self.error.take(),
