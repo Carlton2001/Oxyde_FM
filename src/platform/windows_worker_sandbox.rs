@@ -14,10 +14,7 @@ use windows::Win32::Foundation::*;
 use windows::Win32::Security::Authorization::*;
 use windows::Win32::Security::Isolation::*;
 use windows::Win32::Security::*;
-use windows::Win32::Storage::FileSystem::{
-    FileDispositionInfo, FileIdInfo, GetFileInformationByHandleEx, SetFileInformationByHandle,
-    FILE_DISPOSITION_INFO, FILE_ID_INFO,
-};
+use windows::Win32::Storage::FileSystem::{FileIdInfo, GetFileInformationByHandleEx, FILE_ID_INFO};
 use windows::Win32::System::JobObjects::AssignProcessToJobObject;
 use windows::Win32::System::Pipes::CreatePipe;
 use windows::Win32::System::Threading::*;
@@ -270,16 +267,7 @@ impl Drop for Runtime {
     }
 }
 fn mark_delete(file: &File) -> io::Result<()> {
-    let disposition = FILE_DISPOSITION_INFO { DeleteFile: true };
-    unsafe {
-        SetFileInformationByHandle(
-            HANDLE(file.as_raw_handle()),
-            FileDispositionInfo,
-            (&disposition as *const FILE_DISPOSITION_INFO).cast(),
-            std::mem::size_of_val(&disposition) as u32,
-        )
-    }
-    .map_err(native)
+    super::windows_file_moves::remove(file)
 }
 fn file_id(file: &File) -> io::Result<(u64, [u8; 16])> {
     let mut info = FILE_ID_INFO::default();
