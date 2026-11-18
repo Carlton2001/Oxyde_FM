@@ -18,7 +18,7 @@ fn user_home(version: &str) -> (tempfile::TempDir, PathBuf) {
 #[test]
 fn per_user_installation_updates_itself() {
     let (home, executable) = user_home("2.0.3");
-    assert_eq!(detect(&executable, Some(home.path()), false), Installation::SelfUpdating { manifest_key: ARCHIVE_KEY, signature: ReleaseSignature::OpenPgp });
+    assert_eq!(detect(&executable, Some(home.path()), None), Installation::SelfUpdating { manifest_key: ARCHIVE_KEY, signature: ReleaseSignature::OpenPgp });
     assert_eq!(user_root(&executable, Some(home.path())), Some(executable.parent().unwrap().parent().unwrap().parent().unwrap().to_path_buf()));
 }
 
@@ -34,18 +34,36 @@ fn home_reached_through_a_link_still_matches() {
 fn copies_outside_install_layout_are_unmanaged() {
     let (home, executable) = user_home("2.0.3");
     std::fs::remove_file(home.path().join(".local/lib/oxyde/current")).unwrap();
-    assert_eq!(detect(&executable, Some(home.path()), false), Installation::Unmanaged);
+    assert_eq!(detect(&executable, Some(home.path()), None), Installation::Unmanaged);
     let other = tempfile::tempdir().unwrap();
-    assert_eq!(detect(&executable, Some(other.path()), false), Installation::Unmanaged);
-    assert_eq!(detect(Path::new("/src/target/release/oxyde"), Some(home.path()), false), Installation::Unmanaged);
-    assert_eq!(detect(&executable, None, false), Installation::Unmanaged);
+    assert_eq!(detect(&executable, Some(other.path()), None), Installation::Unmanaged);
+    assert_eq!(detect(Path::new("/src/target/release/oxyde"), Some(home.path()), None), Installation::Unmanaged);
+    assert_eq!(detect(&executable, None, None), Installation::Unmanaged);
 }
 
 #[test]
 fn system_packages_announce_the_deb_or_the_rpm() {
     let executable = Path::new(SYSTEM_EXECUTABLE);
-    assert_eq!(detect(executable, None, true), Installation::Package { manifest_key: Some(DEB_KEY) });
-    assert_eq!(detect(executable, None, false), Installation::Package { manifest_key: Some(RPM_KEY) });
+    assert_eq!(detect(executable, None, Some(DEB_KEY)), Installation::Package { manifest_key: Some(DEB_KEY) });
+    assert_eq!(detect(executable, None, None), Installation::Package { manifest_key: None });
+}
+
+#[test]
+fn the_package_manager_names_the_release() {
+    let system = |paths: &[&str]| {
+        let root = tempfile::tempdir().unwrap();
+        for path in paths {
+            std::fs::create_dir_all(root.path().join(path)).unwrap();
+        }
+        package_key(root.path())
+    };
+    assert_eq!(system(&["var/lib/dpkg/info/oxyde.list"]), Some(DEB_KEY));
+    assert_eq!(system(&["var/lib/rpm"]), Some(RPM_KEY));
+    assert_eq!(system(&["usr/lib/sysimage/rpm"]), Some(RPM_KEY));
+    // AUR on Arch, even with rpm installed beside pacman.
+    assert_eq!(system(&["var/lib/pacman/local/oxyde-2.2.2-1", "var/lib/rpm"]), None);
+    assert_eq!(system(&["var/lib/pacman/local/oxyde-extra-1.0-1", "var/lib/rpm"]), Some(RPM_KEY));
+    assert_eq!(system(&[]), None);
 }
 
 #[test]
@@ -161,7 +179,7 @@ fn update_switches_versions_and_keeps_the_running_one() {
     assert!(entry.lines().any(|line| line == "X-Oxyde-Install=user"));
     assert!(data.join(format!("icons/hicolor/scalable/apps/{APP_ID}.svg")).exists());
     let executable = std::fs::canonicalize(root.join("current/bin/oxyde")).unwrap();
-    assert_eq!(detect(&executable, Some(home.path()), false), Installation::SelfUpdating { manifest_key: ARCHIVE_KEY, signature: ReleaseSignature::OpenPgp });
+    assert_eq!(detect(&executable, Some(home.path()), None), Installation::SelfUpdating { manifest_key: ARCHIVE_KEY, signature: ReleaseSignature::OpenPgp });
 }
 
 #[test]

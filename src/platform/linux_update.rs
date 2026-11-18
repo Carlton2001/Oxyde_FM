@@ -16,7 +16,11 @@ const ARCHIVE_KEY: &str = "linux-x86_64";
 const DEB_KEY: &str = "linux-x86_64-deb";
 const RPM_KEY: &str = "linux-x86_64-rpm";
 const SYSTEM_EXECUTABLE: &str = "/usr/bin/oxyde";
-const DPKG_FILE_LIST: &str = "/var/lib/dpkg/info/oxyde.list";
+const DPKG_FILE_LIST: &str = "var/lib/dpkg/info/oxyde.list";
+/// Pacman's record of an installed package: `oxyde-<version>-<release>`.
+const PACMAN_LOCAL: &str = "var/lib/pacman/local";
+/// The RPM database, where older and newer systems keep it.
+const RPM_DATABASES: [&str; 2] = ["var/lib/rpm", "usr/lib/sysimage/rpm"];
 const SCRIPT_LIMIT: u64 = 1024 * 1024;
 /// Prefix of the temporary folder `systems::updates` downloads into.
 const DOWNLOAD_FOLDER_PREFIX: &str = "oxyde-update-";
@@ -24,15 +28,26 @@ const DOWNLOAD_FOLDER_PREFIX: &str = "oxyde-update-";
 pub(super) fn installation() -> Installation {
     static FOUND: OnceLock<Installation> = OnceLock::new();
     *FOUND.get_or_init(|| match std::env::current_exe() {
-        Ok(executable) => detect(&executable, dirs::home_dir().as_deref(), Path::new(DPKG_FILE_LIST).exists()),
+        Ok(executable) => detect(&executable, dirs::home_dir().as_deref(), package_key(Path::new("/"))),
         Err(_) => Installation::Unmanaged,
     })
 }
 
-fn detect(executable: &Path, home: Option<&Path>, dpkg_owned: bool) -> Installation {
+/// The release a system package of Oxyde under `root` updates from: Oxyde publishes a
+/// DEB and an RPM. Another package (AUR) or a copy by hand gets the release page.
+fn package_key(root: &Path) -> Option<&'static str> {
+    if root.join(DPKG_FILE_LIST).exists() {
+        return Some(DEB_KEY);
+    }
+    let pacman = std::fs::read_dir(root.join(PACMAN_LOCAL)).into_iter().flatten().flatten()
+        .any(|entry| entry.file_name().to_str().and_then(|name| name.strip_prefix("oxyde-"))
+            .is_some_and(|version| version.starts_with(|first: char| first.is_ascii_digit())));
+    (!pacman && RPM_DATABASES.iter().any(|database| root.join(database).is_dir())).then_some(RPM_KEY)
+}
+
+fn detect(executable: &Path, home: Option<&Path>, package: Option<&'static str>) -> Installation {
     if executable == Path::new(SYSTEM_EXECUTABLE) {
-        // Oxyde publishes a DEB and an RPM, and /usr/bin/oxyde comes from one of them.
-        Installation::Package { manifest_key: Some(if dpkg_owned { DEB_KEY } else { RPM_KEY }) }
+        Installation::Package { manifest_key: package }
     } else if user_root(executable, home).is_some() {
         Installation::SelfUpdating { manifest_key: ARCHIVE_KEY, signature: ReleaseSignature::OpenPgp }
     } else {
