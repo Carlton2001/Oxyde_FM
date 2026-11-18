@@ -158,6 +158,7 @@ impl PreviewTask {
                 message: None,
                 loading_delay_elapsed: false,
                 _video_cancellation: None,
+                _load_task: None,
             };
         }
         if preview_type == PreviewType::Pdf {
@@ -175,13 +176,15 @@ impl PreviewTask {
                 message: None,
                 loading_delay_elapsed: false,
                 _video_cancellation: None,
+                _load_task: None,
             };
         }
         let cancellation = crate::ui::preview_jobs::Cancellation::default();
         let audio_source = (preview_type == PreviewType::Audio).then(|| path.clone());
         let video_cancellation = (preview_type == PreviewType::Video)
             .then(|| Arc::new(CancelVideoPreview(cancellation.clone())));
-        cx.spawn(move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+        // Kept, not detached: closing the tooltip drops it and its job leaves the queue unstarted.
+        let load_task = cx.spawn(move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
                 if preview_type == PreviewType::Video {
@@ -393,8 +396,7 @@ impl PreviewTask {
                     cx.notify();
                 });
             }
-        })
-        .detach();
+        });
 
         Self {
             maximum_size: None,
@@ -408,6 +410,7 @@ impl PreviewTask {
             transition_image: None,
             viewer: false,
             _video_cancellation: video_cancellation,
+            _load_task: Some(Arc::new(load_task)),
         }
     }
 }

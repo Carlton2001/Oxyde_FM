@@ -82,6 +82,7 @@ fn check_hidden_tooltip_releases_preview(reason: HideReason) {
                 message: None,
                 loading_delay_elapsed: false,
                 _video_cancellation: Some(Arc::new(CancelVideoPreview(cancellation))),
+                _load_task: None,
             }
         });
         let tooltip = cx.new(|_| Tooltip {
