@@ -77,6 +77,9 @@ pub(super) fn place(
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED,
             );
             if !SetWindowSubclass(window, Some(controls_proc), SUBCLASS, 0).as_bool() {
+                // The style marks the window as set up: take it back so the next call retries.
+                let style = GetWindowLongPtrW(window, GWL_EXSTYLE) as u32;
+                SetWindowLongPtrW(window, GWL_EXSTYLE, (style & !WS_EX_NOACTIVATE.0) as isize);
                 return Err("Cannot configure playback controls".into());
             }
             super::windows_pointer::install(window)?;
