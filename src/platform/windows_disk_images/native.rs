@@ -202,8 +202,9 @@ pub(super) fn mount(path: &Path) -> Result<Vec<String>, String> {
     // Drive-letter assignment may lag behind attachment. Preserve the previous
     // 20 x 100 ms settling window, including an empty result for an unformatted VHD.
     for _ in 0..20 {
-        if let Ok(device) = physical_path(&info) {
-            let number = device_number(&open_device(&device)?)?;
+        // The image is attached for good: a device not readable yet is tried again,
+        // not reported as a failed mount.
+        if let Some(number) = physical_path(&info).ok().and_then(|device| device_number(&open_device(&device).ok()?).ok()) {
             let roots = roots_for(&number, &drive_numbers());
             if !roots.is_empty() {
                 return Ok(roots);
@@ -369,7 +370,8 @@ pub(super) fn mounted_images() -> Result<Vec<MountedDiskImage>, String> {
         let Ok(handle) = open_device(&format!(r"\\.\{device}")) else {
             continue;
         };
-        let Some(image_path) = image_path(&handle)? else {
+        // One device that cannot be asked does not hide the other images.
+        let Ok(Some(image_path)) = image_path(&handle) else {
             continue;
         };
         let Ok(number) = device_number(&handle) else {
