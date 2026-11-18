@@ -85,7 +85,18 @@ impl ClipboardApi for NativeApi {
         }
     }
     fn open(&self, owner: HWND) -> Result<()> {
-        unsafe { OpenClipboard(Some(owner)) }.map_err(|e| error("Cannot open clipboard", e))
+        // Clipboard managers hold it for a moment after each change: the usual few tries.
+        let mut attempt = 0;
+        loop {
+            match unsafe { OpenClipboard(Some(owner)) } {
+                Ok(()) => return Ok(()),
+                Err(_) if attempt < 10 => {
+                    attempt += 1;
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                Err(e) => return Err(error("Cannot open clipboard", e)),
+            }
+        }
     }
     fn empty(&self) -> Result<()> {
         unsafe { EmptyClipboard() }.map_err(|e| error("Cannot empty clipboard", e))
