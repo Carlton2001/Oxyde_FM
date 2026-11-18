@@ -64,7 +64,7 @@ pub(in crate::platform) fn run(path: &Path) -> io::Result<()> {
     let mut applied_seek: u32 = 0;
     let mut size = [0; 2];
     let mut shown = (0, 0);
-    let mut last_report = Instant::now() - REPORT_INTERVAL;
+    let mut last_report = Instant::now().checked_sub(REPORT_INTERVAL).unwrap_or_else(Instant::now);
     let mut resized: Option<Instant> = None;
     let mut position = Duration::from_millis(command.seek_ms);
     // Decoders found missing may follow the stream description: it is sent again.

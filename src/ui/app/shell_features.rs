@@ -195,7 +195,8 @@ impl OxydeApp {
             };
             let mut observed = 0;
             let mut pending = None;
-            let mut refresh = Instant::now() - Duration::from_secs(10);
+            // Due at once; the clock may not reach 10 s back in the first seconds after boot.
+            let mut refresh = Instant::now().checked_sub(Duration::from_secs(10)).unwrap_or_else(Instant::now);
             loop {
                 let now = Instant::now();
                 let current = revision.load(Ordering::Acquire);

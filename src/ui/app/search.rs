@@ -79,7 +79,7 @@ mod tests {
         assert_eq!(slide_progress(1.0, false, 1.0), 0.0);
         let mut slide = SearchInputSlide::default();
         slide.set_expanded(true);
-        slide.started = std::time::Instant::now() - std::time::Duration::from_millis(125);
+        slide.started = std::time::Instant::now().checked_sub(std::time::Duration::from_millis(125)).unwrap_or_else(std::time::Instant::now);
         slide.set_expanded(false);
         assert!((slide.from - 0.5).abs() < 0.02);
         assert_eq!(slide_progress(slide.from, false, 0.0), slide.from);
