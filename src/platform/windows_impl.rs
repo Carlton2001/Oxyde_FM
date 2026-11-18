@@ -109,6 +109,16 @@ impl Platform for WindowsPlatform {
     fn withdraw_from_file_choosers(&self) { super::windows_file_dialog::registration::withdraw() }
     fn identify_process(&self) { super::windows_jump_list::identify() }
     fn set_taskbar_menu(&self, menu: &super::TaskbarMenu) {
+        // Calls come from detached tasks: one at a time, and an older menu never
+        // replaces a newer one that was written first.
+        static ISSUED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        static WRITTEN: std::sync::Mutex<u64> = std::sync::Mutex::new(0);
+        let ticket = ISSUED.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        let mut written = WRITTEN.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if ticket < *written {
+            return;
+        }
+        *written = ticket;
         if let Err(error) = super::windows_jump_list::set(menu) {
             log::warn!("Cannot list the taskbar menu: {error}");
         }
