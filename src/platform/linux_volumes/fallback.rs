@@ -3,7 +3,7 @@
 use super::mounts::MountEntry;
 use crate::models::DriveInfo;
 
-// Systèmes de fichiers virtuels à ignorer
+/// Virtual file systems, never drives.
 const SKIP_FS: &[&str] = &[
     "proc",
     "sysfs",
@@ -58,17 +58,54 @@ pub(super) fn remote(entries: &[MountEntry]) -> Vec<DriveInfo> {
     entries.iter().filter_map(drive).filter(|drive| drive.drive_type == "remote").collect()
 }
 
+/// Network file systems: `statvfs` on one out of reach blocks without end. FUSE mounts
+/// other than block devices (sshfs, rclone, gvfsd-fuse) are as remote.
+const REMOTE_FS: &[&str] = &[
+    "nfs", "nfs4", "smbfs", "cifs", "smb3", "9p", "ceph", "glusterfs", "afs", "davfs", "lustre", "ncpfs", "sshfs",
+];
+
+fn remote_fs(fs_type: &str, device: &str) -> bool {
+    // WSL mounts the Windows drives through 9p, named by their letter.
+    let windows_drive = fs_type == "9p" && device.len() == 3 && device.ends_with(":\\");
+    !windows_drive && (REMOTE_FS.contains(&fs_type) || (fs_type.starts_with("fuse.") && fs_type != "fuseblk"))
+}
+
+/// Places the system keeps for itself, never drives.
+const SYSTEM: &[&str] = &["/boot", "/etc", "/usr", "/var", "/opt", "/root", "/home", "/tmp", "/init"];
+
+/// What the desktop lists, as GIO decides without UDisks2: the root, removable volumes,
+/// direct mounts under `/mnt` (WSL's drives among them) and mounts inside the home; not
+/// `/boot`, `/home`, `/var/log` nor Btrfs snapshots. Network mounts may live elsewhere.
+fn displayed(mount: &str, remote: bool) -> bool {
+    let under = |root: &str| mount.strip_prefix(root).is_some_and(|rest| rest.starts_with('/'));
+    if mount == "/" {
+        return true;
+    }
+    if mount.split('/').any(|component| component.starts_with('.')) {
+        return false;
+    }
+    if under("/media") || under("/run/media") {
+        return true;
+    }
+    if mount.strip_prefix("/mnt/").is_some_and(|name| !name.is_empty() && !name.contains('/')) {
+        return true;
+    }
+    if let Some(home) = dirs::home_dir().and_then(|home| home.to_str().map(str::to_owned)) {
+        if under(&home) {
+            return true;
+        }
+    }
+    remote && !SYSTEM.iter().any(|system| mount == *system || under(system)) && !under("/mnt")
+        && !["/proc", "/sys", "/dev", "/run"].iter().any(|system| under(system))
+}
+
 fn drive(entry: &MountEntry) -> Option<DriveInfo> {
     let (device, mount, fs_type) = (entry.source.as_str(), entry.point.as_str(), entry.fs_type.as_str());
     if SKIP_FS.contains(&fs_type) {
         return None;
     }
-    if mount.starts_with("/proc")
-        || mount.starts_with("/sys")
-        || mount.starts_with("/dev/pts")
-        // udisks2 mounts removable volumes under /run/media/$USER.
-        || (mount.starts_with("/run") && !mount.starts_with("/run/media/"))
-    {
+    let remote = device.starts_with("//") || device.starts_with("cifs") || remote_fs(fs_type, device);
+    if !displayed(mount, remote) {
         return None;
     }
 
@@ -81,14 +118,7 @@ fn drive(entry: &MountEntry) -> Option<DriveInfo> {
             .unwrap_or_else(|| mount.to_string())
     };
 
-    let drive_type = if device.starts_with("//")
-        || device.starts_with("cifs")
-        || fs_type == "nfs"
-        || fs_type == "nfs4"
-        || fs_type == "smbfs"
-        || fs_type == "cifs"
-        || fs_type == "smb3"
-    {
+    let drive_type = if remote {
         "remote"
     } else if device.starts_with("/dev/sr")
         || device.starts_with("/dev/cdrom")
@@ -114,3 +144,7 @@ fn drive(entry: &MountEntry) -> Option<DriveInfo> {
         volume_bytes: 0,
     })
 }
+
+#[cfg(test)]
+#[path = "tests/fallback.rs"]
+mod tests;

@@ -21,6 +21,65 @@ pub(crate) const TEXT_MIME_TYPES: [&str; 3] =
     ["text/plain;charset=utf-8", "UTF8_STRING", "text/plain"];
 pub(crate) const FILE_LIST_MIME_TYPE: &str = "text/uri-list";
 
+// Oxyde: files, offered beside their paths as text in the formats file managers read:
+// URIs for KDE and GTK 4, GNOME's list with its copy or cut verb, KDE's cut mark.
+pub(crate) const FILE_MIME_TYPES: [&str; 3] =
+    ["text/uri-list", "x-special/gnome-copied-files", "application/x-kde-cutselection"];
+/// Oxyde: the metadata of an item's text entry that marks its files as cut.
+pub(crate) const CUT_METADATA: &str = "cut";
+
+/// Oxyde: the files of an item and whether they are cut.
+fn files(item: &ClipboardItem) -> Option<(&[std::path::PathBuf], bool)> {
+    let paths = item.entries().iter().find_map(|entry| match entry {
+        ClipboardEntry::ExternalPaths(paths) if !paths.paths().is_empty() => Some(paths.paths()),
+        _ => None,
+    })?;
+    let cut = item.entries().iter().any(|entry| {
+        matches!(entry, ClipboardEntry::String(text) if text.metadata.as_deref() == Some(CUT_METADATA))
+    });
+    Some((paths, cut))
+}
+
+/// Oxyde: what an item is offered as.
+pub(crate) fn offered(item: &ClipboardItem) -> Vec<&'static str> {
+    let mut types = TEXT_MIME_TYPES.to_vec();
+    if files(item).is_some() {
+        types.extend(FILE_MIME_TYPES);
+    }
+    types
+}
+
+/// Oxyde: a `file://` URI, bytes outside the unreserved set escaped.
+fn file_uri(path: &std::path::Path) -> String {
+    use std::os::unix::ffi::OsStrExt;
+    let mut uri = String::from("file://");
+    for &byte in path.as_os_str().as_bytes() {
+        if byte.is_ascii_alphanumeric() || b"-._~/".contains(&byte) {
+            uri.push(byte as char);
+        } else {
+            uri.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    uri
+}
+
+/// Oxyde: the bytes of an item for `mime_type`.
+pub(crate) fn bytes_for(item: &ClipboardItem, mime_type: &str) -> Option<Vec<u8>> {
+    let uris = |separator: &str| {
+        files(item).map(|(paths, _)| paths.iter().map(|path| file_uri(path)).collect::<Vec<_>>().join(separator))
+    };
+    let cut = || files(item).map(|(_, cut)| cut);
+    match mime_type {
+        "text/uri-list" => uris("\r\n").map(|uris| format!("{uris}\r\n").into_bytes()),
+        "x-special/gnome-copied-files" => {
+            let verb = if cut()? { "cut" } else { "copy" };
+            uris("\n").map(|uris| format!("{verb}\n{uris}").into_bytes())
+        }
+        "application/x-kde-cutselection" => cut().map(|cut| if cut { b"1".to_vec() } else { b"0".to_vec() }),
+        _ => item.text().map(String::into_bytes),
+    }
+}
+
 /// Text mime types that we'll accept from other programs.
 pub(crate) const ALLOWED_TEXT_MIME_TYPES: [&str; 2] = ["text/plain;charset=utf-8", "UTF8_STRING"];
 
@@ -180,9 +239,10 @@ impl Clipboard {
         self.self_mime.clone()
     }
 
-    pub fn send(&self, _mime_type: String, fd: OwnedFd) {
-        if let Some(text) = self.contents.as_ref().and_then(|contents| contents.text()) {
-            self.send_bytes(fd, text.as_bytes().to_owned());
+    pub fn send(&self, mime_type: String, fd: OwnedFd) {
+        // Oxyde: files in the type asked for.
+        if let Some(bytes) = self.contents.as_ref().and_then(|contents| bytes_for(contents, &mime_type)) {
+            self.send_bytes(fd, bytes);
         }
     }
 
@@ -259,5 +319,27 @@ impl Clipboard {
                 },
             )
             .unwrap();
+    }
+}
+
+#[cfg(test)]
+mod oxyde_tests {
+    use super::*;
+
+    #[test]
+    fn files_are_offered_in_the_formats_of_file_managers() {
+        let item = ClipboardItem {
+            entries: vec![
+                ClipboardEntry::String(gpui::ClipboardString { text: "/tmp/Été a\n/tmp/b".into(), metadata: Some(CUT_METADATA.into()) }),
+                ClipboardEntry::ExternalPaths(gpui::ExternalPaths(["/tmp/Été a", "/tmp/b"].iter().map(Into::into).collect())),
+            ],
+        };
+        assert_eq!(offered(&item).len(), 6);
+        let text = |mime| String::from_utf8(bytes_for(&item, mime).unwrap()).unwrap();
+        assert_eq!(text("text/uri-list"), "file:///tmp/%C3%89t%C3%A9%20a\r\nfile:///tmp/b\r\n");
+        assert_eq!(text("x-special/gnome-copied-files"), "cut\nfile:///tmp/%C3%89t%C3%A9%20a\nfile:///tmp/b");
+        assert_eq!(text("application/x-kde-cutselection"), "1");
+        assert_eq!(text("text/plain"), "/tmp/Été a\n/tmp/b");
+        assert_eq!(offered(&ClipboardItem::new_string("text".into())).len(), 3);
     }
 }

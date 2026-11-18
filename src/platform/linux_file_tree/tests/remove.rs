@@ -113,3 +113,58 @@ fn another_file_system_inside_is_never_entered() {
     }
     std::fs::remove_file(marker).unwrap();
 }
+
+/// Binds `source` on `target`; only an administrator of a mount namespace can:
+/// `unshare --map-root-user --mount` runs these tests as one.
+fn bind(source: &Path, target: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let source = std::ffi::CString::new(source.as_os_str().as_bytes()).unwrap();
+    let target = std::ffi::CString::new(target.as_os_str().as_bytes()).unwrap();
+    // SAFETY: two paths; no file system type nor data for a bind mount.
+    unsafe { libc::mount(source.as_ptr(), target.as_ptr(), std::ptr::null(), libc::MS_BIND, std::ptr::null()) == 0 }
+}
+
+fn unbind(target: &Path) {
+    use std::os::unix::ffi::OsStrExt;
+    let target = std::ffi::CString::new(target.as_os_str().as_bytes()).unwrap();
+    // SAFETY: a path mounted by `bind`.
+    unsafe { libc::umount2(target.as_ptr(), libc::MNT_DETACH) };
+}
+
+#[test]
+fn a_bind_mount_inside_is_never_entered() {
+    for workers in [1, 4] {
+        let (root, folder) = tree();
+        let shown = root.path().join("shown");
+        std::fs::create_dir(&shown).unwrap();
+        std::fs::write(shown.join("data"), b"kept").unwrap();
+        let mount = folder.join("sub/mount");
+        std::fs::create_dir(&mount).unwrap();
+        if !bind(&shown, &mount) {
+            return;
+        }
+        let error = remove(&parent(&folder), &folder, workers, &|| Ok(())).unwrap_err();
+        unbind(&mount);
+        assert!(error.to_string().contains("not entered"), "{workers}: {error}");
+        assert_eq!(std::fs::read(shown.join("data")).unwrap(), b"kept");
+    }
+}
+
+#[test]
+fn a_selected_mount_point_is_not_emptied() {
+    for workers in [1, 4] {
+        let root = tempfile::tempdir().unwrap();
+        let shown = root.path().join("shown");
+        std::fs::create_dir_all(shown.join("inner")).unwrap();
+        std::fs::write(shown.join("inner/data"), b"kept").unwrap();
+        let mount = root.path().join("mount");
+        std::fs::create_dir(&mount).unwrap();
+        if !bind(&shown, &mount) {
+            return;
+        }
+        let error = remove(&parent(&mount), &mount, workers, &|| Ok(())).unwrap_err();
+        unbind(&mount);
+        assert!(error.to_string().contains("not entered"), "{workers}: {error}");
+        assert_eq!(std::fs::read(shown.join("inner/data")).unwrap(), b"kept");
+    }
+}

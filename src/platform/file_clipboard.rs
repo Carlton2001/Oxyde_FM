@@ -6,6 +6,11 @@ pub trait FileClipboard: Send + Sync {
     /// the interface must also write the paths as text: the platform could not offer
     /// them to other applications itself.
     fn set_files(&self, paths: Vec<String>, cut: bool) -> Result<bool, String>;
+    /// Whether the text the interface writes also carries the files themselves, which
+    /// the interface's clipboard offers other applications in their formats.
+    fn interface_offers_files(&self, _paths: &[String]) -> bool {
+        false
+    }
     /// Reads file paths and their copy/move intent. `text` is the system clipboard's
     /// text: files offered only as text give way to text copied elsewhere since.
     fn get_files(&self, text: Option<String>) -> Result<(Vec<String>, bool), String>;

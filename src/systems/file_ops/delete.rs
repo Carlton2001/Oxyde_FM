@@ -326,13 +326,18 @@ impl FileOperationManager {
                 follow_turbo_priority(turbo_flag.load(Ordering::Relaxed), ThreadPriority::Normal);
                 op.lock().unwrap().current_file = Some(source.to_string_lossy().into_owned());
                 op.lock().unwrap().item_started(source);
-                let mut locked = match platform().shell_delete(std::slice::from_ref(source), true) {
-                    Ok(()) => {
+                // Each entry is journaled as it reaches the trash: Undo restores those even
+                // when another item fails.
+                let outcome = platform().shell_delete_tracked(source, None);
+                let mut locked = match outcome.error {
+                    None if outcome.completed => {
                         let mut locked = op.lock().unwrap();
+                        locked.deleted_items.extend(outcome.effects);
                         locked.item_complete(source);
                         locked
                     }
-                    Err(failure) => {
+                    failure => {
+                        let failure = failure.unwrap_or_else(|| "Missing completion receipt".into());
                         log::warn!(target: super::FILE_OPS_LOG_TARGET, "trash_item_failed path={source:?} error={failure}");
                         let mut locked = op.lock().unwrap();
                         locked.item_failed(source);

@@ -304,16 +304,16 @@ impl CacheEntry {
 /// the user cache folder holds the copies there.
 fn base() -> io::Result<PathBuf> {
     #[cfg(target_os = "linux")]
-    {
-        let base = crate::app_paths::cache_dir().ok_or_else(|| io::Error::other("No user cache folder"))?;
-        fs::create_dir_all(&base)?;
-        Ok(base)
-    }
+    return linux_base::base();
     // The cache's proof key and entries need access rights: a portable
     // temporary folder on FAT or exFAT has none.
     #[cfg(not(target_os = "linux"))]
     platform().protected_temporary_dir()
 }
+
+#[cfg(target_os = "linux")]
+#[path = "archive_open_cache/linux_base.rs"]
+mod linux_base;
 
 fn seconds(time: SystemTime) -> io::Result<u64> {
     time.duration_since(UNIX_EPOCH)

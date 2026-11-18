@@ -143,3 +143,27 @@ fn a_restored_folder_keeps_full_access_for_its_owner_even_with_an_acl() {
     assert_eq!(kept.0.len(), 1);
     assert_eq!(&kept.0[0].1[12..20], &[2, 0, 5, 0, 0xfe, 0xff, 0, 0]);
 }
+
+/// A FAT volume mounted for the user: `OXYDE_TEST_VFAT=<folder on it>`.
+#[test]
+fn special_bits_do_not_stop_a_copy_to_fat() {
+    let Some(target) = std::env::var_os("OXYDE_TEST_VFAT").map(std::path::PathBuf::from) else { return };
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("shared");
+    std::fs::create_dir(&source).unwrap();
+    std::fs::set_permissions(&source, Permissions::from_mode(0o3775)).unwrap();
+    std::fs::write(source.join("tool"), b"x").unwrap();
+    std::fs::set_permissions(source.join("tool"), Permissions::from_mode(0o4755)).unwrap();
+    let copy = target.join("shared-copy");
+    let _ = std::fs::remove_dir_all(&copy);
+    std::fs::create_dir(&copy).unwrap();
+    copy_all(&source.join("tool"), &copy.join("tool"), None).unwrap();
+    let held = File::open(&source).unwrap();
+    let attributes = super::super::DirectoryAttributes {
+        metadata: held.metadata().unwrap(),
+        extended: super::super::linux_extended_attributes::read(&held).unwrap(),
+    };
+    restore_directory(&File::open(&copy).unwrap(), &attributes).unwrap();
+    assert_eq!(std::fs::read(copy.join("tool")).unwrap(), b"x");
+    std::fs::remove_dir_all(&copy).unwrap();
+}

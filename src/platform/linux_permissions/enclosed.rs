@@ -3,6 +3,7 @@
 //! never followed, other file systems never entered, and each item is changed
 //! through the descriptor whose type was checked.
 use super::chmod;
+use super::super::linux_mount_place::{status_of, Place};
 use crate::models::permissions::Levels;
 use rustix::{fs::{FileType, Mode, OFlags}, io::Errno};
 use std::{
@@ -54,11 +55,12 @@ fn set(item: &OwnedFd, current: u32, mode: u32, path: &Path, outcome: &mut Outco
     }
 }
 
-/// `root` is the folder, already checked by the caller, on `device`.
+/// `root` is the folder, already checked by the caller, at `place`: items at another
+/// place, file system or bind mount, are left as they are.
 pub(super) fn apply(
     root: &OwnedFd,
     root_path: &Path,
-    device: u64,
+    place: Place,
     change: &Levels,
     cancel: &AtomicBool,
 ) -> std::io::Result<Outcome> {
@@ -91,8 +93,8 @@ pub(super) fn apply(
         }
         let path = top.path.join(OsStr::from_bytes(name.to_bytes()));
         let opened = rustix::fs::openat(&top.fd, name, OFlags::PATH | OFlags::NOFOLLOW | OFlags::CLOEXEC, Mode::empty())
-            .and_then(|item| rustix::fs::fstat(&item).map(|stat| (item, stat)));
-        let (item, stat) = match opened {
+            .and_then(|item| status_of(&item).map(|status| (item, status)));
+        let (item, status) = match opened {
             Ok(opened) => opened,
             // Removed since the listing.
             Err(Errno::NOENT) => continue,
@@ -101,11 +103,11 @@ pub(super) fn apply(
                 continue;
             }
         };
-        if stat.st_dev != device {
+        if !place.holds(status.place) {
             continue;
         }
-        let current = stat.st_mode & 0o7777;
-        match FileType::from_raw_mode(stat.st_mode) {
+        let current = status.mode & 0o7777;
+        match status.kind {
             FileType::RegularFile => set(&item, current, change.mode(current, false), &path, &mut outcome),
             FileType::Directory => {
                 let mode = change.mode(current, true);

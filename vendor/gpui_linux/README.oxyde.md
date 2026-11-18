@@ -85,3 +85,8 @@ compare both copies to the new upstream.
   once-per-frame throttle keeps its size (`throttled_size`), applied with the window geometry at
   the next frame callback. Upstream acked it and dropped the size, so the window kept a stale
   size until another configure came: wider or narrower than the pointer after a resize.
+- `gpui_linux/src/linux/wayland/{client,clipboard}.rs`: a clipboard item with external paths is
+  offered as files too, as `text/uri-list`, `x-special/gnome-copied-files` and
+  `application/x-kde-cutselection`, each sent in its own format; a text entry whose metadata
+  is `cut` marks them as cut. Upstream offered text only, so Oxyde ran `wl-copy` for GNOME's
+  format alone, which Dolphin and GTK 4 do not read.

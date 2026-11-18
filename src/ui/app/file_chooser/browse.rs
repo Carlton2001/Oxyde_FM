@@ -2,12 +2,11 @@
 //! background, the selection, and what opening an entry does, entering a folder or
 //! choosing a file, and what the button that accepts chooses, or where it saves.
 use super::selection::{Kept, Selection};
-use super::{FileChooserWindow, Listing};
+use super::{content_types, FileChooserWindow, Listing};
 use crate::ui::workspace::{SortColumn, SortDirection};
 use gpui::*;
 use oxyde_lib::models::FileEntry;
 use oxyde_lib::platform::FileChooserPurpose;
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -89,9 +88,9 @@ impl FileChooserWindow {
     }
 
     /// Lists the folder off the UI thread; a later navigation drops this listing. When
-    /// a type filter names MIME types, the files' types are read there too, once for
-    /// all filters. Its folders are then checked for subfolders, as the main window
-    /// checks them.
+    /// a type filter names MIME types, the files' types not yet known are read after the
+    /// list shows, by batches, once for all filters. Its folders are checked for
+    /// subfolders, as the main window checks them.
     pub(super) fn list_folder(&mut self, keep: Kept, cx: &mut Context<Self>) {
         self.listing = Listing::Loading;
         self.arrange_task = None;
@@ -101,18 +100,14 @@ impl FileChooserWindow {
         let typed = !self.directory && self.filters.iter().any(super::arrange::names_mime_types);
         self.listing_task = Some(cx.spawn(async move |this, cx| {
             let listed = oxyde_lib::commands::io::list_dir(folder.clone(), Some(show_hidden), Some(show_system)).await;
-            let content_types = match &listed {
-                Ok(entries) if typed => {
-                    let files: Vec<String> = entries.iter().filter(|entry| !entry.is_dir).map(|entry| entry.path.clone()).collect();
-                    cx.background_spawn(async move { content_types(files) }).await
-                }
-                _ => HashMap::new(),
-            };
+            let mut pending = Vec::new();
             let _ = this.update(cx, |this, cx| {
                 match listed {
                     Ok(entries) => {
+                        let (known, missing) = if typed { this.type_cache.split(&entries) } else { Default::default() };
+                        pending = missing;
                         this.entries = Arc::new(entries);
-                        this.admission.content_types = Arc::new(content_types);
+                        this.admission.content_types = Arc::new(known);
                         this.arrange(keep, cx);
                         this.check_subfolders(cx);
                     }
@@ -127,6 +122,18 @@ impl FileChooserWindow {
                 }
                 cx.notify();
             });
+            // Dropped with this task, the batches stop at the next navigation.
+            while !pending.is_empty() {
+                let batch: Vec<_> = pending.drain(..pending.len().min(content_types::BATCH)).collect();
+                let typed = cx.background_spawn(async move { content_types::read(batch) }).await;
+                let Ok(()) = this.update(cx, |this, cx| {
+                    this.type_cache.remember(&typed);
+                    let types = Arc::make_mut(&mut this.admission.content_types);
+                    types.extend(typed.into_iter().map(|((path, _), mime)| (path, mime)));
+                    let keep = this.kept();
+                    this.arrange(keep, cx);
+                }) else { return };
+            }
         }));
         cx.notify();
     }
@@ -375,13 +382,4 @@ impl FileChooserWindow {
             self.show_folder(path, cx);
         }
     }
-}
-
-/// The MIME types of files, by their listed paths.
-fn content_types(files: Vec<String>) -> HashMap<String, &'static str> {
-    let platform = oxyde_lib::platform::platform();
-    files.into_iter().filter_map(|path| {
-        let mime = platform.content_type(&oxyde_lib::utils::path_text::decode(&path), false)?;
-        Some((path, mime))
-    }).collect()
 }

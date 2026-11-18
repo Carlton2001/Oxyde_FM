@@ -9,6 +9,7 @@ mod arrange;
 mod band;
 mod browse;
 mod choices;
+mod content_types;
 mod create;
 mod crumbs;
 mod details;
@@ -103,6 +104,8 @@ pub struct FileChooserWindow {
     overwrite: Option<(WindowHandle<overwrite::OverwritePrompt>, Vec<PathBuf>)>,
     /// What the request lets the list show.
     admission: arrange::Admission,
+    /// MIME types already read, for filters that name them.
+    type_cache: content_types::TypeCache,
     folder: String,
     back: Vec<String>,
     forward: Vec<String>,
@@ -409,6 +412,7 @@ impl FileChooserWindow {
                 types: current_filter.and_then(|position| filters.get(position)).cloned(),
                 content_types: Default::default(),
             },
+            type_cache: Default::default(),
             filters,
             type_filter: current_filter,
             default_extension,

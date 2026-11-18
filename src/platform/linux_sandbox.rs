@@ -16,6 +16,8 @@ mod landlock;
 mod seccomp;
 
 const BWRAP: &str = "bwrap";
+/// Where NixOS and Guix keep programs and libraries, outside `/usr`.
+const STORES: [&str; 2] = ["/nix/store", "/gnu/store"];
 /// Where a confined worker finds its document.
 const SOURCE: &str = "/oxyde/source";
 
@@ -63,6 +65,10 @@ pub(super) fn command(executable: &Path, profile: Profile, source: Option<(&Path
     if !available() {
         return without_bubblewrap(executable, profile, source);
     }
+    bubblewrap(executable, profile, source)
+}
+
+fn bubblewrap(executable: &Path, profile: Profile, source: Option<(&Path, File)>) -> io::Result<Launch> {
     let mut arguments = Arguments::default();
     arguments.base();
     arguments.add(["--clearenv", "--setenv", "MALLOC_ARENA_MAX", "2"]);
@@ -132,7 +138,7 @@ fn without_bubblewrap(executable: &Path, profile: Profile, source: Option<(&Path
         Some(ruleset) => ruleset.allow(path, rights),
         None => Ok(()),
     };
-    for name in ["/usr", "/bin", "/sbin", "/lib", "/lib32", "/lib64", "/libx32"] {
+    for name in ["/usr", "/bin", "/sbin", "/lib", "/lib32", "/lib64", "/libx32"].into_iter().chain(STORES) {
         allow(Path::new(name), landlock::RUN)?;
     }
     allow(executable, landlock::RUN)?;
@@ -238,6 +244,10 @@ impl Arguments {
             }
         }
         self.bind_try(Path::new("/etc/ld.so.cache"));
+        // NixOS and Guix keep programs and libraries in their stores.
+        for store in STORES {
+            self.bind_try(Path::new(store));
+        }
         // Local time: ZIP stores its dates that way.
         self.bind_try(Path::new("/etc/localtime"));
     }
@@ -293,15 +303,25 @@ impl Reach {
     }
 }
 
-/// Whether bubblewrap can build the sandbox here: user namespaces may be disabled.
+/// `true`, as the sandbox runs it, to try the sandbox.
+fn true_program() -> Option<PathBuf> {
+    let found = ["/usr/bin/true", "/bin/true"].map(PathBuf::from).into_iter().find(|path| path.is_file())
+        .or_else(|| std::env::split_paths(&std::env::var_os("PATH")?).map(|folder| folder.join("true")).find(|path| path.is_file()))?;
+    std::fs::canonicalize(found).ok()
+}
+
+/// Whether bubblewrap can build the sandbox here, as workers receive it: user namespaces
+/// may be disabled, and an unprivileged container may refuse to mount `/proc` or `/dev`.
 fn available() -> bool {
     static AVAILABLE: OnceLock<bool> = OnceLock::new();
     *AVAILABLE.get_or_init(|| {
-        let mut arguments = Arguments::default();
-        arguments.base();
-        arguments.add(["--", "true"]);
-        let tried = Command::new(BWRAP).args(arguments.0)
-            .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped()).output();
+        let tried = (|| {
+            let program = true_program().ok_or_else(|| io::Error::other("no true program to try it with"))?;
+            // A document as workers receive one: an open descriptor mounted alone.
+            let document = File::open(&program)?;
+            let mut launch = bubblewrap(&program, Profile::Codec, Some((&program, document)))?;
+            launch.command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped()).output()
+        })();
         let refusal = match tried {
             Ok(output) if output.status.success() => return true,
             Ok(output) => String::from_utf8_lossy(&output.stderr).trim().to_owned(),

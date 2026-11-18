@@ -331,6 +331,8 @@ impl Platform for LinuxPlatform {
         let result = (|| {
             write(&mut file)?;
             file.sync_all()?;
+            #[cfg(target_os = "linux")]
+            let _lease = super::linux_preview_quota::admit_beside(&path, &temporary, file.metadata()?.len())?;
             drop(file);
             std::fs::rename(&temporary, &path)
         })();
@@ -526,12 +528,8 @@ impl Platform for LinuxPlatform {
     fn set_trash_retention(&self, retention: &super::TrashRetention) -> Result<(), String> {
         super::linux_trash::set_retention(retention)
     }
-    fn bulk_expand_excluded(&self, _path: &str, name: &str) -> bool {
-        // Preserve the previous shared exclusions; Windows drive rules stay native.
-        matches!(
-            name.to_ascii_lowercase().as_str(),
-            "$recycle.bin" | "system volume information"
-        )
+    fn bulk_expand_excluded(&self, path: &str, name: &str) -> bool {
+        super::linux_bulk_expand::excluded(path, name)
     }
 
     fn trash_original_path(&self, _id: &std::path::Path) -> Option<std::path::PathBuf> { None }
@@ -725,11 +723,8 @@ impl Platform for LinuxPlatform {
 
     fn shell_delete(&self, paths: &[std::path::PathBuf], recycle: bool) -> Result<(), String> {
         if recycle {
-            return trash::delete_all(paths).map_err(|error| match error {
-                trash::Error::FileSystem { path, source } if source.kind() == std::io::ErrorKind::PermissionDenied => {
-                    crate::models::error::DeleteAccessDenied { path: path.to_string_lossy().into_owned() }.to_string()
-                }
-                error => error.to_string(),
+            return paths.iter().try_for_each(|path| {
+                super::linux_trash::send::send(path, None).map(drop).map_err(|error| error.message(path))
             });
         }
         for path in paths {
@@ -745,6 +740,20 @@ impl Platform for LinuxPlatform {
             })?;
         }
         Ok(())
+    }
+
+    /// The trash entry is the receipt: Undo restores that entry, Redo checks the object.
+    fn shell_delete_tracked(&self, path: &std::path::Path, proof: Option<crate::models::transaction::HistoryFileIdentity>) -> super::ShellDeleteOutcome {
+        match super::linux_trash::send::send(path, proof) {
+            Ok(sent) => super::ShellDeleteOutcome {
+                completed: true,
+                error: None,
+                effects: vec![crate::models::transaction::HistoryDeletedItem::trashed(
+                    path.to_string_lossy().into_owned(), sent.identity, sent.content)],
+                destroyed: false,
+            },
+            Err(error) => super::ShellDeleteOutcome::from_result(Err(error.message(path))),
+        }
     }
 
     fn set_thread_priority(&self, _priority: ThreadPriority) {}
@@ -764,6 +773,10 @@ impl Platform for LinuxPlatform {
 
     fn prefer_display_gpu(&self) -> Option<String> {
         super::linux_gpu::prefer_display_gpu()
+    }
+
+    fn raise_open_file_limit(&self) -> Option<String> {
+        super::linux_open_files::raise()
     }
 
     fn installation(&self) -> super::Installation {
@@ -826,6 +839,7 @@ impl Platform for LinuxPlatform {
         use std::process::Stdio;
         let mut command = std::process::Command::new("xdg-open");
         super::linux_gpu::leave_out_of(&mut command);
+        super::linux_open_files::leave_out_of(&mut command);
         let mut child = command
             .arg(path)
             .stdin(Stdio::null())

@@ -3,6 +3,7 @@
 //! Restoration never overwrites nor recreates a missing original folder. Automatic cleanup
 //! belongs to the desktop: GNOME housekeeping settings or KDE trash limits.
 pub(super) mod transfer;
+pub(super) mod send;
 
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;

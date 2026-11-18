@@ -130,6 +130,7 @@ fn main() {
     if oxyde_lib::commands::archive_worker::run_if_requested() { return; }
     if crate::ui::preview_worker::run_if_requested() { return; }
     let idle_gpus = oxyde_lib::platform::platform().prefer_display_gpu();
+    let open_file_limit = oxyde_lib::platform::platform().raise_open_file_limit();
     if let Err(error) = oxyde_lib::app_paths::initialize() {
         let platform = oxyde_lib::platform::platform();
         let locale = platform.regional_locale().unwrap_or_default();
@@ -169,6 +170,9 @@ fn main() {
     oxyde_lib::platform::platform().identify_process();
     if let Some(drivers) = idle_gpus {
         log::info!("Vulkan drivers disabled: {drivers}");
+    }
+    if let Some(change) = open_file_limit {
+        log::info!("{change}");
     }
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

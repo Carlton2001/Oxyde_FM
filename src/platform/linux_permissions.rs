@@ -165,7 +165,8 @@ pub(super) fn write(path: &Path, change: &PermissionChange, cancel: &AtomicBool)
         return Err(PermissionError::Changed);
     }
     let enclosed = if expected.is_dir && !change.enclosed.is_empty() {
-        enclosed::apply(&file, path, stat.st_dev, &change.enclosed, cancel).map_err(failed)?
+        let place = super::linux_mount_place::status_of(&file).map_err(|error| failed(error.into()))?.place;
+        enclosed::apply(&file, path, place, &change.enclosed, cancel).map_err(failed)?
     } else {
         enclosed::Outcome::default()
     };

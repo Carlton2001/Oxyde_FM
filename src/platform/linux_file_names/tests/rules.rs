@@ -56,3 +56,15 @@ fn only_a_casefold_folder_folds_on_ext4() {
     let folded = rules(&File::from(held)).unwrap();
     assert_eq!(key(folded, "A"), key(folded, "a"));
 }
+
+#[test]
+fn fuse_servers_of_windows_file_systems_ignore_case() {
+    let table = "36 25 0:32 / /run/user/1000/gvfs rw - fuse.gvfsd-fuse gvfsd-fuse rw,user_id=1000\n\
+        40 25 8:17 / /run/media/me/KEY rw - fuseblk /dev/sdb1 rw,user_id=1000\n\
+        41 25 0:50 / /home/me/remote rw - fuse.sshfs me@host: rw\n";
+    assert_eq!(mount_type(table, 36).as_deref(), Some("fuse.gvfsd-fuse"));
+    assert_eq!(mount_type(table, 4), None);
+    let caseless: Vec<bool> = [36, 40, 41].iter().map(|id| caseless_fuse(&mount_type(table, *id).unwrap())).collect();
+    assert_eq!(caseless, [true, true, false]);
+    assert!(caseless_fuse("fuse.exfat") && caseless_fuse("fuse.ntfs-3g") && !caseless_fuse("fuse.rclone"));
+}

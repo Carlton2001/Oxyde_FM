@@ -124,3 +124,15 @@ print(\"refused\")'";
     let output = run_without_bubblewrap(Profile::Codec, None, script);
     assert_eq!(String::from_utf8_lossy(&output.stdout), "refused\n", "{output:?}");
 }
+
+#[test]
+fn the_probe_runs_a_program_in_the_sandbox_workers_receive() {
+    let program = true_program().unwrap();
+    let document = File::open(&program).unwrap();
+    let launch = bubblewrap(&program, Profile::Codec, Some((&program, document)));
+    // Where bubblewrap runs at all, the probe and a worker's launch agree.
+    if let Ok(mut launch) = launch {
+        let worked = launch.command.stdin(Stdio::null()).stderr(Stdio::null()).status().is_ok_and(|status| status.success());
+        assert_eq!(available(), worked);
+    }
+}

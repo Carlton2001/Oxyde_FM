@@ -159,12 +159,28 @@ impl HistoryDirectoryIdentity {
 #[derive(Debug, Clone)]
 pub struct HistoryDeletedItem {
     pub path: String,
-    #[cfg(target_os = "windows")]
     pub(crate) identity: Option<HistoryFileIdentity>,
     #[cfg(target_os = "windows")]
     restored: std::sync::Arc<std::sync::atomic::AtomicBool>,
     #[cfg(target_os = "windows")]
     partial: std::sync::Arc<std::sync::Mutex<Vec<HistoryDeletedItem>>>,
+    /// The freedesktop trash entry holding the item, its content path; Redo files the
+    /// item under a new one.
+    #[cfg(not(target_os = "windows"))]
+    content: std::sync::Arc<std::sync::Mutex<Option<std::path::PathBuf>>>,
+}
+#[cfg(not(target_os = "windows"))]
+impl HistoryDeletedItem {
+    pub(crate) fn trashed(path: String, identity: HistoryFileIdentity, content: std::path::PathBuf) -> Self {
+        Self { path, identity: Some(identity), content: std::sync::Arc::new(std::sync::Mutex::new(Some(content))) }
+    }
+    /// Where the item lies in the trash, until Undo restores it.
+    pub(crate) fn content(&self) -> Option<std::path::PathBuf> {
+        self.content.lock().unwrap_or_else(|p| p.into_inner()).clone()
+    }
+    pub(crate) fn set_content(&self, content: Option<std::path::PathBuf>) {
+        *self.content.lock().unwrap_or_else(|p| p.into_inner()) = content;
+    }
 }
 #[cfg(target_os = "windows")]
 impl HistoryDeletedItem {

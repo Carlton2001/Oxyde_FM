@@ -48,6 +48,7 @@ pub(super) fn open(path: &Path) -> Result<(), String> {
     for (program, arguments) in terminals(&desktop) {
         let mut command = Command::new(program);
         super::linux_gpu::leave_out_of(&mut command);
+        super::linux_open_files::leave_out_of(&mut command);
         command.current_dir(path).args(arguments);
         if !arguments.is_empty() { command.arg(path); }
         command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
