@@ -45,8 +45,9 @@ const TIMER: usize = 1;
 /// usually asks at once; Files waits as long for those that look for the window late.
 const PATIENCE: u32 = 10_000;
 /// How long after an item the next one of the same selection may come. The Shell asks
-/// for them in one go, a call each; the user waits this long to see the selection.
-const SETTLE: u32 = 20;
+/// for them in one go, a call each, but a network folder may answer each slowly; the user
+/// waits this long to see the selection.
+const SETTLE: u32 = 150;
 
 /// A Shell item identifier list, freed with the Shell's allocator.
 struct IdList(*mut ITEMIDLIST);
