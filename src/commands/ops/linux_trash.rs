@@ -27,7 +27,7 @@ pub(crate) fn list_trash_unsorted() -> Result<Vec<TrashEntry>, CommandError> {
 fn entry(item: &trash::TrashItem) -> Option<TrashEntry> {
     let content = platform().trash_content_path(item)?;
     let metadata = std::fs::symlink_metadata(&content).ok()?;
-    let deleted_time = (item.time_deleted.max(0) as u64) * 1000;
+    let deleted_time = (item.time_deleted.max(0) as u64).saturating_mul(1000);
     let is_dir = metadata.is_dir();
     Some(TrashEntry {
         name: item.name.to_string_lossy().into_owned(),
