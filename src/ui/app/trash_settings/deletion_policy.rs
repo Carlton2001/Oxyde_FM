@@ -1,10 +1,13 @@
 use super::*;
 
-/// A UI snapshot of per-drive settings; it never determines the operation type.
+/// A UI snapshot of per-drive deletion, for labels and icons; it never
+/// determines the operation type. A drive deletes permanently by setting or
+/// because it has no Recycle Bin at all (mapped share, SUBST, removable drive).
 #[derive(Default)]
 pub(crate) struct DeletePolicy {
     revision: u64,
     drives: Vec<(String, bool)>,
+    without_bin: Vec<String>,
 }
 
 impl DeletePolicy {
@@ -17,11 +20,13 @@ impl DeletePolicy {
         self.revision = self.revision.wrapping_add(1);
     }
 
-    pub(crate) fn replace(&mut self, revision: u64, drives: Vec<(String, bool)>) -> bool {
-        if revision != self.revision || self.drives == drives {
+    pub(crate) fn replace(&mut self, revision: u64, survey: DriveDeletion) -> bool {
+        let (drives, without_bin) = survey;
+        if revision != self.revision || (self.drives == drives && self.without_bin == without_bin) {
             return false;
         }
         self.drives = drives;
+        self.without_bin = without_bin;
         true
     }
 
@@ -29,10 +34,13 @@ impl DeletePolicy {
     pub(crate) fn saved(&mut self, configs: &[TrashSystemConfig]) {
         self.invalidate();
         for config in configs {
+            // A setting never gives a Recycle Bin to a drive without one.
+            let without_bin = self.without_bin.iter()
+                .any(|root| crate::ui::paths::paths_match(root, &config.drive_path));
             if let Some((_, permanent)) = self.drives.iter_mut().find(|(root, _)| {
                 crate::ui::paths::paths_match(root, &config.drive_path)
             }) {
-                *permanent = config.nuke_on_delete;
+                *permanent = config.nuke_on_delete || without_bin;
             } else {
                 self.drives.push((config.drive_path.clone(), config.nuke_on_delete));
             }
@@ -40,6 +48,11 @@ impl DeletePolicy {
     }
 
     pub(crate) fn for_path(&self, path: &str) -> bool {
+        // Windows has no Recycle Bin on a share named by its UNC path.
+        #[cfg(target_os = "windows")]
+        if (path.starts_with(r"\\") && !path.starts_with(r"\\?\")) || path.starts_with(r"\\?\UNC\") {
+            return true;
+        }
         // A verbatim DOS path refers to the same drive as its ordinary form.
         let path = path.strip_prefix(r"\\?\")
             .filter(|rest| rest.as_bytes().get(1) == Some(&b':'))
@@ -51,13 +64,22 @@ impl DeletePolicy {
     }
 }
 
-pub(crate) fn read_drive_policy(drives: &[DriveInfo]) -> Vec<(String, bool)> {
-    drives.iter().map(|drive| {
-        let permanent = oxyde_lib::platform::platform()
-            .recycle_bin_config(drive.path.clone())
-            .is_ok_and(|config| config.nuke_on_delete);
+/// Each drive with whether it deletes permanently, and the drives without a Recycle Bin.
+pub(crate) type DriveDeletion = (Vec<(String, bool)>, Vec<String>);
+
+/// Blocking; call on a background worker.
+pub(crate) fn read_drive_policy(drives: &[DriveInfo]) -> DriveDeletion {
+    let platform = oxyde_lib::platform::platform();
+    let without_bin: Vec<String> = drives.iter()
+        .filter(|drive| !platform.has_recycle_bin(std::path::Path::new(&drive.path)))
+        .map(|drive| drive.path.clone())
+        .collect();
+    let drives = drives.iter().map(|drive| {
+        let permanent = without_bin.contains(&drive.path)
+            || platform.recycle_bin_config(drive.path.clone()).is_ok_and(|config| config.nuke_on_delete);
         (drive.path.clone(), permanent)
-    }).collect()
+    }).collect();
+    (drives, without_bin)
 }
 
 impl OxydeApp {
