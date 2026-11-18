@@ -143,13 +143,15 @@ impl HistoryDirectoryIdentity {
     }
 
     pub(crate) fn snapshot(&self) -> Option<HistoryFileIdentity> {
-        *self.current.lock().unwrap()
+        // The value is a copy: a panic elsewhere cannot leave it half written, and a
+        // poisoned lock must not abort the process from HistoryManager's Drop.
+        *self.current.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     pub(crate) fn refresh_from_file(&self, file: &std::fs::File) -> std::io::Result<()> {
         let captured = HistoryFileIdentity::from_file(file);
         // A failed capture invalidates the old proof; it must never be reused.
-        *self.current.lock().unwrap() = captured.as_ref().ok().copied();
+        *self.current.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = captured.as_ref().ok().copied();
         captured.map(|_| ())
     }
 }
