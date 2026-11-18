@@ -24,7 +24,7 @@ fn comparable(path: &Path) -> PathBuf {
 
 /// Whether two paths name the same place.
 pub(crate) fn paths_match(left: &str, right: &str) -> bool {
-    comparable(Path::new(left)) == comparable(Path::new(right))
+    left == right || comparable(Path::new(left)) == comparable(Path::new(right))
 }
 
 /// Whether `path` is `root` or lies under it, by whole components: `folder-other`
