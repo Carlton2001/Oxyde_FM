@@ -194,3 +194,7 @@ pub(super) fn validate<'a>(
     }
     checkpoint()
 }
+
+#[cfg(all(test, target_os = "windows"))]
+#[path = "tests/share_roots.rs"]
+mod share_root_tests;

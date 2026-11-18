@@ -24,3 +24,12 @@ fn the_translated_path_opens_the_same_object() {
     assert_eq!(canonicalize(&file).unwrap(), expected);
     assert_eq!(canonicalize(root.path()).unwrap(), std::fs::canonicalize(root.path()).unwrap());
 }
+
+#[test]
+fn share_roots_get_the_separator_drive_roots_have() {
+    let share = PathBuf::from(r"\\?\UNC\server\share");
+    assert_eq!(with_root_separator(share), PathBuf::from(r"\\?\UNC\server\share\"));
+    for kept in [r"\\?\UNC\server\share\", r"\\?\UNC\server\share\folder", r"\\?\C:\", r"\\?\C:\folder"] {
+        assert_eq!(with_root_separator(PathBuf::from(kept)), PathBuf::from(kept));
+    }
+}

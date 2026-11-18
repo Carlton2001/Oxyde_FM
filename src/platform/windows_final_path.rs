@@ -32,9 +32,26 @@ pub(super) fn canonicalize(path: &Path) -> io::Result<PathBuf> {
 /// the caller named, and kept only if it opens the same object.
 pub(super) fn of_handle(file: &File, named: &Path) -> io::Result<PathBuf> {
     match final_name(file, GETFINALPATHNAMEBYHANDLE_FLAGS(0)) {
-        Ok(path) => Ok(path.into()),
-        Err(error) => translated(file, named).ok_or(error),
+        Ok(path) => Ok(with_root_separator(path.into())),
+        Err(error) => translated(file, named).map(with_root_separator).ok_or(error),
     }
+}
+
+/// Windows names a share root `\\?\UNC\server\share`, without the separator
+/// it gives a drive root (`\\?\C:\`). Without it the path has no root
+/// component, and a child joined to it no longer starts with it.
+fn with_root_separator(path: PathBuf) -> PathBuf {
+    let mut components = path.components();
+    let share_root = matches!(
+        components.next(),
+        Some(Component::Prefix(prefix)) if matches!(prefix.kind(), Prefix::VerbatimUNC(..) | Prefix::UNC(..))
+    ) && components.next().is_none();
+    if !share_root {
+        return path;
+    }
+    let mut text = path.into_os_string();
+    text.push("\\");
+    text.into()
 }
 
 fn translated(file: &File, named: &Path) -> Option<PathBuf> {
