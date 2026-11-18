@@ -136,27 +136,31 @@ impl OxydeApp {
             if paths.is_empty() {
                 return;
             }
-            if self.config.confirm_delete {
-                let permanent = self.shift_delete;
-                self.trash_delete_check_pending = true;
-                cx.spawn(async move |this, cx| {
-                    let snapshot = paths.clone();
-                    let permanent_prompt = permanent || tokio::task::spawn_blocking(move || {
-                        super::deletion_policy::selection_deletes_permanently(&snapshot)
-                    }).await.unwrap_or(false);
-                    let _ = this.update(cx, |this, cx| {
-                        this.trash_delete_check_pending = false;
-                        if this.pending_trash_delete.is_none() {
-                            let names = paths.iter().take(SHOWN_NAMES).map(|path| display_name(path)).collect();
-                            let count = paths.len() as u64;
-                            this.prompt_delete(DeleteTarget::Files { permanent }, paths, names, count, permanent_prompt, cx);
-                        }
-                    });
-                }).detach();
-                return;
-            }
-            self.queue_trash_delete(paths, self.shift_delete, cx);
-
+            let shift = self.shift_delete;
+            let confirm = self.config.confirm_delete;
+            self.trash_delete_check_pending = true;
+            cx.spawn(async move |this, cx| {
+                let snapshot = paths.clone();
+                // Where nothing can be recycled, ask for the permanent deletion at
+                // once rather than failing to recycle and asking again.
+                let permanent = shift || tokio::task::spawn_blocking(move || {
+                    super::deletion_policy::selection_deletes_permanently(&snapshot)
+                }).await.unwrap_or(false);
+                let _ = this.update(cx, |this, cx| {
+                    this.trash_delete_check_pending = false;
+                    if this.pending_trash_delete.is_some() {
+                        return;
+                    }
+                    // Without confirmation, only Shift may destroy unasked.
+                    if !confirm && (shift || !permanent) {
+                        this.queue_trash_delete(paths, shift, cx);
+                        return;
+                    }
+                    let names = paths.iter().take(SHOWN_NAMES).map(|path| display_name(path)).collect();
+                    let count = paths.len() as u64;
+                    this.prompt_delete(DeleteTarget::Files { permanent }, paths, names, count, permanent, cx);
+                });
+            }).detach();
         }
     }
 

@@ -110,7 +110,7 @@ fn final_name(file: &File, flags: GETFINALPATHNAMEBYHANDLE_FLAGS) -> io::Result<
 }
 
 /// The first native target of a drive letter, e.g. `\Device\ImDisk0`.
-fn dos_device(letter: char) -> Option<String> {
+pub(super) fn dos_device(letter: char) -> Option<String> {
     let name: Vec<u16> = std::ffi::OsStr::new(&format!("{letter}:")).encode_wide().chain(Some(0)).collect();
     let mut buffer = vec![0u16; 1024];
     let count = unsafe { QueryDosDeviceW(PCWSTR(name.as_ptr()), Some(&mut buffer)) } as usize;

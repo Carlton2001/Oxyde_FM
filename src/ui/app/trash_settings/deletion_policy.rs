@@ -74,14 +74,17 @@ impl OxydeApp {
 
 /// Refresh the warning from Windows immediately before showing confirmation.
 /// Keep the captured selection and Shift intent independent of the current pane.
+/// True when no selected item can be recycled: its volume deletes permanently
+/// by setting, or has no Recycle Bin at all (share, SUBST, removable drive).
 pub(super) fn selection_deletes_permanently(paths: &[String]) -> bool {
     let mut roots = std::collections::HashMap::new();
     !paths.is_empty() && paths.iter().all(|path| {
         let Some(root) = std::path::Path::new(path).ancestors().last() else { return false; };
         let root = root.to_string_lossy().into_owned();
         *roots.entry(root.clone()).or_insert_with(|| {
-            oxyde_lib::platform::platform().recycle_bin_config(root)
-                .is_ok_and(|config| config.nuke_on_delete)
+            let platform = oxyde_lib::platform::platform();
+            !platform.has_recycle_bin(std::path::Path::new(&root))
+                || platform.recycle_bin_config(root).is_ok_and(|config| config.nuke_on_delete)
         })
     })
 }

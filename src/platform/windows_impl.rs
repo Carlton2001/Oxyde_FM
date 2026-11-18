@@ -525,6 +525,9 @@ impl Platform for WindowsPlatform {
     fn is_network_path(&self, path: &std::path::Path) -> bool {
         super::hardware::is_network_path(path)
     }
+    fn has_recycle_bin(&self, path: &std::path::Path) -> bool {
+        super::windows_recycle_bin::available(path)
+    }
 
     fn list_network_vicinity(&self) -> Result<Vec<crate::models::FileEntry>, String> {
         super::network::list_network_vicinity().map_err(|error| error.to_string())
