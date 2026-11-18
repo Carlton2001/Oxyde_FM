@@ -59,7 +59,29 @@ fn the_component_walk_opens_plain_paths_and_refuses_junctions() {
 
 #[test]
 fn the_kernel_probe_reaches_a_verdict_on_the_system_drive() {
-    assert!(drive_links_refused().is_some());
+    assert_ne!(kernel(), Kernel::Unknown);
+}
+
+// Kernels without OBJ_DONT_REPARSE look up single components with
+// OPEN_REPARSE_POINT only: the final check must still refuse a junction.
+#[test]
+fn single_components_refuse_junctions_without_dont_reparse() {
+    let root = tempfile::tempdir().unwrap();
+    let target = root.path().join("target");
+    std::fs::create_dir(&target).unwrap();
+    let link = root.path().join("link");
+    let status = std::process::Command::new("cmd")
+        .args(["/C", "mklink", "/J"])
+        .arg(&link)
+        .arg(&target)
+        .output()
+        .unwrap();
+    assert!(status.status.success());
+    let parent = open(root.path(), true, 0x20 | 0x80, 7, 1).unwrap();
+    let leaf = leaf_name(std::ffi::OsStr::new("link")).unwrap();
+    let (opened, _) = create_file(leaf.clone(), parent.as_raw_handle(), Some(true), 0x80, 7, 1, false, 0x80).unwrap();
+    assert_ne!(opened.metadata().unwrap().file_attributes() & 0x400, 0);
+    assert!(open_name_with_attributes(leaf, parent.as_raw_handle(), Some(true), 0x80, 7, 1, true, 0x80).is_err());
 }
 
 /// An existing local path reached through the loopback administrative
