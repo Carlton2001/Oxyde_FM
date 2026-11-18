@@ -196,11 +196,12 @@ impl OxydeApp {
         let Some(secret) = ArchiveSecret::new(std::mem::take(&mut prompt.value)) else { return };
         prompt.checking = true;
         let archive = prompt.archive.clone();
-        archive_password::remember(&archive, secret);
         cx.notify();
         cx.spawn(async move |this, cx| {
             let check = archive.clone();
             let result = tokio::task::spawn_blocking(move || {
+                // Resolving the archive's real path reads the disk.
+                archive_password::remember(&check, secret);
                 oxyde_lib::commands::archive::verify_archive_password(&check)
             })
             .await;
