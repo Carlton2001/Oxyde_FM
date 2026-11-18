@@ -232,7 +232,10 @@ pub(crate) fn render_network_dialog(
                             h.update(cx, |view, cx| {
                                 if let Some(dialog) = &mut view.network_dialog {
                                     if !dialog.busy {
-                                        window.focus(&dialog.drive_focus[index], cx);
+                                        // The list may have shrunk since this row was drawn.
+                                        if let Some(focus) = dialog.drive_focus.get(index) {
+                                            window.focus(focus, cx);
+                                        }
                                         if !dialog.selected.remove(&path) {
                                             dialog.selected.insert(path.clone());
                                         }
