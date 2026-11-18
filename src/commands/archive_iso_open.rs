@@ -128,6 +128,42 @@ fn record(bytes: &[u8], block_size: u64) -> io::Result<Record> {
     })
 }
 
+/// Most descriptors probed after the primary one while looking for UDF.
+const MAX_PROBED_DESCRIPTORS: u64 = 64;
+
+/// A UDF descriptor follows the ISO 9660 set. A UDF bridge, such as a Windows
+/// installation image, may keep only a placeholder ISO 9660 tree: the system
+/// mounts the image instead.
+fn has_udf<R: Read + Seek>(image: &mut Image<'_, R>, primary: u64) -> bool {
+    let mut extended = false;
+    for index in 1..=MAX_PROBED_DESCRIPTORS {
+        let mut descriptor = [0u8; 7];
+        let offset = primary + index * 2048;
+        // A few bytes, bounded by the count above: outside the decoded budget.
+        let read = image.check_range(offset, 7).and_then(|()| {
+            image.file.seek(SeekFrom::Start(offset))?;
+            image.file.read_exact(&mut descriptor)
+        });
+        if read.is_err() {
+            return false;
+        }
+        if !extended {
+            if &descriptor[1..7] != b"CD001\x01" {
+                return false;
+            }
+            extended = descriptor[0] == 255;
+            continue;
+        }
+        match &descriptor[1..6] {
+            b"NSR02" | b"NSR03" => return true,
+            b"BEA01" | b"BOOT2" | b"CDW02" => {}
+            // TEA01 ends the extended area; anything else is not part of it.
+            _ => return false,
+        }
+    }
+    false
+}
+
 fn root_record<R: Read + Seek>(image: &mut Image<'_, R>) -> io::Result<(u64, Record)> {
     let mut offset = 16 * 2048;
     loop {
@@ -149,6 +185,9 @@ fn root_record<R: Read + Seek>(image: &mut Image<'_, R>) -> io::Result<(u64, Rec
                 let root = record(&descriptor[156..190], block_size)?;
                 if !root.directory || !root.final_extent || root.raw_name != [0] {
                     return Err(invalid("Invalid ISO root directory"));
+                }
+                if has_udf(image, offset) {
+                    return Err(invalid("UDF disc images are mounted, not read as ISO 9660"));
                 }
                 return Ok((block_size, root));
             }
@@ -510,6 +549,10 @@ fn extract_with_checkpoint(
     }
     Ok(destination.path)
 }
+
+#[cfg(test)]
+#[path = "archive_iso_open/tests/udf.rs"]
+mod udf_tests;
 
 #[cfg(test)]
 mod tests {
