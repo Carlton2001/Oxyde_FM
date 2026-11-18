@@ -81,7 +81,7 @@ impl AdvancedSearchOptions {
                 .map(|r| SearchPattern::Regex(r, self.ignore_accents))
                 .map_err(|e| e.to_string())
         } else {
-            Ok(SearchPattern::Literal(
+            Ok(SearchPattern::literal(
                 query,
                 self.case_sensitive,
                 self.ignore_accents,
@@ -278,7 +278,7 @@ pub fn quick_search(
                 }
             }
         } else {
-            SearchPattern::Literal(query, false, false)
+            SearchPattern::literal(query, false, false)
         };
         let attributes = std::cell::RefCell::new(crate::utils::visibility::WalkAttributes::default());
         let walker = walkdir::WalkDir::new(&root)

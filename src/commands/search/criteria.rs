@@ -5,10 +5,17 @@ use regex::Regex;
 pub(super) enum SearchPattern {
     Glob(Pattern, bool, bool),
     Regex(Regex, bool),
+    /// The query as `matches` compares it: normalized and, unless case counts, lowercase.
     Literal(String, bool, bool),
 }
 
 impl SearchPattern {
+    pub(super) fn literal(query: String, case_sensitive: bool, ignore_accents: bool) -> Self {
+        let query = normalize(&query, ignore_accents);
+        let query = if case_sensitive { query } else { query.to_lowercase() };
+        Self::Literal(query, case_sensitive, ignore_accents)
+    }
+
     pub(super) fn matches(&self, text: &str) -> bool {
         match self {
             Self::Glob(pattern, ignore_accents, case_sensitive) => {
@@ -36,11 +43,10 @@ impl SearchPattern {
             }
             Self::Literal(query, case_sensitive, ignore_accents) => {
                 let target = normalize(text, *ignore_accents);
-                let query = normalize(query, *ignore_accents);
                 if *case_sensitive {
-                    target.contains(&query)
+                    target.contains(query.as_str())
                 } else {
-                    target.to_lowercase().contains(&query.to_lowercase())
+                    target.to_lowercase().contains(query.as_str())
                 }
             }
         }
