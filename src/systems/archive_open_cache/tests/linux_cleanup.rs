@@ -73,3 +73,23 @@ fn the_default_quota_saturates_at_its_entry_count() {
     drop(prepare(base.path(), Policy { max_entries: 7, ..policy }, now + 120).unwrap());
     assert!(!paths[0].exists() && paths[1..].iter().all(|path| path.exists()));
 }
+
+#[test]
+fn the_temporary_folder_takes_the_copies_only_if_private() {
+    use std::os::unix::fs::PermissionsExt;
+    let temporary = tempfile::tempdir().unwrap();
+    assert!(linux_base::leases(temporary.path()));
+    let folder = linux_base::private_folder(temporary.path()).unwrap();
+    assert_eq!(fs::metadata(&folder).unwrap().permissions().mode() & 0o777, 0o700);
+    assert_eq!(linux_base::private_folder(temporary.path()).unwrap(), folder);
+    fs::set_permissions(&folder, fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(linux_base::private_folder(temporary.path()).is_err());
+}
+
+/// A folder on a file system without leases, such as NFS or WSL's 9p:
+/// `OXYDE_TEST_NO_LEASE=<folder>`.
+#[test]
+fn a_file_system_without_leases_is_recognized() {
+    let Some(folder) = std::env::var_os("OXYDE_TEST_NO_LEASE") else { return };
+    assert!(!linux_base::leases(std::path::Path::new(&folder)));
+}
