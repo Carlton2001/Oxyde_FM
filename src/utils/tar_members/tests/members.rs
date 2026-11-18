@@ -1,4 +1,5 @@
 use super::*;
+#[cfg(target_os = "windows")] // `tar_fidelity` is built for Windows tests only.
 use crate::utils::{archive_limits::ArchiveLimits, tar_fidelity};
 use std::io::{Seek, Write};
 
@@ -103,6 +104,7 @@ fn decoded(file: &mut std::fs::File) -> io::Result<Vec<(String, bool, u64, blake
     Ok(found)
 }
 
+#[cfg(target_os = "windows")]
 fn verified(file: &mut std::fs::File) -> io::Result<Vec<(String, bool, u64, blake3::Hash)>> {
     file.rewind()?;
     Ok(tar_fidelity::scan(file, ArchiveLimits::WORKSPACE, None, true, &|| Ok(()))?
@@ -151,15 +153,18 @@ fn git_archive_global_headers_contiguous_and_sparse_files_are_members() {
     ];
     assert_eq!(decoded, expected);
     // The independent verifier sees the same members with the same contents.
-    let verified = verified(archive.as_file_mut()).unwrap();
-    let names = |list: &[(String, bool, u64, blake3::Hash)]| -> Vec<_> {
-        list.iter()
-            .map(|(name, directory, size, hash)| {
-                (name.replace('\\', "/").trim_end_matches('/').to_owned(), *directory, *size, *hash)
-            })
-            .collect()
-    };
-    assert_eq!(names(&verified), names(&decoded));
+    #[cfg(target_os = "windows")]
+    {
+        let verified = verified(archive.as_file_mut()).unwrap();
+        let names = |list: &[(String, bool, u64, blake3::Hash)]| -> Vec<_> {
+            list.iter()
+                .map(|(name, directory, size, hash)| {
+                    (name.replace('\\', "/").trim_end_matches('/').to_owned(), *directory, *size, *hash)
+                })
+                .collect()
+        };
+        assert_eq!(names(&verified), names(&decoded));
+    }
 }
 
 #[test]
@@ -201,14 +206,18 @@ fn informational_pax_records_and_long_link_names_do_not_refuse_the_archive() {
     let decoded = decoded(archive.as_file_mut()).unwrap();
     assert_eq!(decoded.len(), 2);
     assert_eq!(decoded[0].0, "docs/chosen");
-    let verified = verified(archive.as_file_mut()).unwrap();
-    assert_eq!(
-        verified.iter().map(|record| (record.2, record.3)).collect::<Vec<_>>(),
-        decoded.iter().map(|record| (record.2, record.3)).collect::<Vec<_>>()
-    );
-    assert_eq!(verified[0].0.replace('\\', "/"), "docs/chosen");
+    #[cfg(target_os = "windows")]
+    {
+        let verified = verified(archive.as_file_mut()).unwrap();
+        assert_eq!(
+            verified.iter().map(|record| (record.2, record.3)).collect::<Vec<_>>(),
+            decoded.iter().map(|record| (record.2, record.3)).collect::<Vec<_>>()
+        );
+        assert_eq!(verified[0].0.replace('\\', "/"), "docs/chosen");
+    }
 }
 
+#[cfg(target_os = "windows")]
 #[test]
 fn pax_sparse_records_are_refused_by_the_verifier_too() {
     let mut bytes = Vec::new();
@@ -233,7 +242,10 @@ fn a_long_name_replaces_a_header_name_cut_inside_a_character() {
     padded(&mut bytes, b"safe");
     let mut archive = file(bytes);
     assert_eq!(decoded(archive.as_file_mut()).unwrap()[0].0, name);
-    let verified = verified(archive.as_file_mut()).unwrap();
-    assert_eq!(verified[0].0, name);
-    assert_eq!(verified[0].3, blake3::hash(b"safe"));
+    #[cfg(target_os = "windows")]
+    {
+        let verified = verified(archive.as_file_mut()).unwrap();
+        assert_eq!(verified[0].0, name);
+        assert_eq!(verified[0].3, blake3::hash(b"safe"));
+    }
 }
