@@ -55,7 +55,7 @@ fn get_sidebar_nodes_blocking(path: String) -> Result<Vec<SidebarNode>, CommandE
     }
 
     // Sort by name case-insensitive
-    nodes.sort_by_key(|node| node.name.to_lowercase());
+    nodes.sort_by_cached_key(|node| node.name.to_lowercase());
 
     Ok(nodes)
 }
@@ -138,7 +138,7 @@ fn get_subtree_nodes_blocking(
             });
         }
 
-        nodes.sort_by_key(|node| node.name.to_lowercase());
+        nodes.sort_by_cached_key(|node| node.name.to_lowercase());
 
         // Push subdirs to stack before moving nodes into result
         for node in &nodes {

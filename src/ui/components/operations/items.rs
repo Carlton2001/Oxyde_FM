@@ -25,6 +25,8 @@ pub(super) struct Item {
     path: PathBuf,
     name: String,
     parent: String,
+    /// `parent` in lowercase, which the location column sorts by.
+    parent_key: String,
     search: String,
     /// The item on disk when it was listed; None once gone.
     entry: Option<FileEntry>,
@@ -41,6 +43,10 @@ impl Item {
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_else(|| full.to_string());
+        let parent = path
+            .parent()
+            .map(|parent| parent.to_string_lossy().into_owned())
+            .unwrap_or_default();
         Self {
             icon: icons::icon(entry.as_ref(), path),
             extension: Path::new(&name)
@@ -48,10 +54,8 @@ impl Item {
                 .map(|extension| extension.to_string_lossy().to_lowercase())
                 .unwrap_or_default(),
             path: path.to_path_buf(),
-            parent: path
-                .parent()
-                .map(|parent| parent.to_string_lossy().into_owned())
-                .unwrap_or_default(),
+            parent_key: parent.to_lowercase(),
+            parent,
             search: if shared_folder { name.to_lowercase() } else { full.to_lowercase() },
             name,
             entry,
@@ -96,7 +100,7 @@ pub(super) fn arrange(
         let (a, b) = (&rows[left], &rows[right]);
         let order = match column {
             Column::Name => Ordering::Equal,
-            Column::Location => oxyde_lib::utils::compare_natural(&a.parent.to_lowercase(), &b.parent.to_lowercase()),
+            Column::Location => oxyde_lib::utils::compare_natural(&a.parent_key, &b.parent_key),
             // Folders before files, as the type column of the file list.
             Column::Type => b.is_dir().cmp(&a.is_dir()).then_with(|| a.extension.cmp(&b.extension)),
             Column::Size => a.size().cmp(&b.size()),
