@@ -21,6 +21,7 @@ struct Sample {
     parent_commit: u64,
     parent_handles: u32,
     available_physical: u64,
+    total_physical: u64,
     available_commit: u64,
 }
 impl Sample {
@@ -46,13 +47,19 @@ impl Sample {
             parent_commit: counters.PrivateUsage as u64,
             parent_handles: handles,
             available_physical: memory.ullAvailPhys,
+            total_physical: memory.ullTotalPhys,
             available_commit: memory.ullAvailPageFile,
         })
+    }
+    /// 512 MiB on a roomy machine, less on a small one: a fixed floor would refuse
+    /// every preview of a 4 GB machine with a browser open.
+    fn minimum_physical(&self) -> u64 {
+        (self.total_physical / 16).clamp(128 * 1024 * 1024, MIN_AVAILABLE)
     }
     fn admitted(self) -> bool {
         self.parent_commit < PARENT_COMMIT
             && self.parent_handles < PARENT_HANDLES
-            && self.available_physical >= MIN_AVAILABLE
+            && self.available_physical >= self.minimum_physical()
             && self.available_commit >= MIN_AVAILABLE
     }
 }
