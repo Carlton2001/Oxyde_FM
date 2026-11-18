@@ -187,7 +187,10 @@ pub fn get_network_resources(path: Option<String>) -> Result<Vec<NetResource>, S
                                     if let Some(stripped) = remote_path.strip_prefix("\\\\") {
                                         // Extract server name from \\SERVER\SHARE or \\SERVER
                                         let parts: Vec<&str> = stripped.split('\\').collect();
-                                        if let Some(server_name) = parts.first() {
+                                        // A WebDAV mapping (`\\host@SSL\DavWWWRoot`) is no SMB server to browse.
+                                        let webdav = parts.first().is_some_and(|server| server.contains('@'))
+                                            || parts.get(1).is_some_and(|share| share.eq_ignore_ascii_case("DavWWWRoot"));
+                                        if let Some(server_name) = parts.first().filter(|_| !webdav) {
                                             let server_path = format!("\\\\{}", server_name);
 
                                             // Only add if not already discovered by Shell
