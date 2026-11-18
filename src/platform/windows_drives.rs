@@ -2,11 +2,20 @@ use super::VolumeError;
 use crate::models::DriveInfo;
 
 fn mounted_drive_label(volume_label: String, remote_path: Option<&str>) -> String {
-    if let Some(name) = remote_path
+    let mut parts = remote_path
         .and_then(|path| path.strip_prefix("\\\\"))
-        .and_then(|path| path.split('\\').filter(|part| !part.is_empty()).nth(1))
-    {
-        return name.to_string();
+        .map(|path| path.split('\\').filter(|part| !part.is_empty()))
+        .into_iter()
+        .flatten();
+    let host = parts.next();
+    if let Some(name) = parts.next() {
+        if !name.eq_ignore_ascii_case("DavWWWRoot") {
+            return name.to_string();
+        }
+        // WebDAV mappings all share `DavWWWRoot`: name them by their folder, or their host.
+        if let Some(name) = parts.last().or(host.map(|host| host.split('@').next().unwrap_or(host))) {
+            return name.to_string();
+        }
     }
     if volume_label.is_empty() { "Local Disk".to_string() } else { volume_label }
 }
@@ -23,6 +32,13 @@ mod label_tests {
         assert_eq!(mounted_drive_label("Data".into(), None), "Data");
         assert_eq!(mounted_drive_label("Data".into(), Some("\\\\SERVEUR")), "Data");
         assert_eq!(mounted_drive_label(String::new(), None), "Local Disk");
+    }
+
+    #[test]
+    fn webdav_drive_uses_its_folder_or_host_rather_than_davwwwroot() {
+        assert_eq!(mounted_drive_label(String::new(), Some("\\\\cloud.example@SSL\\DavWWWRoot\\remote.php\\files")), "files");
+        assert_eq!(mounted_drive_label(String::new(), Some("\\\\cloud.example@SSL@8443\\DavWWWRoot")), "cloud.example");
+        assert_eq!(mounted_drive_label(String::new(), Some("\\\\nas\\davwwwroot\\")), "nas");
     }
 }
 
@@ -339,6 +355,7 @@ mod eject_tests {
 
 pub fn list_drives(skip_hardware_info: bool) -> Vec<DriveInfo> {
     use windows::core::PCWSTR;
+    use windows::Win32::Foundation::ERROR_CONNECTION_UNAVAIL;
     use windows::Win32::NetworkManagement::WNet::WNetGetConnectionW;
     use windows::Win32::Storage::FileSystem::{
         CreateFileW, GetDiskFreeSpaceExW, GetDriveTypeW, GetLogicalDriveStringsW,
@@ -378,17 +395,46 @@ pub fn list_drives(skip_hardware_info: bool) -> Vec<DriveInfo> {
                     _ => "unknown".to_string(),
                 };
 
+                let mut media_type = None;
+                let mut physical_id = None;
+                let mut remote_path = None;
+                let mut offline = false;
+
+                if win_type == 4 {
+                    // Remote drive
+                    let mut buffer = [0u16; 1024];
+                    let mut size = buffer.len() as u32;
+                    let root_path_no_slash: Vec<u16> = drive_path[..2]
+                        .encode_utf16()
+                        .chain(std::iter::once(0))
+                        .collect();
+                    let status = WNetGetConnectionW(
+                        windows::core::PCWSTR(root_path_no_slash.as_ptr()),
+                        Some(windows::core::PWSTR(buffer.as_mut_ptr())),
+                        &mut size,
+                    );
+                    // A remembered mapping that is not connected still names its share.
+                    offline = status == ERROR_CONNECTION_UNAVAIL;
+                    if status.is_ok() || offline {
+                        let end = buffer.iter().position(|unit| *unit == 0).unwrap_or(buffer.len());
+                        remote_path = Some(String::from_utf16_lossy(&buffer[..end]));
+                    }
+                }
+
+                // A disconnected mapping would make Windows try to reconnect it first,
+                // and wait for the network timeout.
                 let mut volume_name = [0u16; 261];
                 let mut file_system_name = [0u16; 261];
-                let volume = GetVolumeInformationW(
-                    PCWSTR(root_path.as_ptr()),
-                    Some(&mut volume_name),
-                    None,
-                    None,
-                    None,
-                    Some(&mut file_system_name),
-                )
-                .is_ok();
+                let volume = !offline
+                    && GetVolumeInformationW(
+                        PCWSTR(root_path.as_ptr()),
+                        Some(&mut volume_name),
+                        None,
+                        None,
+                        None,
+                        Some(&mut file_system_name),
+                    )
+                    .is_ok();
                 let text = |buffer: &[u16]| {
                     String::from_utf16_lossy(buffer).trim_matches(char::from(0)).to_string()
                 };
@@ -402,39 +448,13 @@ pub fn list_drives(skip_hardware_info: bool) -> Vec<DriveInfo> {
                 let mut total_bytes = 0u64;
                 let mut total_free_bytes = 0u64;
 
-                let _ = GetDiskFreeSpaceExW(
-                    PCWSTR(root_path.as_ptr()),
-                    Some(&mut free_bytes_available),
-                    Some(&mut total_bytes),
-                    Some(&mut total_free_bytes),
-                );
-
-                let mut media_type = None;
-                let mut physical_id = None;
-                let mut remote_path = None;
-
-                if win_type == 4 {
-                    // Remote drive
-                    let mut buffer = [0u16; 1024];
-                    let mut size = buffer.len() as u32;
-                    let root_path_no_slash: Vec<u16> = drive_path[..2]
-                        .encode_utf16()
-                        .chain(std::iter::once(0))
-                        .collect();
-
-                    if WNetGetConnectionW(
-                        windows::core::PCWSTR(root_path_no_slash.as_ptr()),
-                        Some(windows::core::PWSTR(buffer.as_mut_ptr())),
-                        &mut size,
-                    )
-                    .is_ok()
-                    {
-                        remote_path = Some(
-                            String::from_utf16_lossy(&buffer[..(size as usize).saturating_sub(1).min(buffer.len())])
-                                .trim_matches(char::from(0))
-                                .to_string(),
-                        );
-                    }
+                if !offline {
+                    let _ = GetDiskFreeSpaceExW(
+                        PCWSTR(root_path.as_ptr()),
+                        Some(&mut free_bytes_available),
+                        Some(&mut total_bytes),
+                        Some(&mut total_free_bytes),
+                    );
                 }
 
                 if !skip_hardware_info && (win_type == 3 || win_type == 2 || win_type == 5) {
