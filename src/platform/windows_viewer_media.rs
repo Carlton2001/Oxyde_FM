@@ -32,6 +32,8 @@ use windows::{
 mod info;
 
 const DEADLINE: Duration = Duration::from_secs(15);
+/// A source not on this disk (OneDrive, a slow share) may take longer to give its metadata.
+const LOAD_DEADLINE: Duration = Duration::from_secs(60);
 
 pub(super) fn supervise(path: &Path, control: &ViewerMediaControl) -> io::Result<()> {
     supervise_in(&std::env::current_exe()?, path, control)
@@ -456,7 +458,7 @@ pub(super) fn run(path: &Path) -> io::Result<()> {
                 }
             }
             let value = status.load(Ordering::Acquire);
-            if value == MEDIA_FAILED || (value == 0 && started.elapsed() > DEADLINE) {
+            if value == MEDIA_FAILED || (value == 0 && started.elapsed() > LOAD_DEADLINE) {
                 output.write_all(&encode_media_report(MEDIA_FAILED, 0, 0, [0, 0]))?;
                 output.flush()?;
                 return Err(io::Error::other("System media playback failed"));
