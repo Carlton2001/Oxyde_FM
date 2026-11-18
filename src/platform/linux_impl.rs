@@ -528,12 +528,8 @@ impl Platform for LinuxPlatform {
     fn set_trash_retention(&self, retention: &super::TrashRetention) -> Result<(), String> {
         super::linux_trash::set_retention(retention)
     }
-    fn bulk_expand_excluded(&self, _path: &str, name: &str) -> bool {
-        // Preserve the previous shared exclusions; Windows drive rules stay native.
-        matches!(
-            name.to_ascii_lowercase().as_str(),
-            "$recycle.bin" | "system volume information"
-        )
+    fn bulk_expand_excluded(&self, path: &str, name: &str) -> bool {
+        super::linux_bulk_expand::excluded(path, name)
     }
 
     fn trash_original_path(&self, _id: &std::path::Path) -> Option<std::path::PathBuf> { None }
