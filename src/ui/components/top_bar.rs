@@ -1,6 +1,7 @@
 pub(crate) mod breadcrumb_fades;
 pub(crate) mod breadcrumb_glide;
 mod breadcrumb_menu;
+mod history_menu;
 use crate::ui::components::tooltip::NativeTooltipExt;
 use crate::ui::elements::bar_button;
 use crate::ui::scale::{logical};
@@ -188,6 +189,15 @@ pub fn render_top_bar(
                                 let h = handle.clone();
                                 move |_, _, cx| { h.update(cx, |v: &mut OxydeApp, cx| v.go_back(&p_id, cx)); }
                             });
+                        // A right click lists the locations to reach in one step.
+                        btn = btn.on_mouse_down(MouseButton::Right, {
+                            let (h, p_id) = (handle.clone(), pane_id.clone());
+                            move |event, _, cx| {
+                                cx.stop_propagation();
+                                let menu = h.clone();
+                                h.update(cx, |v: &mut OxydeApp, cx| history_menu::open(v, menu, &p_id, false, event.position, cx));
+                            }
+                        });
                     }
 
                     btn.child(bar_button::icon("icons/arrow-left.svg", bar_button::icon_color(can_go_back, false, theme)))
@@ -203,6 +213,15 @@ pub fn render_top_bar(
                                 let h = handle.clone();
                                 move |_, _, cx| { h.update(cx, |v: &mut OxydeApp, cx| v.go_forward(&p_id, cx)); }
                             });
+                        // A right click lists the locations to reach in one step.
+                        btn = btn.on_mouse_down(MouseButton::Right, {
+                            let (h, p_id) = (handle.clone(), pane_id.clone());
+                            move |event, _, cx| {
+                                cx.stop_propagation();
+                                let menu = h.clone();
+                                h.update(cx, |v: &mut OxydeApp, cx| history_menu::open(v, menu, &p_id, true, event.position, cx));
+                            }
+                        });
                     }
 
                     btn.child(bar_button::icon("icons/arrow-right.svg", bar_button::icon_color(can_go_forward, false, theme)))

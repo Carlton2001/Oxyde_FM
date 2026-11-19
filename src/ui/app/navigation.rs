@@ -346,6 +346,20 @@ impl OxydeApp {
         }
     }
 
+    /// Moves `steps` locations back or forward at once, keeping the skipped ones on the other side.
+    pub(crate) fn go_through_history(&mut self, pane_id: &str, forward: bool, steps: usize, cx: &mut Context<Self>) {
+        let Some(pane) = self.state.find_pane_mut(pane_id) else { return };
+        let tab = pane.active_tab_mut();
+        let (from, to) = if forward { (&mut tab.forward_stack, &mut tab.back_stack) } else { (&mut tab.back_stack, &mut tab.forward_stack) };
+        if steps == 0 || steps > from.len() { return; }
+        let mut target = tab.path.clone();
+        for _ in 0..steps {
+            to.push(target);
+            target = from.pop().expect("checked length");
+        }
+        self.load_path(pane_id, target, cx);
+    }
+
     pub fn add_tab(&mut self, pane_id: &str, path: String, activate: bool, cx: &mut Context<Self>) {
         if path == "viewer://" { self.open_viewer(cx); return; }
         if self.state.find_pane(pane_id).is_some_and(|pane| pane.active_tab().is_viewer()) {

@@ -60,3 +60,27 @@ fn the_history_keeps_the_most_recent_tabs() {
     while state.reopen_closed_tab().is_some() { count += 1; }
     assert_eq!(count, CLOSED_TAB_HISTORY);
 }
+
+#[test]
+fn closed_tabs_survive_a_saved_workspace() {
+    let mut state = WorkspaceState::new();
+    let pane_id = state.active_pane_id.clone();
+    state.find_pane_mut(&pane_id).unwrap().active_tab_mut().path = "/a".into();
+    state.add_tab(&pane_id, "/b".into(), true);
+    state.find_pane_mut(&pane_id).unwrap().tabs[1].back_stack = vec!["/old".into()];
+    state.close_tab_id(&pane_id, 1);
+    let json = serde_json::to_value(state.saved_snapshot(260.0)).unwrap();
+    let (mut restored, _) = WorkspaceState::from_saved_snapshot(serde_json::from_value(json).unwrap()).unwrap();
+    assert_eq!(restored.reopen_closed_tab(), Some((pane_id.clone(), 1)));
+    assert_eq!(paths(&restored, &pane_id), ["/a", "/b"]);
+    assert_eq!(restored.find_pane(&pane_id).unwrap().active_tab().back_stack, ["/old"]);
+}
+
+#[test]
+fn a_workspace_saved_without_closed_tabs_still_loads() {
+    let state = WorkspaceState::new();
+    let mut json = serde_json::to_value(state.saved_snapshot(260.0)).unwrap();
+    json.as_object_mut().unwrap().remove("closed_tabs");
+    let (restored, _) = WorkspaceState::from_saved_snapshot(serde_json::from_value(json).unwrap()).unwrap();
+    assert!(restored.closed_tabs.is_empty());
+}

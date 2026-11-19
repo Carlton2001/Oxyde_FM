@@ -7,24 +7,38 @@ use std::collections::VecDeque;
 pub(crate) const CLOSED_TAB_HISTORY: usize = 25;
 
 /// What a closed tab needs to come back where it was.
-#[derive(Clone)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub(crate) struct ClosedTab {
     pane_id: String,
     index: usize,
     path: String,
+    #[serde(default)]
     view_mode: super::ViewMode,
+    #[serde(default)]
     group_mode: crate::ui::date_groups::GroupMode,
+    #[serde(default)]
     sort_column: super::SortColumn,
+    #[serde(default)]
     sort_direction: super::SortDirection,
+    #[serde(default)]
     back_stack: Vec<String>,
+    #[serde(default)]
     forward_stack: Vec<String>,
 }
 
-#[derive(Clone, Default)]
+/// Saved with the workspace, so the list outlives the session like the tabs' history.
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
 pub(crate) struct ClosedTabs(VecDeque<ClosedTab>);
 
 impl ClosedTabs {
     pub(crate) fn is_empty(&self) -> bool { self.0.is_empty() }
+
+    /// A list read back from disk, kept within the usual length.
+    pub(super) fn restored(mut self) -> Self {
+        self.0.truncate(CLOSED_TAB_HISTORY);
+        self
+    }
 }
 
 impl WorkspaceState {

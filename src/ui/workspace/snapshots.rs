@@ -112,6 +112,7 @@ impl WorkspaceState {
     pub fn saved_snapshot(&self, sidebar_width: f32) -> SavedWorkspace {
         SavedWorkspace {
             sidebar_collapsed: false,
+            closed_tabs: self.closed_tabs.clone(),
             layout: SavedLayoutNode::from_layout(&self.layout),
             active_pane_id: self.active_pane_id.clone(),
             sidebar_width: if sidebar_width.is_finite() {
@@ -156,6 +157,7 @@ impl WorkspaceState {
         let active = state.active_pane_id.clone();
         state.keep_explorer_active(&active);
         state.next_tab_id = next_tab_id;
+        state.closed_tabs = snapshot.closed_tabs.restored();
         state.refresh_sidebar();
 
         let sidebar_width = if snapshot.sidebar_width.is_finite() {

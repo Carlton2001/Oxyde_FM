@@ -32,6 +32,8 @@ pub struct SavedWorkspace {
     pub sidebar_width: f32,
     #[serde(default)]
     pub sidebar_collapsed: bool,
+    #[serde(default)]
+    pub(crate) closed_tabs: closed_tabs::ClosedTabs,
 }
 
 fn default_sidebar_width() -> f32 {
