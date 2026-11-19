@@ -137,17 +137,18 @@ struct Source {
 }
 
 impl StreamedSource for Source {
-    fn extract(mut self: Box<Self>) -> std::result::Result<(Vec<String>, DropStaging), String> {
-        let listing = self.listing.take().expect("streamed listing");
-        let cookie = self.cookie;
-        let asynchronous = self.asynchronous;
-        // The worker owns its apartment, whatever the caller's thread uses.
+    fn extract(self: Box<Self>) -> std::result::Result<(Vec<String>, DropStaging), String> {
+        // The worker owns its apartment, whatever the caller's thread uses. If
+        // it cannot start, dropping the source tells it nothing was copied.
         std::thread::Builder::new()
             .name("streamed-drop".into())
             .spawn(move || in_apartment(|| {
-                let object = object(cookie)?;
-                let result = write_all(&object, &listing);
-                finish(&object, cookie, asynchronous, result.is_ok());
+                let mut source = self;
+                let listing = source.listing.take().expect("streamed listing");
+                let (cookie, asynchronous) = (source.cookie, source.asynchronous);
+                let object = object(cookie);
+                let result = object.as_ref().map_err(Clone::clone).and_then(|object| write_all(object, &listing));
+                finish(object.as_ref().ok(), cookie, asynchronous, result.is_ok());
                 result.map(|staging| (listing.top, staging))
             }))
             .map_err(|error| error.to_string())?
@@ -165,8 +166,7 @@ impl Drop for Source {
         let (cookie, asynchronous) = (self.cookie, self.asynchronous);
         let _ = std::thread::Builder::new().name("streamed-drop".into()).spawn(move || {
             let _ = in_apartment(|| {
-                let object = object(cookie)?;
-                finish(&object, cookie, asynchronous, false);
+                finish(object(cookie).ok().as_ref(), cookie, asynchronous, false);
                 Ok(())
             });
         });
@@ -189,9 +189,11 @@ fn object(cookie: u32) -> std::result::Result<IDataObject, String> {
     Ok(unsafe { IDataObject::from_raw(raw) })
 }
 
-fn finish(object: &IDataObject, cookie: u32, asynchronous: bool, copied: bool) {
+/// Ends the asynchronous operation when the source can still be reached, and
+/// always releases the table's reference.
+fn finish(object: Option<&IDataObject>, cookie: u32, asynchronous: bool, copied: bool) {
     if asynchronous {
-        if let Ok(capability) = object.cast::<IDataObjectAsyncCapability>() {
+        if let Some(capability) = object.and_then(|object| object.cast::<IDataObjectAsyncCapability>().ok()) {
             let (result, effect) = if copied { (S_OK, DROPEFFECT_COPY) } else { (E_ABORT, DROPEFFECT_NONE) };
             let _ = unsafe { capability.EndOperation(result, None, effect.0) };
         }
