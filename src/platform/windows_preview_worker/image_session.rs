@@ -26,6 +26,10 @@ static STOPPING: AtomicBool = AtomicBool::new(false);
 static SERVICE: OnceLock<Result<Service, String>> = OnceLock::new();
 static VIEWER_SERVICE: OnceLock<Result<Service, String>> = OnceLock::new();
 static AUDIO_SERVICE: OnceLock<Result<Service, String>> = OnceLock::new();
+/// Set by `release_viewer`: its message can find the queue full behind a request.
+static VIEWER_RELEASE: AtomicBool = AtomicBool::new(false);
+/// The other sessions are only released by their own recycling.
+static NO_RELEASE: AtomicBool = AtomicBool::new(false);
 pub(super) const AUDIO_KIND: u8 = 3;
 pub(super) const AUDIO_THUMBNAIL_KIND: u8 = 4;
 /// Request kind of a full-resolution Viewer image.
@@ -93,12 +97,12 @@ struct Service {
 }
 
 fn service(kind: u8) -> io::Result<&'static Service> {
-    let (cell, name) = if kind == AUDIO_KIND || kind == AUDIO_THUMBNAIL_KIND {
-        (&AUDIO_SERVICE, "audio-cover-session")
+    let (cell, name, release) = if kind == AUDIO_KIND || kind == AUDIO_THUMBNAIL_KIND {
+        (&AUDIO_SERVICE, "audio-cover-session", &NO_RELEASE)
     } else if kind == VIEWER_KIND {
-        (&VIEWER_SERVICE, "image-viewer-session")
+        (&VIEWER_SERVICE, "image-viewer-session", &VIEWER_RELEASE)
     } else {
-        (&SERVICE, "image-preview-session")
+        (&SERVICE, "image-preview-session", &NO_RELEASE)
     };
     let envelope = envelope(kind);
     cell.get_or_init(|| {
@@ -110,7 +114,7 @@ fn service(kind: u8) -> io::Result<&'static Service> {
         std::thread::Builder::new()
             .name(name.into())
             .spawn(move || {
-                serve_with(requests, &executable, envelope);
+                serve_with(requests, &executable, envelope, release);
                 let _ = done.send(());
             })
             .map_err(|error| error.to_string())?;
@@ -126,6 +130,9 @@ fn service(kind: u8) -> io::Result<&'static Service> {
 /// Ends the Viewer's session; the next image or warm-up starts a new one.
 pub(super) fn release_viewer() {
     if let Some(Ok(service)) = VIEWER_SERVICE.get() {
+        // The flag holds the request even when the message cannot be queued; the
+        // message only wakes an idle session sooner.
+        VIEWER_RELEASE.store(true, Ordering::Release);
         let _ = service.sender.try_send(Message::Release);
     }
 }
@@ -175,10 +182,15 @@ fn checkpoint() -> io::Result<()> {
 
 #[cfg(test)]
 fn serve(requests: mpsc::Receiver<Message>, executable: &Path) {
-    serve_with(requests, executable, PREVIEW)
+    serve_with(requests, executable, PREVIEW, &NO_RELEASE)
 }
 
-fn serve_with(requests: mpsc::Receiver<Message>, executable: &Path, envelope: Envelope) {
+fn serve_with(
+    requests: mpsc::Receiver<Message>,
+    executable: &Path,
+    envelope: Envelope,
+    release: &AtomicBool,
+) {
     let mut session: Option<Session> = None;
     loop {
         if STOPPING.load(Ordering::Acquire) {
@@ -231,6 +243,9 @@ fn serve_with(requests: mpsc::Receiver<Message>, executable: &Path, envelope: En
                     session = None;
                 }
             }
+        }
+        if release.swap(false, Ordering::AcqRel) {
+            session = None;
         }
     }
     // Worker::drop kills/reaps the child before deleting its private runtime.
