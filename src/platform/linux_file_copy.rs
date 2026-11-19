@@ -11,7 +11,56 @@ use std::{
 /// One kernel copy request: short enough to keep pause and cancel responsive.
 const KERNEL_CHUNK: usize = 16 * 1024 * 1024;
 const BUFFER: usize = 1024 * 1024;
+/// Written bytes after which the previous window must reach the device.
+const WRITEBACK_WINDOW: u64 = 16 * 1024 * 1024;
 const SET_ID: u32 = 0o6000;
+
+/// Keeps at most two windows of dirty pages, so progress follows the device
+/// instead of the page cache and the final flush stays short (slow USB keys).
+struct Writeback {
+    enabled: bool,
+    started: u64,
+    waited: u64,
+}
+
+impl Writeback {
+    /// Only for destinations that are not solid-state (USB keys, hard disks, shares):
+    /// waiting on a fast SSD would cost more than it shows.
+    fn new(destination_parent: &File) -> Self {
+        use std::os::fd::AsRawFd;
+        let enabled = std::fs::read_link(format!("/proc/self/fd/{}", destination_parent.as_raw_fd()))
+            .is_ok_and(|folder| !super::platform().volumes().is_ssd(&folder));
+        Self {
+            enabled,
+            started: 0,
+            waited: 0,
+        }
+    }
+
+    fn advance(&mut self, output: &File, copied: u64) {
+        use std::os::fd::AsRawFd;
+        if !self.enabled || copied < self.started + WRITEBACK_WINDOW {
+            return;
+        }
+        let range = |from: u64, to: u64, flags: u32| {
+            // Best effort: a file system without support is flushed by `sync_all` anyway.
+            // SAFETY: plain system call on a descriptor this function borrows.
+            unsafe {
+                libc::sync_file_range(output.as_raw_fd(), from as i64, (to - from) as i64, flags)
+            };
+        };
+        range(
+            self.waited,
+            self.started,
+            libc::SYNC_FILE_RANGE_WAIT_BEFORE
+                | libc::SYNC_FILE_RANGE_WRITE
+                | libc::SYNC_FILE_RANGE_WAIT_AFTER,
+        );
+        range(self.started, copied, libc::SYNC_FILE_RANGE_WRITE);
+        self.waited = self.started;
+        self.started = copied;
+    }
+}
 
 pub(super) fn copy(
     source: &Path,
@@ -36,8 +85,9 @@ pub(super) fn copy(
     let output = super::linux_held::create_file(destination_parent, destination)?;
     created(&output)?;
     // Explicit offsets: a held descriptor may already have been read to its end.
-    let mut copied = kernel_copy(input, &output, progress)?;
-    copy_remaining(input, &output, &mut copied, progress)?;
+    let mut writeback = Writeback::new(destination_parent);
+    let mut copied = kernel_copy(input, &output, &mut writeback, progress)?;
+    copy_remaining(input, &output, &mut copied, &mut writeback, progress)?;
     {
         let _timer = crate::systems::copy_diagnostics::Timer::start(crate::systems::copy_diagnostics::Phase::Flush);
         output.sync_all()?;
@@ -53,14 +103,22 @@ pub(super) fn copy(
 
 /// Lets the kernel share blocks (Btrfs, XFS) or copy without user-space buffers.
 /// Returns the bytes copied before the end or a file system that refuses.
-fn kernel_copy(input: &File, output: &File, progress: &mut dyn FnMut(u64) -> io::Result<()>) -> io::Result<u64> {
+fn kernel_copy(
+    input: &File,
+    output: &File,
+    writeback: &mut Writeback,
+    progress: &mut dyn FnMut(u64) -> io::Result<()>,
+) -> io::Result<u64> {
     let mut copied = 0;
     loop {
         progress(copied)?;
         let (mut from, mut to) = (copied, copied);
         match rustix::fs::copy_file_range(input, Some(&mut from), output, Some(&mut to), KERNEL_CHUNK) {
             Ok(0) => return Ok(copied),
-            Ok(count) => copied += count as u64,
+            Ok(count) => {
+                copied += count as u64;
+                writeback.advance(output, copied);
+            }
             // Other volumes, FUSE mounts such as ntfs-3g, FAT and older kernels.
             Err(Errno::XDEV | Errno::NOSYS | Errno::OPNOTSUPP | Errno::INVAL) => return Ok(copied),
             Err(error) => return Err(error.into()),
@@ -73,6 +131,7 @@ fn copy_remaining(
     input: &File,
     output: &File,
     copied: &mut u64,
+    writeback: &mut Writeback,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
 ) -> io::Result<()> {
     let mut buffer = vec![0_u8; BUFFER];
@@ -88,6 +147,7 @@ fn copy_remaining(
         }
         output.write_all_at(&buffer[..count], *copied)?;
         *copied += count as u64;
+        writeback.advance(output, *copied);
     }
 }
 
