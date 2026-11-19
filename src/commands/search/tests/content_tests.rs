@@ -40,8 +40,8 @@
             true,
             &AtomicBool::new(false)
         ));
-        assert!(!text_reader_contains_content(
-            Cursor::new(b"invalid\xff\nneedle\n"),
+        assert!(text_reader_contains_content(
+            Cursor::new(b"caf\xe9\nneedle\n"),
             &ContentPattern::new("needle", true).unwrap(),
             false,
             &AtomicBool::new(false)

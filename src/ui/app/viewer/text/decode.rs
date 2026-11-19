@@ -1,11 +1,7 @@
 //! Text files in the encodings Windows tools write: UTF-8 with or without a byte order mark,
 //! UTF-16 with one, and legacy single-byte text, read as Windows-1252.
 
-/// The characters of Windows-1252 bytes 0x80 to 0x9F; the five it leaves undefined stay controls.
-const CP1252_HIGH: [char; 32] = [
-    '€', '\u{81}', '‚', 'ƒ', '„', '…', '†', '‡', 'ˆ', '‰', 'Š', '‹', 'Œ', '\u{8D}', 'Ž', '\u{8F}',
-    '\u{90}', '‘', '’', '“', '”', '•', '–', '—', '˜', '™', 'š', '›', 'œ', '\u{9D}', 'ž', 'Ÿ',
-];
+use ::oxyde_lib::utils::legacy_text::cp1252;
 
 /// The text of `bytes`. Valid UTF-8 keeps its buffer; a byte order mark is dropped.
 pub(in super::super) fn decode(mut bytes: Vec<u8>) -> String {
@@ -37,13 +33,6 @@ pub(in super::super) fn decode(mut bytes: Vec<u8>) -> String {
 fn utf16(bytes: &[u8], unit: fn([u8; 2]) -> u16) -> String {
     let units = bytes.chunks_exact(2).map(|pair| unit([pair[0], pair[1]]));
     char::decode_utf16(units).map(|decoded| decoded.unwrap_or(char::REPLACEMENT_CHARACTER)).collect()
-}
-
-fn cp1252(byte: u8) -> char {
-    match byte {
-        0x80..=0x9F => CP1252_HIGH[usize::from(byte - 0x80)],
-        _ => char::from(byte),
-    }
 }
 
 #[cfg(test)]
