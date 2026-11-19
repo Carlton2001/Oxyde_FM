@@ -60,8 +60,13 @@ fn list_trash_from_shell(started: std::time::Instant) -> Result<Vec<TrashEntry>,
             let deleted_time = (item.time_deleted.max(0) as u64).saturating_mul(1000);
 
             // Reuse one snapshot for type, size and modification time.
-            let metadata = std::fs::metadata(&trash_path).ok();
-            let is_dir = metadata.as_ref().is_some_and(|metadata| metadata.is_dir());
+            // The item itself, not its target: a recycled junction to an offline share
+            // would hold the listing until the network times out.
+            let metadata = std::fs::symlink_metadata(&trash_path).ok();
+            let is_dir = metadata.as_ref().is_some_and(|metadata| {
+                use std::os::windows::fs::MetadataExt;
+                metadata.file_attributes() & 0x10 != 0 // FILE_ATTRIBUTE_DIRECTORY
+            });
             let size = if is_dir {
                 0
             } else {

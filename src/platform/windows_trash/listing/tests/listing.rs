@@ -78,3 +78,26 @@ fn purged_item_is_skipped_instead_of_failing_the_listing() {
     let payload = root.path().join("$Rpurged.txt");
     assert!(super::read_entry(payload).unwrap().is_none());
 }
+
+#[test]
+fn recycled_junction_is_a_folder_read_without_its_target() {
+    let root = tempfile::tempdir().unwrap();
+    let payload = root.path().join("$Rjunction");
+    let target = root.path().join("gone");
+    std::fs::create_dir(&target).unwrap();
+    crate::platform::windows_reparse_tests::junction(&payload, &target);
+    std::fs::remove_dir(&target).unwrap();
+    let original = r"C:\Data\link";
+    let wide: Vec<u16> = original.encode_utf16().chain(Some(0)).collect();
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&2u64.to_le_bytes());
+    bytes.extend_from_slice(&0u64.to_le_bytes());
+    bytes.extend_from_slice(&116_444_736_000_000_000u64.to_le_bytes());
+    bytes.extend_from_slice(&(wide.len() as u32).to_le_bytes());
+    for unit in wide { bytes.extend_from_slice(&unit.to_le_bytes()); }
+    std::fs::write(root.path().join("$Ijunction"), bytes).unwrap();
+    let entry = super::read_entry(payload.clone()).unwrap().unwrap();
+    std::fs::remove_dir(&payload).unwrap();
+    assert!(entry.is_dir, "Junction with a missing target lost its folder type");
+    assert_eq!(entry.size, 0);
+}

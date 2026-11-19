@@ -77,8 +77,8 @@ fn read_entry(path: PathBuf) -> Result<Option<TrashEntry>, String> {
     let bytes = super::metadata_bytes(&mut file).map_err(|error| error.to_string())?;
     let original = super::parse_original_path(&bytes).ok_or("Invalid recycle bin metadata")?;
     let deleted_time = deletion_time(&bytes).ok_or("Invalid recycle bin deletion time")?;
-    let metadata = std::fs::metadata(&path).ok();
-    let is_dir = metadata.as_ref().is_some_and(|metadata| metadata.is_dir());
+    let metadata = std::fs::symlink_metadata(&path).ok();
+    let is_dir = metadata.as_ref().is_some_and(is_directory);
     let size = if is_dir { 0 } else { metadata.as_ref().map_or(0, |metadata| metadata.len()) };
     let modified = metadata.as_ref().and_then(|metadata| metadata.modified().ok())
         .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
@@ -89,6 +89,15 @@ fn read_entry(path: PathBuf) -> Result<Option<TrashEntry>, String> {
         original_path: original.to_string_lossy().into_owned(),
         is_dir, size, deleted_time, modified,
     }))
+}
+
+/// Read from the item itself, not its target: a recycled junction to an offline share
+/// would otherwise hold the listing until the network times out. A junction or
+/// directory link still shows as a folder.
+fn is_directory(metadata: &std::fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
+    metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY != 0
 }
 
 fn deletion_time(bytes: &[u8]) -> Option<u64> {
