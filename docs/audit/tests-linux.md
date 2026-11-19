@@ -6,7 +6,9 @@ Liste tenue pendant la remédiation, à exécuter à la fin de l'audit. Chaque l
 
 - [x] `scripts/check-linux.sh` : compilation et tests Linux (le code Linux du lot 1 n'a pas été compilé sous Windows). Fait le 2026-11-18 sous Fedora 45 WSL, Rust 1.100.0 : aucun avertissement ; `cargo test` : 1 échec intermittent préexistant (`pressure_evicts_unmodified_closed_entries_before_expiry`, environ 1 lancement sur 15), le reste passe ; `linux_permissions` sous `unshare` : 15 tests passés.
 
-## Environnement WSL
+## Environnement WSL (historique)
+
+Les tests prévus sous WSL datent du développement sous Windows. Ils se font désormais en natif sur la machine Fedora ; seules les lignes datées « WSL » ci-dessous ont été faites là.
 
 Distribution `FedoraLinux-45`, utilisateur `biluf`, clone dans `~/oxyde` (ext4, pas `/mnt/c` : `mkfifo` et les liens n'y ont pas le comportement Linux). Mettre à jour avec `git pull origin audit-fixes` depuis le dépôt Windows. Lancer l'interface sous WSLg (Wayland, rendu llvmpipe) sur un profil isolé :
 
@@ -29,7 +31,6 @@ Restent sur une vraie machine : propriétés de corbeille GNOME/KDE, répétitio
 
 - [x] Plusieurs conflits en mode simple, double-clic sur Remplacer : seul le premier conflit est remplacé, le suivant reste affiché.
 - [x] Wayland : Entrée maintenue sur Remplacer ne répond qu'au premier conflit.
-- [x] X11 : même test. Limite connue : X11 ne signale pas la répétition de touche dans GPUI, Entrée maintenue peut encore enchaîner les conflits. Noter le résultat.
 
 ### M1 : sélection masquée par un filtre (`d4743871`)
 
@@ -74,7 +75,6 @@ Restent sur une vraie machine : propriétés de corbeille GNOME/KDE, répétitio
 
 - [x] `check-linux.sh` et tests `ui::components::input` sous WSL le 2026-11-18 (code commun, sans partie propre à Linux).
 - [ ] IBus (GNOME, Wayland) avec Anthy ou Mozc : taper `kana` dans le renommage, la barre d'adresse et le filtre : préédition soulignée qui se remplace, puis `かな` (ou sa conversion) inséré une seule fois.
-- [ ] Fcitx 5 sous X11 (KDE ou Xfce) avec Pinyin : `nihao` puis Espace : `你好` une seule fois.
 - [ ] Échap pendant une préédition : la préédition disparaît, le texte d'avant reste, le renommage n'est pas annulé.
 - [ ] Cliquer hors du champ de renommage pendant une préédition : le nom validé contient le texte souligné tel qu'affiché.
 - Limite connue : passer d'un champ à un autre de la même fenêtre pendant une préédition laisse la préédition dans le premier comme texte saisi, et le système continue la composition dans le second.
@@ -95,7 +95,7 @@ Restent sur une vraie machine : propriétés de corbeille GNOME/KDE, répétitio
 
 - [ ] M83 : ouvrir une grosse archive lente (7z solide de plusieurs Go sur une clé USB), puis aller tout de suite dans un autre dossier du même onglet et ouvrir une autre archive : la seconde s'affiche sans attendre la fin de la première (le worker de la première est arrêté). `linux_archive_list::list` prend maintenant un point d'annulation. PARTIEL : listings rapides seulement.
 - [ ] WF6 (code commun) : `MountedDiskImage` a un champ `aliases`, vide sous Linux ; une image montée par udisks reste reconnue (menu Démonter proposé).
-- [ ] Compiler `cargo check --tests` et lancer `cargo test linux_archive_list` sous WSL.
+- [x] Compiler `cargo check --tests` et lancer `cargo test linux_archive_list` sous WSL. Fait en natif sur cette machine (Fedora 45) le 2026-11-19 : `check-linux.sh --offline` propre, `cargo test` 829 + 632 tests verts (un échec isolé sur un des cinq lancements, non reproduit en trois relances, probablement l'intermittent connu), `linux_archive_list` 7 tests verts.
 
 ### Lot 7 : session Linux (Opus)
 
@@ -103,8 +103,7 @@ Fait sous WSL Fedora 45 le 2026-11-18 : `cargo test --no-fail-fast` (798 + 619 t
 
 - [x] E6 (`374c5078`) : le journal indique « open file limit raised from 1024 to … » ; copier un dossier de plus de 1 000 sous-dossiers réussit ; un programme ouvert depuis Oxyde (`ulimit -n` dans un terminal ouvert par Oxyde) voit 1024. `Partiel (nid mutter, 2026-11-19) : avec `ulimit -Sn 1024`, journal « open file limit raised from 1024 to 1048576 » et `/proc/<pid>/limits` à 1048576 ; copie de 1 500 sous-dossiers réussie dans ces conditions ; limite vue par un programme lancé non vérifiée.` Vérifié : un processus enfant voit la limite souple à 1024.
 - [x] E7 et LM4 (`de492644`, `dec384fb`), session Wayland GNOME : copier des fichiers dans Oxyde, coller dans Nautilus ; couper puis coller : déplacés. Même chose vers Dolphin (KDE, `text/uri-list` et coupe KDE) et un sélecteur GTK 4. Coller dans un éditeur de texte : les chemins. Copier dans Nautilus, coller dans Oxyde. Un élément de la corbeille copié ne s'offre qu'en texte. Vérifié avec wl-paste/wl-copy : export uri-list + gnome-copied-files + texte, sans processus wl-copy ; import copy et cut de type Nautilus OK. Pas de session GNOME réelle.
-- [ ] E7 et E9, session X11 : copier puis coller entre deux onglets d'Oxyde ; coller dans un éditeur : les chemins en texte ; aucun processus `wl-copy` ; dans la boîte de conflit, maintenir Entrée sur Ignorer : un seul conflit traité (X11 ne signale pas la répétition).
-- [ ] E10 : voir lot 5 (IBus sous GNOME Wayland, Fcitx 5 sous X11).
+- [ ] E10 : voir lot 5 (IBus sous GNOME Wayland ; Fcitx 5 sous X11 : voir la section X11).
 - [ ] M93 (`2f14fc1a`) : `sudo mount --bind ~/a ~/b/lien` puis supprimer définitivement `~/b` : refus sans toucher à `~/a` ; changer les permissions de `~/b` récursivement : `~/a` inchangé.
 - [x] M94 (`758ddbed`) : rendre `~/.config/gtk-3.0/servers` illisible (`chmod 000`) puis ajouter un serveur : le fichier n'est pas réécrit. Vérifié : fichier laissé intact (même inode, même mtime).
 - [x] M95 (`7303879a`) : monter une ISO réelle par Oxyde, supprimer le fichier ISO, démonter depuis la barre latérale : démontée. `Fait (nid mutter + clé exfat, 2026-11-19) : ISO montée par le menu, fichier ISO supprimé, Démonter depuis la barre latérale : démontée, périphérique loop libéré, entrée retirée.`
@@ -123,7 +122,7 @@ Paquets installés dans la VM WSL pour ces tests : `wl-clipboard`, `udisks2` (se
 
 ### Lot 10 : reportés du lot 8 (Opus)
 
-- [ ] Compiler `cargo check --tests` puis `cargo test` sous WSL (`git pull origin audit-fixes` une fois la branche poussée) ; lancer `check-linux.sh`.
+- [x] Compiler `cargo check --tests` puis `cargo test` sous WSL (`git pull origin audit-fixes` une fois la branche poussée) ; lancer `check-linux.sh`. Fait en natif sur cette machine (Fedora 45) le 2026-11-19 : `check-linux.sh --offline` propre, `cargo test` 829 + 632 tests verts (un échec isolé sur un des cinq lancements, non reproduit en trois relances, probablement l'intermittent connu), `linux_archive_list` 7 tests verts.
 - [x] F94 (`3f80b0d0`) : supprimer de la corbeille Linux un élément déjà purgé par un autre programme : message « sélection indisponible », pas d'erreur brute. `Non fait : la vue Corbeille du nid lit la vraie corbeille de l'utilisateur (listage périmé affiché) ; un Suppr dans cette vue a été bloqué par précaution. À faire à la main.` Vérifié : refus, rien de supprimé ; message désormais traduit (cinq langues, test ajouté).
 - [x] F106 (`dfa3e5bb`) : compresser un dossier qui contient `README` et `readme` : archive créée avec les deux. `Fait (nid mutter, 2026-11-19) : `proj.zip` contient `README` et `readme`.`
 - [ ] F134 (`d64b8acb`) : deux instances d'Oxyde (sélecteur de fichiers ouvert par le portail et fenêtre principale) : `oxyde.log` n'est pas tourné pendant que l'autre écrit.
@@ -132,7 +131,7 @@ Paquets installés dans la VM WSL pour ces tests : `wl-clipboard`, `udisks2` (se
 
 ### Reprise des reportés (2026-11-19)
 
-- [ ] Compiler et lancer `cargo test` sous WSL (code commun : recherche, annulation, aperçus, barre latérale).
+- [x] Compiler et lancer `cargo test` sous WSL (code commun : recherche, annulation, aperçus, barre latérale). Fait en natif sur cette machine (Fedora 45) le 2026-11-19 : `check-linux.sh --offline` propre, `cargo test` 829 + 632 tests verts (un échec isolé sur un des cinq lancements, non reproduit en trois relances, probablement l'intermittent connu), `linux_archive_list` 7 tests verts.
 - [x] M62 (`455c629b`) : rechercher un mot placé après une ligne en Latin-1 (`printf 'caf\xe9\nmot\n'`) : trouvé. `Fait (nid mutter, 2026-11-19) : trouvé. À noter : la boîte de recherche reste ouverte après « Rechercher », et un onglet de recherche sur le contenu seul s'intitule « Rechercher «  » dans … » (requête de nom vide).`
 - [x] M29 (`65b51b17`) : survoler un fichier texte sur un partage NFS/SMB coupé, puis d'autres fichiers après 20 s : leurs aperçus reviennent. `Fait (nid mutter, 2026-11-19) sur le partage SMB local (serveur impacket) figé par SIGSTOP : survol de f1 puis f2 pendant le gel, interface fluide, pas d'infobulle bloquée ; après 25 s et reprise (SIGCONT), l'aperçu de f3 (« contenu 3 ») revient. Un partage NFS n'a pas été essayé.`
 - [x] M63/M64 (`233c9d7e`) : « Tout développer » sur `/`, replier aussitôt : le dossier reste replié. `Fait (nid mutter + clé exfat, 2026-11-19).`
@@ -162,3 +161,11 @@ Paquets installés dans la VM WSL pour ces tests : `wl-clipboard`, `udisks2` (se
 - [ ] Dépôt sur une ISO montée ignoré sans retour, indicateur « Copy » affiché : le fantôme du glisser interne ne connaît pas la cible survolée (il faudrait un état central de cible de dépôt) ; non corrigé.
 - [ ] « Annuler : Supprimer » proposé sur un volume en lecture seule : l'historique est global ; non corrigé, à décider.
 - [ ] Infobulle « This preview could not be loaded » sur un membre d'archive (7z chiffré, ISO) : probablement aperçus d'archive non pris en charge ; non examiné.
+
+## Tests X11 (non prévus)
+
+Sortis de leurs lots : l'utilisateur ne compte pas les faire. Ils restent ouverts, sans échéance.
+
+- [x] E9 (`1cc5172d`), X11 : même test que sous Wayland (Entrée maintenue sur Remplacer). Limite connue : X11 ne signale pas la répétition de touche dans GPUI, Entrée maintenue peut encore enchaîner les conflits. Noter le résultat.
+- [ ] Fcitx 5 sous X11 (KDE ou Xfce) avec Pinyin : `nihao` puis Espace : `你好` une seule fois.
+- [ ] E7 et E9, session X11 : copier puis coller entre deux onglets d'Oxyde ; coller dans un éditeur : les chemins en texte ; aucun processus `wl-copy` ; dans la boîte de conflit, maintenir Entrée sur Ignorer : un seul conflit traité (X11 ne signale pas la répétition).

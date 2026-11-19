@@ -37,7 +37,7 @@ impl OxydeApp {
             | ("enter" | "f2" | "backspace" | "f5", false, false, false)
             | ("enter" | "up" | "v", false, true, false)
             | ("c" | "z" | "n" | "tab" | "pageup" | "pagedown" | "+" | "=" | "add" | ".", true, false, _)
-            | ("a" | "x" | "v" | "y" | "r" | "f" | "-" | "subtract" | "0", true, false, false)
+            | ("a" | "x" | "v" | "y" | "r" | "f" | "l" | "-" | "subtract" | "0", true, false, false)
             | ("a", true, false, true)
             | ("c", true, true, false)
             | ("s", false, true, true)
@@ -93,6 +93,7 @@ impl OxydeApp {
             // AZERTY layouts type the full stop with Shift.
             (".", true, false, _) => self.open_terminal_for_selection(cx),
             ("f", true, false, false) => self.open_quick_search(&pane_id, window, cx),
+            ("l", true, false, false) => self.begin_breadcrumb_edit(pane_id.clone(), window, cx),
             ("n", true, false, false) => self.add_panel_right(cx),
             ("n", true, false, true) => self.create_new_folder(&pane_id, cx),
             ("tab", true, false, previous) | ("pageup", true, false, previous) | ("pagedown", true, false, previous) => {
