@@ -73,8 +73,6 @@ pub(super) fn without_unavailable_shell_menu(items: Vec<dropdown::DropdownItem>,
     }
 }
 
-/// Only a real folder can be a terminal's working directory: not the trash, a search,
-/// the network neighbourhood, a remote URI nor the inside of an archive.
 /// Actions that write where the menu applies: hidden where nothing can be written.
 const WRITING_ACTIONS: &[Message] = &[
     Message::Cut, Message::Paste, Message::NewFolder, Message::NewFile, Message::Compress,
@@ -85,6 +83,8 @@ fn without_writing_actions(items: &mut Vec<dropdown::DropdownItem>, i18n: &I18n)
     items.retain(|item| !WRITING_ACTIONS.iter().any(|message| item.label == i18n.text(*message).as_ref()));
 }
 
+/// Only a real folder can be a terminal's working directory: not the trash, a search,
+/// the network neighbourhood, a remote URI nor the inside of an archive.
 pub(crate) fn is_terminal_folder(path: &str) -> bool {
     std::path::Path::new(path).is_absolute()
         && oxyde_lib::utils::archive::split_virtual_path(path).is_none()
