@@ -32,15 +32,21 @@ pub(super) fn source(path: &str, is_dir: bool, preserve_path: bool) -> String {
             "oxyde_dir_generic".into()
         };
     }
-    let name = path.rsplit('\\').next().unwrap_or(&path);
-    let extension = name
-        .rsplit_once('.')
-        .map(|(_, ext)| ext.to_ascii_lowercase());
-    match extension.as_deref() {
+    match extension(&path).as_deref() {
         Some(ext) if UNIQUE_EXTENSIONS.contains(&ext) => path,
         Some(ext) if !ext.is_empty() => format!("oxyde_ext_{ext}"),
         _ => "oxyde_file_generic".into(),
     }
+}
+
+fn extension(path: &str) -> Option<String> {
+    let name = path.rsplit('\\').next().unwrap_or(path);
+    name.rsplit_once('.').map(|(_, ext)| ext.to_ascii_lowercase())
+}
+
+/// A file whose icon is its own (an .exe, .lnk or .ico), not its type's.
+pub(super) fn has_own_icon(path: &str) -> bool {
+    extension(path).is_some_and(|ext| UNIQUE_EXTENSIONS.contains(&ext.as_str()))
 }
 
 fn special_directory(path: &str) -> bool {
