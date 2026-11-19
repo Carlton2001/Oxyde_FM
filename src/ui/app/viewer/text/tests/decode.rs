@@ -26,3 +26,11 @@ fn a_character_cut_at_the_end_is_not_another_encoding() {
     bytes.pop();
     assert_eq!(decode(bytes), "a\u{FFFD}");
 }
+
+#[test]
+fn utf8_with_one_damaged_byte_stays_utf8() {
+    let mut bytes = "é à ".as_bytes().to_vec();
+    bytes.push(0xFF);
+    bytes.extend_from_slice("ü".as_bytes());
+    assert_eq!(decode(bytes), "é à \u{FFFD}ü");
+}

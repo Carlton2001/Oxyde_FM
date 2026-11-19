@@ -12,6 +12,7 @@ impl OxydeApp {
             && self.pending_trash_delete.is_none()
             && self.file_operation_notice.is_none()
             && self.quit_confirmation.is_none()
+            && self.open_many.is_none()
     }
 
     pub(super) fn refresh_active_view(&mut self, window: &Window, cx: &mut Context<Self>) {

@@ -5,9 +5,6 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 
-/// Opening more at once launches that many applications; Explorer asks past 15.
-const MAX_OPENED_AT_ONCE: usize = 20;
-
 impl OxydeApp {
     pub fn on_action_ouvrir(&mut self, _: &Ouvrir, _: &mut Window, cx: &mut Context<Self>) {
         self.execute_ouvrir(cx);
@@ -97,8 +94,8 @@ impl OxydeApp {
             let paths: Vec<(String, bool)> = tab.files.iter()
                 .filter(|entry| tab.selected_paths.contains(&entry.path))
                 .map(|entry| (entry.path.clone(), entry.is_dir)).collect();
-            if paths.len() > MAX_OPENED_AT_ONCE {
-                self.toast(ToastKind::Error, Message::OpenTooManyItems, String::new(), 0, cx);
+            if paths.len() > super::open_many::CONFIRM_ABOVE {
+                self.ask_open_many(pane_id, paths, cx);
                 return;
             }
             for (path, is_dir) in paths {
@@ -250,6 +247,7 @@ impl OxydeApp {
             || self.pending_trash_delete.is_some()
             || self.file_operation_notice.is_some()
             || self.quit_confirmation.is_some()
+            || self.open_many.is_some()
         {
             return;
         }

@@ -1020,7 +1020,9 @@ quit-operations-stay = No salir
 quit-operations-confirm = Cancelar y salir
 quit-operations-cancelling = Cancelando las operaciones…
 update-waits-for-operations = Termine o cancele las operaciones en curso antes de instalar la actualización.
-open-too-many-items = Demasiados elementos para abrirlos a la vez: seleccione 20 como máximo.
+open-many-title = ¿Abrir estos elementos?
+open-many-prompt = ¿Abrir { $number } elementos a la vez? Cada uno inicia su aplicación.
+open-many-confirm = Abrir
 interrupted-output-removed = { $count ->
     [one] Se eliminó el archivo parcial de una operación interrumpida en { $detail }
    *[other] Se eliminaron { $number } archivos parciales de operaciones interrumpidas en { $detail }

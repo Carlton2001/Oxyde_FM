@@ -204,7 +204,7 @@ impl OxydeApp {
             focus: cx.focus_handle(),
             controls: (0..4).map(|_| cx.focus_handle()).collect(),
             reply: Some(reply),
-                connection: connection.clone(),
+            connection: connection.clone(),
         });
         cx.notify();
     }

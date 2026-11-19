@@ -723,7 +723,9 @@ quit-operations-stay = Don’t quit
 quit-operations-confirm = Cancel and quit
 quit-operations-cancelling = Cancelling operations…
 update-waits-for-operations = Finish or cancel the running operations before installing the update.
-open-too-many-items = Too many items to open at once: select 20 at most.
+open-many-title = Open these items?
+open-many-prompt = Open { $number } items at once? Each one starts its application.
+open-many-confirm = Open
 interrupted-output-removed = { $count ->
     [one] Removed the partial file of an interrupted operation in { $detail }
    *[other] Removed { $number } partial files of interrupted operations in { $detail }
