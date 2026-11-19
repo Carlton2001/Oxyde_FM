@@ -191,7 +191,7 @@ pub(super) fn supervise(
     let started = Instant::now();
     let mut paused_at = None;
     let mut paused_time = Duration::ZERO;
-    let mut deferred: Option<(Frame, Instant, bool)> = None;
+    let mut deferred: Option<(Frame, bool)> = None;
     let mut terminal_at = None;
     let mut priority = None;
     let result = (|| loop {
@@ -240,10 +240,10 @@ pub(super) fn supervise(
             }
         }
         if pending_output.is_none()
-            && deferred.as_ref().is_some_and(|(_, _, ack)| *ack)
+            && deferred.as_ref().is_some_and(|(_, ack)| *ack)
             && !control.paused
         {
-            let (frame, _, _) = deferred.take().unwrap();
+            let (frame, _) = deferred.take().unwrap();
             if let Some(at) = paused_at.take() {
                 paused_time += at.elapsed();
             }
@@ -274,16 +274,16 @@ pub(super) fn supervise(
             timing.frame(&frame);
             let mut packet = Vec::new();
             if frame.message == Message::Paused {
-                let Some((_, requested_at, acknowledged)) = &mut deferred else {
+                let Some((_, acknowledged)) = &mut deferred else {
                     return Err(invalid());
                 };
                 if *acknowledged {
                     return Err(invalid());
                 }
                 *acknowledged = true;
-                if requested_at.elapsed() <= Duration::from_secs(1) {
-                    paused_at = Some(Instant::now());
-                }
+                // From its confirmation the worker waits for Resume: however late the
+                // confirmation came, the pause no longer counts against the deadline.
+                paused_at = Some(Instant::now());
             } else {
                 if deferred.is_some() {
                     return Err(invalid());
@@ -299,7 +299,7 @@ pub(super) fn supervise(
                             turbo: control.turbo,
                         }),
                     )?;
-                    deferred = Some((frame, Instant::now(), false));
+                    deferred = Some((frame, false));
                 } else if frame.message == Message::Checkpoint {
                     wire.write(
                         &mut packet,
