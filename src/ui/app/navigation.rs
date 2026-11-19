@@ -630,7 +630,7 @@ impl OxydeApp {
                         if !super::file_preparation::prepare(&handle, &mut cx, &owner, update).await {
                             // Superseded or failed: a request left pending would keep later
                             // tab switches from listing this tab again.
-                            let _ = handle.update(&mut cx, |this, _| {
+                            handle.update(&mut cx, |this, _| {
                                 if this.pending_file_requests.get(&tab_id) == Some(&request_id) {
                                     this.pending_file_requests.remove(&tab_id);
                                 }

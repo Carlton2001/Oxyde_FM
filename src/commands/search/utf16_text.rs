@@ -77,12 +77,12 @@ impl<R: Read> Utf16Reader<R> {
             joined = [&[first][..], bytes].concat();
             bytes = &joined;
         }
-        let pairs = bytes.chunks_exact(2);
-        if let [last] = pairs.remainder() {
+        let (pairs, rest) = bytes.as_chunks::<2>();
+        if let [last] = rest {
             self.odd_byte = Some(*last);
         }
-        for pair in pairs {
-            let unit = if self.big_endian { u16::from_be_bytes([pair[0], pair[1]]) } else { u16::from_le_bytes([pair[0], pair[1]]) };
+        for &pair in pairs {
+            let unit = if self.big_endian { u16::from_be_bytes(pair) } else { u16::from_le_bytes(pair) };
             self.unit(unit);
         }
         Ok(true)

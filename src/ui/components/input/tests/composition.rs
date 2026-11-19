@@ -34,6 +34,7 @@ fn a_cancelled_composition_restores_the_text_and_an_empty_result_alone_changes_n
 }
 
 #[test]
+#[allow(clippy::reversed_empty_ranges, reason = "input methods may report a caret backwards")]
 fn the_caret_an_input_method_asks_for_counts_utf16_units_within_the_composition() {
     let mut content = "x".to_string();
     let mut marked = None;

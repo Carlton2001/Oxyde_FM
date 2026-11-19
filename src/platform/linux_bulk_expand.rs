@@ -21,6 +21,7 @@ pub(super) fn excluded(path: &str, name: &str) -> bool {
     SYSTEM_ROOTS.contains(&path) || skipped_type(Path::new(path))
 }
 
+#[allow(clippy::unnecessary_cast, reason = "`f_type` is narrower on 32-bit targets")]
 fn skipped_type(path: &Path) -> bool {
     rustix::fs::statfs(path).is_ok_and(|found| SKIPPED_TYPES.contains(&(found.f_type as i64)))
 }

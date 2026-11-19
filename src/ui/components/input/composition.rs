@@ -71,7 +71,7 @@ pub(super) fn compose(
     let range = target.or_else(|| marked.clone()).unwrap_or(selected);
     content.replace_range(range.clone(), text);
     let end = range.start + text.len();
-    *marked = (!text.is_empty()).then(|| range.start..end);
+    *marked = (!text.is_empty()).then_some(range.start..end);
     caret
         .map(|caret| {
             range.start + byte_for_utf16(text, caret.start.min(caret.end))

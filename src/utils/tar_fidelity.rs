@@ -146,7 +146,7 @@ fn sparse_map(
             return Ok(());
         }
         let (start, size) = (number(&entry[..12])?, number(&entry[12..24])?);
-        if (size != 0 && (stored - remaining) % 512 != 0) || start < current {
+        if (size != 0 && !(stored - remaining).is_multiple_of(512)) || start < current {
             return Err(failure());
         }
         current = start.checked_add(size).ok_or_else(failure)?;
