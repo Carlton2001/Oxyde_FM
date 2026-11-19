@@ -80,6 +80,9 @@ view-details = Details view
 view-grid = Grid view
 view-tiles = Tiles view
 grid-card-size = Item size
+grid-size-small = Small items
+grid-size-medium = Medium items
+grid-size-large = Large items
 selected-files = { $count ->
     [one] { $number } file selected ({ $size })
    *[other] { $number } files selected ({ $size })

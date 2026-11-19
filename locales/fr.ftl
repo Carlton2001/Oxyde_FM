@@ -86,6 +86,9 @@ view-details = Vue détaillée
 view-grid = Vue grille
 view-tiles = Vue mosaïque
 grid-card-size = Taille des éléments
+grid-size-small = Petits éléments
+grid-size-medium = Éléments moyens
+grid-size-large = Grands éléments
 selected-files = { $count ->
     [one] { $number } fichier sélectionné ({ $size })
    *[other] { $number } fichiers sélectionnés ({ $size })

@@ -119,6 +119,9 @@ view-details = Detailansicht
 view-grid = Rasteransicht
 view-tiles = Kachelansicht
 grid-card-size = Elementgröße
+grid-size-small = Kleine Elemente
+grid-size-medium = Mittlere Elemente
+grid-size-large = Große Elemente
 
 selected-files = { $count ->
     [one] { $number } Datei ausgewählt ({ $size })

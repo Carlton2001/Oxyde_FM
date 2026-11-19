@@ -239,10 +239,33 @@ fn view_mode_switch(
                 cell.fixed_tooltip(Tooltip::with_secondary_action(
                     cx.i18n().text(tooltip),
                     cx.i18n().text(Message::GridCardSize),
-                    cx.i18n().text(Message::MouseCtrlWheel),
+                    SharedString::from(format!("{} · {}", cx.i18n().text(Message::MouseCtrlWheel), cx.i18n().text(Message::MouseRightClick))),
                 ))
             } else {
                 cell.fixed_tooltip(Tooltip::text(cx.i18n().text(tooltip)))
+            })
+            .when(mode == ViewMode::Grid, |cell| {
+                let handle = handle.clone();
+                let pane_id = pane_id.clone();
+                let anchor_handle = handle.clone();
+                let key = format!("grid-size-{pane_id}");
+                let anchor_key = key.clone();
+                cell.relative()
+                    .on_mouse_down(MouseButton::Right, move |event, _, cx| {
+                        cx.stop_propagation();
+                        handle.update(cx, |view, cx| {
+                            if view.close_menu_owned_by(&key, cx) { return; }
+                            let anchor = view.context_anchor_points.get(&key).copied().unwrap_or(event.position);
+                            view.open_grid_size_menu(&pane_id, anchor, cx);
+                            view.mark_menu_owner(key.clone());
+                        });
+                    })
+                    .on_mouse_up(MouseButton::Right, |_, _, cx| cx.stop_propagation())
+                    .child(canvas(|bounds, _, _| bounds, move |_, bounds, _, cx| {
+                        anchor_handle.update(cx, |view, _| {
+                            view.context_anchor_points.insert(anchor_key.clone(), point(bounds.right(), bounds.top()));
+                        });
+                    }).absolute().left_0().top_0().size_full())
             })
             .on_mouse_down(MouseButton::Left, move |_, _, cx| {
                 cx.stop_propagation();
