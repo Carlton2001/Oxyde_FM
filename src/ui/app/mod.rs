@@ -337,9 +337,9 @@ pub struct OxydeApp {
     pub(crate) network_dialog: Option<network::NetworkDialog>,
     pub(crate) remote_login: Option<remote::RemoteLogin>,
     pub(crate) archive_password: Option<archive_password::ArchivePasswordPrompt>,
-    /// Requests refused while a prompt was open: asked once it is closed.
     /// Clipboard writes and reads run one after the other, in the order they were asked.
     pub(crate) clipboard_gate: std::sync::Arc<tokio::sync::Mutex<()>>,
+    /// Password requests that came while a prompt was open: asked once it is closed.
     pub(crate) archive_password_queue: Vec<archive_password::QueuedAsk>,
     pub(crate) open_with: Option<open_with::OpenWithPrompt>,
     /// Servers and network lists connected this session, listed by URI.
