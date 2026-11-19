@@ -32,6 +32,18 @@ fn plain_path(path: &Path) -> std::borrow::Cow<'_, str> {
     }
 }
 
+/// The ASCII drive letter of `C:...`; `None` for any other start, including a
+/// non-ASCII first character that a byte slice would cut in half.
+#[cfg(target_os = "windows")]
+fn drive_letter(path: &str) -> Option<char> {
+    match path.as_bytes() {
+        [letter, b':', ..] if letter.is_ascii_alphabetic() => {
+            Some(char::from(*letter).to_ascii_uppercase())
+        }
+        _ => None,
+    }
+}
+
 pub fn is_network_path(path: &Path) -> bool {
     #[cfg(not(target_os = "windows"))]
     let _ = path;
@@ -42,8 +54,8 @@ pub fn is_network_path(path: &Path) -> bool {
             return true;
         }
 
-        if path_str.len() >= 2 && path_str.chars().nth(1) == Some(':') {
-            let root_path = format!("{}:\\", &path_str[0..1]);
+        if let Some(letter) = drive_letter(&path_str) {
+            let root_path = format!("{letter}:\\");
             let wide_root: Vec<u16> = root_path.encode_utf16().chain(std::iter::once(0)).collect();
             unsafe {
                 if GetDriveTypeW(PCWSTR(wide_root.as_ptr())) == 4 {
@@ -72,15 +84,10 @@ pub fn get_physical_disk_id(path: &Path) -> u64 {
             return 0;
         }
 
-        if path_str.len() < 2 {
-            return 0;
-        }
-
-        let drive_root = if path_str.chars().nth(1) == Some(':') {
-            format!("\\\\.\\{}:", &path_str[0..1])
-        } else {
+        let Some(letter) = drive_letter(&path_str) else {
             return 0;
         };
+        let drive_root = format!("\\\\.\\{letter}:");
 
         let wide_path: Vec<u16> = drive_root
             .encode_utf16()
@@ -122,11 +129,8 @@ pub fn get_physical_disk_id(path: &Path) -> u64 {
             }
         }
 
-        if path_str.len() >= 2 && path_str.chars().nth(1) == Some(':') {
-            return (path_str.chars().next().unwrap().to_ascii_uppercase() as u64) + 1000;
-        }
+        letter as u64 + 1000
     }
-    0
 }
 
 /// Linux answers from `linux_volumes::disks`.
@@ -138,15 +142,10 @@ pub fn is_ssd(path: &Path) -> bool {
         }
 
         let path_str = plain_path(path);
-        if path_str.len() < 2 {
-            return false;
-        }
-
-        let drive_root = if path_str.chars().nth(1) == Some(':') {
-            format!("\\\\.\\{}:", &path_str[0..1])
-        } else {
+        let Some(letter) = drive_letter(&path_str) else {
             return false;
         };
+        let drive_root = format!("\\\\.\\{letter}:");
 
         let wide_path: Vec<u16> = drive_root
             .encode_utf16()
