@@ -477,9 +477,7 @@ pub(super) fn stream(
     if cancelled() {
         return Ok(());
     }
-    let _slot = VIDEO_SLOT
-        .lock()
-        .map_err(|_| io::Error::other("Video worker admission failed"))?;
+    let _slot = VIDEO_SLOT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     if cancelled() {
         return Ok(());
     }
