@@ -17,14 +17,13 @@ Oxyde runs on **Windows 10 and 11** and, since version 2.1, on **Linux** (x86-64
 ### Workspace and browsing
 
 - **Multipane workspace**: browse several locations in resizable panes, rearrange tabs and panes, and drag files between them. Double-click a separator to share two panes equally, or the sidebar's edge to fit it to its content. Tabs, layout and window geometry are restored between sessions.
-- **Tabs**: duplicate tabs, open folders with a middle click, switch locations independently in each pane, and hover a tab while dragging files to switch to it.
-- **List and grid views**: virtualized lists and thumbnail grids, natural filename sorting, date grouping, an optional checkbox column, type-ahead selection, and rectangle selection that scrolls the list when it reaches an edge.
+- **Tabs**: duplicate tabs, open folders with a middle click, switch locations independently in each pane, and hover a tab while dragging files to switch to it. Closed tabs reopen where they were, even after a restart, and a right click on the back and forward buttons lists the history.
+- **List and grid views**: virtualized lists and thumbnail grids in three card sizes, column filters in both views, natural filename sorting, date grouping, an optional checkbox column, type-ahead selection, and rectangle selection that scrolls the list when it reaches an edge.
 - **Video thumbnails**: grid views and tooltips show video thumbnails, MKV, WMV, FLV and MPEG included, from the Windows shell or from a decoded frame.
 - **Hidden files**: show hidden and system files on demand. On Linux, backup files and names listed in `.hidden` are hidden as in Nautilus.
 - **Unix permissions**: an optional octal column on Linux, with its filter, and permissions in file tooltips.
-- **Sidebar**: quick access shared with the system (Windows quick access, GTK bookmarks) and reordered by dragging, drives and volumes, OneDrive, network locations, the trash, and WSL distributions on Windows.
+- **Sidebar**: the home folder, quick access shared with the system (Windows quick access, GTK bookmarks) and reordered by dragging, drives and volumes, OneDrive, network locations, the trash, and WSL distributions on Windows.
 - **Folder sizes**: calculated in the background with Alt + Shift + S, faster with Turbo mode, and kept up to date while folders change.
-- **Details**: [interface](docs/architecture/interface.md), [quick access](docs/architecture/quick-access.md), [folder watching](docs/architecture/watchers.md).
 
 ### Viewer and previews
 
@@ -34,13 +33,11 @@ Oxyde runs on **Windows 10 and 11** and, since version 2.1, on **Linux** (x86-64
 - **Folders and archives as a tree**: a read-only tree in the Viewer, with content size, archive size and compression ratio.
 - **Audio and video player**: album artwork, track skipping, and technical labels (resolution, codecs, frame rate, sample rate, channels). When a codec is missing, the Viewer says which one.
 - **Hover previews**: images, animations, documents and media straight from file tooltips. PowerToys Peek remains available as an optional Windows integration.
-- **Details**: [previews](docs/architecture/previews.md), [Linux previews and sandbox](docs/architecture/linux-previews.md).
 
 ### Search
 
 - **Advanced search**: recursive search by name with wildcards or regular expressions, content search (Office documents included), and date and size filters. Results appear while the search runs, and stopping keeps what was found.
 - **Duplicate search**: compares files by name, size, content or combined criteria across several locations, with virtualized results for large sets.
-- **Details**: [navigation and search](docs/architecture/search.md).
 
 ### File operations
 
@@ -52,7 +49,6 @@ Oxyde runs on **Windows 10 and 11** and, since version 2.1, on **Linux** (x86-64
 - **Properties**: sections for general details, permissions and owners (Unix permissions and MIME types on Linux), and folder contents.
 - **Open With**: the system's applications, with a search field and a default application switch on Linux.
 - **Terminal**: open a folder in a terminal with Ctrl + . on Linux.
-- **Details**: [operations and Turbo](docs/architecture/operations.md), [Undo and Redo](docs/architecture/undo.md), [trash](docs/architecture/trash.md), [copies](docs/architecture/copies.md), [moves](docs/architecture/moves.md).
 
 ### Archives and disk images
 
@@ -60,7 +56,6 @@ Oxyde runs on **Windows 10 and 11** and, since version 2.1, on **Linux** (x86-64
 - **Archive editing**: create and modify ZIP, 7z, TAR and TAR.ZST archives from the workspace.
 - **Encrypted archives**: open and create password-protected ZIP and 7z archives, open protected RAR archives, and remember passwords for the session.
 - **Disk images**: ISO9660 ISO/IMG images can be browsed directly. ISO and IMG images can be mounted and unmounted on both systems, and VHD and VHDX images on Windows.
-- **Details**: [archives](docs/architecture/archives.md), [volumes](docs/architecture/volumes.md).
 
 ### Volumes and network
 
@@ -68,14 +63,12 @@ Oxyde runs on **Windows 10 and 11** and, since version 2.1, on **Linux** (x86-64
 - **Linux volumes**: through UDisks2, mount on click, unmount and eject, and see which processes keep a volume busy.
 - **Network on Windows**: map and disconnect network drives.
 - **Network on Linux**: SMB, SFTP, FTP and WebDAV shares through GVfs, with recent servers shared with Nautilus and passwords remembered until logout.
-- **Details**: [volumes](docs/architecture/volumes.md), [network on Linux](docs/architecture/linux-network.md).
 
 ### System integration
 
 - **Default file manager** (Preferences › System integration, off by default): folders opened by other applications, and their "Show in folder", open in Oxyde in a new tab of the running window, with the file selected. On Windows, Windows + E opens Oxyde too, while folders opened inside a File Explorer window stay there. Turning the option off gives folders back to the application they opened with before.
 - **Open and Save dialogs** (off by default): applications that ask for a file to open or a place to save get an Oxyde window. On Linux this goes through the desktop portal (Firefox, Chrome, Flatpak applications). On Windows it is **experimental** and installer-only: applications that add their own options to the dialog, run as administrator or are 32-bit keep the Windows dialog, and security software may flag the registration it relies on (see [System integration](docs/architecture/system-integration.md#windows-dialogs-experimental)).
-- **Windows menus**: the installed copy adds **Open in Oxyde** to the menus of folders while it is not the default file manager, and Oxyde's taskbar menu lists the pinned folders.
-- **Details**: [system integration](docs/architecture/system-integration.md).
+- **Windows menus**: the installed copy adds **Open in Oxyde** to the menus of folders while it is not the default file manager, and Oxyde's taskbar menu lists the pinned folders and **Run as administrator**.
 
 ### Security
 
@@ -90,7 +83,6 @@ Oxyde runs on **Windows 10 and 11** and, since version 2.1, on **Linux** (x86-64
 - **Theme files**: user themes are saved apart from preferences, so a preferences reset keeps them.
 - **Color vision**: a setting that keeps file colors distinct for red-green and blue-yellow color vision.
 - **Interface**: adjustable UI scale, window buttons in the style of the Linux desktop (GNOME or KDE), and five languages: English, French, Spanish, German and Italian.
-- **Details**: [interface](docs/architecture/interface.md#themes-and-dimensions).
 
 ## Installation
 
@@ -265,6 +257,7 @@ These shortcuts apply while the file pane has keyboard focus.
 | Open the selected folder or file | Enter |
 | Select the file starting with a letter | Type its first letters |
 | Open quick search | Ctrl + F |
+| Edit the path | Ctrl + L |
 | Add a pane | Ctrl + N |
 | Open / Close the Viewer | Alt + V |
 | Open a folder in a new tab | Middle click |
@@ -289,6 +282,8 @@ These shortcuts apply while the file pane has keyboard focus.
 | --- | --- |
 | Next tab | Ctrl + Tab or Ctrl + PageDown |
 | Previous tab | Ctrl + Shift + Tab or Ctrl + PageUp |
+| Reopen the last closed tab | Ctrl + Shift + T |
+| Change the grid card size | Ctrl + wheel over a grid |
 | Refresh | F5 or Ctrl + R |
 | Increase / Decrease UI scale | Ctrl + Plus / Minus |
 | Reset UI scale | Ctrl + 0 |
