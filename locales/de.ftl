@@ -1063,6 +1063,7 @@ redo-move-unverified = Mit diesem Verlauf lässt sich das Verschieben nicht sich
 redo-move-incomplete = Das Verschieben wurde angehalten und einige Elemente konnten nicht an ihren ursprünglichen Ort zurückkehren. Dateien oder Ordner wurden zur Wiederherstellung behalten: { $detail }. Prüfen Sie diese Orte vor einem erneuten Versuch.
 
 undo-recovery-incomplete = Das Rückgängigmachen wurde angehalten und einige Elemente konnten nicht an ihren ursprünglichen Ort zurückkehren. Dateien oder Ordner wurden zur Wiederherstellung behalten. Prüfen Sie diese Orte vor einem erneuten Versuch: { $detail }.
+undo-staged-output-retained = Vorgang rückgängig gemacht, aber einige Kopien konnten nicht entfernt werden (möglicherweise werden sie von einem anderen Programm verwendet). Löschen Sie sie selbst: { $detail }
 preview-unavailable = Diese Vorschau konnte nicht geladen werden. Versuchen Sie, die Datei direkt zu öffnen.
 preview-image-limit = Dieses Bild überschreitet die Vorschaugrenzen. Die Datei bleibt zugänglich.
 preview-animation-static = Standbild: Die Animation überschreitet die Vorschaugrenzen.

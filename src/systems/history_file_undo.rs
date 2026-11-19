@@ -680,9 +680,11 @@ impl Journal {
         self.finished = true;
         errors
     }
-    fn commit(&mut self) {
+    /// Ends a completed undo and returns the staged outputs it could not remove.
+    fn commit(&mut self) -> Vec<PathBuf> {
         self.finished = true;
         self.effects.clear();
+        let mut retained = Vec::new();
         for (path, expected, identity) in self.discarded.drain(..) {
             let result = self.directories.file_parents(&path).and_then(|parents| {
                 super::file_copy::remove_verified_output_checked(
@@ -694,11 +696,13 @@ impl Journal {
                     "Undo completed; staged output retained at {}: {error}",
                     path.display()
                 );
+                retained.push(self.directories.resolved(&path).unwrap_or(path));
             }
         }
         for error in self.clean_empty_staging() {
             log::warn!("Undo completed; {error}");
         }
+        retained
     }
 }
 impl Drop for Journal {
@@ -710,7 +714,8 @@ impl Drop for Journal {
         }
     }
 }
-pub(crate) fn undo(details: &TransactionDetails) -> Result<(), CommandError> {
+/// Undoes a move; returns the staged outputs left behind after it completed.
+pub(crate) fn undo(details: &TransactionDetails) -> Result<Vec<PathBuf>, CommandError> {
     undo_with(&NativeIo, details).map_err(|error| {
         match CommandError::from(error) {
             // Partial Move outputs use Copy's fixed-identity staging primitive,
@@ -732,10 +737,11 @@ pub(crate) fn undo(details: &TransactionDetails) -> Result<(), CommandError> {
         }
     })
 }
-pub(crate) fn undo_copy(details: &TransactionDetails) -> Result<(), CommandError> {
+/// Undoes a copy; returns the staged outputs left behind after it completed.
+pub(crate) fn undo_copy(details: &TransactionDetails) -> Result<Vec<PathBuf>, CommandError> {
     apply_plan(&NativeIo, Plan::copy(details)?).map_err(CommandError::from)
 }
-fn undo_with(ops: &impl UndoIo, details: &TransactionDetails) -> io::Result<()> {
+fn undo_with(ops: &impl UndoIo, details: &TransactionDetails) -> io::Result<Vec<PathBuf>> {
     let started = std::time::Instant::now();
     log::info!("Move undo journal: moved={:?}; created={:?}; source_dirs={:?}",
         details.moved_files, details.created_files, details.moved_dirs);
@@ -744,12 +750,12 @@ fn undo_with(ops: &impl UndoIo, details: &TransactionDetails) -> io::Result<()> 
         apply_plan(ops, plan).map_err(|error| renamed.revert(error))
     });
     match &result {
-        Ok(()) => log::info!("Move undo completed in {:?}", started.elapsed()),
+        Ok(_) => log::info!("Move undo completed in {:?}", started.elapsed()),
         Err(error) => log::warn!("Move undo failed in {:?}: {error}", started.elapsed()),
     }
     result
 }
-fn apply_plan(ops: &impl UndoIo, plan: Plan) -> io::Result<()> {
+fn apply_plan(ops: &impl UndoIo, plan: Plan) -> io::Result<Vec<PathBuf>> {
     let mut paths = plan.source_dirs.clone();
     paths.extend(
         plan.files
@@ -856,8 +862,7 @@ fn apply_plan(ops: &impl UndoIo, plan: Plan) -> io::Result<()> {
             ))
         };
     }
-    journal.commit();
-    Ok(())
+    Ok(journal.commit())
 }
 
 fn staging_parent<'a>(path: &'a Path, remove_dirs: &[PathBuf]) -> io::Result<&'a Path> {

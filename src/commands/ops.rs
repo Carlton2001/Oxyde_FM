@@ -302,14 +302,28 @@ fn recycle_history_paths(paths: Vec<PathBuf>) -> Result<(), CommandError> {
         .map_err(CommandError::TrashError)
 }
 
+/// A completed undo, with the staged copies it could not remove afterwards
+/// (an antivirus holding them open, for example).
+pub struct UndoReport {
+    pub transaction: Option<Transaction>,
+    pub retained: Vec<PathBuf>,
+}
+
 pub async fn undo_last_action(
     history: &HistoryManager,
 ) -> Result<Option<Transaction>, CommandError> {
+    undo_last_action_report(history).await.map(|report| report.transaction)
+}
+
+pub async fn undo_last_action_report(
+    history: &HistoryManager,
+) -> Result<UndoReport, CommandError> {
+    let mut retained = Vec::new();
     let Some(operation) = history
         .begin_undo()
         .map_err(|error| CommandError::Other(error.to_string()))?
     else {
-        return Ok(None);
+        return Ok(UndoReport { transaction: None, retained });
     };
     let transaction = Some(operation.transaction().clone());
 
@@ -322,10 +336,10 @@ pub async fn undo_last_action(
         }
         match tx.op_type {
             TransactionType::Copy => {
-                crate::systems::history_file_undo::undo_copy(&tx.details)?;
+                retained = crate::systems::history_file_undo::undo_copy(&tx.details)?;
             }
             TransactionType::Move => {
-                crate::systems::history_file_undo::undo(&tx.details)?;
+                retained = crate::systems::history_file_undo::undo(&tx.details)?;
             }
             TransactionType::Delete => {
                 #[cfg(target_os = "windows")]
@@ -355,7 +369,7 @@ pub async fn undo_last_action(
         }
         operation.complete();
     }
-    Ok(transaction)
+    Ok(UndoReport { transaction, retained })
 }
 
 pub async fn redo_last_action(

@@ -1255,3 +1255,26 @@
         assert!(!fixture.partial.exists());
         assert!(fixture.staging().is_empty());
     }
+
+    #[test]
+    fn copy_undo_reports_the_staged_outputs_it_cannot_remove() {
+        let fixture = Fixture::new();
+        let parent = fixture.root.path().join("destination");
+        let ops = FaultIo {
+            remove: |path: &Path| {
+                if path == parent {
+                    // Changed after staging, the outputs are refused by the final
+                    // removal, as a file an antivirus holds open would be.
+                    for directory in fixture.staging() {
+                        let mut output = fs::File::options().append(true).open(directory.join("output"))?;
+                        io::Write::write_all(&mut output, b"changed")?;
+                    }
+                }
+                Ok(())
+            },
+        };
+        let retained = apply_plan(&ops, Plan::copy(&fixture.details).unwrap()).unwrap();
+        assert!(!retained.is_empty());
+        assert!(retained.iter().all(|path| path.exists()), "{retained:?}");
+        assert!(!fixture.destination.exists());
+    }
