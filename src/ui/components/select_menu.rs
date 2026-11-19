@@ -82,7 +82,7 @@ pub(crate) fn surface(theme: OxydeTheme) -> Div {
         .border_color(theme.menu_border)
         .text_size(rems(0.8125))
         .text_color(theme.text)
-        .shadow(crate::ui::style::rem_shadow(true))
+        .shadow(crate::ui::style::menu_shadow())
         .occlude()
 }
 

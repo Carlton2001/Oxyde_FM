@@ -386,7 +386,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
             .border(rems(0.0625))
             .border_color(menu_border)
             .rounded(rems(0.5))
-            .shadow(crate::ui::style::rem_shadow(true))
+            .shadow(crate::ui::style::menu_shadow())
             .when_some(self.header.take(), |s, h| {
                 s.child(div().mb(rems(0.125)).child(h))
             })

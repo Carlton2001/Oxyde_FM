@@ -42,6 +42,21 @@ pub fn rem_shadow(large: bool) -> Vec<BoxShadow> {
     shadows
 }
 
+/// libadwaita's popover shadow (`popover > contents`), its 1 px ring left to the menu's own
+/// border. CSS blurs are twice the Gaussian deviation GPUI takes as its radius; the shadow
+/// ends within the 2 rem margin of popup surfaces.
+pub fn menu_shadow() -> Vec<BoxShadow> {
+    let factor = logical(1.0);
+    let layer = |alpha: f32, drop: f32, blur: f32, spread: f32| BoxShadow {
+        color: hsla(0.0, 0.0, 0.0, alpha),
+        offset: point(px(0.0), px(drop * factor)),
+        blur_radius: px(blur / 2.0 * factor),
+        spread_radius: px(spread * factor),
+        inset: false,
+    };
+    vec![layer(0.09, 1.0, 5.0, 1.0), layer(0.05, 2.0, 14.0, 3.0)]
+}
+
 // Pane chrome follows the heights of the Tauri interface.
 pub const TAB_BAR_HEIGHT: Rems = rems(2.25);
 pub const TAB_MAX_WIDTH: Rems = rems(12.0);

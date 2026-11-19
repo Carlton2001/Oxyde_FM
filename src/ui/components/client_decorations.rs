@@ -74,6 +74,16 @@ pub(crate) fn frame(content: impl IntoElement + Styled, border: Hsla, window: &m
                 });
                 window.on_mouse_event(|_: &MouseUpEvent, _, _, _| PENDING_MOVE.set(None));
             }).absolute().size_0())
+            // Only the frame and the resize band take the pointer; the rest of the shadow lets
+            // clicks through to what lies beneath, as GTK does.
+            .child(canvas(move |_, window, cx| {
+                let region = input_region(content_bounds(window), tiling, window.is_resizable());
+                let last = window.use_keyed_state("client-input-region", cx, |_, _| None);
+                if *last.read(cx) != Some(region) {
+                    last.update(cx, |last, _| *last = Some(region));
+                    window.set_input_region(Some(&[region]));
+                }
+            }, |_, _, _, _| ()).absolute().size_0())
             .when(window.is_resizable(), |frame| {
                 frame
                     .child(canvas(
@@ -181,24 +191,34 @@ const MOVE_THRESHOLD: f32 = 8.0;
 #[cfg(target_os = "linux")]
 const CORNER_GRAB: Pixels = px(24.0);
 
-/// Two layers, a tight contact shadow and a softer one below, both lighter in the backdrop
-/// like libadwaita's. GPUI blurs over three radii: the softer layer ends within the margin.
+/// libadwaita's window shadow (`window.csd`), lighter and tighter in the backdrop, with its
+/// 1 px contact ring. CSS blurs are twice the Gaussian deviation GPUI takes as its radius,
+/// which it spreads over three deviations: the widest layer ends at `MARGIN`.
 #[cfg(target_os = "linux")]
 fn shadows(activity: f32) -> Vec<BoxShadow> {
-    let layer = |active: f32, backdrop: f32, drop: f32, blur: f32| BoxShadow {
-        color: hsla(0.0, 0.0, 0.0, backdrop + (active - backdrop) * activity),
-        offset: point(px(0.0), px(drop)),
-        blur_radius: px(blur),
-        spread_radius: px(0.0),
+    let mix = |backdrop: f32, active: f32| backdrop + (active - backdrop) * activity;
+    let layer = |alpha: f32, blur: f32, spread: f32| BoxShadow {
+        color: hsla(0.0, 0.0, 0.0, alpha),
+        offset: point(px(0.0), px(0.0)),
+        blur_radius: px(blur / 2.0),
+        spread_radius: px(spread),
         inset: false,
     };
-    vec![layer(0.22, 0.14, 1.0, 1.0), layer(0.32, 0.16, 2.0, 2.75)]
+    vec![
+        layer(mix(0.0, 0.15), 14.0, 5.0),
+        layer(mix(0.08, 0.10), mix(10.0, 5.0), mix(5.0, 2.0)),
+        layer(0.05, 0.0, 1.0),
+    ]
 }
 
-/// Transparent margin holding the shadow and the resize zones, as wide as GTK 4's resize
-/// handles.
+/// Transparent margin holding the shadow: its widest layer spreads 5 px, then blurs over
+/// three deviations of 7 px.
 #[cfg(target_os = "linux")]
-const MARGIN: Pixels = px(12.0);
+const MARGIN: Pixels = px(26.0);
+
+/// Width of the resize band along the frame, inside the margin, as GTK 4's resize handles.
+#[cfg(target_os = "linux")]
+const RESIZE_BAND: Pixels = px(12.0);
 
 /// Radius of the window outline, as in Soliton.
 #[cfg(target_os = "linux")]
@@ -231,8 +251,12 @@ fn margin(tiling: Tiling) -> Edges<Pixels> {
 /// `CORNER_GRAB` along both edges; tiled sides have no zone.
 #[cfg(target_os = "linux")]
 fn resize_zones(size: Size<Pixels>, tiling: Tiling) -> impl Iterator<Item = (ResizeEdge, Bounds<Pixels>)> {
-    let Edges { top, right, bottom, left } = margin(tiling);
-    let (width, height) = (size.width, size.height);
+    let outer = margin(tiling);
+    let Edges { top, right, bottom, left } = band(tiling);
+    // The band lies against the frame: zones are laid out in the area it bounds, then moved.
+    let shift = point(outer.left - left, outer.top - top);
+    let width = size.width - (outer.left - left) - (outer.right - right);
+    let height = size.height - (outer.top - top) - (outer.bottom - bottom);
     let (inner_width, inner_height) = (width - left - right, height - top - bottom);
     let grab_x = CORNER_GRAB.min((inner_width / 2.0).max(px(0.0)));
     let grab_y = CORNER_GRAB.min((inner_height / 2.0).max(px(0.0)));
@@ -270,7 +294,27 @@ fn resize_zones(size: Size<Pixels>, tiling: Tiling) -> impl Iterator<Item = (Res
     let right_start = top + along(top_right, grab_y);
     let right_end = height - bottom - along(bottom_right, grab_y);
     zones.push((ResizeEdge::Right, zone(width - right, right_start, right, right_end - right_start)));
-    zones.into_iter().filter(|(_, zone)| !zone.is_empty())
+    zones.into_iter().filter(|(_, zone)| !zone.is_empty()).map(move |(edge, zone)| (edge, Bounds::new(zone.origin + shift, zone.size)))
+}
+
+/// Resize band of each side; tiled sides have none.
+#[cfg(target_os = "linux")]
+fn band(tiling: Tiling) -> Edges<Pixels> {
+    let side = |tiled: bool| if tiled { px(0.0) } else { RESIZE_BAND };
+    Edges { top: side(tiling.top), right: side(tiling.right), bottom: side(tiling.bottom), left: side(tiling.left) }
+}
+
+/// Surface area taking the pointer: the frame, with its resize band when resizable.
+#[cfg(target_os = "linux")]
+fn input_region(content: Bounds<Pixels>, tiling: Tiling, resizable: bool) -> Bounds<Pixels> {
+    if !resizable {
+        return content;
+    }
+    let Edges { top, right, bottom, left } = band(tiling);
+    Bounds::new(
+        point(content.left() - left, content.top() - top),
+        size(content.size.width + left + right, content.size.height + top + bottom),
+    )
 }
 
 #[cfg(target_os = "linux")]
