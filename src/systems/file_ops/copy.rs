@@ -565,8 +565,9 @@ impl FileOperationManager {
             // One storage query per drive or share, not per file.
             let mut drives = HashMap::new();
             let mut solid = |path: &Path| {
+                // Per folder: a volume mounted in `C:\mnt\hdd` is not drive C.
                 #[cfg(target_os = "windows")]
-                let drive = path.components().next().map(|part| part.as_os_str().to_owned());
+                let drive = path.parent().map(|parent| parent.as_os_str().to_owned());
                 // Every path starts at `/`: the filesystem tells the drives apart.
                 #[cfg(not(target_os = "windows"))]
                 let drive = path.metadata().ok().map(|metadata| std::os::unix::fs::MetadataExt::dev(&metadata));
