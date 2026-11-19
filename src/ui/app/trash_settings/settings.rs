@@ -74,7 +74,9 @@ impl OxydeApp {
                     .volumes()
                     .list(true)
                     .into_iter()
-                    .filter(|drive| matches!(drive.drive_type.as_str(), "fixed" | "removable"))
+                    // Drives with a Recycle Bin: Windows has none on USB sticks or SUBST drives.
+                    .filter(|drive| matches!(drive.drive_type.as_str(), "fixed" | "removable")
+                        && oxyde_lib::platform::platform().has_recycle_bin(std::path::Path::new(&drive.path)))
                     .collect();
                 let usage = runtime
                     .block_on(oxyde_lib::commands::ops::get_total_recycle_bin_usage())

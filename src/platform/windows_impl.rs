@@ -412,9 +412,11 @@ impl Platform for WindowsPlatform {
                         .encode_utf16()
                         .chain(std::iter::once(0))
                         .collect();
-                    // Only the drives the settings list: removable (2) and fixed (3).
+                    // Only the drives the settings list: fixed (3), without SUBST.
                     // A network drive has no bin here and can wait for its timeout.
-                    if !matches!(GetDriveTypeW(PCWSTR(wide_path.as_ptr())), 2 | 3) {
+                    if GetDriveTypeW(PCWSTR(wide_path.as_ptr())) != 3
+                        || !super::windows_recycle_bin::available(std::path::Path::new(drive_path))
+                    {
                         continue;
                     }
 
