@@ -758,21 +758,39 @@ pub fn get_office_document(path: String) -> Result<String, CommandError> {
 }
 
 /// `width height` lines (only their ratio is used), one per page.
+///
+/// A line stands for its page even when its size is invalid (degenerate MediaBox):
+/// dropping it would shift every later page. It takes the size of the previous valid
+/// page, else of the next one, else US Letter.
 pub(super) fn parse_pdf_sizes(text: &str) -> Result<Vec<(f32, f32)>, CommandError> {
-    let sizes: Vec<(f32, f32)> = text
+    const LETTER: (f32, f32) = (612.0, 792.0);
+    let parsed: Vec<Option<(f32, f32)>> = text
         .lines()
-        .filter_map(|line| {
+        .map(|line| {
             let (width, height) = line.split_once(' ')?;
             let size = (width.parse::<f32>().ok()?, height.parse::<f32>().ok()?);
             (size.0.is_finite() && size.1.is_finite() && size.0 > 0.0 && size.1 > 0.0)
                 .then_some(size)
         })
         .collect();
-    if sizes.is_empty() {
+    if parsed.is_empty() {
         return Err(CommandError::Other("Empty PDF".into()));
     }
-    Ok(sizes)
+    let mut fallback = parsed.iter().flatten().next().copied().unwrap_or(LETTER);
+    Ok(parsed
+        .into_iter()
+        .map(|size| {
+            if let Some(size) = size {
+                fallback = size;
+            }
+            fallback
+        })
+        .collect())
 }
+
+#[cfg(test)]
+#[path = "thumbnails/tests/pdf_sizes_tests.rs"]
+mod pdf_sizes_tests;
 
 fn isolated_text(bytes: &[u8]) -> Result<String, CommandError> {
     match crate::utils::preview_protocol::decode(bytes)? {
