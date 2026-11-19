@@ -445,3 +445,52 @@ fn preview_jobs_active_video_does_not_occupy_still_admission() {
     blocker.release();
     assert_eq!(runtime.block_on(video).unwrap(), Some(()));
 }
+
+#[test]
+fn preview_jobs_stuck_hover_read_gives_its_slot_back_within_the_spare_limit() {
+    let runtime = runtime();
+    let queue = PreviewQueue::new(1);
+    let spares = Arc::new(Semaphore::new(1));
+    let blocker = Blocker::default();
+    let _release = ReleaseOnDrop(blocker.clone());
+    let deadline = Duration::from_millis(50);
+    let stuck = |blocker: Blocker| {
+        move || {
+            blocker.wait();
+            Ok::<_, String>(5)
+        }
+    };
+    // Past the deadline the first read reports a timeout and frees the slot.
+    let first = runtime.block_on(async {
+        tokio::time::timeout(
+            PATIENCE,
+            queue.run_with_deadline(runtime.handle().clone(), deadline, &spares, stuck(blocker.clone())),
+        )
+        .await
+    });
+    assert!(first.unwrap().unwrap_err().starts_with("PreviewWorkerTimeout:"));
+    assert_eq!(queue.slots.available_permits(), 1);
+    assert_eq!(spares.available_permits(), 0);
+    // Without a spare left, the next stuck read keeps its slot until it returns.
+    let mut second = Box::pin(queue.run_with_deadline(
+        runtime.handle().clone(),
+        deadline,
+        &spares,
+        stuck(blocker.clone()),
+    ));
+    let waiting = runtime.block_on(async {
+        tokio::time::timeout(Duration::from_millis(300), second.as_mut()).await
+    });
+    assert!(waiting.is_err());
+    assert_eq!(queue.slots.available_permits(), 0);
+    blocker.release();
+    let second = runtime.block_on(async { tokio::time::timeout(PATIENCE, second).await });
+    assert_eq!(second.unwrap().unwrap(), 5);
+    // The first read returns its spare once its thread ends.
+    let started = std::time::Instant::now();
+    while spares.available_permits() == 0 {
+        assert!(started.elapsed() < PATIENCE);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(queue.slots.available_permits(), 1);
+}

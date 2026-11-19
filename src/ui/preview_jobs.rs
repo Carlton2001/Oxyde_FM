@@ -3,13 +3,20 @@
 use std::fmt::Display;
 use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::time::Duration;
 use tokio::runtime::Handle;
 use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore};
 
 const MAX_STILL_JOBS: usize = 4;
 const MAX_ICON_JOBS: usize = 2;
 const MAX_VIDEO_JOBS: usize = 1;
+/// A hover read stuck in the system (unreachable share, named pipe) gives its
+/// slot back after this delay, longer than the workers' own 15 s timeout.
+const HOVER_DEADLINE: Duration = Duration::from_secs(20);
+/// Stuck hover reads tolerated at once: each holds a spare permit until its
+/// thread returns; past them, the slot waits for the read as before.
+const MAX_STUCK_HOVER_JOBS: usize = 4;
 
 #[derive(Clone, Default)]
 pub(crate) struct Cancellation {
@@ -100,6 +107,51 @@ impl PreviewQueue {
     }
 }
 
+impl PreviewQueue {
+    /// Runs `work` like `run` without cancellation, but past `deadline` gives the
+    /// slot back when `spares` has room: the work keeps running and holds a spare.
+    async fn run_with_deadline<T, E>(
+        &self,
+        runtime: Handle,
+        deadline: Duration,
+        spares: &Arc<Semaphore>,
+        work: impl FnOnce() -> Result<T, E> + Send + 'static,
+    ) -> Result<T, String>
+    where
+        T: Send + 'static,
+        E: Display + Send + 'static,
+    {
+        let Some(permit) = self.admit(None).await? else {
+            return Err("Preview job cancelled".into());
+        };
+        let held = Arc::new(Mutex::new(permit));
+        let thread_held = held.clone();
+        let mut job = runtime.spawn_blocking(move || {
+            let _held = thread_held;
+            work().map_err(|error| error.to_string())
+        });
+        loop {
+            // GPUI polls this future outside Tokio: the timer runs on the runtime.
+            let timer = runtime.spawn(tokio::time::sleep(deadline));
+            match futures::future::select(&mut job, timer).await {
+                futures::future::Either::Left((result, timer)) => {
+                    timer.abort();
+                    return result.map_err(|error| format!("Preview worker failed: {error}"))?;
+                }
+                futures::future::Either::Right(_) => {
+                    if let Ok(spare) = spares.clone().try_acquire_owned() {
+                        let mut held = held.lock().unwrap_or_else(PoisonError::into_inner);
+                        drop(std::mem::replace(&mut *held, spare));
+                        return Err(format!(
+                            "PreviewWorkerTimeout: Hover preview still reading after {deadline:?}"
+                        ));
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn still_queue() -> &'static PreviewQueue {
     static QUEUE: OnceLock<PreviewQueue> = OnceLock::new();
     QUEUE.get_or_init(|| PreviewQueue::new(MAX_STILL_JOBS))
@@ -139,11 +191,16 @@ where T: Send + 'static, E: Display + Send + 'static {
 }
 
 /// Hover requests bypass bulk grid admissions, while sharing codec sessions.
+/// A read that never returns does not stop the next hovers for good.
 pub(crate) fn load_hover<T, E>(work: impl FnOnce() -> Result<T, E> + Send + 'static)
     -> impl Future<Output = Result<T, String>> + Send
 where T: Send + 'static, E: Display + Send + 'static {
     static QUEUE: OnceLock<PreviewQueue> = OnceLock::new();
-    load_on(QUEUE.get_or_init(|| PreviewQueue::new(1)), work)
+    static STUCK: OnceLock<Arc<Semaphore>> = OnceLock::new();
+    let queue = QUEUE.get_or_init(|| PreviewQueue::new(1));
+    let spares = STUCK.get_or_init(|| Arc::new(Semaphore::new(MAX_STUCK_HOVER_JOBS)));
+    let runtime = Handle::try_current().map_err(|error| format!("Preview runtime unavailable: {error}"));
+    async move { queue.run_with_deadline(runtime?, HOVER_DEADLINE, spares, work).await }
 }
 
 /// Construct on the UI thread where main's Tokio handle is entered. The returned
