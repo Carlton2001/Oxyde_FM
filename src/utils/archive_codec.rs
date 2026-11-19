@@ -22,6 +22,8 @@ pub enum Level {
 
 // LZMA-alone streams can declare dictionaries up to 4 GiB; refuse them before allocation.
 const LZMA_MEMORY: u64 = 1024 * 1024 * 1024;
+/// 2^30 bytes, the same 1 GiB.
+const ZSTD_WINDOW_LOG: u32 = 30;
 // Bound multithreaded xz under the worker's 1 GiB job, with room for I/O buffers.
 const XZ_ENCODER_MEMORY: u64 = 512 * 1024 * 1024;
 
@@ -82,9 +84,20 @@ impl Codec {
         let source = io::Cursor::new(prefix[..length].to_vec()).chain(source);
         Ok(match self {
             Self::Gzip => Box::new(flate2::read::MultiGzDecoder::new(source)),
-            Self::Xz => Box::new(xz2::read::XzDecoder::new_multi_decoder(source)),
+            // The same 1 GiB as LZMA-alone: past it, a clear memory limit error
+            // rather than the worker's job limit cutting it short.
+            Self::Xz => Box::new(xz2::read::XzDecoder::new_stream(
+                source,
+                xz2::stream::Stream::new_stream_decoder(LZMA_MEMORY, xz2::stream::CONCATENATED)
+                    .map_err(io::Error::other)?,
+            )),
             Self::Bzip2 => Box::new(bzip2::read::MultiBzDecoder::new(source)),
-            Self::Zstd => Box::new(zstd::stream::read::Decoder::new(source)?),
+            Self::Zstd => {
+                let mut decoder = zstd::stream::read::Decoder::new(source)?;
+                // Accepts `--long` windows up to 1 GiB, beyond zstd's 128 MiB default.
+                decoder.window_log_max(ZSTD_WINDOW_LOG)?;
+                Box::new(decoder)
+            }
             Self::Lz4 => Box::new(Lz4Frames(lz4_flex::frame::FrameDecoder::new(Watched {
                 inner: source,
                 ended: false,
