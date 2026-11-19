@@ -276,4 +276,4 @@ Statuts : à faire, en cours, corrigé (hash), obsolète, reporté. Mettre à jo
 | catégorie 1 | F44 | corrigé | daad4df9 | profils `Oxyde.Archive.<uuid>` de plus de 10 min supprimés une fois par processus avant la création d'un profil ; vérifié sur cette machine : 2 profils orphelins trouvés ; tests |
 | release | RUSTSEC-2026-0548 | corrigé | 5d5e5680 | zip 9.0.4 → 9.7.3 ; `cargo audit` passe ; précondition d'un test de recherche adaptée (méthode inconnue refusée à la lecture, plus à l'ouverture) |
 | release | toolchain Windows | corrigé | 53fb5c5d | distribution Windows alignée sur Rust 1.100.0 (1.98.1 restait de 0945330e) |
-| release | Win10 LTSC | validé | | 2026-11-19, VM Win10 LTSC, portable 2.2.2 d'`audit-fixes` : pas d'erreur 4395 (création, copie, déplacement, renommage, suppression), workers isolés OK (miniatures, icône d'exe, 7z) |
+| release | Win10 LTSC | validé | | 2026-11-19, VM Win10 LTSC, portable 2.2.2 d'`audit-fixes` : pas d'erreur 4395 (création, copie, déplacement, renommage, suppression), workers isolés OK (miniatures, icône d'exe, 7z) ; mode portable validé (réglages à côté de l'exécutable, extraction d'archive, WM4) |
