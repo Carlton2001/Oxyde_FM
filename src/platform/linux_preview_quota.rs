@@ -11,6 +11,8 @@ use std::os::fd::{AsFd, OwnedFd};
 use std::os::unix::ffi::OsStrExt;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+const LEASE_WAIT: Duration = Duration::from_secs(1);
+
 #[derive(Clone, Copy)]
 pub(super) struct Policy {
     pub bytes: u64,
@@ -87,10 +89,17 @@ pub(super) fn admit(folder: &OwnedFd, destination: &OsStr, temporary: &OsStr, in
     }
     let lease = rustix::fs::openat(folder, LEASE, OFlags::RDWR | OFlags::CREATE | OFlags::NOFOLLOW | OFlags::CLOEXEC,
         Mode::from_raw_mode(0o600))?;
-    rustix::fs::flock(lease.as_fd(), FlockOperation::NonBlockingLockExclusive).map_err(|error| match error {
-        Errno::WOULDBLOCK => io::Error::new(io::ErrorKind::WouldBlock, "Preview cache is being maintained"),
-        error => error.into(),
-    })?;
+    // Another writer holds it through its scan and publication: wait a little rather
+    // than leave this entry uncached, to be generated again at every visit.
+    let started = std::time::Instant::now();
+    loop {
+        match rustix::fs::flock(lease.as_fd(), FlockOperation::NonBlockingLockExclusive) {
+            Ok(()) => break,
+            Err(Errno::WOULDBLOCK) if started.elapsed() < LEASE_WAIT => std::thread::sleep(Duration::from_millis(10)),
+            Err(Errno::WOULDBLOCK) => return Err(io::Error::new(io::ErrorKind::WouldBlock, "Preview cache is being maintained")),
+            Err(error) => return Err(error.into()),
+        }
+    }
     let (mut bytes, mut entries, mut candidates) = scan(folder, destination, temporary)?;
     let fits = |entries: usize, bytes: u64| entries < policy.entries && bytes.saturating_add(incoming) <= policy.bytes;
     if fits(entries, bytes) {
