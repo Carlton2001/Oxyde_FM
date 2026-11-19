@@ -19,3 +19,12 @@ fn non_ascii_first_character_is_not_a_drive_letter() {
     assert!(!is_ssd(Path::new(r"é:\x")));
     assert_eq!(get_physical_disk_id(Path::new(r"é:\x")), 0);
 }
+
+#[test]
+fn drive_root_volume_is_named_by_its_letter() {
+    assert_eq!(folder_mounted_volume(r"C:\Windows\System32"), None);
+    assert_eq!(
+        get_physical_disk_id(Path::new(r"C:\Windows\a.txt")),
+        get_physical_disk_id(Path::new(r"\\?\C:\Windows\b.txt"))
+    );
+}

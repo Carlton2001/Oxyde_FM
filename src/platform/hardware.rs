@@ -5,9 +5,11 @@ use std::{collections::hash_map::DefaultHasher, hash::{Hash, Hasher}};
 #[cfg(target_os = "windows")]
 use windows::core::PCWSTR;
 #[cfg(target_os = "windows")]
+use windows::Win32::Foundation::{CloseHandle, HANDLE};
+#[cfg(target_os = "windows")]
 use windows::Win32::Storage::FileSystem::{
-    CreateFileW, GetDriveTypeW, FILE_FLAG_BACKUP_SEMANTICS, FILE_SHARE_READ, FILE_SHARE_WRITE,
-    OPEN_EXISTING,
+    CreateFileW, GetDriveTypeW, GetVolumeNameForVolumeMountPointW, GetVolumePathNameW,
+    FILE_FLAG_BACKUP_SEMANTICS, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
 };
 #[cfg(target_os = "windows")]
 use windows::Win32::System::Ioctl::{
@@ -71,129 +73,164 @@ pub fn is_network_path(path: &Path) -> bool {
 /// Linux answers from `linux_volumes::disks`.
 #[cfg(target_os = "windows")]
 pub fn get_physical_disk_id(path: &Path) -> u64 {
-    {
-        let path_str = plain_path(path);
-        if let Some(stripped) = path_str.strip_prefix("\\\\") {
-            // UNC Path: Hash the host part to throttle per-server
-            let parts: Vec<&str> = stripped.split('\\').collect();
-            if let Some(host) = parts.first() {
-                let mut hasher = DefaultHasher::new();
-                host.hash(&mut hasher);
-                return hasher.finish() | (1u64 << 63); // Set high bit for Network IDs
-            }
-            return 0;
-        }
-
-        let Some(letter) = drive_letter(&path_str) else {
+    let path_str = plain_path(path);
+    if let Some(stripped) = path_str.strip_prefix(r"\\") {
+        // UNC path: one ID per server, high bit set for network IDs.
+        let Some(host) = stripped.split('\\').next() else {
             return 0;
         };
-        let drive_root = format!("\\\\.\\{letter}:");
-
-        let wide_path: Vec<u16> = drive_root
-            .encode_utf16()
-            .chain(std::iter::once(0))
-            .collect();
-        unsafe {
-            let handle = CreateFileW(
-                PCWSTR(wide_path.as_ptr()),
-                0,
-                FILE_SHARE_READ | FILE_SHARE_WRITE,
-                None,
-                OPEN_EXISTING,
-                FILE_FLAG_BACKUP_SEMANTICS,
-                None,
-            );
-
-            if let Ok(h) = handle {
-                if !h.is_invalid() {
-                    let mut device_number = STORAGE_DEVICE_NUMBER::default();
-                    let mut bytes_returned = 0u32;
-                    if DeviceIoControl(
-                        h,
-                        IOCTL_STORAGE_GET_DEVICE_NUMBER,
-                        None,
-                        0,
-                        Some(&mut device_number as *mut _ as *mut _),
-                        std::mem::size_of::<STORAGE_DEVICE_NUMBER>() as u32,
-                        Some(&mut bytes_returned),
-                        None,
-                    )
-                    .is_ok()
-                    {
-                        let id = (device_number.DeviceNumber + 1) as u64;
-                        let _ = windows::Win32::Foundation::CloseHandle(h);
-                        return id;
-                    }
-                    let _ = windows::Win32::Foundation::CloseHandle(h);
-                }
-            }
-        }
-
-        letter as u64 + 1000
+        let mut hasher = DefaultHasher::new();
+        host.hash(&mut hasher);
+        return hasher.finish() | (1u64 << 63);
     }
+    let Some(letter) = drive_letter(&path_str) else {
+        return 0;
+    };
+    // Callers ask once per file: the files of one folder share its answer.
+    let folder = Path::new(&*path_str).parent().unwrap_or(Path::new(&*path_str)).to_path_buf();
+    if let Some(id) = DISK_IDS.get(&folder) {
+        return id;
+    }
+    let volume = folder_mounted_volume(&path_str);
+    let device = volume.clone().unwrap_or_else(|| format!(r"\\.\{letter}:"));
+    let id = with_device(&device, device_number).unwrap_or_else(|| match volume {
+        // A volume mounted in a folder must not share the throttle of its host drive.
+        Some(volume) => {
+            let mut hasher = DefaultHasher::new();
+            volume.hash(&mut hasher);
+            hasher.finish() | (1u64 << 62)
+        }
+        None => letter as u64 + 1000,
+    });
+    DISK_IDS.insert(folder, id);
+    id
 }
 
 /// Linux answers from `linux_volumes::disks`.
 #[cfg(target_os = "windows")]
 pub fn is_ssd(path: &Path) -> bool {
-    {
-        if is_network_path(path) {
-            return false;
-        }
+    if is_network_path(path) {
+        return false;
+    }
+    let path_str = plain_path(path);
+    let Some(letter) = drive_letter(&path_str) else {
+        return false;
+    };
+    let device = folder_mounted_volume(&path_str).unwrap_or_else(|| format!(r"\\.\{letter}:"));
+    with_device(&device, no_seek_penalty).unwrap_or(false)
+}
 
-        let path_str = plain_path(path);
-        let Some(letter) = drive_letter(&path_str) else {
-            return false;
-        };
-        let drive_root = format!("\\\\.\\{letter}:");
+/// Answers per folder, kept briefly: a drive can be replugged or remounted.
+#[cfg(target_os = "windows")]
+struct FolderCache(std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<std::path::PathBuf, (u64, std::time::Instant)>>>);
 
-        let wide_path: Vec<u16> = drive_root
-            .encode_utf16()
-            .chain(std::iter::once(0))
-            .collect();
-        unsafe {
-            let handle = CreateFileW(
-                PCWSTR(wide_path.as_ptr()),
-                0,
-                FILE_SHARE_READ | FILE_SHARE_WRITE,
-                None,
-                OPEN_EXISTING,
-                FILE_FLAG_BACKUP_SEMANTICS,
-                None,
-            );
+#[cfg(target_os = "windows")]
+static DISK_IDS: FolderCache = FolderCache(std::sync::LazyLock::new(Default::default));
 
-            if let Ok(h) = handle {
-                if !h.is_invalid() {
-                    let mut query = STORAGE_PROPERTY_QUERY {
-                        PropertyId: StorageDeviceSeekPenaltyProperty,
-                        QueryType: PropertyStandardQuery,
-                        ..Default::default()
-                    };
-                    let mut descriptor = DEVICE_SEEK_PENALTY_DESCRIPTOR::default();
-                    let mut bytes_returned = 0u32;
-                    let result = if DeviceIoControl(
-                        h,
-                        IOCTL_STORAGE_QUERY_PROPERTY,
-                        Some(&mut query as *mut _ as *mut _),
-                        std::mem::size_of::<STORAGE_PROPERTY_QUERY>() as u32,
-                        Some(&mut descriptor as *mut _ as *mut _),
-                        std::mem::size_of::<DEVICE_SEEK_PENALTY_DESCRIPTOR>() as u32,
-                        Some(&mut bytes_returned),
-                        None,
-                    )
-                    .is_ok()
-                    {
-                        !descriptor.IncursSeekPenalty
-                    } else {
-                        false
-                    };
-                    let _ = windows::Win32::Foundation::CloseHandle(h);
-                    return result;
-                }
+#[cfg(target_os = "windows")]
+impl FolderCache {
+    const LIFETIME: std::time::Duration = std::time::Duration::from_secs(30);
+    const CAPACITY: usize = 4096;
+
+    fn get(&self, folder: &Path) -> Option<u64> {
+        let cache = self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        cache.get(folder).filter(|(_, at)| at.elapsed() < Self::LIFETIME).map(|(id, _)| *id)
+    }
+
+    fn insert(&self, folder: std::path::PathBuf, id: u64) {
+        let mut cache = self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        if cache.len() >= Self::CAPACITY {
+            cache.retain(|_, (_, at)| at.elapsed() < Self::LIFETIME);
+            if cache.len() >= Self::CAPACITY {
+                cache.clear();
             }
         }
+        cache.insert(folder, (id, std::time::Instant::now()));
     }
-    false
+}
+
+/// `\\?\Volume{…}` when `path` lies on a volume mounted in a folder such as
+/// `C:\mnt\hdd\`; `None` on a drive root, where the letter names the volume.
+#[cfg(target_os = "windows")]
+fn folder_mounted_volume(path: &str) -> Option<String> {
+    let wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
+    let mut mount = vec![0u16; wide.len() + 1];
+    unsafe { GetVolumePathNameW(PCWSTR(wide.as_ptr()), &mut mount) }.ok()?;
+    if mount.iter().position(|c| *c == 0)? <= 3 {
+        return None;
+    }
+    let mut volume = [0u16; 64];
+    unsafe { GetVolumeNameForVolumeMountPointW(PCWSTR(mount.as_ptr()), &mut volume) }.ok()?;
+    let length = volume.iter().position(|c| *c == 0)?;
+    let name = String::from_utf16(&volume[..length]).ok()?;
+    // Without its final separator the name opens the volume device, not its root folder.
+    Some(name.trim_end_matches('\\').to_owned())
+}
+
+#[cfg(target_os = "windows")]
+fn with_device<T>(device: &str, query: impl FnOnce(HANDLE) -> Option<T>) -> Option<T> {
+    let wide: Vec<u16> = device.encode_utf16().chain(std::iter::once(0)).collect();
+    let handle = unsafe {
+        CreateFileW(
+            PCWSTR(wide.as_ptr()),
+            0,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            None,
+            OPEN_EXISTING,
+            FILE_FLAG_BACKUP_SEMANTICS,
+            None,
+        )
+    }
+    .ok()
+    .filter(|handle| !handle.is_invalid())?;
+    let result = query(handle);
+    let _ = unsafe { CloseHandle(handle) };
+    result
+}
+
+#[cfg(target_os = "windows")]
+fn device_number(handle: HANDLE) -> Option<u64> {
+    let mut device_number = STORAGE_DEVICE_NUMBER::default();
+    let mut bytes_returned = 0u32;
+    unsafe {
+        DeviceIoControl(
+            handle,
+            IOCTL_STORAGE_GET_DEVICE_NUMBER,
+            None,
+            0,
+            Some(&mut device_number as *mut _ as *mut _),
+            std::mem::size_of::<STORAGE_DEVICE_NUMBER>() as u32,
+            Some(&mut bytes_returned),
+            None,
+        )
+    }
+    .ok()?;
+    Some(device_number.DeviceNumber as u64 + 1)
+}
+
+#[cfg(target_os = "windows")]
+fn no_seek_penalty(handle: HANDLE) -> Option<bool> {
+    let mut query = STORAGE_PROPERTY_QUERY {
+        PropertyId: StorageDeviceSeekPenaltyProperty,
+        QueryType: PropertyStandardQuery,
+        ..Default::default()
+    };
+    let mut descriptor = DEVICE_SEEK_PENALTY_DESCRIPTOR::default();
+    let mut bytes_returned = 0u32;
+    unsafe {
+        DeviceIoControl(
+            handle,
+            IOCTL_STORAGE_QUERY_PROPERTY,
+            Some(&mut query as *mut _ as *mut _),
+            std::mem::size_of::<STORAGE_PROPERTY_QUERY>() as u32,
+            Some(&mut descriptor as *mut _ as *mut _),
+            std::mem::size_of::<DEVICE_SEEK_PENALTY_DESCRIPTOR>() as u32,
+            Some(&mut bytes_returned),
+            None,
+        )
+    }
+    .ok()?;
+    Some(!descriptor.IncursSeekPenalty)
 }
 
 #[cfg(all(test, target_os = "windows"))]
