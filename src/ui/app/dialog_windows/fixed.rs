@@ -101,7 +101,7 @@ impl DialogKind {
             Self::Network => app.network_dialog = None,
             Self::NetworkForce => app.network_force_confirmation = None,
             Self::RemoteLogin => app.dismiss_remote_login(),
-            Self::ArchivePassword => app.dismiss_archive_password(),
+            Self::ArchivePassword => app.dismiss_archive_password(cx),
             Self::OpenWith => app.open_with = None,
             Self::TrashDelete => app.pending_trash_delete = None,
             Self::SettingsConfirmation => app.settings_confirmation = None,

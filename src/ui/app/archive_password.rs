@@ -256,7 +256,7 @@ impl OxydeApp {
             }
             let Some(window) = self.main_window else { return };
             let QueuedAsk { archive, wrong, retry } = ask;
-            // Marks the prompt as taken until the spawned task shows it.
+            // Shown by the task; a request arriving meanwhile queues itself behind it there.
             cx.spawn(async move |this, cx| {
                 let _ = window.update(cx, |_, window, cx| {
                     let _ = this.update(cx, |this, cx| this.show_archive_password(archive, wrong, retry, window, cx));
@@ -275,9 +275,11 @@ impl OxydeApp {
         cx.notify();
     }
 
-    /// The dialog could not open: the action stays refused.
-    pub(super) fn dismiss_archive_password(&mut self) {
+    /// The dialog could not open: the action stays refused. The requests waiting behind it
+    /// are asked in turn instead of waiting for an unrelated prompt.
+    pub(super) fn dismiss_archive_password(&mut self, cx: &mut Context<Self>) {
         self.archive_password = None;
+        self.ask_next_queued_password(cx);
     }
 
     /// A tab whose archive refused its listing lists it again once unlocked.
