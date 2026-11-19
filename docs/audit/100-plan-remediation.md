@@ -8,7 +8,7 @@ Ce plan découle de [99-synthese.md](99-synthese.md). Les identifiants (E, M, F,
 - Lot 1 fusionné le 2026-11-18 (`c7745898`, fusion sans avance rapide), `audit-fixes` repartie de `main`.
 - Lot 4 fusionné le 2026-11-18 (`2ebc41a7`, fusion sans avance rapide), `audit-fixes` réalignée sur `main`. Validé à la main : ZIP de 5,7 Go, clé exFAT (copie, compression, extraction, Oxyde portable). La marque Internet disparaît en copiant vers exFAT, comme avec l'Explorateur. Puis validés le même jour : ISO de Windows 11 montée, dates des ZIP dans l'Explorateur, archive chiffrée sur lecteur mappé, tar.gz de sources GitHub. `docs/audit/` reste hors Git (décision du 2026-11-18).
 - Lot 6 fusionné le 2026-11-18 (`bd63e890`, non poussé). Restes dans le lot 9.
-- Lot 9 fusionné le 2026-11-18 (`bfdc563b`, fusion sans avance rapide, non poussé), `audit-fixes` réalignée sur `main`. Tests manuels de WF6, F25, F11 et WM6 encore à faire.
+- Lot 9 fusionné le 2026-11-18 (`bfdc563b`, fusion sans avance rapide, non poussé), `audit-fixes` réalignée sur `main`. Tests manuels de WF6, F25 et F11 encore à faire (sous Windows 11) ; WM6 hors périmètre (2026-11-19).
 - Revue des lots du profil C fusionnée le 2026-11-19 (`a8fc0417`, fusion sans avance rapide, non poussée), `audit-fixes` réalignée sur `main`.
 - Lot 5 fusionné le 2026-11-18 (`cb29ff1e`, fusion sans avance rapide), `audit-fixes` réalignée sur `main`. Test manuel de l'IME japonais sous Windows à faire plus tard (pack de langue en téléchargement).
 - Un commit par constat, message en anglais sur une seule ligne.
@@ -174,7 +174,7 @@ Statuts : à faire, en cours, corrigé (hash), obsolète, reporté. Mettre à jo
 | 6 | M86 | voir lot 9 | | traité au lot 9 (96be2854) |
 | 6 | M68, M69, M75, M76, M80 à M82, M87, M90, M92, WM8 | corrigé | 6327bb78, f5ceb5da, ff167822, 3f0e28cb, e8695edb, 1bc563b7, 5847c923, 164624ea, aa00f6bd, eab2fc6f, c29b7617 | délai de 3 s pour l'Explorateur, requête d'instance résolue hors du thread du pipe, en-têtes vidéo sur un autre thread, cible de raccourci inchangée non réécrite, liste de la corbeille sur son thread, collage Shell pompé tant que la fenêtre de progression existe (à tester à la main), session PDF fermée sur erreur de transport, balayage des copies LPAC, lecture du lanceur bornée, OnOverwrite relayé, fichiers cloud exclus de la recherche de contenu |
 | 6 | M74, M83, M88 | voir lot 9 | | traités au lot 9 (M74 obsolète, M83 corrigé, M88 obsolète en partie) |
-| 6 | WM6 | voir lot 9 | | corrigé au lot 9 (1c16de6a), à tester sur Win10 LTSC |
+| 6 | WM6 | voir lot 9 | | corrigé au lot 9 (1c16de6a) ; test sur Win10 hors périmètre (décision du 2026-11-19) |
 | 6 | F5, F7, F9, F10, F12, F13, F14, F17, F19, F20, F21, F22, F23, F24, F28, F29, F30, F34 | corrigé | | commits de la session du 2026-11-18 (tampon des arguments du jump list, relâchement mémorisé, DPI nul, délai vidéo 60 s, .lnk atomique, lecture seule en suppression définitive, presse-papiers avec réessais, images disque, HICON détruits, Corbeille déjà vide, journal Accès rapide) |
 | 6 | F8 | obsolète | | « Exécuter en tant qu'administrateur » retiré du menu de la barre des tâches (df1ff6ba) |
 | 6 | F1 à F4, F6, F16, F18, F27, WF5, WF7 | corrigé | | message tronqué ignoré, requête de dialogue retirée si le lanceur est introuvable, chemins non transmissibles journalisés, menu de la barre des tâches sérialisé, manifeste de propriétés dans le dossier d'Oxyde en repli, attente de 150 ms entre éléments de sélection, attribut lecture seule vraiment effacé (corrige aussi F19), seuil de mémoire proportionnel, lecteur système et SystemRoot |
@@ -187,7 +187,7 @@ Statuts : à faire, en cours, corrigé (hash), obsolète, reporté. Mettre à jo
 | 9 | F26 | corrigé en partie | aa79fa36 | Windows n'a pas de remplacement atomique : révocation tolérée si rien n'est enregistré, une nouvelle tentative, message clair |
 | 9 | WF8 | corrigé | a6e13f8c | le verbe « openas » du sous-menu est lu par GetMenuItemInfo (vérifié sur ce poste) ; libellés gardés en repli |
 | 9 | M74 | obsolète | ca79e66c | vérifié : Windows ne détruit pas les fenêtres possédées d'un autre thread, il leur retire le propriétaire ; le placement suivant les rend à Oxyde (test ajouté) |
-| 9 | WM6 | corrigé, à tester | 1c16de6a | `\wsl$` pour les builds < 22000, les deux racines reconnues ; à tester sur la machine Win10 LTSC |
+| 9 | WM6 | corrigé, hors périmètre | 1c16de6a | `\wsl$` pour les builds < 22000, les deux racines reconnues ; WSL sous Windows 10 déclaré hors périmètre par l'utilisateur le 2026-11-19, non testé |
 | 9 | M83 | corrigé | d1302a19, bed6a16c | listage abandonné quand l'onglet change de dossier (Windows et Linux) ; vérification de mot de passe inchangée |
 | 9 | M88 | obsolète en partie | | Viewer : les requêtes périmées sont déjà sautées avant leur tour (`wanted`, ed41a5a3) ; icônes : assets GPUI sans notion de visibilité, requêtes courtes, laissé tel quel |
 | 9 | WF6 | corrigé | 5eb3a624, 9bb31de9, f7a68393, ffe8b181 | lecteur mappé hors ligne nommé par son partage sans attente réseau, WebDAV nommé par dossier/hôte, occupation de la corbeille sur fixes et amovibles, WebDAV exclu des serveurs, images reconnues via SUBST/lecteur mappé/point de montage, lettres réseau sautées ; à tester à la main |
@@ -274,3 +274,6 @@ Statuts : à faire, en cours, corrigé (hash), obsolète, reporté. Mettre à jo
 | catégorie 1 | F42 | corrigé | 628c9941 | repli PDF (chemin long ou non Unicode) admis par l'emplacement partagé |
 | catégorie 1 | F43 | corrigé | e455bbe8 | libération de la session du Viewer gardée par un drapeau quand la file est pleine ; sans test (session réelle) |
 | catégorie 1 | F44 | corrigé | daad4df9 | profils `Oxyde.Archive.<uuid>` de plus de 10 min supprimés une fois par processus avant la création d'un profil ; vérifié sur cette machine : 2 profils orphelins trouvés ; tests |
+| release | RUSTSEC-2026-0548 | corrigé | 5d5e5680 | zip 9.0.4 → 9.7.3 ; `cargo audit` passe ; précondition d'un test de recherche adaptée (méthode inconnue refusée à la lecture, plus à l'ouverture) |
+| release | toolchain Windows | corrigé | 53fb5c5d | distribution Windows alignée sur Rust 1.100.0 (1.98.1 restait de 0945330e) |
+| release | Win10 LTSC | validé | | 2026-11-19, VM Win10 LTSC, portable 2.2.2 d'`audit-fixes` : pas d'erreur 4395 (création, copie, déplacement, renommage, suppression), workers isolés OK (miniatures, icône d'exe, 7z) |

@@ -9,7 +9,7 @@
 | 1. Corrigeables dès à présent | M96, M97, faibles Windows F32 à F44 | corrigés le 2026-11-19 (lignes « catégorie 1 » du suivi) |
 | 2. Gros chantiers | M17, M67, reste de M43, M31, M32 | faisables, mais refonte |
 | 3. Impossibles ou choix volontaires | F26, F72, F119, WM1 (reste), M14, M88 (icônes), F77, ordre de deux lancements | à laisser, sauf décision contraire |
-| 4. Besoin d'une autre machine | WM6, M57/M58, E9/E10 sous Linux, faibles Linux F45 à F69 | Win10 LTSC ou session Linux |
+| 4. Besoin d'une autre machine | M57/M58, E9/E10 sous Linux, faibles Linux F45 à F69 | session Linux (WM6 hors périmètre, 2026-11-19) |
 | 5. Faibles non examinés | archives, noyau et interface (voir annexe) | à traiter petit à petit |
 | 6. Optimisations (série O) | 86 constats (voir annexe) | à mesurer avant tout changement |
 
@@ -110,7 +110,7 @@ Détails techniques :
 
 | Point | Pour l'utilisateur | Ce qu'il faut |
 | --- | --- | --- |
-| WM6 | sous Windows 10 LTSC, les entrées « Linux » de la barre latérale mènent à des chemins introuvables | corrigé au lot 9 (1c16de6a) ; à tester sur la machine Win10 LTSC |
+| WM6 | sous Windows 10 LTSC, les entrées « Linux » de la barre latérale mènent à des chemins introuvables | corrigé au lot 9 (1c16de6a) ; test hors périmètre (décision du 2026-11-19) |
 | M57, M58 | sous Linux, déplacer beaucoup de fichiers vers une archive, ou annuler une très grosse copie, peut échouer faute de descripteurs | atténués par E6 (374c5078) ; la structure ne change pas sans session Linux |
 | E9, E10 | sous X11, répétition de touche ; saisie IBus/Fcitx | tests sur une vraie machine Linux (`tests-linux.md`) |
 | F45 à F69 | 25 faibles Linux (presse-papiers, corbeille, GIO, montages) | session Linux ou WSL ; détail dans l'annexe |
