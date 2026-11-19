@@ -136,3 +136,11 @@ Paquets installés dans la VM WSL pour ces tests : `wl-clipboard`, `udisks2` (se
 - [ ] M62 (`455c629b`) : rechercher un mot placé après une ligne en Latin-1 (`printf 'caf\xe9\nmot\n'`) : trouvé.
 - [ ] M29 (`65b51b17`) : survoler un fichier texte sur un partage NFS/SMB coupé, puis d'autres fichiers après 20 s : leurs aperçus reviennent.
 - [ ] M63/M64 (`233c9d7e`) : « Tout développer » sur `/`, replier aussitôt : le dossier reste replié.
+
+### Catégorie 1 de 101-restes (2026-11-19)
+
+- [x] Compiler et lancer `cargo test` sous WSL : check-linux.sh propre, 828 + 625 tests verts (2026-11-19).
+- [ ] M96 (`7d56f6b6`) : miniature d'un PNG transparent en grille, quitter puis revenir dans le dossier : toujours transparente.
+- [ ] M97 (`007930d8`) : PDF dont une page a une MediaBox nulle : les pages suivantes gardent leurs proportions, la dernière reste accessible.
+- [ ] F35/F36 (`1971dafc`, `e464eb90`) : compression 7z d'un gros dossier, pause de quelques minutes puis reprise : se termine sans « délai dépassé ».
+- [ ] F40 (`d89c0e11`) : dossier de nombreuses images ouvert dans deux onglets : les miniatures sont toutes mises en cache (le retour au dossier ne les régénère pas).
