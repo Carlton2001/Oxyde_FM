@@ -387,8 +387,9 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
             .border_color(menu_border)
             .rounded(rems(0.5))
             .shadow(crate::ui::style::menu_shadow())
+            // A header alone, such as a row of buttons, keeps the menu's padding even.
             .when_some(self.header.take(), |s, h| {
-                s.child(div().mb(rems(0.125)).child(h))
+                s.child(div().when(item_count > 0, |header| header.mb(rems(0.125))).child(h))
             })
             .child(div().relative().flex().child(
                 div().w(px(list_w)).h(px(viewport_h)).child(

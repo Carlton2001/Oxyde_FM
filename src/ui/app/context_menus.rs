@@ -27,6 +27,7 @@ pub(super) fn context_menu_contains_point(
 
 pub(super) fn context_menu_height(menu: &ContextMenuInstance, viewport_height: Pixels) -> Pixels {
     if let Some(bounds) = menu.native_bounds { return bounds.size.height; }
+    if let ContextMenuContent::GridSize(_) = menu.content { return px(crate::ui::style::menu_item_height() + logical(10.0)); }
     let (item_count, header_height, max_height) = match &menu.content {
         ContextMenuContent::Items(items) | ContextMenuContent::Grid(super::filters::GridMenu { items, .. }) => (
             items.iter().filter(|item| !matches!(item.icon, Some(crate::ui::components::dropdown::IconName::Separator))).count(),
@@ -38,6 +39,7 @@ pub(super) fn context_menu_height(menu: &ContextMenuInstance, viewport_height: P
         }
         // Measured once drawn; until then, a header and a few rows.
         ContextMenuContent::ColumnFilter(_) => (6, logical(96.0), logical(320.0)),
+        ContextMenuContent::GridSize(_) => (1, logical(6.0), f32::INFINITY),
     };
     let header = matches!(&menu.content, ContextMenuContent::ColumnFilter(_));
     let max_height = crate::ui::style::menu_list_max_height(viewport_height.as_f32(), header, max_height);

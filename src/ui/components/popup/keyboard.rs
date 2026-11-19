@@ -11,6 +11,8 @@ struct Row {
     submenu: Option<Action>,
     adjust: Option<Adjust>,
     scroll: Option<(ScrollHandle, usize)>,
+    /// Laid out side by side with the menu's other rows: Left and Right move between them.
+    horizontal: bool,
 }
 #[derive(Default)]
 struct Navigation {
@@ -65,6 +67,10 @@ pub(super) fn key(key: &str, window: &mut Window, cx: &mut App) -> bool {
             if let Some((scroll, index)) = &nav.rows[nav.selected.unwrap()].scroll {
                 scroll.scroll_to_item(*index);
             }
+            window.refresh();
+        }
+        "left" | "right" if nav.rows.iter().all(|row| row.horizontal) => {
+            nav.selected = selection(nav.selected, count, if key == "left" { "up" } else { "down" });
             window.refresh();
         }
         "left" | "right" => {
@@ -129,6 +135,7 @@ pub(crate) struct KeyboardItem {
     submenu: Option<Action>,
     scroll: Option<(ScrollHandle, usize)>,
     adjust: Option<Adjust>,
+    horizontal: bool,
 }
 pub(crate) fn item(
     row: Stateful<Div>,
@@ -142,12 +149,18 @@ pub(crate) fn item(
         submenu,
         scroll,
         adjust: None,
+        horizontal: false,
     }
 }
 impl KeyboardItem {
     /// Left and Right change the row's value instead of leaving or opening a submenu.
     pub(crate) fn adjust(mut self, adjust: Adjust) -> Self {
         self.adjust = Some(adjust);
+        self
+    }
+    /// One of a line of buttons, which Left and Right walk through as Up and Down do.
+    pub(crate) fn horizontal(mut self) -> Self {
+        self.horizontal = true;
         self
     }
 }
@@ -167,6 +180,7 @@ impl RenderOnce for KeyboardItem {
             submenu: self.submenu,
             scroll: self.scroll,
             adjust: self.adjust,
+            horizontal: self.horizontal,
         });
         let selected = nav.selected == Some(index);
         let color = crate::ui::theme::OxydeTheme::global(cx).menu_hover;

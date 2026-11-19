@@ -11,42 +11,14 @@ impl OxydeApp {
         GridSize::from_config(&self.config.grid_size)
     }
 
-    /// The three card sizes, from the grid button's right click, for mice without a wheel.
-    /// Choosing one also shows the pane as a grid.
+    /// The three card sizes, from the grid button's right click, for mice without a wheel:
+    /// a line of squares growing with the size they choose.
     pub(crate) fn open_grid_size_menu(&mut self, pane_id: &str, position: Point<Pixels>, cx: &mut Context<Self>) {
-        use crate::ui::components::dropdown::{DropdownItem, IconName};
-        use crate::ui::i18n::{I18nContext, Message};
-        let handle = cx.entity();
-        let current = self.grid_size();
-        let items = [
-            (GridSize::Small, Message::GridSizeSmall),
-            (GridSize::Medium, Message::GridSizeMedium),
-            (GridSize::Large, Message::GridSizeLarge),
-        ].into_iter().map(|(size, label)| {
-            let handle = handle.clone();
-            let pane_id = pane_id.to_string();
-            let mut item = DropdownItem::new(cx.i18n().text(label).to_string(), move |_, cx| {
-                handle.update(cx, |this, cx| {
-                    this.context_menus.clear();
-                    this.set_grid_size(size, cx);
-                    if let Some(pane) = this.state.find_pane_mut(&pane_id) {
-                        pane.active_tab_mut().view_mode = ViewMode::Grid;
-                    }
-                    this.hovered_card = None;
-                    this.save_workspace(cx);
-                    cx.notify();
-                });
-            });
-            if size == current {
-                item.icon = Some(IconName::Check);
-            }
-            item
-        }).collect();
         self.context_menus.clear();
         self.context_menus.push(super::ContextMenuInstance {
             native_bounds: None,
             position,
-            content: super::ContextMenuContent::Items(items),
+            content: super::ContextMenuContent::GridSize(pane_id.to_string()),
             scroll_handle: UniformListScrollHandle::new(),
             width: px(0.0),
             open_left: true,
@@ -54,6 +26,18 @@ impl OxydeApp {
             native_request_id: None,
             open_up: true,
         });
+        cx.notify();
+    }
+
+    /// A size chosen from that menu, which closes it. Choosing one also shows the pane as a grid.
+    pub(crate) fn choose_grid_size(&mut self, pane_id: &str, size: GridSize, cx: &mut Context<Self>) {
+        self.context_menus.clear();
+        self.set_grid_size(size, cx);
+        if let Some(pane) = self.state.find_pane_mut(pane_id) {
+            pane.active_tab_mut().view_mode = ViewMode::Grid;
+        }
+        self.hovered_card = None;
+        self.save_workspace(cx);
         cx.notify();
     }
 

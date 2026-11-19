@@ -163,6 +163,8 @@ pub enum ContextMenuContent {
     ColumnFilter(Box<filters::ColumnFilterPanel>),
     /// Sort by or Filter by of the grid view, rebuilt from the tab while it stays open.
     Grid(filters::GridMenu),
+    /// The grid's three card sizes on one line, for the pane with this identifier.
+    GridSize(String),
 }
 
 impl ContextMenuContent {

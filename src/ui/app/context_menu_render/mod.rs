@@ -1,6 +1,7 @@
 mod items;
 mod native;
 mod column_filter;
+mod grid_size;
 
 use crate::ui::app::{ContextMenuContent, DragTarget, OxydeApp};
 use gpui::prelude::*;
@@ -52,6 +53,7 @@ impl OxydeApp {
                             ContextMenuContent::Grid(menu) => view.render_items_menu(&menu.items, index, h, scroll.clone(), dragging, parent, height),
                             ContextMenuContent::NativeItems { path, is_background, items } => view.render_native_menu(path, is_background, items, index, h, scroll.clone(), dragging, parent, height),
                             ContextMenuContent::ColumnFilter(panel) => view.render_column_filter(panel, index, h, scroll.clone(), dragging, height, window, cx),
+                            ContextMenuContent::GridSize(pane_id) => view.render_grid_size_menu(pane_id, index, h, scroll.clone(), height, cx),
                         };
                         content.into_any_element()
                     },
@@ -88,6 +90,9 @@ impl OxydeApp {
                 ),
                 ContextMenuContent::ColumnFilter(panel) => self.render_column_filter(
                     panel, m_idx, h, scroll_handle, is_v_dragging, win_h, _window, cx,
+                ),
+                ContextMenuContent::GridSize(pane_id) => self.render_grid_size_menu(
+                    pane_id, m_idx, h, scroll_handle, win_h, cx,
                 ),
             };
 
