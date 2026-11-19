@@ -19,3 +19,18 @@ fn destination_collision_is_translated_and_preserves_the_literal_path() {
         assert!(!translated.starts_with('['));
     }
 }
+
+#[test]
+fn refused_replacement_of_a_link_is_translated_in_every_language() {
+    use crate::ui::i18n::{I18n, Message};
+    let detail = format!(
+        "Cannot copy \"/a\" to \"/b\": {}",
+        oxyde_lib::models::error::COPY_TARGET_NOT_REPLACEABLE
+    );
+    for language in Language::ALL {
+        let i18n = I18n::for_language(language);
+        let translated = error_detail(&detail, &i18n);
+        assert_eq!(translated, i18n.text(Message::TransferTargetNotReplaceable).to_string());
+        assert!(!translated.contains("Copy target"));
+    }
+}

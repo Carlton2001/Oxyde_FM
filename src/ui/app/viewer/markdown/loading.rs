@@ -19,7 +19,7 @@ impl Viewer {
             if cancelled() {
                 return Ok(false);
             }
-            let file = std::fs::File::open(&path)?;
+            let file = oxyde_lib::utils::open_regular::open_regular(std::path::Path::new(&path))?;
             let limit = MAX_MARKDOWN_BYTES;
             let truncated = file.metadata()?.len() > limit;
             let mut bytes = Vec::new();

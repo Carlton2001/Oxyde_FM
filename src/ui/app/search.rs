@@ -192,6 +192,9 @@ pub struct ArchiveSearchWarnings {
 #[cfg(test)]
 #[path = "search/tests/archive_limitations.rs"]
 mod archive_limitation_tests;
+#[cfg(test)]
+#[path = "search/tests/label.rs"]
+mod label_tests;
 
 impl ArchiveSearchWarnings {
     fn record(&mut self, path: String, detail: String) {
@@ -324,7 +327,13 @@ pub fn parse_search_path(path: &str) -> Option<(String, String)> {
 }
 
 pub fn search_label(path: &str, i18n: &crate::ui::i18n::I18n) -> Option<String> {
-    let (root, query) = parse_search_path(path)?;
+    let (root, mut query) = parse_search_path(path)?;
+    if query.is_empty() {
+        // An advanced search on the content alone has no name pattern to display.
+        if let Some((_, options)) = super::advanced_search::parse_advanced_path(path) {
+            query = options.content;
+        }
+    }
     let mut args = FluentArgs::new();
     args.set("query", query);
     args.set(

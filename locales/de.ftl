@@ -1078,6 +1078,7 @@ redo-rename-unverified = Das Umbenennen kann nicht sicher wiederholt werden: Die
 
 transfer-source-changed = Die Quelle wurde ersetzt oder ist keine reguläre Datei bzw. kein regulärer Ordner mehr. Der Vorgang wurde gestoppt; bereits übertragene Elemente bleiben erhalten. Prüfen Sie die Quelle und versuchen Sie es erneut.
 transfer-source-unverified = Die Identität der Quelle kann an diesem Speicherort nicht überprüft werden. Der Vorgang wurde gestoppt; bereits übertragene Elemente bleiben erhalten. Versuchen Sie es von einem kompatiblen lokalen Ordner aus.
+transfer-target-not-replaceable = Das vorhandene Element kann nicht ersetzt werden, da es keine reguläre Datei ist (zum Beispiel ein Link). Es wurde beibehalten; benennen Sie es um oder verschieben Sie es und versuchen Sie es erneut.
 
 trash-restore-ambiguous = Mehrere Papierkorbelemente stammen vom selben Speicherort. Öffnen Sie den Papierkorb und wählen Sie das gewünschte Element zum Wiederherstellen aus. Bereits wiederhergestellte Elemente bleiben erhalten.
 invalid-encoding-name = { $name } (ungültige Kodierung)

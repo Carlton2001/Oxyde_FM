@@ -1078,6 +1078,7 @@ redo-rename-unverified = No se puede rehacer este cambio de nombre de forma segu
 
 transfer-source-changed = El origen se ha sustituido o ya no es un archivo o carpeta normal. La operación se ha detenido; los elementos ya transferidos se conservan. Compruebe el origen e inténtelo de nuevo.
 transfer-source-unverified = No se puede verificar la identidad del origen en esta ubicación. La operación se ha detenido; los elementos ya transferidos se conservan. Pruebe desde una carpeta local compatible.
+transfer-target-not-replaceable = El elemento existente no se puede reemplazar porque no es un archivo normal (por ejemplo, un enlace). Se ha conservado; cámbiele el nombre o muévalo e inténtelo de nuevo.
 
 trash-restore-ambiguous = Varios elementos de la { -trash } proceden de la misma ubicación. Abra la { -trash } y seleccione el elemento concreto que desea restaurar. Los elementos ya restaurados se conservan.
 invalid-encoding-name = { $name } (codificación no válida)

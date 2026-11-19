@@ -120,6 +120,10 @@ impl fmt::Display for ShellDeleteFailure {
     }
 }
 impl std::error::Error for ShellDeleteFailure {}
+/// Message of the copy step that refuses to replace a link, a folder or another item that
+/// is not a regular file; the interface recognizes it to translate it.
+pub const COPY_TARGET_NOT_REPLACEABLE: &str = "Copy target is not an ordinary file";
+
 /// Why Windows refused an item, recognized from the HRESULT in its message.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShellDeleteCause {

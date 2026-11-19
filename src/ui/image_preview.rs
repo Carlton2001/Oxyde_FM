@@ -158,7 +158,7 @@ pub(crate) fn worker_reply(mode: &str, path: &Path) -> Option<oxyde_lib::utils::
         _ => return None,
     };
     let renderer = std::sync::OnceLock::new();
-    let decoded = std::fs::File::open(path)
+    let decoded = oxyde_lib::utils::open_regular::open_regular(std::path::Path::new(path))
         .map_err(|error| decoder::PreviewError::Read(error.to_string()))
         .and_then(|file| decoder::read_bounded(file, policy.encoded_bytes))
         .and_then(|data| decoder::decode(&data, policy, &|data, policy| {

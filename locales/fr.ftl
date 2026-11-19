@@ -787,6 +787,7 @@ redo-rename-unverified = Impossible de rétablir ce renommage en toute sécurit�
 
 transfer-source-changed = La source a été remplacée ou n’est plus un fichier ou dossier ordinaire. L’opération a été arrêtée ; les éléments déjà transférés sont conservés. Vérifiez la source puis réessayez.
 transfer-source-unverified = L’identité de la source ne peut pas être vérifiée sur cet emplacement. L’opération a été arrêtée ; les éléments déjà transférés sont conservés. Essayez depuis un dossier local compatible.
+transfer-target-not-replaceable = L’élément existant ne peut pas être remplacé car ce n’est pas un fichier ordinaire (un lien, par exemple). Il a été conservé ; renommez-le ou déplacez-le puis réessayez.
 
 trash-restore-ambiguous = Plusieurs éléments de la { -trash } proviennent du même emplacement. Ouvrez la { -trash } et sélectionnez précisément l’élément à restaurer. Les éléments déjà restaurés sont conservés.
 invalid-encoding-name = { $name } (encodage non valide)

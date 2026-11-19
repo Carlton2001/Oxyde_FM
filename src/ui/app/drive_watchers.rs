@@ -494,7 +494,14 @@ impl OxydeApp {
             needed.extend(
                 pane.tabs
                     .iter()
-                    .filter(|tab| !tab.is_viewer() && !tab.path.is_empty() && !tab.path.starts_with("search://"))
+                    .filter(|tab| {
+                        // Virtual locations have no directory to watch: the attempt would
+                        // fail and be logged again at every reconciliation.
+                        !tab.is_viewer()
+                            && !tab.path.is_empty()
+                            && !tab.path.starts_with("search://")
+                            && !matches!(tab.path.as_str(), "trash://" | "__network_vincinity__")
+                    })
                     .map(|tab| tab.watched_path()),
             );
         });

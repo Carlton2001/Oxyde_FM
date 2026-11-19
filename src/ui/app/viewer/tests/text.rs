@@ -108,3 +108,14 @@ fn wrapping_never_loses_source_bytes_in_narrow_panes() {
         }
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn a_named_pipe_is_refused_instead_of_blocking_the_viewer() {
+    use super::read;
+    let directory = tempfile::tempdir().unwrap();
+    let pipe = directory.path().join("tube.txt");
+    let c_path = std::ffi::CString::new(pipe.to_str().unwrap()).unwrap();
+    assert_eq!(unsafe { libc::mkfifo(c_path.as_ptr(), 0o644) }, 0);
+    assert!(read(pipe.to_str().unwrap()).is_err());
+}

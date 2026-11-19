@@ -781,6 +781,7 @@ redo-rename-unverified = Cannot safely redo this rename: the file or folder’s 
 
 transfer-source-changed = The source was replaced or is no longer a regular file or folder. The operation stopped; items already transferred were kept. Check the source and try again.
 transfer-source-unverified = The source identity cannot be verified at this location. The operation stopped; items already transferred were kept. Try from a compatible local folder.
+transfer-target-not-replaceable = The existing item cannot be replaced because it is not a regular file (for example a link). It was kept; rename or move it and try again.
 
 trash-restore-ambiguous = Several { -trash } items came from the same location. Open the { -trash } and select the specific item to restore. Items already restored were kept.
 invalid-encoding-name = { $name } (invalid encoding)

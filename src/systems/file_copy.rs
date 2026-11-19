@@ -396,7 +396,7 @@ fn check_replacement(path: &Path) -> io::Result<()> {
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "Copy target is not an ordinary file",
+            crate::models::error::COPY_TARGET_NOT_REPLACEABLE,
         ));
     }
     if metadata.permissions().readonly() {

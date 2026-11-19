@@ -129,7 +129,7 @@ pub(super) fn wrap(text: &str, lines: &[Offset], columns: usize) -> Vec<Offset> 
 
 fn read(path: &str) -> std::io::Result<(String, bool)> {
     use std::io::Read;
-    let file = std::fs::File::open(path)?;
+    let file = oxyde_lib::utils::open_regular::open_regular(std::path::Path::new(path))?;
     let length = file.metadata()?.len();
     let mut bytes = Vec::new();
     file.take(MAX_TEXT_BYTES).read_to_end(&mut bytes)?;
