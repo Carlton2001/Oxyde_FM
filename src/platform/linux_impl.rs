@@ -700,6 +700,11 @@ impl Platform for LinuxPlatform {
     fn is_network_path(&self, path: &std::path::Path) -> bool {
         super::hardware::is_network_path(path)
     }
+    /// GVfs's FUSE view of a network share has no trash to send to: Nautilus offers the
+    /// permanent deletion there.
+    fn has_recycle_bin(&self, path: &std::path::Path) -> bool {
+        !super::linux_gio::fuse_root().is_some_and(|root| path.starts_with(root))
+    }
 
     /// Nautilus' « Networks »: servers GVfs discovers by WS-Discovery, DNS-SD and SMB,
     /// then the recent servers it does not announce.

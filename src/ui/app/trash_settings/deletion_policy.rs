@@ -101,8 +101,13 @@ impl OxydeApp {
 pub(super) fn selection_deletes_permanently(paths: &[String]) -> bool {
     let mut roots = std::collections::HashMap::new();
     !paths.is_empty() && paths.iter().all(|path| {
-        let Some(root) = std::path::Path::new(path).ancestors().last() else { return false; };
-        let root = root.to_string_lossy().into_owned();
+        // Windows decides per drive; elsewhere the item's own path says which mount it is on.
+        let root = if cfg!(windows) {
+            let Some(root) = std::path::Path::new(path).ancestors().last() else { return false; };
+            root.to_string_lossy().into_owned()
+        } else {
+            path.clone()
+        };
         *roots.entry(root.clone()).or_insert_with(|| {
             let platform = oxyde_lib::platform::platform();
             !platform.has_recycle_bin(std::path::Path::new(&root))

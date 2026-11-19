@@ -499,8 +499,8 @@ impl OxydeApp {
                         // fail and be logged again at every reconciliation.
                         !tab.is_viewer()
                             && !tab.path.is_empty()
-                            && !tab.path.starts_with("search://")
-                            && !matches!(tab.path.as_str(), "trash://" | "__network_vincinity__")
+                            && !tab.path.contains("://")
+                            && tab.path != "__network_vincinity__"
                     })
                     .map(|tab| tab.watched_path()),
             );

@@ -168,3 +168,12 @@ fn uris_compare_through_every_escaping_level() {
     assert_ne!(unescaped("smb://nas/a"), unescaped("smb://nas/b"));
     assert_eq!(unescaped("smb://nas/100%"), "smb://nas/100%");
 }
+
+#[test]
+fn a_share_seen_through_gvfs_fuse_has_no_trash() {
+    use crate::platform::Platform;
+    let Some(root) = fuse_root() else { return };
+    let platform = crate::platform::linux_impl::LinuxPlatform;
+    assert!(!platform.has_recycle_bin(&root.join("smb-share:server=host,share=s/dossier/a.txt")));
+    assert!(platform.has_recycle_bin(std::path::Path::new("/tmp/a.txt")));
+}

@@ -107,12 +107,15 @@ pub(super) fn restore_directory(directory: &File, source: &super::DirectoryAttri
 }
 
 /// FAT and exFAT refuse setuid, setgid and sticky bits with `EPERM`, and keep no other
-/// bit: the copy goes on without them, as file managers copy to such volumes.
+/// bit: the copy goes on without them, as file managers copy to such volumes. A mount
+/// with no modes at all, such as GVfs's FUSE view of a network share, answers
+/// `EOPNOTSUPP`: the file keeps the mode the mount gives.
 fn set_mode(file: &File, mode: u32) -> io::Result<()> {
     match file.set_permissions(Permissions::from_mode(mode)) {
         Err(error) if error.kind() == io::ErrorKind::PermissionDenied && mode & 0o7000 != 0 => {
             file.set_permissions(Permissions::from_mode(mode & 0o777))
         }
+        Err(error) if error.raw_os_error() == Some(Errno::OPNOTSUPP.raw_os_error()) => Ok(()),
         result => result,
     }
 }
