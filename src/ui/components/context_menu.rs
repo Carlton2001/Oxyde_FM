@@ -336,7 +336,10 @@ pub fn oxyde_context_menu_items(
     if !path.starts_with("trash:") {
         history_actions::insert_menu_items(&mut items, i18n, h, view);
     }
-    if view.is_read_only_location(&view.state.active_pane_id, &path) {
+    // The actions apply to the whole selection, which a search spreads over several volumes.
+    if std::iter::once(path.clone()).chain(view.context_action_paths(&path))
+        .any(|item| view.is_read_only_location(&view.state.active_pane_id, &item))
+    {
         without_writing_actions(&mut items, i18n);
     }
     context_menu_sections(items, i18n)
