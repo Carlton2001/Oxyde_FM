@@ -159,7 +159,7 @@ pub(super) fn point_to_owner(
     let owner = hwnd(owner)?;
     unsafe {
         let scale = windows::Win32::UI::HiDpi::GetDpiForWindow(window).max(96) as f32 / 96.0;
-        let owner_scale = windows::Win32::UI::HiDpi::GetDpiForWindow(owner) as f32 / 96.0;
+        let owner_scale = windows::Win32::UI::HiDpi::GetDpiForWindow(owner).max(96) as f32 / 96.0;
         let mut point = POINT {
             x: (point.0 * scale).round() as i32,
             y: (point.1 * scale).round() as i32,
@@ -208,7 +208,7 @@ pub(super) fn work_area_size(handle: RawWindowHandle) -> Result<(f32, f32), Stri
         if !GetMonitorInfoW(monitor, &mut info).as_bool() {
             return Err("Cannot read popup work area".into());
         }
-        let scale = windows::Win32::UI::HiDpi::GetDpiForWindow(window) as f32 / 96.0;
+        let scale = windows::Win32::UI::HiDpi::GetDpiForWindow(window).max(96) as f32 / 96.0;
         Ok((
             (info.rcWork.right - info.rcWork.left) as f32 / scale,
             (info.rcWork.bottom - info.rcWork.top) as f32 / scale,
