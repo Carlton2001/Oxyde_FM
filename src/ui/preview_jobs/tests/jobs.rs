@@ -497,3 +497,32 @@ fn preview_jobs_stuck_hover_read_gives_its_slot_back_within_the_spare_limit() {
     }
     assert_eq!(queue.slots.available_permits(), 1);
 }
+
+#[test]
+fn preview_jobs_hover_deadline_runs_when_polled_outside_tokio() {
+    let runtime = runtime();
+    let queue = PreviewQueue::new(1);
+    let spares = Arc::new(Semaphore::new(1));
+    let blocker = Blocker::default();
+    let _release = ReleaseOnDrop(blocker.clone());
+    let work_blocker = blocker.clone();
+    // GPUI polls hover futures on its own threads, without a Tokio context.
+    assert!(Handle::try_current().is_err());
+    let quick = futures::executor::block_on(queue.run_with_deadline(
+        runtime.handle().clone(),
+        Duration::from_millis(50),
+        &spares,
+        || Ok::<_, String>(3),
+    ));
+    assert_eq!(quick.unwrap(), 3);
+    let stuck = futures::executor::block_on(queue.run_with_deadline(
+        runtime.handle().clone(),
+        Duration::from_millis(50),
+        &spares,
+        move || {
+            work_blocker.wait();
+            Ok::<_, String>(4)
+        },
+    ));
+    assert!(stuck.unwrap_err().starts_with("PreviewWorkerTimeout:"));
+}

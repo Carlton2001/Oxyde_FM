@@ -131,8 +131,9 @@ impl PreviewQueue {
             work().map_err(|error| error.to_string())
         });
         loop {
-            // GPUI polls this future outside Tokio: the timer runs on the runtime.
-            let timer = runtime.spawn(tokio::time::sleep(deadline));
+            // GPUI polls this future outside Tokio: the timer is created and
+            // runs inside a runtime task, never on the polling thread.
+            let timer = runtime.spawn(async move { tokio::time::sleep(deadline).await });
             match futures::future::select(&mut job, timer).await {
                 futures::future::Either::Left((result, timer)) => {
                     timer.abort();
