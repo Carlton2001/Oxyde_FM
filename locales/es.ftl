@@ -181,6 +181,7 @@ menu-new-file = Nuevo archivo
 menu-duplicate-tab = Duplicar pestaña
 
 menu-close-other-tabs = Cerrar otras pestañas
+menu-reopen-closed-tab = Reabrir pestaña cerrada
 
 menu-close-tab = Cerrar pestaña
 

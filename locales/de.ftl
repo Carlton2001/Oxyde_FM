@@ -181,6 +181,7 @@ menu-new-file = Neue Datei
 menu-duplicate-tab = Tab duplizieren
 
 menu-close-other-tabs = Andere Tabs schließen
+menu-reopen-closed-tab = Geschlossenen Tab wieder öffnen
 
 menu-close-tab = Tab schließen
 

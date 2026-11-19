@@ -13,6 +13,7 @@ pub struct TabBar {
     children: Vec<AnyElement>,
     scroll_state: crate::ui::workspace::TabStripState,
     on_new_tab: Option<Box<dyn Fn(&mut Window, &mut App) + 'static>>,
+    on_blank_right_click: Option<Box<dyn Fn(Point<Pixels>, &mut Window, &mut App) + 'static>>,
     /// Offset of the + button following the tabs, while a dragged tab opens or leaves room.
     new_tab_shift: f32,
 }
@@ -24,6 +25,7 @@ impl TabBar {
             children: Vec::new(),
             scroll_state: Default::default(),
             on_new_tab: None,
+            on_blank_right_click: None,
             new_tab_shift: 0.0,
         }
     }
@@ -35,6 +37,12 @@ impl TabBar {
 
     pub fn on_new_tab(mut self, f: impl Fn(&mut Window, &mut App) + 'static) -> Self {
         self.on_new_tab = Some(Box::new(f));
+        self
+    }
+
+    /// A right click on the bar outside its tabs, which stop it.
+    pub fn on_blank_right_click(mut self, f: impl Fn(Point<Pixels>, &mut Window, &mut App) + 'static) -> Self {
+        self.on_blank_right_click = Some(Box::new(f));
         self
     }
 
@@ -136,6 +144,9 @@ impl RenderOnce for TabBar {
             .overflow_hidden()
             .h(crate::ui::style::TAB_BAR_HEIGHT)
             .bg(theme.header)
+            .when_some(self.on_blank_right_click, |bar, on_click| {
+                bar.on_mouse_down(MouseButton::Right, move |event, window, cx| on_click(event.position, window, cx))
+            })
             // Paint behind the tabs so the active surface covers the separator.
             .child(
                 div()

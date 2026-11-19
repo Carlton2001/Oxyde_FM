@@ -438,6 +438,17 @@ impl OxydeApp {
         cx.notify();
     }
 
+    /// Reopen the last closed tab, with its opening flash, where it was closed when possible.
+    pub fn reopen_closed_tab(&mut self, cx: &mut Context<Self>) {
+        let Some((pane_id, index)) = self.state.reopen_closed_tab() else { return };
+        if let Some(path) = self.state.find_pane(&pane_id).map(|pane| pane.tabs[index].path.clone()) {
+            self.request_tab_files(&pane_id, index, path, false, cx);
+        }
+        self.reconcile_watchers(cx);
+        self.save_workspace(cx);
+        cx.notify();
+    }
+
     pub fn close_other_tabs(&mut self, pane_id: &str, tab_idx: usize, cx: &mut Context<Self>) {
         self.state.close_other_tabs(pane_id, tab_idx);
         self.reconcile_watchers(cx);

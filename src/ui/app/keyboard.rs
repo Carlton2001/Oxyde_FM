@@ -38,7 +38,7 @@ impl OxydeApp {
             | ("enter" | "up" | "v", false, true, false)
             | ("c" | "z" | "n" | "tab" | "pageup" | "pagedown" | "+" | "=" | "add" | ".", true, false, _)
             | ("a" | "x" | "v" | "y" | "r" | "f" | "l" | "-" | "subtract" | "0", true, false, false)
-            | ("a", true, false, true)
+            | ("a" | "t", true, false, true)
             | ("c", true, true, false)
             | ("s", false, true, true)
             | ("menu", false, false, _)
@@ -96,6 +96,7 @@ impl OxydeApp {
             ("l", true, false, false) => self.begin_breadcrumb_edit(pane_id.clone(), window, cx),
             ("n", true, false, false) => self.add_panel_right(cx),
             ("n", true, false, true) => self.create_new_folder(&pane_id, cx),
+            ("t", true, false, true) => self.reopen_closed_tab(cx),
             ("tab", true, false, previous) | ("pageup", true, false, previous) | ("pagedown", true, false, previous) => {
                 let previous = previous || key.key == "pageup";
                 let count = pane.tabs.len();

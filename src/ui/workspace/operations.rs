@@ -31,6 +31,7 @@ impl WorkspaceState {
             sidebar_items: Vec::new(),
             sidebar_nodes: std::collections::HashMap::new(),
             next_tab_id: 1,
+            closed_tabs: Default::default(),
         };
 
         state.refresh_sidebar();
@@ -207,6 +208,8 @@ impl WorkspaceState {
                 return;
             }
             if pane.tabs.len() == 1 {
+                self.remember_closed_tab(pane_id, tab_idx);
+                let Some(pane) = self.find_pane(pane_id) else { return };
                 let path = if pane.tabs[0].is_viewer() {
                     if cfg!(target_os = "windows") { "C:/".into() } else { Self::home_location() }
                 } else { pane.tabs[0].path.clone() };
@@ -223,6 +226,7 @@ impl WorkspaceState {
             }
         }
 
+        self.remember_closed_tab(pane_id, tab_idx);
         let mut should_remove_pane = false;
         if let Some(pane) = self.find_pane_mut(pane_id) {
             if tab_idx >= pane.tabs.len() {
@@ -272,6 +276,12 @@ impl WorkspaceState {
     }
 
     pub fn close_other_tabs(&mut self, pane_id: &str, tab_idx: usize) {
+        let count = self.find_pane(pane_id).map_or(0, |pane| pane.tabs.len());
+        if tab_idx >= count { return; }
+        // Remembered right to left, so reopening restores them left to right at their places.
+        for index in (0..count).rev().filter(|&index| index != tab_idx) {
+            self.remember_closed_tab(pane_id, index);
+        }
         if let Some(pane) = self.find_pane_mut(pane_id) {
             if tab_idx < pane.tabs.len() {
                 let tab = pane.tabs[tab_idx].clone();

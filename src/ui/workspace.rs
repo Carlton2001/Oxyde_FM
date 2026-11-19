@@ -1,5 +1,6 @@
 mod filters;
 mod operations;
+mod closed_tabs;
 mod sidebar;
 mod snapshots;
 mod tab;
@@ -316,4 +317,5 @@ pub struct WorkspaceState {
     pub sidebar_items: Vec<SidebarItem>,
     pub sidebar_nodes: std::collections::HashMap<String, Vec<SidebarNode>>,
     next_tab_id: u64,
+    pub(crate) closed_tabs: closed_tabs::ClosedTabs,
 }

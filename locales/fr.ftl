@@ -129,6 +129,7 @@ menu-new-folder = Nouveau dossier
 menu-new-file = Nouveau fichier
 menu-duplicate-tab = Dupliquer l’onglet
 menu-close-other-tabs = Fermer les autres onglets
+menu-reopen-closed-tab = Rouvrir l’onglet fermé
 menu-close-tab = Fermer l’onglet
 menu-select-all = Tout sélectionner
 menu-deselect-all = Tout désélectionner

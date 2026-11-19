@@ -116,6 +116,7 @@ impl OxydeApp {
         self.state.layout.visit_panes(&mut |_| pane_count += 1);
         let can_close_tab = pane.active_tab().is_viewer() || pane_count > 1 || tabs_count > 1;
         let can_close_other_tabs = tabs_count > 1;
+        let can_reopen_closed_tab = !self.state.closed_tabs.is_empty();
         // The dragged tab, the slot it targets and the room it takes.
         let dragged = self.dragging_tab.clone();
         let target = self.drop_target_pane.clone().zip(self.drop_target_idx);
@@ -130,18 +131,35 @@ impl OxydeApp {
         let mut tab_bar = TabBar::new(SharedString::from(format!("tab-bar-{}", p_id)))
             .scroll_state(pane.tab_strip.clone(), pane.active_tab().id.clone(), active_idx)
             .new_tab_shift(new_tab_shift)
+            // The viewer's bar offers neither a new tab nor a menu.
             .when(!pane.active_tab().is_viewer(), |bar| bar.on_new_tab({
                 let h = h.clone();
                 let p_id_cap = p_id.clone();
-                move |_, cx| {
+                move |_, cx| h.update(cx, |this, cx| this.add_home_tab(&p_id_cap, cx))
+            })
+            .on_blank_right_click({
+                let h = h.clone();
+                let p_id_cap = p_id.clone();
+                move |position, _, cx| {
                     h.update(cx, |this, cx| {
-                        let path = if cfg!(target_os = "windows") {
-                            // The system drive, which is not always C:.
-                            format!("{}/", std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into()))
-                        } else {
-                            crate::ui::workspace::WorkspaceState::home_location()
-                        };
-                        this.add_tab(&p_id_cap, path, true, cx);
+                        use crate::ui::app::{ContextMenuContent, ContextMenuInstance};
+                        this.context_menus.clear();
+                        this.context_menus.push(ContextMenuInstance {
+                            native_bounds: None,
+                            position,
+                            content: ContextMenuContent::Items(crate::ui::components::tab_bar_context_menu_items(
+                                cx.i18n(),
+                                h.clone(),
+                                p_id_cap.clone(),
+                                !this.state.closed_tabs.is_empty(),
+                            )),
+                            scroll_handle: gpui::UniformListScrollHandle::new(),
+                            width: px(0.0),
+                            open_left: false,
+                            hovered_item: None,
+                            native_request_id: None, open_up: false,
+                        });
+                        cx.notify();
                     });
                 }
             }));
@@ -267,6 +285,7 @@ impl OxydeApp {
                                     t_ix,
                                     can_close_tab,
                                     can_close_other_tabs,
+                                    can_reopen_closed_tab,
                                 ),
                             ),
                             scroll_handle: gpui::UniformListScrollHandle::new(),
@@ -645,6 +664,19 @@ impl OxydeApp {
                 }
             })
             .child(tab_bar)
+    }
+}
+
+impl OxydeApp {
+    /// A tab at the starting location: home, or the system drive on Windows.
+    pub(crate) fn add_home_tab(&mut self, pane_id: &str, cx: &mut Context<Self>) {
+        let path = if cfg!(target_os = "windows") {
+            // The system drive, which is not always C:.
+            format!("{}/", std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into()))
+        } else {
+            crate::ui::workspace::WorkspaceState::home_location()
+        };
+        self.add_tab(pane_id, path, true, cx);
     }
 }
 

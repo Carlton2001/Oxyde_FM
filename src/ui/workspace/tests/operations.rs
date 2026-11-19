@@ -13,7 +13,7 @@ fn show_only_replaces_the_layout_and_keeps_the_given_order() {
         expanded_paths: Default::default(),
         sidebar_items: Vec::new(),
         sidebar_nodes: Default::default(),
-        next_tab_id: 1,
+        next_tab_id: 1, closed_tabs: Default::default(),
     };
     state.show_only(&["/a".into(), "/b".into(), "smb://server/share".into()]);
     let LayoutNode::Pane(pane) = &state.layout else { panic!("one pane expected") };

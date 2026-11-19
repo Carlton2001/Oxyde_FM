@@ -181,6 +181,7 @@ menu-new-file = Nuovo file
 menu-duplicate-tab = Duplica scheda
 
 menu-close-other-tabs = Chiudi altre schede
+menu-reopen-closed-tab = Riapri scheda chiusa
 
 menu-close-tab = Chiudi scheda
 

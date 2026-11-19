@@ -80,6 +80,7 @@ pub enum IconName {
     Restore,
     CopyPlus,
     CopyX,
+    Plus,
 }
 
 /// Match the semantic Lucide icon used by the former Tauri context menu.
@@ -605,6 +606,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                                     IconName::CopyPlus => {
                                                                         "icons/copy-plus.svg"
                                                                     }
+                                                                    IconName::Plus => "icons/plus.svg",
                                                                     IconName::Separator => unreachable!("separator rows have no icon"),
                                                                     IconName::ListOrdered => {
                                                                         "icons/list-ordered.svg"

@@ -249,6 +249,8 @@ impl RenderOnce for Tab {
 
         if let Some(on_right_click) = self.on_right_click {
             container = container.on_mouse_down(MouseButton::Right, move |e, window, cx| {
+                // The tab bar's own menu is for its blank area.
+                cx.stop_propagation();
                 on_right_click(window, cx, e.position)
             });
         }

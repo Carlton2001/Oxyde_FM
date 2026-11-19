@@ -240,6 +240,7 @@ pub fn tab_context_menu_items(
     tab_idx: usize,
     can_close_tab: bool,
     can_close_other_tabs: bool,
+    can_reopen_closed_tab: bool,
 ) -> Vec<crate::ui::components::dropdown::DropdownItem> {
     use crate::ui::components::dropdown::IconName;
 
@@ -305,6 +306,67 @@ pub fn tab_context_menu_items(
             }),
             on_hover: None,
         },
+        reopen_closed_tab_item(i18n, h_app, can_reopen_closed_tab),
+    ]
+}
+
+fn reopen_closed_tab_item(
+    i18n: &I18n,
+    h_app: Entity<crate::ui::app::OxydeApp>,
+    can_reopen_closed_tab: bool,
+) -> crate::ui::components::dropdown::DropdownItem {
+    use crate::ui::components::dropdown::IconName;
+    crate::ui::components::dropdown::DropdownItem {
+        label: i18n.text(Message::ReopenClosedTab).to_string(),
+        icon: Some(IconName::Undo),
+        badge: None,
+        stay_open: false,
+        has_submenu: false,
+        is_dimmed: !can_reopen_closed_tab,
+        is_faded: false,
+        on_click: std::rc::Rc::new({
+            let h = h_app.clone();
+            move |_, app| {
+                h.update(app, |this, cx| {
+                    this.context_menus.clear();
+                    this.reopen_closed_tab(cx);
+                });
+            }
+        }),
+        on_hover: None,
+    }
+}
+
+/// The menu of the tab bar's blank area.
+pub fn tab_bar_context_menu_items(
+    i18n: &I18n,
+    h_app: Entity<crate::ui::app::OxydeApp>,
+    pane_id: String,
+    can_reopen_closed_tab: bool,
+) -> Vec<crate::ui::components::dropdown::DropdownItem> {
+    use crate::ui::components::dropdown::IconName;
+
+    vec![
+        crate::ui::components::dropdown::DropdownItem {
+            label: i18n.text(Message::NewTab).to_string(),
+            icon: Some(IconName::Plus),
+            badge: None,
+            stay_open: false,
+            has_submenu: false,
+            is_dimmed: false,
+            is_faded: false,
+            on_click: std::rc::Rc::new({
+                let h = h_app.clone();
+                move |_, app| {
+                    h.update(app, |this, cx| {
+                        this.context_menus.clear();
+                        this.add_home_tab(&pane_id, cx);
+                    });
+                }
+            }),
+            on_hover: None,
+        },
+        reopen_closed_tab_item(i18n, h_app, can_reopen_closed_tab),
     ]
 }
 

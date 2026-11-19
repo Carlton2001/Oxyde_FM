@@ -12,7 +12,7 @@ fn workspace() -> WorkspaceState {
         expanded_paths: Default::default(),
         sidebar_items: Vec::new(),
         sidebar_nodes: Default::default(),
-        next_tab_id: 1,
+        next_tab_id: 1, closed_tabs: Default::default(),
     }
 }
 

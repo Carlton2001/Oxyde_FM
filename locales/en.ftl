@@ -123,6 +123,7 @@ menu-new-folder = New folder
 menu-new-file = New file
 menu-duplicate-tab = Duplicate tab
 menu-close-other-tabs = Close other tabs
+menu-reopen-closed-tab = Reopen closed tab
 menu-close-tab = Close tab
 menu-select-all = Select all
 menu-deselect-all = Deselect all
