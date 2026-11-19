@@ -1137,9 +1137,9 @@ shell-delete-access-denied = Acceso denegado. No tiene permiso para eliminar est
 shell-delete-not-recyclable = Windows no puede mover este elemento a la { -trash }, así que se ha conservado. Use la eliminación definitiva para eliminarlo.
 shell-delete-destroyed = Windows ha eliminado este elemento definitivamente en lugar de moverlo a la { -trash }. No se puede restaurar.
 delete-batch-failed = No se pudieron eliminar { $failed } de { $total } elementos.
-trash-selection-unavailable = { $count -> 
-    [one] El elemento seleccionado ya no está en la Papelera: otro programa lo restauró o lo eliminó. No se eliminó nada.
-   *[other] { $count } elementos seleccionados ya no están en la Papelera: otro programa los restauró o los eliminó. No se eliminó nada.
+trash-selection-unavailable = { $count ->
+    [one] Un elemento seleccionado ya no está en la { -trash }: otro programa lo restauró o lo eliminó.
+   *[other] { $count } elementos seleccionados ya no están en la { -trash }: otro programa los restauró o los eliminó.
 }
 delete-single-failed = No se pudo eliminar el elemento.
 delete-batch-processed = Los demás elementos se eliminaron. Los elementos con error están marcados en la lista de la operación.

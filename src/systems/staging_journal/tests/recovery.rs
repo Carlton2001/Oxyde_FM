@@ -15,9 +15,14 @@ fn stage(root: &Path, notes: &Path, name: &str) -> (PathBuf, Entry) {
     (path, entry)
 }
 
-/// The process ends: its lock goes, its note stays.
+/// The process ends: its lock goes, its note stays. A process another test forks meanwhile
+/// shares the lock until it executes, so the note counts as ended once it can be locked.
 fn end(mut entry: Entry) {
     drop(entry.lock.take());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while platform().lock_cache_file(&entry.path).is_err() && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
     std::mem::forget(entry);
 }
 

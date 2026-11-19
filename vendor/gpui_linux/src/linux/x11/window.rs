@@ -1891,6 +1891,50 @@ impl PlatformWindow for X11Window {
         }
     }
 
+    /// Oxyde: the input shape, so a click in a client-decorated window's shadow reaches the
+    /// window beneath, as GTK does. Upstream leaves X11 without it.
+    fn set_input_region(&self, region: Option<&[Bounds<Pixels>]>) {
+        use x11rb::protocol::shape::{self, ConnectionExt as _};
+        let scale_factor = self.0.state.borrow().scale_factor;
+        let result = match region {
+            None => self.0.xcb.shape_mask(
+                shape::SO::SET,
+                shape::SK::INPUT,
+                self.0.x_window,
+                0,
+                0,
+                x11rb::NONE,
+            ),
+            Some(rects) => {
+                let rects: Vec<xproto::Rectangle> = rects
+                    .iter()
+                    .map(|rect| {
+                        let left = (f32::from(rect.left()) * scale_factor).floor();
+                        let top = (f32::from(rect.top()) * scale_factor).floor();
+                        let right = (f32::from(rect.right()) * scale_factor).ceil();
+                        let bottom = (f32::from(rect.bottom()) * scale_factor).ceil();
+                        xproto::Rectangle {
+                            x: left as i16,
+                            y: top as i16,
+                            width: (right - left).max(0.0) as u16,
+                            height: (bottom - top).max(0.0) as u16,
+                        }
+                    })
+                    .collect();
+                self.0.xcb.shape_rectangles(
+                    shape::SO::SET,
+                    shape::SK::INPUT,
+                    xproto::ClipOrdering::UNSORTED,
+                    self.0.x_window,
+                    0,
+                    0,
+                    &rects,
+                )
+            }
+        };
+        check_reply(|| "X11 input shape failed.", result).log_err();
+    }
+
     fn set_client_inset(&self, inset: Pixels) {
         let mut state = self.0.state.borrow_mut();
 

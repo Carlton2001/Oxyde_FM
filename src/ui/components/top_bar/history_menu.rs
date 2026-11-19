@@ -1,7 +1,7 @@
 //! The locations a right click on Back or Forward offers, nearest first.
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, OxydeApp};
 use crate::ui::components::dropdown::{DropdownItem, IconName};
-use crate::ui::i18n::{I18n, I18nContext, Message};
+use crate::ui::i18n::{I18n, I18nContext};
 use gpui::*;
 use std::rc::Rc;
 
@@ -53,12 +53,5 @@ fn is_special(path: &str) -> bool {
 
 /// The name the navigation bar gives a location.
 fn location_label(path: &str, i18n: &I18n) -> String {
-    if path == "trash://" || path.starts_with("trash:\\\\") {
-        i18n.text(Message::SidebarTrash).to_string()
-    } else if path == "__network_vincinity__" {
-        i18n.text(Message::SidebarNetwork).to_string()
-    } else {
-        path.starts_with("search://").then(|| crate::ui::app::search::search_label(path, i18n)).flatten()
-            .unwrap_or_else(|| path.to_owned())
-    }
+    super::special_location_label(path, i18n).unwrap_or_else(|| path.to_owned())
 }

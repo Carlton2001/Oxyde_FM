@@ -87,15 +87,7 @@ pub fn render_top_bar(
     let root_icon = breadcrumb_root_icon(&current_path, view);
     let is_trash_path = current_path == "trash://" || current_path.starts_with("trash:\\\\");
     let is_network_neighborhood = current_path == "__network_vincinity__";
-    let special_path_label = if is_trash_path {
-        Some(_cx.i18n().text(Message::SidebarTrash).to_string())
-    } else if is_network_neighborhood {
-        Some(_cx.i18n().text(Message::SidebarNetwork).to_string())
-    } else if current_path.starts_with("search://") {
-        crate::ui::app::search::search_label(&current_path, _cx.i18n())
-    } else {
-        None
-    };
+    let special_path_label = special_location_label(&current_path, _cx.i18n());
     let theme = *_cx.theme();
 
     // A GVfs share starts at its mount, named as in the sidebar, as Nautilus shows it.
@@ -676,4 +668,18 @@ pub fn render_top_bar(
         .when(shows_quick_search, |bar| {
             bar.child(view.render_quick_search_control(&pane_id, _cx))
         })
+}
+
+/// The name the navigation bar gives a location that is not a folder path: the trash, the
+/// network or a search.
+fn special_location_label(path: &str, i18n: &crate::ui::i18n::I18n) -> Option<String> {
+    if path == "trash://" || path.starts_with("trash:\\\\") {
+        Some(i18n.text(Message::SidebarTrash).to_string())
+    } else if path == "__network_vincinity__" {
+        Some(i18n.text(Message::SidebarNetwork).to_string())
+    } else if path.starts_with("search://") {
+        crate::ui::app::search::search_label(path, i18n)
+    } else {
+        None
+    }
 }

@@ -90,3 +90,7 @@ compare both copies to the new upstream.
   `application/x-kde-cutselection`, each sent in its own format; a text entry whose metadata
   is `cut` marks them as cut. Upstream offered text only, so Oxyde ran `wl-copy` for GNOME's
   format alone, which Dolphin and GTK 4 do not read.
+- `gpui_linux/src/linux/x11/window.rs` and `Cargo.toml` (x11rb's `shape` feature): X11 windows
+  implement `set_input_region` with the SHAPE extension's input shape, in device pixels. A
+  client-decorated window's shadow then lets clicks through to the window beneath, as GTK
+  does on X11; upstream ignored the region there.

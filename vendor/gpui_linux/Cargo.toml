@@ -62,6 +62,6 @@
 "wayland-protocols-plasma" = { "version" = "0.3.9", "features" = ["client"], "optional" = true }
 "wayland-protocols-wlr" = { "version" = "0.3.9", "features" = ["client"], "optional" = true }
 "x11-clipboard" = { "version" = "0.9.3", "optional" = true }
-"x11rb" = { "version" = "0.13.1", "features" = ["allow-unsafe-code", "xkb", "randr", "xinput", "cursor", "resource_manager", "sync", "dri3"], "optional" = true }
+"x11rb" = { "version" = "0.13.1", "features" = ["allow-unsafe-code", "xkb", "randr", "xinput", "cursor", "resource_manager", "shape", "sync", "dri3"], "optional" = true }
 "xim" = { "git" = "https://github.com/zed-industries/xim-rs.git", "rev" = "16f35a2c881b815a2b6cdfd6687988e84f8447d8", "features" = ["x11rb-xcb", "x11rb-client"], "package" = "zed-xim", "version" = "0.4.0-zed", "optional" = true }
 "xkbcommon" = { "version" = "0.8.0", "default-features" = false, "optional" = true }

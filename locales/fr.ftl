@@ -846,9 +846,9 @@ shell-delete-access-denied = Accès refusé. Vous n’avez pas les droits néces
 shell-delete-not-recyclable = Windows ne peut pas mettre cet élément dans la { -trash } : il a été conservé. Utilisez la suppression définitive pour le supprimer.
 shell-delete-destroyed = Windows a supprimé cet élément définitivement au lieu de le mettre dans la { -trash }. Il ne pourra pas être restauré.
 delete-batch-failed = { $failed } élément(s) sur { $total } n’ont pas pu être supprimés.
-trash-selection-unavailable = { $count -> 
-    [one] L’élément sélectionné n’est plus dans la Corbeille : un autre programme l’a restauré ou supprimé. Rien n’a été supprimé.
-   *[other] { $count } éléments sélectionnés ne sont plus dans la Corbeille : un autre programme les a restaurés ou supprimés. Rien n’a été supprimé.
+trash-selection-unavailable = { $count ->
+    [one] Un élément sélectionné n’est plus dans la { -trash } : un autre programme l’a restauré ou supprimé.
+   *[other] { $count } éléments sélectionnés ne sont plus dans la { -trash } : un autre programme les a restaurés ou supprimés.
 }
 delete-single-failed = L’élément n’a pas pu être supprimé.
 delete-batch-processed = Les autres éléments ont été supprimés. Ceux en échec sont signalés dans la liste de l’opération.

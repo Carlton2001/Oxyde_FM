@@ -1137,9 +1137,9 @@ shell-delete-access-denied = Accesso negato. Non hai i permessi per eliminare qu
 shell-delete-not-recyclable = Windows non può spostare questo elemento nel { -trash }, quindi è stato mantenuto. Usa l’eliminazione definitiva per eliminarlo.
 shell-delete-destroyed = Windows ha eliminato questo elemento definitivamente invece di spostarlo nel { -trash }. Non può essere ripristinato.
 delete-batch-failed = Non è stato possibile eliminare { $failed } elementi su { $total }.
-trash-selection-unavailable = { $count -> 
-    [one] L’elemento selezionato non è più nel Cestino: un altro programma lo ha ripristinato o eliminato. Non è stato eliminato nulla.
-   *[other] { $count } elementi selezionati non sono più nel Cestino: un altro programma li ha ripristinati o eliminati. Non è stato eliminato nulla.
+trash-selection-unavailable = { $count ->
+    [one] Un elemento selezionato non è più nel { -trash }: un altro programma lo ha ripristinato o eliminato.
+   *[other] { $count } elementi selezionati non sono più nel { -trash }: un altro programma li ha ripristinati o eliminati.
 }
 delete-single-failed = Non è stato possibile eliminare l’elemento.
 delete-batch-processed = Gli altri elementi sono stati eliminati. Gli elementi non riusciti sono segnalati nell’elenco dell’operazione.

@@ -17,32 +17,44 @@ const SET_ID: u32 = 0o6000;
 
 /// Keeps at most two windows of dirty pages, so progress follows the device
 /// instead of the page cache and the final flush stays short (slow USB keys).
-struct Writeback {
-    enabled: bool,
+struct Writeback<'a> {
+    destination_parent: &'a File,
+    /// Decided when the first window fills: a smaller file never asks for the device.
+    enabled: Option<bool>,
     started: u64,
     waited: u64,
 }
 
-impl Writeback {
-    /// Only for destinations that are not solid-state (USB keys, hard disks, shares):
-    /// waiting on a fast SSD would cost more than it shows.
-    fn new(destination_parent: &File) -> Self {
-        use std::os::fd::AsRawFd;
-        let enabled = std::fs::read_link(format!("/proc/self/fd/{}", destination_parent.as_raw_fd()))
-            .is_ok_and(|folder| !super::platform().volumes().is_ssd(&folder));
+impl<'a> Writeback<'a> {
+    fn new(destination_parent: &'a File) -> Self {
         Self {
-            enabled,
+            destination_parent,
+            enabled: None,
             started: 0,
             waited: 0,
         }
     }
 
+    /// Only for destinations that are not solid-state (USB keys, hard disks, shares):
+    /// waiting on a fast SSD would cost more than it shows.
+    fn enabled(&mut self) -> bool {
+        use std::os::fd::AsRawFd;
+        *self.enabled.get_or_insert_with(|| {
+            std::fs::read_link(format!("/proc/self/fd/{}", self.destination_parent.as_raw_fd()))
+                .is_ok_and(|folder| !super::platform().volumes().is_ssd(&folder))
+        })
+    }
+
     fn advance(&mut self, output: &File, copied: u64) {
         use std::os::fd::AsRawFd;
-        if !self.enabled || copied < self.started + WRITEBACK_WINDOW {
+        if copied < self.started + WRITEBACK_WINDOW || !self.enabled() {
             return;
         }
         let range = |from: u64, to: u64, flags: u32| {
+            // A length of zero would mean "to the end of the file".
+            if to <= from {
+                return;
+            }
             // Best effort: a file system without support is flushed by `sync_all` anyway.
             // SAFETY: plain system call on a descriptor this function borrows.
             unsafe {
@@ -106,7 +118,7 @@ pub(super) fn copy(
 fn kernel_copy(
     input: &File,
     output: &File,
-    writeback: &mut Writeback,
+    writeback: &mut Writeback<'_>,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
 ) -> io::Result<u64> {
     let mut copied = 0;
@@ -131,7 +143,7 @@ fn copy_remaining(
     input: &File,
     output: &File,
     copied: &mut u64,
-    writeback: &mut Writeback,
+    writeback: &mut Writeback<'_>,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
 ) -> io::Result<()> {
     let mut buffer = vec![0_u8; BUFFER];

@@ -47,6 +47,6 @@ fn a_stale_trash_selection_is_translated_in_every_language() {
         let mut args = FluentArgs::new();
         args.set("count", 3);
         assert_eq!(error_detail(&detail, &i18n), i18n.text_with_args(Message::TrashSelectionUnavailable, &args).to_string());
-        assert!(!error_detail(&detail, &i18n).contains("Recycle Bin"));
+        assert!(!error_detail(&detail, &i18n).contains("were not purged"));
     }
 }

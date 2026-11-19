@@ -167,3 +167,40 @@ fn special_bits_do_not_stop_a_copy_to_fat() {
     assert_eq!(std::fs::read(copy.join("tool")).unwrap(), b"x");
     std::fs::remove_dir_all(&copy).unwrap();
 }
+
+#[test]
+fn a_small_file_never_asks_which_device_holds_it() {
+    let root = tempfile::tempdir().unwrap();
+    let parent = File::open(root.path()).unwrap();
+    let output = File::create(root.path().join("out")).unwrap();
+    let mut writeback = Writeback::new(&parent);
+    writeback.advance(&output, WRITEBACK_WINDOW - 1);
+    assert!(writeback.enabled.is_none());
+}
+
+#[test]
+fn writeback_waits_one_window_behind_the_copy() {
+    let root = tempfile::tempdir().unwrap();
+    let parent = File::open(root.path()).unwrap();
+    let output = File::create(root.path().join("out")).unwrap();
+    output.set_len(3 * WRITEBACK_WINDOW).unwrap();
+    let mut writeback = Writeback::new(&parent);
+    writeback.enabled = Some(true);
+    writeback.advance(&output, WRITEBACK_WINDOW - 1);
+    assert_eq!((writeback.waited, writeback.started), (0, 0));
+    writeback.advance(&output, WRITEBACK_WINDOW);
+    assert_eq!((writeback.waited, writeback.started), (0, WRITEBACK_WINDOW));
+    writeback.advance(&output, 2 * WRITEBACK_WINDOW + 1);
+    assert_eq!((writeback.waited, writeback.started), (WRITEBACK_WINDOW, 2 * WRITEBACK_WINDOW + 1));
+}
+
+#[test]
+fn a_copy_spanning_several_windows_is_intact() {
+    let root = tempfile::tempdir().unwrap();
+    let source = root.path().join("source");
+    let data = pattern(2 * WRITEBACK_WINDOW as usize + 4097);
+    std::fs::write(&source, &data).unwrap();
+    let destination = root.path().join("copy");
+    copy_all(&source, &destination, None).unwrap();
+    assert!(std::fs::read(&destination).unwrap() == data);
+}

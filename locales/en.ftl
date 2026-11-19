@@ -840,9 +840,9 @@ shell-delete-access-denied = Access denied. You do not have permission to delete
 shell-delete-not-recyclable = Windows cannot move this item to the { -trash }, so it was kept. Use permanent deletion to delete it.
 shell-delete-destroyed = Windows deleted this item permanently instead of moving it to the { -trash }. It cannot be restored.
 delete-batch-failed = { $failed } of { $total } items could not be deleted.
-trash-selection-unavailable = { $count -> 
-    [one] The selected item is no longer in the Trash: it was restored or deleted by another program. Nothing was deleted.
-   *[other] { $count } selected items are no longer in the Trash: they were restored or deleted by another program. Nothing was deleted.
+trash-selection-unavailable = { $count ->
+    [one] One selected item is no longer in the { -trash }: another program restored or deleted it.
+   *[other] { $count } selected items are no longer in the { -trash }: another program restored or deleted them.
 }
 delete-single-failed = The item could not be deleted.
 delete-batch-processed = The other items were deleted. Failed items are marked in the operation’s list.

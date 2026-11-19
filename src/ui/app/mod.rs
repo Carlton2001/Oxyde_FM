@@ -48,7 +48,6 @@ pub(crate) use dialog_windows::close_dialog_windows;
 mod render;
 pub(crate) mod viewer;
 mod context_menu_render;
-pub use drag::drives_differ;
 use toasts::{Toast, ToastKind};
 pub(crate) mod network;
 pub(crate) mod remote;

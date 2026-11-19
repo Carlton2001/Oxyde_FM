@@ -1137,9 +1137,9 @@ shell-delete-access-denied = Zugriff verweigert. Sie haben keine Berechtigung, d
 shell-delete-not-recyclable = Windows kann dieses Element nicht in den { -trash } verschieben; es wurde beibehalten. Verwenden Sie endgültiges Löschen, um es zu löschen.
 shell-delete-destroyed = Windows hat dieses Element endgültig gelöscht, statt es in den { -trash } zu verschieben. Es kann nicht wiederhergestellt werden.
 delete-batch-failed = { $failed } von { $total } Elementen konnten nicht gelöscht werden.
-trash-selection-unavailable = { $count -> 
-    [one] Das ausgewählte Element ist nicht mehr im Papierkorb: Ein anderes Programm hat es wiederhergestellt oder gelöscht. Es wurde nichts gelöscht.
-   *[other] { $count } ausgewählte Elemente sind nicht mehr im Papierkorb: Ein anderes Programm hat sie wiederhergestellt oder gelöscht. Es wurde nichts gelöscht.
+trash-selection-unavailable = { $count ->
+    [one] Ein ausgewähltes Element ist nicht mehr im { -trash }: Ein anderes Programm hat es wiederhergestellt oder gelöscht.
+   *[other] { $count } ausgewählte Elemente sind nicht mehr im { -trash }: Ein anderes Programm hat sie wiederhergestellt oder gelöscht.
 }
 delete-single-failed = Das Element konnte nicht gelöscht werden.
 delete-batch-processed = Die übrigen Elemente wurden gelöscht. Fehlgeschlagene Elemente sind in der Liste des Vorgangs markiert.
