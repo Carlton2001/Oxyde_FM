@@ -32,7 +32,8 @@ fn admission(slot: &'static Mutex<()>, checkpoint: &dyn Fn() -> io::Result<()>) 
         checkpoint()?;
         match slot.try_lock() {
             Ok(slot) => return Ok(slot),
-            Err(TryLockError::Poisoned(_)) => return Err(failed()),
+            // The slot guards no data: a panic that poisoned it left nothing to repair.
+            Err(TryLockError::Poisoned(poisoned)) => return Ok(poisoned.into_inner()),
             Err(TryLockError::WouldBlock) => std::thread::sleep(Duration::from_millis(10)),
         }
     }
@@ -51,7 +52,7 @@ pub(super) fn index(path: &Path, checkpoint: &dyn Fn() -> io::Result<()>) -> Res
 
 /// Checks the remembered password on the navigation slot: the user waits for it.
 pub(super) fn verify(path: &Path) -> Result<(), CommandError> {
-    let _slot = SLOT.lock().map_err(|_| failed())?;
+    let _slot = SLOT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     verify_in(&executable()?, path, DEADLINE)
 }
 

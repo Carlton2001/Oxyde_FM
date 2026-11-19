@@ -40,7 +40,8 @@ fn admission(operation: &Operation, controls: &dyn Fn() -> io::Result<Control>) 
         if !check(controls)?.paused {
             match slot.try_lock() {
                 Ok(guard) => return Ok(guard),
-                Err(TryLockError::Poisoned(_)) => return Err(invalid()),
+                // The slot guards no data: a panic that poisoned it left nothing to repair.
+                Err(TryLockError::Poisoned(poisoned)) => return Ok(poisoned.into_inner()),
                 Err(TryLockError::WouldBlock) => {}
             }
         }

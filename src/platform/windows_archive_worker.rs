@@ -82,7 +82,8 @@ fn admission(
         checkpoint()?;
         match slot.try_lock() {
             Ok(slot) => return Ok(slot),
-            Err(TryLockError::Poisoned(_)) => return Err(failed()),
+            // The slot guards no data: a panic that poisoned it left nothing to repair.
+            Err(TryLockError::Poisoned(poisoned)) => return Ok(poisoned.into_inner()),
             Err(TryLockError::WouldBlock) => std::thread::sleep(Duration::from_millis(10)),
         }
     }
@@ -112,7 +113,7 @@ pub(super) fn index_in(
 }
 /// Checks the remembered password on the navigation slot: the user waits for it.
 pub(super) fn verify(path: &Path) -> Result<(), CommandError> {
-    let _slot = SLOT.lock().map_err(|_| failed())?;
+    let _slot = SLOT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let mut command = Command::new(executable()?);
     command
         .arg(crate::commands::archive_handle_worker::FLAG)
@@ -224,6 +225,17 @@ mod tests {
         assert_eq!(calls.get(), 3);
         drop(slot);
         assert!(admission(&SEARCH_SLOT, &|| Ok(())).is_ok());
+    }
+    #[test]
+    fn a_panic_while_holding_a_slot_does_not_close_it_for_good() {
+        static POISONED: Mutex<()> = Mutex::new(());
+        let _ = std::thread::spawn(|| {
+            let _slot = POISONED.lock().unwrap();
+            panic!("handler panic");
+        })
+        .join();
+        assert!(POISONED.is_poisoned());
+        assert!(admission(&POISONED, &|| Ok(())).is_ok());
     }
     #[test]
     fn a_listing_the_user_left_stops_waiting_for_the_navigation_slot() {
