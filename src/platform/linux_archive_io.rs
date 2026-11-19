@@ -18,7 +18,9 @@ const SEVEN_ENCODE_MEMORY_BYTES: u64 = 2 * MEMORY_BYTES;
 /// A frame fits whole, so that block transfers do not cost a context switch per 64 KiB.
 const PIPE_BYTES: usize = crate::utils::archive_io_protocol::MAX_FRAME;
 const POLL_INTERVAL: Duration = Duration::from_millis(20);
-const EXIT_GRACE: Duration = Duration::from_secs(1);
+/// After Finished, the worker owes only its exit; a saturated machine or a 7z worker
+/// freeing its 2 GiB envelope can take seconds, which is not a protocol failure.
+const EXIT_GRACE: Duration = Duration::from_secs(10);
 static TARGETED: Mutex<()> = Mutex::new(());
 static BULK: Mutex<()> = Mutex::new(());
 

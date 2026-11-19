@@ -24,6 +24,9 @@ use windows::Win32::System::Threading::{
 
 const MEMORY_BYTES: usize = 1024 * 1024 * 1024;
 const SEVEN_ENCODE_MEMORY_BYTES: usize = 2 * MEMORY_BYTES;
+/// After Finished, the worker owes only its exit; a saturated machine or a 7z worker
+/// freeing its 2 GiB envelope can take seconds, which is not a protocol failure.
+const EXIT_GRACE: Duration = Duration::from_secs(10);
 static TARGETED: Mutex<()> = Mutex::new(());
 static BULK: Mutex<()> = Mutex::new(());
 
@@ -229,7 +232,7 @@ pub(super) fn supervise(
                 },
             ));
         }
-        if terminal_at.is_some_and(|at: Instant| at.elapsed() >= Duration::from_secs(1)) {
+        if terminal_at.is_some_and(|at: Instant| at.elapsed() >= EXIT_GRACE) {
             return Err(invalid());
         }
         if let Some(packet) = pending_output.take() {
