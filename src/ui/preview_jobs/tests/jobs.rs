@@ -8,7 +8,8 @@ use std::time::Duration;
 /// Bounds what must happen, never how fast: a loaded machine may take long to schedule a thread.
 const PATIENCE: Duration = Duration::from_secs(60);
 
-/// Tests that occupy every slot of the global still queue run one at a time.
+/// Tests that admit through the global still queue run one at a time: a test
+/// occupying every slot would otherwise find one taken.
 static SATURATING: Mutex<()> = Mutex::new(());
 
 #[test]
@@ -353,6 +354,7 @@ fn preview_jobs_local_loader_future_is_not_polled_before_admission() {
 
 #[test]
 fn preview_jobs_capture_runtime_before_gpui_polls_future() {
+    let _saturating = SATURATING.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let runtime = runtime();
     let job = {
         let _entered = runtime.enter();
@@ -412,6 +414,7 @@ fn preview_jobs_cancel_after_admission_before_blocking_worker_starts() {
 
 #[test]
 fn preview_jobs_active_video_does_not_occupy_still_admission() {
+    let _saturating = SATURATING.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let runtime = runtime();
     let blocker = Blocker::default();
     let _release = ReleaseOnDrop(blocker.clone());
