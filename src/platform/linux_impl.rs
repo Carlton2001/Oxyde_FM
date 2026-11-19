@@ -693,6 +693,10 @@ impl Platform for LinuxPlatform {
         Ok(())
     }
 
+    fn volume_is_read_only(&self, root: &std::path::Path) -> bool {
+        rustix::fs::statvfs(root).is_ok_and(|stats| stats.f_flag.contains(rustix::fs::StatVfsMountFlags::RDONLY))
+    }
+
     fn is_network_path(&self, path: &std::path::Path) -> bool {
         super::hardware::is_network_path(path)
     }

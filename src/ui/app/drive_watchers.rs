@@ -15,6 +15,17 @@ pub(super) fn path_on_drive(path: &str, root: &str) -> bool {
         .any(|ancestor| paths_match(&ancestor.to_string_lossy(), root))
 }
 
+impl OxydeApp {
+    /// Whether nothing can be written at `path` shown in `pane_id`: its volume
+    /// refuses writes, or the pane browses an archive Oxyde cannot rewrite.
+    pub(crate) fn is_read_only_location(&self, pane_id: &str, path: &str) -> bool {
+        let in_fixed_archive = self.state.find_pane(pane_id).and_then(|pane| pane.active_tab().archive_root.as_ref())
+            .is_some_and(|root| !oxyde_lib::utils::archive::ArchiveFormat::from_path(root)
+                .is_some_and(oxyde_lib::utils::archive::ArchiveFormat::writable));
+        in_fixed_archive || self.read_only_volumes.iter().any(|root| path_on_drive(path, root))
+    }
+}
+
 /// The innermost drive holding `path`: under Linux, `/` holds every other mount.
 fn drive_of<'a>(path: &str, drives: &'a [oxyde_lib::models::DriveInfo]) -> Option<&'a oxyde_lib::models::DriveInfo> {
     drives
@@ -228,7 +239,12 @@ impl OxydeApp {
                             super::drag::volumes::replace_mount_points(
                                 oxyde_lib::platform::platform().volumes().mount_points());
                             let policies = super::trash_settings::read_drive_policy(&roots);
-                            (roots, unmounted, policies)
+                            let read_only: Vec<String> = roots.iter()
+                                .filter(|drive| drive.drive_type != "remote" && oxyde_lib::platform::platform()
+                                    .volume_is_read_only(std::path::Path::new(&drive.path)))
+                                .map(|drive| drive.path.clone())
+                                .collect();
+                            (roots, unmounted, (policies, read_only))
                         }).await {
                             h.update(&mut cx, |this, cx| {
                                 if this.ejecting_drive || this.drive_refresh_epoch != epoch
@@ -253,7 +269,12 @@ impl OxydeApp {
                                 // apply_drive_roots rebuilds the sidebar.
                                 this.state.unmounted_volumes = unmounted;
                                 this.apply_drive_roots(roots, cx);
+                                let (policies, read_only) = policies;
                                 if this.trash_delete_policy.replace(policy_revision, policies) {
+                                    cx.notify();
+                                }
+                                if this.read_only_volumes != read_only {
+                                    this.read_only_volumes = read_only;
                                     cx.notify();
                                 }
                                 if changed || details_due {

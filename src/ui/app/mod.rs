@@ -333,6 +333,8 @@ pub struct OxydeApp {
     pub(super) disk_image_refresh_task: Option<Task<()>>,
     pub(crate) shift_delete: bool,
     pub(crate) trash_delete_policy: trash_settings::DeletePolicy,
+    /// Roots of the drives whose volume refuses writes, from the last drive survey.
+    pub(super) read_only_volumes: Vec<String>,
     pub(super) trash_delete_check_pending: bool,
     pub(crate) pending_trash_delete: Option<trash_settings::PendingDelete>,
     pub(crate) trash_settings: Option<trash_settings::TrashSettings>,
@@ -578,6 +580,7 @@ impl OxydeApp {
             pending_trash_delete: None,
             shift_delete: false,
             trash_delete_policy: Default::default(),
+            read_only_volumes: Vec::new(),
             trash_delete_check_pending: false,
             network_dialog_revision: 0,
             network_force_confirmation: None,

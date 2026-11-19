@@ -139,6 +139,8 @@ pub fn render_top_bar(
     let selected = !active_tab.selected_paths.is_empty();
     let ordinary = special_path_label.is_none()
         && active_tab.archive_root.is_none();
+    // Nothing can be written here: write actions hide, New folder stays disabled.
+    let read_only = view.is_read_only_location(&pane_id, &current_path);
 
     let undo_tooltip = history_state.undo.map(|operation| {
         super::history_actions::operation_label(_cx.i18n(), Message::UndoOperation, operation)
@@ -217,10 +219,10 @@ pub fn render_top_bar(
                     if undo_blocked_by_overwrite { _cx.i18n().text(Message::UndoOverwriteUnavailable).to_string() }
                     else { undo_tooltip.clone().unwrap_or_default() }, 1),
                 (!is_trash_path && can_redo, "redo-btn", "icons/redo-2.svg", Message::Redo, redo_tooltip.clone().unwrap_or_default(), 2),
-                (selected && (ordinary || is_trash_path) && !view.trash_busy, "cut-btn", "icons/scissors.svg", Message::Cut, "Ctrl+X".into(), 3),
+                (selected && (ordinary || is_trash_path) && !view.trash_busy && !read_only, "cut-btn", "icons/scissors.svg", Message::Cut, "Ctrl+X".into(), 3),
                 (selected && !is_trash_path && !is_network_neighborhood, "copy-btn", "icons/copy.svg", Message::Copy, "Ctrl+C".into(), 4),
-                (ordinary && view.clipboard_has_files, "paste-btn", "icons/clipboard-paste.svg", Message::Paste, "Ctrl+V".into(), 5),
-                (selected && !is_trash_path && !is_network_neighborhood && active_tab.archive_root.is_none(),
+                (ordinary && view.clipboard_has_files && !read_only, "paste-btn", "icons/clipboard-paste.svg", Message::Paste, "Ctrl+V".into(), 5),
+                (selected && !is_trash_path && !is_network_neighborhood && active_tab.archive_root.is_none() && !read_only,
                     "delete-btn", if permanent_delete { "icons/trash-2.svg" } else { "icons/trash.svg" },
                     if permanent_delete { Message::TrashDeletePermanent } else { Message::Delete }, String::new(), 6),
                 (is_trash_path && selected, "trash-restore-btn", "icons/rotate-ccw.svg", Message::TrashRestoreSelection, String::new(), 8),
@@ -230,6 +232,7 @@ pub fn render_top_bar(
             ] {
                 if !visible { continue; }
                 let enabled = (action != 0 || parent_path.is_some())
+                    && (action != 11 || !read_only)
                     && (action != 1 || can_undo)
                     && (!matches!(action, 1 | 2) || !view.history_operation_in_progress)
                     && (!(7..=10).contains(&action) || (!view.trash_busy && (action < 9 || !active_tab.files.is_empty())));
