@@ -166,19 +166,22 @@ pub fn get_network_resources(path: Option<String>) -> Result<Vec<NetResource>, S
                 )
                 .is_ok()
                 {
-                    let mut buffer = vec![0u8; 16384];
+                    let mut buffer = NetBuffer::new();
                     loop {
                         let mut count = 0xFFFFFFFFu32;
-                        let mut buffer_size = buffer.len() as u32;
-                        if WNetEnumResourceW(
+                        let mut buffer_size = buffer.byte_len();
+                        let enum_res = WNetEnumResourceW(
                             connected_handle,
                             &mut count,
-                            buffer.as_mut_ptr() as *mut _,
+                            buffer.as_mut_ptr(),
                             &mut buffer_size,
-                        )
-                        .is_ok()
-                        {
-                            let ptr = buffer.as_ptr() as *const NETRESOURCEW;
+                        );
+                        if enum_res == ERROR_MORE_DATA {
+                            buffer.grow(buffer_size);
+                            continue;
+                        }
+                        if enum_res.is_ok() {
+                            let ptr = buffer.resources();
                             for i in 0..count as usize {
                                 let item = &*ptr.add(i);
                                 if !item.lpRemoteName.is_null() {
@@ -215,6 +218,11 @@ pub fn get_network_resources(path: Option<String>) -> Result<Vec<NetResource>, S
                                 }
                             }
                         } else {
+                            // Connected servers only complete the Shell's discovery:
+                            // keep what was found, but leave a trace of the gap.
+                            if enum_res != ERROR_NO_MORE_ITEMS {
+                                log::warn!("Connected network resources stopped at error {}", enum_res.0);
+                            }
                             break;
                         }
                     }
@@ -245,20 +253,20 @@ pub fn get_network_resources(path: Option<String>) -> Result<Vec<NetResource>, S
             );
 
             if res.is_ok() {
-                let mut buffer = vec![0u8; 16384];
+                let mut buffer = NetBuffer::new();
                 loop {
                     let mut count = 0xFFFFFFFFu32;
-                    let mut buffer_size = buffer.len() as u32;
+                    let mut buffer_size = buffer.byte_len();
 
                     let enum_res = WNetEnumResourceW(
                         handle,
                         &mut count,
-                        buffer.as_mut_ptr() as *mut _,
+                        buffer.as_mut_ptr(),
                         &mut buffer_size,
                     );
 
                     if enum_res.is_ok() {
-                        let ptr = buffer.as_ptr() as *const NETRESOURCEW;
+                        let ptr = buffer.resources();
                         for i in 0..count as usize {
                             let item = &*ptr.add(i);
                             let remote_name = if !item.lpRemoteName.is_null() {
@@ -290,7 +298,7 @@ pub fn get_network_resources(path: Option<String>) -> Result<Vec<NetResource>, S
                         }
                     } else {
                         if enum_res == ERROR_MORE_DATA {
-                            buffer.resize(buffer_size as usize, 0);
+                            buffer.grow(buffer_size);
                             continue;
                         }
                         if enum_res == ERROR_NO_MORE_ITEMS { break; }
@@ -320,10 +328,15 @@ pub fn map_network_drive(
     username: Option<String>,
     password: Option<String>,
 ) -> Result<(), String> {
+    // Account names stay out of the log, which users share for diagnosis.
     info!(
-        "Mapping network drive: {} -> {} (reconnect: {}, user: {:?})",
-        letter, path, reconnect, username
+        "Mapping network drive: {} -> {} (reconnect: {}, explicit credentials: {})",
+        letter,
+        path,
+        reconnect,
+        username.is_some()
     );
+    let password = password.map(zeroize::Zeroizing::new);
     #[cfg(target_os = "windows")]
     {
         unsafe {
@@ -368,8 +381,9 @@ pub fn map_network_drive(
 
             let wide_user: Option<Vec<u16>> =
                 username.map(|u| u.encode_utf16().chain(std::iter::once(0)).collect());
-            let wide_pass: Option<Vec<u16>> =
-                password.map(|p| p.encode_utf16().chain(std::iter::once(0)).collect());
+            let wide_pass: Option<zeroize::Zeroizing<Vec<u16>>> = password.as_ref().map(|p| {
+                zeroize::Zeroizing::new(p.encode_utf16().chain(std::iter::once(0)).collect())
+            });
 
             let user_ptr = wide_user
                 .as_ref()
@@ -419,5 +433,32 @@ pub fn disconnect_network_drive(letter: String, force: bool) -> Result<(), super
     #[cfg(not(target_os = "windows"))]
     {
         Err(super::NetworkDisconnectError::Other("Network drive disconnect is only available on Windows".to_string()))
+    }
+}
+
+/// `WNetEnumResourceW` output: `NETRESOURCEW` records, with their pointers, need
+/// pointer alignment, which a byte vector does not promise.
+struct NetBuffer(Vec<u64>);
+
+impl NetBuffer {
+    fn new() -> Self {
+        Self(vec![0; 16384 / 8])
+    }
+
+    fn byte_len(&self) -> u32 {
+        (self.0.len() * 8) as u32
+    }
+
+    /// At least `bytes` long, as asked by `ERROR_MORE_DATA`.
+    fn grow(&mut self, bytes: u32) {
+        self.0.resize((bytes as usize).div_ceil(8).max(self.0.len()), 0);
+    }
+
+    fn as_mut_ptr(&mut self) -> *mut std::ffi::c_void {
+        self.0.as_mut_ptr().cast()
+    }
+
+    fn resources(&self) -> *const NETRESOURCEW {
+        self.0.as_ptr().cast()
     }
 }
