@@ -210,6 +210,7 @@ fn write_all(object: &IDataObject, listing: &Listing) -> std::result::Result<Dro
     let staging = DropStaging(listing.staging.clone());
     let root = ExtractionRoot::new(&listing.staging).map_err(|error| error.to_string())?;
     let contents = data::registered(CFSTR_FILECONTENTS);
+    let mut buffer = vec![0_u8; CHUNK];
     for (index, entry) in listing.entries.iter().enumerate() {
         let name = entry.relative.to_string_lossy();
         let destination = root.destination(&name, entry.directory).map_err(|error| error.to_string())?;
@@ -217,13 +218,20 @@ fn write_all(object: &IDataObject, listing: &Listing) -> std::result::Result<Dro
             std::fs::create_dir_all(&destination.path).map_err(|error| error.to_string())?;
             continue;
         }
-        write_entry(object, contents, index, entry, &destination.path)
+        write_entry(object, contents, index, entry, &destination.path, &mut buffer)
             .map_err(|error| format!("{}: {error}", entry.relative.display()))?;
     }
     Ok(staging)
 }
 
-fn write_entry(object: &IDataObject, contents: u16, index: usize, entry: &Entry, path: &Path) -> Result<()> {
+fn write_entry(
+    object: &IDataObject,
+    contents: u16,
+    index: usize,
+    entry: &Entry,
+    path: &Path,
+    buffer: &mut [u8],
+) -> Result<()> {
     let request = FORMATETC {
         cfFormat: contents,
         dwAspect: DVASPECT_CONTENT.0,
@@ -232,7 +240,7 @@ fn write_entry(object: &IDataObject, contents: u16, index: usize, entry: &Entry,
         ..Default::default()
     };
     let mut medium = unsafe { object.GetData(&request) }?;
-    let result = write_medium(&medium, entry, path);
+    let result = write_medium(&medium, entry, path, buffer);
     unsafe { ReleaseStgMedium(&mut medium) };
     result?;
     if let Some(modified) = entry.modified {
@@ -243,22 +251,22 @@ fn write_entry(object: &IDataObject, contents: u16, index: usize, entry: &Entry,
     Ok(())
 }
 
-fn write_medium(medium: &STGMEDIUM, entry: &Entry, path: &Path) -> Result<()> {
+/// The staging folder is temporary and read back at once: nothing is synced.
+fn write_medium(medium: &STGMEDIUM, entry: &Entry, path: &Path, buffer: &mut [u8]) -> Result<()> {
     let create = || std::fs::OpenOptions::new().write(true).create_new(true).open(path).map_err(io_error);
     match TYMED(medium.tymed as i32) {
         TYMED_ISTREAM => {
             let stream = unsafe { medium.u.pstm.as_ref() }.ok_or_else(|| Error::from(E_POINTER))?;
             let mut file = create()?;
-            let mut buffer = vec![0_u8; CHUNK];
             loop {
                 let mut read = 0_u32;
-                unsafe { stream.Read(buffer.as_mut_ptr().cast(), CHUNK as u32, Some(&mut read)) }.ok()?;
+                unsafe { stream.Read(buffer.as_mut_ptr().cast(), buffer.len() as u32, Some(&mut read)) }.ok()?;
                 if read == 0 {
                     break;
                 }
                 file.write_all(&buffer[..read as usize]).map_err(io_error)?;
             }
-            file.sync_all().map_err(io_error)
+            Ok(())
         }
         TYMED_HGLOBAL => {
             let handle = unsafe { medium.u.hGlobal };
@@ -269,13 +277,14 @@ fn write_medium(medium: &STGMEDIUM, entry: &Entry, path: &Path) -> Result<()> {
                 if pointer.is_null() {
                     return Err(Error::from_thread());
                 }
-                // A global block may be larger than the file it holds.
+                // A global block may be larger than the file it holds. Without
+                // FD_FILESIZE, its size is all the source tells.
                 let length = entry.size.map_or(length, |size| length.min(size as usize));
                 let written = file.write_all(unsafe { std::slice::from_raw_parts(pointer, length) });
                 let _ = unsafe { windows::Win32::System::Memory::GlobalUnlock(handle) };
                 written.map_err(io_error)?;
             }
-            file.sync_all().map_err(io_error)
+            Ok(())
         }
         TYMED_ISTORAGE => {
             // An Outlook message: a compound file.
