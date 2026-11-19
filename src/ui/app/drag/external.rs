@@ -9,6 +9,8 @@ pub(crate) struct ExternalDropState {
     pub can_copy: bool,
     pub can_move: bool,
     pub submitted: bool,
+    /// Files a source provides as streams, handed over at Drop only.
+    pub streamed: Option<oxyde_lib::platform::StreamedFiles>,
     directory_paths: Vec<String>,
     directories: Vec<String>,
     directory_lease: std::rc::Rc<()>,
@@ -22,6 +24,7 @@ impl Default for ExternalDropState {
             // targets only negotiate Copy, so a Linux drop must never remove its source.
             can_move: cfg!(target_os = "windows"),
             submitted: false,
+            streamed: None,
             directory_paths: Vec::new(),
             directories: Vec::new(),
             directory_lease: std::rc::Rc::new(()),
@@ -134,7 +137,12 @@ pub(crate) trait FileDropTargetExt: InteractiveElement + Sized {
                     return;
                 }
                 app.external_drop.submitted = true;
-                if effect == FileDropEffect::Copy {
+                if let Some(streamed) = app.external_drop.streamed.take() {
+                    // Never a move: the source keeps its files (`can_move` is false).
+                    if effect == FileDropEffect::Copy {
+                        app.import_streamed_files(streamed, target.clone(), cx);
+                    }
+                } else if effect == FileDropEffect::Copy {
                     app.execute_file_copy(paths, target.clone(), cx);
                 } else {
                     app.execute_file_move(paths, target.clone(), cx);

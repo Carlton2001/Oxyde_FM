@@ -2,7 +2,7 @@
 mod built_binary;
 mod file_names;
 mod file_drag;
-pub use file_drag::{FileDragFeedback, FileDropEffect, FileDropPhase, NativeFileDrop};
+pub use file_drag::{DropStaging, FileDragFeedback, FileDropEffect, FileDropPhase, NativeFileDrop, StreamedFiles};
 mod viewer_media;
 mod memory;
 pub use memory::ProcessMemorySnapshot;

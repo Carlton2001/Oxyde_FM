@@ -201,6 +201,8 @@ pub(crate) struct PendingFileOperation {
     pub(crate) conflicts: Vec<oxyde_lib::models::ConflictEntry>,
     pub(crate) dialog: crate::ui::components::conflict_dialog::ConflictDialogState,
     runtime: tokio::runtime::Handle,
+    /// Removed with the pending operation unless the operation takes it over.
+    staging: Option<std::rc::Rc<oxyde_lib::platform::DropStaging>>,
 }
 
 #[derive(Clone)]
@@ -405,6 +407,8 @@ pub struct OxydeApp {
     rename_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
     rename_generation: u64,
     pub(crate) pending_file_operations: std::collections::VecDeque<PendingFileOperation>,
+    /// Staging folders of dropped streamed files, kept until their copy ends.
+    drop_stagings: std::collections::HashMap<String, std::rc::Rc<oxyde_lib::platform::DropStaging>>,
     file_operation_notice: Option<(Message, String)>,
     /// Items a failed deletion left behind, offered for retry with the matching notice.
     delete_retry: Option<file_operations::DeleteRetry>,
@@ -643,6 +647,7 @@ impl OxydeApp {
             rename_cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             rename_generation: 0,
             pending_file_operations: std::collections::VecDeque::new(),
+            drop_stagings: Default::default(),
             file_operation_notice: None,
             delete_retry: None,
             toasts: Vec::new(),

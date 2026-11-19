@@ -90,6 +90,7 @@ fn native_external_multiselection_copies_then_moves_once() {
                                 shift,
                                 can_copy: true,
                                 can_move: true,
+                                streamed: None,
                             };
                             receive(&app, make(FileDropPhase::Enter), window, cx);
                             receive(&app, make(FileDropPhase::Over), window, cx);

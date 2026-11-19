@@ -1,5 +1,6 @@
 //! OLE sessions run from a posted message, outside any GPUI App/Window borrow.
 mod data;
+mod streams;
 mod target;
 use super::{FileDragFeedback, FileDropEffect};
 use raw_window_handle::RawWindowHandle;

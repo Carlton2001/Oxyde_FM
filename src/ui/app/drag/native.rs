@@ -201,7 +201,7 @@ impl OxydeApp {
 
 fn receive(
     app: &Entity<OxydeApp>,
-    event: NativeFileDrop,
+    mut event: NativeFileDrop,
     window: &mut Window,
     cx: &mut App,
 ) -> FileDropEffect {
@@ -256,6 +256,8 @@ fn receive(
         cx,
     );
     if event.phase == FileDropPhase::Drop {
+        let streamed = event.streamed.take();
+        app.update(cx, |app, _| app.external_drop.streamed = streamed);
         window.dispatch_event(
             MouseUpEvent {
                 position,
@@ -268,6 +270,8 @@ fn receive(
         );
         let effect = app.read(cx).external_drop.effect;
         let submitted = app.read(cx).external_drop.submitted;
+        // Not taken by a target: dropping it tells the source nothing was copied.
+        app.update(cx, |app, _| app.external_drop.streamed.take());
         cx.stop_active_drag(window);
         app.update(cx, |app, cx| app.finish_pointer_drag(cx));
         if submitted {

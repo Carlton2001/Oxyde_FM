@@ -117,7 +117,7 @@ impl OxydeApp {
         target_dir: String,
         cx: &mut Context<Self>,
     ) {
-        self.prepare_file_operation(paths, target_dir, true, cx);
+        self.prepare_file_operation(paths, target_dir, true, None, cx);
     }
 
     pub fn execute_file_copy(
@@ -126,7 +126,41 @@ impl OxydeApp {
         target_dir: String,
         cx: &mut Context<Self>,
     ) {
-        self.prepare_file_operation(paths, target_dir, false, cx);
+        self.prepare_file_operation(paths, target_dir, false, None, cx);
+    }
+
+    /// Writes streamed files to a staging folder off the UI thread, then copies
+    /// them like any other files, with the usual conflicts, progress and undo.
+    pub(crate) fn import_streamed_files(
+        &mut self,
+        files: oxyde_lib::platform::StreamedFiles,
+        target_dir: String,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(handle) = self.handle.clone() else {
+            return;
+        };
+        cx.spawn(move |_, cx: &mut AsyncApp| {
+            let mut cx = cx.clone();
+            async move {
+                let extracted = tokio::task::spawn_blocking(move || files.extract()).await;
+                handle.update(&mut cx, |this, cx| match extracted {
+                    Ok(Ok((paths, staging))) => {
+                        this.prepare_file_operation(paths, target_dir, false, Some(std::rc::Rc::new(staging)), cx)
+                    }
+                    Ok(Err(error)) => {
+                        log::warn!("Streamed drop failed: {error}");
+                        this.file_operation_notice = Some((Message::PrepareFailed, error));
+                        cx.notify();
+                    }
+                    Err(error) => {
+                        this.file_operation_notice = Some((Message::PrepareFailed, format!("{error}")));
+                        cx.notify();
+                    }
+                });
+            }
+        })
+        .detach();
     }
 
     fn prepare_file_operation(
@@ -134,6 +168,7 @@ impl OxydeApp {
         paths: Vec<String>,
         target_dir: String,
         is_move: bool,
+        staging: Option<std::rc::Rc<oxyde_lib::platform::DropStaging>>,
         cx: &mut Context<Self>,
     ) {
         if paths.is_empty() {
@@ -172,11 +207,12 @@ impl OxydeApp {
                                 conflicts: response,
                                 dialog: Default::default(),
                                 runtime,
+                                staging,
                             });
                         cx.notify();
                     }
                     Ok(Ok((paths, _))) => {
-                        this.queue_file_operation(paths, target_dir, is_move, None, runtime, cx)
+                        this.queue_file_operation(paths, target_dir, is_move, None, runtime, staging, cx)
                     }
                     Ok(Err(error)) => {
                         this.file_operation_notice =
@@ -201,6 +237,7 @@ impl OxydeApp {
         is_move: bool,
         resolutions: Option<std::collections::HashMap<String, oxyde_lib::models::ConflictAction>>,
         runtime: tokio::runtime::Handle,
+        staging: Option<std::rc::Rc<oxyde_lib::platform::DropStaging>>,
         cx: &mut Context<Self>,
     ) {
         use oxyde_lib::systems::file_ops::{FileOpType, FileOperation};
@@ -221,6 +258,9 @@ impl OxydeApp {
         let op_id = self
             .file_ops
             .queue_operation_on(&runtime, self.history.clone(), op);
+        if let Some(staging) = staging {
+            self.drop_stagings.insert(op_id.clone(), staging);
+        }
         self.watch_file_operation(op_id, cx);
     }
 
@@ -313,6 +353,8 @@ impl OxydeApp {
                         }
                     }
                 }
+                // Copied, failed or cancelled: the staged streamed files go.
+                handle.update(&mut cx, |this, _| this.drop_stagings.remove(&op_id));
             }
         })
         .detach();
@@ -340,6 +382,7 @@ impl OxydeApp {
             pending.is_move,
             Some(resolutions),
             pending.runtime,
+            pending.staging,
             cx,
         );
         cx.notify();
