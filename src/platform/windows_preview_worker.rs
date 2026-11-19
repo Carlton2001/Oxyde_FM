@@ -178,11 +178,13 @@ pub(super) fn run(mode: &str, path: &Path) -> io::Result<Vec<u8>> {
             return icon_session::run_pdf(path, mode == "pdf-thumbnail");
         }
         let _source = super::platform().retain_archive_source(path)?;
+        // A one-shot parser, admitted like the other ones: a folder of long PDF names
+        // must not start one per file at once.
+        let _slot = SLOT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         return run_in(&std::env::current_exe()?, mode, path, DEADLINE);
     }
-    let _slot = SLOT
-        .lock()
-        .map_err(|_| io::Error::other("Preview worker admission failed"))?;
+    // The slot guards no data: a panic that poisoned it left nothing to repair.
+    let _slot = SLOT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     if mode == "office-text" || mode == "office-document" {
         run_office_text_in(
             &std::env::current_exe()?.with_file_name("oxyde-image-worker.exe"),
