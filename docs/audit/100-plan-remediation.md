@@ -10,7 +10,7 @@ Ce plan découle de [99-synthese.md](99-synthese.md). Les identifiants (E, M, F,
 - Lot 6 fusionné le 2026-11-18 (`bd63e890`, non poussé). Restes dans le lot 9.
 - Lot 9 fusionné le 2026-11-18 (`bfdc563b`, fusion sans avance rapide, non poussé), `audit-fixes` réalignée sur `main`. Tests manuels de WF6, F25 et F11 encore à faire (sous Windows 11) ; WM6 hors périmètre (2026-11-19).
 - Revue des lots du profil C fusionnée le 2026-11-19 (`a8fc0417`, fusion sans avance rapide, non poussée), `audit-fixes` réalignée sur `main`.
-- Lot 5 fusionné le 2026-11-18 (`cb29ff1e`, fusion sans avance rapide), `audit-fixes` réalignée sur `main`. Test manuel de l'IME japonais sous Windows à faire plus tard (pack de langue en téléchargement).
+- Lot 5 fusionné le 2026-11-18 (`cb29ff1e`, fusion sans avance rapide), `audit-fixes` réalignée sur `main`. IME japonais validé sous Windows le 2026-11-19.
 - Un commit par constat, message en anglais sur une seule ligne.
 - Avant de corriger : relire le code actuel (l'audit date du 2026-11-17 et ne couvre pas les 5 commits de la section Fraîcheur) et reproduire le défaut quand c'est possible. Si le constat n'est plus vrai, le noter dans le suivi sans modifier le code.
 - Pour chaque correction : un test de régression dans le dossier `tests/` du module (sans élargir la visibilité), puis `cargo check` sans avertissement du projet.
@@ -144,7 +144,7 @@ Statuts : à faire, en cours, corrigé (hash), obsolète, reporté. Mettre à jo
 | 4 | M43 | corrigé en partie | 2b6aa0ae | une seule extraction et une seule reconstruction quel que soit le nombre de noms pris ; **reporté** : progression et annulation, qui demandent un nouveau genre d'opération dans le panneau |
 | 4 | M45 | corrigé | d1a83246 | cellules au-delà de 64 colonnes ignorées au lieu d'écraser la 64e (xlsx, docx, odt, ods, pptx) |
 | 4 | test Linux intermittent | corrigé | 097edead | cause : un processus en cours de lancement partage les descripteurs ; reprises du bail portées à 5, 10, 20, 40 ms ; 0 échec sur 120 lancements (1 sur 40 avant) |
-| 5 | E10 | corrigé | 4e639422 | plage marquée suivie (`input/composition.rs`), préédition soulignée et remplacée à chaque mise à jour puis par le résultat ; annulation (message vide du IME japonais) sans effacer la sélection ; coller, couper, effacer décalent la composition ; complétions de chemin suspendues pendant la composition ; quitter le champ garde la préédition comme texte saisi ; à tester sous Windows (IME japonais, chinois, coréen) ; Linux (IBus, Fcitx) au lot 7 |
+| 5 | E10 | corrigé | 4e639422 | plage marquée suivie (`input/composition.rs`), préédition soulignée et remplacée à chaque mise à jour puis par le résultat ; annulation (message vide du IME japonais) sans effacer la sélection ; coller, couper, effacer décalent la composition ; complétions de chemin suspendues pendant la composition ; quitter le champ garde la préédition comme texte saisi ; IME japonais validé sous Windows le 2026-11-19 (chinois, coréen non testés) ; Linux (IBus, Fcitx) au lot 7 |
 | 5 | E1 | hors périmètre | | ARM64 non pris en charge |
 | 6 | M13 | corrigé | 804543e7 | réorganisation ou appui terminé si le dossier est désépinglé ; sans test automatique, à vérifier à la main |
 | 6 | M14 | reporté | | comportement voulu et testé (premier choix en mode avancé applique l'opposé aux autres) : décision de conception |
