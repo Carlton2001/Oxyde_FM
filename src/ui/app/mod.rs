@@ -58,6 +58,7 @@ mod folder_handler;
 mod system_menus;
 mod instance;
 mod quit;
+mod open_many;
 pub(crate) mod main_window;
 pub(crate) mod file_chooser;
 pub(crate) mod archive_protection;
@@ -349,6 +350,7 @@ pub struct OxydeApp {
     pub(crate) network_dialog_revision: u64,
     pub(crate) network_force_confirmation: Option<network::NetworkForceConfirmation>,
     pub(crate) quit_confirmation: Option<quit::QuitConfirmation>,
+    pub(crate) open_many: Option<open_many::OpenManyConfirmation>,
     pub(crate) network_force_focus_pending: bool,
     pub(crate) network_focus_restore: bool,
     pub _subscriptions: Vec<Subscription>,
@@ -576,6 +578,7 @@ impl OxydeApp {
             trash_delete_check_pending: false,
             network_dialog_revision: 0,
             network_force_confirmation: None,
+            open_many: None,
             quit_confirmation: None,
             network_force_focus_pending: false,
             network_focus_restore: false,

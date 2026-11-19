@@ -35,6 +35,7 @@ impl DialogKind {
             Self::SettingsConfirmation => app.settings_confirmation.is_some(),
             Self::Notice => app.file_operation_notice.is_some(),
             Self::QuitConfirmation => app.quit_confirmation.is_some(),
+            Self::OpenMany => app.open_many.is_some(),
             Self::Trash | Self::Conflict => false,
         }
     }
@@ -50,6 +51,7 @@ impl DialogKind {
             Self::TrashDelete => app.pending_trash_delete.as_ref().map(|p| p.focus.clone()),
             Self::SettingsConfirmation => app.settings_confirmation.as_ref().map(|c| c.focus.clone()),
             Self::QuitConfirmation => app.quit_confirmation.as_ref().map(|c| c.focus.clone()),
+            Self::OpenMany => app.open_many.as_ref().map(|c| c.focus.clone()),
             _ => None,
         }
     }
@@ -88,6 +90,7 @@ impl DialogKind {
                 }
                 app.resolve_quit_confirmation(false, window, cx);
             }
+            Self::OpenMany => app.resolve_open_many(false, window, cx),
             Self::Trash | Self::Conflict => {}
         }
         cx.notify();
@@ -107,6 +110,7 @@ impl DialogKind {
             Self::SettingsConfirmation => app.settings_confirmation = None,
             Self::Notice => app.dismiss_notice(),
             Self::QuitConfirmation => app.quit_confirmation = None,
+            Self::OpenMany => app.open_many = None,
             Self::Trash | Self::Conflict => {}
         }
     }
@@ -131,6 +135,7 @@ impl DialogKind {
             Self::SettingsConfirmation => settings::render_settings_confirmation(app, owner, window, cx).into_any_element(),
             Self::Notice => render_notice(app, owner, focus, window, cx).into_any_element(),
             Self::QuitConfirmation => crate::ui::components::quit_confirmation::render(app, owner, window, cx).into_any_element(),
+            Self::OpenMany => crate::ui::components::open_many_confirmation::render(app, owner, window, cx).into_any_element(),
             Self::Trash | Self::Conflict => div().into_any_element(),
         }
     }
