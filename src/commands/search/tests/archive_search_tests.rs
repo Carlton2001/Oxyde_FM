@@ -320,6 +320,9 @@
         assert!(zip::ZipArchive::new(File::open(&path).unwrap())
             .unwrap()
             .by_index(0)
+            .and_then(|mut entry| {
+                std::io::copy(&mut entry, &mut std::io::sink()).map_err(Into::into)
+            })
             .is_err());
         let results = search_in_archive(&path, &params(), &Arc::new(AtomicBool::new(false)));
         assert_eq!(
