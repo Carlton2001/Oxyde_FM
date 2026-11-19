@@ -428,10 +428,9 @@ pub(super) fn render_grid_file_list(
         .drag_over::<FileDragData>({
             let handle = handle.clone(); let target = tab.path.clone();
             move |style, data, _, cx| {
-                handle.update(cx, |app, cx| {
-                    app.drag_target_default_copy = data.paths.iter().any(|path| crate::ui::app::drives_differ(path, &target));
-                    app.update_drag_copy_mode(cx);
-                });
+                if handle.update(cx, |app, cx| app.note_drag_target(&data.paths, &target, cx)) {
+                    return style;
+                }
                 style.bg(cx.theme().drag_hover)
             }
         })

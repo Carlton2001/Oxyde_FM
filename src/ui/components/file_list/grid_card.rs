@@ -273,21 +273,9 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                 let h = h.clone();
                 let target = path.clone();
                 move |style, data, _, cx| {
-                    let copy = data
-                        .paths
-                        .first()
-                        .map(|p| {
-                            crate::ui::app::drives_differ(
-                                p, &target,
-                            )
-                        })
-                        .unwrap_or(false);
-                    h.update(cx, |this, cx| {
-                        if this.drag_target_default_copy != copy {
-                            this.drag_target_default_copy = copy;
-                            this.update_drag_copy_mode(cx);
-                        }
-                    });
+                    if h.update(cx, |this, cx| this.note_drag_target(&data.paths, &target, cx)) {
+                        return style;
+                    }
                     style.bg(theme.drag_hover)
                 }
             })

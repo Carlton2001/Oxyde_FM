@@ -139,10 +139,11 @@ impl Render for FileDragPreview {
         #[cfg(test)]
         { self.rendered_copy_mode = Some(is_copy); }
         let new_tab = self.app_handle.read(cx).drag_new_tab;
+        let refused = self.app_handle.read(cx).drag_target_refused;
         #[cfg(target_os = "windows")]
         if native::has_ghost(cx) { return div().into_any_element(); }
         let offset = self.cursor_offset;
-        div().relative().child(ghost_content(&self.paths, self.single_is_dir, is_copy, new_tab, false, cx)
+        div().relative().child(ghost_content(&self.paths, self.single_is_dir, is_copy, new_tab, refused, cx)
             .absolute().left(offset.x + rem_pixels(rems(0.75))).top(offset.y + rem_pixels(rems(0.25))))
             .into_any_element()
     }
@@ -257,6 +258,7 @@ impl OxydeApp {
         self.selection_autoscroll_at = None;
         self.selection_autoscroll_task = None;
         self.file_drag_origin = None;
+        self.drag_target_refused = false;
         self.set_file_drag_new_tab(false, cx);
         let mut needs_notify = false;
         let workspace_layout_changed = matches!(
@@ -286,6 +288,22 @@ impl OxydeApp {
         if needs_notify {
             cx.notify();
         }
+    }
+
+    /// What the hovered drop target decides for an internal drag: the default operation
+    /// and whether it takes nothing. Returns true when it refuses, so it takes no highlight.
+    pub(crate) fn note_drag_target(&mut self, paths: &[String], target: &str, cx: &mut Context<Self>) -> bool {
+        let refused = self.is_read_only_path(target);
+        let default_copy = paths.first().is_some_and(|path| drives_differ(path, target));
+        if self.drag_target_refused != refused {
+            self.drag_target_refused = refused;
+            cx.notify();
+        }
+        if self.drag_target_default_copy != default_copy {
+            self.drag_target_default_copy = default_copy;
+            self.update_drag_copy_mode(cx);
+        }
+        refused
     }
 
     /// Recompute `drag_copy_mode` from modifier override and drive-based default.

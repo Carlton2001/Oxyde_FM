@@ -466,15 +466,9 @@ pub fn render_top_bar(
                                 let h_over = handle.clone();
                                 let tgt = target_path.clone();
                                 move |style, data, _, cx| {
-                                    let default_copy = data.paths.first()
-                                        .map(|s| crate::ui::app::drives_differ(s, &tgt))
-                                        .unwrap_or(false);
-                                    h_over.update(cx, |this, cx| {
-                                        if this.drag_target_default_copy != default_copy {
-                                            this.drag_target_default_copy = default_copy;
-                                            this.update_drag_copy_mode(cx);
-                                        }
-                                    });
+                                    if h_over.update(cx, |this, cx| this.note_drag_target(&data.paths, &tgt, cx)) {
+                                        return style;
+                                    }
                                     style.bg(theme.selection_hover).text_color(theme.text)
                                 }
                             })

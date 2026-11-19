@@ -174,7 +174,9 @@ impl Render for Ghost {
                         session.effect == FileDropEffect::Copy
                     }),
                     native.is_none() && app.drag_new_tab,
-                    blocked || native.is_some_and(|session| session.effect == FileDropEffect::None),
+                    blocked
+                        || native.is_some_and(|session| session.effect == FileDropEffect::None)
+                        || (native.is_none() && app.drag_target_refused),
                 )
             })
             .unwrap_or((false, false, true));

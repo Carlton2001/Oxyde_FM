@@ -169,15 +169,9 @@ pub(super) fn render_sidebar_rows(
                     .drag_over::<FileDragData>({
                         let h = h.clone(); let tgt = path.clone();
                         move |style, data, _, cx| {
-                            let default_copy = data.paths.first()
-                                .map(|s| crate::ui::app::drives_differ(s, &tgt))
-                                .unwrap_or(false);
-                            h.update(cx, |this, cx| {
-                                if this.drag_target_default_copy != default_copy {
-                                    this.drag_target_default_copy = default_copy;
-                                    this.update_drag_copy_mode(cx);
-                                }
-                            });
+                            if h.update(cx, |this, cx| this.note_drag_target(&data.paths, &tgt, cx)) {
+                                return style;
+                            }
                             style.bg(theme.drag_hover)
                         }
                     })
@@ -298,15 +292,9 @@ pub(super) fn render_sidebar_rows(
                     .drag_over::<FileDragData>({
                         let h = h.clone(); let tgt = path.clone();
                         move |style, data, _, cx| {
-                            let default_copy = data.paths.first()
-                                .map(|s| crate::ui::app::drives_differ(s, &tgt))
-                                .unwrap_or(false);
-                            h.update(cx, |this, cx| {
-                                if this.drag_target_default_copy != default_copy {
-                                    this.drag_target_default_copy = default_copy;
-                                    this.update_drag_copy_mode(cx);
-                                }
-                            });
+                            if h.update(cx, |this, cx| this.note_drag_target(&data.paths, &tgt, cx)) {
+                                return style;
+                            }
                             style.bg(theme.drag_hover)
                         }
                     })
@@ -414,15 +402,9 @@ pub(super) fn render_sidebar_rows(
                         let h = h.clone(); let tgt = path.clone(); let self_path = path.clone();
                         move |style, data, _, cx| {
                             if *data.paths == vec![self_path.clone()] { return style; }
-                            let default_copy = data.paths.first()
-                                .map(|s| crate::ui::app::drives_differ(s, &tgt))
-                                .unwrap_or(false);
-                            h.update(cx, |this, cx| {
-                                if this.drag_target_default_copy != default_copy {
-                                    this.drag_target_default_copy = default_copy;
-                                    this.update_drag_copy_mode(cx);
-                                }
-                            });
+                            if h.update(cx, |this, cx| this.note_drag_target(&data.paths, &tgt, cx)) {
+                                return style;
+                            }
                             style.bg(theme.drag_hover)
                         }
                     })
