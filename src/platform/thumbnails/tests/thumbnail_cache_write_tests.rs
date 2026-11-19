@@ -69,6 +69,27 @@
     }
 
     #[test]
+    fn transparent_thumbnail_keeps_its_alpha_on_a_cache_hit() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join(format!("{:064x}.jpg", 7));
+        let mut expected = generated_image();
+        expected.put_pixel(0, 0, image::Rgba([0, 0, 0, 0]));
+        expected.put_pixel(1, 0, image::Rgba([10, 20, 30, 128]));
+        assert_eq!(
+            cached_thumbnail_in(&path, || Ok(expected.clone())).unwrap(),
+            expected
+        );
+        assert!(!path.exists(), "Transparent thumbnail written as JPEG");
+        let png = transparent_cache_file(&path);
+        assert!(crate::platform::preview_cache_names::recognized(
+            png.file_name().unwrap()
+        ));
+        let cached =
+            cached_thumbnail_in(&path, || panic!("Valid cache hit generated again")).unwrap();
+        assert_eq!(cached, expected);
+    }
+
+    #[test]
     fn generation_failure_preserves_invalid_cache_until_replacement() {
         let root = tempfile::tempdir().unwrap();
         let path = root.path().join("entry.jpg");

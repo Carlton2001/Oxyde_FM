@@ -94,7 +94,18 @@ fn load_cached_thumbnail(path: &Path) -> Result<image::DynamicImage, CommandErro
     if file.metadata()?.len() > CACHE_DECODE_LIMITS.encoded_bytes {
         return Err(encoded_thumbnail_limit_error(CACHE_DECODE_LIMITS));
     }
-    decode_thumbnail_image(file, CACHE_DECODE_LIMITS, Some(image::ImageFormat::Jpeg))
+    let format = if path.extension().is_some_and(|extension| extension == "png") {
+        image::ImageFormat::Png
+    } else {
+        image::ImageFormat::Jpeg
+    };
+    decode_thumbnail_image(file, CACHE_DECODE_LIMITS, Some(format))
+}
+
+/// Where a thumbnail with transparency is cached: JPEG has no alpha channel, so it
+/// goes to a PNG beside the opaque JPEG entry instead.
+fn transparent_cache_file(cache_file: &Path) -> std::path::PathBuf {
+    cache_file.with_extension("png")
 }
 
 fn load_source_thumbnail(path: &Path) -> Result<image::DynamicImage, CommandError> {
@@ -124,7 +135,7 @@ fn cached_thumbnail(
     };
     let cache_dir = cache_root.join("thumbnails");
     let key =
-        blake3::hash(format!("v1|{kind}|{}|{}|{modified_ns}", path, metadata.len()).as_bytes())
+        blake3::hash(format!("v2|{kind}|{}|{}|{modified_ns}", path, metadata.len()).as_bytes())
             .to_hex();
     let cache_file = cache_dir.join(format!("{key}.jpg"));
 
@@ -140,12 +151,20 @@ fn cached_thumbnail_in(
     cache_file: &Path,
     generate: impl FnOnce() -> Result<RgbaImage, CommandError>,
 ) -> Result<RgbaImage, CommandError> {
-    if let Ok(image) = load_cached_thumbnail(cache_file) {
+    let transparent_file = transparent_cache_file(cache_file);
+    if let Ok(image) =
+        load_cached_thumbnail(cache_file).or_else(|_| load_cached_thumbnail(&transparent_file))
+    {
         return Ok(image.to_rgba8());
     }
     // Persistence is optional. Keep a generated image usable even when its cache
     // directory cannot be created, encoded, synchronized or published.
     let image = generate()?;
+    let cache_file = if image.pixels().any(|pixel| pixel.0[3] != 255) {
+        transparent_file.as_path()
+    } else {
+        cache_file
+    };
     let write_result = (|| -> Result<(), CommandError> {
         let cache_dir = cache_file.parent().ok_or_else(|| {
             CommandError::Other("Thumbnail cache has no parent directory".to_string())
@@ -169,7 +188,15 @@ fn write_thumbnail_cache(
     temp_file: &Path,
     image: &RgbaImage,
 ) -> Result<(), CommandError> {
+    let png = cache_file.extension().is_some_and(|extension| extension == "png");
     super::platform().write_preview_cache(cache_file, temp_file, &mut |file| {
+        if png {
+            // Keeps the alpha channel, so a cache hit looks like the first generation.
+            use image::ImageEncoder;
+            return image::codecs::png::PngEncoder::new(file)
+                .write_image(image, image.width(), image.height(), image::ExtendedColorType::Rgba8)
+                .map_err(std::io::Error::other);
+        }
         let rgb = image::DynamicImage::ImageRgba8(image.clone()).to_rgb8();
         image::codecs::jpeg::JpegEncoder::new_with_quality(file, 75)
             .encode_image(&image::DynamicImage::ImageRgb8(rgb))
