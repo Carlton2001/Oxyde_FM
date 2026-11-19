@@ -128,7 +128,7 @@ impl OxydeApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.active_location_is_virtual() {
+        if self.active_location_is_virtual() || self.is_read_only_location(&self.state.active_pane_id, &path) {
             return;
         }
         // Rename and breadcrumb editing share the same input entity.
@@ -428,7 +428,8 @@ impl OxydeApp {
     fn create_new_item(&mut self, pane_id: &str, is_dir: bool, cx: &mut Context<Self>) {
         if let Some(pane) = self.state.layout.find_pane(pane_id) {
             let current_path = pane.active_tab().path.clone();
-            if current_path.starts_with("search://") || Self::location_is_virtual(&current_path) { return; }
+            if current_path.starts_with("search://") || Self::location_is_virtual(&current_path)
+                || self.is_read_only_location(pane_id, &current_path) { return; }
             let (name_key, numbered_key) = if is_dir {
                 (Message::NewFolderName, Message::NewFolderNumbered)
             } else {

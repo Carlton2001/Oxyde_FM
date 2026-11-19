@@ -28,6 +28,8 @@ impl OxydeApp {
         let Some(pane) = self.state.find_pane(&self.state.active_pane_id) else { return; };
         let paths = pane.active_tab().actionable_selection();
         if paths.is_empty() { return; }
+        // Cutting from a read-only location would move nothing: menus hide it, keys do nothing.
+        if cut && paths.iter().any(|path| self.is_read_only_location(&self.state.active_pane_id, path)) { return; }
         let text = paths.join("\n");
         let offers_files = oxyde_lib::platform::platform().file_clipboard().interface_offers_files(&paths);
         let item = if offers_files { files_item(&paths, text, cut) } else { ClipboardItem::new_string(text) };
@@ -56,7 +58,8 @@ impl OxydeApp {
     pub fn execute_coller(&mut self, cx: &mut Context<Self>) {
         let Some(pane) = self.state.find_pane(&self.state.active_pane_id) else { return; };
         let target_dir = pane.active_tab().path.clone();
-        if target_dir.starts_with("search://") || target_dir == "trash://" { return; }
+        if target_dir.starts_with("search://") || target_dir == "trash://"
+            || self.is_read_only_location(&self.state.active_pane_id, &target_dir) { return; }
         #[cfg(target_os = "windows")]
         let text = None;
         #[cfg(not(target_os = "windows"))]
