@@ -15,14 +15,25 @@ pub(super) fn path_on_drive(path: &str, root: &str) -> bool {
         .any(|ancestor| paths_match(&ancestor.to_string_lossy(), root))
 }
 
+/// Whether the innermost drive holding `path` refuses writes: under Linux, a
+/// read-only `/` leaves a writable `/home` mounted on it writable.
+fn on_read_only_volume(path: &str, drives: &[oxyde_lib::models::DriveInfo], read_only: &[String]) -> bool {
+    drive_of(path, drives).is_some_and(|drive| read_only.iter().any(|root| paths_match(root, &drive.path)))
+}
+
+fn fixed_archive(root: &std::path::Path) -> bool {
+    !oxyde_lib::utils::archive::ArchiveFormat::from_path(root)
+        .is_some_and(oxyde_lib::utils::archive::ArchiveFormat::writable)
+}
+
 impl OxydeApp {
     /// Whether nothing can be written at `path` shown in `pane_id`: its volume
     /// refuses writes, or the pane browses an archive Oxyde cannot rewrite.
     pub(crate) fn is_read_only_location(&self, pane_id: &str, path: &str) -> bool {
-        let in_fixed_archive = self.state.find_pane(pane_id).and_then(|pane| pane.active_tab().archive_root.as_ref())
-            .is_some_and(|root| !oxyde_lib::utils::archive::ArchiveFormat::from_path(root)
-                .is_some_and(oxyde_lib::utils::archive::ArchiveFormat::writable));
-        in_fixed_archive || self.read_only_volumes.iter().any(|root| path_on_drive(path, root))
+        let in_fixed_archive = self.state.find_pane(pane_id)
+            .and_then(|pane| pane.active_tab().archive_root.as_deref())
+            .is_some_and(fixed_archive);
+        in_fixed_archive || on_read_only_volume(path, &self.state.drives, &self.read_only_volumes)
     }
 }
 
@@ -620,6 +631,10 @@ fn redirect_tabs(
 #[cfg(all(test, not(target_os = "windows")))]
 #[path = "drive_watchers/tests/polling.rs"]
 mod polling_tests;
+
+#[cfg(test)]
+#[path = "drive_watchers/tests/read_only.rs"]
+mod read_only_tests;
 
 #[cfg(test)]
 mod tests {
