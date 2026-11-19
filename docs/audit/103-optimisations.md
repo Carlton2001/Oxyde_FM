@@ -36,7 +36,7 @@ Règle : pas de changement sans gain plausible et mesurable ; un changement simp
 | O22 | `systems/history_move_redo.rs:419` | à examiner | | |
 | O23 | `systems/updates.rs:62` | à examiner | | |
 | O24 | `commands/duplicates.rs:335, :390 et :445` | à examiner | | |
-| O25 | `commands/duplicates.rs:330, :385 et :440, commands/search.rs:520` | à examiner | | |
+| O25 | `commands/duplicates.rs:330, :385 et :440, commands/search.rs:520` | corrigé | a4654b0a | identifiant de disque mis en cache par dossier pendant 30 s (4096 dossiers au plus) |
 | O26 | `commands/duplicates.rs:409-424` | à examiner | | |
 | O28 | `commands/ops/trash_restore.rs:69` | à examiner | | |
 | O29 | `commands/ops/linux_trash.rs:84` | Linux | | |

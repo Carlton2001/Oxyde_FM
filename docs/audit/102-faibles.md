@@ -17,8 +17,8 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F49 | `platform/linux_gio.rs:384, :391 et :486` | Linux | | |
 | F50 | `platform/linux_gio/applications.rs:186` | Linux | | |
 | F51 | `platform/linux_extended_attributes.rs:24` | Linux | | |
-| F52 | `platform/hardware.rs:46, :80 et :146` | à examiner | | |
-| F53 | `platform/hardware.rs:79` | à examiner | | |
+| F52 | `platform/hardware.rs:46, :80 et :146` | corrigé | e11d6088 | lettre de lecteur lue en ASCII (`drive_letter`) ; « é:\… » n'est plus un lecteur ; test |
+| F53 | `platform/hardware.rs:79` | corrigé | a4654b0a | volume monté dans un dossier interrogé par son nom `Volume{…}` (numéro de disque et pénalité de recherche) ; repli sur un identifiant propre au volume ; à tester avec un disque monté dans un dossier |
 | F54 | `platform/linux_permissions.rs:103` | Linux | | |
 | F55 | `platform/linux_portal.rs:239 et :270` | Linux | | |
 | F56 | `platform/linux_portal/chooser.rs:286` | Linux | | |
@@ -28,8 +28,8 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F60 | `platform/linux_trash.rs:72` | Linux | | |
 | F61 | `platform/linux_trash.rs:33` | Linux | | |
 | F62 | `platform/linux_quick_access.rs:35` | Linux | | |
-| F63 | `platform/thumbnails.rs:116` | à examiner | | |
-| F64 | `platform/thumbnails.rs:87` | à examiner | | |
+| F63 | `platform/thumbnails.rs:116` | corrigé | 7f618735 | sans date de modification, miniature générée sans cache ; clé sans casse sous Windows (anciennes entrées orphelines, évincées par le quota) |
+| F64 | `platform/thumbnails.rs:87` | écarté |  | choix de sécurité de c37f7b7b : le décodeur suit l'extension (test `cache_and_source_do_not_decode_a_different_format_than_the_extension`) ; un fichier sans extension d'image n'est pas demandé en miniature |
 | F65 | `platform/thumbnails.rs:230` | Linux | | |
 | F66 | `platform/thread_priority.rs:17` | Linux | | |
 | F67 | `platform/viewer_media.rs:191` | à examiner | | |
@@ -65,7 +65,7 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F99 | `commands/image_handle_worker.rs:76-79` | à examiner | | |
 | F104 | `systems/file_ops/copy.rs:273` | à examiner | | |
 | F105 | `systems/file_ops/archive_transfer.rs:171` | à examiner | | |
-| F107 | `systems/file_ops/copy.rs:561` | à examiner | | |
+| F107 | `systems/file_ops/copy.rs:561` | corrigé | c2132fc8 | Windows : type de stockage demandé par dossier source (avec F53) ; Linux inchangé (un stat par fichier, sans requête de stockage) |
 | F109 | `systems/history_delete.rs:83-90 et :216-226` | à examiner | | |
 | F110 | `systems/history_links.rs:33-45` | à examiner | | |
 | F112 | `systems/file_ops/delete.rs:148-169 et :297-307` | à examiner | | |
