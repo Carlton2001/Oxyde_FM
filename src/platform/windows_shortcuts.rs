@@ -84,13 +84,13 @@ pub(super) fn set_shortcut_info(
         return Err("Only .lnk files can be edited".into());
     }
     if [
-            info.target.as_str(),
-            info.arguments.as_str(),
-            info.working_dir.as_str(),
-            info.description.as_str(),
-        ]
-        .iter()
-        .any(|value| value.contains('\0'))
+        info.target.as_str(),
+        info.arguments.as_str(),
+        info.working_dir.as_str(),
+        info.description.as_str(),
+    ]
+    .iter()
+    .any(|value| value.contains('\0'))
     {
         return Err("Invalid shortcut fields".into());
     }
