@@ -64,14 +64,15 @@ pub(crate) fn item_with_correct_restore_name(item: &trash::TrashItem) -> trash::
 #[cfg(target_os = "windows")]
 mod trash_listing;
 #[cfg(target_os = "windows")]
-pub use trash_listing::list_trash;
+pub use trash_listing::{list_trash, list_trash_fallback};
 #[cfg(target_os = "windows")]
 pub(crate) use trash_listing::list_trash_unsorted;
 #[cfg(not(target_os = "windows"))]
 mod linux_trash;
 #[cfg(not(target_os = "windows"))]
 pub use linux_trash::{
-    empty_trash, get_total_recycle_bin_usage, list_trash, purge_recycle_bin, restore_items,
+    empty_trash, get_total_recycle_bin_usage, list_trash, list_trash_fallback, purge_recycle_bin,
+    restore_items,
     restore_items_report, TrashRestoreReport,
 };
 #[cfg(not(target_os = "windows"))]

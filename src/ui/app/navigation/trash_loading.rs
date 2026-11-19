@@ -30,7 +30,7 @@ impl OxydeApp {
                     });
                     let result = if let Err(error) = result {
                         log::warn!("Progressive trash listing failed, retrying complete listing: {error}");
-                        oxyde_lib::commands::ops::list_trash()
+                        oxyde_lib::commands::ops::list_trash_fallback()
                             .map_err(|error| error.to_string())
                             .map(|entries| { let _ = sender.blocking_send(Update::Batch(entries, true)); })
                     } else { result };

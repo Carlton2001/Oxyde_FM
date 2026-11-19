@@ -178,11 +178,13 @@ pub(super) fn run(mode: &str, path: &Path) -> io::Result<Vec<u8>> {
             return icon_session::run_pdf(path, mode == "pdf-thumbnail");
         }
         let _source = super::platform().retain_archive_source(path)?;
+        // A one-shot parser, admitted like the other ones: a folder of long PDF names
+        // must not start one per file at once.
+        let _slot = SLOT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         return run_in(&std::env::current_exe()?, mode, path, DEADLINE);
     }
-    let _slot = SLOT
-        .lock()
-        .map_err(|_| io::Error::other("Preview worker admission failed"))?;
+    // The slot guards no data: a panic that poisoned it left nothing to repair.
+    let _slot = SLOT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     if mode == "office-text" || mode == "office-document" {
         run_office_text_in(
             &std::env::current_exe()?.with_file_name("oxyde-image-worker.exe"),
@@ -475,9 +477,7 @@ pub(super) fn stream(
     if cancelled() {
         return Ok(());
     }
-    let _slot = VIDEO_SLOT
-        .lock()
-        .map_err(|_| io::Error::other("Video worker admission failed"))?;
+    let _slot = VIDEO_SLOT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     if cancelled() {
         return Ok(());
     }
@@ -516,7 +516,6 @@ pub(super) fn supervise_stream(
     if cancelled() {
         return Ok(());
     }
-    let mut progress = Instant::now();
     let started = Worker::start(command, VIDEO_MEMORY_BYTES, &|| {
         if cancelled() {
             Err(io::Error::new(
@@ -531,6 +530,9 @@ pub(super) fn supervise_stream(
         Err(error) if error.kind() == io::ErrorKind::Interrupted && cancelled() => return Ok(()),
         result => result?,
     };
+    // From the launch, not the request: waiting up to 30 s for the memory budget is not
+    // a worker that produces no frame.
+    let mut progress = Instant::now();
     let mut pending = Vec::new();
     let mut chunk = [0; 64 * 1024];
     let mut exited = None;

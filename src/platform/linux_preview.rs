@@ -51,7 +51,8 @@ pub(super) fn office_search(path: &Path, checkpoint: &dyn Fn() -> io::Result<()>
         }
         match SEARCH_SLOT.try_lock() {
             Ok(slot) => break slot,
-            Err(TryLockError::Poisoned(_)) => return Err(io::Error::other("Office search admission unavailable")),
+            // The slot guards no data: a panic that poisoned it left nothing to repair.
+            Err(TryLockError::Poisoned(poisoned)) => break poisoned.into_inner(),
             Err(TryLockError::WouldBlock) => std::thread::sleep(Duration::from_millis(10)),
         }
     };

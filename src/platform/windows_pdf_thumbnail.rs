@@ -117,17 +117,39 @@ pub(super) fn get_grid(path: String) -> Result<RgbaImage, CommandError> {
     render(&path, 0, 128)
 }
 
+/// Time spent measuring pages before the first reply; the session allows 15 s in all.
+const SIZE_BUDGET: std::time::Duration = std::time::Duration::from_secs(3);
+
 /// One `width height` line per page (WinRT DIPs, after rotation).
 pub(super) fn sizes_of(document: &PdfDocument) -> Result<String, CommandError> {
     let count = document.PageCount()?.min(MAX_LISTED_PAGES);
+    list_sizes(count, SIZE_BUDGET, |index| {
+        let page = OwnedPage(document.GetPage(index)?);
+        let size = page.0.Size()?;
+        Ok((size.Width, size.Height))
+    })
+}
+
+/// Pages past the budget are listed as `0 0`: thousands of pages on a slow disk would
+/// otherwise outlast the session deadline. The parent gives them the size of the last
+/// measured page, and each page still renders at its real size.
+fn list_sizes(
+    count: u32,
+    budget: std::time::Duration,
+    mut measure: impl FnMut(u32) -> Result<(f32, f32), CommandError>,
+) -> Result<String, CommandError> {
     if count == 0 {
         return Err(CommandError::Other("Empty PDF".into()));
     }
+    let started = std::time::Instant::now();
     let mut sizes = String::new();
     for index in 0..count {
-        let page = OwnedPage(document.GetPage(index)?);
-        let size = page.0.Size()?;
-        sizes.push_str(&format!("{} {}\n", size.Width, size.Height));
+        if index > 0 && started.elapsed() >= budget {
+            sizes.push_str("0 0\n");
+            continue;
+        }
+        let (width, height) = measure(index)?;
+        sizes.push_str(&format!("{width} {height}\n"));
     }
     Ok(sizes)
 }
@@ -314,6 +336,23 @@ mod tests {
         })
         .join()
         .unwrap();
+    }
+
+    #[test]
+    fn pages_past_the_size_budget_are_listed_unmeasured() {
+        let mut measured = Vec::new();
+        let sizes = list_sizes(3, std::time::Duration::ZERO, |index| {
+            measured.push(index);
+            Ok((600.0, 800.0))
+        })
+        .unwrap();
+        assert_eq!(measured, [0]);
+        assert_eq!(sizes, "600 800\n0 0\n0 0\n");
+        assert_eq!(
+            super::super::thumbnails::parse_pdf_sizes(&sizes).unwrap(),
+            [(600.0, 800.0); 3]
+        );
+        assert!(list_sizes(0, SIZE_BUDGET, |_| unreachable!()).is_err());
     }
 
     #[test]

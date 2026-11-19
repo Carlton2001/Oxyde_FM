@@ -33,9 +33,30 @@ fn shell_icon_path(path: &str) -> String {
     path.replace('/', "\\")
 }
 
+/// Paths compare without case, as Windows does. A file with its own icon also keys on
+/// its size and write time: an .exe, .lnk or .ico replaced at the same path gets its
+/// new icon instead of the remembered one, even across restarts.
 pub(super) fn cache_key(path: &str, size: &str) -> String {
     let path = shell_icon_path(path);
-    format!("{}_{}", blake3::hash(path.as_bytes()).to_hex(), size)
+    let identity = format!("{}|{}", path.to_lowercase(), own_icon_stamp(&path));
+    format!("{}_{}", blake3::hash(identity.as_bytes()).to_hex(), size)
+}
+
+fn own_icon_stamp(path: &str) -> String {
+    if path.starts_with("oxyde_") || !super::windows_icon_source::has_own_icon(path) {
+        return String::new();
+    }
+    match std::fs::metadata(path) {
+        Ok(metadata) if metadata.is_file() => {
+            let modified = metadata
+                .modified()
+                .ok()
+                .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                .map_or(0, |time| time.as_nanos());
+            format!("{}-{modified}", metadata.len())
+        }
+        _ => String::new(),
+    }
 }
 
 /// The drive Windows is on, which is not always C:.
@@ -252,6 +273,10 @@ mod tauri_comparison_tests;
 #[cfg(test)]
 #[path = "icons/tests/deferred.rs"]
 mod deferred_tests;
+
+#[cfg(test)]
+#[path = "icons/tests/cache_keys.rs"]
+mod cache_key_tests;
 
 #[cfg(test)]
 mod tests {

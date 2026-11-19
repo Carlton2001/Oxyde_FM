@@ -13,7 +13,9 @@ pub(super) fn recognized(name: &OsStr) -> bool {
     let stem = name
         .strip_suffix(".jpg")
         .or_else(|| name.strip_suffix("_small.png"))
-        .or_else(|| name.strip_suffix("_large.png"));
+        .or_else(|| name.strip_suffix("_large.png"))
+        // Checked last: a bare PNG thumbnail must not swallow the suffixes above.
+        .or_else(|| name.strip_suffix(".png"));
     stem.is_some_and(|stem| {
         stem.len() == 64
             && stem

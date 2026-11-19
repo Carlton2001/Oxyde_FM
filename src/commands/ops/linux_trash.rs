@@ -13,6 +13,11 @@ pub fn list_trash() -> Result<Vec<TrashEntry>, CommandError> {
     Ok(entries)
 }
 
+/// Retry after a failed progressive listing (which is this same listing on Linux).
+pub fn list_trash_fallback() -> Result<Vec<TrashEntry>, CommandError> {
+    list_trash_unsorted()
+}
+
 /// The tab applies its configured sort; avoid sorting the same listing twice.
 pub(crate) fn list_trash_unsorted() -> Result<Vec<TrashEntry>, CommandError> {
     let started = std::time::Instant::now();

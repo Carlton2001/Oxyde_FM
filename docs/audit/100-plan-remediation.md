@@ -260,3 +260,17 @@ Statuts : à faire, en cours, corrigé (hash), obsolète, reporté. Mettre à jo
 | reprise | F111 | corrigé | 2b251e82 | annulation réussie mais copies en attente non supprimées : notification d'erreur « Opération annulée, mais… » avec leurs emplacements (5 langues) ; `undo_last_action_report` ; test |
 | reprise | M29 | corrigé | 65b51b17, 6a87b783, be4d67c2 | lecture d'aperçu au survol bloquée : l'emplacement est rendu après 20 s (au-delà des 15 s des workers), jusqu'à 4 lectures bloquées tolérées ensuite l'attente reprend ; test ; test intermittent des files d’aperçu corrigé (verrou partagé) ; plantage au premier survol (minuterie créée hors de Tokio) trouvé au lancement et corrigé, test |
 | reprise | M63, M64 (annulation) | corrigé | 233c9d7e | « Tout développer » arrêté quand on replie le dossier (ou un parent) ou qu'on relance sur le même dossier ; le résultat n'ouvre plus un dossier replié entre-temps ; test |
+| catégorie 1 | M96 | corrigé | 7d56f6b6 | miniature avec transparence mise en cache en PNG (`<clé>.png`, reconnu par le quota), opaque toujours en JPEG ; clé de cache en v2 ; test |
+| catégorie 1 | M97 | corrigé | 007930d8 | page de taille invalide gardée à sa place, avec la taille de la page valide précédente (sinon suivante, sinon Letter) ; tests |
+| catégorie 1 | F32 | corrigé | ce0f4004 | élément purgé pendant l'énumération (`$I` disparu) ignoré ; après un échec du flux, repli direct sur les propriétés Shell (`list_trash_fallback`) au lieu de relire la corbeille deux fois ; test |
+| catégorie 1 | F33 | corrigé | 44e3588c | métadonnées de la corbeille lues sans suivre les liens (lecteur natif et repli Shell) ; une jonction reste un dossier ; test |
+| catégorie 1 | F35 | corrigé | 1971dafc | pause confirmée tardivement : plus comptée dans le délai (Windows et Linux) |
+| catégorie 1 | F36 | corrigé | e464eb90 | 10 s au lieu de 1 s pour la sortie du worker après Finished (Windows et Linux) |
+| catégorie 1 | F37 | corrigé | 7361767c, 98d239df | emplacements d'admission empoisonnés repris (archives, liste, recherche Office, aperçus, vidéo ; Windows et Linux) ; test |
+| catégorie 1 | F38 | corrigé | d11dae72 | clé d'icône sans casse ; .exe, .lnk, .ico… : taille et date d'écriture dans la clé (mémoire, disque, worker) ; tests ; les anciennes icônes en cache deviennent orphelines |
+| catégorie 1 | F39 | corrigé | 16313ded | mesure des pages bornée à 3 s ; les suivantes listées `0 0` et prennent la taille de la dernière mesurée (M97) ; test |
+| catégorie 1 | F40 | corrigé | d89c0e11 | bail du cache d'aperçus attendu jusqu'à 1 s (Windows et Linux) ; test Windows |
+| catégorie 1 | F41 | corrigé | 63d1c8c2 | horloge « aucune image depuis 15 s » démarrée après le lancement du worker vidéo ; Linux déjà correct |
+| catégorie 1 | F42 | corrigé | 628c9941 | repli PDF (chemin long ou non Unicode) admis par l'emplacement partagé |
+| catégorie 1 | F43 | corrigé | e455bbe8 | libération de la session du Viewer gardée par un drapeau quand la file est pleine ; sans test (session réelle) |
+| catégorie 1 | F44 | corrigé | daad4df9 | profils `Oxyde.Archive.<uuid>` de plus de 10 min supprimés une fois par processus avant la création d'un profil ; vérifié sur cette machine : 2 profils orphelins trouvés ; tests |

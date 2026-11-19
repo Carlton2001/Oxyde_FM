@@ -94,7 +94,18 @@ fn load_cached_thumbnail(path: &Path) -> Result<image::DynamicImage, CommandErro
     if file.metadata()?.len() > CACHE_DECODE_LIMITS.encoded_bytes {
         return Err(encoded_thumbnail_limit_error(CACHE_DECODE_LIMITS));
     }
-    decode_thumbnail_image(file, CACHE_DECODE_LIMITS, Some(image::ImageFormat::Jpeg))
+    let format = if path.extension().is_some_and(|extension| extension == "png") {
+        image::ImageFormat::Png
+    } else {
+        image::ImageFormat::Jpeg
+    };
+    decode_thumbnail_image(file, CACHE_DECODE_LIMITS, Some(format))
+}
+
+/// Where a thumbnail with transparency is cached: JPEG has no alpha channel, so it
+/// goes to a PNG beside the opaque JPEG entry instead.
+fn transparent_cache_file(cache_file: &Path) -> std::path::PathBuf {
+    cache_file.with_extension("png")
 }
 
 fn load_source_thumbnail(path: &Path) -> Result<image::DynamicImage, CommandError> {
@@ -124,7 +135,7 @@ fn cached_thumbnail(
     };
     let cache_dir = cache_root.join("thumbnails");
     let key =
-        blake3::hash(format!("v1|{kind}|{}|{}|{modified_ns}", path, metadata.len()).as_bytes())
+        blake3::hash(format!("v2|{kind}|{}|{}|{modified_ns}", path, metadata.len()).as_bytes())
             .to_hex();
     let cache_file = cache_dir.join(format!("{key}.jpg"));
 
@@ -140,12 +151,20 @@ fn cached_thumbnail_in(
     cache_file: &Path,
     generate: impl FnOnce() -> Result<RgbaImage, CommandError>,
 ) -> Result<RgbaImage, CommandError> {
-    if let Ok(image) = load_cached_thumbnail(cache_file) {
+    let transparent_file = transparent_cache_file(cache_file);
+    if let Ok(image) =
+        load_cached_thumbnail(cache_file).or_else(|_| load_cached_thumbnail(&transparent_file))
+    {
         return Ok(image.to_rgba8());
     }
     // Persistence is optional. Keep a generated image usable even when its cache
     // directory cannot be created, encoded, synchronized or published.
     let image = generate()?;
+    let cache_file = if image.pixels().any(|pixel| pixel.0[3] != 255) {
+        transparent_file.as_path()
+    } else {
+        cache_file
+    };
     let write_result = (|| -> Result<(), CommandError> {
         let cache_dir = cache_file.parent().ok_or_else(|| {
             CommandError::Other("Thumbnail cache has no parent directory".to_string())
@@ -169,7 +188,15 @@ fn write_thumbnail_cache(
     temp_file: &Path,
     image: &RgbaImage,
 ) -> Result<(), CommandError> {
+    let png = cache_file.extension().is_some_and(|extension| extension == "png");
     super::platform().write_preview_cache(cache_file, temp_file, &mut |file| {
+        if png {
+            // Keeps the alpha channel, so a cache hit looks like the first generation.
+            use image::ImageEncoder;
+            return image::codecs::png::PngEncoder::new(file)
+                .write_image(image, image.width(), image.height(), image::ExtendedColorType::Rgba8)
+                .map_err(std::io::Error::other);
+        }
         let rgb = image::DynamicImage::ImageRgba8(image.clone()).to_rgb8();
         image::codecs::jpeg::JpegEncoder::new_with_quality(file, 75)
             .encode_image(&image::DynamicImage::ImageRgb8(rgb))
@@ -731,21 +758,39 @@ pub fn get_office_document(path: String) -> Result<String, CommandError> {
 }
 
 /// `width height` lines (only their ratio is used), one per page.
+///
+/// A line stands for its page even when its size is invalid (degenerate MediaBox):
+/// dropping it would shift every later page. It takes the size of the previous valid
+/// page, else of the next one, else US Letter.
 pub(super) fn parse_pdf_sizes(text: &str) -> Result<Vec<(f32, f32)>, CommandError> {
-    let sizes: Vec<(f32, f32)> = text
+    const LETTER: (f32, f32) = (612.0, 792.0);
+    let parsed: Vec<Option<(f32, f32)>> = text
         .lines()
-        .filter_map(|line| {
+        .map(|line| {
             let (width, height) = line.split_once(' ')?;
             let size = (width.parse::<f32>().ok()?, height.parse::<f32>().ok()?);
             (size.0.is_finite() && size.1.is_finite() && size.0 > 0.0 && size.1 > 0.0)
                 .then_some(size)
         })
         .collect();
-    if sizes.is_empty() {
+    if parsed.is_empty() {
         return Err(CommandError::Other("Empty PDF".into()));
     }
-    Ok(sizes)
+    let mut fallback = parsed.iter().flatten().next().copied().unwrap_or(LETTER);
+    Ok(parsed
+        .into_iter()
+        .map(|size| {
+            if let Some(size) = size {
+                fallback = size;
+            }
+            fallback
+        })
+        .collect())
 }
+
+#[cfg(test)]
+#[path = "thumbnails/tests/pdf_sizes_tests.rs"]
+mod pdf_sizes_tests;
 
 fn isolated_text(bytes: &[u8]) -> Result<String, CommandError> {
     match crate::utils::preview_protocol::decode(bytes)? {

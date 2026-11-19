@@ -40,8 +40,11 @@ pub(crate) fn stream(emit: &mut dyn FnMut(Vec<TrashEntry>) -> bool) -> Result<()
                         .map_err(|error| error.to_string())?,
                 ).map_err(|error| error.to_string())?;
                 let before = std::time::Instant::now();
-                entries.push(read_entry(PathBuf::from(path))?);
+                let entry = read_entry(PathBuf::from(path))?;
                 enrichment += before.elapsed();
+                // Purged while the bin was being enumerated: nothing left to show.
+                let Some(entry) = entry else { continue; };
+                entries.push(entry);
                 count += 1;
                 if (first && entries.len() >= 64) || published.elapsed().as_millis() >= 100 {
                     if !emit(std::mem::take(&mut entries)) { return Ok(()); }
@@ -59,29 +62,42 @@ pub(crate) fn stream(emit: &mut dyn FnMut(Vec<TrashEntry>) -> bool) -> Result<()
     Ok(())
 }
 
-fn read_entry(path: PathBuf) -> Result<TrashEntry, String> {
+/// `None` when the item has been purged since the Shell listed it (its `$I` is gone).
+fn read_entry(path: PathBuf) -> Result<Option<TrashEntry>, String> {
     let name = path.file_name().ok_or("Missing recycle bin filename")?.to_string_lossy();
     if !name.get(..2).is_some_and(|prefix| prefix.eq_ignore_ascii_case("$R")) {
         return Err("Unexpected recycle bin payload name".into());
     }
     let sidecar = path.with_file_name(format!("$I{}", &name[2..]));
-    let mut file = super::super::platform().open_archive_source(&sidecar, false)
-        .map_err(|error| error.to_string())?;
+    let mut file = match super::super::platform().open_archive_source(&sidecar, false) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.to_string()),
+    };
     let bytes = super::metadata_bytes(&mut file).map_err(|error| error.to_string())?;
     let original = super::parse_original_path(&bytes).ok_or("Invalid recycle bin metadata")?;
     let deleted_time = deletion_time(&bytes).ok_or("Invalid recycle bin deletion time")?;
-    let metadata = std::fs::metadata(&path).ok();
-    let is_dir = metadata.as_ref().is_some_and(|metadata| metadata.is_dir());
+    let metadata = std::fs::symlink_metadata(&path).ok();
+    let is_dir = metadata.as_ref().is_some_and(is_directory);
     let size = if is_dir { 0 } else { metadata.as_ref().map_or(0, |metadata| metadata.len()) };
     let modified = metadata.as_ref().and_then(|metadata| metadata.modified().ok())
         .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
         .map_or(deleted_time, |duration| duration.as_millis() as u64);
-    Ok(TrashEntry {
+    Ok(Some(TrashEntry {
         name: original.file_name().unwrap_or(original.as_os_str()).to_string_lossy().into_owned(),
         path: path.to_string_lossy().into_owned(),
         original_path: original.to_string_lossy().into_owned(),
         is_dir, size, deleted_time, modified,
-    })
+    }))
+}
+
+/// Read from the item itself, not its target: a recycled junction to an offline share
+/// would otherwise hold the listing until the network times out. A junction or
+/// directory link still shows as a folder.
+fn is_directory(metadata: &std::fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
+    metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY != 0
 }
 
 fn deletion_time(bytes: &[u8]) -> Option<u64> {

@@ -18,7 +18,9 @@ const SEVEN_ENCODE_MEMORY_BYTES: u64 = 2 * MEMORY_BYTES;
 /// A frame fits whole, so that block transfers do not cost a context switch per 64 KiB.
 const PIPE_BYTES: usize = crate::utils::archive_io_protocol::MAX_FRAME;
 const POLL_INTERVAL: Duration = Duration::from_millis(20);
-const EXIT_GRACE: Duration = Duration::from_secs(1);
+/// After Finished, the worker owes only its exit; a saturated machine or a 7z worker
+/// freeing its 2 GiB envelope can take seconds, which is not a protocol failure.
+const EXIT_GRACE: Duration = Duration::from_secs(10);
 static TARGETED: Mutex<()> = Mutex::new(());
 static BULK: Mutex<()> = Mutex::new(());
 
@@ -38,7 +40,8 @@ fn admission(operation: &Operation, controls: &dyn Fn() -> io::Result<Control>) 
         if !check(controls)?.paused {
             match slot.try_lock() {
                 Ok(guard) => return Ok(guard),
-                Err(TryLockError::Poisoned(_)) => return Err(invalid()),
+                // The slot guards no data: a panic that poisoned it left nothing to repair.
+                Err(TryLockError::Poisoned(poisoned)) => return Ok(poisoned.into_inner()),
                 Err(TryLockError::WouldBlock) => {}
             }
         }
@@ -187,28 +190,22 @@ fn converse(conversation: &mut Conversation<'_>, session: [u8; 16], operation: &
 }
 
 /// Asks the worker to stop before its next effect. Only a confirmed pause suspends the
-/// deadline: a worker that never confirms it still runs out of time.
+/// deadline: a worker that never confirms it still runs out of time. Once confirmed,
+/// however late, the worker waits for Resume and the pause is not counted.
 fn pause(conversation: &mut Conversation<'_>, wire: &mut Wire, turbo: bool) -> io::Result<bool> {
-    let requested = Instant::now();
     wire.write(&mut *conversation, &Frame::new(Message::Ack { pause: true, turbo }))?;
     if wire.read(&mut *conversation)?.message != Message::Paused {
         return Err(invalid());
     }
     let confirmed = Instant::now();
-    let suspended = requested.elapsed() <= Duration::from_secs(1);
     let turbo = loop {
         let control = check(conversation.controls)?;
         if !control.paused {
             break control.turbo;
         }
-        if !suspended {
-            conversation.live()?;
-        }
         std::thread::sleep(Duration::from_millis(10));
     };
-    if suspended {
-        conversation.paused += confirmed.elapsed();
-    }
+    conversation.paused += confirmed.elapsed();
     wire.write(&mut *conversation, &Frame::new(Message::Resume { turbo }))?;
     Ok(turbo)
 }

@@ -222,6 +222,33 @@ fn evict(parent: &File, entry: &Entry) -> io::Result<bool> {
     Ok(true)
 }
 
+/// How long a writer waits for another one's scan and publication (500 ms at most for
+/// the scan) before giving up on caching its entry.
+const LEASE_WAIT: Duration = Duration::from_secs(1);
+
+fn acquire_lease(parent: &File) -> io::Result<File> {
+    let started = Instant::now();
+    loop {
+        match super::windows_no_reparse::open_relative(
+            parent,
+            OsStr::new(LEASE),
+            false,
+            GENERIC_READ.0 | GENERIC_WRITE.0,
+            0,
+            3,
+        ) {
+            Ok(lease) => return Ok(lease),
+            Err(error) if matches!(error.raw_os_error(), Some(32 | 33)) => {
+                if started.elapsed() >= LEASE_WAIT {
+                    return Err(io::Error::new(io::ErrorKind::WouldBlock, error));
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+}
+
 // Return the exclusive lease so the caller keeps it through native publication.
 pub(super) fn admit(
     parent: &File,
@@ -236,21 +263,7 @@ pub(super) fn admit(
             "Preview cache entry exceeds its disk budget",
         ));
     }
-    let lease = super::windows_no_reparse::open_relative(
-        parent,
-        OsStr::new(LEASE),
-        false,
-        GENERIC_READ.0 | GENERIC_WRITE.0,
-        0,
-        3,
-    )
-    .map_err(|error| {
-        if matches!(error.raw_os_error(), Some(32 | 33)) {
-            io::Error::new(io::ErrorKind::WouldBlock, error)
-        } else {
-            error
-        }
-    })?;
+    let lease = acquire_lease(parent)?;
     let start = Instant::now();
     let (mut bytes, mut entries, mut candidates) =
         scan(parent, destination, temporary, policy, start)?;

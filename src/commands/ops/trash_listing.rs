@@ -23,6 +23,16 @@ pub(crate) fn list_trash_unsorted() -> Result<Vec<TrashEntry>, CommandError> {
         Err(error) => log::warn!(target: "oxyde_lib::trash_listing",
             "Native display listing failed, falling back to Shell properties: {error}"),
     }
+    list_trash_from_shell(started)
+}
+
+/// After a failed progressive listing: the native reader has just failed, so go
+/// straight to the Shell properties instead of enumerating the bin a third time.
+pub fn list_trash_fallback() -> Result<Vec<TrashEntry>, CommandError> {
+    list_trash_from_shell(std::time::Instant::now())
+}
+
+fn list_trash_from_shell(started: std::time::Instant) -> Result<Vec<TrashEntry>, CommandError> {
     let trash_items =
         crate::platform::platform().list_trash_items().map_err(CommandError::TrashError)?;
 
@@ -50,8 +60,13 @@ pub(crate) fn list_trash_unsorted() -> Result<Vec<TrashEntry>, CommandError> {
             let deleted_time = (item.time_deleted.max(0) as u64).saturating_mul(1000);
 
             // Reuse one snapshot for type, size and modification time.
-            let metadata = std::fs::metadata(&trash_path).ok();
-            let is_dir = metadata.as_ref().is_some_and(|metadata| metadata.is_dir());
+            // The item itself, not its target: a recycled junction to an offline share
+            // would hold the listing until the network times out.
+            let metadata = std::fs::symlink_metadata(&trash_path).ok();
+            let is_dir = metadata.as_ref().is_some_and(|metadata| {
+                use std::os::windows::fs::MetadataExt;
+                metadata.file_attributes() & 0x10 != 0 // FILE_ATTRIBUTE_DIRECTORY
+            });
             let size = if is_dir {
                 0
             } else {

@@ -78,7 +78,10 @@ pub(super) fn clear() {
 pub(super) fn get(path: String, large: bool) -> Result<RgbaImage, String> {
     let path = path.replace('/', "\\");
     let mode = if large { "icon-large" } else { "icon-small" };
-    let key = format!("{mode}|{path}");
+    let size = if large { "large" } else { "small" };
+    // Same identity as the disk entry: a replaced file is not served from memory either.
+    let filename = super::icons::cache_key(&path, size);
+    let key = format!("{mode}|{filename}");
     let generation = {
         let memory = cache().lock().map_err(|error| error.to_string())?;
         if let Some(image) = memory.images.get(&key).cloned() {
@@ -89,13 +92,7 @@ pub(super) fn get(path: String, large: bool) -> Result<RgbaImage, String> {
     let persistence_revision = super::windows_icon_persistence::revision();
     // Consult the persisted PNG before starting a Shell process. Decoding remains
     // bounded by the icon policy and happens on the caller's background thread.
-    let disk = crate::app_paths::cache_dir().map(|directory| {
-        let size = if large { "large" } else { "small" };
-        (
-            directory.join("icons"),
-            super::icons::cache_key(&path, size),
-        )
-    });
+    let disk = crate::app_paths::cache_dir().map(|directory| (directory.join("icons"), filename));
     if let Some((directory, filename)) = &disk {
         if let Ok(image) =
             super::windows_icon_cache::read_cached_png(&directory.join(format!("{filename}.png")))

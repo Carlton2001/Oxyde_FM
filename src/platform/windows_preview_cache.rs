@@ -469,6 +469,27 @@ mod tests {
     }
 
     #[test]
+    fn writer_waits_for_a_lease_released_shortly_after() {
+        let root = tempfile::tempdir().unwrap();
+        let lock = root.path().join(".preview-cache-lock");
+        fs::write(&lock, b"lease witness").unwrap();
+        let reader = File::open(&lock).unwrap();
+        let release = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            drop(reader);
+        });
+        write_with_policy(
+            &cache_path(root.path(), 2),
+            &root.path().join("entry.tmp"),
+            &mut |file| file.write_all(b"new"),
+            quota(100, 2),
+        )
+        .unwrap();
+        release.join().unwrap();
+        assert_eq!(fs::read(cache_path(root.path(), 2)).unwrap(), b"new");
+    }
+
+    #[test]
     fn disk_quota_lock_contention_leaves_existing_cache_and_cleans_staging() {
         let root = tempfile::tempdir().unwrap();
         seed(root.path(), 1, b"1111", 100);

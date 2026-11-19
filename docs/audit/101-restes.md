@@ -6,7 +6,7 @@
 
 | Catégorie | Points | Verdict |
 | --- | --- | --- |
-| 1. Corrigeables dès à présent | M96, M97, faibles Windows F32 à F44 | à faire, sans obstacle |
+| 1. Corrigeables dès à présent | M96, M97, faibles Windows F32 à F44 | corrigés le 2026-11-19 (lignes « catégorie 1 » du suivi) |
 | 2. Gros chantiers | M17, M67, reste de M43, M31, M32 | faisables, mais refonte |
 | 3. Impossibles ou choix volontaires | F26, F72, F119, WM1 (reste), M14, M88 (icônes), F77, ordre de deux lancements | à laisser, sauf décision contraire |
 | 4. Besoin d'une autre machine | WM6, M57/M58, E9/E10 sous Linux, faibles Linux F45 à F69 | Win10 LTSC ou session Linux |
@@ -14,6 +14,8 @@
 | 6. Optimisations (série O) | 86 constats (voir annexe) | à mesurer avant tout changement |
 
 ## 1. Corrigeables dès à présent
+
+**Corrigés le 2026-11-19** sur `audit-fixes` (`7d56f6b6` à `daad4df9`), détail dans les lignes « catégorie 1 » du tableau de suivi de `100-plan-remediation.md`.
 
 ### M96 : miniatures transparentes qui changent d'aspect (moyen)
 
@@ -132,7 +134,7 @@ Environ 140 constats faibles, ni examinés ni corrigés : archives et opération
 
 Texte repris de la synthèse (`99-synthese.md`), groupé par section. Aucun de ces constats n'a été examiné de nouveau ; vérifier sur le code actuel avant de corriger.
 
-### Faibles : Plateforme Windows : fichiers, lecteurs, corbeille, workers (12)
+### Faibles : Plateforme Windows : fichiers, lecteurs, corbeille, workers (12, corrigés le 2026-11-19)
 
 - **F32** platform/windows_trash/listing.rs:43 (WIN-FS-02) : un seul $I absent ou illisible fait échouer l'énumération native. Scénario : élément purgé pendant l'énumération : la corbeille est parcourue trois fois.
 - **F33** platform/windows_trash/listing.rs:73 (WIN-FS-02) : taille et date lues en suivant les liens. Scénario : jonction recyclée vers un partage hors ligne : énumération bloquée jusqu'au délai réseau.
