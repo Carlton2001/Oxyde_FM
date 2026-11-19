@@ -113,28 +113,40 @@ fn streaming_agrees_with_line_regex_for_unicode_assertions_flags_and_chunks() {
 }
 
 #[test]
-fn invalid_utf8_and_read_errors_do_not_publish_partial_line_matches() {
-    let pattern = ContentPattern::new("needle|^$", true).unwrap();
-    for text in [
-        b"needle\xff".as_slice(),
-        b"needle\xf0\x9f",
-        b"\xff\nneedle\n",
-        b"needle\xe2\x28\xa1\n",
+fn bytes_outside_utf8_read_as_windows_1252() {
+    for (text, expression, expected) in [
+        (b"caf\xe9 au lait\nneedle\n".as_slice(), "needle", true),
+        (b"caf\xe9", "^café$", true),
+        (b"caf\xe9\r\n", "^café$", true),
+        (b"\x93x\x94 \xe2\x28\xa1\n", r"^“x” â\(¡$", true),
+        (b"needle\xf0\x9f", "^needleðŸ$", true),
+        (b"\xff\nneedle\n", "needle", true),
+        ("café".as_bytes(), "^café$", true),
+        ("café".as_bytes(), "Ã", false),
     ] {
-        for size in [1, 3, 1024] {
-            assert!(contains(
-                Chunks {
-                    inner: Cursor::new(text),
-                    size
-                },
-                &pattern,
-                false,
-                &AtomicBool::new(false),
-                0
-            )
-            .is_err());
+        let pattern = ContentPattern::new(expression, true).unwrap();
+        for limit in [0, 1024] {
+            for size in [1, 3, 1024] {
+                let actual = contains(
+                    Chunks {
+                        inner: Cursor::new(text),
+                        size,
+                    },
+                    &pattern,
+                    false,
+                    &AtomicBool::new(false),
+                    limit,
+                )
+                .unwrap();
+                assert_eq!(actual, expected, "pattern={expression:?}, text={text:?}, limit={limit}, chunk={size}");
+            }
         }
     }
+}
+
+#[test]
+fn read_errors_do_not_publish_partial_line_matches() {
+    let pattern = ContentPattern::new("needle|^$", true).unwrap();
     for text in [b"needle\n\xff".as_slice(), b"\n\xff", b"needle\r\n\xff"] {
         assert!(contains(
             Cursor::new(text),

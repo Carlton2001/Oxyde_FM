@@ -280,6 +280,8 @@ pub struct OxydeApp {
     pub sidebar_selected_path: Option<String>,
     pub(crate) sidebar_follow_path: Option<String>,
     pub(crate) sidebar_follow_task: Option<Task<()>>,
+    /// « Expand all » walks in flight, by root folder, so collapsing stops them.
+    pub(crate) sidebar_bulk_expands: std::collections::HashMap<String, std::sync::Arc<std::sync::atomic::AtomicBool>>,
     pub list_height: f32,
     pub list_width: f32,
     pub split_sizes: std::collections::HashMap<String, f32>,
@@ -520,6 +522,7 @@ impl OxydeApp {
             sidebar_selected_path: None,
             sidebar_follow_path: None,
             sidebar_follow_task: None,
+            sidebar_bulk_expands: std::collections::HashMap::new(),
             list_height: logical(800.0),
             list_width: logical(1000.0),
             split_sizes: std::collections::HashMap::new(),

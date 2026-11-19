@@ -766,6 +766,7 @@ redo-move-unverified = This history cannot safely redo the move: { $detail }. St
 redo-move-incomplete = The move stopped and some items could not return to their original locations. Files or folders have been kept for recovery: { $detail }. Check these locations before retrying.
 
 undo-recovery-incomplete = Undo stopped and some items could not return to their original locations. Files or folders have been kept for recovery. Check these locations before retrying: { $detail }.
+undo-staged-output-retained = Operation undone, but some copies could not be removed (another program may be using them). Delete them yourself: { $detail }
 preview-unavailable = This preview could not be loaded. Try opening the file directly.
 preview-image-limit = This image exceeds the preview limits. The file remains accessible.
 preview-animation-static = Still preview: the animation exceeds the preview limits.

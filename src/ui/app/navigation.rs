@@ -4,6 +4,8 @@ use crate::ui::app::OxydeApp;
 use crate::ui::components::input::{InputAppearance, TextInput, TextInputOptions};
 use crate::ui::i18n::{I18nContext, Message};
 use gpui::*;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use oxyde_lib::commands::io::list_dir_unsorted_until as list_dir;
 
 mod trash_loading;
@@ -133,32 +135,54 @@ impl OxydeApp {
         };
         let show_hidden = self.show_hidden;
         let show_system = self.show_system;
+        let cancel = Arc::new(AtomicBool::new(false));
+        if let Some(previous) = self.sidebar_bulk_expands.insert(path.clone(), cancel.clone()) {
+            previous.store(true, Ordering::Relaxed);
+        }
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
-                if let Ok(tree) = oxyde_lib::commands::sidebar::get_subtree_nodes(
+                let result = oxyde_lib::commands::sidebar::get_subtree_nodes(
                     path.clone(),
                     show_hidden,
                     show_system,
+                    cancel.clone(),
                 )
-                .await
-                {
-                    handle.update(&mut cx, move |this, cx| {
-                        this.state.expanded_paths.insert(path);
-                        for (parent, nodes) in &tree {
-                            if nodes.iter().any(|node| node.has_subdirs) {
-                                this.state.expanded_paths.insert(parent.clone());
-                            }
+                .await;
+                handle.update(&mut cx, move |this, cx| {
+                    if this.sidebar_bulk_expands.get(&path).is_some_and(|current| Arc::ptr_eq(current, &cancel)) {
+                        this.sidebar_bulk_expands.remove(&path);
+                    }
+                    // A folder collapsed during the walk stays collapsed.
+                    let Ok(tree) = result else { return; };
+                    if cancel.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    this.state.expanded_paths.insert(path);
+                    for (parent, nodes) in &tree {
+                        if nodes.iter().any(|node| node.has_subdirs) {
+                            this.state.expanded_paths.insert(parent.clone());
                         }
-                        this.state.sidebar_nodes.extend(tree);
-                        this.state.refresh_sidebar();
-                        this.reconcile_watchers(cx);
-                        cx.notify();
-                    });
-                }
+                    }
+                    this.state.sidebar_nodes.extend(tree);
+                    this.state.refresh_sidebar();
+                    this.reconcile_watchers(cx);
+                    cx.notify();
+                });
             }
         })
         .detach();
+    }
+
+    /// Stops the « Expand all » walks at or under a folder the user collapsed.
+    pub(crate) fn cancel_sidebar_bulk_expands(&mut self, collapsed: &str) {
+        self.sidebar_bulk_expands.retain(|root, cancel| {
+            let stop = crate::ui::paths::path_within(std::path::Path::new(root), std::path::Path::new(collapsed));
+            if stop {
+                cancel.store(true, Ordering::Relaxed);
+            }
+            !stop
+        });
     }
 
     pub(crate) fn activate_pane(&mut self, pane_id: &str, cx: &mut Context<Self>) {
@@ -175,6 +199,9 @@ impl OxydeApp {
         // A manual tree interaction takes precedence over an in-flight reveal.
         self.sidebar_follow_task = None;
         self.state.toggle_sidebar_path(path.clone());
+        if !self.state.expanded_paths.contains(&path) {
+            self.cancel_sidebar_bulk_expands(&path);
+        }
         self.reconcile_watchers(cx);
         cx.notify();
         self.request_sidebar_nodes(path, false, cx);

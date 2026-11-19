@@ -8,7 +8,8 @@ use std::time::Duration;
 /// Bounds what must happen, never how fast: a loaded machine may take long to schedule a thread.
 const PATIENCE: Duration = Duration::from_secs(60);
 
-/// Tests that occupy every slot of the global still queue run one at a time.
+/// Tests that admit through the global still queue run one at a time: a test
+/// occupying every slot would otherwise find one taken.
 static SATURATING: Mutex<()> = Mutex::new(());
 
 #[test]
@@ -353,6 +354,7 @@ fn preview_jobs_local_loader_future_is_not_polled_before_admission() {
 
 #[test]
 fn preview_jobs_capture_runtime_before_gpui_polls_future() {
+    let _saturating = SATURATING.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let runtime = runtime();
     let job = {
         let _entered = runtime.enter();
@@ -412,6 +414,7 @@ fn preview_jobs_cancel_after_admission_before_blocking_worker_starts() {
 
 #[test]
 fn preview_jobs_active_video_does_not_occupy_still_admission() {
+    let _saturating = SATURATING.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     let runtime = runtime();
     let blocker = Blocker::default();
     let _release = ReleaseOnDrop(blocker.clone());
@@ -444,4 +447,82 @@ fn preview_jobs_active_video_does_not_occupy_still_admission() {
     );
     blocker.release();
     assert_eq!(runtime.block_on(video).unwrap(), Some(()));
+}
+
+#[test]
+fn preview_jobs_stuck_hover_read_gives_its_slot_back_within_the_spare_limit() {
+    let runtime = runtime();
+    let queue = PreviewQueue::new(1);
+    let spares = Arc::new(Semaphore::new(1));
+    let blocker = Blocker::default();
+    let _release = ReleaseOnDrop(blocker.clone());
+    let deadline = Duration::from_millis(50);
+    let stuck = |blocker: Blocker| {
+        move || {
+            blocker.wait();
+            Ok::<_, String>(5)
+        }
+    };
+    // Past the deadline the first read reports a timeout and frees the slot.
+    let first = runtime.block_on(async {
+        tokio::time::timeout(
+            PATIENCE,
+            queue.run_with_deadline(runtime.handle().clone(), deadline, &spares, stuck(blocker.clone())),
+        )
+        .await
+    });
+    assert!(first.unwrap().unwrap_err().starts_with("PreviewWorkerTimeout:"));
+    assert_eq!(queue.slots.available_permits(), 1);
+    assert_eq!(spares.available_permits(), 0);
+    // Without a spare left, the next stuck read keeps its slot until it returns.
+    let mut second = Box::pin(queue.run_with_deadline(
+        runtime.handle().clone(),
+        deadline,
+        &spares,
+        stuck(blocker.clone()),
+    ));
+    let waiting = runtime.block_on(async {
+        tokio::time::timeout(Duration::from_millis(300), second.as_mut()).await
+    });
+    assert!(waiting.is_err());
+    assert_eq!(queue.slots.available_permits(), 0);
+    blocker.release();
+    let second = runtime.block_on(async { tokio::time::timeout(PATIENCE, second).await });
+    assert_eq!(second.unwrap().unwrap(), 5);
+    // The first read returns its spare once its thread ends.
+    let started = std::time::Instant::now();
+    while spares.available_permits() == 0 {
+        assert!(started.elapsed() < PATIENCE);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(queue.slots.available_permits(), 1);
+}
+
+#[test]
+fn preview_jobs_hover_deadline_runs_when_polled_outside_tokio() {
+    let runtime = runtime();
+    let queue = PreviewQueue::new(1);
+    let spares = Arc::new(Semaphore::new(1));
+    let blocker = Blocker::default();
+    let _release = ReleaseOnDrop(blocker.clone());
+    let work_blocker = blocker.clone();
+    // GPUI polls hover futures on its own threads, without a Tokio context.
+    assert!(Handle::try_current().is_err());
+    let quick = futures::executor::block_on(queue.run_with_deadline(
+        runtime.handle().clone(),
+        Duration::from_millis(50),
+        &spares,
+        || Ok::<_, String>(3),
+    ));
+    assert_eq!(quick.unwrap(), 3);
+    let stuck = futures::executor::block_on(queue.run_with_deadline(
+        runtime.handle().clone(),
+        Duration::from_millis(50),
+        &spares,
+        move || {
+            work_blocker.wait();
+            Ok::<_, String>(4)
+        },
+    ));
+    assert!(stuck.unwrap_err().starts_with("PreviewWorkerTimeout:"));
 }

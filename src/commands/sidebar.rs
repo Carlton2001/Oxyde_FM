@@ -1,6 +1,8 @@
 use crate::models::{CommandError, SidebarNode};
 use crate::utils::path_security::validate_path;
 use std::fs;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 pub async fn get_sidebar_nodes(path: String) -> Result<Vec<SidebarNode>, CommandError> {
     tokio::task::spawn_blocking(move || get_sidebar_nodes_blocking(path))
@@ -60,10 +62,13 @@ fn get_sidebar_nodes_blocking(path: String) -> Result<Vec<SidebarNode>, CommandE
     Ok(nodes)
 }
 
+/// Reads the folders under `path` for « Expand all ». Setting `cancel` stops the walk
+/// between two folders and returns an error.
 pub async fn get_subtree_nodes(
     path: String,
     show_hidden: bool,
     show_system: bool,
+    cancel: Arc<AtomicBool>,
 ) -> Result<std::collections::HashMap<String, Vec<SidebarNode>>, CommandError> {
     // The path checks touch the file system, which may stall on a disconnected share.
     tokio::task::spawn_blocking(move || {
@@ -74,7 +79,7 @@ pub async fn get_subtree_nodes(
                 path
             )));
         }
-        get_subtree_nodes_blocking(pb, show_hidden, show_system)
+        get_subtree_nodes_blocking(pb, show_hidden, show_system, &cancel)
     })
         .await
         .map_err(|error| CommandError::IoError(error.to_string()))?
@@ -87,11 +92,16 @@ fn get_subtree_nodes_blocking(
     pb: std::path::PathBuf,
     show_hidden: bool,
     show_system: bool,
+    cancel: &AtomicBool,
 ) -> Result<std::collections::HashMap<String, Vec<SidebarNode>>, CommandError> {
+    let cancelled = || CommandError::Other("Expand all cancelled".into());
     let mut result = std::collections::HashMap::new();
     let mut stack = vec![pb];
 
     while let Some(current_pb) = stack.pop() {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(cancelled());
+        }
         // « Expand all » on a huge tree returns what it has found so far.
         if result.len() >= MAX_BULK_FOLDERS {
             break;
@@ -106,6 +116,10 @@ fn get_subtree_nodes_blocking(
         let mut nodes = Vec::new();
         let attributes = crate::utils::visibility::DirectoryAttributes::load(&current_pb);
         for entry in entries.filter_map(|e| e.ok()) {
+            // Each folder also lists its children: a large one takes a while.
+            if cancel.load(Ordering::Relaxed) {
+                return Err(cancelled());
+            }
             let metadata = match entry.metadata() {
                 Ok(m) => m,
                 Err(_) => continue,
@@ -160,3 +174,7 @@ fn get_subtree_nodes_blocking(
 fn is_bulk_expand_excluded(path: &str, name: &str) -> bool {
     crate::platform::platform().bulk_expand_excluded(path, name)
 }
+
+#[cfg(test)]
+#[path = "sidebar/tests/expand_all.rs"]
+mod expand_all_tests;

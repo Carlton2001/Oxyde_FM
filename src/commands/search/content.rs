@@ -1,6 +1,9 @@
 //! Bounded line search. Small lines retain the optimized regex engine; large
 //! lines carry the same compiled Thompson states across UTF-8 input blocks.
+//! A byte that is not part of a UTF-8 character reads as Windows-1252, so legacy
+//! text stays searchable past its first accented letter.
 use super::ContentReader;
+use crate::utils::legacy_text::cp1252;
 use regex::{Regex, RegexBuilder};
 use regex_automata::{
     nfa::thompson::{WhichCaptures, NFA},
@@ -152,14 +155,26 @@ impl<'a> Line<'a> {
         } else {
             &self.short
         };
-        let text = std::str::from_utf8(bytes).map_err(io::Error::other)?;
+        let text = decode_line(bytes);
         let matched = if self.ignore_accents {
-            self.pattern.is_match(&crate::utils::remove_accents(text))
+            self.pattern.is_match(&crate::utils::remove_accents(&text))
         } else {
-            self.pattern.is_match(text)
+            self.pattern.is_match(&text)
         };
         self.short.clear();
         Ok(matched)
+    }
+}
+
+/// The text of a line: UTF-8 characters, and each byte outside one as Windows-1252.
+fn decode_line(bytes: &[u8]) -> std::borrow::Cow<'_, str> {
+    match std::str::from_utf8(bytes) {
+        Ok(text) => text.into(),
+        Err(_) => bytes
+            .utf8_chunks()
+            .flat_map(|chunk| chunk.valid().chars().chain(chunk.invalid().iter().map(|&byte| cp1252(byte))))
+            .collect::<String>()
+            .into(),
     }
 }
 
@@ -185,6 +200,7 @@ impl<'a> LongLine<'a> {
     }
 
     fn push(&mut self, mut bytes: &[u8], cancel: &AtomicBool) -> io::Result<()> {
+        // Complete the character cut at the end of the previous block.
         while self.utf8_len > 0 && !bytes.is_empty() {
             self.utf8[self.utf8_len] = bytes[0];
             self.utf8_len += 1;
@@ -195,30 +211,44 @@ impl<'a> LongLine<'a> {
                     self.utf8_len = 0;
                     self.character(c, cancel)?;
                 }
-                Err(error) if error.error_len().is_some() => return Err(io::Error::other(error)),
+                Err(error) if error.error_len().is_some() => {
+                    let (pending, length) = (self.utf8, self.utf8_len);
+                    self.utf8_len = 0;
+                    self.decode(&pending[..length], cancel)?;
+                }
                 Err(_) => {}
             }
         }
-        match std::str::from_utf8(bytes) {
-            Ok(text) => {
-                for c in text.chars() {
-                    self.character(c, cancel)?;
+        self.decode(bytes, cancel)
+    }
+
+    /// Feeds UTF-8 characters, and each byte outside one as Windows-1252; keeps
+    /// a character cut at the end of `bytes` for the next block.
+    fn decode(&mut self, mut bytes: &[u8], cancel: &AtomicBool) -> io::Result<()> {
+        loop {
+            let error = match std::str::from_utf8(bytes) {
+                Ok(text) => {
+                    for c in text.chars() {
+                        self.character(c, cancel)?;
+                    }
+                    return Ok(());
                 }
+                Err(error) => error,
+            };
+            let (valid, rest) = bytes.split_at(error.valid_up_to());
+            for c in std::str::from_utf8(valid).unwrap().chars() {
+                self.character(c, cancel)?;
             }
-            Err(error) => {
-                let prefix = std::str::from_utf8(&bytes[..error.valid_up_to()]).unwrap();
-                for c in prefix.chars() {
-                    self.character(c, cancel)?;
-                }
-                if error.error_len().is_some() {
-                    return Err(io::Error::other(error));
-                }
-                let tail = &bytes[error.valid_up_to()..];
-                self.utf8[..tail.len()].copy_from_slice(tail);
-                self.utf8_len = tail.len();
+            let Some(invalid) = error.error_len() else {
+                self.utf8[..rest.len()].copy_from_slice(rest);
+                self.utf8_len = rest.len();
+                return Ok(());
+            };
+            for &byte in &rest[..invalid] {
+                self.character(cp1252(byte), cancel)?;
             }
+            bytes = &rest[invalid..];
         }
-        Ok(())
     }
 
     fn character(&mut self, c: char, cancel: &AtomicBool) -> io::Result<()> {
@@ -245,8 +275,10 @@ impl<'a> LongLine<'a> {
     }
 
     fn finish(&mut self, newline: bool, cancel: &AtomicBool) -> io::Result<bool> {
-        if self.utf8_len != 0 {
-            return Err(io::Error::other("Incomplete UTF-8 sequence"));
+        let (pending, length) = (self.utf8, self.utf8_len);
+        self.utf8_len = 0;
+        for &byte in &pending[..length] {
+            self.character(cp1252(byte), cancel)?;
         }
         if let Some(c) = self.held.take().filter(|&c| !newline || c != '\r') {
             self.emit(c, cancel)?;

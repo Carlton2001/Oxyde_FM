@@ -34,7 +34,7 @@ impl OxydeApp {
             async move {
                 let runtime = tokio::runtime::Handle::current();
                 let result = tokio::task::spawn_blocking(move || {
-                    runtime.block_on(oxyde_lib::commands::ops::undo_last_action(&history))
+                    runtime.block_on(oxyde_lib::commands::ops::undo_last_action_report(&history))
                 })
                 .await;
                 handle.update(&mut cx, |this, cx| {
@@ -45,10 +45,16 @@ impl OxydeApp {
                         this.toast(ToastKind::Error, message, detail, 0, cx);
                     } else if let Err(error) = &result {
                         this.toast(ToastKind::Error, Message::UndoFailed, format!("{error}"), 0, cx);
-                    } else if matches!(result, Ok(Ok(Some(_)))) {
-                        this.toast(ToastKind::Success, Message::ToastUndo, String::new(), 0, cx);
+                    } else if let Ok(Ok(report)) = &result {
+                        if !report.retained.is_empty() {
+                            let locations = report.retained.iter().map(|path| path.to_string_lossy()).collect::<Vec<_>>().join("
+");
+                            this.toast(ToastKind::Error, Message::UndoStagedOutputRetained, locations, 0, cx);
+                        } else if report.transaction.is_some() {
+                            this.toast(ToastKind::Success, Message::ToastUndo, String::new(), 0, cx);
+                        }
                     }
-                    let refresh_files = matches!(&result, Ok(Ok(Some(_))))
+                    let refresh_files = matches!(&result, Ok(Ok(report)) if report.transaction.is_some())
                         || matches!(&result, Ok(Err(oxyde_lib::models::CommandError::TrashError(_))) | Err(_));
                     if refresh_files { this.refresh_all_tabs(cx); }
                     cx.notify();
