@@ -14,7 +14,7 @@ fn display_entry_reads_unicode_name_size_and_deletion_time_from_private_fixture(
     bytes.extend_from_slice(&(wide.len() as u32).to_le_bytes());
     for unit in wide { bytes.extend_from_slice(&unit.to_le_bytes()); }
     std::fs::write(root.path().join("$Ifixture.lnk"), bytes).unwrap();
-    let entry = super::read_entry(payload.clone()).unwrap();
+    let entry = super::read_entry(payload.clone()).unwrap().unwrap();
     assert_eq!(entry.name, "raccourci été.lnk");
     assert_eq!(entry.original_path, original);
     assert_eq!(entry.path, payload.to_string_lossy());
@@ -23,7 +23,7 @@ fn display_entry_reads_unicode_name_size_and_deletion_time_from_private_fixture(
     assert!(!entry.is_dir);
     std::fs::remove_file(&payload).unwrap();
     std::fs::create_dir(&payload).unwrap();
-    let directory = super::read_entry(payload).unwrap();
+    let directory = super::read_entry(payload).unwrap().unwrap();
     assert!(directory.is_dir);
     assert_eq!(directory.size, 0);
 }
@@ -70,4 +70,11 @@ fn filetime_conversion_preserves_milliseconds_and_clamps_pre_epoch() {
     bytes[16..24].fill(0);
     assert_eq!(deletion_time(&bytes), Some(0));
     assert_eq!(deletion_time(&bytes[..23]), None);
+}
+
+#[test]
+fn purged_item_is_skipped_instead_of_failing_the_listing() {
+    let root = tempfile::tempdir().unwrap();
+    let payload = root.path().join("$Rpurged.txt");
+    assert!(super::read_entry(payload).unwrap().is_none());
 }

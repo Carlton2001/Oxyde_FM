@@ -23,6 +23,16 @@ pub(crate) fn list_trash_unsorted() -> Result<Vec<TrashEntry>, CommandError> {
         Err(error) => log::warn!(target: "oxyde_lib::trash_listing",
             "Native display listing failed, falling back to Shell properties: {error}"),
     }
+    list_trash_from_shell(started)
+}
+
+/// After a failed progressive listing: the native reader has just failed, so go
+/// straight to the Shell properties instead of enumerating the bin a third time.
+pub fn list_trash_fallback() -> Result<Vec<TrashEntry>, CommandError> {
+    list_trash_from_shell(std::time::Instant::now())
+}
+
+fn list_trash_from_shell(started: std::time::Instant) -> Result<Vec<TrashEntry>, CommandError> {
     let trash_items =
         crate::platform::platform().list_trash_items().map_err(CommandError::TrashError)?;
 
