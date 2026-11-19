@@ -104,19 +104,20 @@ pub async fn empty_trash() -> Result<(), CommandError> {
     Ok(())
 }
 
-/// Permanently delete the selected items; unknown or ambiguous selections are skipped.
+/// Permanently delete the selected items; unknown or ambiguous selections are skipped,
+/// then reported as an error.
 pub async fn purge_recycle_bin(paths: Vec<String>) -> Result<(), CommandError> {
     let started = std::time::Instant::now();
     let items = platform().list_trash_items().map_err(CommandError::TrashError)?;
     let (selected, failures) = select(items, paths);
-    for (path, issue) in failures {
+    for (path, issue) in &failures {
         log::warn!(target: "oxyde_lib::trash_purge", "stage=selection_unavailable id={path:?} issue={issue:?}");
     }
     if !selected.is_empty() {
         platform().purge_trash_items(selected).map_err(CommandError::TrashError)?;
     }
     info!(target: "oxyde_lib::trash_purge", "stage=end mode=selected wall_s={:.6}", started.elapsed().as_secs_f64());
-    Ok(())
+    super::unavailable_selection(failures.len())
 }
 
 #[derive(Default)]

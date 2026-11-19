@@ -1,5 +1,6 @@
 pub const SEARCH_LIMIT_STEP: u32 = 500;
-pub const MAX_SEARCH_LIMIT: u32 = u32::MAX / SEARCH_LIMIT_STEP * SEARCH_LIMIT_STEP;
+/// Highest result count a search keeps in memory; a larger hand-edited value is brought back to it.
+pub const MAX_SEARCH_LIMIT: u32 = 100_000;
 
 pub fn normalized_search_limit(value: u32) -> u32 {
     value.clamp(SEARCH_LIMIT_STEP, MAX_SEARCH_LIMIT)
@@ -29,6 +30,8 @@ mod search_limit_tests {
         assert_eq!(stepped_search_limit(3200, true), 3700);
         assert_eq!(stepped_search_limit(u32::MAX, true), MAX_SEARCH_LIMIT);
         assert_eq!(stepped_search_limit(MAX_SEARCH_LIMIT, false), MAX_SEARCH_LIMIT - 500);
+        assert_eq!(normalized_search_limit(4_000_000_000), 100_000);
+        assert_eq!(MAX_SEARCH_LIMIT % SEARCH_LIMIT_STEP, 0);
     }
 }
 

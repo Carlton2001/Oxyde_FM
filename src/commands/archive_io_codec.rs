@@ -286,6 +286,8 @@ fn decode<T: Exchange + Send + 'static>(
                 return Err(invalid().into());
             }
             notify(connection, Frame::new(Message::ManifestEnd))?;
+            // Set once a member decoded with the password: a later checksum error is damage.
+            let mut password_proven = false;
             for index in 0..archive.len() {
                 if requested.is_some() && selection != Some(index) {
                     continue;
@@ -308,10 +310,13 @@ fn decode<T: Exchange + Send + 'static>(
                 meta.modified = zip_time::from_zip(&entry);
                 let copied = copy_entry(connection, &meta, &mut entry, budget, checkpoint);
                 // ZipCrypto accepts one wrong password in 256: the checksum then refuses it.
-                if encrypted && copied.as_ref().is_err_and(|error| error.to_string().contains("Invalid checksum")) {
+                // Once the password has decoded a member, it is the archive that is damaged,
+                // and asking for the password again would never end.
+                if encrypted && !password_proven && copied.as_ref().is_err_and(|error| error.to_string().contains("Invalid checksum")) {
                     return Err(ArchivePasswordFailure::Wrong.into());
                 }
                 copied?;
+                password_proven |= encrypted;
             }
         }
         Format::SevenZip => {

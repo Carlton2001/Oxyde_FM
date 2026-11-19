@@ -88,12 +88,14 @@ impl FileOperationManager {
                     locked.item_started(path);
                 }
             }
+            let mut done = std::collections::HashSet::new();
             let mut completed = |deleted: crate::models::transaction::HistoryDeletedItem| {
                 let mut locked = op.lock().unwrap();
                 let path = std::path::Path::new(&deleted.path);
                 if roots.contains(path) {
                     locked.processed_files += 1;
                     locked.item_complete(path);
+                    done.insert(path.to_path_buf());
                 }
                 locked.deleted_items.push(deleted);
             };
@@ -116,8 +118,11 @@ impl FileOperationManager {
             let mut locked = op.lock().unwrap();
             for (path, failure) in batch_failures {
                 log::warn!(target: FILE_OPS_LOG_TARGET, "trash_item_failed path={path:?} error={failure}");
-                locked.item_failed(&path);
-                locked.processed_files += 1;
+                // In the Recycle Bin with an error after (its receipt): counted once, as done.
+                if !done.contains(&path) {
+                    locked.item_failed(&path);
+                    locked.processed_files += 1;
+                }
                 failures.push(failure);
             }
         }

@@ -63,7 +63,7 @@ fn card(
     cx: &App,
 ) -> impl IntoElement {
     let t = *cx.theme();
-    let newer = entry.modified > other.modified;
+    let newer = entry.modified > other.modified.saturating_add(super::rules::SAME_TIME_MS);
     let warning = newer && entry.size < other.size;
     let mut badges = div().flex().flex_none().items_center().gap(rems(0.5));
     if newer {

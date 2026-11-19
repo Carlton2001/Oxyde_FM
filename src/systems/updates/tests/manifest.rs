@@ -117,3 +117,19 @@ fn published_tauri_setup_matches_the_updater_key() {
     let bytes = crate::platform::platform().download(url, SETUP_LIMIT).unwrap();
     verify(&bytes, TAURI_1_2_1_NSIS_SIGNATURE, PUBLIC_KEY).unwrap();
 }
+
+#[test]
+fn discard_removes_only_the_folder_made_for_the_download() {
+    let root = tempfile::tempdir().unwrap();
+    let ours = root.path().join("oxyde-update-abc");
+    std::fs::create_dir(&ours).unwrap();
+    std::fs::write(ours.join("setup.exe"), b"x").unwrap();
+    super::discard(&ours.join("setup.exe"));
+    assert!(!ours.exists());
+
+    let other = root.path().join("Downloads");
+    std::fs::create_dir(&other).unwrap();
+    std::fs::write(other.join("setup.exe"), b"x").unwrap();
+    super::discard(&other.join("setup.exe"));
+    assert!(other.join("setup.exe").exists());
+}

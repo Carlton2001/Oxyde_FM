@@ -20,13 +20,23 @@ pub(super) enum MediaKind {
     Audio,
 }
 
+/// The lowercase extension, empty for "mp3" or ".mp3": a name without a dot after its
+/// first character has none.
+pub(super) fn file_extension(name: &str) -> String {
+    std::path::Path::new(name)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase()
+}
+
 /// Mirrors `Viewer::load_current`: each kind skips only to its own kind.
 pub(super) fn media_kind(file: &FileEntry) -> Option<MediaKind> {
     use crate::ui::components::icons::{get_preview_type, PreviewType, AUDIO_EXTENSIONS, VIDEO_EXTENSIONS};
     if file.is_dir || file.archive_path.is_some() {
         return None;
     }
-    let extension = file.name.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+    let extension = file_extension(&file.name);
     if AUDIO_EXTENSIONS.contains(extension.as_str()) || file.native_kind == Some(NativeFileKind::Audio) {
         Some(MediaKind::Audio)
     } else if VIDEO_EXTENSIONS.contains(extension.as_str()) || file.native_kind == Some(NativeFileKind::Video) {
@@ -548,3 +558,7 @@ impl Render for OverlayWindow {
         .into_any_element()
     }
 }
+
+#[cfg(test)]
+#[path = "tests/media_extension.rs"]
+mod extension_tests;

@@ -143,9 +143,9 @@ impl Tooltip {
                 cx.i18n().text_with_args(message, &args)
             };
             let (location, extra) = if let Some(original) = &file.original_path {
-                let deleted = file.deleted_time.and_then(|date| u64::try_from(date).ok()).unwrap_or(0);
+                let deleted = file.deleted_time.and_then(|date| u64::try_from(date).ok());
                 (Some(line(Message::TooltipOriginalLocation, parent(original).unwrap_or_default())),
-                    vec![line(Message::TooltipDeleted, format_date(deleted, crate::ui::format::date_format(cx)))])
+                    deleted.map(|deleted| line(Message::TooltipDeleted, format_date(deleted, crate::ui::format::date_format(cx)))).into_iter().collect())
             } else if search_result {
                 (parent(&file.path).map(|parent| line(Message::TooltipLocation, parent)), Vec::new())
             } else {

@@ -186,7 +186,15 @@ fn collect_frames(
         let Some(frame) = input.next() else {
             break;
         };
-        let frame = frame.map_err(classify_decode)?;
+        // A truncated animation still shows the frames read before the damage, as browsers do.
+        let frame = match frame {
+            Ok(frame) => frame,
+            Err(error) if frames.is_empty() => return Err(classify_decode(error)),
+            Err(error) => {
+                log::debug!("Animation cut at frame {}: {error}", frames.len());
+                break;
+            }
+        };
         if frames.len() >= policy.frame_count {
             frames.truncate(1);
             return Ok((frames, true));

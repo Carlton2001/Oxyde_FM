@@ -372,10 +372,11 @@ impl Session {
                 return Err(io::Error::other("Cache root scan limit exceeded"));
             }
             let path = item.path();
+            // Not one of ours (Thumbs.db, desktop.ini, a backup tool's file): left alone, and
+            // never a reason to refuse every later opening from an archive.
             if !item.file_name().to_string_lossy().starts_with("entry-") {
-                return Err(io::Error::other(
-                    "Archive cache contains an unrecognized entry",
-                ));
+                log::debug!("Archive cache ignores the unrecognized entry {}", path.display());
+                continue;
             }
             let metadata = match fs::symlink_metadata(&path) {
                 Err(error) if error.kind() == io::ErrorKind::NotFound => continue,

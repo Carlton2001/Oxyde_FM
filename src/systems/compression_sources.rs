@@ -54,7 +54,7 @@ pub(super) fn remap(
             .ok_or_else(|| io::Error::other("Archive names exceeded"))?;
         if entry.name.len() > crate::utils::archive_io_protocol::MAX_NAME
             || bytes > 64 * 1024 * 1024
-            || !names.insert(entry.name.to_lowercase())
+            || !names.insert(name_key(&entry.name))
         {
             return Err(io::Error::other(
                 "Archive rename creates invalid or duplicate names",
@@ -95,9 +95,13 @@ pub(super) fn plan_controlled(
     let mut name_bytes = 0usize;
     for root in roots {
         let source = root.path().to_path_buf();
+        // A drive root (E:\) has no name of its own: its letter names it in the archive.
         let base = source
             .file_name()
+            .map(std::ffi::OsStr::to_os_string)
+            .or_else(|| drive_letter(&source))
             .ok_or_else(|| io::Error::other("Invalid compression source name"))?;
+        let base = base.as_os_str();
         let mut walk = SourceWalk::new(root);
         loop {
             if let Some(budget) = budget {
@@ -132,11 +136,9 @@ pub(super) fn plan_controlled(
                     .checked_add(name.len())
                     .filter(|n| *n <= crate::utils::archive_io_state::MAX_MANIFEST_NAMES)
                     .ok_or_else(crate::utils::archive_io_protocol::invalid)?;
-                if !names.insert(
-                    crate::utils::archive_security::relative_archive_path(&name)?
-                        .to_string_lossy()
-                        .to_lowercase(),
-                ) {
+                if !names.insert(name_key(
+                    &crate::utils::archive_security::relative_archive_path(&name)?.to_string_lossy(),
+                )) {
                     return Err(io::Error::other("Ambiguous archive source names"));
                 }
             }
@@ -176,6 +178,10 @@ pub(super) fn seven_entry(name: String, metadata: &Metadata) -> sevenz_rust2::Ar
     }
     entry
 }
+
+#[cfg(test)]
+#[path = "compression_sources/tests/names.rs"]
+mod name_tests;
 
 #[cfg(all(test, target_os = "windows"))]
 mod tests {
@@ -312,5 +318,24 @@ mod tests {
             }
         )
         .is_err());
+    }
+}
+
+/// Two archive names that would land on one file: whatever the case on Windows, where
+/// extraction folds it (as M36 does when reading), exactly elsewhere.
+fn name_key(name: &str) -> String {
+    if cfg!(target_os = "windows") { name.to_lowercase() } else { name.to_owned() }
+}
+
+/// "E" for the root of drive E:.
+fn drive_letter(path: &Path) -> Option<std::ffi::OsString> {
+    match path.components().next()? {
+        std::path::Component::Prefix(prefix) => match prefix.kind() {
+            std::path::Prefix::Disk(letter) | std::path::Prefix::VerbatimDisk(letter) => {
+                Some(char::from(letter).to_string().into())
+            }
+            _ => None,
+        },
+        _ => None,
     }
 }

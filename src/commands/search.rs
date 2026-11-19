@@ -16,6 +16,7 @@ use std::time::SystemTime;
 
 mod content;
 mod criteria;
+mod utf16_text;
 use content::{text_reader_contains_content, ContentPattern};
 use criteria::{SearchParams, SearchPattern};
 pub use criteria::ArchiveSearchLimitation;
@@ -465,7 +466,8 @@ fn is_binary_file(path: &std::path::Path) -> bool {
 
     let mut buffer = [0u8; 1024];
     match file.read(&mut buffer) {
-        Ok(n) => buffer[..n].contains(&0),
+        // UTF-16 text holds zero bytes too: its byte order mark tells it apart.
+        Ok(n) => utf16_text::byte_order(&buffer[..n]).is_none() && buffer[..n].contains(&0),
         Err(_) => true,
     }
 }
@@ -552,17 +554,28 @@ fn read_file_and_check(
     ignore_accents: bool,
     cancellation: &AtomicBool,
 ) -> bool {
-    let file = match crate::utils::open_regular::open_regular(path) {
+    let mut file = match crate::utils::open_regular::open_regular(path) {
         Ok(f) => f,
         Err(_) => return false,
     };
-
-    text_reader_contains_content(file, pattern, ignore_accents, cancellation)
+    let mut mark = [0u8; 2];
+    let utf16 = file.read_exact(&mut mark).ok().and_then(|()| utf16_text::byte_order(&mark));
+    if std::io::Seek::rewind(&mut file).is_err() {
+        return false;
+    }
+    match utf16 {
+        Some(big_endian) => text_reader_contains_content(utf16_text::Utf16Reader::new(file, big_endian), pattern, ignore_accents, cancellation),
+        None => text_reader_contains_content(file, pattern, ignore_accents, cancellation),
+    }
 }
 
 #[cfg(test)]
 #[path = "search/tests/content_tests.rs"]
 mod content_tests;
+
+#[cfg(test)]
+#[path = "search/tests/utf16_tests.rs"]
+mod utf16_tests;
 
 #[cfg(test)]
 #[path = "search/tests/quick_search_tests.rs"]

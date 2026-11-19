@@ -60,6 +60,10 @@ impl OxydeApp {
             if owner.upgrade().is_none() {
                 return;
             }
+            // A second request in the same turn finds the window the first one opened.
+            if cx.windows().iter().any(|handle| handle.downcast::<DuplicateWindow>().is_some()) {
+                return;
+            }
             let result = cx.open_window(
                 WindowOptions {
                     app_id: Some(crate::ui::APP_ID.into()),

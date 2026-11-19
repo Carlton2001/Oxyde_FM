@@ -159,7 +159,13 @@ pub fn decode_with(bytes: &[u8], limits: Limits) -> io::Result<Reply> {
                     image,
                     0,
                     0,
-                    Delay::from_numer_denom_ms(num, den),
+                    // The worker already turns a delay under 20 ms into 100 ms; a reply that
+                    // does not must not spin the interface without a pause.
+                    if u64::from(num) < 20 * u64::from(den) {
+                        Delay::from_numer_denom_ms(100, 1)
+                    } else {
+                        Delay::from_numer_denom_ms(num, den)
+                    },
                 ));
             }
             Reply::Images {
@@ -196,6 +202,10 @@ pub fn decode_with(bytes: &[u8], limits: Limits) -> io::Result<Reply> {
     }
     Ok(reply)
 }
+
+#[cfg(test)]
+#[path = "preview_protocol/tests/delays.rs"]
+mod delay_tests;
 
 #[cfg(test)]
 mod tests {

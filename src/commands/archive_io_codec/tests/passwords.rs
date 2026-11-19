@@ -125,3 +125,26 @@ fn protected_archives_are_written_encrypted_and_read_back_with_their_password() 
     let seven = encrypted(Format::SevenZip, "correct horse");
     assert!(!seven.windows(8).any(|window| window == b"n\0o\0t\0e\0"));
 }
+
+/// Two ZipCrypto members; the second one's data is damaged after its encryption header.
+fn damaged_zipcrypto() -> Vec<u8> {
+    let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Stored);
+    let options = zip::unstable::write::FileOptionsExt::with_deprecated_encryption(options, b"correct horse").unwrap();
+    for name in ["a.txt", "b.txt"] {
+        writer.start_file(name, options).unwrap();
+        writer.write_all(CONTENT).unwrap();
+    }
+    let mut bytes = writer.finish().unwrap().into_inner();
+    let start = zip::ZipArchive::new(Cursor::new(bytes.clone())).unwrap().by_index_raw(1).unwrap().data_start().unwrap();
+    bytes[start as usize + 12 + 3] ^= 0xff;
+    bytes
+}
+
+#[test]
+fn a_damaged_member_after_a_decoded_one_is_not_a_wrong_password() {
+    let (result, _) = decode_with(Format::Zip, damaged_zipcrypto(), None, Some("correct horse"));
+    let error = result.unwrap_err();
+    assert_eq!(ArchivePasswordFailure::from_message(&error.to_string()), None, "{error}");
+}

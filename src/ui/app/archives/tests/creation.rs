@@ -18,3 +18,11 @@ fn compressed_tar_identifiers_create_their_compound_suffix() {
     }
     assert_eq!(archive_name_for_format("report.tar.zst", "tar.zst", "tar.xz"), "report.tar.xz");
 }
+
+#[test]
+fn a_folder_keeps_its_whole_name_and_a_file_loses_its_extension() {
+    use super::archive_name;
+    use std::path::Path;
+    assert_eq!(archive_name(Path::new("C:/x/v1.2"), true, "zip"), Path::new("C:/x/v1.2.zip"));
+    assert_eq!(archive_name(Path::new("C:/x/report.pdf"), false, "zip"), Path::new("C:/x/report.zip"));
+}

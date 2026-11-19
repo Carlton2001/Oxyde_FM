@@ -83,7 +83,7 @@ impl OxydeApp {
             return;
         };
         let extension = archive_extension(self.default_archive_format());
-        let destination = first.with_extension(&extension);
+        let destination = archive_name(first, tab.files.iter().any(|file| file.is_dir && std::path::Path::new(&file.path) == first.as_path()), &extension);
         self.begin_rename_with_extension(
             destination.to_string_lossy().into_owned(),
             false,
@@ -164,6 +164,19 @@ impl OxydeApp {
             }
         })
         .detach();
+    }
+}
+
+/// The proposed archive: a file loses its extension (report.pdf, report.zip), a folder
+/// keeps its whole name (v1.2, v1.2.zip).
+fn archive_name(first: &std::path::Path, is_dir: bool, extension: &str) -> std::path::PathBuf {
+    if is_dir {
+        let mut name = first.as_os_str().to_owned();
+        name.push(".");
+        name.push(extension);
+        std::path::PathBuf::from(name)
+    } else {
+        first.with_extension(extension)
     }
 }
 

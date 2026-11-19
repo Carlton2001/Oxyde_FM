@@ -3,6 +3,9 @@ use oxyde_lib::models::FileEntry;
 use super::confirmation::SHOWN_NAMES;
 use std::collections::HashSet;
 
+/// Longest wait for the volumes to tell whether a deletion would be permanent.
+const POLICY_CHECK_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// Paths and shown names of the trash items an action applies to.
 fn trash_targets(files: &[FileEntry], selected: &HashSet<String>, all: bool) -> (Vec<String>, Vec<String>) {
     files
@@ -143,9 +146,22 @@ impl OxydeApp {
                 let snapshot = paths.clone();
                 // Where nothing can be recycled, ask for the permanent deletion at
                 // once rather than failing to recycle and asking again.
-                let permanent = shift || tokio::task::spawn_blocking(move || {
-                    super::deletion_policy::selection_deletes_permanently(&snapshot)
-                }).await.unwrap_or(false);
+                // A volume that does not answer must not hold every later deletion: past the
+                // delay the Recycle Bin is tried, and the Shell warns if it deletes for good.
+                let permanent = shift || {
+                    use futures::FutureExt;
+                    let check = tokio::task::spawn_blocking(move || {
+                        super::deletion_policy::selection_deletes_permanently(&snapshot)
+                    });
+                    let delay = cx.background_executor().timer(POLICY_CHECK_DELAY);
+                    futures::select_biased! {
+                        permanent = check.fuse() => permanent.unwrap_or(false),
+                        _ = delay.fuse() => {
+                            log::warn!("Recycle Bin policy check timed out; trying the Recycle Bin");
+                            false
+                        }
+                    }
+                };
                 let _ = this.update(cx, |this, cx| {
                     this.trash_delete_check_pending = false;
                     if this.pending_trash_delete.is_some() {

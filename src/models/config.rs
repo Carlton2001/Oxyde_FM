@@ -273,9 +273,8 @@ impl ConfigManager {
 
     pub fn read_from_path(path: &std::path::Path) -> Result<AppConfig, CommandError> {
         let mut config: AppConfig = match fs::read_to_string(path) {
-            Ok(content) => {
-                serde_json::from_str(&content).map_err(|e| CommandError::Other(e.to_string()))?
-            }
+            // Editors may save a byte order mark, which JSON does not allow.
+            Ok(content) => parse_config(content.strip_prefix('\u{feff}').unwrap_or(&content), path)?,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 AppConfig::for_system_locale(crate::platform::platform().interface_locale().as_deref())
             }
@@ -308,6 +307,34 @@ impl ConfigManager {
     }
 }
 
+/// The configuration in `content`. A field of the wrong type no longer costs every setting:
+/// it takes its default, and the file as found is kept beside as `config.json.invalid`.
+/// Text that is not a JSON object is still refused.
+fn parse_config(content: &str, path: &std::path::Path) -> Result<AppConfig, CommandError> {
+    let error = match serde_json::from_str(content) {
+        Ok(config) => return Ok(config),
+        Err(error) => CommandError::Other(error.to_string()),
+    };
+    let Ok(serde_json::Value::Object(fields)) = serde_json::from_str::<serde_json::Value>(content) else {
+        return Err(error);
+    };
+    let mut kept = serde_json::Map::new();
+    let mut dropped = Vec::new();
+    for (key, value) in fields {
+        kept.insert(key.clone(), value);
+        if serde_json::from_value::<AppConfig>(serde_json::Value::Object(kept.clone())).is_err() {
+            kept.remove(&key);
+            dropped.push(key);
+        }
+    }
+    let config = serde_json::from_value(serde_json::Value::Object(kept)).map_err(|_| error)?;
+    log::warn!("config.json fields reset to their default: {dropped:?}");
+    if let Err(error) = fs::copy(path, path.with_file_name("config.json.invalid")) {
+        log::warn!("Cannot keep a copy of config.json: {error}");
+    }
+    Ok(config)
+}
+
 #[derive(Serialize, Deserialize)]
 struct ThemesFile {
     #[serde(default)]
@@ -329,9 +356,17 @@ fn write_json(path: &std::path::Path, value: &impl Serialize) -> Result<(), Comm
         .as_file()
         .sync_all()
         .map_err(|e| CommandError::IoError(e.to_string()))?;
-    temporary
-        .persist(path)
-        .map_err(|e| CommandError::IoError(e.to_string()))?;
+    // An antivirus or a backup tool briefly holding the file refuses its replacement.
+    for attempt in 0.. {
+        match temporary.persist(path) {
+            Ok(_) => break,
+            Err(error) if attempt < 4 && error.error.kind() == std::io::ErrorKind::PermissionDenied => {
+                temporary = error.file;
+                std::thread::sleep(std::time::Duration::from_millis(50 << attempt));
+            }
+            Err(error) => return Err(CommandError::IoError(error.error.to_string())),
+        }
+    }
     Ok(())
 }
 
@@ -494,3 +529,7 @@ mod theme_tests;
 #[cfg(test)]
 #[path = "config/tests/archive_format.rs"]
 mod archive_format_tests;
+
+#[cfg(test)]
+#[path = "config/tests/recovery.rs"]
+mod recovery_tests;

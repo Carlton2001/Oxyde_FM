@@ -19,6 +19,21 @@ pub(crate) fn same_entry(source: &Path, target: &Path) -> bool {
     compare().unwrap_or(false)
 }
 
+/// Longest name NTFS, ext4 and most other file systems store: 255 UTF-16 units on
+/// Windows, 255 bytes elsewhere.
+fn fits_name(name: &std::ffi::OsStr) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        name.encode_wide().count() <= 255
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        name.as_bytes().len() <= 255
+    }
+}
+
 pub(super) fn copy_name(
     source: &Path,
     directory: &Path,
@@ -44,14 +59,27 @@ pub(super) fn copy_name(
     .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Missing copy source name"))?;
     let extension = (!is_directory).then(|| source.extension()).flatten();
     for index in 1..=10000 {
-        let mut name = OsString::from(stem);
-        name.push(format!(" - {suffix}"));
-        if index > 1 {
-            name.push(format!(" ({index})"));
-        }
-        if let Some(extension) = extension {
-            name.push(".");
-            name.push(extension);
+        let named = |stem: &std::ffi::OsStr| {
+            let mut name = OsString::from(stem);
+            name.push(format!(" - {suffix}"));
+            if index > 1 {
+                name.push(format!(" ({index})"));
+            }
+            if let Some(extension) = extension {
+                name.push(".");
+                name.push(extension);
+            }
+            name
+        };
+        let mut name = named(stem);
+        // A long name loses the end of its stem rather than exceed what file systems store.
+        if !fits_name(&name) {
+            let text = stem.to_string_lossy();
+            let mut characters: Vec<char> = text.chars().collect();
+            while !characters.is_empty() && !fits_name(&name) {
+                characters.pop();
+                name = named(std::ffi::OsStr::new(&characters.iter().collect::<String>()));
+            }
         }
         let target = directory.join(name);
         if reserved.contains(&target) {
@@ -71,6 +99,10 @@ pub(super) fn copy_name(
         "No available copy name",
     ))
 }
+
+#[cfg(test)]
+#[path = "transfer_naming/tests/long_names.rs"]
+mod long_name_tests;
 
 #[cfg(test)]
 mod tests {

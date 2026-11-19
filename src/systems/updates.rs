@@ -79,8 +79,26 @@ pub fn download(update: &Update) -> Result<PathBuf, String> {
 }
 
 /// Install the downloaded release; Oxyde starts again once this process has exited.
+/// A release that cannot be started is removed with its folder.
 pub fn launch(setup: &std::path::Path) -> Result<(), String> {
-    crate::platform::platform().launch_update(setup).map_err(|error| error.to_string())
+    crate::platform::platform().launch_update(setup).map_err(|error| {
+        discard(setup);
+        error.to_string()
+    })
+}
+
+/// Remove a downloaded release that will not be installed, with the folder `download` made for it.
+pub fn discard(setup: &std::path::Path) {
+    let Some(directory) = setup.parent() else { return };
+    let ours = directory
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with("oxyde-update-"));
+    if ours {
+        if let Err(error) = std::fs::remove_dir_all(directory) {
+            log::warn!("Cannot remove the downloaded update {}: {error}", directory.display());
+        }
+    }
 }
 
 fn parse_manifest(bytes: &[u8], current: &str, installation: Installation) -> Result<Option<Update>, String> {

@@ -374,7 +374,8 @@ impl TextInput {
         if self.password {
             masked_byte_index(&self.content, index)
         } else {
-            index.min(self.content.len())
+            // The layout may predate the last keystroke: never land inside a character.
+            self.content.floor_char_boundary(index)
         }
     }
 
@@ -553,6 +554,11 @@ impl TextInput {
     }
 
     fn backspace(&mut self, _: &Backspace, window: &mut Window, cx: &mut Context<Self>) {
+        // Nothing to erase: no change to announce (a filter would sort the list again).
+        if self.selected_range.is_empty() && self.selected_range.start == 0 {
+            self.reset_blinking(cx);
+            return;
+        }
         if self.selected_range.is_empty() && self.selected_range.start > 0 {
             let prev = self
                 .content
@@ -578,6 +584,10 @@ impl TextInput {
     }
 
     fn delete(&mut self, _: &Delete, window: &mut Window, cx: &mut Context<Self>) {
+        if self.selected_range.is_empty() && self.selected_range.end >= self.content.len() {
+            self.reset_blinking(cx);
+            return;
+        }
         if self.selected_range.is_empty() && self.selected_range.end < self.content.len() {
             let next = self
                 .content
@@ -1034,26 +1044,29 @@ impl Element for TextInputElement {
             });
             let offset = input.horizontal_offset;
             window.with_content_mask(Some(ContentMask { bounds }), |window| {
+                // A lost device or a full atlas skips this frame's text instead of ending Oxyde.
                 if !selected_range.is_empty() {
-                    line.paint_background(
+                    if let Err(error) = line.paint_background(
                         bounds.origin + point(-offset, y_offset),
                         line_h,
                         TextAlign::Left,
                         None,
                         window,
                         cx,
-                    )
-                    .unwrap();
+                    ) {
+                        log::warn!("Cannot paint the input selection: {error}");
+                    }
                 }
-                line.paint(
+                if let Err(error) = line.paint(
                     bounds.origin + point(-offset, y_offset),
                     line_h,
                     TextAlign::Left,
                     None,
                     window,
                     cx,
-                )
-                .unwrap();
+                ) {
+                    log::warn!("Cannot paint the input text: {error}");
+                }
                 if focus_handle.is_focused(window) && cursor_visible && selected_range.is_empty() {
                     let cursor_x = line.x_for_index(cursor_index);
                     let cursor_h = line_h * 0.8;

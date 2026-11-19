@@ -34,9 +34,9 @@ impl OxydeApp {
         let pane_id = self.state.active_pane_id.clone();
         let Some(pane) = self.state.find_pane(&pane_id) else { return false; };
         let tab = pane.active_tab();
-        // A leading space is not a name search.
-        if self.type_select.prefix.is_empty() && text == " "
-            && self.type_select.last.is_none_or(|last| last.elapsed() > RESET_DELAY) { return false; }
+        // A leading space is not a name search, also after an earlier search has expired.
+        if text == " " && (self.type_select.prefix.is_empty()
+            || self.type_select.last.is_none_or(|last| last.elapsed() > RESET_DELAY)) { return false; }
         let prefix = self.type_select.push(text, Instant::now()).to_owned();
         let rows = display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, 1);
         let order: Vec<usize> = rows.iter().filter_map(|row| match row {

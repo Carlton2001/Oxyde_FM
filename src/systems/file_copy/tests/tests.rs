@@ -703,3 +703,13 @@
         );
         fixture.no_staging();
     }
+
+    #[test]
+    fn a_replacement_whose_target_is_gone_creates_the_file() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source.txt");
+        let destination = root.path().join("removed meanwhile.txt");
+        fs::write(&source, b"new contents").unwrap();
+        copy(&source, &destination, true, &mut |_| Ok(())).unwrap();
+        assert_eq!(fs::read(&destination).unwrap(), b"new contents");
+    }

@@ -91,7 +91,16 @@ fn calculate_hash<P: AsRef<Path>>(
 
         let mut reader = BufReader::new(file);
         let mut buffer = vec![0; limit];
-        let bytes_read = reader.read(&mut buffer)?;
+        // A share or a FUSE mount may return less than asked in one read.
+        let mut bytes_read = 0;
+        while bytes_read < limit {
+            match reader.read(&mut buffer[bytes_read..]) {
+                Ok(0) => break,
+                Ok(read) => bytes_read += read,
+                Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(error) => return Err(error),
+            }
+        }
         hasher.update(&buffer[..bytes_read]);
     } else {
         let mut reader = BufReader::new(file);
@@ -133,15 +142,24 @@ pub async fn find_duplicates(
             ));
         }
         // Canonical roots eliminate aliases and overlapping selections before scanning.
+        // A location out of reach (unplugged drive, archive tab) is left out; the search
+        // fails only when none is left.
         let mut roots = Vec::new();
+        let mut unreachable = None;
         for path in paths {
             let path = if cfg!(windows) && path.len() == 2 && path.ends_with(':') {
                 format!("{path}\\")
             } else {
                 path
             };
-            let root = std::fs::canonicalize(&path)
-                .map_err(|e| CommandError::IoError(format!("{path}: {e}")))?;
+            let root = match std::fs::canonicalize(&path) {
+                Ok(root) => root,
+                Err(e) => {
+                    log::warn!("Duplicate search leaves out {path}: {e}");
+                    unreachable = Some(CommandError::IoError(format!("{path}: {e}")));
+                    continue;
+                }
+            };
             if is_inside_recycle_bin(&root) {
                 continue;
             }
@@ -153,7 +171,9 @@ pub async fn find_duplicates(
                 _ => root,
             };
             if !root.is_dir() {
-                return Err(CommandError::IoError(format!("{path}: not a directory")));
+                log::warn!("Duplicate search leaves out {path}: not a directory");
+                unreachable = Some(CommandError::IoError(format!("{path}: not a directory")));
+                continue;
             }
             if roots
                 .iter()
@@ -163,6 +183,11 @@ pub async fn find_duplicates(
             }
             roots.retain(|existing| !existing.starts_with(&root));
             roots.push(root);
+        }
+        if roots.is_empty() {
+            if let Some(error) = unreachable {
+                return Err(error);
+            }
         }
         let report = |stage: DuplicateStage, current: usize, total: usize| {
             if let Ok(mut value) = progress.lock() {

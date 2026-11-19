@@ -411,7 +411,7 @@ pub(super) fn run(path: &Path) -> io::Result<()> {
         let mut applied = None;
         let mut applied_controls = 0;
         let started = Instant::now();
-        let mut heartbeat = Instant::now() - Duration::from_secs(1);
+        let mut heartbeat = Instant::now().checked_sub(Duration::from_secs(1)).unwrap_or_else(Instant::now);
         let mut output = io::stdout().lock();
         // The engine is created paused; the first command decides playback.
         let mut paused = true;

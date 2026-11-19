@@ -15,6 +15,8 @@ struct Row {
 #[derive(Default)]
 struct Navigation {
     selected: Option<usize>,
+    /// Whether the pointer has moved over this menu: Enter then means no row by default.
+    pointed: bool,
     rows: Vec<Row>,
 }
 #[derive(Default)]
@@ -38,7 +40,10 @@ pub(super) fn pointer(window: &mut Window, cx: &mut App) {
         .default_global::<Navigations>()
         .0
         .get_mut(&window.window_handle().window_id())
-        .is_some_and(|nav| nav.selected.take().is_some())
+        .is_some_and(|nav| {
+            nav.pointed = true;
+            nav.selected.take().is_some()
+        })
     {
         window.refresh();
     }
@@ -70,7 +75,9 @@ pub(super) fn key(key: &str, window: &mut Window, cx: &mut App) -> bool {
             } else if key == "left" {
                 return false;
             } else {
-                let index = nav.selected.filter(|index| *index < count).unwrap_or(0);
+                let Some(index) = keyboard_row(nav, count) else {
+                    return false;
+                };
                 let Some(submenu) = nav.rows[index].submenu.clone() else {
                     return false;
                 };
@@ -78,13 +85,25 @@ pub(super) fn key(key: &str, window: &mut Window, cx: &mut App) -> bool {
             }
         }
         "enter" | "space" => {
-            let index = nav.selected.filter(|index| *index < count).unwrap_or(0);
-            let action = nav.rows[index].action.clone();
-            action(window, cx);
+            if let Some(index) = keyboard_row(nav, count) {
+                let action = nav.rows[index].action.clone();
+                action(window, cx);
+            }
         }
         _ => return false,
     }
     true
+}
+
+/// The row Enter or Right acts on: the one chosen with the arrows, else the first while
+/// only the keyboard has been used. Once the pointer has moved over the menu, a row it
+/// rests on must not make Enter run the first one.
+fn keyboard_row(nav: &Navigation, count: usize) -> Option<usize> {
+    match nav.selected.filter(|index| *index < count) {
+        Some(index) => Some(index),
+        None if !nav.pointed && count > 0 => Some(0),
+        None => None,
+    }
 }
 
 fn selection(current: Option<usize>, count: usize, key: &str) -> Option<usize> {

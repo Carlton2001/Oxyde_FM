@@ -331,7 +331,8 @@ fn redo_with(details: &TransactionDetails, checkpoint: &mut impl Checkpoint) -> 
         .iter()
         .map(PathBuf::from)
         .collect();
-    created.sort_by_key(|path| path.components().count());
+    // By depth, then by path, so that every duplicate sits next to its twin for dedup.
+    created.sort_by(|left, right| left.components().count().cmp(&right.components().count()).then_with(|| left.cmp(right)));
     created.dedup();
     let mut removed: Vec<_> = moved_dirs
         .iter()

@@ -273,7 +273,10 @@ fn extension_change(original: &str, edited: &str, is_dir: bool) -> Option<(Strin
     if is_dir {
         return None;
     }
-    let extension = |name: &str| std::path::Path::new(name).extension().map(|extension| extension.to_string_lossy().into_owned());
+    // A final dot alone ("notes.") is no extension: removing one is not changing it to "".
+    let extension = |name: &str| std::path::Path::new(name).extension()
+        .filter(|extension| !extension.is_empty())
+        .map(|extension| extension.to_string_lossy().into_owned());
     let from = extension(original)?;
     let to = extension(edited.trim());
     (to.as_deref() != Some(from.as_str())).then_some((from, to))
