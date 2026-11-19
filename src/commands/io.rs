@@ -163,9 +163,7 @@ fn read_local_entries(
         let entry = match entry {
             Ok(entry) => entry,
             Err(error) => {
-                log::debug!("Skipping an unreadable entry of {path}: {error}");
-                unreadable += 1;
-                if unreadable > 64 { break; }
+                skip_unreadable_entry(&mut unreadable, path, error)?;
                 continue;
             }
         };
@@ -193,6 +191,20 @@ fn read_local_entries(
         entries.push(file_entry);
     }
     Ok((entries, true))
+}
+
+/// Entries that cannot be read past this many make the folder fail: a listing that silently
+/// lacks more of them would pass for the whole folder.
+const MAX_UNREADABLE_ENTRIES: usize = 64;
+
+/// Counts an entry the directory could not give, and fails once there are too many.
+fn skip_unreadable_entry(unreadable: &mut usize, path: &str, error: std::io::Error) -> Result<(), CommandError> {
+    *unreadable += 1;
+    if *unreadable > MAX_UNREADABLE_ENTRIES {
+        return Err(CommandError::IoError(error.to_string()));
+    }
+    log::debug!("Skipping an unreadable entry of {path}: {error}");
+    Ok(())
 }
 
 /// Viewer folder previews: at most `limit` visible entries of a local directory, in
@@ -307,6 +319,10 @@ mod listing_preparation_tests;
 #[cfg(test)]
 #[path = "io/tests/bounded_listing.rs"]
 mod bounded_listing_tests;
+
+#[cfg(test)]
+#[path = "io/tests/unreadable_entries.rs"]
+mod unreadable_entry_tests;
 
 #[cfg(all(test, unix))]
 #[path = "io/tests/invalid_names.rs"]
