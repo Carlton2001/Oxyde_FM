@@ -636,6 +636,7 @@ Includes dependencies for all supported targets, including build dependencies.
 ## Apache License 2.0
 
 - lzma-rust2 0.22.0
+- lzma-rust2 0.25.0
 - sevenz-rust2 0.24.0
 - sevenz-rust2 0.24.0
 
@@ -2761,7 +2762,7 @@ express Statement of Purpose.
 
 ## GNU General Public License v3.0 only
 
-- oxyde 2.2.1
+- oxyde 2.2.2
 
 ```text
 GNU GENERAL PUBLIC LICENSE
@@ -9546,13 +9547,17 @@ SOFTWARE.
 - winapi-i686-pc-windows-gnu 0.4.0
 - winapi-x86_64-pc-windows-gnu 0.4.0
 - windows-collections 0.3.2
+- windows-core 0.57.0
 - windows-core 0.62.2
 - windows-future 0.3.2
+- windows-implement 0.57.0
 - windows-implement 0.60.2
+- windows-interface 0.57.0
 - windows-interface 0.59.3
 - windows-link 0.2.1
 - windows-numerics 0.3.1
 - windows-registry 0.6.1
+- windows-result 0.1.2
 - windows-result 0.4.1
 - windows-strings 0.5.1
 - windows-sys 0.59.0
@@ -10114,7 +10119,7 @@ DEALINGS IN THE SOFTWARE.
 - thiserror-impl 2.0.21
 - thiserror 1.0.69
 - thiserror 2.0.21
-- typed-path 0.12.3
+- typed-path 0.13.0
 - typeid 1.0.3
 - unic-langid-impl 0.9.6
 - unic-langid 0.9.6
@@ -10446,7 +10451,7 @@ SOFTWARE.
 ## MIT License
 
 - tracing-core 0.1.36
-- zip 9.0.4
+- zip 9.7.3
 
 ```text
 The MIT License (MIT)

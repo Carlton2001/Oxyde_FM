@@ -353,6 +353,22 @@ mod eject_tests {
     }
 }
 
+/// Whether the volume at `root` (`F:\`, a SUBST letter or a mount folder) refuses writes.
+pub(super) fn volume_is_read_only(root: &std::path::Path) -> bool {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::PCWSTR;
+    use windows::Win32::Storage::FileSystem::GetVolumeInformationW;
+    const FILE_READ_ONLY_VOLUME: u32 = 0x0008_0000;
+    let mut wide: Vec<u16> = root.as_os_str().encode_wide().collect();
+    if wide.last() != Some(&u16::from(b'\\')) {
+        wide.push(u16::from(b'\\'));
+    }
+    wide.push(0);
+    let mut flags = 0u32;
+    unsafe { GetVolumeInformationW(PCWSTR(wide.as_ptr()), None, None, None, Some(&mut flags), None) }
+        .is_ok_and(|_| flags & FILE_READ_ONLY_VOLUME != 0)
+}
+
 pub fn list_drives(skip_hardware_info: bool) -> Vec<DriveInfo> {
     use windows::core::PCWSTR;
     use windows::Win32::Foundation::ERROR_CONNECTION_UNAVAIL;
@@ -589,3 +605,7 @@ pub fn list_drives(skip_hardware_info: bool) -> Vec<DriveInfo> {
     drives.sort_by(|a, b| a.path.cmp(&b.path));
     drives
 }
+
+#[cfg(test)]
+#[path = "windows_drives/tests/read_only.rs"]
+mod tests;

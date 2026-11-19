@@ -2,7 +2,7 @@
 mod built_binary;
 mod file_names;
 mod file_drag;
-pub use file_drag::{FileDragFeedback, FileDropEffect, FileDropPhase, NativeFileDrop};
+pub use file_drag::{DropStaging, FileDragFeedback, FileDropEffect, FileDropPhase, NativeFileDrop, StreamedFiles};
 mod viewer_media;
 mod memory;
 pub use memory::ProcessMemorySnapshot;
@@ -852,6 +852,11 @@ pub trait Platform: Send + Sync {
     /// Blocking; call on a background worker.
     fn has_recycle_bin(&self, _path: &std::path::Path) -> bool {
         true
+    }
+    /// Whether the volume at this drive root refuses writes: optical disc,
+    /// disk image, locked card. Blocking; never call it on a network drive.
+    fn volume_is_read_only(&self, _root: &std::path::Path) -> bool {
+        false
     }
     /// Blocking network operations; call on a background worker.
     fn map_network_drive(&self, letter: String, path: String, reconnect: bool, username: Option<String>, password: Option<String>) -> Result<(), String>;

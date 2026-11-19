@@ -15,6 +15,40 @@ pub(super) fn path_on_drive(path: &str, root: &str) -> bool {
         .any(|ancestor| paths_match(&ancestor.to_string_lossy(), root))
 }
 
+/// Whether the innermost drive holding `path` refuses writes: under Linux, a
+/// read-only `/` leaves a writable `/home` mounted on it writable.
+fn on_read_only_volume(path: &str, drives: &[oxyde_lib::models::DriveInfo], read_only: &[String]) -> bool {
+    drive_of(path, drives).is_some_and(|drive| read_only.iter().any(|root| paths_match(root, &drive.path)))
+}
+
+fn fixed_archive(root: &std::path::Path) -> bool {
+    !oxyde_lib::utils::archive::ArchiveFormat::from_path(root)
+        .is_some_and(oxyde_lib::utils::archive::ArchiveFormat::writable)
+}
+
+impl OxydeApp {
+    /// Whether nothing can be written at `path` shown in `pane_id`: its volume
+    /// refuses writes, or the pane browses an archive Oxyde cannot rewrite.
+    pub(crate) fn is_read_only_location(&self, pane_id: &str, path: &str) -> bool {
+        let in_fixed_archive = self.state.find_pane(pane_id)
+            .and_then(|pane| pane.active_tab().archive_root.as_deref())
+            .is_some_and(fixed_archive);
+        in_fixed_archive || on_read_only_volume(path, &self.state.drives, &self.read_only_volumes)
+    }
+
+    /// Whether nothing can be written into the folder `path`, wherever it is
+    /// shown: its volume refuses writes, or it lies in an archive a tab browses
+    /// and Oxyde cannot rewrite.
+    pub(crate) fn is_read_only_path(&self, path: &str) -> bool {
+        let mut in_fixed_archive = false;
+        self.state.layout.visit_panes(&mut |pane| {
+            in_fixed_archive |= pane.tabs.iter().filter_map(|tab| tab.archive_root.as_deref())
+                .any(|root| fixed_archive(root) && path_on_drive(path, &root.to_string_lossy()));
+        });
+        in_fixed_archive || on_read_only_volume(path, &self.state.drives, &self.read_only_volumes)
+    }
+}
+
 /// The innermost drive holding `path`: under Linux, `/` holds every other mount.
 fn drive_of<'a>(path: &str, drives: &'a [oxyde_lib::models::DriveInfo]) -> Option<&'a oxyde_lib::models::DriveInfo> {
     drives
@@ -228,7 +262,12 @@ impl OxydeApp {
                             super::drag::volumes::replace_mount_points(
                                 oxyde_lib::platform::platform().volumes().mount_points());
                             let policies = super::trash_settings::read_drive_policy(&roots);
-                            (roots, unmounted, policies)
+                            let read_only: Vec<String> = roots.iter()
+                                .filter(|drive| drive.drive_type != "remote" && oxyde_lib::platform::platform()
+                                    .volume_is_read_only(std::path::Path::new(&drive.path)))
+                                .map(|drive| drive.path.clone())
+                                .collect();
+                            (roots, unmounted, (policies, read_only))
                         }).await {
                             h.update(&mut cx, |this, cx| {
                                 if this.ejecting_drive || this.drive_refresh_epoch != epoch
@@ -253,7 +292,12 @@ impl OxydeApp {
                                 // apply_drive_roots rebuilds the sidebar.
                                 this.state.unmounted_volumes = unmounted;
                                 this.apply_drive_roots(roots, cx);
+                                let (policies, read_only) = policies;
                                 if this.trash_delete_policy.replace(policy_revision, policies) {
+                                    cx.notify();
+                                }
+                                if this.read_only_volumes != read_only {
+                                    this.read_only_volumes = read_only;
                                     cx.notify();
                                 }
                                 if changed || details_due {
@@ -599,6 +643,10 @@ fn redirect_tabs(
 #[cfg(all(test, not(target_os = "windows")))]
 #[path = "drive_watchers/tests/polling.rs"]
 mod polling_tests;
+
+#[cfg(test)]
+#[path = "drive_watchers/tests/read_only.rs"]
+mod read_only_tests;
 
 #[cfg(test)]
 mod tests {

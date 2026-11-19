@@ -139,6 +139,9 @@ impl OxydeApp {
             if paths.is_empty() {
                 return;
             }
+            if paths.iter().any(|path| self.is_read_only_location(&pane_id, path)) {
+                return;
+            }
             let shift = self.shift_delete;
             let confirm = self.config.confirm_delete;
             self.trash_delete_check_pending = true;

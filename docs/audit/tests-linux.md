@@ -144,3 +144,10 @@ Paquets installés dans la VM WSL pour ces tests : `wl-clipboard`, `udisks2` (se
 - [ ] M97 (`007930d8`) : PDF dont une page a une MediaBox nulle : les pages suivantes gardent leurs proportions, la dernière reste accessible.
 - [ ] F35/F36 (`1971dafc`, `e464eb90`) : compression 7z d'un gros dossier, pause de quelques minutes puis reprise : se termine sans « délai dépassé ».
 - [ ] F40 (`d89c0e11`) : dossier de nombreuses images ouvert dans deux onglets : les miniatures sont toutes mises en cache (le retour au dossier ne les régénère pas).
+
+## Lecture seule (0b79d399)
+
+- [ ] Compilation Linux : `volume_is_read_only` (statvfs, `ST_RDONLY`) dans `linux_impl.rs`.
+- [ ] ISO montée par udisks ou clé montée `ro` : couper, coller, renommer, supprimer, nouveau, compresser, extraire ici absents des menus ; « Nouveau dossier » grisé dans la barre.
+- [ ] Lecteur le plus profond (`f96c3172`) : avec `/` en lecture seule et `/home` monté à part (SteamOS, ou un montage `ro` contenant un montage `rw`), les actions d'écriture restent disponibles dans `/home`.
+- [ ] Dépôt (`cac4d642`) : glisser des fichiers sur un dossier d'une ISO montée est refusé ; Maj + glisser depuis l'ISO vers `/home` copie sans erreur.

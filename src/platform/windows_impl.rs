@@ -412,9 +412,11 @@ impl Platform for WindowsPlatform {
                         .encode_utf16()
                         .chain(std::iter::once(0))
                         .collect();
-                    // Only the drives the settings list: removable (2) and fixed (3).
+                    // Only the drives the settings list: fixed (3), without SUBST.
                     // A network drive has no bin here and can wait for its timeout.
-                    if !matches!(GetDriveTypeW(PCWSTR(wide_path.as_ptr())), 2 | 3) {
+                    if GetDriveTypeW(PCWSTR(wide_path.as_ptr())) != 3
+                        || !super::windows_recycle_bin::available(std::path::Path::new(drive_path))
+                    {
                         continue;
                     }
 
@@ -549,6 +551,9 @@ impl Platform for WindowsPlatform {
     }
     fn has_recycle_bin(&self, path: &std::path::Path) -> bool {
         super::windows_recycle_bin::available(path)
+    }
+    fn volume_is_read_only(&self, root: &std::path::Path) -> bool {
+        super::windows_drives::volume_is_read_only(root)
     }
 
     fn list_network_vicinity(&self) -> Result<Vec<crate::models::FileEntry>, String> {

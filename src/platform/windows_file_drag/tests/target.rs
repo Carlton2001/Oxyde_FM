@@ -60,6 +60,7 @@ fn native_move_has_one_drop_and_never_authorizes_foreign_source_deletion() {
             FileDropEffect::Move
         }),
         paths: RefCell::default(),
+        listing: RefCell::default(),
         source: RefCell::default(),
         allowed: Cell::new(DROPEFFECT_NONE),
         helper: None,
@@ -103,6 +104,7 @@ fn invalid_final_object_cancels_the_drop_and_clears_the_ui_session() {
             FileDropEffect::Copy
         }),
         paths: RefCell::default(),
+        listing: RefCell::default(),
         source: RefCell::default(),
         allowed: Cell::new(DROPEFFECT_NONE),
         helper: None,
@@ -128,6 +130,7 @@ fn target_cannot_return_an_operation_the_source_did_not_offer() {
         window: window.0,
         callback: Box::new(|_| FileDropEffect::Move),
         paths: RefCell::default(),
+        listing: RefCell::default(),
         source: RefCell::default(),
         allowed: Cell::new(DROPEFFECT_NONE),
         helper: None,
@@ -152,6 +155,7 @@ fn a_source_reentering_in_the_same_drag_is_not_rendered_again() {
             FileDropEffect::Copy
         }),
         paths: RefCell::default(),
+        listing: RefCell::default(),
         source: RefCell::default(),
         allowed: Cell::new(DROPEFFECT_NONE),
         helper: None,

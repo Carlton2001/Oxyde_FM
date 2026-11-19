@@ -201,6 +201,8 @@ pub(crate) struct PendingFileOperation {
     pub(crate) conflicts: Vec<oxyde_lib::models::ConflictEntry>,
     pub(crate) dialog: crate::ui::components::conflict_dialog::ConflictDialogState,
     runtime: tokio::runtime::Handle,
+    /// Removed with the pending operation unless the operation takes it over.
+    staging: Option<std::rc::Rc<oxyde_lib::platform::DropStaging>>,
 }
 
 #[derive(Clone)]
@@ -333,6 +335,8 @@ pub struct OxydeApp {
     pub(super) disk_image_refresh_task: Option<Task<()>>,
     pub(crate) shift_delete: bool,
     pub(crate) trash_delete_policy: trash_settings::DeletePolicy,
+    /// Roots of the drives whose volume refuses writes, from the last drive survey.
+    pub(super) read_only_volumes: Vec<String>,
     pub(super) trash_delete_check_pending: bool,
     pub(crate) pending_trash_delete: Option<trash_settings::PendingDelete>,
     pub(crate) trash_settings: Option<trash_settings::TrashSettings>,
@@ -403,6 +407,8 @@ pub struct OxydeApp {
     rename_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
     rename_generation: u64,
     pub(crate) pending_file_operations: std::collections::VecDeque<PendingFileOperation>,
+    /// Staging folders of dropped streamed files, kept until their copy ends.
+    drop_stagings: std::collections::HashMap<String, std::rc::Rc<oxyde_lib::platform::DropStaging>>,
     file_operation_notice: Option<(Message, String)>,
     /// Items a failed deletion left behind, offered for retry with the matching notice.
     delete_retry: Option<file_operations::DeleteRetry>,
@@ -578,6 +584,7 @@ impl OxydeApp {
             pending_trash_delete: None,
             shift_delete: false,
             trash_delete_policy: Default::default(),
+            read_only_volumes: Vec::new(),
             trash_delete_check_pending: false,
             network_dialog_revision: 0,
             network_force_confirmation: None,
@@ -640,6 +647,7 @@ impl OxydeApp {
             rename_cancel: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             rename_generation: 0,
             pending_file_operations: std::collections::VecDeque::new(),
+            drop_stagings: Default::default(),
             file_operation_notice: None,
             delete_retry: None,
             toasts: Vec::new(),

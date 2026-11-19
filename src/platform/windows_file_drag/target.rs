@@ -1,5 +1,5 @@
-use super::{data, hwnd};
-use crate::platform::{FileDropEffect, FileDropPhase, NativeFileDrop};
+use super::{data, hwnd, streams};
+use crate::platform::{FileDropEffect, FileDropPhase, NativeFileDrop, StreamedFiles};
 use raw_window_handle::RawWindowHandle;
 use std::cell::{Cell, RefCell};
 use windows::{
@@ -17,6 +17,9 @@ struct Target {
     window: HWND,
     callback: Box<dyn Fn(NativeFileDrop) -> FileDropEffect>,
     paths: RefCell<Vec<String>>,
+    /// Set when the source offers streams instead of paths; `paths` then name
+    /// its top-level items in a staging folder written at Drop.
+    listing: RefCell<Option<streams::Listing>>,
     /// The object `paths` were read from. A source that renders its files on
     /// request (an Explorer ZIP folder extracts them) is read once per drag,
     /// not at each entry of the pointer; the reference keeps its identity unique.
@@ -35,11 +38,22 @@ impl Target {
             .is_some_and(|source| source.as_raw() == identity.as_raw());
         same.then_some(identity)
     }
+    /// Paths, or else the descriptor of streamed files. Never their contents.
+    fn read(object: &IDataObject) -> (Vec<String>, Option<streams::Listing>) {
+        match data::read_paths(object) {
+            Ok(paths) => (paths, None),
+            Err(_) => match streams::read_listing(object) {
+                Some(listing) => (listing.top.clone(), Some(listing)),
+                None => (Vec::new(), None),
+            },
+        }
+    }
     fn dispatch(
         &self,
         phase: FileDropPhase,
         point: &POINTL,
         keys: MODIFIERKEYS_FLAGS,
+        streamed: Option<StreamedFiles>,
     ) -> DROPEFFECT {
         let mut position = POINT {
             x: point.x,
@@ -65,6 +79,7 @@ impl Target {
             shift: keys.0 & MK_SHIFT.0 != 0,
             can_copy: allowed.0 & DROPEFFECT_COPY.0 != 0,
             can_move: allowed.0 & DROPEFFECT_MOVE.0 != 0,
+            streamed,
         });
         match effect {
             FileDropEffect::Copy if allowed.0 & DROPEFFECT_COPY.0 != 0 => DROPEFFECT_COPY,
@@ -84,15 +99,23 @@ impl IDropTarget_Impl for Target_Impl {
         output: *mut DROPEFFECT,
     ) -> Result<()> {
         let output = unsafe { output.as_mut() }.ok_or_else(|| Error::from(E_POINTER))?;
-        self.allowed.set(*output);
+        let offered = *output;
         *output = DROPEFFECT_NONE;
         let object = object.ok()?;
         if self.read_from(object).is_none() {
-            *self.paths.borrow_mut() = data::read_paths(object).unwrap_or_default();
+            let (paths, listing) = Target::read(object);
+            *self.paths.borrow_mut() = paths;
+            *self.listing.borrow_mut() = listing;
             *self.source.borrow_mut() = object.cast::<IUnknown>().ok();
         }
+        // Streamed files are written by Oxyde: the source keeps them.
+        self.allowed.set(if self.listing.borrow().is_some() {
+            DROPEFFECT(offered.0 & DROPEFFECT_COPY.0)
+        } else {
+            offered
+        });
         if !self.paths.borrow().is_empty() {
-            *output = self.dispatch(FileDropPhase::Enter, point, keys);
+            *output = self.dispatch(FileDropPhase::Enter, point, keys, None);
         }
         if let Some(helper) = &self.helper {
             let _ = unsafe {
@@ -116,7 +139,7 @@ impl IDropTarget_Impl for Target_Impl {
         output: *mut DROPEFFECT,
     ) -> Result<()> {
         let output = unsafe { output.as_mut() }.ok_or_else(|| Error::from(E_POINTER))?;
-        *output = self.dispatch(FileDropPhase::Over, point, keys);
+        *output = self.dispatch(FileDropPhase::Over, point, keys, None);
         if let Some(helper) = &self.helper {
             let _ = unsafe {
                 helper.DragOver(
@@ -135,6 +158,7 @@ impl IDropTarget_Impl for Target_Impl {
             FileDropPhase::Leave,
             &POINTL::default(),
             MODIFIERKEYS_FLAGS(0),
+            None,
         );
         // Paths stay with their source: the pointer may come back in this drag.
         if let Some(helper) = &self.helper {
@@ -155,12 +179,24 @@ impl IDropTarget_Impl for Target_Impl {
         // Validate the final object, rather than trusting a previous DragEnter
         // made with another one.
         if self.read_from(object).is_none() {
-            let paths = data::read_paths(object).unwrap_or_default();
-            if paths != *self.paths.borrow() {
+            let (paths, listing) = Target::read(object);
+            // A streamed object read again would name another staging folder.
+            if listing.is_some() || self.listing.borrow().is_some() || paths != *self.paths.borrow() {
                 self.paths.borrow_mut().clear();
             }
         }
-        let accepted = self.dispatch(FileDropPhase::Drop, point, keys);
+        let listing = self.listing.borrow_mut().take();
+        let streamed = match listing {
+            Some(listing) if !self.paths.borrow().is_empty() => {
+                let streamed = streams::streamed(object, listing);
+                if streamed.is_none() {
+                    self.paths.borrow_mut().clear();
+                }
+                streamed
+            }
+            _ => None,
+        };
+        let accepted = self.dispatch(FileDropPhase::Drop, point, keys, streamed);
         // Oxyde owns asynchronous copies AND moves, including conflict handling.
         // An optimized move never authorizes the foreign source to delete files.
         *output = if accepted == DROPEFFECT_MOVE {
@@ -185,8 +221,9 @@ impl IDropTarget_Impl for Target_Impl {
                 )
             };
         }
-        self.dispatch(FileDropPhase::Leave, point, keys);
+        self.dispatch(FileDropPhase::Leave, point, keys, None);
         self.paths.borrow_mut().clear();
+        self.listing.borrow_mut().take();
         self.source.borrow_mut().take();
         Ok(())
     }
@@ -205,6 +242,7 @@ pub(in crate::platform) fn install_target(
         window,
         callback,
         paths: RefCell::default(),
+        listing: RefCell::default(),
         source: RefCell::default(),
         allowed: Cell::new(DROPEFFECT_NONE),
         helper: unsafe { CoCreateInstance(&CLSID_DragDropHelper, None, CLSCTX_INPROC_SERVER) }.ok(),

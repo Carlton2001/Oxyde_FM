@@ -7,7 +7,7 @@ runs:
     - name: Install distribution toolchain
       shell: pwsh
       run: |
-        $toolchain = '1.98.1-x86_64-pc-windows-msvc'
+        $toolchain = '1.100.0-x86_64-pc-windows-msvc'
         if (-not $env:RUNNER_TOOL_CACHE) { throw 'Missing runner tool cache directory.' }
         # rust-cache hashes every installed toolchain, including unused runner defaults.
         # Keep a stable, versioned Rustup home containing only the distribution toolchain.

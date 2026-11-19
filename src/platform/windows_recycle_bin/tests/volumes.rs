@@ -26,3 +26,18 @@ fn drive_letters_are_read_from_roots_only() {
     assert_eq!(drive_letter(Path::new(r"C:\Data\")), None);
     assert_eq!(drive_letter(Path::new(r"\\server\share\")), None);
 }
+
+#[test]
+fn path_letters_are_read_from_any_drive_path() {
+    assert_eq!(path_letter(Path::new(r"Y:\boot.wim")), Some('Y'));
+    assert_eq!(path_letter(Path::new(r"\\?\Y:\data")), Some('Y'));
+    assert_eq!(path_letter(Path::new(r"\\server\share\x")), None);
+}
+
+#[test]
+fn subst_drives_have_no_recycle_bin() {
+    // Set up by hand: `subst Y: <folder>`, including a folder of a mounted ISO.
+    if super::super::windows_final_path::dos_device('Y').is_some_and(|device| device.starts_with(r"\??\")) {
+        assert!(!available(Path::new(r"Y:\")));
+    }
+}

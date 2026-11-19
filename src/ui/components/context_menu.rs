@@ -73,6 +73,16 @@ pub(super) fn without_unavailable_shell_menu(items: Vec<dropdown::DropdownItem>,
     }
 }
 
+/// Actions that write where the menu applies: hidden where nothing can be written.
+const WRITING_ACTIONS: &[Message] = &[
+    Message::Cut, Message::Paste, Message::NewFolder, Message::NewFile, Message::Compress,
+    Message::OpExtractHere, Message::Rename, Message::Delete, Message::TrashDeletePermanent,
+];
+
+fn without_writing_actions(items: &mut Vec<dropdown::DropdownItem>, i18n: &I18n) {
+    items.retain(|item| !WRITING_ACTIONS.iter().any(|message| item.label == i18n.text(*message).as_ref()));
+}
+
 /// Only a real folder can be a terminal's working directory: not the trash, a search,
 /// the network neighbourhood, a remote URI nor the inside of an archive.
 pub(crate) fn is_terminal_folder(path: &str) -> bool {
@@ -326,6 +336,12 @@ pub fn oxyde_context_menu_items(
     if !path.starts_with("trash:") {
         history_actions::insert_menu_items(&mut items, i18n, h, view);
     }
+    // The actions apply to the whole selection, which a search spreads over several volumes.
+    if std::iter::once(path.clone()).chain(view.context_action_paths(&path))
+        .any(|item| view.is_read_only_location(&view.state.active_pane_id, &item))
+    {
+        without_writing_actions(&mut items, i18n);
+    }
     context_menu_sections(items, i18n)
 }
 
@@ -349,6 +365,7 @@ pub fn pane_context_menu_items(i18n: &I18n, h: Entity<crate::ui::app::OxydeApp>,
             crate::ui::paths::paths_match(&ancestor.to_string_lossy(), &drive.path))) {
         items.extend(network::network_actions(i18n, h.clone(), &drive.path, true));
     }
+    let read_only = view.is_read_only_location(&pane_id, path);
     items.extend(pane_context_menu_items_raw(i18n, h.clone(), pane_id));
     let mut items = with_terminal_action(items, h.clone(), path, i18n);
     history_actions::insert_menu_items(&mut items, i18n, h, view);
@@ -357,6 +374,9 @@ pub fn pane_context_menu_items(i18n: &I18n, h: Entity<crate::ui::app::OxydeApp>,
             .iter().any(|message| item.label == i18n.text(*message).as_ref()));
     } else if oxyde_lib::utils::archive::resolve_virtual_path(std::path::Path::new(path)).is_some() {
         items.retain(|item| item.label != i18n.text(Message::NewFile).as_ref());
+    }
+    if read_only {
+        without_writing_actions(&mut items, i18n);
     }
     context_menu_sections(items, i18n)
 }

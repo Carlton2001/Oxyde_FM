@@ -16,6 +16,10 @@ Business state and actions belong to `src/ui/app/`. Components receive data and 
 - **Terminal** (Linux, Ctrl + . or the folder menu): opens the folder selected alone, else the folder shown, in `xdg-terminal-exec` when present, then the desktop's own terminal (Konsole on KDE, Xfce or MATE's), then Ptyxis, GNOME Console, GNOME Terminal and other common terminals (`platform/linux_terminal.rs`). Not offered in the trash or inside archives.
 - **PowerToys Peek** (Windows): when Peek is installed and enabled, its own shortcut (Ctrl + Space by default, or Space when Peek allows it) read from PowerToys' settings opens the selected file in Peek (`platform/windows_peek.rs`, `app/shell_features.rs`). Oxyde's own previews do not need it.
 
+## Read-only locations
+
+Where nothing can be written, write actions disappear rather than fail: a volume that refuses writes (optical disc, disk image, locked card), judged by the innermost drive holding the path so a writable `/home` on a read-only `/` stays writable, or an archive Oxyde cannot rewrite (`OxydeApp::is_read_only_location`, `is_read_only_path` in `app/drive_watchers.rs`). Menus hide Cut, Paste, New, Compress, Extract here, Rename and Delete, also when only part of the selection is affected; the bar hides them and greys New folder; their keys do nothing. Drops onto such a folder are refused, and a move out of one becomes a copy.
+
 ## Window buttons
 
 - `components/window_controls.rs` draws minimize, maximize and close for every Oxyde title bar, in the style `Platform::window_control_style` picks: Windows captions, Adwaita discs under GNOME and other Linux desktops, bare Breeze glyphs (Lucide chevrons and diamond) under KDE.
