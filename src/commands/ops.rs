@@ -158,9 +158,9 @@ pub(crate) fn unavailable_selection(count: usize) -> Result<(), CommandError> {
     if count == 0 {
         return Ok(());
     }
-    Err(CommandError::TrashError(format!(
-        "{count} selected item(s) are no longer in the Recycle Bin and were not purged"
-    )))
+    Err(CommandError::TrashError(
+        crate::models::error::TrashSelectionUnavailable { count }.to_string(),
+    ))
 }
 
 mod conflicts;

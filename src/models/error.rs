@@ -211,6 +211,25 @@ impl DeleteBatchFailure {
     }
 }
 
+/// Selected Recycle Bin items that were restored or purged by someone else meanwhile.
+#[derive(Clone, Debug)]
+pub struct TrashSelectionUnavailable {
+    pub count: usize,
+}
+impl fmt::Display for TrashSelectionUnavailable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} selected item(s) are no longer in the Recycle Bin and were not purged", self.count)
+    }
+}
+impl std::error::Error for TrashSelectionUnavailable {}
+impl TrashSelectionUnavailable {
+    pub fn from_message(message: &str) -> Option<usize> {
+        let end = message.find(" selected item(s) are no longer in the Recycle Bin and were not purged")?;
+        let digits = message[..end].rsplit(|c: char| !c.is_ascii_digit()).next()?;
+        digits.parse().ok()
+    }
+}
+
 /// Stable cause retained through string-based file-operation status.
 #[derive(Clone, Debug)]
 pub struct SourceSelectionFailure {

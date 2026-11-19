@@ -34,3 +34,19 @@ fn refused_replacement_of_a_link_is_translated_in_every_language() {
         assert!(!translated.contains("Copy target"));
     }
 }
+
+#[test]
+fn a_stale_trash_selection_is_translated_in_every_language() {
+    use crate::ui::i18n::{FluentArgs, I18n, Message};
+    let detail = oxyde_lib::models::error::CommandError::TrashError(
+        oxyde_lib::models::error::TrashSelectionUnavailable { count: 3 }.to_string(),
+    )
+    .to_string();
+    for language in Language::ALL {
+        let i18n = I18n::for_language(language);
+        let mut args = FluentArgs::new();
+        args.set("count", 3);
+        assert_eq!(error_detail(&detail, &i18n), i18n.text_with_args(Message::TrashSelectionUnavailable, &args).to_string());
+        assert!(!error_detail(&detail, &i18n).contains("Recycle Bin"));
+    }
+}

@@ -501,6 +501,11 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
         text.push_str(&error_detail(&batch.first, i18n));
         return text;
     }
+    if let Some(count) = oxyde_lib::models::error::TrashSelectionUnavailable::from_message(detail) {
+        let mut args = FluentArgs::new();
+        args.set("count", count);
+        return i18n.text_with_args(Message::TrashSelectionUnavailable, &args).to_string();
+    }
     if let Some(recovery) = oxyde_lib::models::error::ArchiveRecoveryFailure::from_message(detail) {
         let mut args = FluentArgs::new();
         args.set("locations", recovery.locations.iter().map(|path| display_paths(path)).collect::<Vec<_>>().join("\n"));
