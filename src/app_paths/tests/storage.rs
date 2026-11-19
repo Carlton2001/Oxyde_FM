@@ -18,8 +18,9 @@ fn absent_data_directory_preserves_installed_paths() {
 #[test]
 fn portable_paths_and_temporary_files_stay_beside_executable() {
     let root = tempfile::tempdir().unwrap();
-    let data = root.path().join("data");
-    std::fs::create_dir(&data).unwrap();
+    std::fs::create_dir(root.path().join("data")).unwrap();
+    // Resolved like the data folder: Windows may give the temporary folder as a short 8.3 name.
+    let data = real_path(&root.path().join("data"));
     let paths = resolve(root.path()).unwrap();
     paths.prepare().unwrap();
     assert!(paths.portable);
@@ -93,7 +94,7 @@ fn portable_process_routes_configuration_caches_and_environment_locally() {
     std::fs::copy(std::env::current_exe().unwrap(), &executable).unwrap();
     let run = || std::process::Command::new(&executable)
         .args(["--exact", "app_paths::tests::portable_process_routes_configuration_caches_and_environment_locally", "--nocapture"])
-        .env(CHILD, root.path()).current_dir(unrelated.path()).output();
+        .env(CHILD, real_path(root.path())).current_dir(unrelated.path()).output();
     // Linux: a process forked by another test while the copy was open for writing holds
     // that descriptor until it executes, and the copy is busy until then.
     let mut output = run();

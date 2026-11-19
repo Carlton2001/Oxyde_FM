@@ -55,7 +55,8 @@ fn unknown_content_or_a_replaced_folder_is_left_in_place() {
     end(entry);
     let (replaced, entry) = stage(root.path(), &notes, ".oxyde-copy-replaced");
     end(entry);
-    std::fs::remove_dir_all(&replaced).unwrap();
+    // Moved away, not removed: a filesystem may reuse freed inodes for the new folder and pin.
+    std::fs::rename(&replaced, root.path().join("original")).unwrap();
     std::fs::create_dir(&replaced).unwrap();
     std::fs::write(replaced.join(".pin"), b"").unwrap();
     std::fs::write(replaced.join("output"), b"someone else's").unwrap();

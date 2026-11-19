@@ -847,6 +847,7 @@ function New-Object {{ param($ComObject) return $global:shell }}
     }
 
     #[test]
+    #[ignore = "needs a desktop where .txt has several handlers: a CI runner shows no Open with popup"]
     fn open_with_popup_carries_its_canonical_verb_in_any_language() {
         let folder = tempfile::tempdir().unwrap();
         let file = folder.path().join("sample.txt");
