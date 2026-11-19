@@ -40,17 +40,17 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 
 | ID | Emplacement | État | Commits | Note |
 | --- | --- | --- | --- | --- |
-| F70 | `commands/archive_iso_open.rs:208` | à examiner | | |
-| F71 | `commands/archive_iso_open.rs:181 et :195` | à examiner | | |
-| F73 | `commands/archive.rs:239` | à examiner | | |
-| F74 | `commands/archive.rs:143` | à examiner | | |
-| F75 | `commands/archive_io_codec/parallel.rs:65` | à examiner | | |
+| F70 | `commands/archive_iso_open.rs:208` | corrigé (en partie) | 6e67bba6 | arbre Joliet lu quand l'image en a un (noms Unicode) ; Rock Ridge non pris en charge ; tests ; workers à reconstruire |
+| F71 | `commands/archive_iso_open.rs:181 et :195` | corrigé | 6e67bba6 | bornes des enregistrements et bourrage calculés sur le secteur de 2048 octets ; taille de bloc limitée à 512–2048 |
+| F73 | `commands/archive.rs:239` | corrigé | 23825b4d | dossier interne absent : erreur « Archive directory not found » pour ZIP, RAR, TAR, flux, 7z (local et worker), comme ISO ; dossier vide ou implicite toujours listé ; test ; workers à reconstruire |
+| F74 | `commands/archive.rs:143` | obsolète |  | corrigé par d1302a19 : `list_archive_contents_checked` arrête le listage quand l'onglet l'abandonne |
+| F75 | `commands/archive_io_codec/parallel.rs:65` | corrigé | 5a8b8c25 | l'encodeur ZIP Turbo écrit par blocs de 1 Mio et s'arrête quand son travail est abandonné ; le `Drop` attend au plus un bloc ; workers à reconstruire |
 | F77 | `systems/archive_open_cache.rs:516` | écarté | | choix du lot 10 : une copie modifiée par l'utilisateur n'est jamais évincée (catégorie 3) |
 | F78 | `systems/archive_open_cache.rs:235` | à examiner | | |
-| F79 | `commands/archive_rar.rs:145` | à examiner | | |
-| F80 | `commands/archive_verify.rs:30, :51 et :65` | à examiner | | |
-| F81 | `commands/archive_rar.rs:39` | à examiner | | |
-| F82 | `systems/archive_io.rs:171` | à examiner | | |
+| F79 | `commands/archive_rar.rs:145` | corrigé | 6e12a3dc | RAR solide : premier membre chiffré (les précédents sont décodés de toute façon) ; non solide : le plus petit |
+| F80 | `commands/archive_verify.rs:30, :51 et :65` | corrigé (en partie) | 9dfbbed4 | 7z : plus petit bloc chiffré AES ; ZIP : erreur de décompression (`InvalidData`) après le contrôle d'un octet comptée comme mauvais mot de passe (un membre endommagé aussi) ; reste : membre ZipCrypto stocké de plus de 1 Mio et RAR 4 stocké |
+| F81 | `commands/archive_rar.rs:39` | corrigé | 6e12a3dc | `ResourceLimit` de rars : « RAR archive exceeds Oxyde's processing limits » au lieu de « Invalid RAR archive » (texte anglais, la limite atteinte n'est pas typée par rars) |
+| F82 | `systems/archive_io.rs:171` | corrigé | 8d1d1cbb | documentation corrigée : `Operation::Decode::password` accepté pour ZIP, 7z et RAR |
 | F83 | `systems/archive_owned_tree.rs:13` | à examiner | | |
 | F84 | `utils/archive_codec.rs:85 et :87` | à examiner | | |
 | F85 | `utils/archive.rs:112` | à examiner | | |
