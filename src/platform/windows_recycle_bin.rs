@@ -10,8 +10,15 @@ const DRIVE_NO_ROOT_DIR: u32 = 1;
 const DRIVE_FIXED: u32 = 3;
 
 pub(super) fn available(path: &Path) -> bool {
-    let Some(root) = volume_root(path) else { return true };
     // A SUBST drive reports the type of the drive it maps, but has no Recycle Bin.
+    // Read from the path's own letter: GetVolumePathNameW fails on a SUBST of a
+    // folder of an optical or disk image volume.
+    if path_letter(path).and_then(super::windows_final_path::dos_device)
+        .is_some_and(|device| device.starts_with(r"\??\"))
+    {
+        return false;
+    }
+    let Some(root) = volume_root(path) else { return true };
     if let Some(letter) = drive_letter(&root) {
         if super::windows_final_path::dos_device(letter).is_some_and(|device| device.starts_with(r"\??\")) {
             return false;
@@ -34,6 +41,15 @@ fn volume_root(path: &Path) -> Option<PathBuf> {
     unsafe { GetVolumePathNameW(PCWSTR(wide.as_ptr()), &mut buffer) }.ok()?;
     let length = buffer.iter().position(|c| *c == 0)?;
     Some(std::ffi::OsString::from_wide(&buffer[..length]).into())
+}
+
+/// The letter a path is written with: `Y` for `Y:\data` or `\\?\Y:\data`.
+fn path_letter(path: &Path) -> Option<char> {
+    let std::path::Component::Prefix(prefix) = path.components().next()? else { return None };
+    match prefix.kind() {
+        std::path::Prefix::Disk(letter) | std::path::Prefix::VerbatimDisk(letter) => Some(letter as char),
+        _ => None,
+    }
 }
 
 fn drive_letter(root: &Path) -> Option<char> {
