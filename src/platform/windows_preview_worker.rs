@@ -516,7 +516,6 @@ pub(super) fn supervise_stream(
     if cancelled() {
         return Ok(());
     }
-    let mut progress = Instant::now();
     let started = Worker::start(command, VIDEO_MEMORY_BYTES, &|| {
         if cancelled() {
             Err(io::Error::new(
@@ -531,6 +530,9 @@ pub(super) fn supervise_stream(
         Err(error) if error.kind() == io::ErrorKind::Interrupted && cancelled() => return Ok(()),
         result => result?,
     };
+    // From the launch, not the request: waiting up to 30 s for the memory budget is not
+    // a worker that produces no frame.
+    let mut progress = Instant::now();
     let mut pending = Vec::new();
     let mut chunk = [0; 64 * 1024];
     let mut exited = None;
