@@ -164,41 +164,103 @@ fn has_udf<R: Read + Seek>(image: &mut Image<'_, R>, primary: u64) -> bool {
     false
 }
 
-fn root_record<R: Read + Seek>(image: &mut Image<'_, R>) -> io::Result<(u64, Record)> {
-    let mut offset = 16 * 2048;
-    loop {
+/// Directory records never cross a 2048-byte logical sector, whatever the
+/// logical block size of the extents.
+const SECTOR: u64 = 2048;
+
+/// The tree to read: the Joliet one when the image has it, for Unicode names.
+struct Tree {
+    block_size: u64,
+    root: Record,
+    joliet: bool,
+}
+
+fn volume_root(descriptor: &[u8; 2048]) -> io::Result<(u64, Record)> {
+    let block_size = u16::from_le_bytes(descriptor[128..130].try_into().unwrap()) as u64;
+    if block_size != u16::from_be_bytes(descriptor[130..132].try_into().unwrap()) as u64
+        || !(512..=SECTOR).contains(&block_size)
+        || !block_size.is_power_of_two()
+    {
+        return Err(invalid("Invalid ISO logical block size"));
+    }
+    let root = record(&descriptor[156..190], block_size)?;
+    if !root.directory || !root.final_extent || root.raw_name != [0] {
+        return Err(invalid("Invalid ISO root directory"));
+    }
+    Ok((block_size, root))
+}
+
+/// A supplementary descriptor with one of the UCS-2 escape sequences (levels 1 to 3).
+fn is_joliet(descriptor: &[u8; 2048]) -> bool {
+    descriptor[6] == 1 && matches!(&descriptor[88..91], b"%/@" | b"%/C" | b"%/E")
+}
+
+fn root_record<R: Read + Seek>(image: &mut Image<'_, R>) -> io::Result<Tree> {
+    let mut offset = 16 * SECTOR;
+    let mut primary = None;
+    let mut joliet = None;
+    for _ in 0..=MAX_PROBED_DESCRIPTORS {
+        // Past the primary descriptor, the set only adds an optional Joliet tree:
+        // a truncated or damaged rest keeps the primary tree readable.
+        if primary.is_some() && image.check_range(offset, SECTOR).is_err() {
+            break;
+        }
         let mut descriptor = [0u8; 2048];
-        image.read_at(offset, &mut descriptor)?;
-        if &descriptor[1..7] != b"CD001\x01" {
+        if primary.is_none() {
+            image.read_at(offset, &mut descriptor)?;
+        } else {
+            // Bounded by the count above, like `has_udf`: outside the decoded budget.
+            image.budget.checkpoint(image.checkpoint)?;
+            image.file.seek(SeekFrom::Start(offset))?;
+            image.file.read_exact(&mut descriptor)?;
+        }
+        if &descriptor[1..6] != b"CD001" {
+            if primary.is_some() {
+                break;
+            }
             return Err(invalid("Invalid ISO volume descriptor"));
         }
         match descriptor[0] {
-            1 => {
-                let block_size =
-                    u16::from_le_bytes(descriptor[128..130].try_into().unwrap()) as u64;
-                if block_size != u16::from_be_bytes(descriptor[130..132].try_into().unwrap()) as u64
-                    || block_size < 512
-                    || !block_size.is_power_of_two()
-                {
-                    return Err(invalid("Invalid ISO logical block size"));
+            1 if primary.is_none() => {
+                if descriptor[6] != 1 {
+                    return Err(invalid("Invalid ISO volume descriptor"));
                 }
-                let root = record(&descriptor[156..190], block_size)?;
-                if !root.directory || !root.final_extent || root.raw_name != [0] {
-                    return Err(invalid("Invalid ISO root directory"));
-                }
+                primary = Some(volume_root(&descriptor)?);
                 if has_udf(image, offset) {
                     return Err(invalid("UDF disc images are mounted, not read as ISO 9660"));
                 }
-                return Ok((block_size, root));
             }
-            255 => return Err(invalid("Missing ISO primary volume descriptor")),
-            _ => offset += 2048,
+            // A damaged Joliet tree leaves the primary one readable.
+            2 if joliet.is_none() && is_joliet(&descriptor) => joliet = volume_root(&descriptor).ok(),
+            255 => break,
+            _ => {}
         }
+        offset += SECTOR;
     }
+    let (block_size, root) =
+        primary.ok_or_else(|| invalid("Missing ISO primary volume descriptor"))?;
+    Ok(match joliet {
+        Some((block_size, root)) => Tree { block_size, root, joliet: true },
+        None => Tree { block_size, root, joliet: false },
+    })
+}
+
+/// Joliet identifiers are big-endian UCS-2; ISO 9660 ones are ASCII.
+fn identifier(raw: &[u8], joliet: bool) -> io::Result<String> {
+    let encoding = || invalid("Invalid ISO file identifier encoding");
+    if !joliet {
+        return std::str::from_utf8(raw).map(str::to_owned).map_err(|_| encoding());
+    }
+    if raw.len() % 2 != 0 {
+        return Err(encoding());
+    }
+    char::decode_utf16(raw.chunks_exact(2).map(|pair| u16::from_be_bytes([pair[0], pair[1]])))
+        .collect::<Result<String, _>>()
+        .map_err(|_| encoding())
 }
 
 fn index<R: Read + Seek>(image: &mut Image<'_, R>) -> Result<Vec<Entry>, CommandError> {
-    let (block_size, root) = root_record(image)?;
+    let Tree { block_size, root, joliet } = root_record(image)?;
     let mut directories = vec![(PathBuf::new(), root.extent)];
     let mut visited = HashSet::new();
     let mut paths = HashSet::new();
@@ -217,7 +279,7 @@ fn index<R: Read + Seek>(image: &mut Image<'_, R>) -> Result<Vec<Entry>, Command
             image.read_at(position, &mut bytes[..1])?;
             let length = bytes[0] as usize;
             if length == 0 {
-                let next = (position / block_size + 1) * block_size;
+                let next = (position / SECTOR + 1) * SECTOR;
                 // ISO records cannot continue past zero padding in this block.
                 while position < next.min(end) {
                     let count = ((next.min(end) - position) as usize).min(bytes.len());
@@ -231,7 +293,7 @@ fn index<R: Read + Seek>(image: &mut Image<'_, R>) -> Result<Vec<Entry>, Command
             }
             if length < 34
                 || position + length as u64 > end
-                || position % block_size + length as u64 > block_size
+                || position % SECTOR + length as u64 > SECTOR
             {
                 return Err(invalid("Invalid ISO directory record bounds").into());
             }
@@ -244,8 +306,7 @@ fn index<R: Read + Seek>(image: &mut Image<'_, R>) -> Result<Vec<Entry>, Command
                 }
                 continue;
             }
-            let identifier = std::str::from_utf8(&entry.raw_name)
-                .map_err(|_| invalid("Invalid ISO file identifier encoding"))?;
+            let identifier = identifier(&entry.raw_name, joliet)?;
             // Match the existing ISO listing's version and trailing-dot handling.
             let display = identifier.split(';').next().unwrap_or("");
             let display = display.strip_suffix('.').unwrap_or(display);
@@ -553,6 +614,10 @@ fn extract_with_checkpoint(
 #[cfg(test)]
 #[path = "archive_iso_open/tests/udf.rs"]
 mod udf_tests;
+
+#[cfg(test)]
+#[path = "archive_iso_open/tests/joliet.rs"]
+mod joliet_tests;
 
 #[cfg(test)]
 mod tests {
