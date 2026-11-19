@@ -32,9 +32,9 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F64 | `platform/thumbnails.rs:87` | écarté |  | choix de sécurité de c37f7b7b : le décodeur suit l'extension (test `cache_and_source_do_not_decode_a_different_format_than_the_extension`) ; un fichier sans extension d'image n'est pas demandé en miniature |
 | F65 | `platform/thumbnails.rs:230` | Linux | | |
 | F66 | `platform/thread_priority.rs:17` | Linux | | |
-| F67 | `platform/viewer_media.rs:191` | à examiner | | |
-| F68 | `platform/network.rs:112, :214-216, :236 et :181` | à examiner | | |
-| F69 | `platform/network.rs:320` | à examiner | | |
+| F67 | `platform/viewer_media.rs:191` | corrigé | afc0480b | rapports du worker média Windows suivis du dernier seek appliqué (comme Linux) ; position ignorée tant que le seek demandé n'est pas appliqué ; workers à reconstruire ; à tester : glisser la barre de lecture |
+| F68 | `platform/network.rs:112, :214-216, :236 et :181` | corrigé (en partie) | 706942a9 | tampon aligné pour `NETRESOURCEW` ; serveurs connectés : `ERROR_MORE_DATA` agrandit le tampon, autre erreur journalisée ; reste : pas de délai ni d'annulation sur les partages d'un serveur (appel bloquant de WNet) |
+| F69 | `platform/network.rs:320` | corrigé | 706942a9 | nom d'utilisateur retiré du journal ; mot de passe du mappage effacé après usage (`Zeroizing`) ; `Debug` de `RemoteAnswer` sans identifiants ; le texte saisi dans l'interface reste une `String` (voir F152) |
 
 ### Archives, systèmes de fichiers, historique et opérations
 
