@@ -29,6 +29,8 @@ fn owned(raw: HANDLE) -> OwnedHandle {
     unsafe { OwnedHandle::from_raw_handle(raw.0) }
 }
 
+mod profiles;
+
 struct Profile {
     sid: PSID,
     name: Vec<u16>,
@@ -36,6 +38,7 @@ struct Profile {
 }
 impl Profile {
     fn create() -> io::Result<Self> {
+        profiles::sweep_once();
         let name = wide(format!("Oxyde.Archive.{}", uuid::Uuid::new_v4()));
         // A fresh moniker determines a unique package SID. The parent creates
         // the bootstrap store and removes it before the initial thread resumes.
