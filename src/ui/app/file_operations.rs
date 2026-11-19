@@ -171,9 +171,14 @@ impl OxydeApp {
         staging: Option<std::rc::Rc<oxyde_lib::platform::DropStaging>>,
         cx: &mut Context<Self>,
     ) {
-        if paths.is_empty() {
+        // Menus and keys already refuse these; drops reach here directly.
+        if paths.is_empty() || self.is_read_only_path(&target_dir) {
             return;
         }
+        // Nothing leaves a read-only location: a move from there is a copy.
+        let is_move = is_move && !paths.iter().any(|path| {
+            std::path::Path::new(path).parent().is_some_and(|parent| self.is_read_only_path(&parent.to_string_lossy()))
+        });
         let Some(handle) = self.handle.clone() else {
             return;
         };

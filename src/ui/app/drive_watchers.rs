@@ -35,6 +35,18 @@ impl OxydeApp {
             .is_some_and(fixed_archive);
         in_fixed_archive || on_read_only_volume(path, &self.state.drives, &self.read_only_volumes)
     }
+
+    /// Whether nothing can be written into the folder `path`, wherever it is
+    /// shown: its volume refuses writes, or it lies in an archive a tab browses
+    /// and Oxyde cannot rewrite.
+    pub(crate) fn is_read_only_path(&self, path: &str) -> bool {
+        let mut in_fixed_archive = false;
+        self.state.layout.visit_panes(&mut |pane| {
+            in_fixed_archive |= pane.tabs.iter().filter_map(|tab| tab.archive_root.as_deref())
+                .any(|root| fixed_archive(root) && path_on_drive(path, &root.to_string_lossy()));
+        });
+        in_fixed_archive || on_read_only_volume(path, &self.state.drives, &self.read_only_volumes)
+    }
 }
 
 /// The innermost drive holding `path`: under Linux, `/` holds every other mount.

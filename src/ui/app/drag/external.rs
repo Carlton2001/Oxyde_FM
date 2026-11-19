@@ -89,6 +89,14 @@ fn choose_effect(
     }
 }
 
+/// Nothing is dropped where nothing can be written: the source shows a refusal.
+fn drop_effect(paths: &[String], target: &str, modifiers: Modifiers, app: &OxydeApp) -> FileDropEffect {
+    if app.is_read_only_path(target) {
+        return FileDropEffect::None;
+    }
+    choose_effect(paths, target, modifiers, &app.external_drop)
+}
+
 pub(crate) trait FileDropTargetExt: InteractiveElement + Sized {
     fn external_file_drop(self, app: Entity<OxydeApp>, target: String) -> Self {
         self.on_drag_move::<ExternalPaths>({
@@ -100,8 +108,7 @@ pub(crate) trait FileDropTargetExt: InteractiveElement + Sized {
                 }
                 let paths = transfer_paths(event.drag(cx), &target);
                 app.update(cx, |app, cx| {
-                    let effect =
-                        choose_effect(&paths, &target, event.event.modifiers, &app.external_drop);
+                    let effect = drop_effect(&paths, &target, event.event.modifiers, app);
                     app.external_drop.effect = effect;
                     if effect != FileDropEffect::None {
                         app.drag_target_default_copy = effect == FileDropEffect::Copy;
@@ -115,12 +122,8 @@ pub(crate) trait FileDropTargetExt: InteractiveElement + Sized {
             let app = app.clone();
             let target = target.clone();
             move |style, data, window, cx| {
-                if choose_effect(
-                    &transfer_paths(data, &target),
-                    &target,
-                    window.modifiers(),
-                    &app.read(cx).external_drop,
-                ) == FileDropEffect::None
+                if drop_effect(&transfer_paths(data, &target), &target, window.modifiers(), app.read(cx))
+                    == FileDropEffect::None
                 {
                     style
                 } else {
@@ -131,7 +134,7 @@ pub(crate) trait FileDropTargetExt: InteractiveElement + Sized {
         .on_drop(move |data: &ExternalPaths, window, cx| {
             let paths = transfer_paths(data, &target);
             app.update(cx, |app, cx| {
-                let effect = choose_effect(&paths, &target, window.modifiers(), &app.external_drop);
+                let effect = drop_effect(&paths, &target, window.modifiers(), app);
                 app.external_drop.effect = effect;
                 if effect == FileDropEffect::None || app.external_drop.submitted {
                     return;
