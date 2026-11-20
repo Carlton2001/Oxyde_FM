@@ -69,9 +69,9 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F109 | `systems/history_delete.rs:83-90 et :216-226` | reporté |  | une annulation partielle (éléments prouvés restaurés, les autres laissés en corbeille) demande un compte rendu à l'interface, comme `retained` de F111 ; à faire avec ce rapport |
 | F110 | `systems/history_links.rs:33-45` | corrigé | 80049d55 | si l'identité du lien recréé ne peut être relevée, ce lien précis (même identité système) est retiré avant l'erreur ; sans test (échec de capture non reproductible) |
 | F112 | `systems/file_ops/delete.rs:148-169 et :297-307` | corrigé (en partie) | d681cab7 | suppression définitive : élément déjà disparu compté terminé ; reste : descendants d'un dossier sélectionné écartés par `collapse_roots` (corbeille Windows) toujours « non traités » |
-| F113 | `systems/file_ops/scheduler.rs:236-273` | à examiner | | |
-| F114 | `systems/folder_sizes/pools.rs:59-60` | à examiner | | |
-| F118 | `systems/history_move.rs:57` | à examiner | | |
+| F113 | `systems/file_ops/scheduler.rs:236-273` | corrigé (en partie) | e6f015bc | préfixes `\\?\C:` et `C:`, `\\?\UNC` et `\\serveur` réservés pareil ; test ; reste : lecteur mappé, jonction et nom d'extraction « X (1) » (demandent des E/S, or la réservation se fait sur le thread UI) |
+| F114 | `systems/folder_sizes/pools.rs:59-60` | corrigé | 087c4048 | seul un pool construit est mémorisé ; un échec de construction est retenté au calcul suivant |
+| F118 | `systems/history_move.rs:57` | corrigé | 174c8fb8 | la copie native renvoie la taille de la destination (handle créé), plus celle de la source |
 
 ### Modèles, utilitaires et noyau
 
