@@ -20,6 +20,8 @@ pub(crate) struct ArchivePasswordPrompt {
     pub archive: PathBuf,
     /// The previous password was refused.
     pub wrong: bool,
+    /// The typed password is longer than an archive password may be.
+    pub too_long: bool,
     pub input: Entity<TextInput>,
     /// Kept as typed: an input calling back cannot be read while it updates.
     pub value: String,
@@ -155,6 +157,7 @@ impl OxydeApp {
                 move |text, _, cx| change.update(cx, |this, _| {
                     if let Some(prompt) = &mut this.archive_password {
                         prompt.value = text.to_string();
+                        prompt.too_long = false;
                     }
                 }),
                 move |window, cx| submit.update(cx, |this, cx| this.answer_archive_password(false, window, cx)),
@@ -170,6 +173,7 @@ impl OxydeApp {
         self.archive_password = Some(ArchivePasswordPrompt {
             archive,
             wrong,
+            too_long: false,
             input,
             value: String::new(),
             checking: false,
@@ -199,6 +203,13 @@ impl OxydeApp {
             return;
         }
         let Some(prompt) = self.archive_password.as_mut().filter(|prompt| !prompt.checking) else { return };
+        // Refused before any check, as a wrong one is: the field shakes and says why.
+        if prompt.value.len() > archive_password::MAX_BYTES {
+            prompt.too_long = true;
+            prompt.shake_id = prompt.shake_id.wrapping_add(1);
+            cx.notify();
+            return;
+        }
         let Some(secret) = ArchiveSecret::new(std::mem::take(&mut prompt.value)) else { return };
         prompt.checking = true;
         static CHECKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
