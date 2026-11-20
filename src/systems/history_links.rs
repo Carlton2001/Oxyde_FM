@@ -33,7 +33,17 @@ pub(crate) fn redo(links: &[HistoryLink]) -> io::Result<()> {
         let result = HeldParents::new(&link.path).and_then(|parents| {
             let created =
                 platform().create_link(parents.directory(), &link.path, &link.target, false)?;
-            link.identity.refresh_from_file(&created)
+            link.identity.refresh_from_file(&created).map_err(|error| {
+                // The new link has no history proof: remove this exact link now,
+                // or Redo would next find its own leftover in the way.
+                match remove_created(&parents, link, &created) {
+                    Ok(()) => error,
+                    Err(rollback) => io::Error::new(
+                        error.kind(),
+                        format!("{error}; new link left in place: {rollback}"),
+                    ),
+                }
+            })
         });
         if let Err(error) = result {
             return Err(match remove(&links[..index]) {
@@ -46,6 +56,17 @@ pub(crate) fn redo(links: &[HistoryLink]) -> io::Result<()> {
         }
     }
     Ok(())
+}
+
+fn remove_created(parents: &HeldParents, link: &HistoryLink, created: &std::fs::File) -> io::Result<()> {
+    let expected = platform().file_identity(created)?;
+    platform().remove_link(parents.directory(), &link.path, &mut |current| {
+        if platform().file_identity(current)? == expected {
+            Ok(())
+        } else {
+            Err(super::file_copy::identity_changed(&link.path))
+        }
+    })
 }
 
 /// Remove recreated links that are still exactly the links Redo created.
