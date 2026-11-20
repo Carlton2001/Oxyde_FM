@@ -77,15 +77,15 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 
 | ID | Emplacement | État | Commits | Note |
 | --- | --- | --- | --- | --- |
-| F124 | `commands/sidebar.rs:25-31, :45 et :120` | à examiner | | |
-| F125 | `commands/sidebar.rs:63-79` | à examiner | | |
-| F126 | `commands/system.rs:9-19` | à examiner | | |
-| F127 | `commands/system.rs:33-53` | à examiner | | |
-| F130 | `models/error.rs:131-143 et autres` | à examiner | | |
-| F131 | `models/history.rs:142-148 et :170-183` | à examiner | | |
-| F136 | `utils/office_document.rs:109-139` | à examiner | | |
-| F138 | `utils/office_document.rs:252` | à examiner | | |
-| F140 | `utils/office_document.rs:248-274` | à examiner | | |
+| F124 | `commands/sidebar.rs:25-31, :45 et :120` | Linux |  | lien symbolique vers un dossier dans l'arbre (Unix) |
+| F125 | `commands/sidebar.rs:63-79` | corrigé (en partie) | 592da38b | repli et nouvelle demande l'annulaient déjà ; résultat écarté aussi si l'affichage des fichiers cachés ou système a changé ; lecteur déconnecté pendant le parcours non traité |
+| F126 | `commands/system.rs:9-19` | corrigé | 4db5c2eb | commande sans appelant supprimée (l'interface passe par `Platform::open_item`) |
+| F127 | `commands/system.rs:33-53` | corrigé (en partie) | 4db5c2eb | la purge tente icons et thumbnails puis rend la première erreur ; reste Linux : pas de pause des écritures de miniatures pendant la purge |
+| F130 | `models/error.rs:131-143 et autres` | reporté |  | refonte : remplacer les marqueurs texte par des erreurs typées de bout en bout (workers compris) |
+| F131 | `models/history.rs:142-148 et :170-183` | corrigé | 64e16632 | entrées expirées nettoyées sur un thread dédié (repli sur place si le thread ne démarre pas) ; synchrone dans les tests |
+| F136 | `utils/office_document.rs:109-139` | corrigé | 8a43400a | ligne ou rangée coupée à la place restante (frontière de caractère) ; paragraphe en cours borné au budget ; workers à reconstruire |
+| F138 | `utils/office_document.rs:252` | corrigé | 81a29de2 | `<w:tab>` avec position (définition de taquet) ignoré dans l'aperçu et la recherche ; test |
+| F140 | `utils/office_document.rs:248-274` | corrigé | d2cf6140 | contenu de `mc:Fallback` ignoré (aperçu et recherche) ; test |
 | F141 | `utils/office_document.rs:50-57 et office_document/sheets.rs:76-81` | à examiner | | |
 | F142 | `utils/office_preview.rs:21-24 et :41-47` | à examiner | | |
 | F143 | `utils/office_document/search.rs:67-71` | à examiner | | |
