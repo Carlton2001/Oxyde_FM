@@ -244,7 +244,13 @@ fn push_text(target: &mut String, text: &str) {
 
 fn parse(xml: &str, odf: Option<Odf>) -> String {
     let mut builder = Builder { tag: "p", ..Default::default() };
+    let mut fallback = 0usize;
     tags(xml, |text, name, tag, closing| {
+        // Word saves a text box twice, in `mc:Choice` and in `mc:Fallback` for older
+        // readers: only the first copy is text.
+        if fallback_tag(name, tag, closing, &mut fallback) || fallback > 0 {
+            return !builder.full();
+        }
         // Past the output budget the rest of a paragraph would only be cut.
         if builder.in_text && !text.is_empty() && builder.paragraph.len() < MAX_OUTPUT_BYTES {
             push_text(&mut builder.paragraph, text);
@@ -259,6 +265,19 @@ fn parse(xml: &str, odf: Option<Odf>) -> String {
         builder.end_paragraph();
     }
     builder.output
+}
+
+/// Tracks the depth of `mc:Fallback` elements; `true` for their own tags.
+pub(super) fn fallback_tag(name: &str, tag: &str, closing: bool, depth: &mut usize) -> bool {
+    if name != "mc:Fallback" {
+        return false;
+    }
+    if closing {
+        *depth = depth.saturating_sub(1);
+    } else if !tag.ends_with('/') {
+        *depth += 1;
+    }
+    true
 }
 
 /// `<w:tab/>` in a run is a tab; with a position it defines a paragraph's tab stop.

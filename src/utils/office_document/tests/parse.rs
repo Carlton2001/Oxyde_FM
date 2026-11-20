@@ -24,6 +24,12 @@ fn word_paragraphs_headings_lists_and_tables_keep_their_order() {
 }
 
 #[test]
+fn word_text_boxes_are_read_once_without_their_fallback_copy() {
+    let xml = r#"<w:document><w:body><w:p><w:r><mc:AlternateContent><mc:Choice Requires="wps"><w:drawing><w:txbxContent><w:p><w:r><w:t>box</w:t></w:r></w:p></w:txbxContent></w:drawing></mc:Choice><mc:Fallback><w:pict><w:txbxContent><w:p><w:r><w:t>box</w:t></w:r></w:p></w:txbxContent></w:pict></mc:Fallback></mc:AlternateContent></w:r></w:p></w:body></w:document>"#;
+    assert_eq!(parse(xml, None).matches("box").count(), 1);
+}
+
+#[test]
 fn word_tab_stop_definitions_add_no_space() {
     let xml = r#"<w:document><w:body><w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="720"/><w:tab w:val="right" w:pos="9000"/></w:tabs></w:pPr><w:r><w:t>a</w:t><w:tab/><w:t>b</w:t></w:r></w:p></w:body></w:document>"#;
     assert_eq!(parse(xml, None), "p\ta b\n");

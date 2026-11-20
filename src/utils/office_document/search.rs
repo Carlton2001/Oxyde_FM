@@ -179,7 +179,12 @@ fn paragraphs(
     let mut in_text = false;
     let mut notes = false;
     let mut odf_depth = 0usize;
+    let mut fallback = 0usize;
     visit(xml, checkpoint, |text, name, tag, closing| {
+        // The second copy of a Word text box, as in the Viewer.
+        if super::fallback_tag(name, tag, closing, &mut fallback) || fallback > 0 {
+            return Ok(());
+        }
         if in_text && !notes {
             output.append(text)?;
         }
