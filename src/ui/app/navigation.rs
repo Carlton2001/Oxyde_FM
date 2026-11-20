@@ -155,7 +155,11 @@ impl OxydeApp {
                     }
                     // A folder collapsed during the walk stays collapsed.
                     let Ok(tree) = result else { return; };
-                    if cancel.load(Ordering::Relaxed) {
+                    // Read with other visibility settings: newer nodes must not be replaced.
+                    if cancel.load(Ordering::Relaxed)
+                        || this.show_hidden != show_hidden
+                        || this.show_system != show_system
+                    {
                         return;
                     }
                     this.state.expanded_paths.insert(path);
