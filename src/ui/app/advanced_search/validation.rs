@@ -32,14 +32,15 @@ impl AdvancedSearchWindow {
                     )
                     .ok_or(())?;
                 use chrono::TimeZone;
+                // Midnight skipped by a clock change: the day starts an hour later.
                 let timestamp = chrono::Local
                     .from_local_datetime(&time)
                     .earliest()
+                    .or_else(|| chrono::Local.from_local_datetime(&(time + chrono::Duration::hours(1))).earliest())
                     .ok_or(())?
                     .timestamp_millis();
-                u64::try_from(timestamp + if index == 6 { 999 } else { 0 })
-                    .map(Some)
-                    .map_err(|_| ())
+                // Dates before 1970 bound nothing finer than the earliest representable time.
+                Ok(Some(u64::try_from(timestamp + if index == 6 { 999 } else { 0 }).unwrap_or(0)))
             };
             let o = AdvancedSearchOptions {
                 query: d.values[0].trim().into(),
@@ -77,7 +78,18 @@ impl AdvancedSearchWindow {
         let owner = self.owner.clone();
         cx.defer(move |cx| {
             let _ = owner.update(cx, |owner, cx| {
-                owner.navigate_to(&pane, path, cx);
+                // The pane closed since the dialog opened: search in the active one.
+                let pane = if owner.state.find_pane(&pane).is_some() {
+                    pane
+                } else {
+                    owner.state.active_pane_id.clone()
+                };
+                // The same search again runs again, as a refresh would.
+                if owner.state.find_pane(&pane).is_some_and(|found| found.active_tab().path == path) {
+                    owner.load_path(&pane, path, cx);
+                } else {
+                    owner.navigate_to(&pane, path, cx);
+                }
                 for handle in cx.windows() {
                     if let Some(handle) = handle.downcast::<OxydeApp>() {
                         cx.defer(move |cx| {
