@@ -483,6 +483,7 @@ pub enum Message {
     DuplicateFiles,
     DuplicateGroup,
     DuplicateFailed,
+    DuplicateUnreadable,
     DuplicateDisk,
 
     Undo,
@@ -1340,6 +1341,7 @@ impl Message {
             Self::DuplicateFiles => "duplicate-files",
             Self::DuplicateGroup => "duplicate-group",
             Self::DuplicateFailed => "duplicate-failed",
+            Self::DuplicateUnreadable => "duplicate-unreadable",
             Self::DuplicateDisk => "duplicate-disk",
 
             Self::Undo => "navigation-undo",
@@ -2367,6 +2369,7 @@ mod tests {
                 Message::DuplicateFiles,
                 Message::DuplicateGroup,
                 Message::DuplicateFailed,
+                Message::DuplicateUnreadable,
                 Message::DuplicateSizeRange,
                 Message::DuplicateDisk,
 

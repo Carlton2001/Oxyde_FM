@@ -23,6 +23,8 @@ pub struct DuplicatesProgress {
     pub current: usize,
     pub total: usize,
     pub message: String,
+    /// Files left out of the comparison because they could not be read.
+    pub unreadable: usize,
 }
 
 pub struct DuplicateSearchState(pub Arc<AtomicBool>, pub Arc<Mutex<DuplicatesProgress>>);
@@ -36,6 +38,7 @@ impl DuplicateSearchState {
                 current: 0,
                 total: 0,
                 message: String::new(),
+                unreadable: 0,
             })),
         )
     }
@@ -197,6 +200,17 @@ pub async fn find_duplicates(
             }
         };
         report(DuplicateStage::Scanning, 0, 0);
+        // A locked or vanished file is skipped, but the window says the result is incomplete.
+        let hash_or_skip = |result: std::io::Result<blake3::Hash>| match result {
+            Ok(hash) => Some(hash),
+            Err(_) if cancel_flag.load(Ordering::Relaxed) => None,
+            Err(_) => {
+                if let Ok(mut value) = progress.lock() {
+                    value.unreadable += 1;
+                }
+                None
+            }
+        };
         // 1. Collect all files and group by selected criteria (Parallel Scan)
         #[derive(PartialEq, Eq, Hash, Debug)]
         struct GroupKey {
@@ -361,7 +375,7 @@ pub async fn find_duplicates(
                 } else {
                     None
                 };
-                let hash = calculate_hash(&path, limit, false, &cancel_flag).ok()?;
+                let hash = hash_or_skip(calculate_hash(&path, limit, false, &cancel_flag))?;
                 let count = hashed.fetch_add(1, Ordering::Relaxed) + 1;
                 if count.is_multiple_of(20) {
                     report(DuplicateStage::Hashing, count, hash_total);
@@ -416,7 +430,7 @@ pub async fn find_duplicates(
                 } else {
                     None
                 };
-                let hash = calculate_hash(&path, limit, true, &cancel_flag).ok()?;
+                let hash = hash_or_skip(calculate_hash(&path, limit, true, &cancel_flag))?;
                 let count = hashed.fetch_add(1, Ordering::Relaxed) + 1;
                 if count.is_multiple_of(20) {
                     report(DuplicateStage::Hashing, count, hash_total);
@@ -466,7 +480,7 @@ pub async fn find_duplicates(
                     .or_insert_with(|| Arc::new(Mutex::new(())))
                     .clone();
                 let _guard = lock.lock().unwrap();
-                let hash = calculate_hash(&path, None, false, &cancel_flag).ok()?;
+                let hash = hash_or_skip(calculate_hash(&path, None, false, &cancel_flag))?;
                 let count = hashed.fetch_add(1, Ordering::Relaxed) + 1;
                 if count.is_multiple_of(20) {
                     report(DuplicateStage::Hashing, count, hash_total);

@@ -539,6 +539,10 @@ duplicate-files = { $file_count ->
     }
 duplicate-group = Groupe { $index }
 duplicate-failed = La recherche a échoué : { $error }
+duplicate-unreadable = { $count ->
+    [one] { $number } fichier n'a pas pu être lu et n'a pas été comparé.
+   *[other] { $number } fichiers n'ont pas pu être lus et n'ont pas été comparés.
+    }
 duplicate-size-range = { $min } – { $max }
 duplicate-disk = Disque #{ $disk }
 duplicate-go-to-folder = Cliquez pour aller au dossier

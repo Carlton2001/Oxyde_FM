@@ -819,6 +819,10 @@ duplicate-files = { $file_count ->
 duplicate-group = Grupo { $index }
 
 duplicate-failed = La búsqueda ha fallado: { $error }
+duplicate-unreadable = { $count ->
+    [one] No se pudo leer { $number } archivo y no se ha comparado.
+   *[other] No se pudieron leer { $number } archivos y no se han comparado.
+    }
 
 duplicate-size-range = { $min } – { $max }
 

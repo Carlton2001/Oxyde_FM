@@ -56,6 +56,18 @@ impl DuplicateWindow {
                     .child(cx.i18n().text_with_args(Message::DuplicateFailed, &a)),
             );
         }
+        let unreadable = self.cancellation.1.lock().map_or(0, |progress| progress.unreadable);
+        if !self.running && unreadable > 0 {
+            let mut a = FluentArgs::new();
+            a.set("count", unreadable);
+            a.set("number", crate::ui::format::format_number(unreadable as u64, cx.i18n().language()));
+            results = results.child(
+                div()
+                    .pt(CARD_GAP)
+                    .text_color(theme.text_muted)
+                    .child(cx.i18n().text_with_args(Message::DuplicateUnreadable, &a)),
+            );
+        }
         if self.filtered.is_empty() && !self.running && !self.filtering && self.error.is_none() {
             results = results.child(
                 div()

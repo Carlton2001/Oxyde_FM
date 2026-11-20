@@ -533,6 +533,10 @@ duplicate-files = { $file_count ->
     }
 duplicate-group = Group { $index }
 duplicate-failed = Search failed: { $error }
+duplicate-unreadable = { $count ->
+    [one] { $number } file could not be read and was not compared.
+   *[other] { $number } files could not be read and were not compared.
+    }
 duplicate-size-range = { $min } – { $max }
 duplicate-disk = Disk #{ $disk }
 duplicate-go-to-folder = Click to go to the folder
