@@ -1,21 +1,7 @@
 use crate::models::{CommandError, DriveInfo, QuickAccessItem};
-use crate::utils::path_security::validate_path;
-use log::info;
 
 pub fn get_drives(skip_hardware_info: Option<bool>) -> Vec<DriveInfo> {
     crate::platform::platform().volumes().list(skip_hardware_info.unwrap_or(false))
-}
-
-pub async fn open_item(path: String) -> Result<(), CommandError> {
-    let normalized_path = if path.starts_with("::{") || path.starts_with("?") {
-        path
-    } else {
-        validate_path(&path)?.to_string_lossy().into_owned()
-    };
-    info!("Opening item: {}", normalized_path);
-    crate::platform::platform()
-        .open_item(&normalized_path)
-        .map_err(CommandError::SystemError)
 }
 
 pub fn get_quick_access_items() -> Result<Vec<QuickAccessItem>, CommandError> {
@@ -41,16 +27,21 @@ pub fn clear_app_cache() -> Result<(), CommandError> {
     Ok(())
 }
 
+/// Both folders are tried: one held open (a thumbnail being written) must not
+/// leave the other in place while the interface has already dropped its images.
 fn clear_generated_cache(root: &std::path::Path) -> Result<(), CommandError> {
+    let mut first_error = None;
     for name in ["icons", "thumbnails"] {
         let path = root.join(name);
         match std::fs::remove_dir_all(&path) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(CommandError::IoError(error.to_string())),
+            Err(error) => {
+                first_error.get_or_insert(CommandError::IoError(format!("{}: {error}", path.display())));
+            }
         }
     }
-    Ok(())
+    first_error.map_or(Ok(()), Err)
 }
 
 pub async fn open_peek(path: String) -> Result<(), String> {
