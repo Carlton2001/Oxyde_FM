@@ -108,15 +108,18 @@ pub fn compare_natural(a: &str, b: &str) -> std::cmp::Ordering {
                         return a_total.cmp(&b_total);
                     }
                 } else {
-                    // Case-insensitive lexicographical comparison
-                    let ac_low = (ac as char).to_lowercase().next().unwrap_or(ac as char);
-                    let bc_low = (bc as char).to_lowercase().next().unwrap_or(bc as char);
+                    // Case-insensitive, by whole characters as the interface sorts:
+                    // a byte of `é` or of a Cyrillic letter is no character of its own.
+                    let ach = a[ai..].chars().next().unwrap_or(ac as char);
+                    let bch = b[bi..].chars().next().unwrap_or(bc as char);
+                    let ac_low = ach.to_lowercase().next().unwrap_or(ach);
+                    let bc_low = bch.to_lowercase().next().unwrap_or(bch);
 
                     if ac_low != bc_low {
                         return ac_low.cmp(&bc_low);
                     }
-                    ai += 1;
-                    bi += 1;
+                    ai += ach.len_utf8();
+                    bi += bch.len_utf8();
                 }
             }
             (None, None) => return std::cmp::Ordering::Equal,
@@ -130,6 +133,10 @@ pub fn compare_natural(a: &str, b: &str) -> std::cmp::Ordering {
 pub fn get_file_attributes(metadata: &Metadata, file_name: &str) -> (bool, bool, bool) {
     crate::platform::platform().file_attributes(metadata, file_name)
 }
+
+#[cfg(test)]
+#[path = "tests/natural.rs"]
+mod natural_tests;
 
 #[cfg(test)]
 mod tests {
