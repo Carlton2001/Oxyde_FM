@@ -145,7 +145,8 @@ impl FileOperationManager {
                         Ok(())
                     });
 
-                    let succeeded = res.is_ok();
+                    // An item already gone is deleted too: it counts as done, not left unprocessed.
+                    let succeeded = res.as_ref().map_or_else(|error| error.kind() == std::io::ErrorKind::NotFound, |_| true);
                     if let Err(e) = res {
                         if e.kind() == std::io::ErrorKind::Interrupted && cancel.load(Ordering::Relaxed) {
                             return Ok(());
