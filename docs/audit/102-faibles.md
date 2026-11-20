@@ -58,11 +58,11 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F87 | `systems/archive_workspace.rs:315, :333 et :352` | Linux |  | verrou de l'original sous Linux |
 | F88 | `utils/archive_listing_protocol.rs:242` | corrigé (en partie) | 03612ad2 | caractères de contrôle et de mise en forme bidirectionnelle retirés ; test ; les messages internes anglais restent non traduits |
 | F89 | `utils/archive_volumes.rs:58 et :44` | corrigé (en partie) | 9155c85a | ancien nommage poursuivi après .r99 par .s00 jusqu'à .z99 ; test ; reste : un double-clic sur film.r03 ne l'ouvre pas, car .rNN n'est pas reconnu comme archive (élargir la reconnaissance toucherait tous les fichiers .r00) |
-| F93 | `commands/duplicates.rs:341, :396 et :446` | à examiner | | |
-| F95 | `commands/ops/conflicts.rs:54` | à examiner | | |
-| F96 | `commands/ops/trash_listing.rs:53` | à examiner | | |
-| F98 | `commands/ops.rs:482` | à examiner | | |
-| F99 | `commands/image_handle_worker.rs:76-79` | à examiner | | |
+| F93 | `commands/duplicates.rs:341, :396 et :446` | corrigé | b6b798f4 | fichiers illisibles comptés pendant le hash ; la fenêtre des doublons affiche « N fichiers n'ont pas pu être lus » (5 langues) ; à tester avec un fichier verrouillé |
+| F95 | `commands/ops/conflicts.rs:54` | obsolète |  | déjà corrigé : `occupied` et la copie testent le nom par `symlink_metadata` (lien cassé compris) |
+| F96 | `commands/ops/trash_listing.rs:53` | obsolète |  | déjà corrigé : le repli lit l'élément par `symlink_metadata`, sans suivre le lien |
+| F98 | `commands/ops.rs:482` | reporté |  | rejeu hors du panneau des opérations, sans jeton d'annulation venu de l'interface ; même plomberie que M17 et M74 (annulation à faire passer par l'historique) |
+| F99 | `commands/image_handle_worker.rs:76-79` | corrigé (en partie) | 1f32bae5 | workers image, audio et Office : code de sortie 1 en cas d'échec (le parent vérifie le statut) ; sessions d'icônes et d'images inchangées (leur fin habituelle est la fermeture par le parent) ; workers à reconstruire |
 | F104 | `systems/file_ops/copy.rs:273` | à examiner | | |
 | F105 | `systems/file_ops/archive_transfer.rs:171` | à examiner | | |
 | F107 | `systems/file_ops/copy.rs:561` | corrigé | c2132fc8 | Windows : type de stockage demandé par dossier source (avec F53) ; Linux inchangé (un stat par fichier, sans requête de stockage) |
