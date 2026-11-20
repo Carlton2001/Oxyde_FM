@@ -137,6 +137,7 @@ impl AdvancedSearchWindow {
         let d = self.advanced_search.as_ref().unwrap();
         let theme = *cx.theme();
         let refresh = handle.clone();
+        let owner = self.owner.clone();
         let mut rows = div()
             .id("advanced-help-scroll")
             .h_full()
@@ -168,10 +169,20 @@ impl AdvancedSearchWindow {
                                 .size(rems(0.625))
                                 .text_color(theme.accent),
                         )
-                        .on_click(|_, _, cx| {
-                            cx.background_spawn(async {
-                                let _ = oxyde_lib::platform::platform()
-                                    .open_item("https://regex101.com");
+                        .on_click(move |_, _, cx| {
+                            let owner = owner.clone();
+                            // No browser to open the link: the main window says so.
+                            cx.spawn(async move |cx| {
+                                let opened = cx
+                                    .background_spawn(async {
+                                        oxyde_lib::platform::platform().open_item("https://regex101.com")
+                                    })
+                                    .await;
+                                if let Err(error) = opened {
+                                    let _ = owner.update(cx, |owner, cx| {
+                                        owner.toast(super::super::ToastKind::Error, Message::OpenItemFailed, error, 0, cx);
+                                    });
+                                }
                             })
                             .detach();
                         }),
