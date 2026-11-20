@@ -64,7 +64,7 @@ pub(crate) fn extract(
         if sheet && name == "xl/sharedStrings.xml" {
             shared = true;
         }
-        if (word && name == "word/document.xml")
+        if (word && word_text_part(&name))
             || (sheet && name.starts_with("xl/worksheets/") && name.ends_with(".xml"))
             || (slides && name.starts_with("ppt/slides/") && name.ends_with(".xml"))
             || (odf && name == "content.xml")
@@ -167,6 +167,16 @@ impl Text {
         self.line.clear();
         Ok(())
     }
+}
+
+/// The body and the other Word parts written in paragraphs: headers, footers,
+/// footnotes, endnotes and comments.
+fn word_text_part(name: &str) -> bool {
+    let Some(file) = name.strip_prefix("word/").filter(|file| !file.contains('/')) else {
+        return false;
+    };
+    matches!(file, "document.xml" | "footnotes.xml" | "endnotes.xml" | "comments.xml")
+        || ((file.starts_with("header") || file.starts_with("footer")) && file.ends_with(".xml"))
 }
 
 fn paragraphs(
