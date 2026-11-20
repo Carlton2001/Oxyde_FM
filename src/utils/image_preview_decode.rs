@@ -75,7 +75,15 @@ pub const MAX_NATURAL_SIDE: u32 = 32768;
 
 fn svg_natural_size(data: &[u8]) -> Option<(u32, u32)> {
     // usvg resolves units, viewBox and SVGZ; GPUI does not expose the parsed size.
-    let size = usvg::Tree::from_data(data, &usvg::Options::default()).ok()?.size();
+    // Only the size is read: no linked file is opened, no embedded image parsed.
+    let options = usvg::Options {
+        image_href_resolver: usvg::ImageHrefResolver {
+            resolve_data: Box::new(|_, _, _| None),
+            resolve_string: Box::new(|_, _| None),
+        },
+        ..usvg::Options::default()
+    };
+    let size = usvg::Tree::from_data(data, &options).ok()?.size();
     let side = |value: f32| (value.ceil() as u32).clamp(1, MAX_NATURAL_SIDE);
     Some((side(size.width()), side(size.height())))
 }
