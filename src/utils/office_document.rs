@@ -234,7 +234,7 @@ fn decode_entity(entity: &str) -> Option<char> {
     }
 }
 
-fn push_text(target: &mut String, text: &str) {
+pub(crate) fn push_text(target: &mut String, text: &str) {
     let mut rest = text;
     while let Some(index) = rest.find('&') {
         target.push_str(&rest[..index]);
