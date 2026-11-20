@@ -24,7 +24,8 @@ pub(crate) struct ArchivePasswordPrompt {
     pub too_long: bool,
     pub input: Entity<TextInput>,
     /// Kept as typed: an input calling back cannot be read while it updates.
-    pub value: String,
+    /// Each replaced copy is wiped.
+    pub value: zeroize::Zeroizing<String>,
     /// The typed password is being checked.
     pub checking: bool,
     /// The eye shows the typed characters.
@@ -156,7 +157,7 @@ impl OxydeApp {
                 String::new(),
                 move |text, _, cx| change.update(cx, |this, _| {
                     if let Some(prompt) = &mut this.archive_password {
-                        prompt.value = text.to_string();
+                        prompt.value = zeroize::Zeroizing::new(text.to_string());
                         prompt.too_long = false;
                     }
                 }),
@@ -175,7 +176,7 @@ impl OxydeApp {
             wrong,
             too_long: false,
             input,
-            value: String::new(),
+            value: Default::default(),
             checking: false,
             revealed: false,
             shake_id: 0,
@@ -210,7 +211,7 @@ impl OxydeApp {
             cx.notify();
             return;
         }
-        let Some(secret) = ArchiveSecret::new(std::mem::take(&mut prompt.value)) else { return };
+        let Some(secret) = ArchiveSecret::new(std::mem::take(&mut *prompt.value)) else { return };
         prompt.checking = true;
         static CHECKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
         let check = CHECKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
