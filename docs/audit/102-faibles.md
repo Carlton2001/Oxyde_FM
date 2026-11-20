@@ -63,12 +63,12 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F96 | `commands/ops/trash_listing.rs:53` | obsolète |  | déjà corrigé : le repli lit l'élément par `symlink_metadata`, sans suivre le lien |
 | F98 | `commands/ops.rs:482` | reporté |  | rejeu hors du panneau des opérations, sans jeton d'annulation venu de l'interface ; même plomberie que M17 et M74 (annulation à faire passer par l'historique) |
 | F99 | `commands/image_handle_worker.rs:76-79` | corrigé (en partie) | 1f32bae5 | workers image, audio et Office : code de sortie 1 en cas d'échec (le parent vérifie le statut) ; sessions d'icônes et d'images inchangées (leur fin habituelle est la fermeture par le parent) ; workers à reconstruire |
-| F104 | `systems/file_ops/copy.rs:273` | à examiner | | |
-| F105 | `systems/file_ops/archive_transfer.rs:171` | à examiner | | |
+| F104 | `systems/file_ops/copy.rs:273` | corrigé | 4c3775b7 | `same_entry` exige aussi le même dossier parent (identité) ; un lien physique ailleurs passe par la question de conflit ; test |
+| F105 | `systems/file_ops/archive_transfer.rs:171` | reporté |  | garder les effets d'une extraction vers un vrai dossier demande une entrée d'historique annulable mais non rétablissable (la source est une vue temporaire de l'archive) : à concevoir avec l'historique |
 | F107 | `systems/file_ops/copy.rs:561` | corrigé | c2132fc8 | Windows : type de stockage demandé par dossier source (avec F53) ; Linux inchangé (un stat par fichier, sans requête de stockage) |
-| F109 | `systems/history_delete.rs:83-90 et :216-226` | à examiner | | |
-| F110 | `systems/history_links.rs:33-45` | à examiner | | |
-| F112 | `systems/file_ops/delete.rs:148-169 et :297-307` | à examiner | | |
+| F109 | `systems/history_delete.rs:83-90 et :216-226` | reporté |  | une annulation partielle (éléments prouvés restaurés, les autres laissés en corbeille) demande un compte rendu à l'interface, comme `retained` de F111 ; à faire avec ce rapport |
+| F110 | `systems/history_links.rs:33-45` | corrigé | 80049d55 | si l'identité du lien recréé ne peut être relevée, ce lien précis (même identité système) est retiré avant l'erreur ; sans test (échec de capture non reproductible) |
+| F112 | `systems/file_ops/delete.rs:148-169 et :297-307` | corrigé (en partie) | d681cab7 | suppression définitive : élément déjà disparu compté terminé ; reste : descendants d'un dossier sélectionné écartés par `collapse_roots` (corbeille Windows) toujours « non traités » |
 | F113 | `systems/file_ops/scheduler.rs:236-273` | à examiner | | |
 | F114 | `systems/folder_sizes/pools.rs:59-60` | à examiner | | |
 | F118 | `systems/history_move.rs:57` | à examiner | | |
