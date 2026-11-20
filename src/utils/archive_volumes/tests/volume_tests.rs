@@ -52,3 +52,16 @@ fn set_names_lead_every_part_to_the_first_without_touching_files() {
     assert_eq!(rar_set_name(Path::new("/d/plain.rar")), None);
     assert_eq!(rar_set_name(Path::new("/d/a.part.rar")), None);
 }
+
+#[test]
+fn old_naming_continues_past_r99_with_s00() {
+    let folder = tempfile::tempdir().unwrap();
+    let mut names = vec!["big.rar".to_owned()];
+    names.extend((0..100).map(|number| format!("big.r{number:02}")));
+    names.extend(["big.s00".to_owned(), "big.s01".to_owned()]);
+    let names: Vec<&str> = names.iter().map(String::as_str).collect();
+    touch(folder.path(), &names);
+    let volumes = rar_volumes(&folder.path().join("big.rar"));
+    assert_eq!(volumes.len(), 103);
+    assert_eq!(volumes.last().unwrap(), &folder.path().join("big.s01"));
+}
