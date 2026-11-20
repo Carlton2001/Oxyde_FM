@@ -16,9 +16,10 @@ impl AdvancedSearchWindow {
     /// Opens the picker of date field `index` on its date, today when it holds none.
     pub(super) fn open_calendar(&mut self, index: usize) {
         let Some(d) = &mut self.advanced_search else { return };
-        let date = NaiveDate::parse_from_str(&d.values[index], "%Y-%m-%d")
+        let date = NaiveDate::parse_from_str(d.values[index].trim(), "%Y-%m-%d")
             .unwrap_or_else(|_| chrono::Local::now().date_naive());
         d.calendar = Some((index, date));
+        self.calendar_day = chrono::Datelike::day(&date);
     }
 
     /// The date under the keyboard moves by `days`, or by whole months.
@@ -29,7 +30,19 @@ impl AdvancedSearchWindow {
             m if m < 0 => date.checked_sub_months(chrono::Months::new(m.unsigned_abs())),
             m => date.checked_add_months(chrono::Months::new(m as u32)),
         };
-        *date = moved.unwrap_or(*date);
+        let moved = moved.unwrap_or(*date);
+        // By month, the day stays the one chosen last, kept within shorter months.
+        *date = if months == 0 {
+            moved
+        } else {
+            (chrono::Datelike::day(&moved)..=self.calendar_day)
+                .rev()
+                .find_map(|day| chrono::Datelike::with_day(&moved, day))
+                .unwrap_or(moved)
+        };
+        if months == 0 {
+            self.calendar_day = chrono::Datelike::day(&*date);
+        }
     }
 
     /// Writes `date` in its field and closes the picker.
@@ -38,6 +51,8 @@ impl AdvancedSearchWindow {
         let Some((index, _)) = d.calendar.take() else { return };
         let value = date.format("%Y-%m-%d").to_string();
         d.values[index] = value.clone();
+        // A picked date is valid: the refusal shown for the typed one no longer applies.
+        d.error = false;
         d.inputs[index].update(cx, |input, cx| input.set_content(value, cx));
         cx.notify();
     }
