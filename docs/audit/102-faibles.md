@@ -46,18 +46,18 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F74 | `commands/archive.rs:143` | obsolète |  | corrigé par d1302a19 : `list_archive_contents_checked` arrête le listage quand l'onglet l'abandonne |
 | F75 | `commands/archive_io_codec/parallel.rs:65` | corrigé | 5a8b8c25 | l'encodeur ZIP Turbo écrit par blocs de 1 Mio et s'arrête quand son travail est abandonné ; le `Drop` attend au plus un bloc ; workers à reconstruire |
 | F77 | `systems/archive_open_cache.rs:516` | écarté | | choix du lot 10 : une copie modifiée par l'utilisateur n'est jamais évincée (catégorie 3) |
-| F78 | `systems/archive_open_cache.rs:235` | à examiner | | |
+| F78 | `systems/archive_open_cache.rs:235` | corrigé (en partie) | 4d9bc4a9 | empreinte de la copie calculée avant de reprendre le verrou (l'entrée est privée jusqu'à son marqueur) ; l'éviction hache encore sous le verrou, nécessaire pour prouver l'entrée |
 | F79 | `commands/archive_rar.rs:145` | corrigé | 6e12a3dc | RAR solide : premier membre chiffré (les précédents sont décodés de toute façon) ; non solide : le plus petit |
 | F80 | `commands/archive_verify.rs:30, :51 et :65` | corrigé (en partie) | 9dfbbed4 | 7z : plus petit bloc chiffré AES ; ZIP : erreur de décompression (`InvalidData`) après le contrôle d'un octet comptée comme mauvais mot de passe (un membre endommagé aussi) ; reste : membre ZipCrypto stocké de plus de 1 Mio et RAR 4 stocké |
 | F81 | `commands/archive_rar.rs:39` | corrigé | 6e12a3dc | `ResourceLimit` de rars : « RAR archive exceeds Oxyde's processing limits » au lieu de « Invalid RAR archive » (texte anglais, la limite atteinte n'est pas typée par rars) |
 | F82 | `systems/archive_io.rs:171` | corrigé | 8d1d1cbb | documentation corrigée : `Operation::Decode::password` accepté pour ZIP, 7z et RAR |
-| F83 | `systems/archive_owned_tree.rs:13` | à examiner | | |
-| F84 | `utils/archive_codec.rs:85 et :87` | à examiner | | |
-| F85 | `utils/archive.rs:112` | à examiner | | |
-| F86 | `systems/archive_volumes.rs:27` | à examiner | | |
-| F87 | `systems/archive_workspace.rs:315, :333 et :352` | à examiner | | |
-| F88 | `utils/archive_listing_protocol.rs:242` | à examiner | | |
-| F89 | `utils/archive_volumes.rs:58 et :44` | à examiner | | |
+| F83 | `systems/archive_owned_tree.rs:13` | reporté |  | choix de conception : chaque entrée garde parent et suivi pour un nettoyage par identité (sans énumération) ; réduire les handles demande une refonte du nettoyage |
+| F84 | `utils/archive_codec.rs:85 et :87` | corrigé | 51b2ca4e | xz limité à 1 Gio de mémoire (erreur de limite claire) ; fenêtre zstd acceptée jusqu'à 2^30 (`--long` jusqu'à 30) ; documenté ; workers à reconstruire |
+| F85 | `utils/archive.rs:112` | corrigé | 30452bff | le menu du dossier lit `archive_root` de l'onglet, résolu par la navigation hors du thread UI ; plus d'accès disque au clic droit |
+| F86 | `systems/archive_volumes.rs:27` | Linux |  | réouverture des volumes par nom sous Linux |
+| F87 | `systems/archive_workspace.rs:315, :333 et :352` | Linux |  | verrou de l'original sous Linux |
+| F88 | `utils/archive_listing_protocol.rs:242` | corrigé (en partie) | 03612ad2 | caractères de contrôle et de mise en forme bidirectionnelle retirés ; test ; les messages internes anglais restent non traduits |
+| F89 | `utils/archive_volumes.rs:58 et :44` | corrigé (en partie) | 9155c85a | ancien nommage poursuivi après .r99 par .s00 jusqu'à .z99 ; test ; reste : un double-clic sur film.r03 ne l'ouvre pas, car .rNN n'est pas reconnu comme archive (élargir la reconnaissance toucherait tous les fichiers .r00) |
 | F93 | `commands/duplicates.rs:341, :396 et :446` | à examiner | | |
 | F95 | `commands/ops/conflicts.rs:54` | à examiner | | |
 | F96 | `commands/ops/trash_listing.rs:53` | à examiner | | |
