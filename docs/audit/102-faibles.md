@@ -86,12 +86,12 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F136 | `utils/office_document.rs:109-139` | corrigé | 8a43400a | ligne ou rangée coupée à la place restante (frontière de caractère) ; paragraphe en cours borné au budget ; workers à reconstruire |
 | F138 | `utils/office_document.rs:252` | corrigé | 81a29de2 | `<w:tab>` avec position (définition de taquet) ignoré dans l'aperçu et la recherche ; test |
 | F140 | `utils/office_document.rs:248-274` | corrigé | d2cf6140 | contenu de `mc:Fallback` ignoré (aperçu et recherche) ; test |
-| F141 | `utils/office_document.rs:50-57 et office_document/sheets.rs:76-81` | à examiner | | |
-| F142 | `utils/office_preview.rs:21-24 et :41-47` | à examiner | | |
-| F143 | `utils/office_document/search.rs:67-71` | à examiner | | |
-| F144 | `utils/mod.rs:109-110` | à examiner | | |
-| F146 | `utils/image_preview_decode.rs:76-81` | à examiner | | |
-| F148 | `chemins non UTF-8 : utils/path_text.rs:29, commands/sidebar.rs:35-142, ui/app/file_chooser/navbar.rs:150 et browse.rs:140, commands/ops.rs:332-335 et :515-517, platform/linux_impl.rs:588 et :825, platform/linux_preview.rs:84, platform/windows_pdf_session.rs:42` | à examiner | | |
+| F141 | `utils/office_document.rs:50-57 et office_document/sheets.rs:76-81` | corrigé | 6d307926 | aperçu Office : 256 Mio décompressés et 4096 parties au plus par document (la recherche avait déjà un budget cumulé) ; workers à reconstruire |
+| F142 | `utils/office_preview.rs:21-24 et :41-47` | corrigé | 5f3d2d77 | jusqu'à 64 Kio lus (plus une seule lecture de 8 Ko) ; nom de balise entier comparé (w:pPr n'est plus un paragraphe, a:p et text:h séparent les lignes) ; entités décodées ; test ; workers à reconstruire |
+| F143 | `utils/office_document/search.rs:67-71` | corrigé (en partie) | 413ecc3f | recherche Word : en-têtes, pieds de page, notes de bas de page et de fin, commentaires ; reste : graphiques et commentaires Excel |
+| F144 | `utils/mod.rs:109-110` | corrigé | 90dd560e | comparaison par caractère entier, en minuscule, comme l'interface ; test (accents, cyrillique) |
+| F146 | `utils/image_preview_decode.rs:76-81` | corrigé (en partie) | dad379b4 | l'analyse de taille ne résout plus aucune image liée ou intégrée ; le rendu GPUI garde ses propres options (seconde analyse) |
+| F148 | `chemins non UTF-8 : utils/path_text.rs:29, commands/sidebar.rs:35-142, ui/app/file_chooser/navbar.rs:150 et browse.rs:140, commands/ops.rs:332-335 et :515-517, platform/linux_impl.rs:588 et :825, platform/linux_preview.rs:84, platform/windows_pdf_session.rs:42` | reporté |  | refonte transversale : transporter `PathBuf`/`OsString` de bout en bout (sidebar, sélecteur, ops, aperçus) ; surtout Linux, sous Windows limité aux noms à surrogate isolé |
 
 ### Interface : application, fenêtres et composants
 
