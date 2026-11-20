@@ -97,15 +97,15 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 
 | ID | Emplacement | État | Commits | Note |
 | --- | --- | --- | --- | --- |
-| F149 | `ui/app/archive_password.rs:184` | à examiner | | |
-| F150 | `ui/app/archive_password.rs:104` | à examiner | | |
-| F151 | `ui/app/archive_password.rs:176 et :187` | à examiner | | |
-| F152 | `ui/app/archive_password.rs:143` | à examiner | | |
-| F153 | `ui/app/advanced_search/validation.rs:75` | à examiner | | |
-| F154 | `ui/app/advanced_search/validation.rs:26` | à examiner | | |
-| F155 | `ui/app/advanced_search/calendar.rs:36, :19 et :29-32` | à examiner | | |
-| F156 | `ui/app/advanced_search/help.rs:171` | à examiner | | |
-| F157 | `ui/app/clipboard.rs:18` | à examiner | | |
+| F149 | `ui/app/archive_password.rs:184` | corrigé | acea9f31 | trop long : le champ tremble et affiche « mot de passe trop long » ; vide : bouton Déverrouiller désactivé, Entrée sans effet (comportement voulu) |
+| F150 | `ui/app/archive_password.rs:104` | corrigé | 8475e952 | refus « mauvais mot de passe » ignoré pour l'oubli tant qu'un nouveau mot de passe de la même archive est vérifié |
+| F151 | `ui/app/archive_password.rs:176 et :187` | corrigé | 8475e952 | vérification identifiée ; annulée pendant la vérification, le mot de passe mémorisé est oublié (sauf vérification plus récente de la même archive) |
+| F152 | `ui/app/archive_password.rs:143` | corrigé (en partie) | 4d0f6231 | copies tenues par Oxyde (invite et compression) effacées à chaque remplacement ; reste : le contenu du champ texte et son historique d'annulation |
+| F153 | `ui/app/advanced_search/validation.rs:75` | corrigé | 2d1c5506 | volet fermé : recherche dans le volet actif ; même recherche : relancée comme une actualisation |
+| F154 | `ui/app/advanced_search/validation.rs:26` | corrigé | 2d1c5506 | minuit sauté : début du jour une heure plus tard ; avant 1970 : borne ramenée à 0 |
+| F155 | `ui/app/advanced_search/calendar.rs:36, :19 et :29-32` | corrigé | 5e10037e | choix d'une date efface l'erreur ; valeur tronquée à l'ouverture ; Page préc./suiv. revient au jour choisi (31 après février) |
+| F156 | `ui/app/advanced_search/help.rs:171` | corrigé | 316264e2 | échec d'ouverture signalé par une notification d'erreur dans la fenêtre principale |
+| F157 | `ui/app/clipboard.rs:18` | corrigé | 3dd2a8cb | nombre annoncé = nombre d'éléments ; l'ordre de copie suit déjà l'affichage (`actionable_selection` parcourt la liste filtrée) |
 | F158 | `ui/app/context_menus.rs:305 et :331` | à examiner | | |
 | F159 | `ui/app/context_menus.rs:206` | à examiner | | |
 | F160 | `ui/app/context_menu_render/native.rs:229` | à examiner | | |
