@@ -24,6 +24,7 @@ enum Odf {
 }
 
 pub fn document(file: std::fs::File, extension: &str) -> Result<String, CommandError> {
+    PARTS_READ.with(|read| read.set((0, 0)));
     let mut archive =
         zip::ZipArchive::new(file).map_err(|error| CommandError::Other(error.to_string()))?;
     match extension.to_ascii_lowercase().as_str() {
@@ -46,13 +47,26 @@ pub fn document(file: std::fs::File, extension: &str) -> Result<String, CommandE
 
 type Archive = zip::ZipArchive<std::fs::File>;
 
+/// Decompressed bytes and parts read for the current document: many highly
+/// compressible sheets or slides must not each get the whole part budget.
+const MAX_DOCUMENT_BYTES: u64 = 2 * MAX_XML_BYTES;
+const MAX_PARTS: usize = 4096;
+thread_local! {
+    static PARTS_READ: std::cell::Cell<(u64, usize)> = const { std::cell::Cell::new((0, 0)) };
+}
+
 /// One bounded, decompressed XML part.
 fn entry(archive: &mut Archive, name: &str) -> Result<String, CommandError> {
+    let (bytes, parts) = PARTS_READ.with(std::cell::Cell::get);
+    if bytes >= MAX_DOCUMENT_BYTES || parts >= MAX_PARTS {
+        return Err(CommandError::Other("Office document exceeds the text extraction budget".into()));
+    }
     let entry = archive
         .by_name(name)
         .map_err(|error| CommandError::Other(error.to_string()))?;
     let mut xml = Vec::new();
-    entry.take(MAX_XML_BYTES).read_to_end(&mut xml)?;
+    entry.take(MAX_XML_BYTES.min(MAX_DOCUMENT_BYTES - bytes)).read_to_end(&mut xml)?;
+    PARTS_READ.with(|read| read.set((bytes + xml.len() as u64, parts + 1)));
     Ok(String::from_utf8_lossy(&xml).into_owned())
 }
 
