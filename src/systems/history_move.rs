@@ -46,15 +46,24 @@ impl MoveIo for NativeIo {
         parent: &File,
         created: &mut dyn FnMut(&File) -> io::Result<()>,
     ) -> io::Result<u64> {
+        let mut output = None;
         platform().copy_file_with_progress(
             source,
             destination,
             Some(file),
             parent,
-            created,
+            &mut |copy| {
+                output = copy.try_clone().ok();
+                created(copy)
+            },
             &mut |_| Ok(()),
         )?;
-        Ok(file.metadata()?.len())
+        // The copy's own length: the source's would compare it with itself and
+        // leave a short copy to the hash check.
+        match output {
+            Some(output) => Ok(output.metadata()?.len()),
+            None => Ok(std::fs::symlink_metadata(destination)?.len()),
+        }
     }
     fn remove(&self, file: &File, path: &Path) -> io::Result<()> {
         platform().remove_open_file(file, path)
