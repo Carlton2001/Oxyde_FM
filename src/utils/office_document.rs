@@ -112,16 +112,25 @@ impl Builder {
         self.line(tag, text.trim_end());
     }
     fn line(&mut self, tag: &str, text: &str) {
-        if self.full() {
+        // Room for the tag, its tab and the newline: a longer line is cut, so the
+        // Viewer shows the start of a huge paragraph instead of failing.
+        let Some(room) = MAX_OUTPUT_BYTES
+            .checked_sub(self.output.len() + tag.len() + 2)
+            .filter(|room| *room > 0)
+        else {
             return;
+        };
+        let mut end = text.len().min(room);
+        while !text.is_char_boundary(end) {
+            end -= 1;
         }
-        let clean: String = text
-            .chars()
-            .map(|c| if c == '\n' || c == '\r' || c == '\t' { ' ' } else { c })
-            .collect();
         self.output.push_str(tag);
         self.output.push('\t');
-        self.output.push_str(&clean);
+        self.output.extend(
+            text[..end]
+                .chars()
+                .map(|c| if c == '\n' || c == '\r' || c == '\t' { ' ' } else { c }),
+        );
         self.output.push('\n');
     }
     fn cell(&mut self) {
@@ -141,11 +150,7 @@ impl Builder {
         }
         if cells.iter().any(|cell| !cell.is_empty()) {
             let row = cells.join(&CELL_SEPARATOR.to_string());
-            if !self.full() {
-                self.output.push_str("tr\t");
-                self.output.push_str(&row.replace(['\n', '\r', '\t'], " "));
-                self.output.push('\n');
-            }
+            self.line("tr", &row);
         }
     }
 }
@@ -240,7 +245,8 @@ fn push_text(target: &mut String, text: &str) {
 fn parse(xml: &str, odf: Option<Odf>) -> String {
     let mut builder = Builder { tag: "p", ..Default::default() };
     tags(xml, |text, name, tag, closing| {
-        if builder.in_text && !text.is_empty() {
+        // Past the output budget the rest of a paragraph would only be cut.
+        if builder.in_text && !text.is_empty() && builder.paragraph.len() < MAX_OUTPUT_BYTES {
             push_text(&mut builder.paragraph, text);
         }
         match odf {
