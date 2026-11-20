@@ -212,7 +212,10 @@ fn paragraphs(
             if name == paragraph && closing {
                 output.end_line()?;
             }
-            if matches!(name, "w:tab" | "w:br" | "w:cr" | "a:br") && !closing {
+            if matches!(name, "w:tab" | "w:br" | "w:cr" | "a:br")
+                && !closing
+                && !(name == "w:tab" && super::is_tab_stop(tag))
+            {
                 output.append(" ")?;
             }
         }

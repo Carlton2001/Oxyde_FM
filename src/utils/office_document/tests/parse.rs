@@ -24,6 +24,12 @@ fn word_paragraphs_headings_lists_and_tables_keep_their_order() {
 }
 
 #[test]
+fn word_tab_stop_definitions_add_no_space() {
+    let xml = r#"<w:document><w:body><w:p><w:pPr><w:tabs><w:tab w:val="left" w:pos="720"/><w:tab w:val="right" w:pos="9000"/></w:tabs></w:pPr><w:r><w:t>a</w:t><w:tab/><w:t>b</w:t></w:r></w:p></w:body></w:document>"#;
+    assert_eq!(parse(xml, None), "p\ta b\n");
+}
+
+#[test]
 fn odf_headings_and_paragraphs_ignore_markup_between_blocks() {
     let xml = r#"<office:document-content><office:automatic-styles><style:style/></office:automatic-styles>
 <office:body><office:text>

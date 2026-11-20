@@ -261,11 +261,17 @@ fn parse(xml: &str, odf: Option<Odf>) -> String {
     builder.output
 }
 
+/// `<w:tab/>` in a run is a tab; with a position it defines a paragraph's tab stop.
+pub(super) fn is_tab_stop(tag: &str) -> bool {
+    attribute(tag, "w:pos").is_some()
+}
+
 fn parse_word(builder: &mut Builder, name: &str, tag: &str, closing: bool) {
     match (name, closing) {
         ("w:t", false) => builder.in_text = !tag.ends_with('/'),
         ("w:t", true) => builder.in_text = false,
-        ("w:tab", false) => builder.paragraph.push(' '),
+        // A tab stop definition (`<w:tabs><w:tab w:pos=…/>`) is no tab character.
+        ("w:tab", false) if !is_tab_stop(tag) => builder.paragraph.push(' '),
         ("w:br" | "w:cr", false) => builder.paragraph.push(' '),
         ("w:pStyle", false) => {
             if let Some(tag) = attribute(tag, "w:val").and_then(heading) {
