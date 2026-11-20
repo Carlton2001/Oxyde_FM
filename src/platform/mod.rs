@@ -1307,6 +1307,20 @@ pub(crate) fn finish_archive_worker_shutdown() -> Result<(), String> {
     }
 }
 
+/// Ends a worker whose request failed with exit code 1: its parent checks the
+/// status and reports a failed worker, not an empty or truncated reply.
+pub(crate) fn finish_failed_worker_shutdown() -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        windows_impl::shutdown_with(1)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        platform().finish_process_shutdown()?;
+        std::process::exit(1)
+    }
+}
+
 /// Internal worker dispatch; never called by the UI to bypass process isolation.
 pub fn local_preview_worker_reply(mode: &str, path: &std::path::Path) -> crate::utils::preview_protocol::Reply {
     platform().decode_preview_worker(mode, path)
