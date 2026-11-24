@@ -27,3 +27,22 @@
             assert_eq!(decode_office_thumbnail(data).is_ok(), accepted);
         }
     }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn a_damaged_first_thumbnail_gives_way_to_the_next() {
+        use std::io::Write;
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("document.odt");
+        let mut archive = zip::ZipWriter::new(fs::File::create(&path).unwrap());
+        let options = zip::write::SimpleFileOptions::default();
+        archive.start_file("docProps/thumbnail.jpeg", options).unwrap();
+        archive.write_all(b"not a jpeg").unwrap();
+        archive.start_file("Thumbnails/thumbnail.png", options).unwrap();
+        let mut png = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(RgbaImage::new(4, 2)).write_to(&mut png, image::ImageFormat::Png).unwrap();
+        archive.write_all(png.get_ref()).unwrap();
+        archive.finish().unwrap();
+        let image = get_office_thumbnail_uncached(path.to_string_lossy().into_owned()).unwrap();
+        assert_eq!(image.width(), 2 * image.height());
+    }

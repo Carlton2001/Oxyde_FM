@@ -263,12 +263,17 @@ pub(super) fn get_office_thumbnail_uncached(path: String) -> Result<RgbaImage, C
     let file = fs::File::open(path).map_err(|error| CommandError::IoError(error.to_string()))?;
     let mut archive =
         zip::ZipArchive::new(file).map_err(|error| CommandError::Other(error.to_string()))?;
+    // A damaged first candidate gives way to the next.
+    let mut failure = CommandError::Other("No office thumbnail".to_string());
     for name in ["docProps/thumbnail.jpeg", "Thumbnails/thumbnail.png"] {
         if let Ok(entry) = archive.by_name(name) {
-            return decode_office_thumbnail(entry);
+            match decode_office_thumbnail(entry) {
+                Ok(image) => return Ok(image),
+                Err(error) => failure = error,
+            }
         }
     }
-    Err(CommandError::Other("No office thumbnail".to_string()))
+    Err(failure)
 }
 
 #[cfg(not(target_os = "windows"))]
