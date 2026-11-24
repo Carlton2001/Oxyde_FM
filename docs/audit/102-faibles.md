@@ -127,21 +127,21 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F182 | `ui/app/file_chooser/sidebar.rs:52-63` | corrigé | 25f840da | la fenêtre principale reçoit le volume monté même si le sélecteur s'est fermé |
 | F183 | `ui/app/file_chooser/tree.rs:93-103` | corrigé | 08c7c73c | un dépliage garde un listage plus récent (`or_insert`) ; le listage du dossier ouvert remplace un dépliage en cours ; copies initiales du suivi cédant aux listages récents |
 | F184 | `ui/app/instance.rs:13-15 et :25-31` | corrigé | 41f506d1 | comparaison par `paths_match` (préfixe étendu, séparateurs, casse) ; une racine sans parent s'ouvre elle-même ; chemins relatifs déjà rendus absolus par la plateforme ; test Linux à lancer |
-| F188 | `ui/app/navigation.rs:54-56` | à examiner | | |
-| F189 | `ui/app/navigation/breadcrumb.rs:129-154, :25-31 et :200-211` | à examiner | | |
-| F190 | `ui/app/navigation.rs:393-416` | à examiner | | |
-| F191 | `ui/app/layout/tabs.rs:645-651` | à examiner | | |
-| F192 | `ui/app/open_with.rs:229-235` | à examiner | | |
-| F193 | `ui/app/pinned_order.rs:76` | à examiner | | |
-| F194 | `ui/app/network.rs:466-468` | à examiner | | |
-| F195 | `ui/app/navigation.rs:700-716` | à examiner | | |
-| F196 | `ui/app/properties/interactions.rs:148-173` | à examiner | | |
-| F197 | `ui/app/properties/selection.rs:22-30` | à examiner | | |
-| F198 | `ui/app/properties/window.rs:30-38` | à examiner | | |
-| F200 | `ui/app/properties/interactions.rs:111` | à examiner | | |
-| F201 | `ui/app/rename.rs:252-255` | à examiner | | |
-| F202 | `ui/app/properties/permissions/save.rs:97-98 et properties/dialog.rs:52` | à examiner | | |
-| F203 | `ui/app/selection.rs:55 et :354` | à examiner | | |
+| F188 | `ui/app/navigation.rs:54-56` | corrigé | 3552f865 | niveau en cache sans le dossier suivant relu (fenêtre principale et sélecteur) |
+| F189 | `ui/app/navigation/breadcrumb.rs:129-154, :25-31 et :200-211` | corrigé | 38d65b2f | nom relatif résolu depuis le dossier affiché (sans . ni ..), « C: » seul vers sa racine ; vérification bornée à 10 s et une seule à la fois ; échec du chevron signalé par une notification ; comparaison de lecteur par `paths_match` ; tests |
+| F190 | `ui/app/navigation.rs:393-416` | corrigé | 8570cfff | fermer des onglets qui change l'onglet actif du volet termine l'édition du chemin |
+| F191 | `ui/app/layout/tabs.rs:645-651` | corrigé | c8812d96 | dossiers ajoutés du dernier au premier, chacun après l'onglet actif : ordre gardé |
+| F192 | `ui/app/open_with.rs:229-235` | corrigé | e8a36da4 | Entrée sans application choisie (chargement en cours) laisse l'invite ouverte |
+| F193 | `ui/app/pinned_order.rs:76` | corrigé | b5e47f92 | dossier enregistré mais absent gardé après celui qu'il suivait (64 au plus) ; test |
+| F194 | `ui/app/network.rs:466-468` | corrigé | 6d45ad67 | échec du relâchement journalisé, la déconnexion continue (comme l'éjection) |
+| F195 | `ui/app/navigation.rs:700-716` | corrigé | 896f2062 | au démarrage, seul l'onglet affiché de chaque volet est listé ; les autres au premier choix (déjà géré par `switch_tab`) |
+| F196 | `ui/app/properties/interactions.rs:148-173` | corrigé (en partie) | 73a1c5bb | fenêtre principale rafraîchie après l'écriture même si Propriétés s'est fermée ; l'écriture (un appel COM bref) reste non annulable |
+| F197 | `ui/app/properties/selection.rs:22-30` | corrigé | 3b88d752 | élément illisible compté à part (ligne « Illisibles », 5 langues), échec seulement si aucun n'est lisible ; droits non modifiables dans ce cas ; annulation silencieuse ; test |
+| F198 | `ui/app/properties/window.rs:30-38` | corrigé | 7ca9870c | Propriétés déjà ouvertes pour les mêmes éléments ramenées au premier plan |
+| F200 | `ui/app/properties/interactions.rs:111` | corrigé | d52b0615 | cible vide acceptée si elle l'était déjà (raccourci Shell) ; le moteur ne réécrit pas une cible inchangée |
+| F201 | `ui/app/rename.rs:252-255` | corrigé | ebfe8b0c | mot de passe porté par l'opération Compresser, retenu sous le nom publié après création ; une archive existante du même nom garde le sien ; la compression n'utilise plus le registre ; `remember_new` retiré ; workers à reconstruire |
+| F202 | `ui/app/properties/permissions/save.rs:97-98 et properties/dialog.rs:52` | corrigé | 3b5a519f | « modifié depuis l'ouverture » : droits relus, le prochain OK s'applique ; message effacé à la saisie ou au changement d'onglet ; Linux à tester |
+| F203 | `ui/app/selection.rs:55 et :354` | corrigé | 047b5295 | curseur dans un groupe replié : fichier affiché le plus proche dans le sens de la flèche ; test |
 | F207 | `ui/app/theme_window/draft.rs:251 et :233, theme_window.rs:17` | à examiner | | |
 | F209 | `ui/app/trash_settings/linux.rs:157 et :171` | Linux | | |
 | F210 | `ui/app/trash_settings/settings.rs:82, :168, :229 et :281` | à examiner | | |
