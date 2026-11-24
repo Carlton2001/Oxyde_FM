@@ -283,7 +283,8 @@ impl Call {
 
 /// Hands the call to the portal after Oxyde's, which answers it.
 async fn forward(method: &str, call: &Call, server: &ObjectServer, connection: &zbus::Connection) -> (u32, Options) {
-    let Some(backend) = super::fallback() else {
+    // Configuration files, perhaps on a slow home folder: off the bus executor.
+    let Some(backend) = blocking::unblock(super::fallback).await else {
         log::warn!("No portal after Oxyde chooses files for {method}");
         return (ENDED, Options::new());
     };
