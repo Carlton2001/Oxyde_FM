@@ -10,7 +10,9 @@ pub(crate) const DELAY: Duration = Duration::from_millis(250);
 #[derive(Default)]
 struct Intent {
     generation: u64,
-    target: Option<SharedString>,
+    /// The target waiting, and since when: a window closed during the delay never
+    /// runs its intent, which then only stands for its delay.
+    target: Option<(SharedString, std::time::Instant)>,
     /// The pointer's last position in the menu, for the direction of its next move.
     last: Option<Point<Pixels>>,
 }
@@ -26,11 +28,11 @@ pub(crate) fn intend(
 ) {
     let target = target.into();
     let intent = cx.default_global::<Intent>();
-    if intent.target.as_ref() == Some(&target) {
+    if intent.target.as_ref().is_some_and(|(waiting, since)| *waiting == target && since.elapsed() < DELAY * 2) {
         return;
     }
     intent.generation += 1;
-    intent.target = Some(target);
+    intent.target = Some((target, std::time::Instant::now()));
     let generation = intent.generation;
     window
         .spawn(cx, async move |cx| {
