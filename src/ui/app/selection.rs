@@ -57,7 +57,22 @@ impl OxydeApp {
             .and_then(|path| tab.filtered_files().iter().position(|file| &file.path == path))
             .or_else(|| file_rows.iter().flat_map(|row| row.iter()).copied()
                 .find(|index| tab.selected_paths.contains(&tab.filtered_files()[*index].path)));
-        let Some(index) = arrow_target(&file_rows, current, key) else { return; };
+        // The cursor in a folded group: the arrow goes to the nearest file shown in the
+        // way it points, not back to the first file.
+        let hidden = current.filter(|index| !file_rows.iter().any(|row| row.contains(index)));
+        let target = match hidden {
+            Some(hidden) => {
+                let unfolded = display_rows(tab.filtered_files(), tab.grouping(), &Default::default(), columns);
+                let order: Vec<usize> = unfolded.iter().filter_map(|row| match row {
+                    DisplayRow::Files(indices) => Some(indices.iter().copied()), _ => None,
+                }).flatten().collect();
+                let shown: std::collections::HashSet<usize> = file_rows.iter().flat_map(|row| row.iter()).copied().collect();
+                nearest_shown(&order, &shown, hidden, matches!(key, "down" | "right"))
+                    .or_else(|| arrow_target(&file_rows, None, key))
+            }
+            None => arrow_target(&file_rows, current, key),
+        };
+        let Some(index) = target else { return; };
         let path = tab.filtered_files()[index].path.clone();
         self.toggle_selection(&pane_id, path.clone(), false, shift, cx);
         if let Some(pane) = self.state.find_pane(&pane_id) {
@@ -350,6 +365,21 @@ pub(super) fn scroll_row_into_view(tab: &crate::ui::workspace::TabState, rows: &
 #[cfg(test)]
 #[path = "selection/tests/rectangle.rs"]
 mod rectangle_tests;
+
+/// The file shown nearest to `hidden` in display `order`, after it when `forward`.
+fn nearest_shown(order: &[usize], shown: &std::collections::HashSet<usize>, hidden: usize, forward: bool) -> Option<usize> {
+    let position = order.iter().position(|index| *index == hidden)?;
+    let found = if forward {
+        order[position + 1..].iter().find(|index| shown.contains(index))
+    } else {
+        order[..position].iter().rev().find(|index| shown.contains(index))
+    };
+    found.copied()
+}
+
+#[cfg(test)]
+#[path = "selection/tests/arrows.rs"]
+mod arrow_tests;
 
 pub(super) fn arrow_target(rows: &[&[usize]], current: Option<usize>, key: &str) -> Option<usize> {
     let Some((row, column)) = current.and_then(|index| rows.iter().enumerate()
