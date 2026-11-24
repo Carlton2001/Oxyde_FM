@@ -314,6 +314,11 @@ impl OxydeApp {
                     } else {
                         None
                     };
+                    // A file renamed or moved into the folder meanwhile (a finished
+                    // download) keeps its older creation time; the Shell creates anew.
+                    let invoked_at = std::time::SystemTime::now()
+                        .checked_sub(std::time::Duration::from_secs(2))
+                        .unwrap_or(std::time::UNIX_EPOCH);
                     oxyde_lib::platform::platform().execute_native_context_menu_item(
                         &path,
                         id,
@@ -325,6 +330,12 @@ impl OxydeApp {
                                 .map_err(|error| error.to_string())?
                                 .filter_map(Result::ok)
                                 .filter(|entry| !before.contains(&entry.path()))
+                                .filter(|entry| {
+                                    entry
+                                        .metadata()
+                                        .and_then(|metadata| metadata.created())
+                                        .map_or(true, |created| created >= invoked_at)
+                                })
                                 .collect();
                             if added.len() == 1 {
                                 let entry = &added[0];
