@@ -463,8 +463,12 @@ impl OxydeApp {
         cx.notify();
         cx.spawn(async move |this, cx| {
             let result = tokio::task::spawn_blocking(move || {
+                // A watch already gone (deleted folder) does not keep the drive busy: the
+                // disconnection goes on, as an ejection does.
                 for (watched_path, watcher) in watchers {
-                    watcher.release(&watched_path)?;
+                    if let Err(error) = watcher.release(&watched_path) {
+                        log::warn!("Releasing watcher on {watched_path} failed: {error}");
+                    }
                 }
                 if let Some((letter, path, user, password)) = request {
                     oxyde_lib::platform::platform()
