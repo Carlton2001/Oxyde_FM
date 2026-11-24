@@ -115,18 +115,18 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F168 | `ui/app/drive_watchers.rs:468-517` | corrigé | 4b1ffde3 | échec mémorisé : nouvel essai après 60 s ou au changement de la liste des lecteurs, avertissement journalisé une fois |
 | F169 | `ui/app/drive_watchers.rs:170-176` | corrigé | 9714a19f | volume monté ouvert dans le volet qui l'a demandé, ou le volet actif s'il a été fermé |
 | F170 | `ui/app/disk_images.rs:53-80 et :108-111` | corrigé | 4466ff1f | une seule sonde par image en cours ; montage refusé pendant un autre changement de volume : notification « déjà en cours » (5 langues) |
-| F173 | `ui/app/file_chooser/browse.rs:68 et :70` | à examiner | | |
-| F174 | `ui/app/file_chooser/location.rs:39` | à examiner | | |
-| F175 | `ui/app/file_chooser.rs:368 et :387` | à examiner | | |
-| F176 | `ui/app/file_chooser/create.rs:34, :53 et :63` | à examiner | | |
-| F177 | `ui/app/file_chooser/band.rs:49` | à examiner | | |
-| F178 | `ui/app/file_chooser/overwrite.rs:36` | à examiner | | |
-| F179 | `ui/app/file_chooser/save.rs:222-229 et :92-94` | à examiner | | |
-| F180 | `ui/app/file_operations.rs:268-278, :176-183 et :357` | à examiner | | |
-| F181 | `ui/app/file_chooser/setting.rs:13-18 et :46-49, ui/app/folder_handler.rs:13-18 et :54-57` | à examiner | | |
-| F182 | `ui/app/file_chooser/sidebar.rs:52-63` | à examiner | | |
-| F183 | `ui/app/file_chooser/tree.rs:93-103` | à examiner | | |
-| F184 | `ui/app/instance.rs:13-15 et :25-31` | à examiner | | |
+| F173 | `ui/app/file_chooser/browse.rs:68 et :70` | corrigé | 968960c3 | la navigation rend le clavier à la liste quand elle ferme le champ d'adresse ou le renommage ; demande de menu de chevron en cours oubliée |
+| F174 | `ui/app/file_chooser/location.rs:39` | corrigé | 22d860d4 | « D: » seul (ou « D:dossier ») part de la racine du lecteur ; test |
+| F175 | `ui/app/file_chooser.rs:368 et :387` | corrigé | 2cb1fc11 | dossier initial illisible (clé débranchée) : dossier suivant des candidats (dernier choisi, défaut, dossier personnel, racine), sans historique ; demande retirée : menus fermés et réglages mémorisés |
+| F176 | `ui/app/file_chooser/create.rs:34, :53 et :63` | corrigé | b95cefc9 | 10 000 noms essayés au plus ; création historisée même si le sélecteur s'est fermé ; dossier ajouté à la liste tout de suite, sans attendre un nouveau listage (frappes gardées) |
+| F177 | `ui/app/file_chooser/band.rs:49` | corrigé | 4d3c572b | rectangle abandonné à la navigation ; positions de départ au-delà d'une liste raccourcie ignorées |
+| F178 | `ui/app/file_chooser/overwrite.rs:36` | corrigé | 02d9ed27 | invite ouverte après la fermeture du sélecteur refermée aussitôt ; une invite précédente est fermée avant d'adopter la nouvelle |
+| F179 | `ui/app/file_chooser/save.rs:222-229 et :92-94` | corrigé | 7e1b2589 | droit d'écriture réel : ouverture en écriture des données sans rien écrire (Windows), `access(W_OK)` (Linux) ; résultat ignoré si le dossier a changé ; test |
+| F180 | `ui/app/file_operations.rs:268-278, :176-183 et :357` | corrigé | 669be063 | avis d'échec mis en file derrière celui affiché (8 au plus), avec leur reprise ; lien brisé gardé dans la reprise (`symlink_metadata`) |
+| F181 | `ui/app/file_chooser/setting.rs:13-18 et :46-49, ui/app/folder_handler.rs:13-18 et :54-57` | corrigé | 88050434 | compteur de changements : une lecture commencée avant un changement est ignorée ; échec interrompu : valeur relue au lieu de rétablie |
+| F182 | `ui/app/file_chooser/sidebar.rs:52-63` | corrigé | 25f840da | la fenêtre principale reçoit le volume monté même si le sélecteur s'est fermé |
+| F183 | `ui/app/file_chooser/tree.rs:93-103` | corrigé | 08c7c73c | un dépliage garde un listage plus récent (`or_insert`) ; le listage du dossier ouvert remplace un dépliage en cours ; copies initiales du suivi cédant aux listages récents |
+| F184 | `ui/app/instance.rs:13-15 et :25-31` | corrigé | 41f506d1 | comparaison par `paths_match` (préfixe étendu, séparateurs, casse) ; une racine sans parent s'ouvre elle-même ; chemins relatifs déjà rendus absolus par la plateforme ; test Linux à lancer |
 | F188 | `ui/app/navigation.rs:54-56` | à examiner | | |
 | F189 | `ui/app/navigation/breadcrumb.rs:129-154, :25-31 et :200-211` | à examiner | | |
 | F190 | `ui/app/navigation.rs:393-416` | à examiner | | |
