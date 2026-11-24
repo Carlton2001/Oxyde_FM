@@ -106,15 +106,15 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F155 | `ui/app/advanced_search/calendar.rs:36, :19 et :29-32` | corrigé | 5e10037e | choix d'une date efface l'erreur ; valeur tronquée à l'ouverture ; Page préc./suiv. revient au jour choisi (31 après février) |
 | F156 | `ui/app/advanced_search/help.rs:171` | corrigé | 316264e2 | échec d'ouverture signalé par une notification d'erreur dans la fenêtre principale |
 | F157 | `ui/app/clipboard.rs:18` | corrigé | 3dd2a8cb | nombre annoncé = nombre d'éléments ; l'ordre de copie suit déjà l'affichage (`actionable_selection` parcourt la liste filtrée) |
-| F158 | `ui/app/context_menus.rs:305 et :331` | à examiner | | |
-| F159 | `ui/app/context_menus.rs:206` | à examiner | | |
-| F160 | `ui/app/context_menu_render/native.rs:229` | à examiner | | |
-| F162 | `ui/app/drag.rs:548-559` | à examiner | | |
-| F163 | `ui/app/drag.rs:51-55` | à examiner | | |
-| F165 | `ui/app/duplicates/lifecycle.rs:126 et :129-130` | à examiner | | |
-| F168 | `ui/app/drive_watchers.rs:468-517` | à examiner | | |
-| F169 | `ui/app/drive_watchers.rs:170-176` | à examiner | | |
-| F170 | `ui/app/disk_images.rs:53-80 et :108-111` | à examiner | | |
+| F158 | `ui/app/context_menus.rs:305 et :331` | corrigé (en partie) | 61945ba7 | élément dont la date de création précède la commande « Nouveau » écarté (téléchargement terminé, fichier déplacé) ; reste : un fichier créé par un autre programme dans la même seconde |
+| F159 | `ui/app/context_menus.rs:206` | corrigé (en partie) | 19827850 | au bout de 10 s, « Le menu système ne répond pas » (5 langues) ; 4 chargements bloqués au plus, les suivants échouent aussitôt ; l'appel Shell bloqué ne peut être interrompu |
+| F160 | `ui/app/context_menu_render/native.rs:229` | corrigé | ebc8f2cf | sous-menu ouvert reconnu par son contenu entier (`WinMenuItem: PartialEq`), plus par l'identifiant du premier élément |
+| F162 | `ui/app/drag.rs:548-559` | corrigé | b66f2d88 | la minuterie appartient à `DragTabSwitch` : quitter l'onglet l'annule, un nouveau survol repart de 600 ms |
+| F163 | `ui/app/drag.rs:51-55` | corrigé | 79b93258 | lecteur ou partage comparé sans préfixe étendu ni casse ; volumes montés dans un dossier relevés en arrière-plan (`mount_points` Windows) ; tests ; à tester : glisser vers un disque monté dans un dossier (déplacer → copier) |
+| F165 | `ui/app/duplicates/lifecycle.rs:126 et :129-130` | corrigé | 57ab8d8e | disque le plus profond contenant le dossier (`path_within`) ; racine de lecteur déjà listée seulement cochée ; `file_chooser/sources.rs` n'existe plus |
+| F168 | `ui/app/drive_watchers.rs:468-517` | corrigé | 4b1ffde3 | échec mémorisé : nouvel essai après 60 s ou au changement de la liste des lecteurs, avertissement journalisé une fois |
+| F169 | `ui/app/drive_watchers.rs:170-176` | corrigé | 9714a19f | volume monté ouvert dans le volet qui l'a demandé, ou le volet actif s'il a été fermé |
+| F170 | `ui/app/disk_images.rs:53-80 et :108-111` | corrigé | 4466ff1f | une seule sonde par image en cours ; montage refusé pendant un autre changement de volume : notification « déjà en cours » (5 langues) |
 | F173 | `ui/app/file_chooser/browse.rs:68 et :70` | à examiner | | |
 | F174 | `ui/app/file_chooser/location.rs:39` | à examiner | | |
 | F175 | `ui/app/file_chooser.rs:368 et :387` | à examiner | | |
