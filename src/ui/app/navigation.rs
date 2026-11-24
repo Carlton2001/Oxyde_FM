@@ -439,7 +439,9 @@ impl OxydeApp {
     }
 
     pub fn close_tab(&mut self, pane_id: &str, tab_idx: usize, cx: &mut Context<Self>) {
+        let active = self.active_tab_id(pane_id);
         self.state.close_tab_id(pane_id, tab_idx);
+        self.end_breadcrumb_edit_if_tab_changed(pane_id, active, cx);
         let reload = self.state.find_pane(pane_id).and_then(|pane| {
             (pane.active_tab().files.is_empty()
                 && matches!(
@@ -469,10 +471,24 @@ impl OxydeApp {
     }
 
     pub fn close_other_tabs(&mut self, pane_id: &str, tab_idx: usize, cx: &mut Context<Self>) {
+        let active = self.active_tab_id(pane_id);
         self.state.close_other_tabs(pane_id, tab_idx);
+        self.end_breadcrumb_edit_if_tab_changed(pane_id, active, cx);
         self.reconcile_watchers(cx);
         self.save_workspace(cx);
         cx.notify();
+    }
+
+    fn active_tab_id(&self, pane_id: &str) -> Option<String> {
+        self.state.find_pane(pane_id).map(|pane| pane.active_tab().id.clone())
+    }
+
+    /// The path typed in a pane belongs to the tab it was typed in: another tab shown
+    /// there, or the pane gone, ends its edit.
+    fn end_breadcrumb_edit_if_tab_changed(&mut self, pane_id: &str, before: Option<String>, cx: &mut Context<Self>) {
+        if self.breadcrumb_pane_id.as_deref() == Some(pane_id) && self.active_tab_id(pane_id) != before {
+            self.cancel_breadcrumb_edit(cx);
+        }
     }
 
     pub fn load_path(&mut self, pane_id: &str, path: String, cx: &mut Context<Self>) {
