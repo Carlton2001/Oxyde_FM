@@ -188,13 +188,14 @@ impl OxydeApp {
         }).detach();
     }
 
-    /// Mounts a sidebar volume in the background, then opens it in the active pane.
+    /// Mounts a sidebar volume in the background, then opens it in the pane active at the request.
     pub(crate) fn mount_volume(&mut self, id: String, cx: &mut Context<Self>) {
         self.context_menus.clear();
         if self.mounting_volume.is_some() || self.ejecting_drive {
             return;
         }
         self.mounting_volume = Some(id.clone());
+        let origin_pane = self.state.active_pane_id.clone();
         cx.notify();
         cx.spawn(async move |this, cx| {
             use oxyde_lib::platform::VolumeError;
@@ -212,7 +213,12 @@ impl OxydeApp {
                         this.apply_drive_snapshot(drives, cx);
                         this.reconcile_watchers(cx);
                         this.sidebar_selected_path = Some(path.clone());
-                        let pane = this.state.active_pane_id.clone();
+                        // The pane that asked, unless it was closed meanwhile.
+                        let pane = if this.state.find_pane(&origin_pane).is_some() {
+                            origin_pane
+                        } else {
+                            this.state.active_pane_id.clone()
+                        };
                         this.navigate_to(&pane, path, cx);
                         None
                     }
