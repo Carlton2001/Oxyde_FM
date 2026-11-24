@@ -20,11 +20,11 @@ fn languages_and_variants_share_code_group_icon_and_text_preview() {
 fn syntect_inventory_is_covered_without_changing_plain_or_unknown_files() {
     for syntax in syntect::parsing::SyntaxSet::load_defaults_newlines().syntaxes() {
         if syntax.name == "Plain Text" { continue; }
-        for extension in &syntax.file_extensions {
+        for extension in syntax.file_extensions.iter().filter(|extension| !BINARY_CODE.contains(&extension.as_str())) {
             assert!(is_code_file(&format!("probe.{extension}")), "{}: {extension}", syntax.name);
         }
     }
-    for name in ["notes.txt", "data.bin", "report.pdf", "README", "file.unknown"] {
+    for name in ["notes.txt", "data.bin", "report.pdf", "README", "file.unknown", "config", "build", "module.wasm", "image.fasl"] {
         assert!(!is_code_file(name), "{name}");
     }
 }
