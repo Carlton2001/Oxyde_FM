@@ -7,11 +7,12 @@ use gpui::Context;
 impl OxydeApp {
     /// Reads the portal's configuration off the UI thread; the row stays hidden until known.
     pub(crate) fn refresh_file_chooser_setting(&mut self, cx: &mut Context<Self>) {
+        let revision = self.system_setting_revision;
         cx.spawn(async move |this, cx| {
             let state = tokio::task::spawn_blocking(|| oxyde_lib::platform::platform().chooses_files())
                 .await.ok().flatten();
             let _ = this.update(cx, |this, cx| {
-                if !this.changing_file_chooser && this.chooses_files != state {
+                if !this.changing_file_chooser && this.system_setting_revision == revision && this.chooses_files != state {
                     this.chooses_files = state;
                     cx.notify();
                 }
@@ -28,6 +29,7 @@ impl OxydeApp {
         let enabled = !current;
         self.chooses_files = Some(enabled);
         self.changing_file_chooser = true;
+        self.system_setting_revision = self.system_setting_revision.wrapping_add(1);
         cx.notify();
         cx.spawn(async move |this, cx| {
             let result = tokio::task::spawn_blocking(move || {
@@ -45,7 +47,9 @@ impl OxydeApp {
                     }
                     Err(error) => {
                         log::warn!("Changing the file chooser stopped: {error}");
-                        this.chooses_files = Some(current);
+                        // The change may have been made in part: read it again.
+                        this.chooses_files = None;
+                        this.refresh_file_chooser_setting(cx);
                         this.settings_error = Some(Message::SettingsFileChooserError);
                     }
                 }

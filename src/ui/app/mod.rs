@@ -326,6 +326,9 @@ pub struct OxydeApp {
     /// None until read, or without a portal.
     pub(crate) chooses_files: Option<bool>,
     pub(super) changing_file_chooser: bool,
+    /// Counts the changes of the folder handler and file chooser settings: a reading
+    /// begun before one is stale.
+    pub(super) system_setting_revision: u64,
     /// Folder watching and listings started, which a file chooser alone does not need.
     browsing: bool,
     pub(crate) peek_status: oxyde_lib::platform::PeekStatus,
@@ -573,6 +576,7 @@ impl OxydeApp {
             changing_folder_handler: false,
             chooses_files: None,
             changing_file_chooser: false,
+            system_setting_revision: 0,
             browsing: false,
             peek_status: Default::default(),
             _drive_refresh_task: None,
