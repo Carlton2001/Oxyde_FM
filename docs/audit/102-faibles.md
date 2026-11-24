@@ -170,14 +170,14 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F244 | `ui/components/tabs/scroll.rs:44` | corrigé | ccd7bc91 | une seule chaîne de défilement : marquée par sa dernière trame, relancée seulement si elle s'est éteinte (250 ms) |
 | F245 | `ui/components/settings/fallback.rs:18` | corrigé | 6eaa9db5 | voile de repli fermé par tout bouton, clic droit et milieu arrêtés |
 | F246 | `ui/components/top_bar/breadcrumb_menu.rs:57` | corrigé | 916ca930 | handle de défilement neuf à chaque ouverture d'un menu de chevron |
-| F248 | `ui/components/tooltip/hover.rs:176-186` | à examiner | | |
-| F249 | `ui/components/tooltip.rs:28-32` | à examiner | | |
-| F250 | `ui/components/tooltip/hover/native_window.rs:534-538` | à examiner | | |
-| F251 | `ui/audio_covers.rs:25-29` | à examiner | | |
-| F252 | `ui/date_groups/grouping.rs:178` | à examiner | | |
-| F253 | `ui/date_groups/grouping.rs:121-123 et :141-147` | à examiner | | |
-| F254 | `ui/format.rs:69-85, :155-160 et :12-25` | à examiner | | |
-| F255 | `ui/errors.rs:134-142 et :48, :91` | à examiner | | |
+| F248 | `ui/components/tooltip/hover.rs:176-186` | corrigé | d0235e5a | révision (taille, date, calcul) de l'élément survolé suivie au rendu : infobulle reconstruite à la trame suivante si elle change |
+| F249 | `ui/components/tooltip.rs:28-32` | corrigé | fb1b2318 | `invalidate_media_preview` retire aussi les assets GPUI (image, PDF) ; appelée quand l'élément survolé change |
+| F250 | `ui/components/tooltip/hover/native_window.rs:534-538` | corrigé | 28c8d630 | échec de surface native retenté après 30 s au lieu de définitif |
+| F251 | `ui/audio_covers.rs:25-29` | corrigé | 5eabed30 | pool plein de pochettes vivantes : la nouvelle reste non partagée, aucune partagée n'est retirée |
+| F252 | `ui/date_groups/grouping.rs:178` | corrigé | b0d5733f | sections datées par le jour qui clé le cache de présentation |
+| F253 | `ui/date_groups/grouping.rs:121-123 et :141-147` | corrigé | e9ae49e9 | date de modification absente en « date inconnue » comme les autres modes ; origine comparée sans casse ni séparateur sous Windows (`OriginPath`) ; tests |
+| F254 | `ui/format.rs:69-85, :155-160 et :12-25` | corrigé | 9030cb7d | signe refusé dans une taille ; année de moins de 4 chiffres refusée ; racine sans libellé gardant son séparateur ; tests |
+| F255 | `ui/errors.rs:134-142 et :48, :91` | corrigé | ac74dc41 | « existe déjà » reconnu par code système (80, 183, EEXIST) ; replis d'annulation et de rétablissement en texte, plus en Debug ; test |
 | F257 | `ui/elements/button.rs:75-93` | à examiner | | |
 | F258 | `ui/file_types.rs:6-273` | à examiner | | |
 | F259 | `ui/i18n.rs:1797` | à examiner | | |
