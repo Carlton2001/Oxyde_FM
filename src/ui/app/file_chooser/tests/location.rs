@@ -22,4 +22,6 @@ fn typed_windows_paths_keep_their_drive_or_share() {
     assert_eq!(typed_path(r"E:\Media\.\a.png", folder, home), Path::new(r"E:\Media\a.png"));
     assert_eq!(typed_path(r"~\Music", folder, home), Path::new(r"C:\Users\Me\Music"));
     assert_eq!(typed_path(r"\\server\share\a\..\b", folder, home), Path::new(r"\\server\share\b"));
+    assert_eq!(typed_path("E:", folder, home), Path::new(r"E:\"));
+    assert_eq!(typed_path("E:Media", folder, home), Path::new(r"E:\Media"));
 }
