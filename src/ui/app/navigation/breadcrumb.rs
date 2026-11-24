@@ -27,6 +27,8 @@ impl OxydeApp {
                         let (pane, path, index) = request;
                         let folders = entries.into_iter().filter(|entry| entry.is_dir).collect();
                         this.breadcrumb_menu = Some((pane, path, index, folders));
+                        // The handle is shared by every chevron: each menu opens at its top.
+                        this.breadcrumb_scroll = UniformListScrollHandle::new();
                     }
                     // A press that shows nothing says why.
                     Err(error) => {
