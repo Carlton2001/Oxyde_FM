@@ -59,14 +59,8 @@ fn listing_preserves_legacy_natural_ties_and_search_preserves_arrival_order() {
                 .iter()
                 .map(|file| file.name.as_str())
                 .collect::<Vec<_>>();
-            assert_eq!(
-                names,
-                if listed {
-                    ["É.txt", "é.txt"]
-                } else {
-                    ["é.txt", "É.txt"]
-                }
-            );
+            // Whole characters tie without case, so both keep their arrival order.
+            assert_eq!(names, ["é.txt", "É.txt"], "listed: {listed}");
         }
     }
 }
