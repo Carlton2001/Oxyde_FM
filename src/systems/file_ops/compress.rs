@@ -290,11 +290,11 @@ impl FileOperationManager {
             } else {
                 final_target
             };
-            // A protected archive published under another name keeps its password.
-            if display_path != requested {
-                if let Some(secret) = crate::utils::archive_password::for_archive(&requested) {
-                    crate::utils::archive_password::remember(&display_path, secret);
-                }
+            // The new archive opens with the password it was made with, under the name
+            // it was published as: another archive's password is never touched.
+            let secret = op.lock().unwrap().archive_password.clone();
+            if let Some(secret) = secret {
+                crate::utils::archive_password::remember(&display_path, secret);
             }
             op.lock().unwrap().destination = Some(display_path);
         }

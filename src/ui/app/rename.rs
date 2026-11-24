@@ -268,17 +268,14 @@ impl OxydeApp {
                 .parent()
                 .unwrap_or(std::path::Path::new(""))
                 .join(name);
-            // The encoder finds the new archive's password where a rebuild finds its own;
-            // an older archive's password must not protect a new unprotected one.
-            match secret {
-                Some(secret) => oxyde_lib::utils::archive_password::remember_new(&destination, secret),
-                None => oxyde_lib::utils::archive_password::forget(&destination),
-            }
+            // The password goes with the operation: an archive already at that name
+            // keeps its own remembered password, whatever happens to this one.
             self.cancel_rename(cx);
             self.queue_archive_operation(
                 oxyde_lib::systems::file_ops::FileOpType::Compress,
                 sources,
                 destination,
+                secret,
                 cx,
             );
             return;

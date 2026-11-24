@@ -79,9 +79,16 @@ pub(super) fn run(
     };
     let format = format(path)?;
     // A rebuild keeps the password the archive was opened with; a new archive gets
-    // the one its dialog remembered for it.
+    // the one its dialog gave the operation, never one remembered for another archive
+    // of that name.
     let password = matches!(format, crate::utils::archive_io_protocol::Format::Zip | crate::utils::archive_io_protocol::Format::SevenZip)
-        .then(|| op.lock().unwrap().archive_password.clone().or_else(|| crate::utils::archive_password::for_archive(path)))
+        .then(|| {
+            let (given, new) = {
+                let op = op.lock().unwrap();
+                (op.archive_password.clone(), op.op_type == super::file_ops::FileOpType::Compress)
+            };
+            if new { given } else { given.or_else(|| crate::utils::archive_password::for_archive(path)) }
+        })
         .flatten();
     let operation = Operation::Encode {
         format,
