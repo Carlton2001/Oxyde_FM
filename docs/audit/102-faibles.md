@@ -158,12 +158,12 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F226 | `ui/components/file_list/presentation.rs:72 et :174` | corrigé | c78eae78 | case de sélection, bouton des tailles et boutons de la barre d'outils passent par `activate_pane` (volet enregistré) |
 | F227 | `ui/components/file_list/details.rs:329, grid.rs:433` | corrigé | ffed80b2 | dépôt refusé (sans surlignage) sur la Corbeille, le Réseau et les résultats de recherche, glisser interne ou externe ; garde aussi dans `execute_file_drop` |
 | F228 | `ui/components/file_list/icons.rs:411` | corrigé | dae229fc | icônes propres à un fichier limitées à 1024 (la plus ancienne libérée, texture comprise) ; échec redemandé après 30 s quand l'icône est de nouveau affichée |
-| F233 | `ui/components/input.rs:129-132` | à examiner | | |
-| F235 | `ui/components/operations/items.rs:244 et :267` | à examiner | | |
-| F236 | `ui/components/operations/view.rs:163` | à examiner | | |
-| F237 | `ui/components/operations/items/icons.rs:14` | à examiner | | |
-| F238 | `ui/components/popup/hover.rs:38` | à examiner | | |
-| F239 | `ui/components/operations/list.rs:255` | à examiner | | |
+| F233 | `ui/components/input.rs:129-132` | corrigé | 495efebf | hors Windows, seuls sauts de ligne et tabulations sont retirés (et les espaces devant un chemin absolu) ; test ; Linux à tester |
+| F235 | `ui/components/operations/items.rs:244 et :267` | corrigé | ceee3a36 | éléments relus quand l'opération se termine (taille et type à destination) ; tri par état suivi chaque seconde pendant l'opération, sans remonter la liste |
+| F236 | `ui/components/operations/view.rs:163` | corrigé | 37849e84 | lecture des éléments arrêtée quand une autre opération est choisie ou la fenêtre fermée |
+| F237 | `ui/components/operations/items/icons.rs:14` | corrigé | 5c621583 | élément cherché à la destination planifiée par l'opération (nom « garder les deux » compris), repli sur dossier + nom ; nouvelle `FileOperation::item_destinations` |
+| F238 | `ui/components/popup/hover.rs:38` | corrigé | c201de1e | intention d'une fenêtre fermée pendant le délai expirée après deux délais : la même ligne rouvre son sous-menu |
+| F239 | `ui/components/operations/list.rs:255` | corrigé | 9b1cff40 | largeur glissée bornée par la fenêtre comme à l'affichage |
 | F241 | `ui/components/sidebar.rs:42` | à examiner | | |
 | F242 | `ui/components/sidebar/rail.rs:168 et :226-232` | à examiner | | |
 | F243 | `ui/components/sidebar/pinned.rs:62 et :143` | à examiner | | |
