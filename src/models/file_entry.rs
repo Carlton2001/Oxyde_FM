@@ -194,7 +194,7 @@ pub struct QuickAccessItem {
     pub path: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WinMenuItem {
     pub id: i32,
     pub label: String,
