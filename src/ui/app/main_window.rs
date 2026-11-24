@@ -64,8 +64,8 @@ pub(crate) fn remove_main_window(window: &mut Window, cx: &mut App) {
 }
 
 impl OxydeApp {
-    /// What only a browsing Oxyde needs: folder watching, the tabs' listings and the
-    /// update check. Once per process, before the first main window.
+    /// What only a browsing Oxyde needs: folder watching, the shown tabs' listings and
+    /// the update check. Once per process, before the first main window.
     pub(crate) fn start_browsing(&mut self, cx: &mut Context<Self>) {
         if self.browsing {
             return;
@@ -73,7 +73,9 @@ impl OxydeApp {
         self.browsing = true;
         self.start_watcher_task(cx);
         self.reconcile_watchers(cx);
-        self.refresh_all_tabs(cx);
+        // The tabs shown only: the others list when chosen, so that a remote one
+        // connects, or asks for credentials, only when the user goes there.
+        self.refresh_all(cx);
         self.schedule_update_check(cx);
     }
 }
