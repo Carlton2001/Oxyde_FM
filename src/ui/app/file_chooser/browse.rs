@@ -64,9 +64,11 @@ impl FileChooserWindow {
             }
         }
         // A new folder starts unfiltered, its path no longer edited.
+        self.refocus |= self.location.input.is_some() || self.rename.is_some();
         self.location.close();
         self.rename = None;
         self.crumbs.menu = None;
+        self.crumbs.request = None;
         self.crumbs.context = None;
         self.filter.clear();
         self.entries = Arc::new(Vec::new());

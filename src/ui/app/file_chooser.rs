@@ -156,6 +156,8 @@ pub struct FileChooserWindow {
     grab_offset: f32,
     /// The new folder whose name is edited in place.
     rename: Option<create::Rename>,
+    /// A navigation closed the field that held the focus: the entries take it back.
+    refocus: bool,
     /// The selection rectangle being drawn, and the entries' area it is measured in.
     band: Option<band::Band>,
     entries_bounds: std::rc::Rc<std::cell::Cell<Bounds<Pixels>>>,
@@ -460,6 +462,7 @@ impl FileChooserWindow {
             scrollbar_origins: Default::default(),
             grab_offset: 0.0,
             rename: None,
+            refocus: false,
             band: None,
             entries_bounds: Default::default(),
             scroll_drag: None,
