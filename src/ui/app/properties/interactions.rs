@@ -145,8 +145,15 @@ impl PropertiesWindow {
         window.focus(&dialog.ok_focus, cx);
         cx.notify();
         let window_handle = window.window_handle();
+        let owner = self.owner.clone();
         cx.spawn(async move |this, cx| {
             let result = oxyde_lib::commands::io::set_shortcut_info(path, info).await;
+            // Written: the main window shows it, even when this window closed meanwhile.
+            if result.is_ok() {
+                if let Some(owner) = owner.upgrade() {
+                    let _ = owner.update(cx, |owner, cx| owner.refresh_all(cx));
+                }
+            }
             let _ = window_handle.update(cx, |_, window, cx| {
                 this.update(cx, |this, cx| {
                     let Some(dialog) = this
@@ -158,12 +165,7 @@ impl PropertiesWindow {
                     };
                     dialog.saving = false;
                     match result {
-                        Ok(()) => {
-                            this.close_file_properties(window, cx);
-                            if let Some(owner) = this.owner.upgrade() {
-                                owner.update(cx, |owner, cx| owner.refresh_all(cx));
-                            }
-                        }
+                        Ok(()) => this.close_file_properties(window, cx),
                         Err(error) => dialog.error = Some(error.to_string()),
                     }
                     cx.notify();
