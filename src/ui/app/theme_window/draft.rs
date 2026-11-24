@@ -230,7 +230,7 @@ impl ThemeWindow {
     }
 
     /// Selecting a user theme opens its colors; any other selection closes the editor.
-    pub(super) fn choose(&mut self, choice: ThemeChoice, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn choose_now(&mut self, choice: ThemeChoice, window: &mut Window, cx: &mut Context<Self>) {
         self.discard_draft(cx);
         let custom = matches!(choice, ThemeChoice::Custom(_));
         let _ = self.owner.update(cx, |app, cx| app.set_theme(choice, cx));
