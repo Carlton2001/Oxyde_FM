@@ -1,12 +1,11 @@
 use crate::ui::app::FileDropTargetExt;
-use crate::ui::components::dropdown::{DropdownItem, IconName};
-use super::menus::{directory_context_menu, drive_context_menu, location_context_menu, pinned_context_menu};
+use super::menus::{directory_context_menu, location_context_menu, pinned_context_menu};
 use super::{pinned_display_name, sidebar_item_height};
 use crate::ui::paths::paths_match;
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, FileDragData, FileDragPreview, OxydeApp};
 use crate::ui::components::tooltip::Tooltip;
 use crate::ui::components::tooltip::hover::{HoverRegion, SharedTooltipExt};
-use crate::ui::i18n::{I18nContext, Message};
+use crate::ui::i18n::I18nContext;
 use crate::ui::theme::OxydeTheme;
 use crate::ui::workspace::SidebarItem;
 use gpui::prelude::*;
@@ -245,16 +244,7 @@ pub(super) fn render_sidebar_rows(
                         let h = h.clone(); let p = path.clone();
                         move |e, _, cx| {
                             let pos   = e.position;
-                            let mut items = drive_context_menu(cx.i18n(), h.clone(), p.clone(), actions, is_remote);
-                            // Where the drive unmounts itself (Linux), its Unmount already releases the image.
-                            let image = (!actions.unmount && !actions.eject).then(|| h.read(cx).mounted_image_for_drive(&p)).flatten();
-                            if let Some(image) = image {
-                                let image_handle = h.clone();
-                                let action = DropdownItem::new(cx.i18n().text(Message::UnmountDiskImage).to_string(), move |_, cx| {
-                                    image_handle.update(cx, |this, cx| this.change_disk_image(image.clone(), true, None, cx));
-                                }).icon(IconName::ExternalLink);
-                                items = super::super::context_menu_sections(super::super::network::insert_after_open(items, vec![action], cx.i18n()), cx.i18n());
-                            }
+                            let items = super::menus::drive_menu_with_image(cx, h.clone(), p.clone(), actions, is_remote);
                             h.update(cx, |this, cx| {
                                 this.sidebar_selected_path = Some(p.clone());
                                 this.context_menus.clear();

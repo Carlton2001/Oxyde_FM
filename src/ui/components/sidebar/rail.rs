@@ -132,6 +132,27 @@ pub(super) fn render_sidebar_rail(
             entries = entries.child(crate::ui::elements::separator::horizontal(theme.border).px_2());
             continue;
         }
+        // An unmounted volume mounts on a click, as its row in the tree.
+        if let SidebarItem::Volume { volume } = item {
+            let label = super::volume_row::name(volume, cx.i18n());
+            let id = volume.id.clone();
+            let mount = handle.clone();
+            entries = entries.child(
+                sidebar_button_with_tooltip(
+                    format!("rail-volume-{}", volume.id),
+                    Tooltip::text(label),
+                    Some(if volume.removable { "icons/usb.svg" } else { "icons/hard-drive.svg" }),
+                    None,
+                    theme,
+                    true,
+                    false,
+                    move |_, _, cx| mount.update(cx, |this, cx| this.mount_volume(id.clone(), cx)),
+                )
+                .w_full()
+                .h(RAIL_ROW),
+            );
+            continue;
+        }
         let (path, label, icon, text) = match item {
             SidebarItem::Drive { drive, .. } => (
                 drive.path.clone(),
@@ -220,8 +241,8 @@ pub(super) fn render_sidebar_rail(
             .on_mouse_down(MouseButton::Right, move |event, _, cx| {
                 cx.stop_propagation();
                 let items = match &menu_item {
-                    SidebarItem::Drive { drive, .. } => super::menus::drive_context_menu(
-                        cx.i18n(),
+                    SidebarItem::Drive { drive, .. } => super::menus::drive_menu_with_image(
+                        cx,
                         menu.clone(),
                         menu_path.clone(),
                         oxyde_lib::platform::platform().volumes().actions(drive),
