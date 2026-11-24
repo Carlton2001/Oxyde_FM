@@ -889,6 +889,7 @@ storage-unavailable = Impossible d’accéder aux données d’Oxyde. En mode po
 properties-selection-items = { $number } éléments
 properties-total-size = Taille totale
 properties-multiple-locations = Plusieurs emplacements
+properties-unreadable = Illisibles
 operations-affected-items = { $count ->
     [1] Élément concerné ({ $number })
    *[other] Éléments concernés ({ $number })

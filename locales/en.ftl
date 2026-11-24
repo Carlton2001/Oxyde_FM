@@ -883,6 +883,7 @@ storage-unavailable = Could not access Oxyde data. In portable mode, the data fo
 properties-selection-items = { $number } items
 properties-total-size = Total size
 properties-multiple-locations = Multiple locations
+properties-unreadable = Unreadable
 operations-affected-items = { $count ->
     [1] Item involved ({ $number })
    *[other] Items involved ({ $number })

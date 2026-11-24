@@ -324,6 +324,7 @@ pub enum Message {
     PropertiesSelectionItems,
     PropertiesTotalSize,
     PropertiesMultipleLocations,
+    PropertiesUnreadable,
     PropertiesDrive,
     PropertiesFileSystem,
 
@@ -1102,6 +1103,7 @@ impl Message {
             Self::PropertiesSelectionItems => "properties-selection-items",
             Self::PropertiesTotalSize => "properties-total-size",
             Self::PropertiesMultipleLocations => "properties-multiple-locations",
+            Self::PropertiesUnreadable => "properties-unreadable",
             Self::PropertiesDrive => "properties-drive",
             Self::PropertiesFileSystem => "properties-file-system",
             Self::Properties => "menu-properties",
@@ -2197,6 +2199,7 @@ mod tests {
                 Message::PropertiesSelectionItems,
                 Message::PropertiesTotalSize,
                 Message::PropertiesMultipleLocations,
+                Message::PropertiesUnreadable,
                 Message::PropertiesDrive,
                 Message::PropertiesFileSystem,
 

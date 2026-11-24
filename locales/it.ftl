@@ -1180,6 +1180,7 @@ storage-unavailable = Impossibile accedere ai dati di Oxyde. In modalità portat
 properties-selection-items = { $number } elementi
 properties-total-size = Dimensione totale
 properties-multiple-locations = Più posizioni
+properties-unreadable = Illeggibili
 operations-affected-items = { $count ->
     [1] Elemento interessato ({ $number })
    *[other] Elementi interessati ({ $number })

@@ -1,6 +1,7 @@
 use super::{PropertiesDialog, PropertiesWindow};
 use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::OxydeTheme;
+use gpui::prelude::*;
 use gpui::*;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -10,23 +11,34 @@ pub(super) struct SelectionProperties {
     pub folders: u64,
     pub size: u64,
     pub location: Option<String>,
+    /// Selected items whose properties could not be read, left out of the totals.
+    pub unreadable: u64,
 }
 
 /// The selection's summary, the folders to measure, and the permissions of its
-/// items when every one has them, with the levels proposed for enclosed items.
+/// items when every one has them, with the levels proposed for enclosed items. An item
+/// that cannot be read is counted apart; the inspection fails only when none can.
 fn inspect_selection(
     paths: &[String],
     cancellation: &AtomicBool,
 ) -> Result<(SelectionProperties, Vec<String>, Option<super::permissions::PermissionsEdit>), String> {
     let mut properties = Vec::with_capacity(paths.len());
+    let mut failure = None;
     for path in paths {
         if cancellation.load(Ordering::Relaxed) {
             return Err("Cancelled".into());
         }
-        properties.push(
-            oxyde_lib::commands::io::get_file_properties(path.clone())
-                .map_err(|error| error.to_string())?,
-        );
+        match oxyde_lib::commands::io::get_file_properties(path.clone()) {
+            Ok(item) => properties.push(item),
+            Err(error) => {
+                log::warn!("Cannot read the properties of {path}: {error}");
+                failure.get_or_insert_with(|| error.to_string());
+            }
+        }
+    }
+    let unreadable = (paths.len() - properties.len()) as u64;
+    if properties.is_empty() {
+        return Err(failure.unwrap_or_else(|| "Nothing selected".into()));
     }
     let location = properties
         .first()
@@ -46,6 +58,7 @@ fn inspect_selection(
         folders: 0,
         size: 0,
         location,
+        unreadable,
     };
     let mut directories = Vec::new();
     for p in &properties {
@@ -65,12 +78,19 @@ fn inspect_selection(
             summary.size = summary.size.saturating_add(p.size);
         }
     }
-    let permissions = properties
-        .iter()
+    // Permissions apply to the whole selection, never to the readable part alone.
+    let permissions = (unreadable == 0)
+        .then_some(&properties)
+        .into_iter()
+        .flatten()
         .map(|p| Some(super::permissions::Item { path: p.path.clone(), loaded: p.permissions.clone()? }))
         .collect::<Option<_>>()
         .and_then(|items| super::permissions::PermissionsEdit::new(items, oxyde_lib::commands::io::enclosed_defaults()));
     Ok((summary, directories, permissions))
+}
+
+fn flag_closed(cancellation: &AtomicBool) -> bool {
+    cancellation.load(Ordering::Relaxed)
 }
 
 impl PropertiesWindow {
@@ -90,6 +110,11 @@ impl PropertiesWindow {
                             dialog.permissions = permissions;
                             dialog.calculating = !directories.is_empty();
                             Some(directories)
+                        }
+                        // Closed or replaced: nothing to report.
+                        _ if flag_closed(&cancellation) => {
+                            dialog.calculating = false;
+                            None
                         }
                         other => {
                             dialog.calculating = false;
@@ -203,7 +228,11 @@ pub(super) fn render(
             .child(row(
                 cx.i18n().text(Message::PropertiesContains),
                 cx.i18n().text_with_args(Message::PropertiesCounts, &args).to_string(),
-            ));
+            ))
+            .when(summary.unreadable > 0, |card| card.child(row(
+                cx.i18n().text(Message::PropertiesUnreadable),
+                crate::ui::format::format_number(summary.unreadable, cx.i18n().language()),
+            )));
         body = body.child(super::section::section(
             cx.i18n().text(Message::PropertiesSectionDetails),
             "icons/info.svg",

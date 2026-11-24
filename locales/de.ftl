@@ -1180,6 +1180,7 @@ storage-unavailable = Auf die Oxyde-Daten konnte nicht zugegriffen werden. Im po
 properties-selection-items = { $number } Elemente
 properties-total-size = Gesamtgröße
 properties-multiple-locations = Mehrere Speicherorte
+properties-unreadable = Nicht lesbar
 operations-affected-items = { $count ->
     [1] Betroffenes Element ({ $number })
    *[other] Betroffene Elemente ({ $number })
