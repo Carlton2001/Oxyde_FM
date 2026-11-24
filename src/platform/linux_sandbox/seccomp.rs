@@ -32,6 +32,8 @@ const EPERM: u32 = 1;
 const ENOSYS: u32 = 38;
 const EAFNOSUPPORT: u32 = 97;
 const AF_UNIX: u64 = 1;
+/// A new user namespace, which `unshare` and `setns` already cannot give.
+const CLONE_NEWUSER: u64 = 0x1000_0000;
 /// Typing into, or reprogramming, a terminal the worker shares.
 const TERMINAL_INJECTION: [u64; 2] = [0x5412, 0x541c];
 
@@ -124,6 +126,10 @@ fn rules(library: &Seccomp, context: *mut c_void, local_sockets: bool) -> io::Re
     } else {
         add("socket", errno(EAFNOSUPPORT), &[])?;
     }
+    // clone3 passes its flags in memory, which a filter cannot read: as Flatpak does, it
+    // is unknown, and the C library falls back to clone, whose flags it can.
+    add("clone", errno(EPERM), &[Comparison { argument: 0, operation: MASKED_EQUAL, first: CLONE_NEWUSER, second: CLONE_NEWUSER }])?;
+    add("clone3", errno(ENOSYS), &[])?;
     for request in TERMINAL_INJECTION {
         add("ioctl", errno(EPERM), &[Comparison { argument: 1, operation: MASKED_EQUAL, first: 0xffff_ffff, second: request }])?;
     }

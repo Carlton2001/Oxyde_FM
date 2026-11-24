@@ -136,3 +136,22 @@ fn the_probe_runs_a_program_in_the_sandbox_workers_receive() {
         assert_eq!(available(), worked);
     }
 }
+
+#[test]
+fn without_bubblewrap_a_codec_cannot_clone_into_a_user_namespace() {
+    if seccomp::filter_without_sockets().is_none() || !Path::new("/usr/bin/python3").exists() {
+        eprintln!("skipped: libseccomp or Python is missing");
+        return;
+    }
+    // CLONE_FS makes the kernel refuse the call with EINVAL: without the filter, no process
+    // starts either. clone3 is 435 on both architectures.
+    let script = "python3 -I -c '
+import ctypes, errno, os
+libc = ctypes.CDLL(None, use_errno=True)
+clone = {\"x86_64\": 56, \"aarch64\": 220}[os.uname().machine]
+assert libc.syscall(clone, 0x10000000 | 0x200, 0, 0, 0, 0) == -1 and ctypes.get_errno() == errno.EPERM, ctypes.get_errno()
+assert libc.syscall(435, 0, 0) == -1 and ctypes.get_errno() == errno.ENOSYS, ctypes.get_errno()
+print(\"refused\")'";
+    let output = run_without_bubblewrap(Profile::Codec, None, script);
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "refused\n", "{output:?}");
+}
