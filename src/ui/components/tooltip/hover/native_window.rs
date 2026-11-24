@@ -13,10 +13,21 @@ struct NativeWindows {
     windows: HashMap<WindowId, (WindowHandle<NativeTooltip>, Task<()>)>,
     pending: HashSet<WindowId>,
     ordinary: HashMap<WindowId, AnyView>,
-    failed: HashSet<WindowId>,
+    /// Windows whose surface could not be created, and when: they draw their tooltips
+    /// themselves for a while, then try again, as a failure may pass.
+    failed: HashMap<WindowId, std::time::Instant>,
     cleanup: Option<Subscription>,
 }
 impl Global for NativeWindows {}
+
+/// How long a window without a surface waits before trying to create one again.
+const SURFACE_RETRY: Duration = Duration::from_secs(30);
+
+impl NativeWindows {
+    fn has_failed(&self, id: &WindowId) -> bool {
+        self.failed.get(id).is_some_and(|since| since.elapsed() < SURFACE_RETRY)
+    }
+}
 
 pub(in crate::ui::components::tooltip) fn is_surface(window: &Window, cx: &App) -> bool {
     let id = window.window_handle().window_id();
@@ -33,7 +44,7 @@ pub(in crate::ui::components::tooltip) fn proxy(view: AnyView, parent: AnyWindow
     let id = parent.window_id();
     #[cfg(not(target_os = "windows"))]
     if !super::anchored::available() { return view; }
-    if cx.default_global::<NativeWindows>().failed.contains(&id) { return view; }
+    if cx.default_global::<NativeWindows>().has_failed(&id) { return view; }
     let lease = view.entity_id();
     cx.new(|cx| {
         cx.on_release(move |_, cx| {
@@ -51,7 +62,7 @@ struct TooltipProxy { view: AnyView }
 impl Render for TooltipProxy {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let id = Window::window_handle(window).window_id();
-        if cx.default_global::<NativeWindows>().failed.contains(&id) {
+        if cx.default_global::<NativeWindows>().has_failed(&id) {
             return self.view.clone().into_any_element();
         }
         let view = self.view.clone();
@@ -407,13 +418,13 @@ pub(super) fn present(view: &AnyView, parent: &mut Window, cx: &mut App) -> bool
     // Opening means a new surface here, not showing a hidden one.
     #[cfg(not(target_os = "windows"))]
     if !family_active(parent, cx) || !parent.is_window_hovered() {
-        return !cx.default_global::<NativeWindows>().failed.contains(&Window::window_handle(parent).window_id());
+        return !cx.default_global::<NativeWindows>().has_failed(&Window::window_handle(parent).window_id());
     }
     #[cfg(not(target_os = "windows"))]
     let (fixed, pointer) = (fixed_bounds(view, cx), parent.mouse_position());
     let id = Window::window_handle(parent).window_id();
     let state = cx.default_global::<NativeWindows>();
-    if state.failed.contains(&id) {
+    if state.has_failed(&id) {
         return false;
     }
     if state.windows.contains_key(&id) {
@@ -533,7 +544,7 @@ pub(super) fn present(view: &AnyView, parent: &mut Window, cx: &mut App) -> bool
             }
             Err(error) => {
                 log::warn!("Native hover preview unavailable: {error}");
-                cx.default_global::<NativeWindows>().failed.insert(id);
+                cx.default_global::<NativeWindows>().failed.insert(id, std::time::Instant::now());
                 let _ = parent_handle.update(cx, |_, window, _| window.refresh());
             }
         }
