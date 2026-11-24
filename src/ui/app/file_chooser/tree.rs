@@ -150,7 +150,10 @@ impl FileChooserWindow {
             let mut loaded = Vec::new();
             for (index, target) in targets.iter().enumerate() {
                 // The folder's own parent is listed again, for a folder just made there.
-                let known = if index + 1 < targets.len() { cached.get(&current).cloned() } else { None };
+                // A cached level that lacks the next folder lists again: it was made since.
+                let known = if index + 1 < targets.len() {
+                    cached.get(&current).filter(|nodes| nodes.iter().any(|node| paths_match(&node.path, target))).cloned()
+                } else { None };
                 let fresh = known.is_none();
                 let nodes = match known {
                     Some(nodes) => nodes,

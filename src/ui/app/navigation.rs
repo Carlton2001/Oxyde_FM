@@ -52,9 +52,10 @@ impl OxydeApp {
             let mut current = root;
             let mut loaded = Vec::new();
             for (index, target) in targets.iter().enumerate() {
-                // Refresh the immediate parent so newly created folders can be revealed.
+                // Refresh the immediate parent so newly created folders can be revealed,
+                // and any cached level that lacks the next folder: it was made since.
                 let nodes = if index + 1 < targets.len() {
-                    cached.get(&current).cloned()
+                    cached.get(&current).filter(|nodes| nodes.iter().any(|node| paths_match(&node.path, target))).cloned()
                 } else { None };
                 let nodes = match nodes {
                     Some(nodes) => nodes,
