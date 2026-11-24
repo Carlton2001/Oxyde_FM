@@ -46,3 +46,24 @@ fn a_new_tab_takes_the_sort_of_the_tab_it_opens_from() {
     assert_eq!(open_from("/home", SortColumn::OriginalLocation), (SortColumn::Name, SortDirection::Ascending));
     assert_eq!(open_from("/home", SortColumn::Location), (SortColumn::Name, SortDirection::Ascending));
 }
+
+#[test]
+fn closing_the_last_explorer_beside_the_viewer_keeps_an_explorer_active() {
+    let mut state = WorkspaceState::new();
+    let explorer = state.active_pane_id.clone();
+    state.add_viewer().unwrap();
+    let path = state.find_pane(&explorer).unwrap().tabs[0].path.clone();
+    state.close_tab_id(&explorer, 0);
+    let pane = state.find_pane(&explorer).expect("the explorer stays");
+    assert_eq!(state.active_pane_id, explorer);
+    assert_eq!(pane.tabs.len(), 1);
+    assert_eq!(pane.tabs[0].path, path);
+    assert!(!state.is_viewer_pane(&state.active_pane_id));
+}
+
+#[test]
+fn a_new_workspace_reads_no_volume_or_quick_access() {
+    let state = WorkspaceState::new();
+    assert!(state.drives.is_empty());
+    assert!(state.pinned_items.is_empty());
+}
