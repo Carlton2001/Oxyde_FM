@@ -238,7 +238,9 @@ impl Viewer {
     pub(super) fn toggle_media(&mut self, cx: &mut Context<Self>) {
         if let Some(media) = &mut self.media {
             if matches!(media.control.status(), MEDIA_ENDED | MEDIA_FAILED) {
+                // Play asked again: the new session starts over and plays, autoplay or not.
                 self.media = None;
+                self.resume = Some((0, false));
             } else {
                 media.paused = !media.paused;
                 self.update_visibility();
