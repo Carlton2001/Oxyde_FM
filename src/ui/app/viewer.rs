@@ -286,7 +286,8 @@ impl Source {
 }
 
 impl Viewer {
-    #[cfg(test)]
+    /// For the native window tests, which run on Windows.
+    #[cfg(all(test, target_os = "windows"))]
     fn new(
         owner: Entity<OxydeApp>,
         tab_id: String,
