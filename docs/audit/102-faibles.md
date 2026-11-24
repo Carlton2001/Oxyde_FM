@@ -142,17 +142,17 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F201 | `ui/app/rename.rs:252-255` | corrigé | ebfe8b0c | mot de passe porté par l'opération Compresser, retenu sous le nom publié après création ; une archive existante du même nom garde le sien ; la compression n'utilise plus le registre ; `remember_new` retiré ; workers à reconstruire |
 | F202 | `ui/app/properties/permissions/save.rs:97-98 et properties/dialog.rs:52` | corrigé | 3b5a519f | « modifié depuis l'ouverture » : droits relus, le prochain OK s'applique ; message effacé à la saisie ou au changement d'onglet ; Linux à tester |
 | F203 | `ui/app/selection.rs:55 et :354` | corrigé | 047b5295 | curseur dans un groupe replié : fichier affiché le plus proche dans le sens de la flèche ; test |
-| F207 | `ui/app/theme_window/draft.rs:251 et :233, theme_window.rs:17` | à examiner | | |
+| F207 | `ui/app/theme_window/draft.rs:251 et :233, theme_window.rs:17` | corrigé | 9e2eb42d | confirmation avant suppression d'un thème et avant d'abandonner un brouillon modifié pour un autre thème (5 langues) ; aperçu retiré quand la fenêtre principale ferme la fenêtre Thèmes |
 | F209 | `ui/app/trash_settings/linux.rs:157 et :171` | Linux | | |
-| F210 | `ui/app/trash_settings/settings.rs:82, :168, :229 et :281` | à examiner | | |
-| F214 | `ui/app/viewer.rs:196 et viewer/markdown/loading.rs:13` | à examiner | | |
-| F215 | `ui/app/viewer/fullscreen_controls.rs:154 et :207` | à examiner | | |
-| F216 | `ui/app/viewer/markdown.rs:95` | à examiner | | |
-| F217 | `ui/app/viewer/markdown/parse.rs:112 et :51-66` | à examiner | | |
-| F218 | `ui/app/viewer/markdown/selection.rs:134-137 et viewer/text/selection.rs:141-143` | à examiner | | |
-| F219 | `ui/app/viewer/media.rs:238-244` | à examiner | | |
-| F220 | `ui/app/viewer/media_overlay.rs:409-479` | à examiner | | |
-| F221 | `ui/app/viewer/tree.rs:230-243, :54, tree/loading.rs:75 et :155-157` | à examiner | | |
+| F210 | `ui/app/trash_settings/settings.rs:82, :168, :229 et :281` | corrigé | 9fff2490 | réglages lisibles affichés avec la première erreur ; un enregistrement partiel garde ce qui a été écrit ; valeur vidée vérifiée au changement de lecteur ; usage relu même après un échec de vidage |
+| F214 | `ui/app/viewer.rs:196 et viewer/markdown/loading.rs:13` | corrigé | 2ace4aa0 | suppressions en cours connues d'un Viewer créé ensuite ; lecture du .md et des images inscrite au registre de suppression |
+| F215 | `ui/app/viewer/fullscreen_controls.rs:154 et :207` | corrigé | 1b713a39 | attente levée seulement après le handle ; échec journalisé une fois, sans nouvelle tentative jusqu'à la fin du plein écran |
+| F216 | `ui/app/viewer/markdown.rs:95` | corrigé | afdf5bf9 | au-delà de 32 images, la plus éloignée de la vue est libérée et redemandée si elle revient |
+| F217 | `ui/app/viewer/markdown/parse.rs:112 et :51-66` | corrigé | b1bfb9bd | coloration bornée à 1 Mio de code par document (déterministe) ; images avec composant parent ou nom de périphérique Windows refusées ; test |
+| F218 | `ui/app/viewer/markdown/selection.rs:134-137 et viewer/text/selection.rs:141-143` | corrigé | 2c2b161c | sélection de tout le Markdown étendue aux blocs chargés ensuite ; copie de texte au-delà de 64 Mo refusée avec notification (5 langues) |
+| F219 | `ui/app/viewer/media.rs:238-244` | corrigé | b3fcbcc2 | Lecture après la fin repart du début et joue, lecture automatique ou non |
+| F220 | `ui/app/viewer/media_overlay.rs:409-479` | corrigé | 2a3bdab0 | si aucune popup ne s'ouvre : erreur journalisée une fois, pas de nouvelle tentative avant la fermeture du calque |
+| F221 | `ui/app/viewer/tree.rs:230-243, :54, tree/loading.rs:75 et :155-157` | corrigé | d0e8a47f | niveau en échec relu à la réouverture ; sommes saturantes ; comptage retiré si son thread ne démarre pas ; tests |
 | F223 | `ui/components/conflict_dialog/advanced.rs:135-137 et frame.rs:187-189` | à examiner | | |
 | F224 | `ui/components/file_list/icons.rs:281` | à examiner | | |
 | F226 | `ui/components/file_list/presentation.rs:72 et :174` | à examiner | | |
