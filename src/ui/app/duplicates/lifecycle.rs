@@ -123,11 +123,24 @@ impl DuplicateWindow {
             && !root.starts_with("::{")
             && root != "__network_vincinity__";
         let mut selected = HashSet::new();
-        if valid_root {
+        if let Some(drive) = valid_root
+            .then(|| drives.iter().find(|d| crate::ui::paths::paths_match(&d.path, &root)))
+            .flatten()
+        {
+            // The current folder is a drive root already listed.
+            selected.insert(drive.path.clone());
+        } else if valid_root {
             selected.insert(root.clone());
+            // The deepest drive holding the folder: `/mnt/usb/x` is not on `/`.
             let disk = drives
                 .iter()
-                .find(|d| root.to_lowercase().starts_with(&d.path.to_lowercase()))
+                .filter(|d| {
+                    crate::ui::paths::path_within(
+                        std::path::Path::new(&root),
+                        std::path::Path::new(&d.path),
+                    )
+                })
+                .max_by_key(|d| d.path.len())
                 .map(|d| Self::disk_label(d, cx))
                 .unwrap_or_default();
             locations.push((root, String::new(), disk));
