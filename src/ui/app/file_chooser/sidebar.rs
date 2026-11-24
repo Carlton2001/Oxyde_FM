@@ -42,6 +42,7 @@ impl FileChooserWindow {
         }
         self.mounting_volume = Some(id.clone());
         cx.notify();
+        let owner = self.owner.clone();
         cx.spawn(async move |this, cx| {
             use oxyde_lib::platform::VolumeError;
             let result = tokio::task::spawn_blocking(move || {
@@ -49,17 +50,21 @@ impl FileChooserWindow {
                 let path = volumes.mount(&id)?;
                 Ok::<_, VolumeError>((path, oxyde_lib::commands::system::get_drives(Some(false)), volumes.unmounted()))
             }).await;
+            // The main window learns of the drive even when the chooser closed meanwhile.
+            if let Ok(Ok((_, drives, unmounted))) = &result {
+                let (drives, unmounted) = (drives.clone(), unmounted.clone());
+                let _ = owner.update(cx, |owner, cx| {
+                    owner.drive_refresh_epoch = owner.drive_refresh_epoch.wrapping_add(1);
+                    owner.state.unmounted_volumes = unmounted;
+                    owner.apply_drive_snapshot(drives, cx);
+                    owner.reconcile_watchers(cx);
+                    cx.notify();
+                });
+            }
             let _ = this.update(cx, |this, cx| {
                 this.mounting_volume = None;
                 let failure = match result {
-                    Ok(Ok((path, drives, unmounted))) => {
-                        let _ = this.owner.update(cx, |owner, cx| {
-                            owner.drive_refresh_epoch = owner.drive_refresh_epoch.wrapping_add(1);
-                            owner.state.unmounted_volumes = unmounted;
-                            owner.apply_drive_snapshot(drives, cx);
-                            owner.reconcile_watchers(cx);
-                            cx.notify();
-                        });
+                    Ok(Ok((path, _, _))) => {
                         this.show_folder(path, cx);
                         None
                     }
