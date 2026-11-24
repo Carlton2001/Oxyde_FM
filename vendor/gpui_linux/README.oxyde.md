@@ -90,6 +90,11 @@ compare both copies to the new upstream.
   `application/x-kde-cutselection`, each sent in its own format; a text entry whose metadata
   is `cut` marks them as cut. Upstream offered text only, so Oxyde ran `wl-copy` for GNOME's
   format alone, which Dolphin and GTK 4 do not read.
+- `Platform::clipboard_offers` (`gpui/src/platform.rs`, false by default), `App::clipboard_offers`
+  (`gpui/src/app.rs`), `LinuxClient::clipboard_offers` (`gpui_linux/src/linux/platform.rs`) and
+  its Wayland version (`gpui_linux/src/linux/wayland/{client,clipboard}.rs`): whether another
+  client's selection announced a type, from the offer GPUI already tracks, without reading it.
+  Oxyde enables Paste for files another file manager copied; upstream only exposes a read.
 - `gpui_linux/src/linux/x11/window.rs` and `Cargo.toml` (x11rb's `shape` feature): X11 windows
   implement `set_input_region` with the SHAPE extension's input shape, in device pixels. A
   client-decorated window's shadow then lets clicks through to the window beneath, as GTK

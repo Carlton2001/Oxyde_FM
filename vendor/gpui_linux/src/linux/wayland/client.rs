@@ -1413,6 +1413,11 @@ impl LinuxClient for WaylandClient {
         self.0.borrow_mut().clipboard.read()
     }
 
+    // Oxyde: the announced types of another client's selection.
+    fn clipboard_offers(&self, mime_type: &str) -> bool {
+        self.0.borrow().clipboard.offers(mime_type)
+    }
+
     fn active_window(&self) -> Option<AnyWindowHandle> {
         self.0
             .borrow_mut()

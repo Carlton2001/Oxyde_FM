@@ -1515,6 +1515,12 @@ impl App {
         self.platform.read_from_clipboard()
     }
 
+    /// Oxyde: whether another application's clipboard contents are offered as
+    /// `mime_type`, without reading them. Only known under Wayland; false elsewhere.
+    pub fn clipboard_offers(&self, mime_type: &str) -> bool {
+        self.platform.clipboard_offers(mime_type)
+    }
+
     /// Reads data from the platform clipboard, resolving once the contents
     /// are available.
     ///

@@ -346,6 +346,10 @@ impl OxydeApp {
                         oxyde_lib::platform::platform().file_clipboard().has_file_format()
                     }).await.unwrap_or(false);
                     h.update(&mut cx, |this, cx| {
+                        // Files another file manager copied, from the types its offer announced.
+                        let clipboard_has_files = clipboard_has_files
+                            || oxyde_lib::platform::platform().file_clipboard().external_files_type()
+                                .is_some_and(|mime_type| cx.clipboard_offers(mime_type));
                         if this.clipboard_has_files != clipboard_has_files {
                             this.clipboard_has_files = clipboard_has_files;
                             cx.notify();

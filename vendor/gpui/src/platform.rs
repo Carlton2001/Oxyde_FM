@@ -371,6 +371,12 @@ pub trait Platform: 'static {
     fn read_from_clipboard(&self) -> Option<ClipboardItem>;
     fn write_to_clipboard(&self, item: ClipboardItem);
 
+    /// Oxyde: whether another application's clipboard contents are offered as `mime_type`,
+    /// from the types announced, without reading them. Only Wayland knows; false elsewhere.
+    fn clipboard_offers(&self, _mime_type: &str) -> bool {
+        false
+    }
+
     /// Reads the clipboard, resolving once its contents are available.
     ///
     /// Most platforms read synchronously and return a ready task. Platforms

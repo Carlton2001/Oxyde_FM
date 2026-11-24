@@ -256,6 +256,14 @@ impl Clipboard {
         }
     }
 
+    /// Oxyde: whether another client's selection offers `mime_type`, from the types it
+    /// announced, without reading it.
+    pub fn offers(&self, mime_type: &str) -> bool {
+        self.current_offer.as_ref().is_some_and(|offer| {
+            offer.has_mime_type(mime_type) && !offer.has_mime_type(&self.self_mime)
+        })
+    }
+
     pub fn read(&mut self) -> Option<ClipboardItem> {
         let offer = self.current_offer.as_ref()?;
         if let Some(cached) = self.cached_read.clone() {
