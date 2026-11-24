@@ -290,8 +290,16 @@ impl OxydeApp {
 
     /// What the hovered drop target decides for an internal drag: the default operation
     /// and whether it takes nothing. Returns true when it refuses, so it takes no highlight.
+    /// Nothing is dropped where nothing can be written: a read-only volume or archive,
+    /// the Trash, the network list, or search results.
+    pub(crate) fn refuses_drop(&self, target: &str) -> bool {
+        matches!(target, "trash://" | "__network_vincinity__")
+            || target.starts_with("search://")
+            || self.is_read_only_path(target)
+    }
+
     pub(crate) fn note_drag_target(&mut self, paths: &[String], target: &str, cx: &mut Context<Self>) -> bool {
-        let refused = self.is_read_only_path(target);
+        let refused = self.refuses_drop(target);
         let default_copy = paths.first().is_some_and(|path| drives_differ(path, target));
         if self.drag_target_refused != refused {
             self.drag_target_refused = refused;
@@ -353,6 +361,9 @@ impl OxydeApp {
     }
 
     pub(crate) fn execute_file_drop(&mut self, paths: Vec<String>, target: String, cx: &mut Context<Self>) {
+        if self.refuses_drop(&target) {
+            return;
+        }
         let paths = actionable_drop_paths(paths, &target);
         if self.drag_copy_mode {
             self.execute_file_copy(paths, target, cx);
