@@ -6,14 +6,18 @@ use futures::StreamExt;
 use gpui::Context;
 use oxyde_lib::platform::{InstanceMessage, InstanceRequest};
 
-/// Items grouped by folder, folders in the order their first item came.
+/// Items grouped by folder, folders in the order their first item came. A root, in
+/// no folder, is shown itself, nothing selected.
 pub(super) fn by_folder(items: Vec<String>) -> Vec<(String, Vec<String>)> {
     let mut groups: Vec<(String, Vec<String>)> = Vec::new();
     for item in items {
         let Some(folder) = std::path::Path::new(&item).parent().map(|folder| folder.to_string_lossy().into_owned()) else {
+            if !groups.iter().any(|(known, members)| members.is_empty() && shows(known, &item)) {
+                groups.push((item, Vec::new()));
+            }
             continue;
         };
-        match groups.iter_mut().find(|(known, _)| *known == folder) {
+        match groups.iter_mut().find(|(known, members)| !members.is_empty() && *known == folder) {
             Some((_, members)) => members.push(item),
             None => groups.push((folder, vec![item])),
         }
@@ -21,13 +25,10 @@ pub(super) fn by_folder(items: Vec<String>) -> Vec<(String, Vec<String>)> {
     groups
 }
 
-/// Whether a tab on `shown` already shows `folder`, as the platform compares names.
+/// Whether a tab on `shown` already shows `folder`, as the platform compares names:
+/// on Windows, whatever the case, the separators and the `\\?\` prefix.
 pub(super) fn shows(shown: &str, folder: &str) -> bool {
-    let plain = |path: &str| {
-        let path = if path.len() > 1 { path.trim_end_matches(['/', '\\']) } else { path };
-        if cfg!(target_os = "windows") { path.to_lowercase() } else { path.to_owned() }
-    };
-    plain(shown) == plain(folder)
+    crate::ui::paths::paths_match(shown, folder)
 }
 
 impl OxydeApp {
@@ -95,7 +96,9 @@ impl OxydeApp {
                     if !shown {
                         self.add_tab(&pane, folder, true, cx);
                     }
-                    self.select_received_items(members, cx);
+                    if !members.is_empty() {
+                        self.select_received_items(members, cx);
+                    }
                 }
                 Vec::new()
             }
