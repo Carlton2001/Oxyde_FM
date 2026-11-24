@@ -22,16 +22,20 @@ pub(super) struct Rename {
     pending: bool,
 }
 
+/// Names tried at most before the creation gives up.
+const MAX_NAME_ATTEMPTS: u32 = 10_000;
+
 impl FileChooserWindow {
     /// Ctrl+Shift+N or the navigation bar's button.
     pub(super) fn create_folder(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let folder = self.folder.clone();
         let language = cx.i18n().language();
+        let owner = self.owner.clone();
         cx.spawn_in(window, async move |this, cx| {
             let parent = folder.clone();
             let created = cx.background_spawn(async move {
                 let i18n = I18n::for_language(language);
-                for counter in 0.. {
+                for counter in 0..MAX_NAME_ATTEMPTS {
                     let name = if counter == 0 {
                         i18n.text(Message::NewFolderName).to_string()
                     } else {
@@ -41,25 +45,37 @@ impl FileChooserWindow {
                     };
                     let path = oxyde_lib::utils::path_text::decode(&parent).join(name);
                     match oxyde_lib::commands::io::create_local_folder(&path) {
-                        Ok(identity) => return Ok((path, identity)),
+                        Ok(identity) => {
+                            let entry = oxyde_lib::models::file_entry::get_file_entry_from_path(&path).ok();
+                            return Ok((path, identity, entry));
+                        }
                         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
                         Err(error) => return Err(error),
                     }
                 }
-                unreachable!()
+                Err(std::io::Error::new(std::io::ErrorKind::AlreadyExists, "No free name for a new folder"))
             }).await;
+            // Recorded even when the chooser closed meanwhile: Undo still removes it.
+            if let Ok((path, identity, _)) = &created {
+                let transaction = super::super::rename::new_folder_transaction(path, *identity, folder.clone());
+                let _ = owner.update(cx, |owner, _| owner.history.push(transaction));
+            }
             let _ = this.update_in(cx, |this, window, cx| match created {
-                Ok((path, identity)) => {
-                    let _ = this.owner.update(cx, |owner, _| {
-                        owner.history.push(super::super::rename::new_folder_transaction(&path, identity, folder.clone()));
-                    });
+                Ok((path, _, entry)) => {
                     let path = oxyde_lib::utils::path_text::encode(&path);
                     if this.folder != folder {
                         return;
                     }
                     // The new folder shows whatever the name filter holds.
                     this.filter.clear();
-                    this.list_folder(Kept::path(path.clone()), cx);
+                    // Shown at once, its name field with it: no keystroke waits for a new listing.
+                    match entry {
+                        Some(entry) if !this.entries.iter().any(|known| known.path == entry.path) => {
+                            std::sync::Arc::make_mut(&mut this.entries).push(entry);
+                            this.arrange(Kept::path(path.clone()), cx);
+                        }
+                        _ => this.list_folder(Kept::path(path.clone()), cx),
+                    }
                     this.begin_rename(path, window, cx);
                 }
                 Err(error) => {
