@@ -131,6 +131,9 @@ impl FileChooserWindow {
                 covered.insert(position);
             }
         }
+        // A refresh while it is drawn may have shortened the list.
+        let shown = self.shown.len();
+        band.initial.retain(|position| *position < shown);
         let keep_anchor = band.modifiers.control || band.modifiers.shift;
         let marked = rectangle_selection(&band.initial, covered, band.modifiers);
         if self.selection.cover(marked, keep_anchor) {

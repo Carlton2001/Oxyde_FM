@@ -70,6 +70,8 @@ impl FileChooserWindow {
         self.rename = None;
         self.crumbs.menu = None;
         self.crumbs.request = None;
+        // A rectangle drawn across the navigation would select the new folder's entries.
+        self.band = None;
         self.crumbs.context = None;
         self.filter.clear();
         self.entries = Arc::new(Vec::new());
