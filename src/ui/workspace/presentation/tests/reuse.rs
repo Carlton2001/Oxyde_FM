@@ -42,7 +42,8 @@ fn repeated_large_pane_snapshots_reuse_files_rows_and_geometry() {
         assert!(Arc::ptr_eq(&grid.files, &resized.files));
         tab.group_mode = crate::ui::date_groups::GroupMode::Date;
         let grouped = tab.presentation(Some(crate::ui::style::CardLayout::Grid(crate::ui::style::GridSize::Medium)), 7);
-        tab.collapsed_groups.insert(GroupKey::Date(crate::ui::date_groups::DateGroup::Older));
+        // The fixture has no dates: its files share the missing-date group.
+        tab.collapsed_groups.insert(GroupKey::MissingDate);
         let collapsed = tab.presentation(Some(crate::ui::style::CardLayout::Grid(crate::ui::style::GridSize::Medium)), 7);
         assert!(collapsed.rows.len() < grouped.rows.len());
         let old = Arc::downgrade(&collapsed);
