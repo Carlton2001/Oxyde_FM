@@ -350,6 +350,20 @@ impl ArchiveWorkspace {
                 )),
             };
         }
+        // Outside Windows nothing kept other programs from writing to the original since
+        // its fingerprint: if one did, its version comes back in place of the rebuild.
+        let written = original.metadata().map_err(|e| e.to_string())
+            .map(|now| now.len() != self.length || now.modified().ok() != self.modified)?;
+        if written {
+            let platform = crate::platform::platform();
+            let restored = platform.rename_open_file_exclusive(&rebuilt, &self.archive, &destination)
+                .and_then(|()| platform.rename_open_file_exclusive(&original, &backup, &self.archive));
+            return Err(match restored {
+                Ok(()) => crate::models::error::ArchiveSourceConflict.to_string(),
+                Err(restore) => format!("{}; original kept at {}: {restore}",
+                    crate::models::error::ArchiveSourceConflict, backup.display()),
+            });
+        }
         if let Err(error) = crate::platform::platform().remove_open_file(&original, &backup) {
             log::warn!(
                 "Archive updated, original backup retained at {}: {error}",
