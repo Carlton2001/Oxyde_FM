@@ -10,28 +10,28 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 
 | ID | Emplacement | État | Commits | Note |
 | --- | --- | --- | --- | --- |
-| F45 | `platform/linux_file_clipboard.rs:82` | Linux | | |
-| F46 | `platform/linux_file_clipboard/wayland.rs:42` | Linux | | |
-| F47 | `platform/linux_download.rs:38` | Linux | | |
-| F48 | `platform/linux_file_tree.rs:88 et :57` | Linux | | |
-| F49 | `platform/linux_gio.rs:384, :391 et :486` | Linux | | |
-| F50 | `platform/linux_gio/applications.rs:186` | Linux | | |
-| F51 | `platform/linux_extended_attributes.rs:24` | Linux | | |
+| F45 | `platform/linux_file_clipboard.rs:82` | corrigé | ab2a45b0 | GPUI patché (`clipboard_offers`) : types annoncés par l'offre Wayland, sans lecture ni `wl-paste` ; Coller actif pour des fichiers copiés dans Nautilus ; à tester sous GNOME et KDE |
+| F46 | `platform/linux_file_clipboard/wayland.rs:42` | corrigé | 6bb4475e | `wl-paste` sous délai de 3 s, groupe de processus tué (`linux_process::output_within`) ; test |
+| F47 | `platform/linux_download.rs:38` | corrigé (en partie) | 7f34bffe | durée totale bornée (620 s), `--no-config`, corps vide refusé ; wget2 refuse la redirection HTTP (`--https-only`, vérifié) ; reste : wget 1 la suit encore (signature) ; test |
+| F48 | `platform/linux_file_tree.rs:88 et :57` | corrigé | 4756540d | un descripteur par niveau (limite déjà relevée par 374c5078) ; dossier non vide après une passe qui a supprimé : relu ; test (échouait avant) |
+| F49 | `platform/linux_gio.rs:384, :391 et :486` | corrigé | 02a00de6 | énumération et démontage annulables, bornés à 30 s (`linux_gio/cancellation.rs`) ; test du délai ; non testé avec GVfs (absent de la WSL) |
+| F50 | `platform/linux_gio/applications.rs:186` | corrigé | 424b7f35 | association enregistrée après un lancement réussi |
+| F51 | `platform/linux_extended_attributes.rs:24` | corrigé | b205a6c6 | 8 tentatives ERANGE au plus, 64 Kio au plus ; test |
 | F52 | `platform/hardware.rs:46, :80 et :146` | corrigé | e11d6088 | lettre de lecteur lue en ASCII (`drive_letter`) ; « é:\… » n'est plus un lecteur ; test |
 | F53 | `platform/hardware.rs:79` | corrigé | a4654b0a | volume monté dans un dossier interrogé par son nom `Volume{…}` (numéro de disque et pénalité de recherche) ; repli sur un identifiant propre au volume ; à tester avec un disque monté dans un dossier |
-| F54 | `platform/linux_permissions.rs:103` | Linux | | |
-| F55 | `platform/linux_portal.rs:239 et :270` | Linux | | |
-| F56 | `platform/linux_portal/chooser.rs:286` | Linux | | |
-| F57 | `platform/linux_media/worker.rs:114` | Linux | | |
-| F58 | `platform/linux_sandbox/seccomp.rs:38` | Linux | | |
-| F59 | `platform/linux_volumes/holders.rs:35` | Linux | | |
-| F60 | `platform/linux_trash.rs:72` | Linux | | |
-| F61 | `platform/linux_trash.rs:33` | Linux | | |
-| F62 | `platform/linux_quick_access.rs:35` | Linux | | |
+| F54 | `platform/linux_permissions.rs:103` | corrigé | 55b47727 | verrou relâché pendant `getent`, borné à 10 s |
+| F55 | `platform/linux_portal.rs:239 et :270` | corrigé | 299a84a0 | fichier écrit sans configuration système marqué puis supprimé une fois vide ; redémarrage du portail différé tant qu'une session ou une requête existe (1 h au plus) ; tests ; à tester avec un partage d'écran |
+| F56 | `platform/linux_portal/chooser.rs:286` | corrigé | 14d85fa3 | `fallback` lu par `blocking::unblock` |
+| F57 | `platform/linux_media/worker.rs:114` | corrigé | 8d6ef65d | seek marqué appliqué seulement une fois accepté, nouvel essai pendant 2 s puis abandon journalisé ; workers à reconstruire |
+| F58 | `platform/linux_sandbox/seccomp.rs:38` | corrigé | a53742ba | `clone` avec CLONE_NEWUSER refusé (EPERM), `clone3` inconnu (ENOSYS), comme Flatpak ; test ; tous les tests des workers passent ; workers à reconstruire |
+| F59 | `platform/linux_volumes/holders.rs:35` | corrigé | cce830d8 | chemin de `maps` lu après la cinquième colonne, espaces compris ; test |
+| F60 | `platform/linux_trash.rs:72` | obsolète | d02a0f76 | la restauration envoie déjà un élément d'un autre volume au moteur de déplacement (`on_other_volumes`) ; Annuler le refuse avec un message |
+| F61 | `platform/linux_trash.rs:33` | corrigé | 44dbf2e9 | seuls la corbeille personnelle, `.Trash-$uid` et `.Trash/$uid` en haut d'un montage ; tests |
+| F62 | `platform/linux_quick_access.rs:35` | corrigé | d8f449b4 | dossier `gtk-3.0` créé (0700) pour être surveillé |
 | F63 | `platform/thumbnails.rs:116` | corrigé | 7f618735 | sans date de modification, miniature générée sans cache ; clé sans casse sous Windows (anciennes entrées orphelines, évincées par le quota) |
 | F64 | `platform/thumbnails.rs:87` | écarté |  | choix de sécurité de c37f7b7b : le décodeur suit l'extension (test `cache_and_source_do_not_decode_a_different_format_than_the_extension`) ; un fichier sans extension d'image n'est pas demandé en miniature |
-| F65 | `platform/thumbnails.rs:230` | Linux | | |
-| F66 | `platform/thread_priority.rs:17` | Linux | | |
+| F65 | `platform/thumbnails.rs:230` | corrigé | 532c6ffe | candidat suivant essayé si le premier est endommagé ; test |
+| F66 | `platform/thread_priority.rs:17` | corrigé | 34c2cb3a | priorité d'E/S du thread (best-effort 7, défaut, 0) ; priorité CPU inchangée (un thread non privilégié ne peut pas la remonter) ; sans effet hors BFQ ; test |
 | F67 | `platform/viewer_media.rs:191` | corrigé | afc0480b | rapports du worker média Windows suivis du dernier seek appliqué (comme Linux) ; position ignorée tant que le seek demandé n'est pas appliqué ; workers à reconstruire ; à tester : glisser la barre de lecture |
 | F68 | `platform/network.rs:112, :214-216, :236 et :181` | corrigé (en partie) | 706942a9 | tampon aligné pour `NETRESOURCEW` ; serveurs connectés : `ERROR_MORE_DATA` agrandit le tampon, autre erreur journalisée ; reste : pas de délai ni d'annulation sur les partages d'un serveur (appel bloquant de WNet) |
 | F69 | `platform/network.rs:320` | corrigé | 706942a9 | nom d'utilisateur retiré du journal ; mot de passe du mappage effacé après usage (`Zeroizing`) ; `Debug` de `RemoteAnswer` sans identifiants ; le texte saisi dans l'interface reste une `String` (voir F152) |
@@ -54,8 +54,8 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F83 | `systems/archive_owned_tree.rs:13` | reporté |  | choix de conception : chaque entrée garde parent et suivi pour un nettoyage par identité (sans énumération) ; réduire les handles demande une refonte du nettoyage |
 | F84 | `utils/archive_codec.rs:85 et :87` | corrigé | 51b2ca4e | xz limité à 1 Gio de mémoire (erreur de limite claire) ; fenêtre zstd acceptée jusqu'à 2^30 (`--long` jusqu'à 30) ; documenté ; workers à reconstruire |
 | F85 | `utils/archive.rs:112` | corrigé | 30452bff | le menu du dossier lit `archive_root` de l'onglet, résolu par la navigation hors du thread UI ; plus d'accès disque au clic droit |
-| F86 | `systems/archive_volumes.rs:27` | Linux |  | réouverture des volumes par nom sous Linux |
-| F87 | `systems/archive_workspace.rs:315, :333 et :352` | Linux |  | verrou de l'original sous Linux |
+| F86 | `systems/archive_volumes.rs:27` | corrigé | e77d6bf5 | le volume vérifié est lu par son fichier ouvert ; les autres volumes restent ouverts par nom ; test |
+| F87 | `systems/archive_workspace.rs:315, :333 et :352` | corrigé (en partie) | 70b5bdb8 | original modifié (taille ou date) après l'empreinte : la reconstruction est annulée et l'original revient ; reste une fenêtre entre la vérification et la suppression de la sauvegarde ; pas de test |
 | F88 | `utils/archive_listing_protocol.rs:242` | corrigé (en partie) | 03612ad2 | caractères de contrôle et de mise en forme bidirectionnelle retirés ; test ; les messages internes anglais restent non traduits |
 | F89 | `utils/archive_volumes.rs:58 et :44` | corrigé (en partie) | 9155c85a | ancien nommage poursuivi après .r99 par .s00 jusqu'à .z99 ; test ; reste : un double-clic sur film.r03 ne l'ouvre pas, car .rNN n'est pas reconnu comme archive (élargir la reconnaissance toucherait tous les fichiers .r00) |
 | F93 | `commands/duplicates.rs:341, :396 et :446` | corrigé | b6b798f4 | fichiers illisibles comptés pendant le hash ; la fenêtre des doublons affiche « N fichiers n'ont pas pu être lus » (5 langues) ; à tester avec un fichier verrouillé |
@@ -77,7 +77,7 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 
 | ID | Emplacement | État | Commits | Note |
 | --- | --- | --- | --- | --- |
-| F124 | `commands/sidebar.rs:25-31, :45 et :120` | Linux |  | lien symbolique vers un dossier dans l'arbre (Unix) |
+| F124 | `commands/sidebar.rs:25-31, :45 et :120` | corrigé | 2d015312 | lien vers un dossier affiché avec sa flèche ; « Tout développer » n'y entre pas ; tests |
 | F125 | `commands/sidebar.rs:63-79` | corrigé (en partie) | 592da38b | repli et nouvelle demande l'annulaient déjà ; résultat écarté aussi si l'affichage des fichiers cachés ou système a changé ; lecteur déconnecté pendant le parcours non traité |
 | F126 | `commands/system.rs:9-19` | corrigé | 4db5c2eb | commande sans appelant supprimée (l'interface passe par `Platform::open_item`) |
 | F127 | `commands/system.rs:33-53` | corrigé (en partie) | 4db5c2eb | la purge tente icons et thumbnails puis rend la première erreur ; reste Linux : pas de pause des écritures de miniatures pendant la purge |
@@ -143,7 +143,7 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F202 | `ui/app/properties/permissions/save.rs:97-98 et properties/dialog.rs:52` | corrigé | 3b5a519f | « modifié depuis l'ouverture » : droits relus, le prochain OK s'applique ; message effacé à la saisie ou au changement d'onglet ; Linux à tester |
 | F203 | `ui/app/selection.rs:55 et :354` | corrigé | 047b5295 | curseur dans un groupe replié : fichier affiché le plus proche dans le sens de la flèche ; test |
 | F207 | `ui/app/theme_window/draft.rs:251 et :233, theme_window.rs:17` | corrigé | 9e2eb42d | confirmation avant suppression d'un thème et avant d'abandonner un brouillon modifié pour un autre thème (5 langues) ; aperçu retiré quand la fenêtre principale ferme la fenêtre Thèmes |
-| F209 | `ui/app/trash_settings/linux.rs:157 et :171` | Linux | | |
+| F209 | `ui/app/trash_settings/linux.rs:157 et :171` | corrigé | d6ac0f67 | champ inchangé : valeur lue conservée (12.34) ; test |
 | F210 | `ui/app/trash_settings/settings.rs:82, :168, :229 et :281` | corrigé | 9fff2490 | réglages lisibles affichés avec la première erreur ; un enregistrement partiel garde ce qui a été écrit ; valeur vidée vérifiée au changement de lecteur ; usage relu même après un échec de vidage |
 | F214 | `ui/app/viewer.rs:196 et viewer/markdown/loading.rs:13` | corrigé | 2ace4aa0 | suppressions en cours connues d'un Viewer créé ensuite ; lecture du .md et des images inscrite au registre de suppression |
 | F215 | `ui/app/viewer/fullscreen_controls.rs:154 et :207` | corrigé | 1b713a39 | attente levée seulement après le handle ; échec journalisé une fois, sans nouvelle tentative jusqu'à la fin du plein écran |
