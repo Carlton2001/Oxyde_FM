@@ -116,6 +116,12 @@ pub(super) fn arrange(
     shown
 }
 
+/// Where a copied or moved `source` went: the path the operation planned for it,
+/// renamed when a conflict kept both, else `folder` with its name.
+fn moved_to(destinations: &HashMap<PathBuf, PathBuf>, folder: &Path, source: &Path) -> Option<PathBuf> {
+    destinations.get(source).cloned().or_else(|| source.file_name().map(|name| folder.join(name)))
+}
+
 /// Metadata column widths, in the file list's units.
 #[derive(Clone, Copy, Default)]
 struct Widths {
@@ -129,6 +135,8 @@ pub(super) struct Items {
     pub(super) operation: Option<String>,
     kind: Option<FileOpType>,
     destination: Option<PathBuf>,
+    /// Where each item went, renamed or not, as the operation planned it.
+    destinations: Arc<HashMap<PathBuf, PathBuf>>,
     /// The folder every item comes from; without one, a Location column names each.
     origin: Option<PathBuf>,
     rows: Arc<Vec<Item>>,
@@ -159,6 +167,7 @@ impl Default for Items {
             operation: None,
             kind: None,
             destination: None,
+            destinations: Arc::default(),
             origin: None,
             rows: Arc::default(),
             shown: Arc::default(),
@@ -229,6 +238,8 @@ impl OperationsPanelView {
         items.operation = Some(operation.id.clone());
         items.kind = Some(operation.op_type.clone());
         items.destination = operation.destination.clone();
+        items.destinations = Arc::new(operation.item_destinations());
+        let destinations = items.destinations.clone();
         items.origin = operation.source_parent.clone();
         items.rows = Arc::default();
         items.shown = Arc::default();
@@ -257,7 +268,7 @@ impl OperationsPanelView {
                         // Another operation chosen: its disk reads stop here.
                         .take_while(|_| !cancelled.load(std::sync::atomic::Ordering::Relaxed))
                         .map(|source| {
-                            let moved = destination.as_ref().zip(source.file_name()).map(|(folder, name)| folder.join(name));
+                            let moved = destination.as_ref().and_then(|folder| moved_to(&destinations, folder, source));
                             Item::new(source, icons::resolve_entry(source, moved.as_deref()).ok(), shared_folder)
                         })
                         .collect();
@@ -331,9 +342,7 @@ impl OperationsPanelView {
         let mut candidates = Vec::new();
         match (&self.items.kind, &self.items.destination) {
             (Some(FileOpType::Copy | FileOpType::Move), Some(folder)) => {
-                if let Some(name) = source.file_name() {
-                    candidates.push(folder.join(name));
-                }
+                candidates.extend(moved_to(&self.items.destinations, folder, &source));
             }
             (Some(FileOpType::Compress), Some(archive)) => candidates.push(archive.clone()),
             _ => {}
