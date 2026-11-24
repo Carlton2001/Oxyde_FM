@@ -157,14 +157,16 @@ pub fn display_rows(
     collapsed: &HashSet<GroupKey>,
     columns: usize,
 ) -> Vec<DisplayRow> {
-    display_data(files, mode, collapsed, columns).0
+    display_data(files, mode, collapsed, columns, chrono::Local::now().date_naive()).0
 }
 
+/// `today` dates the calendar sections: the day a cached presentation was keyed by.
 pub(crate) fn display_data(
     files: &[FileEntry],
     mode: GroupMode,
     collapsed: &HashSet<GroupKey>,
     columns: usize,
+    today: NaiveDate,
 ) -> (Vec<DisplayRow>, BTreeMap<GroupKey, Vec<usize>>) {
     let columns = columns.max(1);
     if mode == GroupMode::None {
@@ -175,7 +177,6 @@ pub(crate) fn display_data(
             .collect();
         return (rows, BTreeMap::new());
     }
-    let today = chrono::Local::now().date_naive();
     let mut groups: BTreeMap<GroupKey, Vec<usize>> = BTreeMap::new();
     for (index, file) in files.iter().enumerate() {
         groups

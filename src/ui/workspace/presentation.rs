@@ -41,7 +41,9 @@ impl TabState {
             }
         }
         let files = self.cached_filtered_files.clone();
-        let (rows, groups) = crate::ui::date_groups::display_data(&files, self.grouping(), &self.collapsed_groups, columns);
+        // The day the cache is keyed by, not one read again: both change together at midnight.
+        let today = calendar.as_ref().map_or_else(|| chrono::Local::now().date_naive(), |calendar| calendar.today);
+        let (rows, groups) = crate::ui::date_groups::display_data(&files, self.grouping(), &self.collapsed_groups, columns, today);
         let rows = Arc::new(rows);
         let groups = Arc::new(groups);
         let mut heights = Vec::with_capacity(rows.len() + 1);
