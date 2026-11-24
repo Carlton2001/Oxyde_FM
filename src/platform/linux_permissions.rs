@@ -83,15 +83,17 @@ fn accounts() -> MutexGuard<'static, Accounts> {
     accounts
 }
 
+/// An unreachable directory service (LDAP, SSSD) leaves the accounts unnamed.
+const GETENT_TIMEOUT: Duration = Duration::from_secs(10);
+const GETENT_LIMIT: usize = 64 * 1024 * 1024;
+
 /// `getent` lines as their fields; an empty key list enumerates the database.
 fn getent(database: &str, keys: &[String]) -> Vec<Vec<String>> {
-    let output = std::process::Command::new("getent")
-        .arg(database)
-        .args(keys)
-        .stdin(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .output();
-    let Ok(output) = output else { return Vec::new() };
+    let mut command = std::process::Command::new("getent");
+    command.arg(database).args(keys);
+    let Ok(output) = super::linux_process::output_within(command, GETENT_TIMEOUT, GETENT_LIMIT) else {
+        return Vec::new();
+    };
     String::from_utf8_lossy(&output.stdout)
         .lines()
         .map(|line| line.split(':').map(str::to_owned).collect::<Vec<_>>())
@@ -99,16 +101,16 @@ fn getent(database: &str, keys: &[String]) -> Vec<Vec<String>> {
         .collect()
 }
 
+/// The cache is not held during `getent`: other Properties windows keep their answers.
 fn name(database: &'static str, id: u32) -> Option<String> {
-    let mut accounts = accounts();
-    if let Some(name) = accounts.names.get(&(database, id)) {
+    if let Some(name) = accounts().names.get(&(database, id)) {
         return name.clone();
     }
     let name = getent(database, &[id.to_string()])
         .into_iter()
         .find(|fields| fields[2].parse() == Ok(id))
         .map(|fields| fields[0].clone());
-    accounts.names.insert((database, id), name.clone());
+    accounts().names.insert((database, id), name.clone());
     name
 }
 
