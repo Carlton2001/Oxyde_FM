@@ -98,6 +98,8 @@ impl Render for Viewer {
             }
         }
         let theme = *cx.theme();
+        // Set again by the notice that offers to open the file, if it is drawn.
+        self.open_offered.set(false);
 
         let failed = self
             .media
@@ -158,6 +160,8 @@ impl Render for Viewer {
                     "left" => this.step(false, cx),
                     "right" => this.step(true, cx),
                     "space" => this.toggle_media(cx),
+                    // The keyboard's way to the « Open » button of an unavailable file.
+                    "enter" if this.open_offered.get() => this.open_in_application(cx),
                     _ => return,
                 }
                 cx.stop_propagation();

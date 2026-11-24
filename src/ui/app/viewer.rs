@@ -87,6 +87,8 @@ pub(crate) struct Viewer {
     blocked: bool,
     focus: FocusHandle,
     focus_pending: bool,
+    /// The last frame offered to open the file in its application: Enter does it.
+    open_offered: std::cell::Cell<bool>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -358,6 +360,7 @@ impl Viewer {
             blocked: false,
             focus: cx.focus_handle(),
             focus_pending: false,
+            open_offered: Default::default(),
             _subscriptions: vec![subscription],
         };
         this.set_source(source, cx);
