@@ -1834,11 +1834,22 @@ impl I18n {
             if errors.is_empty() {
                 return text.into_owned().into();
             }
-            log::warn!("Cannot format UI message {key}: {errors:?}");
+            if first_report(key) {
+                log::warn!("Cannot format UI message {key}: {errors:?}");
+            }
         }
-        log::warn!("No usable translation for UI message {key}");
+        if first_report(key) {
+            log::warn!("No usable translation for UI message {key}");
+        }
         format!("[{key}]").into()
     }
+}
+
+/// A faulty message is drawn every frame: say so once per key, not at each frame.
+fn first_report(key: &str) -> bool {
+    static REPORTED: std::sync::Mutex<Option<std::collections::HashSet<String>>> = std::sync::Mutex::new(None);
+    let mut reported = REPORTED.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    reported.get_or_insert_with(Default::default).insert(key.to_owned())
 }
 
 pub trait I18nContext {
