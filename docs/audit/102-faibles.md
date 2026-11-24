@@ -153,11 +153,11 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F219 | `ui/app/viewer/media.rs:238-244` | corrigé | b3fcbcc2 | Lecture après la fin repart du début et joue, lecture automatique ou non |
 | F220 | `ui/app/viewer/media_overlay.rs:409-479` | corrigé | 2a3bdab0 | si aucune popup ne s'ouvre : erreur journalisée une fois, pas de nouvelle tentative avant la fermeture du calque |
 | F221 | `ui/app/viewer/tree.rs:230-243, :54, tree/loading.rs:75 et :155-157` | corrigé | d0e8a47f | niveau en échec relu à la réouverture ; sommes saturantes ; comptage retiré si son thread ne démarre pas ; tests |
-| F223 | `ui/components/conflict_dialog/advanced.rs:135-137 et frame.rs:187-189` | à examiner | | |
-| F224 | `ui/components/file_list/icons.rs:281` | à examiner | | |
-| F226 | `ui/components/file_list/presentation.rs:72 et :174` | à examiner | | |
-| F227 | `ui/components/file_list/details.rs:329, grid.rs:433` | à examiner | | |
-| F228 | `ui/components/file_list/icons.rs:411` | à examiner | | |
+| F223 | `ui/components/conflict_dialog/advanced.rs:135-137 et frame.rs:187-189` | corrigé | 31b3a4a6 | retrait plafonné à 6 niveaux ; Haut, Bas, Début, Fin parcourent la liste avancée (défilée jusqu'à la ligne), Gauche et Droite plient le dossier choisi ; hors champ de recherche ; tests |
+| F224 | `ui/components/file_list/icons.rs:281` | corrigé | dca83a30 | « .key » classé certificat (clé privée), retiré des présentations |
+| F226 | `ui/components/file_list/presentation.rs:72 et :174` | corrigé | c78eae78 | case de sélection, bouton des tailles et boutons de la barre d'outils passent par `activate_pane` (volet enregistré) |
+| F227 | `ui/components/file_list/details.rs:329, grid.rs:433` | corrigé | ffed80b2 | dépôt refusé (sans surlignage) sur la Corbeille, le Réseau et les résultats de recherche, glisser interne ou externe ; garde aussi dans `execute_file_drop` |
+| F228 | `ui/components/file_list/icons.rs:411` | corrigé | dae229fc | icônes propres à un fichier limitées à 1024 (la plus ancienne libérée, texture comprise) ; échec redemandé après 30 s quand l'icône est de nouveau affichée |
 | F233 | `ui/components/input.rs:129-132` | à examiner | | |
 | F235 | `ui/components/operations/items.rs:244 et :267` | à examiner | | |
 | F236 | `ui/components/operations/view.rs:163` | à examiner | | |
