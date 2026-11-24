@@ -472,6 +472,7 @@ disk-image-unmount-failed = Could not unmount the image. { $detail }
 disk-image-open-failed = Could not open the image. { $detail }
 disk-image-busy = A file operation is still using this image.
 disk-image-no-volume = No accessible volume was assigned to this image.
+volume-change-in-progress = A drive or image is already being mounted or ejected.
 
 advanced-settings = Settings
 advanced-help = Help

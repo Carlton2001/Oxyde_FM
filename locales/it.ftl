@@ -707,6 +707,7 @@ disk-image-open-failed = Impossibile aprire l’immagine. { $detail }
 disk-image-busy = Un’operazione sui file sta ancora usando questa immagine.
 
 disk-image-no-volume = Nessun volume accessibile è stato assegnato a questa immagine.
+volume-change-in-progress = Un’unità o un’immagine è già in fase di montaggio o di espulsione.
 
 advanced-settings = Impostazioni
 

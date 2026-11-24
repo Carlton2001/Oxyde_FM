@@ -707,6 +707,7 @@ disk-image-open-failed = Abbild konnte nicht geöffnet werden. { $detail }
 disk-image-busy = Ein Dateivorgang verwendet dieses Abbild noch.
 
 disk-image-no-volume = Diesem Abbild wurde kein zugängliches Volume zugewiesen.
+volume-change-in-progress = Ein Laufwerk oder Abbild wird bereits eingebunden oder ausgeworfen.
 
 advanced-settings = Einstellungen
 

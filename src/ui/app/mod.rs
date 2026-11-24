@@ -335,6 +335,8 @@ pub struct OxydeApp {
     /// UDisks2 object being mounted from the sidebar.
     pub(crate) mounting_volume: Option<String>,
     pub(crate) mounted_disk_images: Vec<oxyde_lib::platform::MountedDiskImage>,
+    /// Disk images whose readability is being checked before they open.
+    pub(super) probing_disk_images: std::collections::HashSet<String>,
     pub(super) disk_image_refresh_task: Option<Task<()>>,
     pub(crate) shift_delete: bool,
     pub(crate) trash_delete_policy: trash_settings::DeletePolicy,
@@ -576,6 +578,7 @@ impl OxydeApp {
             ejecting_drive: false,
             mounting_volume: None,
             mounted_disk_images: Vec::new(),
+            probing_disk_images: std::collections::HashSet::new(),
             disk_image_refresh_task: None,
             network_dialog: None,
             remote_login: None,
