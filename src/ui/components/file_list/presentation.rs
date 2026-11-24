@@ -69,7 +69,7 @@ fn sizes_button(pane_id: &str, active: bool, handle: Entity<OxydeApp>, theme: Ox
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             cx.stop_propagation();
             handle.update(cx, |view, cx| {
-                view.state.active_pane_id = pane_id.clone();
+                view.activate_pane(&pane_id, cx);
                 view.calculate_sizes(cx);
             });
         })
@@ -173,7 +173,7 @@ pub(super) fn selection_checkbox(
         .on_click(move |_, window, cx| {
             cx.stop_propagation();
             handle.update(cx, |view, cx| {
-                view.state.active_pane_id = pane_id.clone();
+                view.activate_pane(&pane_id, cx);
                 view.focus_handle.focus(window, cx);
                 view.toggle_selection(&pane_id, path.clone(), true, false, cx);
             });
