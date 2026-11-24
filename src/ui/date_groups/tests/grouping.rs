@@ -118,10 +118,7 @@ fn creation_and_deletion_use_their_own_dates_and_missing_data_stays_unknown() {
         deleted_time: Some(now as i64),
         ..file("file", 0)
     };
-    assert_eq!(
-        group_for_file(&entry, GroupMode::Date, today()),
-        GroupKey::Date(DateGroup::Older)
-    );
+    assert_eq!(group_for_file(&entry, GroupMode::Date, today()), GroupKey::MissingDate);
     for mode in [GroupMode::Created, GroupMode::Deleted] {
         assert_eq!(
             group_for_file(&entry, mode, today()),
@@ -143,4 +140,12 @@ fn creation_and_deletion_use_their_own_dates_and_missing_data_stays_unknown() {
         group_for_file(&entry, GroupMode::Deleted, today()),
         GroupKey::MissingDate
     );
+}
+
+#[test]
+fn origins_differing_only_by_case_or_separator_share_a_section_on_windows() {
+    let at = |path: &str| FileEntry { original_path: Some(path.into()), ..file("file", 0) };
+    let upper = group_for_file(&at(r"C:\Users\a.txt"), GroupMode::Origin, today());
+    let lower = group_for_file(&at("c:/users/b.txt"), GroupMode::Origin, today());
+    assert_eq!(upper == lower, cfg!(windows));
 }

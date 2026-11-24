@@ -1,6 +1,6 @@
 use super::*;
 use crate::ui::date_groups::GroupMode;
-use crate::ui::date_groups::{display_rows, visible_indices, DateGroup, DisplayRow, GroupKey};
+use crate::ui::date_groups::{display_rows, visible_indices, DisplayRow, GroupKey};
 use std::collections::HashSet;
 
 fn file(name: &str) -> FileEntry {
@@ -88,7 +88,7 @@ fn family_rows_keep_sort_indices_pack_each_grid_group_and_restore_date_mode() {
     assert_eq!(visible_indices(&rows), [4, 0, 2, 5, 1, 3]);
     let collapsed = HashSet::from([
         GroupKey::Family(FileFamily::Archives),
-        GroupKey::Date(DateGroup::Older),
+        GroupKey::MissingDate,
     ]);
     assert_eq!(
         visible_indices(&display_rows(&files, GroupMode::Type, &collapsed, 1)),

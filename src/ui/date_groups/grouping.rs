@@ -78,6 +78,43 @@ impl SizeGroup {
     }
 }
 
+/// A folder of origin, shown as first met and compared as the system does: on
+/// Windows, `C:\Users` and `c:/users` are one section.
+#[derive(Clone, Debug)]
+pub struct OriginPath(String);
+
+impl OriginPath {
+    fn key(&self) -> std::borrow::Cow<'_, str> {
+        if cfg!(windows) {
+            self.0.replace('/', "\\").to_lowercase().into()
+        } else {
+            self.0.as_str().into()
+        }
+    }
+}
+
+impl PartialEq for OriginPath {
+    fn eq(&self, other: &Self) -> bool {
+        self.key() == other.key()
+    }
+}
+impl Eq for OriginPath {}
+impl std::hash::Hash for OriginPath {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.key().hash(state);
+    }
+}
+impl PartialOrd for OriginPath {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for OriginPath {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.key().cmp(&other.key())
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum GroupKey {
     Date(DateGroup),
@@ -85,7 +122,7 @@ pub enum GroupKey {
     Size(SizeGroup),
     Extension(String),
     NoExtension,
-    Origin(String),
+    Origin(OriginPath),
     MissingOrigin,
     MissingDate,
 }
@@ -93,7 +130,7 @@ impl GroupKey {
     pub fn label(&self, i18n: &I18n) -> SharedString {
         match self {
             Self::Extension(extension) => extension.to_uppercase().into(),
-            Self::Origin(path) => path.clone().into(),
+            Self::Origin(path) => path.0.clone().into(),
             Self::Date(date) => i18n.text(date.message()),
             Self::Family(family) => i18n.text(family.message()),
             Self::Size(size) => i18n.text(size.message()),
@@ -118,9 +155,8 @@ fn calendar_group(timestamp: Option<u64>, today: NaiveDate) -> GroupKey {
 
 pub fn group_for_file(file: &FileEntry, mode: GroupMode, today: NaiveDate) -> GroupKey {
     match mode {
-        GroupMode::None | GroupMode::Date => {
-            GroupKey::Date(DateGroup::for_timestamp(file.modified, today))
-        }
+        // An unknown date is no old one, as in the other date modes.
+        GroupMode::None | GroupMode::Date => calendar_group(Some(file.modified).filter(|&modified| modified > 0), today),
         GroupMode::Created => calendar_group(file.created, today),
         GroupMode::Deleted => calendar_group(
             file.deleted_time.and_then(|time| u64::try_from(time).ok()),
@@ -143,7 +179,7 @@ pub fn group_for_file(file: &FileEntry, mode: GroupMode, today: NaiveDate) -> Gr
             std::path::Path::new(path)
                 .parent()
                 .filter(|parent| !parent.as_os_str().is_empty())
-                .map(|parent| GroupKey::Origin(parent.to_string_lossy().into_owned()))
+                .map(|parent| GroupKey::Origin(OriginPath(parent.to_string_lossy().into_owned())))
                 .unwrap_or(GroupKey::MissingOrigin)
         }
     }
