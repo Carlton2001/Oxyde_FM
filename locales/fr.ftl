@@ -650,6 +650,7 @@ properties-file-system = Système de fichiers
 properties-copy-name-double-click = Copier le nom sur double clic
 
 toast-copied = Copié dans le presse-papier
+copy-too-large = La sélection est trop grande pour être copiée (plus de 64 Mo).
 toast-cut = Coupé dans le presse-papier
 toast-names-copied = { $count ->
     [one] { $number } nom copié

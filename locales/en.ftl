@@ -644,6 +644,7 @@ properties-file-system = File system
 properties-copy-name-double-click = Double-click to copy the name
 
 toast-copied = Copied to clipboard
+copy-too-large = The selection is too large to copy (over 64 MB).
 toast-cut = Cut to clipboard
 toast-names-copied = { $count ->
     [one] { $number } name copied

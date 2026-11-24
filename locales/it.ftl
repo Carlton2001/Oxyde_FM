@@ -941,6 +941,7 @@ properties-file-system = File system
 properties-copy-name-double-click = Doppio clic per copiare il nome
 
 toast-copied = Copiato negli appunti
+copy-too-large = La selezione è troppo grande per essere copiata (oltre 64 MB).
 toast-cut = Tagliato negli appunti
 toast-names-copied = { $count ->
     [one] { $number } nome copiato

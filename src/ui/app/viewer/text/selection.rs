@@ -11,6 +11,9 @@ pub(in crate::ui::app::viewer) struct Selection {
     pub head: usize,
 }
 
+/// Text a copy places on the clipboard at most.
+const MAX_COPY_BYTES: usize = 64 * 1024 * 1024;
+
 impl Selection {
     pub(in crate::ui::app::viewer) fn range(&self) -> std::ops::Range<usize> {
         self.anchor.min(self.head)..self.anchor.max(self.head)
@@ -139,7 +142,14 @@ impl Viewer {
             }
             "c" => {
                 if let Some(selected) = text.selected_text() {
-                    cx.write_to_clipboard(ClipboardItem::new_string(selected.to_owned()));
+                    // The clipboard is written on the UI thread: a larger copy would freeze it.
+                    if selected.len() > MAX_COPY_BYTES {
+                        let _ = self.owner.update(cx, |app, cx| {
+                            app.toast(crate::ui::app::ToastKind::Error, crate::ui::i18n::Message::CopyTooLarge, String::new(), 0, cx);
+                        });
+                    } else {
+                        cx.write_to_clipboard(ClipboardItem::new_string(selected.to_owned()));
+                    }
                 }
                 true
             }
