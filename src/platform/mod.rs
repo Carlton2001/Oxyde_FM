@@ -1309,16 +1309,10 @@ pub(crate) fn finish_archive_worker_shutdown() -> Result<(), String> {
 
 /// Ends a worker whose request failed with exit code 1: its parent checks the
 /// status and reports a failed worker, not an empty or truncated reply.
+/// Only the Windows handle workers use it.
+#[cfg(target_os = "windows")]
 pub(crate) fn finish_failed_worker_shutdown() -> Result<(), String> {
-    #[cfg(target_os = "windows")]
-    {
-        windows_impl::shutdown_with(1)
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        platform().finish_process_shutdown()?;
-        std::process::exit(1)
-    }
+    windows_impl::shutdown_with(1)
 }
 
 /// Internal worker dispatch; never called by the UI to bypass process isolation.
