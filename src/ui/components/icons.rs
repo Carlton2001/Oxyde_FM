@@ -190,8 +190,10 @@ pub static WORD_EXTENSIONS: Lazy<HashSet<&'static str>> =
 pub static EXCEL_EXTENSIONS: Lazy<HashSet<&'static str>> =
     Lazy::new(|| ["xls", "xlsx", "ods", "csv", "tsv", "numbers", "xlsm"].into());
 
+// `.key` is left to certificates: off macOS, it is a private key far more often
+// than a Keynote presentation.
 pub static POWERPOINT_EXTENSIONS: Lazy<HashSet<&'static str>> =
-    Lazy::new(|| ["ppt", "pptx", "odp", "key", "pps", "ppsx"].into());
+    Lazy::new(|| ["ppt", "pptx", "odp", "pps", "ppsx"].into());
 
 pub static DATABASE_EXTENSIONS: Lazy<HashSet<&'static str>> =
     Lazy::new(|| ["accdb", "mdb", "db", "sqlite", "sqlite3"].into());
