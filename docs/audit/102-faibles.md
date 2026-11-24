@@ -164,12 +164,12 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F237 | `ui/components/operations/items/icons.rs:14` | corrigé | 5c621583 | élément cherché à la destination planifiée par l'opération (nom « garder les deux » compris), repli sur dossier + nom ; nouvelle `FileOperation::item_destinations` |
 | F238 | `ui/components/popup/hover.rs:38` | corrigé | c201de1e | intention d'une fenêtre fermée pendant le délai expirée après deux délais : la même ligne rouvre son sous-menu |
 | F239 | `ui/components/operations/list.rs:255` | corrigé | 9b1cff40 | largeur glissée bornée par la fenêtre comme à l'affichage |
-| F241 | `ui/components/sidebar.rs:42` | à examiner | | |
-| F242 | `ui/components/sidebar/rail.rs:168 et :226-232` | à examiner | | |
-| F243 | `ui/components/sidebar/pinned.rs:62 et :143` | à examiner | | |
-| F244 | `ui/components/tabs/scroll.rs:44` | à examiner | | |
-| F245 | `ui/components/settings/fallback.rs:18` | à examiner | | |
-| F246 | `ui/components/top_bar/breadcrumb_menu.rs:57` | à examiner | | |
+| F241 | `ui/components/sidebar.rs:42` | corrigé | 3c998e25 | dossiers sous un dossier masqué masqués avec lui (arbre, rail, révélation) ; test |
+| F242 | `ui/components/sidebar/rail.rs:168 et :226-232` | corrigé | 5f544307 | rail : volumes non montés (clic = monter) et « Démonter l'image disque » sur ses lecteurs ; WSL reste une entrée unique vers la racine des distributions |
+| F243 | `ui/components/sidebar/pinned.rs:62 et :143` | corrigé | 8ca6a169 | bornes du bouton à la cellule entière du rail (2,25 rem) |
+| F244 | `ui/components/tabs/scroll.rs:44` | corrigé | ccd7bc91 | une seule chaîne de défilement : marquée par sa dernière trame, relancée seulement si elle s'est éteinte (250 ms) |
+| F245 | `ui/components/settings/fallback.rs:18` | corrigé | 6eaa9db5 | voile de repli fermé par tout bouton, clic droit et milieu arrêtés |
+| F246 | `ui/components/top_bar/breadcrumb_menu.rs:57` | corrigé | 916ca930 | handle de défilement neuf à chaque ouverture d'un menu de chevron |
 | F248 | `ui/components/tooltip/hover.rs:176-186` | à examiner | | |
 | F249 | `ui/components/tooltip.rs:28-32` | à examiner | | |
 | F250 | `ui/components/tooltip/hover/native_window.rs:534-538` | à examiner | | |
