@@ -12,9 +12,11 @@ use gpui::*;
 use oxyde_lib::models::error::{ArchiveRecoveryFailure, DeleteBatchFailure};
 
 impl OxydeApp {
-    pub(super) fn dismiss_notice(&mut self) {
-        self.file_operation_notice = None;
-        self.delete_retry = None;
+    /// Closes the notice shown; the next one queued takes its place.
+    pub(crate) fn dismiss_notice(&mut self) {
+        let next = self.queued_notices.pop_front();
+        self.delete_retry = next.as_ref().and_then(|(_, retry)| retry.clone());
+        self.file_operation_notice = next.map(|(notice, _)| notice);
     }
 }
 

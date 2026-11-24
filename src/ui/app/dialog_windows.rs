@@ -376,7 +376,7 @@ impl OxydeApp {
                         _ => kind.discard_fixed(app, cx),
                     }
                     if kind != DialogKind::Notice {
-                        app.file_operation_notice = Some((Message::OperationFailed, error.to_string()));
+                        app.report_notice((Message::OperationFailed, error.to_string()), None);
                     }
                     cx.notify();
                 });

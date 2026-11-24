@@ -419,6 +419,8 @@ pub struct OxydeApp {
     file_operation_notice: Option<(Message, String)>,
     /// Items a failed deletion left behind, offered for retry with the matching notice.
     delete_retry: Option<file_operations::DeleteRetry>,
+    /// Failure notices reported while another is shown, with their retries.
+    queued_notices: std::collections::VecDeque<((Message, String), Option<file_operations::DeleteRetry>)>,
     toasts: Vec<Toast>,
     next_toast_id: u64,
     pub(crate) update_status: UpdateStatus,
@@ -660,6 +662,7 @@ impl OxydeApp {
             drop_stagings: Default::default(),
             file_operation_notice: None,
             delete_retry: None,
+            queued_notices: std::collections::VecDeque::new(),
             toasts: Vec::new(),
             next_toast_id: 0,
             update_status: UpdateStatus::Idle,
