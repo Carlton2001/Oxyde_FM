@@ -108,7 +108,9 @@ impl PropertiesWindow {
             .iter()
             .map(|input| input.read(cx).content().to_string())
             .collect();
-        if fields[0].trim().is_empty() || fields.iter().any(|value| value.contains('\0')) {
+        // A Shell-only shortcut (a Control Panel item) has no path: kept empty, it stays as it is.
+        let emptied = fields[0].trim().is_empty() && fields[0] != info.target;
+        if emptied || fields.iter().any(|value| value.contains('\0')) {
             self.properties_dialog.as_mut().unwrap().validation_error =
                 Some(Message::ShortcutInvalidTarget);
             cx.notify();
