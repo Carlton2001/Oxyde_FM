@@ -175,6 +175,7 @@ impl Render for OperationsPanelView {
                 .child(self.render_items(operation, system, window, cx)),
             None => self.render_empty(cx),
         };
+        let viewport = window.viewport_size().width.as_f32();
         let root = div()
             .track_focus(&self.focus)
             .size_full()
@@ -183,7 +184,7 @@ impl Render for OperationsPanelView {
             .bg(theme.active_background)
             .text_color(theme.text)
             .child(crate::ui::components::tool_window::pointer_drag(cx.entity(),
-                |this, event, cx| if this.resizing_list { this.resize_list(event, cx) } else { this.move_scrollbar(event, cx) },
+                move |this, event, cx| if this.resizing_list { this.resize_list(event, viewport, cx) } else { this.move_scrollbar(event, cx) },
                 |this, cx| {
                     this.scroll_drag = None;
                     this.finish_list_resize(cx);
