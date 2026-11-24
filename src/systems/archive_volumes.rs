@@ -17,7 +17,8 @@ pub(crate) struct VolumeFiles {
 
 impl VolumeFiles {
     /// `source` opened at `path`; a volume of a set brings every volume, opened under
-    /// their held folder, the first one first.
+    /// their held folder, the first one first. `path`'s volume stays `source`, the file
+    /// the caller checked: reopening it by name could read a replacement.
     pub(crate) fn open(path: &Path, source: File) -> io::Result<Self> {
         let volumes = crate::utils::archive_volumes::rar_volumes(path);
         if volumes.len() < 2 {
@@ -25,10 +26,14 @@ impl VolumeFiles {
             return Ok(Self { files: vec![(source, size)] });
         }
         let parents = HeldParents::new(path)?;
+        let mut source = Some(source);
         let files = volumes
             .iter()
             .map(|volume| {
-                let file = platform().open_archive_source(&parents.resolved_path(volume)?, false)?;
+                let file = match source.take_if(|_| volume == path) {
+                    Some(file) => file,
+                    None => platform().open_archive_source(&parents.resolved_path(volume)?, false)?,
+                };
                 let size = file.metadata()?.len();
                 if size == 0 {
                     return Err(invalid());
@@ -125,3 +130,8 @@ pub(crate) fn index_rar_set(path: &Path, checkpoint: &dyn Fn() -> io::Result<()>
         .map_err(CommandError::from)?;
     Ok(entries)
 }
+
+// Replacing a file another handle holds open is refused on Windows.
+#[cfg(all(test, unix))]
+#[path = "archive_volumes/tests/source.rs"]
+mod tests;
