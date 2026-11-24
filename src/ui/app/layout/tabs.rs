@@ -659,7 +659,8 @@ impl OxydeApp {
                     if h.read(cx).state.find_pane(&pane_id).is_some_and(|pane| pane.active_tab().is_viewer()) { return; }
                     let directories = h.read(cx).tab_drop_directories(data);
                     h.update(cx, |this, cx| {
-                        for path in directories { this.add_tab(&pane_id, path, false, cx); }
+                        // Each tab opens just after the active one: the last first keeps their order.
+                        for path in directories.into_iter().rev() { this.add_tab(&pane_id, path, false, cx); }
                     });
                 }
             })
