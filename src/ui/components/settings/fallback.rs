@@ -11,17 +11,23 @@ pub(super) fn render(view: &OxydeApp, handle: Entity<OxydeApp>, window: &mut Win
     let origin = view
         .settings_button_bounds
         .map_or(point(px(0.0), px(crate::ui::components::title_bar::titlebar_h())), |button| point(px(0.0), button.bottom()));
-    let backdrop = handle.clone();
-    let mut overlay = div()
-        .absolute()
-        .inset_0()
-        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+    // Any button closes the panel: a right or middle click must not reach the list below.
+    let dismiss = |handle: Entity<OxydeApp>| {
+        move |_: &MouseDownEvent, _: &mut Window, cx: &mut App| {
             cx.stop_propagation();
-            backdrop.update(cx, |view, cx| {
+            handle.update(cx, |view, cx| {
                 view.close_settings();
                 cx.notify();
             });
-        })
+        }
+    };
+    let mut overlay = div()
+        .absolute()
+        .inset_0()
+        .on_mouse_down(MouseButton::Left, dismiss(handle.clone()))
+        .on_mouse_down(MouseButton::Right, dismiss(handle.clone()))
+        .on_mouse_down(MouseButton::Middle, dismiss(handle.clone()))
+        .on_mouse_up(MouseButton::Right, |_, _, cx| cx.stop_propagation())
         .child(anchored().position(origin).snap_to_window().child(panel::render(view, handle.clone(), window, cx)));
     if let Some((kind, anchor)) = view.settings_picker.and_then(|kind| Some((kind, submenu_anchor(view, kind)?))) {
         let bounds = anchor.bounds;
