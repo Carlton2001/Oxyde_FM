@@ -52,6 +52,7 @@ impl FileChooserWindow {
         let left = std::mem::replace(&mut self.folder, folder);
         if !left.is_empty() {
             self.note_interaction(cx);
+            self.initial_fallbacks.clear();
         }
         if !left.is_empty() && left != self.folder {
             match step {
@@ -112,6 +113,15 @@ impl FileChooserWindow {
                         this.admission.content_types = Arc::new(known);
                         this.arrange(keep, cx);
                         this.check_subfolders(cx);
+                        this.initial_fallbacks.clear();
+                    }
+                    Err(_) if this.folder == folder && !this.initial_fallbacks.is_empty() => {
+                        let next = this.initial_fallbacks.remove(0);
+                        log::info!("The file chooser cannot list {folder}; it opens {next} instead");
+                        // Not a navigation: nothing enters the history.
+                        this.folder.clear();
+                        this.show_folder(next, cx);
+                        return;
                     }
                     Err(error) => {
                         log::warn!("The file chooser cannot list {folder}: {error:?}");

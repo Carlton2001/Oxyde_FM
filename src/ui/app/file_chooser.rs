@@ -156,6 +156,8 @@ pub struct FileChooserWindow {
     grab_offset: f32,
     /// The new folder whose name is edited in place.
     rename: Option<create::Rename>,
+    /// The folders to try in turn while the first one shown cannot be listed.
+    initial_fallbacks: Vec<String>,
     /// A navigation closed the field that held the focus: the entries take it back.
     refocus: bool,
     /// The selection rectangle being drawn, and the entries' area it is measured in.
@@ -376,6 +378,8 @@ impl FileChooserWindow {
             if withdrawn.await.is_ok() {
                 let _ = this.update_in(cx, |this, window, cx| {
                     this.close_overwrite(cx);
+                    this.remember(cx);
+                    crate::ui::components::tool_window::close_transients(window, cx);
                     window.remove_window();
                 });
             }
@@ -391,12 +395,20 @@ impl FileChooserWindow {
         }));
         let sidebar_width = lent.options.sidebar.unwrap_or(lent.sidebar_width);
         // The application's folder, else where it last chose, its default, the last one.
-        let folder = current_folder.map(|folder| oxyde_lib::utils::path_text::encode(&folder))
-            .or_else(|| extras.client.as_deref().and_then(|client| lent.options.client_folder(client)))
-            .or_else(|| extras.default_folder.as_ref().map(|folder| oxyde_lib::utils::path_text::encode(folder)))
-            .or_else(|| lent.options.folder.clone())
-            .or_else(|| dirs::home_dir().map(|home| home.to_string_lossy().into_owned()))
-            .unwrap_or_else(|| if cfg!(target_os = "windows") { r"C:\".into() } else { "/".into() });
+        // The next ones stand in when a folder cannot be listed, such as an unplugged key's.
+        let mut candidates: Vec<String> = [
+            current_folder.map(|folder| oxyde_lib::utils::path_text::encode(&folder)),
+            extras.client.as_deref().and_then(|client| lent.options.client_folder(client)),
+            extras.default_folder.as_ref().map(|folder| oxyde_lib::utils::path_text::encode(folder)),
+            lent.options.folder.clone(),
+            dirs::home_dir().map(|home| home.to_string_lossy().into_owned()),
+            Some(if cfg!(target_os = "windows") { r"C:\".into() } else { "/".into() }),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        candidates.dedup();
+        let folder = candidates.remove(0);
         let proposed = match &purpose {
             FileChooserPurpose::Save { name } => Some(name.clone()),
             _ => None,
@@ -479,6 +491,7 @@ impl FileChooserWindow {
             arrange_task: None,
             arranging: false,
             subfolder_task: None,
+            initial_fallbacks: candidates,
             _withdrawal: withdrawal,
             _owner_changes: owner_changes,
         };
