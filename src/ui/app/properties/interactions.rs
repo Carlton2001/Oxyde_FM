@@ -38,6 +38,7 @@ impl PropertiesWindow {
             let handle = cx.entity();
             let mut inputs = Vec::new();
             for value in values {
+                let changed = handle.clone();
                 let submit = handle.clone();
                 let cancel = handle.clone();
                 let context = handle.clone();
@@ -46,7 +47,14 @@ impl PropertiesWindow {
                         cx,
                         "",
                         value,
-                        |_, _, _| {},
+                        // A field edited: the message about the last OK no longer applies.
+                        move |_, _, cx| {
+                            changed.update(cx, |this, cx| {
+                                if this.properties_dialog.as_mut().and_then(|dialog| dialog.validation_error.take()).is_some() {
+                                    cx.notify();
+                                }
+                            })
+                        },
                         move |window, cx| {
                             submit.update(cx, |this, cx| this.accept_properties(window, cx))
                         },
@@ -71,6 +79,9 @@ impl PropertiesWindow {
             dialog.run_window = run_window;
         }
         let dialog = self.properties_dialog.as_mut().unwrap();
+        if dialog.tab != tab {
+            dialog.validation_error = None;
+        }
         dialog.tab = tab;
         dialog.run_menu = None;
         if let Some(edit) = &mut dialog.permissions {
