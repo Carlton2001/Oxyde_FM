@@ -126,6 +126,14 @@ impl Tooltip {
             }).into()
         }
     }
+    /// What a pane item's tooltip shows that can change while it is hovered.
+    pub(crate) fn item_revision(file: &oxyde_lib::models::FileEntry, provisional_size: bool) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        (file.size, file.modified, file.is_calculated, provisional_size).hash(&mut hasher);
+        hasher.finish()
+    }
+
     /// The single entry point for pane items, in list and grid views alike.
     /// Order: name, type, size, modification date, location, context lines.
     pub(crate) fn for_item(file: oxyde_lib::models::FileEntry, search_result: bool, previews: bool, provisional_size: bool) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
