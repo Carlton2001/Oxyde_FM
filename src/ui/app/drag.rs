@@ -566,6 +566,19 @@ impl OxydeApp {
 /// Hover time over a tab before a drag activates it.
 const DRAG_TAB_SWITCH_DELAY: std::time::Duration = std::time::Duration::from_millis(600);
 
+/// A tab waiting for drag activation; dropping it cancels its timer.
+pub(crate) struct DragTabSwitch {
+    pane_id: String,
+    tab_ix: usize,
+    _timer: Task<()>,
+}
+
+impl DragTabSwitch {
+    fn targets(&self, pane_id: &str, tab_ix: usize) -> bool {
+        self.pane_id == pane_id && self.tab_ix == tab_ix
+    }
+}
+
 impl OxydeApp {
     /// Activates the hovered tab once the drag pointer has rested on it long enough.
     pub(crate) fn hover_tab_during_drag(&mut self, pane_id: &str, tab_ix: usize, cx: &mut Context<Self>) {
@@ -575,28 +588,25 @@ impl OxydeApp {
             self.drag_tab_switch = None;
             return;
         }
-        let target = (pane_id.to_owned(), tab_ix);
-        if self.drag_tab_switch.as_ref() == Some(&target) {
+        if self.drag_tab_switch.as_ref().is_some_and(|switch| switch.targets(pane_id, tab_ix)) {
             return;
         }
-        self.drag_tab_switch = Some(target.clone());
-        cx.spawn(async move |this, cx| {
+        let pane = pane_id.to_owned();
+        let timer = cx.spawn(async move |this, cx| {
             cx.background_executor().timer(DRAG_TAB_SWITCH_DELAY).await;
             let _ = this.update(cx, |this, cx| {
-                if this.drag_tab_switch.as_ref() == Some(&target) {
-                    this.drag_tab_switch = None;
-                    if cx.has_active_drag() {
-                        this.switch_tab(&target.0, target.1, cx);
-                    }
+                this.drag_tab_switch = None;
+                if cx.has_active_drag() {
+                    this.switch_tab(&pane, tab_ix, cx);
                 }
             });
-        })
-        .detach();
+        });
+        self.drag_tab_switch = Some(DragTabSwitch { pane_id: pane_id.to_owned(), tab_ix, _timer: timer });
     }
 
     /// Cancels a pending drag activation when the pointer leaves that tab.
     pub(crate) fn leave_tab_during_drag(&mut self, pane_id: &str, tab_ix: usize) {
-        if self.drag_tab_switch.as_ref().is_some_and(|(pane, ix)| pane == pane_id && *ix == tab_ix) {
+        if self.drag_tab_switch.as_ref().is_some_and(|switch| switch.targets(pane_id, tab_ix)) {
             self.drag_tab_switch = None;
         }
     }

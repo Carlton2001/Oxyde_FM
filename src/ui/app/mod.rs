@@ -378,7 +378,7 @@ pub struct OxydeApp {
     pub drag_target_default_copy: bool,
     /// The hovered drop target refuses writes (read-only volume or archive): the ghost says so.
     pub(crate) drag_target_refused: bool,
-    pub(crate) drag_tab_switch: Option<(String, usize)>,
+    pub(crate) drag_tab_switch: Option<drag::DragTabSwitch>,
 
     pub editing_path: Option<String>,
     /// Whether the item being renamed is a folder, whose name has no extension.
