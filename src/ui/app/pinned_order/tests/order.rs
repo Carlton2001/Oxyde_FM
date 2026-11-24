@@ -1,4 +1,4 @@
-use super::{apply_order, moved};
+use super::{apply_order, merged_order, moved};
 use oxyde_lib::models::QuickAccessItem;
 
 fn items(paths: &[&str]) -> Vec<QuickAccessItem> {
@@ -30,4 +30,14 @@ fn a_drop_in_place_changes_nothing() {
     assert!(moved(&list, "/b", "/b", false).is_none());
     assert!(moved(&list, "/b", "/a", true).is_none());
     assert!(moved(&list, "/b", "/c", false).is_none());
+}
+
+#[test]
+fn an_absent_folder_keeps_its_saved_place_through_a_reorder() {
+    let saved: Vec<String> = ["/a", "/usb", "/b", "/c"].map(String::from).to_vec();
+    let shown: Vec<String> = ["/b", "/a", "/c"].map(String::from).to_vec();
+    assert_eq!(merged_order(&saved, &shown), ["/b", "/a", "/usb", "/c"]);
+    let shown: Vec<String> = ["/c", "/b", "/a"].map(String::from).to_vec();
+    let saved: Vec<String> = ["/usb", "/a"].map(String::from).to_vec();
+    assert_eq!(merged_order(&saved, &shown), ["/usb", "/c", "/b", "/a"]);
 }

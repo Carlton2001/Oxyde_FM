@@ -40,6 +40,32 @@ pub(crate) fn moved(items: &[QuickAccessItem], path: &str, target: &str, after: 
     (to != from).then_some(moved)
 }
 
+/// Absent folders kept in the saved order: unpinned ones are never told apart.
+const MAX_ABSENT: usize = 64;
+
+/// The saved order once `shown` was reordered: a folder saved but absent for now (an
+/// unplugged drive's) keeps its place after the folder it followed.
+pub(crate) fn merged_order(saved: &[String], shown: &[String]) -> Vec<String> {
+    let mut order = shown.to_vec();
+    let mut absent = 0;
+    for (index, path) in saved.iter().enumerate() {
+        if order.contains(path) {
+            continue;
+        }
+        absent += 1;
+        if absent > MAX_ABSENT {
+            break;
+        }
+        let place = saved[..index]
+            .iter()
+            .rev()
+            .find_map(|before| order.iter().position(|known| known == before))
+            .map_or(0, |position| position + 1);
+        order.insert(place, path.clone());
+    }
+    order
+}
+
 impl OxydeApp {
     pub(crate) fn press_pinned(&mut self, path: String, pointer: Point<Pixels>) {
         self.pinned_press = Some((path, pointer));
@@ -73,7 +99,8 @@ impl OxydeApp {
         cx.notify();
         let Some((target, after)) = reorder.target.filter(|_| commit) else { return };
         let Some(items) = moved(&self.state.pinned_items, &reorder.path, &target, after) else { return };
-        self.config.pinned_order = items.iter().map(|item| item.path.clone()).collect();
+        let shown: Vec<String> = items.iter().map(|item| item.path.clone()).collect();
+        self.config.pinned_order = merged_order(&self.config.pinned_order, &shown);
         self.state.pinned_items = items;
         self.state.refresh_sidebar();
         self.refresh_system_menus(cx);
