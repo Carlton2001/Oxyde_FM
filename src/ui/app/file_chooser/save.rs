@@ -88,9 +88,25 @@ pub(super) fn strictly_typed(path: PathBuf, filter: &FileTypeFilter) -> PathBuf 
     path.with_file_name(name)
 }
 
-/// Whether the file at `path` cannot be written. Reads the disk: run it off the UI thread.
+/// Whether the file at `path` cannot be written: its attribute, its permissions or its
+/// access rights refuse it. Reads the disk: run it off the UI thread.
+#[cfg(target_os = "windows")]
 fn read_only(path: &Path) -> bool {
-    std::fs::metadata(path).is_ok_and(|metadata| metadata.permissions().readonly())
+    use std::os::windows::fs::OpenOptionsExt;
+    // Opened for writing its data, shared with everyone, nothing written.
+    const FILE_WRITE_DATA: u32 = 0x2;
+    std::fs::OpenOptions::new()
+        .access_mode(FILE_WRITE_DATA)
+        .share_mode(0x7)
+        .open(path)
+        .is_err_and(|error| error.kind() == std::io::ErrorKind::PermissionDenied)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn read_only(path: &Path) -> bool {
+    // Asked without opening it: a FIFO would block.
+    rustix::fs::access(path, rustix::fs::Access::WRITE_OK)
+        .is_err_and(|error| error == rustix::io::Errno::ACCESS || error == rustix::io::Errno::ROFS || error == rustix::io::Errno::PERM)
 }
 
 /// `path` with `extension`, when it is a free name without one; a folder typed to be
@@ -209,6 +225,7 @@ impl FileChooserWindow {
         // What the application asks of the file: the shown filter's type, a writable one.
         let strict = self.type_filter.and_then(|position| self.filters.get(position)).filter(|_| self.extras.strict_types).cloned();
         let refuse_read_only = self.extras.refuse_read_only;
+        let folder = self.folder.clone();
         self.name.task = Some(cx.spawn_in(window, async move |this, cx| {
             let (path, found, refused) = cx.background_spawn(async move {
                 let path = match strict {
@@ -221,6 +238,10 @@ impl FileChooserWindow {
             }).await;
             let _ = this.update_in(cx, |this, window, cx| {
                 this.name.task = None;
+                // Left meanwhile: the name was meant for the folder then open.
+                if this.folder != folder {
+                    return;
+                }
                 if refused || !this.save_at(path, found, window, cx) {
                     this.name.invalid = true;
                     this.name.shake = this.name.shake.wrapping_add(1);
