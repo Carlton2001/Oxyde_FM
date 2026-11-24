@@ -89,16 +89,22 @@ impl Viewer {
     }
 
     fn request_markdown_image(&mut self, index: usize, path: String, cx: &mut Context<Self>) {
+        // An image being deleted stays closed; a deletion waits for one being read.
+        if self.deletion_blocks(&path) {
+            return;
+        }
         let Content::Markdown(document) = &mut self.content else {
             return;
         };
         if document.images.contains_key(&index) || document.images.len() >= 32 {
             return;
         }
+        let reading = self.jobs.register(&path);
         let renderer = cx.svg_renderer();
         let generation = self.generation;
         let wanted = self.wanted.clone();
         let work = crate::ui::preview_jobs::load(move || {
+            let _reading = reading;
             if wanted.load(std::sync::atomic::Ordering::Acquire) != generation {
                 return Err("Markdown image no longer shown".to_string());
             }

@@ -227,6 +227,8 @@ pub struct FileDragPreview {
 pub struct OxydeApp {
     pub state: WorkspaceState,
     pub(crate) viewers: std::collections::HashMap<String, Entity<viewer::Viewer>>,
+    /// Deletions running, by operation: a Viewer opened meanwhile keeps their files closed.
+    pub(super) viewer_deletions: std::collections::HashMap<String, Vec<std::path::PathBuf>>,
     pub handle: Option<Entity<Self>>,
     pub(crate) next_file_request: u64,
     pub(crate) next_native_menu_request: u64,
@@ -490,6 +492,7 @@ impl OxydeApp {
         Self {
             state,
             viewers: Default::default(),
+            viewer_deletions: Default::default(),
             handle: None,
             next_file_request: 0,
             next_native_menu_request: 0,

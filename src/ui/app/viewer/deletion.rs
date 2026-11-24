@@ -75,6 +75,7 @@ impl OxydeApp {
         cx: &mut Context<Self>,
     ) -> impl std::future::Future<Output = ()> + Send + use<> {
         let mut pending = Vec::new();
+        self.viewer_deletions.insert(id.to_owned(), paths.to_vec());
         for viewer in self.viewers.values() {
             viewer.update(cx, |viewer, cx| {
                 viewer.deletions.insert(id.to_owned(), paths.to_vec());
@@ -102,6 +103,7 @@ impl OxydeApp {
         reload: bool,
         cx: &mut Context<Self>,
     ) {
+        self.viewer_deletions.remove(id);
         for viewer in self.viewers.values() {
             viewer.update(cx, |viewer, cx| {
                 let Some(paths) = viewer.deletions.remove(id) else {

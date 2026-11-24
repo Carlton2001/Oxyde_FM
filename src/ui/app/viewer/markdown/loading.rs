@@ -14,7 +14,10 @@ impl Viewer {
         // At most two batches wait for the UI. Dropping the receiver also
         // releases a producer waiting to publish after a file/mode change.
         let (sender, mut batches) = tokio::sync::mpsc::channel(2);
+        // A deletion of the file waits until the reading is over.
+        let reading = self.jobs.register(&path);
         let work = crate::ui::preview_jobs::load_viewer(move || {
+            let _reading = reading;
             let cancelled = || sender.is_closed() || wanted.load(Ordering::Acquire) != generation;
             if cancelled() {
                 return Ok(false);
