@@ -191,6 +191,19 @@ pub(super) fn render_frame(
                 handle.update(cx, |a, cx| a.cancel_pending_file_operation(cx));
                 restore_focus(&handle, window, cx);
             }
+            let modifiers = event.keystroke.modifiers;
+            if !(modifiers.control || modifiers.alt || modifiers.shift || modifiers.platform) {
+                let key = event.keystroke.key.clone();
+                handle.update(cx, |app, cx| {
+                    // The search field keeps its own arrows.
+                    let typing = app.pending_file_operations.front()
+                        .and_then(|p| p.dialog.input.as_ref())
+                        .is_some_and(|input| input.read(cx).focus_handle.is_focused(window));
+                    if !typing && app.pending_file_operations.front_mut().is_some_and(|p| super::controls::list_key(p, &key)) {
+                        cx.notify();
+                    }
+                });
+            }
         })
         .on_action(|_: &crate::ui::app::Ouvrir, _, cx| cx.stop_propagation())
         .on_action(|_: &crate::ui::app::Copier, _, cx| cx.stop_propagation())

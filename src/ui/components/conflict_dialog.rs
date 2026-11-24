@@ -32,6 +32,8 @@ pub(crate) struct ConflictDialogState {
     pub(crate) resolutions: HashMap<String, ConflictAction>,
     automatic: HashSet<String>,
     opposite_initialized: bool,
+    /// The advanced list, scrolled to the row the keyboard selects.
+    list_scroll: ScrollHandle,
 }
 
 impl Default for ConflictDialogState {
@@ -50,6 +52,7 @@ impl Default for ConflictDialogState {
             resolutions: HashMap::new(),
             automatic: HashSet::new(),
             opposite_initialized: false,
+            list_scroll: ScrollHandle::new(),
         }
     }
 }
