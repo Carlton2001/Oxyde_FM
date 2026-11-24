@@ -1,7 +1,7 @@
 use super::rows::{render_sidebar_rows, SidebarRowPresentation};
 use super::reorder;
 use super::toolbar::sidebar_toolbar;
-use super::{pinned_display_name, sidebar_item_height, sidebar_item_visible, sidebar_row_h};
+use super::{pinned_display_name, sidebar_item_height, sidebar_row_h, visible_sidebar_items};
 use crate::ui::app::{DragTarget, OxydeApp};
 use crate::ui::components::scrollbar::{render_scrollbar, ScrollbarAxis};
 use crate::ui::i18n::I18nContext;
@@ -32,13 +32,10 @@ pub(super) fn render_sidebar_tree(
         .iter()
         .map(|i| i.path.clone())
         .collect();
-    let sidebar_items: Vec<SidebarItem> = view
-        .state
-        .sidebar_items
-        .iter()
-        .filter(|item| sidebar_item_visible(item, show_hidden, show_system, view.show_network()))
-        .cloned()
-        .collect();
+    let sidebar_items: Vec<SidebarItem> =
+        visible_sidebar_items(&view.state.sidebar_items, show_hidden, show_system, view.show_network())
+            .cloned()
+            .collect();
     let theme = *_cx.theme();
     let use_system_icons = cfg!(target_os = "windows") && view.use_system_icons();
 

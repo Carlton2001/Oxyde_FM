@@ -89,7 +89,7 @@ impl OxydeApp {
                     &this.state.sidebar_items, &path, this.show_hidden, this.show_system, this.show_network(),
                 ) {
                     this.sidebar_selected_path = Some(current);
-                    let visible: Vec<_> = this.state.sidebar_items.iter().filter(|item| crate::ui::components::sidebar::sidebar_item_visible(item, this.show_hidden, this.show_system, this.show_network())).collect();
+                    let visible: Vec<_> = crate::ui::components::sidebar::visible_sidebar_items(&this.state.sidebar_items, this.show_hidden, this.show_system, this.show_network()).collect();
                     let top: f32 = crate::ui::scale::rem_pixels(crate::ui::components::sidebar::LIST_PADDING).as_f32() + visible.iter().take(index).map(|item| crate::ui::components::sidebar::sidebar_item_height(item)).sum::<f32>();
                     let height = visible.get(index).map(|item| crate::ui::components::sidebar::sidebar_item_height(item)).unwrap_or(0.0);
                     let scroll = this.sidebar_scroll.0.borrow().base_handle.clone();
@@ -830,8 +830,7 @@ fn sidebar_reveal_index(
     show_network: bool,
 ) -> Option<usize> {
     use crate::ui::workspace::SidebarItem;
-    items.iter()
-        .filter(|item| crate::ui::components::sidebar::sidebar_item_visible(item, show_hidden, show_system, show_network))
+    crate::ui::components::sidebar::visible_sidebar_items(items, show_hidden, show_system, show_network)
         .position(|item| match item {
             SidebarItem::Drive { drive, .. } => paths_match(&drive.path, path),
             SidebarItem::Directory { node, .. } => paths_match(&node.path, path),

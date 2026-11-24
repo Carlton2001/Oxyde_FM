@@ -118,15 +118,12 @@ pub(super) fn render_sidebar_rail(
         });
         deepest_root(current, roots).map(str::to_string)
     });
-    for item in &view.state.sidebar_items {
-        if !super::sidebar_item_visible(
-            item,
-            view.show_hidden,
-            view.show_system,
-            view.show_network(),
-        ) {
-            continue;
-        }
+    for item in super::visible_sidebar_items(
+        &view.state.sidebar_items,
+        view.show_hidden,
+        view.show_system,
+        view.show_network(),
+    ) {
         // Sections part as in the expanded tree; the places, pinned menu included, end first.
         if let SidebarItem::Header(_) = item {
             if let Some(pinned) = pinned.take() {

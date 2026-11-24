@@ -50,6 +50,32 @@ pub(crate) fn sidebar_item_visible(item: &SidebarItem, show_hidden: bool, show_s
     }
 }
 
+/// The items shown, in order: the visible ones, without the folders under a hidden one.
+pub(crate) fn visible_sidebar_items(
+    items: &[SidebarItem],
+    show_hidden: bool,
+    show_system: bool,
+    show_network: bool,
+) -> impl Iterator<Item = &SidebarItem> {
+    let mut hidden_below: Option<usize> = None;
+    items.iter().filter(move |item| {
+        let depth = match item {
+            SidebarItem::Directory { depth, .. } => Some(*depth),
+            _ => None,
+        };
+        if depth.zip(hidden_below).is_some_and(|(depth, hidden)| depth > hidden) {
+            return false;
+        }
+        let visible = sidebar_item_visible(item, show_hidden, show_system, show_network);
+        hidden_below = if visible { None } else { depth };
+        visible
+    })
+}
+
+#[cfg(test)]
+#[path = "sidebar/tests/visibility_tests.rs"]
+mod visibility_tests;
+
 fn pinned_display_name(item: &oxyde_lib::models::QuickAccessItem, i18n: &I18n) -> String {
     match item.path.as_str() {
         "__network_vincinity__" => i18n.text(Message::SidebarNetwork).to_string(),
