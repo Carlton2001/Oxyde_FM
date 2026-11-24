@@ -30,10 +30,20 @@ fn holds(process: &Path, under: &impl Fn(&Path) -> bool) -> bool {
     if links.chain(files).any(|path| under(&path)) {
         return true;
     }
-    // The path is the sixth column; mapped libraries and fonts count too.
+    // Mapped libraries and fonts count too.
     std::fs::read_to_string(process.join("maps")).is_ok_and(|maps| {
-        maps.lines().filter_map(|line| line.split_whitespace().nth(5)).any(|path| under(Path::new(path)))
+        maps.lines().filter_map(mapped_path).any(|path| under(Path::new(path)))
     })
+}
+
+/// The path of a `maps` line: all that follows the fifth column, spaces included.
+fn mapped_path(line: &str) -> Option<&str> {
+    let mut rest = line;
+    for _ in 0..5 {
+        rest = rest.trim_start();
+        rest = &rest[rest.find(char::is_whitespace)?..];
+    }
+    Some(rest.trim_start()).filter(|path| !path.is_empty())
 }
 
 /// `comm` is cut at 15 bytes; the executable then gives the full name.
