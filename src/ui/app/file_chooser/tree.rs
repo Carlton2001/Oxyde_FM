@@ -95,7 +95,8 @@ impl FileChooserWindow {
             let _ = this.update(cx, |this, cx| {
                 this.tree.loading.remove(&path);
                 match result {
-                    Ok(nodes) => { this.tree.nodes.insert(path, nodes); }
+                    // Folders listed meanwhile, by the folder's own listing, are newer.
+                    Ok(nodes) => { this.tree.nodes.entry(path).or_insert(nodes); }
                     Err(error) => log::warn!("The file chooser cannot unfold {path}: {error:?}"),
                 }
                 cx.notify();
@@ -116,6 +117,9 @@ impl FileChooserWindow {
     pub(super) fn update_tree(&mut self, folder: &str, nodes: &[SidebarNode]) {
         if let Some(known) = self.tree.nodes.get_mut(folder) {
             *known = nodes.to_vec();
+        } else if self.tree.loading.contains(folder) {
+            // Newer than the unfolding under way, which keeps these.
+            self.tree.nodes.insert(folder.to_owned(), nodes.to_vec());
         }
         // Its chevron, in its parent's list, follows a first folder made or the last removed.
         for node in self.tree.nodes.values_mut().flatten().filter(|node| paths_match(&node.path, folder)) {
@@ -147,6 +151,7 @@ impl FileChooserWindow {
             for (index, target) in targets.iter().enumerate() {
                 // The folder's own parent is listed again, for a folder just made there.
                 let known = if index + 1 < targets.len() { cached.get(&current).cloned() } else { None };
+                let fresh = known.is_none();
                 let nodes = match known {
                     Some(nodes) => nodes,
                     None => match oxyde_lib::commands::sidebar::get_sidebar_nodes(current.clone()).await {
@@ -158,7 +163,7 @@ impl FileChooserWindow {
                     },
                 };
                 let next = nodes.iter().find(|node| paths_match(&node.path, target)).map(|node| node.path.clone());
-                loaded.push((current.clone(), nodes));
+                loaded.push((current.clone(), nodes, fresh));
                 let Some(next) = next else { break };
                 current = next;
             }
@@ -166,9 +171,14 @@ impl FileChooserWindow {
                 if this.folder != folder {
                     return;
                 }
-                for (parent, nodes) in loaded {
+                for (parent, nodes, fresh) in loaded {
                     this.tree.expanded.insert(parent.clone());
-                    this.tree.nodes.insert(parent, nodes);
+                    // A copy taken at the start yields to a listing made since.
+                    if fresh {
+                        this.tree.nodes.insert(parent, nodes);
+                    } else {
+                        this.tree.nodes.entry(parent).or_insert(nodes);
+                    }
                 }
                 this.reveal_in_sidebar(&folder);
                 cx.notify();
