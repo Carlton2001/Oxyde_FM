@@ -33,11 +33,28 @@ fn content_is_beside_the_record_and_names_keep_their_case() {
 
 #[test]
 fn trash_content_is_recognized_only_under_a_trash_root() {
-    let (_root, trash, original) = trash_with("x");
-    assert!(inside_trash(&trash.join("files").join("x")));
-    assert!(inside_trash(&trash.join("files").join("x").join("child")));
-    assert!(!inside_trash(&trash.join("info").join("x.trashinfo")));
+    let home = dirs::data_dir().unwrap().join("Trash");
+    std::fs::create_dir_all(home.join("info")).unwrap();
+    assert!(inside_trash(&home.join("files").join("x")));
+    assert!(inside_trash(&home.join("files").join("x").join("child")));
+    assert!(!inside_trash(&home.join("info").join("x.trashinfo")));
+    // A copy of an old home trash, kept in a backup, is an ordinary folder.
+    let (_root, copy, original) = trash_with("x");
+    assert!(!inside_trash(&copy.join("files").join("x")));
     assert!(!inside_trash(&original.join("files").join("x")));
+}
+
+#[test]
+fn mount_trashes_are_named_by_the_user_at_the_top_of_a_mount() {
+    assert_eq!(mount_trash_top(Path::new("/media/key/.Trash-1000")), Some(Path::new("/media/key")));
+    assert_eq!(mount_trash_top(Path::new("/media/key/.Trash/1000")), Some(Path::new("/media/key")));
+    for root in ["/media/key/.Trash-", "/media/key/.Trash-abc", "/media/key/Trash", "/media/key/old/1000"] {
+        assert_eq!(mount_trash_top(Path::new(root)), None, "{root}");
+    }
+    assert!(mount_top(Path::new("/")));
+    assert!(mount_top(Path::new("/proc")));
+    let folder = tempfile::tempdir().unwrap();
+    assert!(!mount_top(folder.path()));
 }
 
 #[test]

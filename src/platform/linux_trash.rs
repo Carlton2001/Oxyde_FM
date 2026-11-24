@@ -29,11 +29,39 @@ pub(super) fn inside_trash(path: &Path) -> bool {
     })
 }
 
+/// The home trash, or a trash of the specification at the top of a mount: `.Trash-$uid`,
+/// or `.Trash/$uid`. Another folder with `files` and `info`, such as a copy of an old
+/// home trash, is an ordinary folder.
 fn is_trash_root(root: &Path) -> bool {
-    let name = root.file_name().map(OsStr::as_bytes).unwrap_or_default();
-    name == b"Trash"
-        || name.starts_with(b".Trash-")
-        || root.parent().and_then(Path::file_name) == Some(OsStr::new(".Trash"))
+    if dirs::data_dir().is_some_and(|data| root == data.join("Trash")) {
+        return true;
+    }
+    mount_trash_top(root).is_some_and(mount_top)
+}
+
+/// The folder a mount trash would be at the top of, from the trash's name alone.
+fn mount_trash_top(root: &Path) -> Option<&Path> {
+    let user = |name: &[u8]| !name.is_empty() && name.iter().all(u8::is_ascii_digit);
+    let name = root.file_name()?.as_bytes();
+    if name.strip_prefix(b".Trash-").is_some_and(user) {
+        return root.parent();
+    }
+    let shared = root.parent()?;
+    (user(name) && shared.file_name() == Some(OsStr::new(".Trash"))).then(|| shared.parent()).flatten()
+}
+
+/// Whether `folder` is the root of its mount.
+fn mount_top(folder: &Path) -> bool {
+    let Some(parent) = folder.parent() else { return true };
+    let place = |path: &Path| {
+        let flags = rustix::fs::OFlags::PATH | rustix::fs::OFlags::DIRECTORY | rustix::fs::OFlags::CLOEXEC;
+        let fd = rustix::fs::open(path, flags, rustix::fs::Mode::empty()).ok()?;
+        super::linux_mount_place::status_of(&fd).ok().map(|status| status.place)
+    };
+    match (place(folder), place(parent)) {
+        (Some(own), Some(above)) => own.mounted_on(above),
+        _ => false,
+    }
 }
 
 pub(super) fn purge(items: &[trash::TrashItem]) -> Result<(), String> {
