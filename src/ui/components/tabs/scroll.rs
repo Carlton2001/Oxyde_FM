@@ -10,6 +10,8 @@ const DRAG_EDGE: f32 = 30.0;
 const DRAG_RATE: f32 = 20.0;
 /// Depth beyond which the speed stops growing, reached over the arrows.
 const DRAG_MAX_DEPTH: f32 = 60.0;
+/// A scrolling chain without a frame for this long is gone.
+const CHAIN_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(250);
 
 /// How deep `x` is in the band along the strip's left (negative) or right (positive)
 /// end, zero between the bands.
@@ -41,7 +43,10 @@ pub(crate) fn drag_scroll(state: &TabStripState, x: Pixels, window: &mut Window)
     }
     let running = state.drag_scroll.get();
     state.drag_scroll.set(Some((depth, running.map_or_else(Instant::now, |(_, at)| at))));
-    if running.is_none() {
+    // A chain whose frame never came (the window stopped drawing) no longer counts.
+    let chained = state.drag_scroll_frame.get().is_some_and(|frame| frame.elapsed() < CHAIN_TIMEOUT);
+    if !chained {
+        state.drag_scroll_frame.set(Some(Instant::now()));
         // Cancel a gliding wheel or arrow scroll: the drag takes over.
         state.animation_generation.set(state.animation_generation.get().wrapping_add(1));
         state.animation_target.set(None);
@@ -58,10 +63,12 @@ pub(crate) fn stop_drag_scroll(state: &TabStripState) {
 /// event, so each frame asks for the next until the pointer leaves the band or drops.
 fn drag_step(state: TabStripState, window: &mut Window, cx: &mut App) {
     if state.drag_scroll.get().is_none() {
+        state.drag_scroll_frame.set(None);
         return;
     }
     if !cx.has_active_drag() {
         state.drag_scroll.set(None);
+        state.drag_scroll_frame.set(None);
         return;
     }
     // The tabs moved under a still pointer since the last frame: replay its position
@@ -73,7 +80,11 @@ fn drag_step(state: TabStripState, window: &mut Window, cx: &mut App) {
         pressed_button: Some(MouseButton::Left),
         modifiers,
     }), cx);
-    let Some((depth, at)) = state.drag_scroll.get() else { return };
+    let Some((depth, at)) = state.drag_scroll.get() else {
+        state.drag_scroll_frame.set(None);
+        return;
+    };
+    state.drag_scroll_frame.set(Some(Instant::now()));
     let now = Instant::now();
     let elapsed = now.duration_since(at).as_secs_f32().min(0.1);
     state.drag_scroll.set(Some((depth, now)));

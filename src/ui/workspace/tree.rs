@@ -12,6 +12,7 @@ impl Default for TabStripState {
             active_index: Default::default(),
             tab_widths: Default::default(),
             drag_scroll: Default::default(),
+            drag_scroll_frame: Default::default(),
         }
     }
 }
