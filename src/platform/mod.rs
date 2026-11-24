@@ -1180,6 +1180,8 @@ mod linux_update;
 #[cfg(not(target_os = "windows"))]
 mod linux_download;
 #[cfg(not(target_os = "windows"))]
+mod linux_process;
+#[cfg(not(target_os = "windows"))]
 mod linux_signature;
 #[cfg(not(target_os = "windows"))]
 pub use linux_trash::{KdeLimitAction, KdeTrashLimits, TrashRetention};
