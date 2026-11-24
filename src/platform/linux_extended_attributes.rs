@@ -14,6 +14,12 @@ fn kept(name: &[u8]) -> bool {
     name.starts_with(b"user.") || name == b"system.posix_acl_access" || name == b"system.posix_acl_default"
 }
 
+/// Linux's ceiling for a value and for a name list (`XATTR_SIZE_MAX`, `XATTR_LIST_MAX`).
+const LIMIT: usize = 64 * 1024;
+/// A value that keeps growing between query and read, or a file system that keeps
+/// answering ERANGE, ends the attempt.
+const ATTEMPTS: usize = 8;
+
 /// Reads through `read` until the buffer holds the current value, which may grow
 /// between the size query and the read. A zero-length buffer is not a size query
 /// in rustix, so the size comes from `query`.
@@ -21,10 +27,13 @@ fn sized(
     mut query: impl FnMut() -> rustix::io::Result<usize>,
     mut read: impl FnMut(&mut [u8]) -> rustix::io::Result<usize>,
 ) -> rustix::io::Result<Vec<u8>> {
-    loop {
+    for _ in 0..ATTEMPTS {
         let size = query()?;
         if size == 0 {
             return Ok(Vec::new());
+        }
+        if size > LIMIT {
+            return Err(Errno::TOOBIG);
         }
         let mut buffer = vec![0_u8; size];
         match read(&mut buffer) {
@@ -36,6 +45,7 @@ fn sized(
             Err(error) => return Err(error),
         }
     }
+    Err(Errno::RANGE)
 }
 
 pub(super) fn read(file: &File) -> io::Result<ExtendedAttributes> {
