@@ -308,6 +308,8 @@ pub struct OxydeApp {
     pub(super) watcher_pending_listings: std::collections::HashSet<String>,
     pub _path_watchers: std::collections::HashMap<String, drive_watchers::DirectoryWatcher>,
     pub(super) pending_watchers: std::collections::HashMap<String, (u64, bool, bool)>,
+    /// Paths whose watcher could not be created, with the time of the last attempt.
+    pub(super) failed_watchers: std::collections::HashMap<String, std::time::Instant>,
     pub(super) next_watcher_request: u64,
     pub(super) drive_metadata_ready: bool,
     pub(super) drive_refresh_epoch: u64,
@@ -554,6 +556,7 @@ impl OxydeApp {
             watcher_pending_listings: Default::default(),
             _path_watchers: std::collections::HashMap::new(),
             pending_watchers: std::collections::HashMap::new(),
+            failed_watchers: std::collections::HashMap::new(),
             next_watcher_request: 0,
             drive_metadata_ready: false,
             drive_refresh_epoch: 0,

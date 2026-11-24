@@ -26,6 +26,9 @@ fn fixed_archive(root: &std::path::Path) -> bool {
         .is_some_and(oxyde_lib::utils::archive::ArchiveFormat::writable)
 }
 
+/// Wait before creating again a watcher that failed, unless the drives change.
+const WATCHER_RETRY: std::time::Duration = std::time::Duration::from_secs(60);
+
 impl OxydeApp {
     /// Whether nothing can be written at `path` shown in `pane_id`: its volume
     /// refuses writes, or the pane browses an archive Oxyde cannot rewrite.
@@ -473,6 +476,8 @@ impl OxydeApp {
             self.sidebar_selected_path = None;
         }
         self.state.drives = drives;
+        // Inserted media or a new drive: try the failed watchers again at once.
+        self.failed_watchers.clear();
         self.redirect_removed_drive_tabs(&removed, cx);
         self.state.refresh_sidebar();
         cx.notify();
@@ -535,9 +540,13 @@ impl OxydeApp {
                     .detach();
             }
         }
+        self.failed_watchers.retain(|path, _| wanted.contains_key(path));
         for (path, (polling, recursive)) in wanted {
             if self._path_watchers.contains_key(&path) || self.pending_watchers.contains_key(&path)
             {
+                continue;
+            }
+            if self.failed_watchers.get(&path).is_some_and(|failed| failed.elapsed() < WATCHER_RETRY) {
                 continue;
             }
             self.next_watcher_request = self.next_watcher_request.wrapping_add(1);
@@ -551,7 +560,7 @@ impl OxydeApp {
                     .background_executor()
                     .spawn(async move { DirectoryWatcher::create(&worker_path, polling, recursive, changes) })
                     .await;
-                if let Err(error) = &result { log::warn!("Cannot watch {path}: {error}"); }
+                let error = result.as_ref().err().map(ToString::to_string);
                 let mut result = result.ok();
                 let _ = this.update(cx, |this, cx| {
                     if !this.ejecting_drive
@@ -561,6 +570,12 @@ impl OxydeApp {
                         let installed = result.is_some();
                         if let Some(watcher) = result.take() {
                             this._path_watchers.insert(path.clone(), watcher);
+                            this.failed_watchers.remove(&path);
+                        } else if let Some(error) = &error {
+                            // Logged once until the path can be watched again.
+                            if this.failed_watchers.insert(path.clone(), std::time::Instant::now()).is_none() {
+                                log::warn!("Cannot watch {path}: {error}");
+                            }
                         }
                         {
                             let mut ids = Vec::new();
