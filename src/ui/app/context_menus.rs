@@ -4,6 +4,32 @@ use crate::ui::i18n::{FluentArgs, I18n, I18nContext, Message};
 use crate::ui::scale::logical;
 use gpui::*;
 
+const NATIVE_MENU_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+/// Loads whose Shell call is still running, timed out or not.
+const MAX_NATIVE_MENU_LOADS: usize = 4;
+static NATIVE_MENU_LOADS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Counts one native menu load until its Shell call returns.
+struct NativeMenuLoad;
+
+impl NativeMenuLoad {
+    fn start() -> Option<Self> {
+        use std::sync::atomic::Ordering;
+        NATIVE_MENU_LOADS
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |loads| {
+                (loads < MAX_NATIVE_MENU_LOADS).then_some(loads + 1)
+            })
+            .ok()
+            .map(|_| Self)
+    }
+}
+
+impl Drop for NativeMenuLoad {
+    fn drop(&mut self) {
+        NATIVE_MENU_LOADS.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+    }
+}
+
 pub(super) fn native_menu_max_height(viewport_height: Pixels) -> f32 {
     // Leave 8 px on each side, in addition to the menu's 6 px of chrome.
     (viewport_height.as_f32() - logical(22.0)).max(crate::ui::style::menu_item_height())
@@ -204,27 +230,42 @@ impl OxydeApp {
         cx.notify();
 
         let language = cx.i18n().language();
+        let timer = cx.background_executor().timer(NATIVE_MENU_TIMEOUT);
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
-                let path_for_worker = path.clone();
-                let result = tokio::task::spawn_blocking(move || {
-                    oxyde_lib::platform::platform()
-                        .native_context_menu_items(&path_for_worker, is_background)
-                })
-                .await;
+                // A Shell extension can block its call forever, and the call cannot
+                // be cancelled: the menu reports it, and stuck threads stay bounded.
+                let load = NativeMenuLoad::start().map(|load| {
+                    let path_for_worker = path.clone();
+                    tokio::task::spawn_blocking(move || {
+                        let _load = load;
+                        oxyde_lib::platform::platform()
+                            .native_context_menu_items(&path_for_worker, is_background)
+                    })
+                });
+                let result = match load {
+                    Some(task) => {
+                        match futures::future::select(task, timer).await {
+                            futures::future::Either::Left((result, _)) => Some(result),
+                            futures::future::Either::Right(_) => None,
+                        }
+                    }
+                    None => None,
+                };
                 let i18n = I18n::for_language(language);
                 let result = match result {
-                    Ok(Ok(items)) if !items.is_empty() => Ok(items),
-                    Ok(Ok(_)) => Err(i18n.text(Message::NativeMenuEmpty).to_string()),
-                    Ok(Err(error)) => {
+                    None => Err(i18n.text(Message::NativeMenuTimeout).to_string()),
+                    Some(Ok(Ok(items))) if !items.is_empty() => Ok(items),
+                    Some(Ok(Ok(_))) => Err(i18n.text(Message::NativeMenuEmpty).to_string()),
+                    Some(Ok(Err(error))) => {
                         let mut args = FluentArgs::new();
                         args.set("detail", error.to_string());
                         Err(i18n
                             .text_with_args(Message::NativeMenuFailed, &args)
                             .to_string())
                     }
-                    Err(error) => {
+                    Some(Err(error)) => {
                         let mut args = FluentArgs::new();
                         args.set("detail", error.to_string());
                         Err(i18n

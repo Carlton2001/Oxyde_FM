@@ -413,6 +413,7 @@ new-file-numbered = Neue Datei ({ $number })
 native-menu-empty = Keine Befehle verfügbar
 
 native-menu-failed = Systemmenü konnte nicht geladen werden: { $detail }
+native-menu-timeout = Das Systemmenü reagiert nicht
 
 drag-items = { $count ->
     [one] { $number } Element
