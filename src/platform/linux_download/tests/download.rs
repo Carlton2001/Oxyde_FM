@@ -28,3 +28,15 @@ fn failure_reports_the_tool_last_message() {
     let error = run(shell("echo 'first' >&2; echo '(22) The requested URL returned error: 404' >&2; exit 22"), 1024).unwrap_err();
     assert_eq!(error.to_string(), "sh: (22) The requested URL returned error: 404");
 }
+
+#[test]
+fn an_empty_body_is_refused() {
+    let error = run(shell("exit 0"), 1024).unwrap_err();
+    assert_eq!(error.to_string(), "sh: the server sent nothing");
+}
+
+#[test]
+fn the_wget_fallback_ignores_its_configuration_file() {
+    let command = wget("https://example.com/latest.json");
+    assert!(command.get_args().any(|argument| argument == "--no-config"));
+}
