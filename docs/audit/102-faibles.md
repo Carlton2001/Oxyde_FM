@@ -178,11 +178,11 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F253 | `ui/date_groups/grouping.rs:121-123 et :141-147` | corrigé | e9ae49e9 | date de modification absente en « date inconnue » comme les autres modes ; origine comparée sans casse ni séparateur sous Windows (`OriginPath`) ; tests |
 | F254 | `ui/format.rs:69-85, :155-160 et :12-25` | corrigé | 9030cb7d | signe refusé dans une taille ; année de moins de 4 chiffres refusée ; racine sans libellé gardant son séparateur ; tests |
 | F255 | `ui/errors.rs:134-142 et :48, :91` | corrigé | ac74dc41 | « existe déjà » reconnu par code système (80, 183, EEXIST) ; replis d'annulation et de rétablissement en texte, plus en Debug ; test |
-| F257 | `ui/elements/button.rs:75-93` | à examiner | | |
-| F258 | `ui/file_types.rs:6-273` | à examiner | | |
-| F259 | `ui/i18n.rs:1797` | à examiner | | |
-| F260 | `ui/paths.rs:11` | à examiner | | |
-| F261 | `ui/style.rs:98` | à examiner | | |
-| F262 | `ui/workspace/filters.rs:335 et :151` | à examiner | | |
-| F263 | `ui/workspace/snapshots.rs:22, :82 et :52` | à examiner | | |
-| F264 | `ui/workspace/operations.rs:6 et :64` | à examiner | | |
+| F257 | `ui/elements/button.rs:75-93` | corrigé | 1a77d9b8 | bouton agissant au relâchement (glisser hors du bouton annule) ; seul usage sans clavier (« Ouvrir » du Viewer sur fichier indisponible) ouvert par Entrée |
+| F258 | `ui/file_types.rs:6-273` | corrigé | ddb1a215 | .wasm et .fasl compilés retirés du catalogue de code ; config, build et builder reconnus en extension seulement ; test |
+| F259 | `ui/i18n.rs:1797` | corrigé | b50739e3 | message d'interface défaillant journalisé une fois par clé au lieu de chaque image |
+| F260 | `ui/paths.rs:11` | corrigé | 41a74219 | chemin interne d'une distribution WSL comparé avec sa casse ; racine et nom de distribution sans casse ; tests |
+| F261 | `ui/style.rs:98` | corrigé | 8ade6df2 | colonnes comptées dans la largeur laissée par la barre de défilement |
+| F262 | `ui/workspace/filters.rs:335 et :151` | corrigé | 8a4feeca | plage de dates personnalisée refiltrée au changement de calendrier ; motif de Corbeille inachevé cherché comme texte |
+| F263 | `ui/workspace/snapshots.rs:22, :82 et :52` | corrigé | 582111ce | historique enregistré borné à 50 par sens ; volet vide retiré seul ; identifiants d'onglet uniques et un seul Viewer, seul dans son volet ; disposition sans explorateur non restaurée ; tests. Tests rattrapés : df8589b4 (F253), cb4360cb (ordre naturel) |
+| F264 | `ui/workspace/operations.rs:6 et :64` | corrigé | c9327142 | volumes et Accès rapide lus seulement par leurs tâches de fond, qui sondent dès le démarrage ; dernier explorateur gardé à côté du Viewer quand son onglet se ferme ; tests |
