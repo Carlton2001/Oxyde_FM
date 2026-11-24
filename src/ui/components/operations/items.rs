@@ -139,6 +139,8 @@ pub(super) struct Items {
     pub(super) list: UniformListScrollHandle,
     loading: bool,
     load_task: Option<Task<()>>,
+    /// Raised when the rows being read are no longer wanted: their thread stops early.
+    load_cancelled: Arc<std::sync::atomic::AtomicBool>,
     arrange_task: Option<Task<()>>,
     /// The selected row, as an index into `rows`.
     selected: Option<usize>,
@@ -166,6 +168,7 @@ impl Default for Items {
             list: UniformListScrollHandle::new(),
             loading: false,
             load_task: None,
+            load_cancelled: Arc::default(),
             arrange_task: None,
             selected: None,
             input: None,
@@ -174,6 +177,13 @@ impl Default for Items {
             widths: Widths::default(),
             pane_width: Default::default(),
         }
+    }
+}
+
+/// A closed window stops the rows it was still reading.
+impl Drop for Items {
+    fn drop(&mut self) {
+        self.load_cancelled.store(true, std::sync::atomic::Ordering::Relaxed);
     }
 }
 
@@ -225,6 +235,9 @@ impl OperationsPanelView {
         items.selected = None;
         items.loading = true;
         items.arrange_task = None;
+        items.load_cancelled.store(true, std::sync::atomic::Ordering::Relaxed);
+        let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        items.load_cancelled = cancelled.clone();
         items.list = UniformListScrollHandle::new();
         let sources = operation.sources.clone();
         // Moved and copied items are found at their destination once their source is gone.
@@ -241,6 +254,8 @@ impl OperationsPanelView {
                 .spawn(async move {
                     let rows: Vec<Item> = sources
                         .iter()
+                        // Another operation chosen: its disk reads stop here.
+                        .take_while(|_| !cancelled.load(std::sync::atomic::Ordering::Relaxed))
                         .map(|source| {
                             let moved = destination.as_ref().zip(source.file_name()).map(|(folder, name)| folder.join(name));
                             Item::new(source, icons::resolve_entry(source, moved.as_deref()).ok(), shared_folder)
