@@ -25,10 +25,13 @@ use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use gpui::*;
 use std::sync::Arc;
 
-pub(crate) fn invalidate_media_preview(path: &str) {
+/// Forgets `path`'s previews, GPUI's loaded assets included: the next tooltip reads it again.
+pub(crate) fn invalidate_media_preview(path: &str, cx: &mut App) {
     crate::ui::audio_covers::invalidate(path);
     pdf_cache::invalidate(path);
     image_cache::invalidate(std::path::Path::new(path));
+    cx.remove_asset::<assets::TooltipImageAsset>(&std::path::PathBuf::from(path));
+    cx.remove_asset::<assets::TooltipPreviewAsset>(&SharedString::from(path.to_owned()));
 }
 
 // Worker-only lookup: signature checks must stay outside UI rendering.

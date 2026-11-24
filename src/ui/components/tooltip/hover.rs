@@ -320,7 +320,10 @@ impl SharedTooltipExt for Stateful<Div> {
         builder: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
     ) -> Self {
         let builder: Builder = Rc::new(builder);
-        note_revision(&key, revision, &builder, cx);
+        if note_revision(&key, revision, &builder, cx) {
+            // The key is the item's path: its preview is read again too.
+            super::invalidate_media_preview(&key, cx);
+        }
         register(self, owner, HoverRegion::Files(pane), key, Some(revision), builder, cx)
     }
 
@@ -336,15 +339,19 @@ impl SharedTooltipExt for Stateful<Div> {
     }
 }
 
-/// A hovered item drawn again with other contents asks its tooltip to follow.
-fn note_revision(key: &str, revision: u64, builder: &Builder, cx: &mut App) {
+/// A hovered item drawn again with other contents asks its tooltip to follow;
+/// `true` when it did.
+fn note_revision(key: &str, revision: u64, builder: &Builder, cx: &mut App) -> bool {
+    let mut changed = false;
     for session in cx.default_global::<Sessions>().windows.values_mut() {
         let Some((hovered, shown)) = &mut session.revision else { continue };
         if hovered == key && *shown != revision && session.timing.hovered.as_deref() == Some(key) {
             *shown = revision;
             session.refresh = Some(builder.clone());
+            changed = true;
         }
     }
+    changed
 }
 
 fn register(
