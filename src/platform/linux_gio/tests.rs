@@ -177,3 +177,21 @@ fn a_share_seen_through_gvfs_fuse_has_no_trash() {
     assert!(!platform.has_recycle_bin(&root.join("smb-share:server=host,share=s/dossier/a.txt")));
     assert!(platform.has_recycle_bin(std::path::Path::new("/tmp/a.txt")));
 }
+
+#[test]
+fn a_watched_call_reports_its_expired_limit_and_ends_with_its_call() {
+    let Some(gio) = gio() else { return };
+    let never = AtomicBool::new(false);
+    let started = std::time::Instant::now();
+    let quick = cancellation::watched(gio, &never, Some(Duration::from_secs(10)), |_| 1).unwrap();
+    assert_eq!((quick.result, quick.expired), (1, false));
+    assert!(started.elapsed() < Duration::from_secs(1));
+    let slow = cancellation::watched(gio, &never, Some(Duration::from_millis(100)), |_| {
+        std::thread::sleep(Duration::from_millis(400));
+    })
+    .unwrap();
+    assert!(slow.expired);
+    let cancelled = AtomicBool::new(true);
+    let asked = cancellation::watched(gio, &cancelled, None, |_| std::thread::sleep(Duration::from_millis(300))).unwrap();
+    assert!(!asked.expired);
+}

@@ -6,8 +6,10 @@ use library::{gio, GError, Gio, Object};
 use std::ffi::{c_char, c_uint, c_void, CStr, CString};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
+use std::time::Duration;
 
+mod cancellation;
 mod library;
 pub(super) mod servers;
 #[cfg(target_os = "linux")]
@@ -25,6 +27,10 @@ const MOUNTABLE: c_uint = 6;
 
 /// Schemes GVfs mounts that Oxyde opens, `network` being the neighborhood.
 const SCHEMES: &[&str] = &["smb", "sftp", "ftp", "ftps", "dav", "davs", "dav+sd", "davs+sd", "afp", "nfs", "network"];
+/// An unattended call (listing, unmounting) gives up on a server that does not answer.
+const UNATTENDED: Duration = Duration::from_secs(30);
+const NO_ANSWER: &str = "The server did not answer in time";
+
 /// Mount types under the FUSE folder that the drive list shows as network shares.
 const NETWORK_MOUNTS: &[&str] = &["smb-share", "sftp", "ftp", "ftps", "dav", "davs", "dav+sd", "davs+sd", "afp-volume", "nfs"];
 
@@ -150,7 +156,8 @@ pub(super) fn connect(
 ) -> Result<RemoteLocation, RemoteError> {
     let gio = gio().ok_or(RemoteError::Unsupported)?;
     let file = file_for_uri(gio, uri)?;
-    mount(gio, &file, ask, cancel)?;
+    // The user may take their time with credentials, and cancels themselves.
+    mount(gio, &file, ask, cancel, None)?;
     Ok(match local_path(gio, &file).or_else(|| mount_root_path(uri)) {
         Some(path) => {
             appear(&path);
@@ -219,53 +226,38 @@ struct Finished {
     error: std::cell::Cell<Option<Failure>>,
 }
 
+/// `limit` bounds the whole mount, questions included.
 fn mount(
     gio: &'static Gio, file: &Owned, ask: &mut dyn FnMut(&RemotePrompt) -> RemoteAnswer, cancel: &AtomicBool,
+    limit: Option<Duration>,
 ) -> Result<(), RemoteError> {
     let context = ThreadContext::new(gio);
-    // SAFETY: new objects, released at the end of this call.
+    // SAFETY: a new object, released at the end of this call.
     let operation = Owned::new(gio, unsafe { (gio.g_mount_operation_new)() }).ok_or(RemoteError::Unsupported)?;
-    let cancellable = Owned::new(gio, unsafe { (gio.g_cancellable_new)() }).ok_or(RemoteError::Unsupported)?;
     let mut asking = Asking { gio, ask, asked: false, declined: false };
     let finished = Finished::default();
-    let over = AtomicBool::new(false);
-    let result = std::thread::scope(|scope| {
-        // GIO's loop blocks: a watcher turns the flag into a cancellation, which
-        // `g_cancellable_cancel` allows from any thread.
-        let target = SendObject(cancellable.1);
-        let over = &over;
-        scope.spawn(move || {
-            let target = target;
-            while !over.load(Ordering::Acquire) {
-                if cancel.load(Ordering::Acquire) {
-                    // SAFETY: the cancellable lives until this scope ends.
-                    unsafe { (gio.g_cancellable_cancel)(target.0) };
-                    return;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(100));
-            }
-        });
+    let watched = cancellation::watched(gio, cancel, limit, |cancellable| {
         // SAFETY: `asking` and `finished` outlive the loop that runs the callbacks; the
         // handlers are disconnected before `asking` goes out of scope.
-        let result = unsafe {
+        unsafe {
             let data: *mut c_void = (&raw mut asking).cast();
             let handlers = [
                 (gio.g_signal_connect_data)(operation.1, c"ask-password".as_ptr(), ask_password as *const c_void, data, std::ptr::null(), 0),
                 (gio.g_signal_connect_data)(operation.1, c"ask-question".as_ptr(), ask_question as *const c_void, data, std::ptr::null(), 0),
             ];
-            (gio.g_file_mount_enclosing_volume)(file.1, 0, operation.1, cancellable.1, Some(mounted), (&raw const finished).cast_mut().cast());
+            (gio.g_file_mount_enclosing_volume)(file.1, 0, operation.1, cancellable, Some(mounted), (&raw const finished).cast_mut().cast());
             context.run_until(&|| finished.done.get());
             for handler in handlers {
                 (gio.g_signal_handler_disconnect)(operation.1, handler);
             }
             finished.error.take()
-        };
-        over.store(true, Ordering::Release);
-        result
-    });
-    match result {
+        }
+    })
+    .ok_or(RemoteError::Unsupported)?;
+    match watched.result {
         None => Ok(()),
         Some(Failure { code: Some(ALREADY_MOUNTED), .. }) => Ok(()),
+        Some(_) if watched.expired => Err(RemoteError::Other(NO_ANSWER.into())),
         Some(_) if asking.declined => Err(RemoteError::Cancelled),
         Some(failure) => Err(remote_error(failure)),
     }
@@ -331,12 +323,6 @@ unsafe extern "C" fn ask_password(
     }
 }
 
-/// A GObject handed to the cancellation watcher.
-#[derive(Clone, Copy)]
-struct SendObject(Object);
-// SAFETY: only `g_cancellable_cancel`, which GIO makes thread-safe, uses it there.
-unsafe impl Send for SendObject {}
-
 /// GVfs asks a question with choices, such as accepting an unknown SFTP host key.
 unsafe extern "C" fn ask_question(operation: Object, message: *const c_char, choices: *const *const c_char, data: *mut c_void) {
     // SAFETY: `data` is the `Asking` of `mount`; `choices` ends with a null pointer.
@@ -376,12 +362,25 @@ pub(super) struct RemoteChild {
     pub directory: bool,
 }
 
-/// Lists a mounted location, such as `network:///` or `smb://server/`.
+/// Lists a mounted location, such as `network:///` or `smb://server/`, within
+/// `UNATTENDED` in all.
 pub(super) fn children(uri: &str) -> Result<Vec<RemoteChild>, RemoteError> {
     let gio = gio().ok_or(RemoteError::Unsupported)?;
     let parent = file_for_uri(gio, uri)?;
+    let started = std::time::Instant::now();
+    let never = AtomicBool::new(false);
     // A refresh or a reopened tab mounts again with saved credentials, never a prompt.
-    mount(gio, &parent, &mut |_| RemoteAnswer::Cancel, &AtomicBool::new(false))?;
+    mount(gio, &parent, &mut |_| RemoteAnswer::Cancel, &never, Some(UNATTENDED))?;
+    let limit = UNATTENDED.saturating_sub(started.elapsed());
+    let watched = cancellation::watched(gio, &never, Some(limit), |cancellable| enumerate(gio, &parent, uri, cancellable))
+        .ok_or(RemoteError::Unsupported)?;
+    match watched.result {
+        Err(_) if watched.expired => Err(RemoteError::Other(NO_ANSWER.into())),
+        result => result,
+    }
+}
+
+fn enumerate(gio: &'static Gio, parent: &Owned, uri: &str, cancellable: Object) -> Result<Vec<RemoteChild>, RemoteError> {
     // The neighborhood points at servers. A server's shares are named from its URI: their
     // target drops a non-default port and GIO's child of a server is `._share`.
     let targets = uri.get(..10).is_some_and(|scheme| scheme.eq_ignore_ascii_case("network://"));
@@ -390,12 +389,12 @@ pub(super) fn children(uri: &str) -> Result<Vec<RemoteChild>, RemoteError> {
     unsafe {
         let enumerator = (gio.g_file_enumerate_children)(
             parent.1, c"standard::name,standard::display-name,standard::type,standard::target-uri".as_ptr(),
-            0, std::ptr::null_mut(), &mut error,
+            0, cancellable, &mut error,
         );
         let enumerator = Owned::new(gio, enumerator).ok_or_else(|| remote_error(failure(gio, error)))?;
         let mut children = Vec::new();
         loop {
-            let info = (gio.g_file_enumerator_next_file)(enumerator.1, std::ptr::null_mut(), &mut error);
+            let info = (gio.g_file_enumerator_next_file)(enumerator.1, cancellable, &mut error);
             let Some(info) = Owned::new(gio, info) else {
                 if !error.is_null() {
                     return Err(remote_error(failure(gio, error)));
@@ -473,7 +472,7 @@ fn enclosing_mount(gio: &'static Gio, path: &Path) -> Result<Owned, Failure> {
     }
 }
 
-/// Unmounts the GVfs share holding `path`.
+/// Unmounts the GVfs share holding `path`, within `UNATTENDED`.
 pub(super) fn unmount(path: &Path) -> Result<(), VolumeError> {
     let gio = gio().ok_or_else(|| VolumeError::Other("GIO unavailable".into()))?;
     // GVfs no longer knows the share: unmounted meanwhile, by Nautilus for instance, while
@@ -481,13 +480,18 @@ pub(super) fn unmount(path: &Path) -> Result<(), VolumeError> {
     let Ok(mount) = enclosing_mount(gio, path) else { return Ok(()) };
     let context = ThreadContext::new(gio);
     let finished = Finished::default();
-    // SAFETY: `finished` outlives the loop that runs the callback.
-    unsafe {
-        (gio.g_mount_unmount_with_operation)(mount.1, 0, std::ptr::null_mut(), std::ptr::null_mut(), Some(unmounted), (&raw const finished).cast_mut().cast());
-    }
-    context.run_until(&|| finished.done.get());
-    match finished.error.take() {
+    let watched = cancellation::watched(gio, &AtomicBool::new(false), Some(UNATTENDED), |cancellable| {
+        // SAFETY: `finished` outlives the loop that runs the callback.
+        unsafe {
+            (gio.g_mount_unmount_with_operation)(mount.1, 0, std::ptr::null_mut(), cancellable, Some(unmounted), (&raw const finished).cast_mut().cast());
+        }
+        context.run_until(&|| finished.done.get());
+        finished.error.take()
+    })
+    .ok_or_else(|| VolumeError::Other("GIO unavailable".into()))?;
+    match watched.result {
         None => Ok(()),
+        Some(_) if watched.expired => Err(VolumeError::Other(NO_ANSWER.into())),
         Some(Failure { code: Some(BUSY), .. }) => Err(VolumeError::Busy(Vec::new())),
         Some(Failure { code: Some(CANCELLED | FAILED_HANDLED), .. }) => Err(VolumeError::Cancelled),
         Some(failure) => Err(VolumeError::Other(failure.message)),
