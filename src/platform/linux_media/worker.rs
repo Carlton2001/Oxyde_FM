@@ -16,6 +16,9 @@ const PULL_TIMEOUT: Duration = Duration::from_millis(20);
 const REPORT_INTERVAL: Duration = Duration::from_millis(100);
 /// Resizing renegotiates the scaler: wait until the Viewer's size settles.
 const RESIZE_SETTLE: Duration = Duration::from_millis(150);
+/// A stream still buffering can refuse a seek for a moment. Past this, the seek is given
+/// up and the reports follow the position the player kept.
+const SEEK_RETRY: Duration = Duration::from_secs(2);
 
 /// Frames scaled to the displayed size, without enlarging; the sink follows the clock,
 /// dropping a frame rather than delaying the sound when Oxyde falls behind.
@@ -67,6 +70,8 @@ pub(in crate::platform) fn run(path: &Path) -> io::Result<()> {
     let mut last_report = Instant::now().checked_sub(REPORT_INTERVAL).unwrap_or_else(Instant::now);
     let mut resized: Option<Instant> = None;
     let mut position = Duration::from_millis(command.seek_ms);
+    // The seek the player refused, and since when.
+    let mut refused: Option<(u32, Instant)> = None;
     // Decoders found missing may follow the stream description: it is sent again.
     let mut info = None;
     let mut missing = MediaInfo::default();
@@ -112,11 +117,25 @@ pub(in crate::platform) fn run(path: &Path) -> io::Result<()> {
         ended |= events.ended;
         // A seek waits for the media to load; a new one also leaves the end.
         if loaded && command.seek_id != applied_seek {
-            applied_seek = command.seek_id;
-            position = Duration::from_millis(command.seek_ms);
-            if player.seek(position) && ended {
-                ended = false;
-                player.set_state(if command.paused { PAUSED } else { PLAYING });
+            let target = Duration::from_millis(command.seek_ms);
+            if player.seek(target) {
+                applied_seek = command.seek_id;
+                position = target;
+                refused = None;
+                if ended {
+                    ended = false;
+                    player.set_state(if command.paused { PAUSED } else { PLAYING });
+                }
+            } else {
+                let since = match refused {
+                    Some((seek_id, since)) if seek_id == command.seek_id => since,
+                    _ => refused.insert((command.seek_id, Instant::now())).1,
+                };
+                if since.elapsed() >= SEEK_RETRY {
+                    log::warn!("Viewer media worker: the player refused a seek to {} ms", command.seek_ms);
+                    applied_seek = command.seek_id;
+                    refused = None;
+                }
             }
         }
         if resized.is_some_and(|at| at.elapsed() >= RESIZE_SETTLE) {
