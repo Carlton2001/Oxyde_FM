@@ -22,12 +22,20 @@ impl OxydeApp {
                     return;
                 }
                 this.breadcrumb_menu_request = None;
-                if let Ok(entries) = listed {
-                    let (pane, path, index) = request;
-                    let folders = entries.into_iter().filter(|entry| entry.is_dir).collect();
-                    this.breadcrumb_menu = Some((pane, path, index, folders));
-                    cx.notify();
+                match listed {
+                    Ok(entries) => {
+                        let (pane, path, index) = request;
+                        let folders = entries.into_iter().filter(|entry| entry.is_dir).collect();
+                        this.breadcrumb_menu = Some((pane, path, index, folders));
+                    }
+                    // A press that shows nothing says why.
+                    Err(error) => {
+                        log::warn!("Cannot list {} for its chevron: {error:?}", request.1);
+                        let message = crate::ui::errors::path_load_message(&error);
+                        this.toast(super::super::ToastKind::Error, message, String::new(), 0, cx);
+                    }
                 }
+                cx.notify();
             });
         }).detach();
     }
@@ -119,6 +127,10 @@ impl OxydeApp {
         if !self.breadcrumb_editing || !self.context_menus.is_empty() {
             return;
         }
+        // The same text is being checked already: a repeated Enter starts no other check.
+        if self.breadcrumb_validation_task.is_some() {
+            return;
+        }
         self.invalidate_breadcrumb_validation();
         let Some(owner) = self.breadcrumb_owner() else {
             return;
@@ -126,25 +138,36 @@ impl OxydeApp {
         let Some(handle) = self.handle.clone() else {
             return;
         };
-        let path = crate::ui::components::input::navigation_path_text(&owner.text);
+        let typed = crate::ui::components::input::navigation_path_text(&owner.text);
+        // A name relative to the folder shown, not to Oxyde's own working folder.
+        let path = resolved_path(&typed, &owner.location);
+        let timer = cx.background_executor().timer(VALIDATION_TIMEOUT);
         self.breadcrumb_validation_task = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
+                let Some(path) = path else {
+                    handle.update(&mut cx, |this, cx| {
+                        if this.breadcrumb_owner().as_ref() == Some(&owner) {
+                            this.breadcrumb_validation_task = None;
+                            this.reject_breadcrumb_text(cx);
+                        }
+                    });
+                    return;
+                };
                 let check = path.clone();
-                let valid =
-                    validate_path_in_background(check, |path| std::path::Path::new(path).is_dir())
-                        .await;
+                let validation = validate_path_in_background(check, |path| std::path::Path::new(path).is_dir());
+                // A share that does not answer: the field says no rather than waiting.
+                let valid = match futures::future::select(Box::pin(validation), timer).await {
+                    futures::future::Either::Left((valid, _)) => valid,
+                    futures::future::Either::Right(_) => false,
+                };
                 handle.update(&mut cx, |this, cx| {
                     if this.breadcrumb_owner().as_ref() != Some(&owner) {
                         return;
                     }
                     this.breadcrumb_validation_task = None;
                     if !valid {
-                        this.breadcrumb_shake_id = this.breadcrumb_shake_id.wrapping_add(1);
-                        this.breadcrumb_invalid = true;
-                        if let Some(input) = this.editing_view.clone() {
-                            input.update(cx, |input, cx| input.mark_invalid(cx));
-                        }
+                        this.reject_breadcrumb_text(cx);
                     } else {
                         this.breadcrumb_pane_id = None;
                         this.breadcrumb_editing = false;
@@ -158,6 +181,15 @@ impl OxydeApp {
                 });
             }
         }));
+    }
+
+    fn reject_breadcrumb_text(&mut self, cx: &mut Context<Self>) {
+        self.breadcrumb_shake_id = self.breadcrumb_shake_id.wrapping_add(1);
+        self.breadcrumb_invalid = true;
+        if let Some(input) = self.editing_view.clone() {
+            input.update(cx, |input, cx| input.mark_invalid(cx));
+        }
+        cx.notify();
     }
 
     pub(crate) fn cancel_breadcrumb_edit(&mut self, cx: &mut Context<Self>) {
@@ -197,6 +229,51 @@ struct Owner {
     location: String,
     text: String,
 }
+/// How long a typed path may take to be found before the field refuses it.
+const VALIDATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// The path `typed` names from the folder shown at `location`: special locations and
+/// absolute paths as they are, a bare drive at its root, a relative name under
+/// `location` without `.` or `..`. None when `location` is no folder to start from.
+fn resolved_path(typed: &str, location: &str) -> Option<String> {
+    use std::path::{Component, Path, PathBuf};
+    let special = typed.is_empty()
+        || typed == "__network_vincinity__"
+        || typed.contains("://")
+        || typed.starts_with(r"\\")
+        || typed.starts_with("//");
+    if special {
+        return Some(typed.to_owned());
+    }
+    let path = Path::new(typed);
+    if path.is_absolute() {
+        return Some(typed.to_owned());
+    }
+    let base = Path::new(location);
+    let joined = match path.components().next() {
+        // `D:` or `D:name`: from that drive's root, never from its current folder.
+        Some(Component::Prefix(_)) => PathBuf::from(typed),
+        _ if base.is_absolute() && !location.contains("://") => base.join(path),
+        _ => return None,
+    };
+    let mut resolved = PathBuf::new();
+    for component in joined.components() {
+        match component {
+            Component::Prefix(prefix) => {
+                resolved.push(prefix.as_os_str());
+                resolved.push(std::path::MAIN_SEPARATOR_STR);
+            }
+            Component::RootDir => resolved.push(std::path::MAIN_SEPARATOR_STR),
+            Component::Normal(name) => resolved.push(name),
+            Component::ParentDir => {
+                resolved.pop();
+            }
+            Component::CurDir => {}
+        }
+    }
+    Some(resolved.to_string_lossy().into_owned())
+}
+
 async fn validate_path_in_background(
     path: String,
     is_dir: impl FnOnce(&str) -> bool + Send + 'static,

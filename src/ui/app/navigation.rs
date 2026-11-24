@@ -244,7 +244,7 @@ impl OxydeApp {
                     this.pending_sidebar_requests.remove(&path);
                     match result {
                         Ok(nodes) if this.state.expanded_paths.contains(&path)
-                            || this.state.drives.iter().any(|drive| drive.path == path) => {
+                            || this.state.drives.iter().any(|drive| paths_match(&drive.path, &path)) => {
                             this.state.sidebar_nodes.insert(path, nodes);
                             this.state.refresh_sidebar();
                             this.reconcile_watchers(cx);
