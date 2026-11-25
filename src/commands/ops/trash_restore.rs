@@ -58,6 +58,29 @@ fn restore_selected(
     report
 }
 
+/// Resolving a restore name reads the entry's `$I` record. The interface asks
+/// by Recycle Bin ID: then only the requested entries are resolved. A request
+/// by original path matches resolved names, so it keeps every entry.
+fn requested_by_id(items: Vec<trash::TrashItem>, paths: &[String]) -> Vec<trash::TrashItem> {
+    let requested: HashSet<String> = paths
+        .iter()
+        .map(|path| normalize_restore_path(std::path::Path::new(path)))
+        .collect();
+    let selected: Vec<_> = items
+        .iter()
+        .filter(|item| requested.contains(&normalize_restore_path(std::path::Path::new(&item.id))))
+        .collect();
+    let found: HashSet<String> = selected
+        .iter()
+        .map(|item| normalize_restore_path(std::path::Path::new(&item.id)))
+        .collect();
+    if found.len() == requested.len() {
+        selected.into_iter().cloned().collect()
+    } else {
+        items
+    }
+}
+
 pub async fn restore_items_report(paths: Vec<String>) -> Result<TrashRestoreReport, CommandError> {
     let started = std::time::Instant::now();
     info!(target: "oxyde_lib::trash_restore", "stage=start requested={}", paths.len());
@@ -66,7 +89,7 @@ pub async fn restore_items_report(paths: Vec<String>) -> Result<TrashRestoreRepo
         CommandError::TrashError(error)
     })?;
     info!(target: "oxyde_lib::trash_restore", "stage=enumerated available={} wall_s={:.6}", items.len(), started.elapsed().as_secs_f64());
-    let items = items.iter().map(item_with_correct_restore_name).collect();
+    let items = requested_by_id(items, &paths).iter().map(item_with_correct_restore_name).collect();
     info!(target: "oxyde_lib::trash_restore", "stage=names_resolved wall_s={:.6}", started.elapsed().as_secs_f64());
     let report = restore_selected(items, paths, |item| crate::platform::platform().restore_trash_items(vec![item]));
     info!(target: "oxyde_lib::trash_restore", "stage=end restored={} failed={} wall_s={:.6}", report.restored.len(), report.failures.len(), started.elapsed().as_secs_f64());
