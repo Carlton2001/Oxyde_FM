@@ -15,6 +15,10 @@ use windows::Win32::UI::Shell::{
 };
 use windows::core::{GUID, PCWSTR, PWSTR, w};
 
+mod icon_types;
+mod package_types;
+pub(super) use icon_types::icon_types;
+
 pub struct ShellNewTemplate {
     pub label: String,
     pub extension: String,
@@ -154,8 +158,16 @@ fn registered_extension(name: &str) -> bool {
 }
 
 pub(super) fn templates() -> io::Result<Vec<ShellNewTemplate>> {
-    let root = HKEY_CLASSES_ROOT;
-    let mut templates = Vec::new();
+    let mut templates: Vec<_> = extensions(HKEY_CLASSES_ROOT)?
+        .into_iter()
+        .filter_map(|extension| find_template(HKEY_CLASSES_ROOT, extension))
+        .collect();
+    templates.sort_by_cached_key(|entry| (entry.label.to_lowercase(), entry.extension.clone()));
+    Ok(templates)
+}
+
+fn extensions(root: HKEY) -> io::Result<Vec<String>> {
+    let mut extensions = Vec::new();
     let mut name = [0u16; 256];
     for index in 0.. {
         let mut length = name.len() as u32;
@@ -177,18 +189,23 @@ pub(super) fn templates() -> io::Result<Vec<ShellNewTemplate>> {
         registry_result(result)?;
         if let Ok(extension) = String::from_utf16(&name[..length as usize]) {
             if registered_extension(&extension) {
-                templates.extend(find_template(root, extension));
+                extensions.push(extension);
             }
         }
     }
-    templates.sort_by_cached_key(|entry| (entry.label.to_lowercase(), entry.extension.clone()));
-    Ok(templates)
+    Ok(extensions)
 }
 
-fn find_template(root: HKEY, extension: String) -> Option<ShellNewTemplate> {
-    let key = open(root, &extension).ok()?;
+struct Registration {
+    location: String,
+    key: Key,
+    prog_id: Option<String>,
+}
+
+fn registration(root: HKEY, extension: &str) -> Option<Registration> {
+    let key = open(root, extension).ok()?;
     let prog_id = string(&key, PCWSTR::null()).filter(|name| file_name_part(name));
-    let (location, registration) = [
+    let (location, key) = [
         Some(format!(r"{extension}\ShellNew")),
         prog_id
             .as_ref()
@@ -198,39 +215,48 @@ fn find_template(root: HKEY, extension: String) -> Option<ShellNewTemplate> {
     .into_iter()
     .flatten()
     .find_map(|path| open(root, &path).ok().map(|key| (path, key)))?;
+    Some(Registration {
+        location,
+        key,
+        prog_id,
+    })
+}
+
+fn registration_label(root: HKEY, registration: &Registration, extension: &str) -> Option<String> {
+    [w!("MenuText"), w!("ItemName")]
+        .into_iter()
+        .find_map(|name| string(&registration.key, name).and_then(display_string))
+        .or_else(|| {
+            let key = open(root, registration.prog_id.as_deref()?).ok()?;
+            string(&key, w!("FriendlyTypeName"))
+                .and_then(display_string)
+                .or_else(|| string(&key, PCWSTR::null()).and_then(display_string))
+        })
+        .or_else(|| association_name(extension))
+}
+
+fn find_template(root: HKEY, extension: String) -> Option<ShellNewTemplate> {
+    let registration = registration(root, &extension)?;
 
     // Windows owns the UI and effects of these registrations, including its shortcut wizard.
     // They remain available in Oxyde's native Shell menu.
     if [w!("Command"), w!("Handler"), w!("Directory")]
         .into_iter()
-        .any(|value| has_value(&registration, value, RRF_RT_ANY))
+        .any(|value| has_value(&registration.key, value, RRF_RT_ANY))
     {
         return None;
     }
-    let contents = if has_value(&registration, w!("NullFile"), RRF_RT_ANY) {
+    let contents = if has_value(&registration.key, w!("NullFile"), RRF_RT_ANY) {
         Contents::Empty
-    } else if let Some(path) = string(&registration, w!("FileName")) {
+    } else if let Some(path) = string(&registration.key, w!("FileName")) {
         Contents::File(PathBuf::from(path))
-    } else if has_value(&registration, w!("Data"), RRF_RT_REG_BINARY) {
-        Contents::RegistryData(location)
+    } else if has_value(&registration.key, w!("Data"), RRF_RT_REG_BINARY) {
+        Contents::RegistryData(registration.location.clone())
     } else {
         return None;
     };
-    let label = [w!("MenuText"), w!("ItemName")]
-        .into_iter()
-        .find_map(|name| string(&registration, name).and_then(display_string))
-        .or_else(|| {
-            prog_id
-                .as_deref()
-                .and_then(|id| open(root, id).ok())
-                .and_then(|key| {
-                    string(&key, w!("FriendlyTypeName"))
-                        .and_then(display_string)
-                        .or_else(|| string(&key, PCWSTR::null()).and_then(display_string))
-                })
-        })
-        .or_else(|| association_name(&extension))
-        .unwrap_or_else(|| extension.clone());
+    let label =
+        registration_label(root, &registration, &extension).unwrap_or_else(|| extension.clone());
     Some(ShellNewTemplate {
         label,
         extension,

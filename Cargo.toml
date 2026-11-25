@@ -122,12 +122,15 @@ wayland-client = "0.31.11"
 wayland-protocols = { version = "0.32.9", features = ["client"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
+roxmltree = "0.21"
 # Required by the official COM implementation macro; already used by windows.
 windows-core = "0.62.2"
 
 [target.'cfg(target_os = "windows")'.dependencies.windows]
 version = "0.62.2"
 features = [
+    "ApplicationModel",
+    "Management_Deployment",
     "Win32_Foundation",
     "Win32_Devices_DeviceAndDriverInstallation",
     "Win32_System_Registry",

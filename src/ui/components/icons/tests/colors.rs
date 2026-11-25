@@ -4,7 +4,7 @@ use crate::ui::theme::ThemeId;
 #[test]
 fn pdf_color_depends_on_filename_and_preserves_other_text_documents() {
     let theme = OxydeTheme::light();
-    for path in [r"C:\Documents\REPORT.PDF", "/documents/report.pdf"] {
+    for path in [r"C:\Documents\REPORT.PDF", "/documents/report.pdf", "oxyde_ext_pdf"] {
         assert_eq!(
             file_icon_color(path, IconType::FileText, &theme),
             theme.file_icons.pdf
@@ -24,6 +24,23 @@ fn pdf_color_depends_on_filename_and_preserves_other_text_documents() {
         file_icon_color("folder.pdf", IconType::Folder, &theme),
         theme.file_icons.folder
     );
+}
+
+#[test]
+fn shell_new_file_types_share_the_existing_icon_and_palette() {
+    let theme = OxydeTheme::light();
+    for (extension, icon, color) in [
+        ("bmp", IconType::FileImage, theme.file_icons.image),
+        ("odg", IconType::FileImage, theme.file_icons.image),
+        ("py", IconType::FileCode, theme.file_icons.code),
+        ("txt", IconType::FileText, theme.text),
+        ("gdoc", IconType::FileText, theme.text),
+        ("gsheet", IconType::FileSpreadsheet, theme.text),
+        ("gslides", IconType::FileStack, theme.text),
+    ] {
+        assert_eq!(super::super::get_icon_type(&format!("new.{extension}"), false, None, false, false), icon);
+        assert_eq!(file_icon_color(&format!("oxyde_ext_{extension}"), icon, &theme), color);
+    }
 }
 
 #[test]

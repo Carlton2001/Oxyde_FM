@@ -114,6 +114,47 @@ fn reads_the_same_entries_as_more_options_and_invokes_a_fresh_command() {
     }
 }
 
+#[test]
+#[ignore = "Requires the installed Windows Shell handlers in a desktop session"]
+fn resolves_file_types_for_installed_lucide_entries() {
+    let temp = tempfile::tempdir().unwrap();
+    let start = std::time::Instant::now();
+    let entries = entries(temp.path().to_str().unwrap(), false).unwrap();
+    assert!(!entries.is_empty());
+    let expected = [
+        (&["Image bitmap", "Bitmap image"][..], ".bmp"),
+        (&["Document texte", "Text Document"][..], ".txt"),
+        (&["Python Script"][..], ".py"),
+        (&["Google Docs"][..], ".gdoc"),
+        (&["Google Sheets"][..], ".gsheet"),
+        (&["Google Slides"][..], ".gslides"),
+        (&["Raccourci", "Shortcut"][..], ".lnk"),
+        (&["Dessin OpenDocument", "OpenDocument Drawing"][..], ".odg"),
+    ];
+    for (labels, extension) in expected {
+        if let Some(entry) = entries.iter().find(|entry| {
+            labels
+                .iter()
+                .any(|label| entry.command.label.eq_ignore_ascii_case(label))
+        }) {
+            assert_eq!(
+                entry.extension.as_deref(),
+                Some(extension),
+                "{}",
+                entry.command.label
+            );
+        }
+    }
+    eprintln!(
+        "Resolved Windows New entries in {:?}: {:?}",
+        start.elapsed(),
+        entries
+            .iter()
+            .map(|entry| (&entry.command.label, entry.extension.as_deref()))
+            .collect::<Vec<_>>()
+    );
+}
+
 fn wait_for(temp: &tempfile::TempDir, matches: impl Fn(&std::path::Path) -> bool) -> bool {
     for _ in 0..20 {
         if temp

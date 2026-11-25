@@ -57,13 +57,6 @@ fn file_icon(extension: Option<&str>, system: bool) -> IconName {
 
 fn load_rows(source: &Source) -> Vec<Row> {
     let entries = platform().shell_new_menu(&source.folder, source.icons);
-    let templates = if entries.as_ref().is_ok_and(|entries| {
-        !entries.is_empty() && entries.iter().all(|entry| entry.icon.is_some())
-    }) {
-        Vec::new()
-    } else {
-        platform().shell_new_templates().unwrap_or_default()
-    };
     match entries {
         Ok(entries) if !entries.is_empty() => entries
             .into_iter()
@@ -72,11 +65,7 @@ fn load_rows(source: &Source) -> Vec<Row> {
                 let icon = if let Some(bitmap) = entry.icon {
                     IconName::ShellIcon(Arc::new(RenderImage::new(vec![image::Frame::new(bitmap)])))
                 } else {
-                    let extension = templates
-                        .iter()
-                        .find(|template| template.label == label)
-                        .map(|template| template.extension.as_str());
-                    file_icon(extension, source.icons)
+                    file_icon(entry.extension.as_deref(), source.icons)
                 };
                 Row {
                     label,
@@ -89,7 +78,9 @@ fn load_rows(source: &Source) -> Vec<Row> {
             if let Err(error) = other {
                 log::warn!("Cannot read the Windows New submenu: {error}");
             }
-            templates
+            platform()
+                .shell_new_templates()
+                .unwrap_or_default()
                 .into_iter()
                 .map(|template| Row {
                     label: template.label.clone(),
@@ -263,10 +254,10 @@ impl OxydeApp {
             (
                 Message::NewFolder,
                 true,
-                if system {
-                    IconName::NativeFolder(String::new())
-                } else {
-                    IconName::FolderPlus
+                IconName::FileType {
+                    path: String::new(),
+                    icon: IconType::Folder,
+                    system,
                 },
             ),
             (

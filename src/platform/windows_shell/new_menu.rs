@@ -23,6 +23,7 @@ pub struct ShellNewCommand {
 
 pub struct ShellNewEntry {
     pub command: ShellNewCommand,
+    pub extension: Option<String>,
     /// Native BGRA pixels, when Windows publishes a bitmap for the command.
     pub icon: Option<RgbaImage>,
 }
@@ -192,16 +193,24 @@ pub(in crate::platform) fn entries(
     folder: &str,
     icons: bool,
 ) -> Result<Vec<ShellNewEntry>, CommandError> {
-    with_new_submenu(folder, |context, menu, system_folder_label| {
+    let mut entries: Vec<_> = with_new_submenu(folder, |context, menu, system_folder_label| {
         commands(context, menu, icons)
             .filter(|(_, command, _)| !folder_label(&command.label, system_folder_label))
             .map(|(_, command, bitmap)| ShellNewEntry {
                 command,
+                extension: None,
                 icon: bitmap_image(bitmap),
             })
             .collect()
-    })
-    .map(Option::unwrap_or_default)
+    })?
+    .unwrap_or_default();
+    if entries.iter().any(|entry| entry.icon.is_none()) {
+        let types = super::super::windows_shell_new::icon_types();
+        for entry in entries.iter_mut().filter(|entry| entry.icon.is_none()) {
+            entry.extension = types.extension(&entry.command.label).map(str::to_owned);
+        }
+    }
+    Ok(entries)
 }
 
 pub(in crate::platform) fn execute(

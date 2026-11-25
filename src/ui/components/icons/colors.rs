@@ -24,14 +24,9 @@ pub(super) fn file_icon_color(path: &str, icon: IconType, theme: &OxydeTheme) ->
         IconType::FileCode | IconType::Link2 | IconType::FileSymlink => palette.code,
         IconType::BrokenLink => theme.text_muted,
         IconType::FileText
-            if path
-                .rsplit(std::path::is_separator)
-                .next()
-                .unwrap_or(path)
-                .rsplit_once('.')
-                .is_some_and(|(_, ext)| {
-                    PDF_EXTENSIONS.contains(ext.to_ascii_lowercase().as_str())
-                }) =>
+            if path.strip_prefix("oxyde_ext_").or_else(|| {
+                path.rsplit(std::path::is_separator).next()?.rsplit_once('.').map(|(_, ext)| ext)
+            }).is_some_and(|ext| PDF_EXTENSIONS.contains(ext.to_ascii_lowercase().as_str())) =>
         {
             palette.pdf
         }
