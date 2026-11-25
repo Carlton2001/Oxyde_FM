@@ -38,7 +38,7 @@ fn line_numbers_skip_continuations_and_styling_expands_tabs() {
         text: Arc::new(text.into()),
         rows: Arc::new(wrap(text, &lines, 8)),
         lines: Arc::new(lines),
-        highlights: Arc::new(vec![syntax::Span { range: 0..7, kind: 2 }]),
+        highlights: Arc::new(vec![Arc::from([syntax::Span { range: 0..7, kind: 2 }])]),
         columns: 8,
     };
     assert_eq!(rows.line_number(0), "1");
@@ -61,7 +61,7 @@ fn highlights_are_clipped_to_each_wrapped_utf8_row() {
         text: Arc::new(text.into()),
         rows: Arc::new(wrap(text, &lines, 2)),
         lines: Arc::new(lines),
-        highlights: Arc::new(vec![syntax::Span { range: 0..text.len(), kind: 2 }]),
+        highlights: Arc::new(vec![Arc::from([syntax::Span { range: 0..text.len(), kind: 2 }])]),
         columns: 2,
     };
     let theme = crate::ui::theme::OxydeTheme::light();
@@ -80,7 +80,7 @@ fn wrapped_rows_preserve_indent_and_shift_syntax_ranges() {
             text: Arc::new(source.into()),
             rows: Arc::new(starts),
             lines: Arc::new(lines),
-            highlights: Arc::new(vec![syntax::Span { range: 0..source.len(), kind: 2 }]),
+            highlights: Arc::new(vec![Arc::from([syntax::Span { range: 0..source.len(), kind: 2 }])]),
             columns,
         };
         assert!(rows.rows.len() > 1);
@@ -118,4 +118,35 @@ fn a_named_pipe_is_refused_instead_of_blocking_the_viewer() {
     let c_path = std::ffi::CString::new(pipe.to_str().unwrap()).unwrap();
     assert_eq!(unsafe { libc::mkfifo(c_path.as_ptr(), 0o644) }, 0);
     assert!(read(pipe.to_str().unwrap()).is_err());
+}
+
+#[test]
+fn a_row_reads_its_highlights_across_analysis_chunks() {
+    use super::{Rows, syntax};
+    use std::sync::Arc;
+    let text = "one two three\nfour";
+    let lines = line_starts(text);
+    let rows = Rows {
+        text: Arc::new(text.into()),
+        rows: Arc::new(wrap(text, &lines, 80)),
+        lines: Arc::new(lines),
+        highlights: Arc::new(vec![
+            Arc::from([syntax::Span { range: 0..3, kind: 2 }]),
+            Arc::from([syntax::Span { range: 4..7, kind: 2 }, syntax::Span { range: 8..13, kind: 2 }]),
+            Arc::from([syntax::Span { range: 14..18, kind: 2 }]),
+        ]),
+        columns: 80,
+    };
+    let theme = crate::ui::theme::OxydeTheme::dark();
+    let first: Vec<_> = rows.row_highlights(0, &theme).into_iter().map(|(range, _)| range).collect();
+    assert_eq!(first, [0..3, 4..7, 8..13]);
+    let second: Vec<_> = rows.row_highlights(1, &theme).into_iter().map(|(range, _)| range).collect();
+    assert_eq!(second, [0..4]);
+}
+
+#[test]
+fn a_cut_utf8_file_keeps_its_text_and_marks_the_cut() {
+    let mut bytes = "abc é".as_bytes().to_vec();
+    bytes.pop();
+    assert_eq!(super::decode::decode(bytes), "abc \u{FFFD}");
 }
