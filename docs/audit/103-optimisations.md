@@ -33,20 +33,20 @@ Règle : pas de changement sans gain plausible et mesurable ; un changement simp
 | O19 | `systems/history_file_undo.rs:400 et :686-691` | écarté |  | la seconde lecture vérifie le fichier juste avant de le supprimer ; l'éviter demanderait de tenir chaque sortie sans partage d'écriture de la première vérification à la validation, soit des milliers de handles pour une grosse copie |
 | O20 | `systems/history_directories.rs:30-64` | corrigé | a29496c9 | dossiers en double ignorés (un stat par dossier distinct au lieu d'un par fichier), et le plan de suppression cherché par ancêtre dans un ensemble au lieu d'un parcours de la liste |
 | O21 | `systems/folder_sizes.rs:150-176` | corrigé | e18326dc | sous Windows, tailles et nombre de fichiers lus dans l'énumération du dossier (une lecture de plus par dossier, aucune ouverture par fichier) ; repli par entrée si l'énumération échoue : 165 fichiers, 2,5 ms avant, 0,9 à 1,3 ms après (release) |
-| O22 | `systems/history_move_redo.rs:419` | à examiner | | |
-| O23 | `systems/updates.rs:62` | à examiner | | |
-| O24 | `commands/duplicates.rs:335, :390 et :445` | à examiner | | |
+| O22 | `systems/history_move_redo.rs:419` | corrigé | 596254fb | partiel : entre volumes sous Windows, la source tenue sans partage en écriture n'est plus relue après la copie (3 lectures deviennent 2) ; la validation de toutes les sources avant le premier effet garde sa lecture (tout ou rien) |
+| O23 | `systems/updates.rs:62` | écarté |  | un pic mémoire de la taille du paquet (une vingtaine de Mo en pratique), une fois par mise à jour ; garder le paquet en mémoire permet de vérifier la signature Minisign avant d'écrire quoi que ce soit |
+| O24 | `commands/duplicates.rs:335, :390 et :445` | corrigé | 63b3bc9a | verrou par disque seulement pour un disque à pénalité de recherche ou réseau (is_ssd une fois par disque) ; 48 fichiers de 8 Mio en cache sur NVMe : 143 ms avant, 36 ms après (release) |
 | O25 | `commands/duplicates.rs:330, :385 et :440, commands/search.rs:520` | corrigé | a4654b0a | identifiant de disque mis en cache par dossier pendant 30 s (4096 dossiers au plus) |
-| O26 | `commands/duplicates.rs:409-424` | à examiner | | |
-| O28 | `commands/ops/trash_restore.rs:69` | à examiner | | |
+| O26 | `commands/duplicates.rs:409-424` | corrigé | 58d1743d | la seconde passe groupe par taille, hash de début et hash de fin : deux fichiers qui ne partagent que leur fin ne vont plus au hash complet |
+| O28 | `commands/ops/trash_restore.rs:69` | corrigé | 354a1eb0 | quand chaque demande est un identifiant de la Corbeille (cas de l'interface), seuls les éléments demandés lisent leur enregistrement $I ; une demande par chemin d'origine garde la résolution de tous |
 | O29 | `commands/ops/linux_trash.rs:84` | Linux | | |
 | O30 | `commands/search.rs:153, :172, :460 et :539` | Linux | | |
-| O32 | `commands/sidebar.rs:42-46 et :117-121, :58 et :133` | à examiner | | |
-| O33 | `models/config.rs:299-303 et :313-331` | à examiner | | |
-| O35 | `utils/audio_metadata.rs:38-44` | à examiner | | |
-| O36 | `utils/office_document.rs:50-57` | à examiner | | |
-| O37 | `utils/preview_protocol.rs:148-156` | à examiner | | |
-| O39 | `utils/office_document/sheets.rs:104-109` | à examiner | | |
+| O32 | `commands/sidebar.rs:42-46 et :117-121, :58 et :133` | écarté |  | le tri passe déjà par sort_by_cached_key (une mise en minuscules par nœud) ; holds_folder s'arrête au premier sous-dossier, et un dossier sans sous-dossier, seul cas lu en entier, n'est pas parcouru ensuite : on ne peut afficher la flèche sans cette lecture |
+| O33 | `models/config.rs:299-303 et :313-331` | corrigé | 65117cd4 | un fichier qui contient déjà les octets à écrire n'est plus remplacé ni synchronisé (themes.json à presque chaque sauvegarde) ; les rafales étaient déjà fusionnées (lot 10), la sérialisation de l'espace de travail sur le thread UI reste (quelques Ko) |
+| O35 | `utils/audio_metadata.rs:38-44` | corrigé | edf3dd4a | pixels de pochette en base64 dans la réponse du worker (1,33 caractère par octet au lieu d'environ 4), tableaux encore lisibles ; module partagé utils/base64_bytes, repris par la preuve de cache (O5) |
+| O36 | `utils/office_document.rs:50-57` | corrigé | 77e6d327 | tampon dimensionné par la taille déclarée (bornée par le budget) au lieu de doubler, et texte UTF-8 valide repris sans copie ; la conversion avec perte ne copie plus que les parties invalides |
+| O37 | `utils/preview_protocol.rs:148-156` | corrigé | d64681c6 | la session d'images vérifie la réponse sans copier les pixels (elle en faisait une copie jetée), et l'aperçu décode une image unique dans le tampon reçu (decode_owned_with) : une image de 256 Mo n'est plus tenue deux fois |
+| O39 | `utils/office_document/sheets.rs:104-109` | corrigé | 4ce2f4fe | la valeur affichée est copiée une fois, directement dans la cellule (allocation réutilisée), et seulement pour les colonnes gardées |
 | O40 | `platform/linux_gio/applications.rs:153` | Linux | | |
 | O41 | `platform/linux_permissions.rs:33` | Linux | | |
 | O42 | `platform/linux_mime.rs:184 et :227` | Linux | | |
