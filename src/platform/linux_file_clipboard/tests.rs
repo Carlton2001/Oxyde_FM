@@ -28,6 +28,15 @@ fn files_other_managers_offer_are_read_in_the_gnome_format() {
 }
 
 #[test]
+fn uri_lists_keep_local_files_and_skip_comments_and_remote_links() {
+    let text = "# copied\r\nfile:///tmp/%C3%A9%20a\r\nhttps://example.com/b\r\nfile:///tmp/c\r\n";
+    assert_eq!(wayland::uris(text.lines()), Some(vec!["/tmp/é a".to_string(), "/tmp/c".to_string()]));
+    assert_eq!(wayland::uris("https://example.com/b".lines()), None);
+    assert_eq!(wayland::TYPES[0], wayland::FORMAT, "the format carrying cut comes first");
+    assert!(wayland::TYPES.contains(&wayland::URI_LIST));
+}
+
+#[test]
 fn trashed_items_are_offered_as_text_alone() {
     let trash = dirs::data_dir().unwrap().join("Trash/files/doc.txt").to_string_lossy().into_owned();
     std::fs::create_dir_all(dirs::data_dir().unwrap().join("Trash/info")).unwrap();

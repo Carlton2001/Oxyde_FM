@@ -66,7 +66,11 @@ impl OxydeApp {
         let text = None;
         #[cfg(not(target_os = "windows"))]
         let text = {
-            let system = cx.read_from_clipboard();
+            // Files another application announces are read on the worker below: reading
+            // here would hold the interface while their owner does not answer.
+            let announced = oxyde_lib::platform::platform().file_clipboard().external_files_types()
+                .iter().any(|mime_type| cx.clipboard_offers(mime_type));
+            let system = if announced { None } else { cx.read_from_clipboard() };
             // Files another application offers through GPUI come first, as in Zed. Oxyde's
             // own files go through its file clipboard, which knows whether they are cut.
             if let Some(paths) = system.as_ref().filter(|item| !own_files(item)).and_then(external_paths) {

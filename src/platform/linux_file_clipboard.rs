@@ -1,7 +1,7 @@
 //! Oxyde's own file clipboard. Files travel between Oxyde windows here, as in Zed, and the
 //! interface writes their paths to the system clipboard. In a Wayland session, GPUI offers
 //! them there as files too, in the formats GNOME, KDE and GTK 4 file managers read; under
-//! X11 other applications receive the paths as text. Files other file managers offer are
+//! X11 other applications receive the paths as text. Files other applications offer are
 //! read through `wl-paste`, when installed.
 use super::FileClipboard;
 use std::sync::{Mutex, MutexGuard};
@@ -63,8 +63,8 @@ impl FileClipboard for LinuxFileClipboard {
         selection().is_some()
     }
 
-    fn external_files_type(&self) -> Option<&'static str> {
-        wayland::session().then_some(wayland::FORMAT)
+    fn external_files_types(&self) -> &'static [&'static str] {
+        if wayland::session() { &wayland::TYPES } else { &[] }
     }
 }
 
