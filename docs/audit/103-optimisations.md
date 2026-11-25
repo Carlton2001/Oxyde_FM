@@ -50,30 +50,30 @@ Règle : pas de changement sans gain plausible et mesurable ; un changement simp
 | O40 | `platform/linux_gio/applications.rs:153` | Linux | | |
 | O41 | `platform/linux_permissions.rs:33` | Linux | | |
 | O42 | `platform/linux_mime.rs:184 et :227` | Linux | | |
-| O43 | `platform/thumbnails.rs:172 et :360` | à examiner | | |
-| O44 | `platform/windows_peek.rs:22` | à examiner | | |
-| O45 | `platform/windows_shell_delete_tracked/effects.rs:63` | à examiner | | |
-| O46 | `platform/windows_shell_window.rs:197` | à examiner | | |
-| O47 | `platform/windows_file_tree.rs:72 et :169` | à examiner | | |
+| O43 | `platform/thumbnails.rs:172 et :360` | corrigé | 556ae5e2 | partiel : conversion RGB sans clone RGBA ; le sync_all avant renommage reste (un cache lu après coupure ne doit pas être un fichier rempli de zéros), l'agrandissement vidéo à 640 est côté Linux (linux_impl.rs:333, session Linux) |
+| O44 | `platform/windows_peek.rs:22` | écarté |  | hors du thread UI, neuf tests d'existence et deux petits JSON toutes les 5 s : moins d'une milliseconde ; un cache par date de fichier manquerait l'installation ou la désinstallation de PowerToys sans gain visible |
+| O45 | `platform/windows_shell_delete_tracked/effects.rs:63` | écarté |  | garder les parents d'un élément pour les suivants tiendrait un handle sur des dossiers que le Shell doit ensuite supprimer, ce qui ferait échouer ou retarder leur suppression ; la preuve est prise puis relâchée par élément exprès |
+| O46 | `platform/windows_shell_window.rs:197` | corrigé | 6bfa94d1 | les éléments déjà notés sont gardés dans un ensemble à côté de la liste ordonnée : test en temps constant au lieu d'un parcours |
+| O47 | `platform/windows_file_tree.rs:72 et :169` | corrigé | 04412023, 6e20f3f5 | NtQueryDirectoryFile lit un tampon d'entrées (64 Kio pour une liste, 4 Kio par niveau pour une suppression) au lieu d'une entrée par appel ; mesuré 20 000 fichiers : 95 → 8 ms en local, 2,0 s → 23 ms par SMB (partage administratif local) ; la première requête de chaque dossier redémarre la liste, donc un dossier vide sur redirecteur se supprime aussi ; les threads Turbo ne démarrent qu'avec les sous-dossiers qu'ils prennent |
 
 ### Interface
 
 | ID | Emplacement | État | Commits | Note |
 | --- | --- | --- | --- | --- |
-| O50 | `ui/app/archive_password.rs:58` | à examiner | | |
-| O52 | `ui/app/calendar.rs:6` | à examiner | | |
-| O53 | `ui/app/archives.rs:122` | à examiner | | |
-| O54 | `ui/app/advanced_search/validation.rs:58` | à examiner | | |
-| O55 | `ui/app/drag/external.rs:43-55, :98, :115-120 et :151-154` | à examiner | | |
-| O56 | `ui/app/duplicates/search.rs:104-114` | à examiner | | |
-| O57 | `ui/app/drive_watchers.rs:107 et :453-467` | à examiner | | |
-| O59 | `ui/app/file_chooser/details.rs:45` | à examiner | | |
-| O60 | `ui/app/file_chooser.rs:377` | à examiner | | |
-| O61 | `ui/app/file_chooser/browse.rs:102` | à examiner | | |
-| O62 | `ui/app/file_chooser/navbar.rs:84` | à examiner | | |
-| O63 | `ui/app/file_chooser/browse.rs:133` | à examiner | | |
-| O64 | `ui/app/duplicates/title_actions.rs:33` | à examiner | | |
-| O65 | `ui/app/file_preparation.rs:119-123` | à examiner | | |
+| O50 | `ui/app/archive_password.rs:58` | corrigé | 28ef443b | la racine listée par la sonde (mot de passe 7z/RAR, image disque) est gardée 10 s pour la navigation qui suit (commands/archive_probe.rs), si l'archive n'a pas changé (taille, date) : un lancement de worker et une analyse de l'archive en moins à l'ouverture ; oubliée si l'utilisateur est allé ailleurs |
+| O52 | `ui/app/calendar.rs:6` | à mesurer |  | chaque boucle tourne sur le thread UI (cx.spawn), mais ne fait au repos qu'une lecture atomique ; les rendre événementielles demande un signal (Notify) à côté du compteur dans les API watch de Platform, Windows et Linux, et un réveil par session d'infobulle visible seulement : à décider sur une mesure des réveils au repos (changements de contexte du thread UI, consommation sur batterie) |
+| O53 | `ui/app/archives.rs:122` | corrigé | 229c0b07 | extraction : un seul passage sur les onglets pour toute la sélection (files_for_action) ; glisser vers un onglet, Ouvrir avec, ouvrir dans un onglet et épingler : sélection en HashSet ; propriétés : un élément est couvert si l'un de ses ancêtres est un dossier sélectionné (ensemble), au lieu de comparer chaque paire |
+| O54 | `ui/app/advanced_search/validation.rs:58` | écarté |  | une compilation par validation du dialogue (pas par frappe), bornée par la limite de taille du crate regex : quelques millisecondes au pire pour un motif saisi à la main ; la déplacer hors du thread UI ajouterait un état d'attente au dialogue sans gain visible |
+| O55 | `ui/app/drag/external.rs:43-55, :98, :115-120 et :151-154` | corrigé | d2aba017 | chemins convertis une fois par glisser (comparés aux précédents sans allocation), filtrés une fois par cible (quatre dernières gardées) ; la cible n'est plus mise en minuscules pour chaque source |
+| O56 | `ui/app/duplicates/search.rs:104-114` | corrigé | fa628e1f | déjà hors du thread UI et retardé de 150 ms ; un chemin ASCII est comparé sans copie (eq_ignore_ascii_case), les autres comme avant, et le nom n'est plus cherché à part quand il termine le chemin |
+| O57 | `ui/app/drive_watchers.rs:107 et :453-467` | corrigé | 34041ef9, dd6624c3 | partiel : les comparaisons d'ancêtres d'un événement se font avant le verrou partagé ; l'éjection libère encore tous les observateurs : un dossier de montage (C:\mnt\usb) tient le volume éjecté sans partager sa lettre, et l'éjection reste rare |
+| O59 | `ui/app/file_chooser/details.rs:45` | corrigé | aa5934b5 | les chiffres tabulaires ont tous la même chasse : les tailles sont regroupées par motif (chiffres remplacés par 0) et seul chaque motif est mis en forme, quelques dizaines au lieu de dizaines de milliers ; explorateur et sélecteur |
+| O60 | `ui/app/file_chooser.rs:377` | corrigé | bfb394bf | le dossier personnel est demandé au système une fois ; le reste (quelques dizaines de favoris et lecteurs clonés puis comparés) est négligeable et garde la comparaison simple |
+| O61 | `ui/app/file_chooser/browse.rs:102` | corrigé | 3aa170c4 | partiel : le listage n'est plus trié (arrange trie), et types et tailles des colonnes ne sont recueillis qu'au premier arrangement d'un listage, plus à chaque frappe ; le clonage des entrées affichées reste, hors du thread UI |
+| O62 | `ui/app/file_chooser/navbar.rs:84` | corrigé | 5405f397 | partiel : les entrées du menu ne sont plus clonées entières à chaque rendu ; le listage (métadonnées, tri) reste hors du thread UI et sert l'ordre du menu ; les lignes restent reconstruites par rendu, car GenericDropdown possède ses éléments |
+| O63 | `ui/app/file_chooser/browse.rs:133` | à mesurer |  | hors du thread UI ; le coût est l'ouverture de chaque sous-dossier pour sa flèche (holds_folder), qui est ce qui rend la flèche juste ; piste : sur un rafraîchissement d'observateur, ne vérifier que les sous-dossiers nouveaux et garder les autres drapeaux, F5 et la navigation vérifiant tout ; à mesurer sur un partage de milliers de sous-dossiers avant de changer ce compromis |
+| O64 | `ui/app/duplicates/title_actions.rs:33` | corrigé | 01895a10 | l'ensemble des groupes réduits est partagé (Arc) avec la tâche de filtrage au lieu d'être cloné à chaque frappe ; « Tout réduire » le remplit encore une fois |
+| O65 | `ui/app/file_preparation.rs:119-123` | corrigé | f4eaa3aa | cause du coût : une préparation de filtre (Current) copiait, retriait et réétiquetait toute la liste ; l'onglet retient l'ordre de ses fichiers (Weak sur le vecteur), et un filtre ou un regroupement ne copie ni ne trie plus : 100 000 entrées, environ 50 ms → moins d'une ms hors filtre ; un calcul périmé reste non annulable, mais il est désormais court |
 | O66 | `ui/app/file_chooser/sidebar.rs:201-209 et :249` | à examiner | | |
 | O67 | `ui/app/file_chooser/save.rs:215-219 et :111-119` | à examiner | | |
 | O68 | `ui/app/item_pointer.rs:30-34` | à examiner | | |
