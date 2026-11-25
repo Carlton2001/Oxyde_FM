@@ -57,7 +57,8 @@ pub(crate) fn field_error(message: SharedString, theme: crate::ui::theme::OxydeT
         .text_size(rems(0.75))
         .text_color(theme.error)
         .child(svg().path("icons/circle-x.svg").size(rems(0.75)).flex_none().text_color(theme.error))
-        .child(message)
+        // A long message wraps inside the field's width instead of running past its start.
+        .child(div().min_w_0().text_right().child(message))
 }
 
 /// The frame of a modal prompt or dialog window: the secondary windows' title bar, a
