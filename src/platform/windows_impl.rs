@@ -518,18 +518,52 @@ impl Platform for WindowsPlatform {
         path: &[String],
         is_background: bool,
     ) -> Result<Vec<crate::models::WinMenuItem>, String> {
-        super::windows_shell::get_native_context_menu_items(path.to_vec(), is_background)
-            .map_err(|error| error.to_string())
+        let read = || super::windows_shell::get_native_context_menu_items(path.to_vec(), is_background);
+        let mut items = if is_background {
+            super::windows_shell::sharing::read_beside_folder_sharing(path, read)
+        } else {
+            read()
+        }
+        .map_err(|error| error.to_string())?;
+        if is_background {
+            super::windows_shell::new_menu::remove_new_submenu(&mut items);
+        }
+        Ok(items)
+    }
+
+    fn shell_new_templates(&self) -> std::io::Result<Vec<super::ShellNewTemplate>> {
+        super::windows_new_registrations::templates()
+    }
+
+    fn shell_new_menu(&self, folder: &str, icons: bool) -> Result<Vec<super::ShellNewEntry>, String> {
+        super::windows_shell::new_menu::entries(folder, icons).map_err(|error| error.to_string())
+    }
+
+    fn execute_shell_new_command(&self, folder: &str, command: &super::ShellNewCommand) -> Result<(), String> {
+        super::windows_shell::new_menu::execute(folder, command).map_err(|error| error.to_string())
+    }
+
+    fn create_shell_new_file(
+        &self,
+        folder: &std::path::Path,
+        template: &super::ShellNewTemplate,
+        names: &mut dyn Iterator<Item = String>,
+    ) -> std::io::Result<std::path::PathBuf> {
+        super::windows_new_registrations::create_file(folder, template, names)
     }
 
     fn execute_native_context_menu_item(
         &self,
         path: &[String],
-        id: i32,
+        item: &crate::models::WinMenuItem,
         is_background: bool,
     ) -> Result<(), String> {
-        super::windows_shell::execute_native_menu_item(path.to_vec(), id, is_background)
-            .map_err(|error| error.to_string())
+        if is_background && item.is_folder_sharing_command {
+            super::windows_shell::sharing::execute_folder_sharing_command(path, item)
+        } else {
+            super::windows_shell::execute_native_menu_item(path.to_vec(), item.id, is_background)
+        }
+        .map_err(|error| error.to_string())
     }
 
     fn is_network_path(&self, path: &std::path::Path) -> bool {

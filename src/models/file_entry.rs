@@ -200,6 +200,8 @@ pub struct WinMenuItem {
     pub label: String,
     pub verb: Option<String>,
     pub has_submenu: bool,
+    /// This command comes from the displayed folder's own sharing submenu.
+    pub is_folder_sharing_command: bool,
     pub children: Vec<WinMenuItem>,
 }
 

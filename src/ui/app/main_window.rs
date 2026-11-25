@@ -71,6 +71,8 @@ impl OxydeApp {
             return;
         }
         self.browsing = true;
+        #[cfg(target_os = "windows")]
+        self.refresh_new_menu_catalog(cx);
         self.start_watcher_task(cx);
         self.reconcile_watchers(cx);
         // The tabs shown only: the others list when chosen, so that a remote one

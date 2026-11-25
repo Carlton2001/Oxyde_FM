@@ -39,6 +39,10 @@ pub enum IconName {
     CheckboxFile { checked: bool, path: String, icon: crate::ui::components::icons::IconType, system: bool },
     Folder,
     NativeFolder(String),
+    #[cfg(target_os = "windows")]
+    FileType { path: String, icon: crate::ui::components::icons::IconType, system: bool },
+    #[cfg(target_os = "windows")]
+    ShellIcon(std::sync::Arc<RenderImage>),
     /// An image file, such as an application's icon; the window icon when missing.
     Image(Option<std::path::PathBuf>),
     HardDrive,
@@ -472,6 +476,17 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                                 rems(1.0), &theme, true, false,
                                                             )).when(item.is_dimmed, |d| d.opacity(0.5));
                                                         }
+                                                        #[cfg(target_os = "windows")]
+                                                        if let IconName::FileType { path, icon, system } = icon {
+                                                            return d.child(crate::ui::components::icons::render_file_icon(
+                                                                path.clone(), *icon, rems(1.0), &theme, *system, false,
+                                                            )).when(item.is_dimmed, |d| d.opacity(0.5));
+                                                        }
+                                                        #[cfg(target_os = "windows")]
+                                                        if let IconName::ShellIcon(image) = icon {
+                                                            return d.child(img(image.clone()).size_full().object_fit(ObjectFit::Contain))
+                                                                .when(item.is_dimmed, |d| d.opacity(0.5));
+                                                        }
                                                         if let IconName::Image(Some(path)) = icon {
                                                             return d.child(img(path.clone()).size_full().object_fit(ObjectFit::Contain))
                                                                 .when(item.is_dimmed, |d| d.opacity(0.5));
@@ -503,6 +518,10 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                                         "icons/square.svg"
                                                                     }
                                                                     IconName::NativeFolder(_) => "icons/folder.svg",
+                                                                    #[cfg(target_os = "windows")]
+                                                                    IconName::FileType { icon, .. } => icon.path(),
+                                                                    #[cfg(target_os = "windows")]
+                                                                    IconName::ShellIcon(_) => unreachable!("Shell bitmap rendered above"),
                                                                     IconName::Image(_) => "icons/app-window.svg",
                                                                     IconName::Folder => "icons/folder.svg",
                                                                     IconName::HardDrive => {

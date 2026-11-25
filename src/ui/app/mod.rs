@@ -38,6 +38,8 @@ mod file_preparation;
 mod archives;
 pub(crate) use archives::archive_extension;
 mod rename;
+#[cfg(target_os = "windows")]
+mod new_menu;
 mod context_menus;
 mod drag;
 pub(crate) use drag::external::FileDropTargetExt;
@@ -298,6 +300,8 @@ pub struct OxydeApp {
     /// The chevron whose folder is being listed, before its menu opens.
     pub(crate) breadcrumb_menu_request: Option<(String, String, usize)>,
     pub context_menus: Vec<ContextMenuInstance>,
+    #[cfg(target_os = "windows")]
+    new_menu_catalog: new_menu::Catalog,
     /// Control that opened the current root menu, identified with that menu's scroll state.
     pub(crate) context_menu_owner: Option<(SharedString, UniformListScrollHandle)>,
     /// Owner whose menu the native outside click just dismissed, before the click reaches it.
@@ -554,6 +558,8 @@ impl OxydeApp {
             breadcrumb_menu: None,
             breadcrumb_menu_request: None,
             context_menus: Vec::new(),
+            #[cfg(target_os = "windows")]
+            new_menu_catalog: Default::default(),
             context_menu_owner: None,
             dismissed_menu_owner: None,
             context_anchor_points: std::collections::HashMap::new(),

@@ -111,3 +111,19 @@ Tests: `shell/oxyde-file-dialog/tests/dialog.rs` loads the library as an applica
 **Taskbar menu** (`platform/windows_jump_list.rs`): right-clicking Oxyde's taskbar button lists the pinned folders of the sidebar (Quick access), each opened as a tab. There is no list of recent folders, which Oxyde does not keep, and no new window, which panes replace. When the user turned off recently opened items in Start and jump lists (`Start_TrackDocs` 0), Windows refuses an application's categories with `E_ACCESSDENIED`; the folders are then listed as tasks. Folders the user removed from the menu are left out of the next list, as Windows requires. `the_shell_accepts_the_menu` writes a list under a test identity and deletes it; it is ignored by default, as it needs a desktop session.
 
 **Application identity.** The list belongs to an `AppUserModelID`. The process takes `Oxyde.GPUI.Windows`, the one of the Setup's shortcuts, before its first window (`Platform::identify_process`), so the button, a pinned shortcut and the menu are the same however Oxyde was started; a debug build takes `Oxyde.GPUI.Windows.Devel`. A taskbar pin made from a window of an earlier version, which had no identity of its own, no longer matches and has to be pinned again.
+
+## The New submenu (Windows)
+
+The background menu of a folder shows **New** in place of New folder and New file (`ui/app/new_menu.rs`). It lists New folder and Empty file, created by Oxyde, then the commands of the Shell's own New submenu (`platform/windows_shell/new_menu.rs`), which Windows executes in the folder. That submenu is then removed from More options. A command is found again by its label, its verb and its rank among identical ones, since command IDs change at each query. The verb of a file type's command is its extension, which gives the icon when Windows supplies no bitmap; otherwise the labels of the registry and of package manifests are matched (`platform/windows_new_registrations/types.rs`).
+
+The list loads off the UI thread, within the timeout of native menus, and is kept for a minute. Changing folders keeps the previous list until the new one arrives, so the open submenu does not grow under the pointer. If the Shell fails or hangs, Oxyde lists the registrations it can create itself (`NullFile`, `FileName`, `Data`), named after `ItemName` or New and the type; it creates them without overwriting and never leaves a partial file. The next opening asks the Shell again.
+
+Oxyde starts renaming the created item, except when the registration hands it to a program or a wizard (`Command`, `Handler`, `uap10:ShellNewCommandParameters`, the shortcut's `NewLink`), which may rename or delete it itself.
+
+Tests: `windows_shell/tests/new_menu.rs` compares the list with More options and creates a folder and a text document in a temporary folder; it is ignored by default, as it needs a desktop session. `windows_new_registrations/tests` cover registrations in a volatile registry key, manifests and file creation.
+
+## Sharing on a folder background (Windows)
+
+On a background, the Shell lists **Give access to** with no commands, since there is no selection. Oxyde puts in its place the sharing submenu of the displayed folder itself, read on a second STA thread beside the background menu so the menu waits only for the slower query (`platform/windows_shell/sharing.rs`). Only enabled commands are listed, and the popup goes when the folder offers none; a sharing submenu that the background fills itself is kept as is. A command is found again in a fresh menu of the folder by its label and verb, and refused when that is ambiguous or no longer offered, since command IDs change at each query. Other empty popups are listed as Windows gives them.
+
+Tests: `windows_shell/tests/sharing.rs` places the submenu and resolves commands; the comparison with the folder's own menu is ignored by default, as it needs a desktop session.

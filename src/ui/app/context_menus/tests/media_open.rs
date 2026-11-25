@@ -7,6 +7,7 @@ fn item(id: i32, verb: Option<&str>, children: Vec<WinMenuItem>) -> WinMenuItem 
         label: "Localized label".into(),
         verb: verb.map(str::to_owned),
         has_submenu: !children.is_empty(),
+        is_folder_sharing_command: false,
         children,
     }
 }

@@ -1114,14 +1114,31 @@ pub trait Platform: Send + Sync {
         Err("Native context menus are unavailable on this platform".to_string())
     }
 
-    /// Executes a command ID from a previously built native context-menu snapshot.
+    #[cfg(target_os = "windows")]
+    fn shell_new_templates(&self) -> std::io::Result<Vec<ShellNewTemplate>>;
+
+    #[cfg(target_os = "windows")]
+    fn shell_new_menu(&self, folder: &str, icons: bool) -> Result<Vec<ShellNewEntry>, String>;
+
+    #[cfg(target_os = "windows")]
+    fn execute_shell_new_command(&self, folder: &str, command: &ShellNewCommand) -> Result<(), String>;
+
+    #[cfg(target_os = "windows")]
+    fn create_shell_new_file(
+        &self,
+        folder: &std::path::Path,
+        template: &ShellNewTemplate,
+        names: &mut dyn Iterator<Item = String>,
+    ) -> std::io::Result<std::path::PathBuf>;
+
+    /// Executes a command from a previously built native context-menu snapshot.
     fn execute_native_context_menu_item(
         &self,
         path: &[String],
-        id: i32,
+        item: &crate::models::WinMenuItem,
         is_background: bool,
     ) -> Result<(), String> {
-        let _ = (path, id, is_background);
+        let _ = (path, item, is_background);
         Err("Native context menus are unavailable on this platform".to_string())
     }
 }
@@ -1291,6 +1308,12 @@ mod windows_recycle_bin;
 mod windows_write_access;
 #[cfg(target_os = "windows")]
 mod windows_shell;
+#[cfg(target_os = "windows")]
+pub use windows_shell::new_menu::{ShellNewCommand, ShellNewEntry};
+#[cfg(target_os = "windows")]
+mod windows_new_registrations;
+#[cfg(target_os = "windows")]
+pub use windows_new_registrations::ShellNewTemplate;
 #[cfg(target_os = "windows")]
 mod windows_shell_selection;
 #[cfg(target_os = "windows")]

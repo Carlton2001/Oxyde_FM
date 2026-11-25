@@ -179,6 +179,8 @@ menu-properties = Proprietà
 
 menu-more-options = Altre opzioni
 
+menu-new-item = Nuovo
+menu-new-empty-file = File vuoto
 menu-new-folder = Nuova cartella
 menu-new-file = Nuovo file
 
@@ -413,6 +415,8 @@ new-folder-name = Nuova cartella
 new-folder-numbered = Nuova cartella ({ $number })
 new-file-name = Nuovo file
 new-file-numbered = Nuovo file ({ $number })
+new-template-name = Nuovo { $type }
+new-item-numbered = { $name } ({ $number })
 
 native-menu-empty = Nessun comando disponibile
 
@@ -447,7 +451,7 @@ sidebar-expand = Espandi
 
 settings-windows-icons = Icone di Windows
 
-settings-windows-icons-description = Usa le icone di Windows per file e cartelle nelle viste elenco e griglia.
+settings-windows-icons-description = Usa le icone di Windows per file e cartelle.
 
 settings-checkboxes = Caselle di selezione
 

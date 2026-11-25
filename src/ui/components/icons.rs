@@ -122,7 +122,7 @@ pub(crate) fn link_icon(is_dir: bool, broken: bool) -> IconType {
 
 pub static IMAGE_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
     [
-        "png", "jpg", "jpeg", "gif", "bmp", "webp", "svg", "ico", "tiff", "tif",
+        "png", "jpg", "jpeg", "gif", "bmp", "webp", "svg", "ico", "tiff", "tif", "odg",
     ]
     .into()
 });
@@ -186,15 +186,15 @@ pub static TEXT_BASE_EXTENSIONS: Lazy<HashSet<&'static str>> = Lazy::new(|| {
 });
 
 pub static WORD_EXTENSIONS: Lazy<HashSet<&'static str>> =
-    Lazy::new(|| ["doc", "docx", "odt", "rtf", "pages", "dot", "dotx"].into());
+    Lazy::new(|| ["doc", "docx", "odt", "rtf", "pages", "dot", "dotx", "gdoc"].into());
 
 pub static EXCEL_EXTENSIONS: Lazy<HashSet<&'static str>> =
-    Lazy::new(|| ["xls", "xlsx", "ods", "csv", "tsv", "numbers", "xlsm"].into());
+    Lazy::new(|| ["xls", "xlsx", "ods", "csv", "tsv", "numbers", "xlsm", "gsheet"].into());
 
 // `.key` is left to certificates: off macOS, it is a private key far more often
 // than a Keynote presentation.
 pub static POWERPOINT_EXTENSIONS: Lazy<HashSet<&'static str>> =
-    Lazy::new(|| ["ppt", "pptx", "odp", "pps", "ppsx"].into());
+    Lazy::new(|| ["ppt", "pptx", "odp", "pps", "ppsx", "gslides"].into());
 
 pub static DATABASE_EXTENSIONS: Lazy<HashSet<&'static str>> =
     Lazy::new(|| ["accdb", "mdb", "db", "sqlite", "sqlite3"].into());

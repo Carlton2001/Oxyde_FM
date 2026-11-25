@@ -123,6 +123,8 @@ menu-rename = Rename
 menu-delete = Delete
 menu-properties = Properties
 menu-more-options = More options
+menu-new-item = New
+menu-new-empty-file = Empty file
 menu-new-folder = New folder
 menu-new-file = New file
 menu-duplicate-tab = Duplicate tab
@@ -270,6 +272,8 @@ new-folder-name = New folder
 new-folder-numbered = New folder ({ $number })
 new-file-name = New file
 new-file-numbered = New file ({ $number })
+new-template-name = New { $type }
+new-item-numbered = { $name } ({ $number })
 native-menu-empty = No commands available
 native-menu-failed = Could not load native menu: { $detail }
 native-menu-timeout = The system menu is not responding
@@ -292,7 +296,7 @@ sidebar-collapse = Collapse sidebar
 sidebar-expand = Expand sidebar
 
 settings-windows-icons = Windows icons
-settings-windows-icons-description = Use Windows file and folder icons in list and grid views.
+settings-windows-icons-description = Use Windows file and folder icons.
 
 settings-checkboxes = Selection checkboxes
 settings-checkboxes-description = Select multiple items without holding Ctrl.

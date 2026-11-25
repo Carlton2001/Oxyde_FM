@@ -21,7 +21,7 @@ Native file explorer in Rust, GPUI and Tokio. Documentation: [index](docs/README
 | Menus, tooltips, secondary windows | [Windows](docs/architecture/windows.md) |
 | Previews, thumbnails, sessions | [Previews](docs/architecture/previews.md) |
 | Archives, confinement, guarantees | [Archives](docs/architecture/archives.md), [security limits](docs/security/status.md) |
-| Default file manager, Open and Save dialogs, single instance | [System integration](docs/architecture/system-integration.md) |
+| Default file manager, Open and Save dialogs, single instance, Windows New submenu | [System integration](docs/architecture/system-integration.md) |
 | Final process exit | [Shutdown](docs/diagnostics/shutdown.md) |
 | Module splitting and tests | [Development](docs/guides/development.md) |
 

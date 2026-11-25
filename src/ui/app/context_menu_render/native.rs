@@ -29,6 +29,7 @@ impl OxydeApp {
             .map(|it| {
                 let h = h_app.clone();
                 let p = path_cap.clone();
+                let command = it.clone();
                 let id = it.id;
                 let has_sub = it.has_submenu;
 
@@ -54,10 +55,9 @@ impl OxydeApp {
                         move |_, app| {
                             let h_inner = h.clone();
                             let p_inner = p.clone();
-                            let id_inner = id;
 
                             h_inner.update(app, |this, cx| {
-                                if !has_sub && id_inner >= 0 {
+                                if !has_sub && id >= 0 {
                                     fn is_creation(
                                         items: &[oxyde_lib::models::WinMenuItem],
                                         id: i32,
@@ -76,20 +76,21 @@ impl OxydeApp {
                                         })
                                     }
                                     let creates_item = is_bg_cap
+                                        && !command.is_folder_sharing_command
                                         && this.context_menus.iter().any(|menu| {
                                             if let ContextMenuContent::NativeItems {
                                                 items,
                                                 ..
                                             } = &menu.content
                                             {
-                                                is_creation(items, id_inner, false)
+                                                is_creation(items, id, false)
                                             } else {
                                                 false
                                             }
                                         });
                                     this.execute_native_context_menu_item(
                                         p_inner,
-                                        id_inner,
+                                        command.clone(),
                                         is_bg_cap,
                                         creates_item,
                                         cx,

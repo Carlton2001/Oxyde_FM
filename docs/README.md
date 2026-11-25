@@ -26,7 +26,7 @@ Shared:
 [file clipboard](architecture/clipboard.md),
 [folder watching](architecture/watchers.md),
 [quick access](architecture/quick-access.md),
-[system integration](architecture/system-integration.md): default file manager, Open and Save dialogs, single instance.
+[system integration](architecture/system-integration.md): default file manager, Open and Save dialogs, single instance, New submenu.
 
 Linux:
 [previews and sandbox](architecture/linux-previews.md),

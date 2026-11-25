@@ -21,7 +21,7 @@ const GROUPS: &[&[Message]] = &[
     &[Message::MountDiskImage, Message::UnmountDiskImage, Message::PinQuickAccess,
         Message::UnpinQuickAccess, Message::UnmountDrive, Message::EjectDrive, Message::TrashRestore, Message::TrashRestoreAll],
     &[Message::Cut, Message::Copy, Message::Paste],
-    &[Message::NewFolder, Message::NewFile],
+    &[Message::NewItem, Message::NewFolder, Message::NewFile],
     &[Message::SelectAll],
     &[Message::Compress, Message::OpExtractHere],
     &[], // Undo/Redo, recognised by their icons.
@@ -75,7 +75,7 @@ pub(super) fn without_unavailable_shell_menu(items: Vec<dropdown::DropdownItem>,
 
 /// Actions that write where the menu applies: hidden where nothing can be written.
 const WRITING_ACTIONS: &[Message] = &[
-    Message::Cut, Message::Paste, Message::NewFolder, Message::NewFile, Message::Compress,
+    Message::Cut, Message::Paste, Message::NewItem, Message::NewFolder, Message::NewFile, Message::Compress,
     Message::OpExtractHere, Message::Rename, Message::Delete, Message::TrashDeletePermanent,
 ];
 
@@ -111,14 +111,14 @@ pub(crate) fn with_terminal_action(
     network::insert_after_open(items, vec![action], i18n)
 }
 
-fn pane_context_menu_items_raw(
+fn pane_creation_items(
     i18n: &I18n,
     h_app: Entity<crate::ui::app::OxydeApp>,
     pane_id: String,
 ) -> Vec<crate::ui::components::dropdown::DropdownItem> {
     use crate::ui::components::dropdown::IconName;
 
-    without_unavailable_shell_menu(vec![
+    vec![
         crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::NewFolder).to_string(),
             icon: Some(IconName::FolderPlus),
@@ -150,6 +150,17 @@ fn pane_context_menu_items_raw(
             }
         })
         .icon(IconName::FilePlus),
+    ]
+}
+
+fn pane_context_menu_items_raw(
+    i18n: &I18n,
+    h_app: Entity<crate::ui::app::OxydeApp>,
+    pane_id: String,
+) -> Vec<dropdown::DropdownItem> {
+    use crate::ui::components::dropdown::IconName;
+
+    without_unavailable_shell_menu(vec![
         crate::ui::components::dropdown::DropdownItem {
             label: i18n.text(Message::SelectAll).to_string(),
             icon: Some(IconName::SquareDashedMousePointer),
@@ -430,11 +441,22 @@ pub fn pane_context_menu_items(i18n: &I18n, h: Entity<crate::ui::app::OxydeApp>,
     let read_only = view.is_read_only_location(&pane_id, path);
     // Resolved by the listing off the UI thread: no disk access on a slow share here.
     let in_archive = view.state.find_pane(&pane_id).is_some_and(|pane| pane.active_tab().archive_root.is_some());
+    if !read_only && !path.starts_with("search://") {
+        #[cfg(target_os = "windows")]
+        let new_menu = view.windows_new_menu_item(h.clone(), &pane_id, i18n);
+        #[cfg(not(target_os = "windows"))]
+        let new_menu: Option<dropdown::DropdownItem> = None;
+        if let Some(menu) = new_menu {
+            items.push(menu);
+        } else {
+            items.extend(pane_creation_items(i18n, h.clone(), pane_id.clone()));
+        }
+    }
     items.extend(pane_context_menu_items_raw(i18n, h.clone(), pane_id));
     let mut items = with_terminal_action(items, h.clone(), path, i18n);
     history_actions::insert_menu_items(&mut items, i18n, h, view);
     if path.starts_with("search://") {
-        items.retain(|item| ![Message::NewFolder, Message::NewFile, Message::Paste, Message::Properties, Message::MoreOptions]
+        items.retain(|item| ![Message::Paste, Message::Properties, Message::MoreOptions]
             .iter().any(|message| item.label == i18n.text(*message).as_ref()));
     } else if in_archive {
         items.retain(|item| item.label != i18n.text(Message::NewFile).as_ref());
