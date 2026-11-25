@@ -206,7 +206,7 @@ fn write_thumbnail_cache(
                 .write_image(image, image.width(), image.height(), image::ExtendedColorType::Rgba8)
                 .map_err(std::io::Error::other);
         }
-        let rgb = image::DynamicImage::ImageRgba8(image.clone()).to_rgb8();
+        let rgb: image::RgbImage = image::buffer::ConvertBuffer::convert(image);
         image::codecs::jpeg::JpegEncoder::new_with_quality(file, 75)
             .encode_image(&image::DynamicImage::ImageRgb8(rgb))
             .map_err(std::io::Error::other)
