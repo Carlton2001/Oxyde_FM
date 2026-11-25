@@ -10,11 +10,11 @@ Règle : pas de changement sans gain plausible et mesurable ; un changement simp
 
 | ID | Emplacement | État | Commits | Note |
 | --- | --- | --- | --- | --- |
-| O1 | `commands/archive_io_worker.rs:57 et archive_io_codec.rs:77` | à examiner | | |
-| O2 | `commands/archive_io_codec.rs:257` | à examiner | | |
-| O3 | `commands/archive_io_codec/parallel.rs:94` | à examiner | | |
-| O4 | `commands/archive.rs:231 et archive_handle_worker.rs:108` | à examiner | | |
-| O5 | `systems/archive_open_cache/recovery.rs:199` | à examiner | | |
+| O1 | `commands/archive_io_worker.rs:57 et archive_io_codec.rs:77` | corrigé | d709a747 | source TAR, flux compressés et ISO lus par blocs de 256 Kio, octets décodés signalés par blocs : 90 petits fichiers passent de 1355 (TAR) et 1086 (tar.gz) allers-retours à 814 ; le rendez-vous Checkpoint avant chaque message reste (sémantique de pause, changement de protocole) |
+| O2 | `commands/archive_io_codec.rs:257` | corrigé | e15cdcbc | la fenêtre de lecture repart à 4 Kio après un saut et double en lecture séquentielle : extraire un membre d'un ZIP de 20 fichiers de 300 Kio lit 412 Ko au lieu de 5,7 Mo ; l'en-tête local reste lu (aller-retour par membre), le crate zip n'expose pas les champs extra sans lui |
+| O3 | `commands/archive_io_codec/parallel.rs:94` | corrigé | 50797e20 | threads d'encodage réutilisés (au plus un par travail admis) : 5000 fichiers de 1 Ko passent de 373 à 202 ms en release ; l'archive temporaire par membre reste (raw_copy_file en a besoin pour garder l'ordre) |
+| O4 | `commands/archive.rs:231 et archive_handle_worker.rs:108` | écarté |  | changement d'architecture (cache d'index côté hôte validé par identité, admission distincte de la recherche, repli au-delà de MAX_REPLY) ; seuls TAR compressés et flux en profitent, ZIP/7z/ISO ne relisent que leur répertoire |
+| O5 | `systems/archive_open_cache/recovery.rs:199` | corrigé | 1bf74130 | bloc à venir en base64 (les preuves en tableau restent lisibles) : preuve de 940 à 350 Ko, et DPAPI de 42 à 1,8 ms par bloc ; 16 Mio passent de 2,6 s à 0,26 s en release. Un sync_all par bloc reste (garantie de reprise) |
 | O6 | `systems/archive_owned_tree.rs:463` | à examiner | | |
 | O7 | `systems/archive_workspace.rs:203 et :191` | à examiner | | |
 | O8 | `systems/archive_workspace.rs:414 (via archive_transfer.rs:68) et :592` | à examiner | | |
