@@ -400,11 +400,13 @@ pub async fn find_duplicates(
                 .push(res.1);
         }
 
+        // The start hash stays in the key: files that only share their end
+        // are not sent to the full hash together.
         let mut end_check_list = Vec::new();
-        for ((size, _), files) in partial_start_groups {
+        for ((size, start), files) in partial_start_groups {
             if files.len() > 1 {
                 for path in files {
-                    end_check_list.push((size, path));
+                    end_check_list.push((size, start, path));
                 }
             }
         }
@@ -417,9 +419,9 @@ pub async fn find_duplicates(
         hashed.store(0, Ordering::Relaxed);
         let hash_total = total_end;
         report(DuplicateStage::Hashing, 0, hash_total);
-        let partial_end_results: Vec<Option<(u64, PathBuf, blake3::Hash)>> = end_check_list
+        let partial_end_results: Vec<Option<(u64, blake3::Hash, PathBuf, blake3::Hash)>> = end_check_list
             .into_par_iter()
-            .map(|(size, path)| {
+            .map(|(size, start, path)| {
                 if cancel_flag.load(Ordering::Relaxed) {
                     return None;
                 }
@@ -435,7 +437,7 @@ pub async fn find_duplicates(
                 if count.is_multiple_of(20) {
                     report(DuplicateStage::Hashing, count, hash_total);
                 }
-                Some((size, path, hash))
+                Some((size, start, path, hash))
             })
             .collect();
 
@@ -443,16 +445,17 @@ pub async fn find_duplicates(
             return Ok(vec![]);
         }
 
-        let mut partial_end_groups: HashMap<(u64, blake3::Hash), Vec<PathBuf>> = HashMap::new();
-        for res in partial_end_results.into_iter().flatten() {
+        let mut partial_end_groups: HashMap<(u64, blake3::Hash, blake3::Hash), Vec<PathBuf>> =
+            HashMap::new();
+        for (size, start, path, end) in partial_end_results.into_iter().flatten() {
             partial_end_groups
-                .entry((res.0, res.2))
+                .entry((size, start, end))
                 .or_default()
-                .push(res.1);
+                .push(path);
         }
 
         let mut final_check_list = Vec::new();
-        for ((size, _), files) in partial_end_groups {
+        for ((size, _, _), files) in partial_end_groups {
             if files.len() > 1 {
                 for path in files {
                     final_check_list.push((size, path));
