@@ -213,7 +213,7 @@ fn installing_a_recursive_watch_on_a_large_tree_does_not_invalidate_every_size()
     }
     let changes: WatcherChanges = Default::default();
     let path = root.path().to_string_lossy().into_owned();
-    let _watcher = DirectoryWatcher::create(&path, false, true, changes.clone()).unwrap();
+    let _watcher = DirectoryWatcher::create(&path, None, true, changes.clone()).unwrap();
     std::thread::sleep(std::time::Duration::from_millis(1500));
     assert!(changes.lock().unwrap().get(&path).is_none_or(|change| !change.all_sizes));
     std::fs::write(root.path().join("7").join("7").join("new"), "x").unwrap();

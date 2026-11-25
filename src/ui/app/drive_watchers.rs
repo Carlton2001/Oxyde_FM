@@ -592,11 +592,13 @@ impl OxydeApp {
             self.pending_watchers
                 .insert(path.clone(), (request, polling, recursive));
             let changes = self.watcher_changes.clone();
+            // Folders of one polled volume share its polling thread.
+            let volume = drive_of(&path, &self.state.drives).filter(|_| polling).map(|drive| drive.path.clone());
             cx.spawn(async move |this, cx| {
                 let worker_path = path.clone();
                 let result = cx
                     .background_executor()
-                    .spawn(async move { DirectoryWatcher::create(&worker_path, polling, recursive, changes) })
+                    .spawn(async move { DirectoryWatcher::create(&worker_path, volume.as_deref(), recursive, changes) })
                     .await;
                 let error = result.as_ref().err().map(ToString::to_string);
                 let mut result = result.ok();
@@ -839,7 +841,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().to_string_lossy().into_owned();
         let changes = Arc::new(Mutex::new(HashMap::new()));
-        let watcher = DirectoryWatcher::create(&path, true, false, changes.clone()).unwrap();
+        let watcher = DirectoryWatcher::create(&path, Some(&path), false, changes.clone()).unwrap();
         changes.lock().unwrap().clear();
         std::fs::create_dir(directory.path().join("new-folder")).unwrap();
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(6);

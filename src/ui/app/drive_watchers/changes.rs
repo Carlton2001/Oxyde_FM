@@ -139,18 +139,23 @@ pub struct DirectoryWatcher {
 }
 
 impl DirectoryWatcher {
+    /// `polled_volume` names the volume of a folder whose changes are polled.
     pub(super) fn create(
         path: &str,
-        polling: bool,
+        polled_volume: Option<&str>,
         recursive: bool,
         changes: WatcherChanges,
     ) -> notify::Result<Self> {
+        let polling = polled_volume.is_some();
         // Recursive polling walks the whole subtree: do not repeat that every
         // two seconds on removable or unidentified storage.
         let interval = std::time::Duration::from_secs(if recursive { 30 } else { 2 });
         #[cfg(target_os = "linux")]
         if !recursive {
-            let kind = if polling { shared::Kind::Poll(interval) } else { shared::Kind::Inotify };
+            let kind = match polled_volume {
+                Some(volume) => shared::Kind::Poll { interval, volume: volume.to_owned() },
+                None => shared::Kind::Inotify,
+            };
             if let Some(registration) = shared::watch(path, kind, changes.clone())? {
                 return Ok(Self {
                     polling,

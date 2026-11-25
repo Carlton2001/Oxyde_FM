@@ -1,9 +1,13 @@
 //! One inotify instance for every plain folder watch, as GIO keeps one per process, and
-//! one polling thread for every plain folder of a polled volume (NFS, FUSE).
+//! one polling thread per polled volume (NFS, FUSE) for its plain folders.
 //!
 //! A watcher per folder took one of the user's inotify instances (128 by default, shared
 //! with every program of the session) and a thread each: « Expand all » on `/` used them
 //! all up, and other programs could no longer watch anything while Oxyde held them.
+//!
+//! A share whose server stops answering holds its polling thread inside a scan, and
+//! notify's lock with it: its folders are released on a thread of their own, so neither
+//! the interface nor its closing waits for the server, and other volumes keep polling.
 
 use super::{DirectoryChanges, Observed, WatcherChanges};
 use notify::{Config, Event, EventKind, PollWatcher, RecommendedWatcher, RecursiveMode, Watcher};
@@ -11,7 +15,7 @@ use oxyde_lib::utils::path_text::decode;
 use std::collections::HashMap;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{mpsc, Arc, Mutex, OnceLock, PoisonError};
 
 struct Root {
     encoded: String,
@@ -29,31 +33,42 @@ struct Registry {
 }
 
 /// How the shared instance learns of changes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Kind {
     Inotify,
     /// Every interval, for volumes whose changes the kernel does not report.
-    Poll(std::time::Duration),
+    Poll { interval: std::time::Duration, volume: String },
 }
 
 struct Shared {
     watcher: Mutex<Option<Box<dyn Watcher + Send>>>,
     registry: Arc<Mutex<Registry>>,
+    /// Folders to unwatch, for a thread that may wait on an unanswering server.
+    releases: Mutex<Option<mpsc::Sender<PathBuf>>>,
 }
 
-fn shared(kind: Kind) -> &'static Shared {
-    static INOTIFY: OnceLock<Shared> = OnceLock::new();
-    static POLL: OnceLock<Shared> = OnceLock::new();
-    let cell = match kind {
-        Kind::Inotify => &INOTIFY,
-        Kind::Poll(_) => &POLL,
-    };
-    cell.get_or_init(|| Shared { watcher: Mutex::new(None), registry: Default::default() })
+impl Shared {
+    fn new() -> Arc<Self> {
+        Arc::new(Self { watcher: Mutex::new(None), registry: Default::default(), releases: Mutex::new(None) })
+    }
+}
+
+fn shared(kind: &Kind) -> Arc<Shared> {
+    static INOTIFY: OnceLock<Arc<Shared>> = OnceLock::new();
+    static POLLED: OnceLock<Mutex<HashMap<String, Arc<Shared>>>> = OnceLock::new();
+    match kind {
+        Kind::Inotify => INOTIFY.get_or_init(Shared::new).clone(),
+        Kind::Poll { volume, .. } => {
+            let mut volumes = POLLED.get_or_init(Default::default).lock().unwrap_or_else(PoisonError::into_inner);
+            volumes.entry(volume.clone()).or_insert_with(Shared::new).clone()
+        }
+    }
 }
 
 /// A folder watched through a shared instance, until released or dropped.
 pub(super) struct Registration {
-    kind: Kind,
+    polled: bool,
+    shared: Arc<Shared>,
     path: PathBuf,
     generation: u64,
 }
@@ -64,10 +79,10 @@ pub(super) fn watch(path: &str, kind: Kind, changes: WatcherChanges) -> notify::
     let decoded = decode(path);
     let metadata = std::fs::metadata(&decoded).map_err(|error| notify::Error::io(error).add_path(decoded.clone()))?;
     let identity = (metadata.dev(), metadata.ino());
-    let shared = shared(kind);
+    let shared = shared(&kind);
     let mut watcher = shared.watcher.lock().map_err(|_| notify::Error::generic("watcher lock poisoned"))?;
     if watcher.is_none() {
-        *watcher = Some(create(kind, shared.registry.clone())?);
+        *watcher = Some(create(&kind, shared.registry.clone())?);
     }
     let generation = {
         let mut registry = shared.registry.lock().map_err(|_| notify::Error::generic("watcher lock poisoned"))?;
@@ -84,15 +99,16 @@ pub(super) fn watch(path: &str, kind: Kind, changes: WatcherChanges) -> notify::
     };
     // The registry is released first: the watcher's thread routes events through it.
     if let Some(Err(error)) = watcher.as_mut().map(|watcher| watcher.watch(&decoded, RecursiveMode::NonRecursive)) {
-        forget(kind, &decoded, generation);
+        forget(&shared, &decoded, generation);
         return Err(error);
     }
-    Ok(Some(Registration { kind, path: decoded, generation }))
+    drop(watcher);
+    Ok(Some(Registration { polled: kind != Kind::Inotify, shared, path: decoded, generation }))
 }
 
 /// Removes the registration's root, unless the same folder was watched again since.
-fn forget(kind: Kind, path: &PathBuf, generation: u64) -> bool {
-    let Ok(mut registry) = shared(kind).registry.lock() else {
+fn forget(shared: &Shared, path: &PathBuf, generation: u64) -> bool {
+    let Ok(mut registry) = shared.registry.lock() else {
         return false;
     };
     if registry.roots.get(path).is_some_and(|root| root.generation == generation) {
@@ -103,21 +119,49 @@ fn forget(kind: Kind, path: &PathBuf, generation: u64) -> bool {
     }
 }
 
+/// The folder stops reporting at once; a polled one is unwatched on its volume's thread.
 pub(super) fn release(registration: Registration) -> Result<(), String> {
-    let shared = shared(registration.kind);
+    let Registration { polled, shared, path, generation } = registration;
+    if !forget(&shared, &path, generation) {
+        return Ok(());
+    }
+    if !polled {
+        return unwatch(&shared, &path);
+    }
+    let mut releases = shared.releases.lock().map_err(|_| "watcher lock poisoned".to_string())?;
+    if releases.is_none() {
+        let (sender, receiver) = mpsc::channel::<PathBuf>();
+        let target = shared.clone();
+        std::thread::Builder::new()
+            .name("oxyde-poll-release".into())
+            .spawn(move || {
+                for path in receiver {
+                    if let Err(error) = unwatch(&target, &path) {
+                        log::warn!("Cannot stop polling {}: {error}", path.display());
+                    }
+                }
+            })
+            .map_err(|error| error.to_string())?;
+        *releases = Some(sender);
+    }
+    releases.as_ref().map_or(Ok(()), |sender| sender.send(path).map_err(|error| error.to_string()))
+}
+
+/// Unless the folder was watched again meanwhile, which `watch` does under the same lock.
+fn unwatch(shared: &Shared, path: &PathBuf) -> Result<(), String> {
     let Ok(mut watcher) = shared.watcher.lock() else {
         return Err("watcher lock poisoned".into());
     };
-    if !forget(registration.kind, &registration.path, registration.generation) {
+    if shared.registry.lock().map_err(|_| "watcher lock poisoned".to_string())?.roots.contains_key(path) {
         return Ok(());
     }
     let Some(watcher) = watcher.as_mut() else {
         return Ok(());
     };
-    watcher.unwatch(&registration.path).map_err(|error| error.to_string())
+    watcher.unwatch(path).map_err(|error| error.to_string())
 }
 
-fn create(kind: Kind, registry: Arc<Mutex<Registry>>) -> notify::Result<Box<dyn Watcher + Send>> {
+fn create(kind: &Kind, registry: Arc<Mutex<Registry>>) -> notify::Result<Box<dyn Watcher + Send>> {
     let callback = move |result: notify::Result<Event>| {
         if matches!(&result, Ok(event) if matches!(event.kind, EventKind::Access(_))) {
             return;
@@ -167,7 +211,7 @@ fn create(kind: Kind, registry: Arc<Mutex<Registry>>) -> notify::Result<Box<dyn 
     Ok(match kind {
         Kind::Inotify => Box::new(RecommendedWatcher::new(callback, config)?),
         // Snapshots, not open handles: a polled volume can still be unmounted.
-        Kind::Poll(interval) => Box::new(PollWatcher::new(callback, config.with_poll_interval(interval))?),
+        Kind::Poll { interval, .. } => Box::new(PollWatcher::new(callback, config.with_poll_interval(*interval))?),
     })
 }
 
