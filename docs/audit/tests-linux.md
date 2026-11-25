@@ -190,6 +190,19 @@ Corrigés sous WSL Fedora 45 (`51ec43ca..552e8bb6`). Reste à faire sur une vrai
 - [ ] Dossier du système en écriture mais qui appartient à root (`/etc`, `/var/lib`) : Nouveau dossier grisé dans la barre, Nouveau, Coller, Couper, Renommer et Supprimer absents des menus, comme Nautilus ; `/tmp` garde ces actions.
 - [ ] Glisser un fichier depuis `~` sur la ligne `etc` en listant `/` : dépôt refusé, sans surbrillance ; sur `tmp` : accepté.
 
+## Optimisations Linux de 103-optimisations (2026-11-25)
+
+Corrigés et mesurés sous WSL Fedora 45 (`c6409fba..6cc13488`), mesures dans `103-optimisations.md`.
+
+- [x] Compiler et lancer les tests sous WSL : fait le 2026-11-25, `check-linux.sh --offline` propre, `cargo test` 874 + 671 tests verts et intégration verte (`--test-threads=1`), `linux_permissions` sous `unshare --map-auto --map-root-user` 17 verts. Un échec intermittent trouvé et corrigé (`99aac9ae`) : le test de suppression d'arbre `an_entry_the_listing_passed_is_found_by_another_pass` écrivait dans un dossier qu'un autre worker venait de retirer (0 échec sur 300 lancements après).
+- [ ] O29 (`c6409fba`), corbeille : mettre une centaine de dossiers à la corbeille depuis Dolphin (KDE écrit `directorysizes`), puis les supprimer définitivement depuis la vue Corbeille d'Oxyde : leurs lignes disparaissent de `~/.local/share/Trash/directorysizes`, les autres restent, et la taille de la corbeille affichée par Dolphin reste juste. Même chose avec « Vider la corbeille ».
+- [ ] O29, propriétés : sélectionner plusieurs centaines d'éléments dans la vue Corbeille, ouvrir Propriétés : la fenêtre s'ouvre sans attente sensible ; ouvrir aussi les propriétés d'un seul élément : emplacement d'origine et date de suppression justes. Remettre à la corbeille un fichier du même nom qu'un élément purgé, puis ses propriétés : ce sont celles du nouvel élément. Refaire sur la corbeille d'une clé USB (`.Trash-1000`).
+- [ ] O29, restauration : restaurer une sélection, puis Annuler la mise à la corbeille d'un élément (sélection par chemin d'origine) : inchangé.
+- [ ] O30 (`b94f17d0`), recherche avancée : sans « fichiers cachés », un dossier caché (`.cache`) n'est pas parcouru et ses fichiers n'apparaissent pas ; avec, ils apparaissent. Recherche de contenu dans un dossier mêlant texte, UTF-16 (`iconv -t UTF-16`) et binaires : les textes et l'UTF-16 sont trouvés, pas les binaires ; un document Office (`.docx`, `.odt`) reste trouvé par son texte.
+- [ ] O40 (`610a122b`), « Ouvrir avec… » sur un fichier : les icônes des applications s'affichent comme avant, y compris celles des Flatpak (`/var/lib/flatpak/exports/share`, `~/.local/share/flatpak/exports/share`) et d'une application qui n'a qu'une icône dans `/usr/share/pixmaps`.
+- [ ] O41 (`b7df8b25`), Propriétés > Permissions d'un fichier à soi : la liste des groupes nomme tous les groupes de l'utilisateur (`id -Gn`), le propriétaire et le groupe du fichier aussi. Si possible avec un annuaire (SSSD, LDAP) : la fenêtre s'ouvre sans attendre un processus `getent` par groupe.
+- [ ] O42 (`6cc13488`), types de fichiers : colonne Type et Propriétés pour `photo.PNG`, `archive.tar.gz`, `ARCHIVE.TAR.GZ`, `Makefile`, `README`, `script.sh`, un fichier sans extension (texte, puis binaire) et un fichier vide : mêmes types que `gio info -a standard::content-type`. Sélecteur de fichiers ouvert par Firefox avec le filtre « Images » sur un dossier de milliers de fichiers : la liste filtrée apparaît sans gel.
+
 ## Tests X11 (non prévus)
 
 Sortis de leurs lots : l'utilisateur ne compte pas les faire. Ils restent ouverts, sans échéance.
