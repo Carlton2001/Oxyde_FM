@@ -7,22 +7,54 @@ use windows::Win32::UI::Shell::IContextMenu;
 
 const SHARING_VERB: &str = "Windows.Share";
 
-pub(in crate::platform) fn add_folder_sharing_submenu(
+/// Reads the background menu while a second STA thread reads the displayed
+/// folder's sharing submenu, so the menu waits only for the slower query.
+pub(in crate::platform) fn read_beside_folder_sharing(
     paths: &[String],
-    items: &mut Vec<WinMenuItem>,
-) {
-    if items.iter().any(|item| {
+    read_background: impl FnOnce() -> Result<Vec<WinMenuItem>, CommandError>,
+) -> Result<Vec<WinMenuItem>, CommandError> {
+    // The scope joins the thread on every return: a Shell extension that hangs
+    // holds this worker, which the bound on native menu loads already counts.
+    std::thread::scope(|scope| {
+        let worker = std::thread::Builder::new()
+            .name("oxyde-folder-sharing".into())
+            .spawn_scoped(scope, || folder_sharing_submenu(paths));
+        let mut items = read_background()?;
+        let sharing = match worker {
+            Ok(worker) => worker.join().ok().flatten(),
+            Err(_) => folder_sharing_submenu(paths),
+        };
+        place_folder_sharing_submenu(&mut items, sharing);
+        Ok(items)
+    })
+}
+
+fn folder_sharing_submenu(paths: &[String]) -> Option<WinMenuItem> {
+    let mut sharing = with_folder_sharing(paths, |_, sharing| Ok(sharing))
+        .ok()
+        .flatten()?;
+    mark_sharing_commands(&mut sharing.children);
+    Some(sharing)
+}
+
+/// The background lists sharing as an empty popup: the folder's submenu takes
+/// its place, or the popup goes when the folder offers no sharing command.
+fn place_folder_sharing_submenu(items: &mut Vec<WinMenuItem>, sharing: Option<WinMenuItem>) {
+    let position = items.iter().position(|item| {
         item.has_submenu
             && item
                 .verb
                 .as_deref()
                 .is_some_and(|verb| verb.eq_ignore_ascii_case(SHARING_VERB))
-    }) {
-        return;
-    }
-    if let Ok(Some(mut sharing)) = with_folder_sharing(paths, |_, sharing| Ok(sharing)) {
-        mark_sharing_commands(&mut sharing.children);
-        items.push(sharing);
+    });
+    match (position, sharing) {
+        (Some(index), _) if !items[index].children.is_empty() => {}
+        (Some(index), Some(sharing)) => items[index] = sharing,
+        (Some(index), None) => {
+            items.remove(index);
+        }
+        (None, Some(sharing)) => items.push(sharing),
+        (None, None) => {}
     }
 }
 

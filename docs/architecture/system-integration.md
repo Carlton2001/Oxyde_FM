@@ -121,3 +121,9 @@ The list loads off the UI thread, within the timeout of native menus, and is kep
 Oxyde starts renaming the created item, except when the registration hands it to a program or a wizard (`Command`, `Handler`, `uap10:ShellNewCommandParameters`, the shortcut's `NewLink`), which may rename or delete it itself.
 
 Tests: `windows_shell/tests/new_menu.rs` compares the list with More options and creates a folder and a text document in a temporary folder; it is ignored by default, as it needs a desktop session. `windows_new_registrations/tests` cover registrations in a volatile registry key, manifests and file creation.
+
+## Sharing on a folder background (Windows)
+
+On a background, the Shell lists **Give access to** with no commands, since there is no selection. Oxyde puts in its place the sharing submenu of the displayed folder itself, read on a second STA thread beside the background menu so the menu waits only for the slower query (`platform/windows_shell/sharing.rs`). Only enabled commands are listed, and the popup goes when the folder offers none; a sharing submenu that the background fills itself is kept as is. A command is found again in a fresh menu of the folder by its label and verb, and refused when that is ambiguous or no longer offered, since command IDs change at each query. Other empty popups are listed as Windows gives them.
+
+Tests: `windows_shell/tests/sharing.rs` places the submenu and resolves commands; the comparison with the folder's own menu is ignored by default, as it needs a desktop session.

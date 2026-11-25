@@ -518,11 +518,15 @@ impl Platform for WindowsPlatform {
         path: &[String],
         is_background: bool,
     ) -> Result<Vec<crate::models::WinMenuItem>, String> {
-        let mut items = super::windows_shell::get_native_context_menu_items(path.to_vec(), is_background)
-            .map_err(|error| error.to_string())?;
+        let read = || super::windows_shell::get_native_context_menu_items(path.to_vec(), is_background);
+        let mut items = if is_background {
+            super::windows_shell::sharing::read_beside_folder_sharing(path, read)
+        } else {
+            read()
+        }
+        .map_err(|error| error.to_string())?;
         if is_background {
             super::windows_shell::new_menu::remove_new_submenu(&mut items);
-            super::windows_shell::sharing::add_folder_sharing_submenu(path, &mut items);
         }
         Ok(items)
     }

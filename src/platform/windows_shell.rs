@@ -13,7 +13,6 @@ use crate::models::{CommandError, QuickAccessItem, WinMenuItem};
 pub(super) mod new_menu;
 pub(super) mod sharing;
 
-
 fn read_verb_with(read: impl FnOnce(&mut [u8]) -> windows::core::Result<()>) -> Option<String> {
     let mut buffer = [0u8; 128];
     read(&mut buffer).ok()?;
@@ -249,7 +248,10 @@ fn with_menu_snapshot<T>(
     paths: &[String],
     is_background: bool,
     only_popup: Option<&str>,
-    read: impl FnOnce(&windows::Win32::UI::Shell::IContextMenu, Vec<WinMenuItem>) -> Result<T, CommandError>,
+    read: impl FnOnce(
+        &windows::Win32::UI::Shell::IContextMenu,
+        Vec<WinMenuItem>,
+    ) -> Result<T, CommandError>,
 ) -> Result<T, CommandError> {
     use windows::core::Interface;
     use windows::Win32::Foundation::{LPARAM, WPARAM};
@@ -300,9 +302,10 @@ fn with_menu_snapshot<T>(
                     let submenu = GetSubMenu(hmenu, i);
                     let has_submenu = !submenu.is_invalid();
                     if let Some(expected) = only_popup {
-                        if !has_submenu || !popup_id(hmenu, i)
-                            .and_then(|id| canonical_verb(context_menu, id))
-                            .is_some_and(|verb| verb.eq_ignore_ascii_case(expected))
+                        if !has_submenu
+                            || !popup_id(hmenu, i)
+                                .and_then(|id| canonical_verb(context_menu, id))
+                                .is_some_and(|verb| verb.eq_ignore_ascii_case(expected))
                         {
                             continue;
                         }
@@ -345,7 +348,11 @@ fn with_menu_snapshot<T>(
                     // language: "openas" for Open with.
                     let verb = canonical_verb(
                         context_menu,
-                        if has_submenu { popup_id(hmenu, i).unwrap_or(id) } else { id },
+                        if has_submenu {
+                            popup_id(hmenu, i).unwrap_or(id)
+                        } else {
+                            id
+                        },
                     );
                     // "Open in Oxyde" (`windows_folder_handler/menu.rs`) means nothing inside Oxyde.
                     if verb.as_deref().is_some_and(|verb| verb.eq_ignore_ascii_case("Oxyde")) {
@@ -371,10 +378,12 @@ fn with_menu_snapshot<T>(
                     }
 
                     let children = if has_submenu {
-                        let children = scrape_level(submenu, context_menu, cm2, cm3, None, enabled_only);
-                        // The Shell can advertise a popup without any commands (for
-                        // example, sharing on a folder background).
-                        if children.is_empty() {
+                        let children =
+                            scrape_level(submenu, context_menu, cm2, cm3, None, enabled_only);
+                        // A popup left without enabled commands offers nothing to
+                        // run. Other snapshots keep empty popups as Windows lists
+                        // them; `sharing.rs` handles the background's empty one.
+                        if enabled_only && children.is_empty() {
                             continue;
                         }
                         children
@@ -395,7 +404,14 @@ fn with_menu_snapshot<T>(
             }
         }
 
-        let items = scrape_level(hmenu, context_menu, cm2.as_ref(), cm3.as_ref(), only_popup, only_popup.is_some());
+        let items = scrape_level(
+            hmenu,
+            context_menu,
+            cm2.as_ref(),
+            cm3.as_ref(),
+            only_popup,
+            only_popup.is_some(),
+        );
         read(context_menu, items)
     })
 }
