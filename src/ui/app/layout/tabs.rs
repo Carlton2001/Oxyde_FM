@@ -68,36 +68,29 @@ fn tab_drop_zone_contains_pointer(
 
 impl OxydeApp {
     fn tab_drive_name(&self, path: &str, cx: &Context<Self>) -> Option<String> {
-        let mut drive_name = None;
-        for item in &self.state.sidebar_items {
-            if let crate::ui::workspace::SidebarItem::Drive { drive, .. } = item {
-                let norm_drive = drive.path.trim_end_matches(std::path::is_separator);
-                let norm_tab = path.trim_end_matches(std::path::is_separator);
-                let same = if cfg!(target_os = "windows") {
-                    norm_drive.eq_ignore_ascii_case(norm_tab)
-                } else {
-                    norm_drive == norm_tab
-                };
-                if same {
-                    drive_name = Some(if !cfg!(target_os = "windows") {
-                        // Linux names a volume alone, as the sidebar.
-                        crate::ui::format::drive_name(drive, cx.i18n())
-                    } else if drive.label.is_empty() {
-                        {
-                            let mut args = FluentArgs::new();
-                            args.set("drive", norm_drive);
-                            cx.i18n()
-                                .text_with_args(Message::LocalDrive, &args)
-                                .to_string()
-                        }
-                    } else {
-                        format!("{} ({})", drive.label, norm_drive)
-                    });
-                    break;
-                }
+        let norm_tab = path.trim_end_matches(std::path::is_separator);
+        // The sidebar's drives are these, in this order, without its unfolded folders.
+        let drive = self.state.drives.iter().find(|drive| {
+            let norm_drive = drive.path.trim_end_matches(std::path::is_separator);
+            if cfg!(target_os = "windows") {
+                norm_drive.eq_ignore_ascii_case(norm_tab)
+            } else {
+                norm_drive == norm_tab
             }
-        }
-        drive_name
+        })?;
+        let norm_drive = drive.path.trim_end_matches(std::path::is_separator);
+        Some(if !cfg!(target_os = "windows") {
+            // Linux names a volume alone, as the sidebar.
+            crate::ui::format::drive_name(drive, cx.i18n())
+        } else if drive.label.is_empty() {
+            let mut args = FluentArgs::new();
+            args.set("drive", norm_drive);
+            cx.i18n()
+                .text_with_args(Message::LocalDrive, &args)
+                .to_string()
+        } else {
+            format!("{} ({})", drive.label, norm_drive)
+        })
     }
 
     pub(super) fn render_pane_tabs(
@@ -255,8 +248,10 @@ impl OxydeApp {
                 move |bounds, cx| {
                     let anchor = point(bounds.left(), bounds.bottom());
                     h.update(cx, |this, _| {
-                        this.context_anchor_points
-                            .insert(anchor_key.clone(), anchor);
+                        // Called at each frame: the key is copied only when the tab moved.
+                        if this.context_anchor_points.get(&anchor_key) != Some(&anchor) {
+                            this.context_anchor_points.insert(anchor_key.clone(), anchor);
+                        }
                     });
                 }
             })
