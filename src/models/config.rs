@@ -347,11 +347,17 @@ fn write_json(path: &std::path::Path, value: &impl Serialize) -> Result<(), Comm
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| std::path::Path::new("."));
+    let bytes = serde_json::to_vec_pretty(value).map_err(|e| CommandError::Other(e.to_string()))?;
+    // Every save writes both files: one already holding these bytes, as the
+    // themes mostly do, is not replaced and synced again.
+    if fs::read(path).is_ok_and(|current| current == bytes) {
+        return Ok(());
+    }
     fs::create_dir_all(parent).map_err(|e| CommandError::IoError(e.to_string()))?;
     let mut temporary = tempfile::NamedTempFile::new_in(parent)
         .map_err(|e| CommandError::IoError(e.to_string()))?;
-    serde_json::to_writer_pretty(&mut temporary, value)
-        .map_err(|e| CommandError::Other(e.to_string()))?;
+    std::io::Write::write_all(&mut temporary, &bytes)
+        .map_err(|e| CommandError::IoError(e.to_string()))?;
     temporary
         .as_file()
         .sync_all()

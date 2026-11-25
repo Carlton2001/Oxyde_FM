@@ -49,3 +49,22 @@ fn a_corrupt_themes_file_is_set_aside_and_the_settings_still_load() {
     ConfigManager::write_to_path(&path, &config).unwrap();
     assert_eq!(std::fs::read_to_string(themes.with_file_name("themes.json.invalid")).unwrap(), "{broken");
 }
+
+#[test]
+fn unchanged_files_are_not_replaced_on_save() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.json");
+    let mut config = AppConfig { custom_themes: vec![theme("theme-1")], ..AppConfig::default() };
+    ConfigManager::write_to_path(&path, &config).unwrap();
+    let themes = ConfigManager::themes_path(&path);
+    // A read-only file would refuse its replacement on Windows.
+    let mut permissions = std::fs::metadata(&themes).unwrap().permissions();
+    permissions.set_readonly(true);
+    std::fs::set_permissions(&themes, permissions.clone()).unwrap();
+    config.show_hidden = !config.show_hidden;
+    ConfigManager::write_to_path(&path, &config).unwrap();
+    assert_eq!(ConfigManager::read_from_path(&path).unwrap().show_hidden, config.show_hidden);
+    #[allow(clippy::permissions_set_readonly_false)]
+    permissions.set_readonly(false);
+    std::fs::set_permissions(&themes, permissions).unwrap();
+}
