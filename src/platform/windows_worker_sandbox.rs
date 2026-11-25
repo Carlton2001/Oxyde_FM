@@ -180,9 +180,12 @@ impl Runtime {
             .binary
             .as_mut()
             .ok_or_else(|| io::Error::other("Missing staged binary"))?;
-        use std::io::{Read, Seek, SeekFrom};
+        use std::io::Read;
         let mut copy_bytes = [0; 64 * 1024];
         let mut copied = 0u64;
+        // The source is held without write sharing: the bytes copied are its
+        // content, so they are hashed here instead of reading it a second time.
+        let mut source_hash = blake3::Hasher::new();
         loop {
             checkpoint()?;
             let count = source_file.read(&mut copy_bytes)?;
@@ -196,9 +199,10 @@ impl Runtime {
                     "Worker runtime exceeds its limit",
                 ));
             }
+            source_hash.update(&copy_bytes[..count]);
             target_file.write_all(&copy_bytes[..count])?;
         }
-        target_file.sync_all()?;
+        // No flush to disk: the loader maps the image through the same cache.
         // Overlap handles while downgrading from the creator's write access.
         // An image cannot be loaded while a writable file object is retained.
         let transition = OpenOptions::new().read(true).share_mode(7).open(&target)?;
@@ -227,7 +231,6 @@ impl Runtime {
             .as_ref()
             .ok_or_else(|| io::Error::other("Missing staged binary"))?;
         // Compare bytes through retained handles, never a second pathname read.
-        source_file.seek(SeekFrom::Start(0))?;
         let hash = |mut file: &File| -> io::Result<blake3::Hash> {
             let mut hasher = blake3::Hasher::new();
             let mut bytes = [0; 64 * 1024];
@@ -241,7 +244,7 @@ impl Runtime {
             }
             Ok(hasher.finalize())
         };
-        if hash(&source_file)? != hash(binary)? {
+        if source_hash.finalize() != hash(binary)? {
             return Err(io::Error::other("Archive runtime provenance mismatch"));
         }
         Ok(runtime)
