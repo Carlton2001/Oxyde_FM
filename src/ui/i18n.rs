@@ -1768,6 +1768,8 @@ pub struct I18n {
     language: Language,
     active: FluentBundle<FluentResource>,
     fallback: FluentBundle<FluentResource>,
+    /// Messages without arguments, formatted once: renders ask for them at each frame.
+    texts: std::cell::RefCell<std::collections::HashMap<&'static str, SharedString>>,
 }
 
 impl Global for I18n {}
@@ -1801,6 +1803,7 @@ impl I18n {
             language: Language::from_id(locale),
             active: Self::bundle(locale, catalog)?,
             fallback: Self::bundle("fr", FRENCH)?,
+            texts: Default::default(),
         })
     }
 
@@ -1828,7 +1831,13 @@ impl I18n {
     }
 
     pub fn text(&self, message: Message) -> SharedString {
-        self.format(message.key(), None)
+        let key = message.key();
+        if let Some(text) = self.texts.borrow().get(key) {
+            return text.clone();
+        }
+        let text = self.format(key, None);
+        self.texts.borrow_mut().insert(key, text.clone());
+        text
     }
 
     pub fn text_with_args(&self, message: Message, args: &FluentArgs<'_>) -> SharedString {
