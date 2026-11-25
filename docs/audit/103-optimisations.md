@@ -74,17 +74,17 @@ Règle : pas de changement sans gain plausible et mesurable ; un changement simp
 | O63 | `ui/app/file_chooser/browse.rs:133` | à mesurer |  | hors du thread UI ; le coût est l'ouverture de chaque sous-dossier pour sa flèche (holds_folder), qui est ce qui rend la flèche juste ; piste : sur un rafraîchissement d'observateur, ne vérifier que les sous-dossiers nouveaux et garder les autres drapeaux, F5 et la navigation vérifiant tout ; à mesurer sur un partage de milliers de sous-dossiers avant de changer ce compromis |
 | O64 | `ui/app/duplicates/title_actions.rs:33` | corrigé | 01895a10 | l'ensemble des groupes réduits est partagé (Arc) avec la tâche de filtrage au lieu d'être cloné à chaque frappe ; « Tout réduire » le remplit encore une fois |
 | O65 | `ui/app/file_preparation.rs:119-123` | corrigé | f4eaa3aa | cause du coût : une préparation de filtre (Current) copiait, retriait et réétiquetait toute la liste ; l'onglet retient l'ordre de ses fichiers (Weak sur le vecteur), et un filtre ou un regroupement ne copie ni ne trie plus : 100 000 entrées, environ 50 ms → moins d'une ms hors filtre ; un calcul périmé reste non annulable, mais il est désormais court |
-| O66 | `ui/app/file_chooser/sidebar.rs:201-209 et :249` | à examiner | | |
-| O67 | `ui/app/file_chooser/save.rs:215-219 et :111-119` | à examiner | | |
-| O68 | `ui/app/item_pointer.rs:30-34` | à examiner | | |
-| O69 | `ui/app/layout/tabs.rs:70-101 et :232-241` | à examiner | | |
-| O71 | `ui/app/selection.rs:114 et :193-206` | à examiner | | |
-| O72 | `ui/app/type_select.rs:72` | à examiner | | |
-| O73 | `ui/app/viewer.rs:243` | à examiner | | |
-| O74 | `ui/app/viewer/markdown.rs:162` | à examiner | | |
-| O76 | `ui/app/viewer/content.rs:144` | à examiner | | |
-| O77 | `ui/app/viewer/text.rs:135, :281-308 et :334` | à examiner | | |
-| O78 | `ui/app/viewer/tree/loading.rs:47-55` | à examiner | | |
+| O66 | `ui/app/file_chooser/sidebar.rs:201-209 et :249` | corrigé | 9289644f | la hauteur du contenu compte les dossiers dépliés sans les cloner, et le rendu calcule cette hauteur une fois : la liste n'est plus construite qu'une fois par rendu |
+| O67 | `ui/app/file_chooser/save.rs:215-219 et :111-119` | corrigé | eba34612 | déjà hors du thread UI ; target lit l'entrée elle-même d'abord (un lien seul est suivi) : un nom libre coûte deux requêtes au lieu de trois, et le type strict ne relit le chemin que si le nom a changé : de neuf requêtes à six au pire, quatre le plus souvent, sur un partage |
+| O68 | `ui/app/item_pointer.rs:30-34` | corrigé | 34a30755 | la sélection de départ n'est copiée que si Ctrl ou Maj est tenu (sinon le rectangle ne s'en sert pas) et elle est partagée (Arc) : plus de copie au clic simple, ni à chaque mouvement et image du rectangle, qui la recopiaient aussi |
+| O69 | `ui/app/layout/tabs.rs:70-101 et :232-241` | corrigé | bcf2a738 | le nom d'un onglet de lecteur cherche dans la liste des lecteurs (ceux de la barre latérale, sans ses dossiers dépliés), chemin de l'onglet normalisé une fois ; le point d'ancrage n'est réécrit (clé clonée) que si l'onglet a bougé |
+| O71 | `ui/app/selection.rs:114 et :193-206` | corrigé | 1c9eaaa7 | en liste, le rectangle reprend les lignes du cache de présentation au lieu de les reconstruire (la grille, dont les colonnes suivent une autre largeur, les reconstruit encore) ; les chemins couverts ne sont clonés et la sélection recalculée que si les indices couverts changent ; la cible de glisser n'est plus reconstruite à chaque mouvement |
+| O72 | `ui/app/type_select.rs:72` | corrigé | af5e20b4 | en liste, la frappe reprend les lignes (et donc le regroupement) du cache de présentation, pour la recherche comme pour le défilement ; les noms sont mis en minuscules à la lecture, caractère par caractère, sans copie ; la grille reconstruit encore ses lignes |
+| O73 | `ui/app/viewer.rs:243` | obsolète |  | capture reprend déjà la sélection précédente (Arc) quand elle n'a pas changé : seule reste une comparaison des ensembles par notification, sans allocation ; un compteur de révision de la sélection l'éviterait mais toucherait chaque écriture de selected_paths |
+| O74 | `ui/app/viewer/markdown.rs:162` | corrigé | d4540ceb | le bouton de copie reçoit une fonction qui assemble le tableau ou relit le bloc de code au clic : plus de texte de tableau entier ni de copie de bloc par rendu ; le texte affiché reste copié une fois pour StyledText |
+| O76 | `ui/app/viewer/content.rs:144` | corrigé | 72ec358d | le découpage en blocs se fait dans la tâche de lecture, hors du thread UI ; il ne reste à l'interface que la création de la liste |
+| O77 | `ui/app/viewer/text.rs:135, :281-308 et :334` | corrigé | eee3e911 | partiel : la coloration est gardée par morceaux partagés (un lot ajoute un morceau au lieu de recopier tous les segments que tiennent les lignes affichées) ; un fichier coupé au milieu d'un caractère est décodé sur place (plus de pic double) ; un UTF-8 abîmé ailleurs est encore recopié, et le réencadrage, hors du thread UI, n'est pas interrompu |
+| O78 | `ui/app/viewer/tree/loading.rs:47-55` | corrigé | 038d5303 | le niveau s'affiche dès son listage ; l'ouverture de ses sous-dossiers (jusqu'à 1000) se fait ensuite dans une seconde tâche, et leurs chevrons apparaissent à son retour (écartée si l'affichage des cachés ou système a changé entre-temps) |
 | O81 | `ui/components/conflict_dialog/advanced.rs:123-243` | à examiner | | |
 | O82 | `ui/components/conflict_dialog/controls.rs:46-48` | à examiner | | |
 | O83 | `ui/components/dropdown.rs:252-297, :326-336, :395 et :417` | à examiner | | |
