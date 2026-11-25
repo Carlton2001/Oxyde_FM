@@ -174,22 +174,27 @@ fn remove_parallel(
     };
     let (sender, receiver) = mpsc::sync_channel::<Directory>(workers);
     let receiver = Mutex::new(receiver);
-    let (object, result) = std::thread::scope(|scope| {
-        for _ in 0..workers {
-            scope.spawn(|| loop {
-                let job = receiver.lock().unwrap_or_else(|p| p.into_inner()).recv();
-                let Ok(directory) = job else { break };
-                if stop.load(Ordering::Relaxed) {
-                    continue; // Release the queued handles undeleted.
-                }
-                if let Err(error) = traverse(directory, &guarded) {
-                    stop.store(true, Ordering::Relaxed);
-                    failure.lock().unwrap_or_else(|p| p.into_inner()).get_or_insert(error);
-                }
-            });
+    let worker = || loop {
+        let job = receiver.lock().unwrap_or_else(|p| p.into_inner()).recv();
+        let Ok(directory) = job else { break };
+        if stop.load(Ordering::Relaxed) {
+            continue; // Release the queued handles undeleted.
         }
+        if let Err(error) = traverse(directory, &guarded) {
+            stop.store(true, Ordering::Relaxed);
+            failure.lock().unwrap_or_else(|p| p.into_inner()).get_or_insert(error);
+        }
+    };
+    let (object, result) = std::thread::scope(|scope| {
+        // Workers start with the subfolders they take: deleting many folders
+        // that hold only files starts no thread.
+        let mut started = 0;
         let Directory { object, reader } = root;
         let result = traverse_children(&object, &reader, &guarded, &mut |child| {
+            if started < workers {
+                scope.spawn(&worker);
+                started += 1;
+            }
             sender.send(child).map_err(|_| io::Error::other("Deletion workers stopped"))
         });
         if result.is_err() {
