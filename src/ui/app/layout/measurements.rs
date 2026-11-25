@@ -22,7 +22,7 @@ impl OxydeApp {
             tab.type_col_width = crate::ui::style::metadata_column_width(type_width, measure(i18n.text(Message::ColumnType).as_ref(), true, false), true);
             tab.date_col_width = crate::ui::style::metadata_column_width(measure(&date_sample, false, true), measure(i18n.text(Message::ColumnModified).as_ref(), true, false), true);
             tab.deleted_col_width = crate::ui::style::metadata_column_width(measure(&date_sample, false, true), measure(i18n.text(Message::TrashDeletedAt).as_ref(), false, false), true);
-            let size_width = tab.column_size_values.iter().map(|&(size, directory, calculated)| measure(&size_column_text(size, directory, calculated, i18n), false, true)).fold(0.0_f32, f32::max);
+            let size_width = widest_tabular(tab.column_size_values.iter().map(|&(size, directory, calculated)| size_column_text(size, directory, calculated, i18n)), |text| measure(text, false, true));
             tab.size_col_width = crate::ui::style::metadata_column_width(size_width, measure(i18n.text(Message::ColumnSize).as_ref(), true, false), true);
             // Fixed width: four tabular digits, the most the column ever shows.
             tab.permissions_col_width = crate::ui::style::metadata_column_width(measure("0000", false, true), measure(i18n.text(Message::ColumnPermissions).as_ref(), true, false), true);
@@ -45,6 +45,15 @@ pub(crate) fn column_text_width(window: &Window, cx: &App, text: &str, bold: boo
     line.width.as_f32() / logical(1.0)
 }
 
+/// The widest of `texts` set in tabular figures. Their digits share one width,
+/// so the texts differing only by their digits are shaped once.
+pub(in crate::ui::app) fn widest_tabular(texts: impl Iterator<Item = String>, measure: impl Fn(&str) -> f32) -> f32 {
+    let shapes: std::collections::HashSet<String> = texts
+        .map(|text| text.chars().map(|c| if c.is_ascii_digit() { '0' } else { c }).collect())
+        .collect();
+    shapes.iter().map(|shape| measure(shape)).fold(0.0_f32, f32::max)
+}
+
 /// What the type column shows for a type label.
 pub(in crate::ui::app) fn type_column_text(label: &str, i18n: &crate::ui::i18n::I18n) -> String {
     let message = match label {
@@ -64,3 +73,7 @@ pub(crate) fn size_column_text(size: u64, directory: bool, calculated: bool, i18
         crate::ui::format::format_size(size, directory, calculated, i18n.language())
     }
 }
+
+#[cfg(test)]
+#[path = "tests/measurements.rs"]
+mod tests;
