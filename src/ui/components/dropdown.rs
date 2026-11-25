@@ -328,13 +328,14 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
         let mut original_indices = Vec::new();
         let mut pending_separator = false;
         let mut visible_items = Vec::new();
-        for (index, item) in self.items.iter().enumerate() {
+        // Moved, not copied: a long list (a folder's subfolders) is not cloned twice a frame.
+        for (index, item) in std::mem::take(&mut self.items).into_iter().enumerate() {
             if matches!(item.icon, Some(IconName::Separator)) {
                 pending_separator = true;
             } else {
                 separator_before.push(pending_separator);
                 original_indices.push(index);
-                visible_items.push(item.clone());
+                visible_items.push(item);
                 pending_separator = false;
             }
         }
@@ -398,7 +399,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
             .child(div().relative().flex().child(
                 div().w(px(list_w)).h(px(viewport_h)).child(
                     div().id("dropdown-items").flex_col().overflow_y_scroll().children({
-                        let items = self.items.clone();
+                        let items = std::mem::take(&mut self.items);
                         let on_close = self.on_close.clone();
                         let list_w_inner = list_w;
                         let on_hover_list = on_item_hover.clone();
