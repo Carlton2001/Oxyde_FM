@@ -168,6 +168,7 @@ fn copy_verified_with_checkpoint(
         destination,
         false,
         Some(&original),
+        Some(&source_parents),
         Some(expected),
         destination_parents,
         progress,
@@ -246,11 +247,16 @@ pub(super) fn copy_with_parents(
     destination_parents: super::path_parents::HeldParents,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
 ) -> io::Result<CopiedFile> {
-    copy_with_parents_observed(source, destination, replace, held_source, destination_parents, progress, None)
+    copy_with_parents_observed(source, destination, replace, held_source, None, destination_parents, progress, None)
 }
+/// `source_parents`, when given, already holds the parents of `source`, which
+/// is then their resolved path: they are not opened again for each file.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn copy_with_parents_observed(
     source: &Path, destination: &Path, replace: bool,
-    held_source: Option<&std::fs::File>, destination_parents: super::path_parents::HeldParents,
+    held_source: Option<&std::fs::File>,
+    source_parents: Option<&super::path_parents::HeldParents>,
+    destination_parents: super::path_parents::HeldParents,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
     before_replace: Option<&mut dyn FnMut() -> io::Result<bool>>,
 ) -> io::Result<CopiedFile> {
@@ -259,6 +265,7 @@ pub(super) fn copy_with_parents_observed(
         destination,
         replace,
         held_source,
+        source_parents,
         None,
         destination_parents,
         progress,
@@ -272,6 +279,7 @@ fn copy_with_parents_checked(
     destination: &Path,
     replace: bool,
     held_source: Option<&std::fs::File>,
+    source_parents: Option<&super::path_parents::HeldParents>,
     expected: Option<&str>,
     destination_parents: super::path_parents::HeldParents,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
@@ -279,8 +287,14 @@ fn copy_with_parents_checked(
 ) -> io::Result<CopiedFile> {
     let mut timing = super::copy_diagnostics::FileTiming::start(source, destination);
     let parents_timer = Timer::start(Phase::Parents);
-    let source_parents = super::path_parents::HeldParents::new(source)?;
-    let source = source_parents.resolved_path(source)?;
+    let held_parents = match source_parents {
+        Some(_) => None,
+        None => Some(super::path_parents::HeldParents::new(source)?),
+    };
+    let source = match &held_parents {
+        Some(parents) => parents.resolved_path(source)?,
+        None => source.to_path_buf(),
+    };
     let destination = destination_parents.resolved_path(destination)?;
     drop(parents_timer);
     let checks_timer = Timer::start(Phase::Checks);
