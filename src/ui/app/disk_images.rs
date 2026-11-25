@@ -65,8 +65,7 @@ impl OxydeApp {
             cx.spawn(async move |this, cx| {
                 let image_path = path.clone();
                 let readable = tokio::task::spawn_blocking(move || {
-                    oxyde_lib::commands::archive::list_archive_contents(image_path, String::new())
-                        .is_ok()
+                    oxyde_lib::commands::archive_probe::probe(image_path).is_ok()
                 })
                 .await
                 .unwrap_or(false);
@@ -77,6 +76,7 @@ impl OxydeApp {
                             (pane.active_tab().id.clone(), pane.active_tab().path.clone())
                         }) != origin
                     {
+                        oxyde_lib::commands::archive_probe::forget();
                         return;
                     }
                     if readable || !mountable {

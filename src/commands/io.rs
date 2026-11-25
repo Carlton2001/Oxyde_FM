@@ -126,11 +126,15 @@ fn list_dir_blocking(
                 ),
                 _ => Ok(()),
             };
-            let mut entries = crate::commands::archive::list_archive_contents_checked(
-                archive.to_string_lossy().into_owned(),
-                internal,
-                &checkpoint,
-            )?;
+            let probed = internal.is_empty().then(|| super::archive_probe::take(&archive)).flatten();
+            let mut entries = match probed {
+                Some(entries) => entries,
+                None => crate::commands::archive::list_archive_contents_checked(
+                    archive.to_string_lossy().into_owned(),
+                    internal,
+                    &checkpoint,
+                )?,
+            };
             if ordered { sort_file_entries(&mut entries); }
             return Ok(entries);
         }
