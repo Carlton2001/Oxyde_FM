@@ -15,24 +15,24 @@ Règle : pas de changement sans gain plausible et mesurable ; un changement simp
 | O3 | `commands/archive_io_codec/parallel.rs:94` | corrigé | 50797e20 | threads d'encodage réutilisés (au plus un par travail admis) : 5000 fichiers de 1 Ko passent de 373 à 202 ms en release ; l'archive temporaire par membre reste (raw_copy_file en a besoin pour garder l'ordre) |
 | O4 | `commands/archive.rs:231 et archive_handle_worker.rs:108` | écarté |  | changement d'architecture (cache d'index côté hôte validé par identité, admission distincte de la recherche, repli au-delà de MAX_REPLY) ; seuls TAR compressés et flux en profitent, ZIP/7z/ISO ne relisent que leur répertoire |
 | O5 | `systems/archive_open_cache/recovery.rs:199` | corrigé | 1bf74130 | bloc à venir en base64 (les preuves en tableau restent lisibles) : preuve de 940 à 350 Ko, et DPAPI de 42 à 1,8 ms par bloc ; 16 Mio passent de 2,6 s à 0,26 s en release. Un sync_all par bloc reste (garantie de reprise) |
-| O6 | `systems/archive_owned_tree.rs:463` | à examiner | | |
-| O7 | `systems/archive_workspace.rs:203 et :191` | à examiner | | |
-| O8 | `systems/archive_workspace.rs:414 (via archive_transfer.rs:68) et :592` | à examiner | | |
-| O9 | `platform/windows_worker_sandbox.rs:197` | à examiner | | |
-| O10 | `platform/windows_preview_quota.rs:290` | à examiner | | |
-| O11 | `platform/windows_icon_pixels.rs:84` | à examiner | | |
+| O6 | `systems/archive_owned_tree.rs:463` | corrigé | 645df50b | un fichier sélectionné est retiré sans parcourir l'arbre, et la somme des noms n'est plus recalculée (tenue à jour, y compris au remplacement d'un dossier) ; un dossier sélectionné parcourt encore les clés une fois |
+| O7 | `systems/archive_workspace.rs:203 et :191` | corrigé | e7635862 | sous Windows, seconde empreinte seulement sur un volume réseau (le partage en lecture seule refuse les écrivains en local) ; le parcours à la recherche de liens reste (défense en profondeur, sans métadonnée en plus de l'énumération) |
+| O8 | `systems/archive_workspace.rs:414 (via archive_transfer.rs:68) et :592` | écarté |  | gros chantier : une source de copie ciblée demande une extraction par préfixe (dossiers) et la publication d'un membre hors de l'arbre possédé (renommage sans que son nettoyage supprime le fichier déplacé) ; l'export de :592 est le chemin de test, la production (prepare_selection_owned) copie aussi |
+| O9 | `platform/windows_worker_sandbox.rs:197` | corrigé | 868131bf | source hachée pendant la copie (tenue sans partage en écriture) au lieu d'être relue, et plus de sync_all : le chargeur lit l'image par le même cache ; la copie hachée du binaire reste relue |
+| O10 | `platform/windows_preview_quota.rs:290` | écarté |  | le dossier est borné à 4096 entrées (quelques appels d'énumération par écriture), et le compte exact sous bail est ce qui rend le quota juste entre processus ; un compteur en mémoire serait faux dès qu'un second processus écrit |
+| O11 | `platform/windows_icon_pixels.rs:84` | écarté |  | une copie de 256 Kio au plus (dizaines de µs) par icône absente du cache de l'interface, qui garde l'image convertie ; l'appelant a besoin d'une image possédée, et l'extraction Shell qu'on évite coûte des millisecondes |
 
 ### Fichiers, opérations, historique
 
 | ID | Emplacement | État | Commits | Note |
 | --- | --- | --- | --- | --- |
-| O13 | `systems/file_ops/file_copy.rs:282` | à examiner | | |
-| O14 | `systems/file_ops/copy.rs:315` | à examiner | | |
-| O15 | `systems/file_ops/destination_tree.rs:134` | à examiner | | |
-| O17 | `systems/file_ops/file_copy.rs:52` | à examiner | | |
-| O19 | `systems/history_file_undo.rs:400 et :686-691` | à examiner | | |
-| O20 | `systems/history_directories.rs:30-64` | à examiner | | |
-| O21 | `systems/folder_sizes.rs:150-176` | à examiner | | |
+| O13 | `systems/file_ops/file_copy.rs:282` | corrigé | 482a605d | la copie réutilise les parents déjà tenus par la sélection (et par la copie vérifiée de l'historique) au lieu de rouvrir la chaîne par fichier : 400 petits fichiers à profondeur 8, 4,1 s avant, 3,65 s après (release, moyenne de deux) |
+| O14 | `systems/file_ops/copy.rs:315` | corrigé | c6b3c062 | à la planification, seules les entrées d'un espace de travail d'archive sont ouvertes pour vérifier leur propriétaire (même condition que verify_archive_item) ; les autres sont ouvertes une fois, à la copie |
+| O15 | `systems/file_ops/destination_tree.rs:134` | écarté |  | par niveau, une lecture d'attributs sur un handle déjà tenu et une duplication de handle (vérification voulue qu'aucun ancêtre n'est devenu un point d'analyse) : quelques dizaines de µs par fichier à profondeur 8, contre environ 6 ms mesurées pour copier un petit fichier |
+| O17 | `systems/file_ops/file_copy.rs:52` | écarté |  | mesuré : création du staging et de sa note 0,3 ms, nettoyage 0,1 ms, sur environ 6 ms par petit fichier (la copie native et son flush en prennent 3) ; le staging par fichier porte la garantie de publication et de reprise |
+| O19 | `systems/history_file_undo.rs:400 et :686-691` | écarté |  | la seconde lecture vérifie le fichier juste avant de le supprimer ; l'éviter demanderait de tenir chaque sortie sans partage d'écriture de la première vérification à la validation, soit des milliers de handles pour une grosse copie |
+| O20 | `systems/history_directories.rs:30-64` | corrigé | a29496c9 | dossiers en double ignorés (un stat par dossier distinct au lieu d'un par fichier), et le plan de suppression cherché par ancêtre dans un ensemble au lieu d'un parcours de la liste |
+| O21 | `systems/folder_sizes.rs:150-176` | corrigé | e18326dc | sous Windows, tailles et nombre de fichiers lus dans l'énumération du dossier (une lecture de plus par dossier, aucune ouverture par fichier) ; repli par entrée si l'énumération échoue : 165 fichiers, 2,5 ms avant, 0,9 à 1,3 ms après (release) |
 | O22 | `systems/history_move_redo.rs:419` | à examiner | | |
 | O23 | `systems/updates.rs:62` | à examiner | | |
 | O24 | `commands/duplicates.rs:335, :390 et :445` | à examiner | | |
