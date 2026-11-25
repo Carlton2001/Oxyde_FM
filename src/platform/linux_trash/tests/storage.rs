@@ -1,5 +1,4 @@
 use super::*;
-use std::ffi::OsStr;
 
 fn item(trash: &Path, name: &str, original_parent: &Path) -> trash::TrashItem {
     trash::TrashItem {
@@ -103,8 +102,9 @@ fn purge_removes_links_not_their_targets_and_updates_the_size_cache() {
 #[test]
 fn size_cache_names_are_percent_decoded() {
     let cache = b"5 1 a%20b\n6 2 c\n";
-    assert_eq!(without_cached_size(cache, OsStr::new("a b")).unwrap(), b"6 2 c\n");
-    assert!(without_cached_size(cache, OsStr::new("a%20b")).is_none());
+    let names = |name: &'static str| std::collections::HashSet::from([name.as_bytes()]);
+    assert_eq!(without_cached_sizes(cache, &names("a b")).unwrap(), b"6 2 c\n");
+    assert!(without_cached_sizes(cache, &names("a%20b")).is_none());
 }
 
 #[test]

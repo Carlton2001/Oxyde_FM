@@ -1,7 +1,7 @@
 //! Items leaving the trash by Cut and Paste or a drag between panes: the transfer engine
 //! gives them their original name, then detaches the record of each one that left, keeping
 //! it for Undo. Only a listed item qualifies, not what lies inside a trashed folder.
-use super::{content_path, forget_directory_size_of, trash_root};
+use super::{content_path, forget_directory_sizes, trash_root};
 use crate::models::transaction::{HistoryFileIdentity, HistoryMoveIdentity};
 use crate::platform::{platform, DetachedTrashMetadata, TrashTransferEntry};
 use crate::systems::path_parents::HeldParents;
@@ -76,7 +76,7 @@ fn detach_checked(entry: &TrashTransferEntry) -> io::Result<Option<DetachedTrash
     let backup = root.join(format!(".oxyde-trash-{}.tmp", uuid::Uuid::new_v4()));
     let backup_parents = HeldParents::new(&backup)?;
     platform().rename_operation_file(&file, &source, backup_parents.directory(), &backup_parents.resolved_path(&backup)?, false)?;
-    forget_directory_size_of(&entry.metadata_path);
+    forget_directory_sizes(&[&entry.metadata_path]);
     Ok(Some(DetachedTrashMetadata { source: entry.metadata_path.clone(), backup, identity, hash }))
 }
 

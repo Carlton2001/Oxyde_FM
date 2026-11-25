@@ -5,6 +5,7 @@
 pub(super) mod transfer;
 pub(super) mod send;
 
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
@@ -65,7 +66,8 @@ fn mount_top(folder: &Path) -> bool {
 }
 
 pub(super) fn purge(items: &[trash::TrashItem]) -> Result<(), String> {
-    for item in items {
+    let mut purged = Vec::new();
+    let result = items.iter().try_for_each(|item| {
         let info = Path::new(&item.id);
         let content = content_path(item).ok_or_else(|| format!("Invalid trash record: {info:?}"))?;
         match std::fs::symlink_metadata(&content) {
@@ -77,9 +79,12 @@ pub(super) fn purge(items: &[trash::TrashItem]) -> Result<(), String> {
         }
         .map_err(|error| format!("{content:?}: {error}"))?;
         std::fs::remove_file(info).map_err(|error| format!("{info:?}: {error}"))?;
-        forget_directory_size(item);
-    }
-    Ok(())
+        purged.push(info);
+        Ok(())
+    });
+    // Each trash's size cache is rewritten once, not once per purged folder.
+    forget_directory_sizes(&purged);
+    result
 }
 
 pub(super) fn restore(item: &trash::TrashItem) -> Result<(), String> {
@@ -106,7 +111,7 @@ pub(super) fn restore(item: &trash::TrashItem) -> Result<(), String> {
     if let Err(error) = std::fs::remove_file(info) {
         log::warn!(target: "oxyde_lib::trash_restore", "stage=record_cleanup id={info:?} error={error}");
     }
-    forget_directory_size(item);
+    forget_directory_sizes(&[info]);
     Ok(())
 }
 
@@ -115,34 +120,38 @@ fn rename_no_replace(from: &Path, to: &Path) -> std::io::Result<()> {
     super::linux_rename::exclusive(rustix::fs::CWD, from, rustix::fs::CWD, to)
 }
 
-/// Keep the Trash specification 1.0 directory size cache, read by KDE, in step.
-fn forget_directory_size(item: &trash::TrashItem) {
-    forget_directory_size_of(Path::new(&item.id));
-}
-
-fn forget_directory_size_of(info: &Path) {
-    let (Some(root), Some(name)) = (trash_root(info), info.file_stem()) else { return };
-    let cache = root.join("directorysizes");
-    let result = match std::fs::read(&cache) {
-        Ok(content) => match without_cached_size(&content, name) {
-            Some(kept) => write_atomically(&cache, &kept),
-            None => Ok(()),
-        },
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error),
-    };
-    if let Err(error) = result {
-        log::warn!(target: "oxyde_lib::trash", "stage=directory_sizes cache={cache:?} error={error}");
+/// Keep the Trash specification 1.0 directory size cache, read by KDE, in step with
+/// the records removed: each trash's cache is read and rewritten once.
+fn forget_directory_sizes(infos: &[&Path]) {
+    let mut by_root: HashMap<&Path, HashSet<&[u8]>> = HashMap::new();
+    for info in infos {
+        if let (Some(root), Some(name)) = (trash_root(info), info.file_stem()) {
+            by_root.entry(root).or_default().insert(name.as_bytes());
+        }
+    }
+    for (root, names) in by_root {
+        let cache = root.join("directorysizes");
+        let result = match std::fs::read(&cache) {
+            Ok(content) => match without_cached_sizes(&content, &names) {
+                Some(kept) => write_atomically(&cache, &kept),
+                None => Ok(()),
+            },
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error),
+        };
+        if let Err(error) = result {
+            log::warn!(target: "oxyde_lib::trash", "stage=directory_sizes cache={cache:?} error={error}");
+        }
     }
 }
 
-/// Lines are `size mtime percent-encoded-name`; None when `name` has no entry.
-fn without_cached_size(content: &[u8], name: &OsStr) -> Option<Vec<u8>> {
+/// Lines are `size mtime percent-encoded-name`; None when none of `names` has an entry.
+fn without_cached_sizes(content: &[u8], names: &HashSet<&[u8]>) -> Option<Vec<u8>> {
     let mut kept = Vec::with_capacity(content.len());
     let mut found = false;
     for line in content.split(|byte| *byte == b'\n').filter(|line| !line.is_empty()) {
         let entry = line.splitn(3, |byte| *byte == b' ').nth(2).map(percent_decode);
-        if entry.as_deref() == Some(name.as_bytes()) {
+        if entry.is_some_and(|entry| names.contains(entry.as_slice())) {
             found = true;
         } else {
             kept.extend_from_slice(line);
