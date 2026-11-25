@@ -6,7 +6,6 @@ use dashmap::DashMap;
 use glob::Pattern;
 use once_cell::sync::Lazy;
 use regex::RegexBuilder;
-#[cfg(test)]
 use std::fs::File;
 use std::io::Read;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -142,22 +141,12 @@ pub fn advanced_search(
             let mut batch = Vec::new();
             let mut count = 0;
             let mut flush = std::time::Instant::now();
-            let attributes = std::cell::RefCell::new(crate::utils::visibility::WalkAttributes::default());
-            let walker = walkdir::WalkDir::new(&root)
+            let mut attributes = crate::utils::visibility::WalkAttributes::default();
+            let mut walker = walkdir::WalkDir::new(&root)
                 .follow_links(false)
                 .max_depth(if options.recursive { usize::MAX } else { 1 })
-                .into_iter()
-                .filter_entry(|e| {
-                    if e.depth() == 0 {
-                        return true;
-                    }
-                    let name = e.file_name().to_string_lossy();
-                    e.metadata().is_ok_and(|m| {
-                        let (hidden, system, _) = attributes.borrow_mut().of(e.path(), &m, &name);
-                        crate::utils::visibility::is_visible(hidden, system, show_hidden, show_system)
-                    })
-                });
-            for entry in walker {
+                .into_iter();
+            while let Some(entry) = walker.next() {
                 if cancellation.load(Ordering::Relaxed) {
                     return Ok(());
                 }
@@ -171,57 +160,69 @@ pub fn advanced_search(
                 }
                 let path = entry.path();
                 let name = entry.file_name().to_string_lossy().into_owned();
-                if let Ok(m) = entry.metadata() {
-                    let modified = m.modified().ok()
-                        .and_then(|date| date.duration_since(SystemTime::UNIX_EPOCH).ok())
-                        .map(|date| date.as_millis() as u64);
-                    let mut matches = params.matches_metadata(&name, m.is_dir(), m.len(), modified);
-                    if let Some(pattern) = params.content.as_ref().filter(|_| matches) {
-                        matches = match file_contains_content(path, pattern, options.ignore_accents, &cancellation) {
-                            Ok(matched) => matched,
-                            Err(_) if cancellation.load(Ordering::Relaxed) => return Ok(()),
-                            Err(error) => {
-                                log::warn!("Content search skipped {}: {error}", path.display());
-                                if sender.send(QuickSearchEvent::ContentSkipped { path: path.to_string_lossy().into_owned(), detail: error.to_string() }).is_err() { return Ok(()); }
-                                false
-                            }
-                        };
+                // One metadata read per entry decides its visibility and describes it:
+                // outside Windows, each read is a system call. A hidden folder is not entered.
+                let Ok(m) = entry.metadata() else {
+                    if entry.file_type().is_dir() {
+                        walker.skip_current_dir();
                     }
-                    if cancellation.load(Ordering::Relaxed) {
-                        return Ok(());
+                    continue;
+                };
+                let (hidden, system, _) = attributes.of(path, &m, &name);
+                if !crate::utils::visibility::is_visible(hidden, system, show_hidden, show_system) {
+                    if m.is_dir() {
+                        walker.skip_current_dir();
                     }
-                    if matches {
-                        let (hidden, system, _) = attributes.borrow_mut().of(path, &m, &name);
-                        batch.push(FileEntry {
-                            content_stamp: crate::models::FileStamp::for_entry(path, &m),
-                            created: m.created().ok().and_then(|time| time.duration_since(SystemTime::UNIX_EPOCH).ok()).and_then(|duration| duration.as_millis().try_into().ok()),
-                            name,
-                            path: crate::utils::path_text::encode(path),
-                            is_dir: m.is_dir(),
-                            size: if m.is_dir() { 0 } else { m.len() },
-                            modified: modified.unwrap_or_default(),
-                            is_hidden: hidden,
-                            is_system: system,
-                            is_symlink: entry.file_type().is_symlink(),
-                            mode: crate::models::file_entry::unix_mode(&m),
-                            ..Default::default()
-                        });
-                    }
-                    if options.archives && !m.is_dir() && is_archive(path) {
-                        match search_archive(path, &params, &cancellation) {
-                            Ok(entries) => batch.extend(entries),
-                            Err(_) if cancellation.load(Ordering::Relaxed) => return Ok(()),
-                            Err(error) => {
-                                log::warn!("Archive search skipped {}: {error}", path.display());
-                                if sender
-                                    .send(QuickSearchEvent::ArchiveSkipped {
-                                        path: path.to_string_lossy().into_owned(),
-                                        detail: error.to_string(),
-                                    })
-                                    .is_err()
-                                {
-                                    return Ok(());
-                                }
+                    continue;
+                }
+                let modified = m.modified().ok()
+                    .and_then(|date| date.duration_since(SystemTime::UNIX_EPOCH).ok())
+                    .map(|date| date.as_millis() as u64);
+                let mut matches = params.matches_metadata(&name, m.is_dir(), m.len(), modified);
+                if let Some(pattern) = params.content.as_ref().filter(|_| matches) {
+                    matches = match file_contains_content(path, pattern, options.ignore_accents, &cancellation) {
+                        Ok(matched) => matched,
+                        Err(_) if cancellation.load(Ordering::Relaxed) => return Ok(()),
+                        Err(error) => {
+                            log::warn!("Content search skipped {}: {error}", path.display());
+                            if sender.send(QuickSearchEvent::ContentSkipped { path: path.to_string_lossy().into_owned(), detail: error.to_string() }).is_err() { return Ok(()); }
+                            false
+                        }
+                    };
+                }
+                if cancellation.load(Ordering::Relaxed) {
+                    return Ok(());
+                }
+                if matches {
+                    batch.push(FileEntry {
+                        content_stamp: crate::models::FileStamp::for_entry(path, &m),
+                        created: m.created().ok().and_then(|time| time.duration_since(SystemTime::UNIX_EPOCH).ok()).and_then(|duration| duration.as_millis().try_into().ok()),
+                        name,
+                        path: crate::utils::path_text::encode(path),
+                        is_dir: m.is_dir(),
+                        size: if m.is_dir() { 0 } else { m.len() },
+                        modified: modified.unwrap_or_default(),
+                        is_hidden: hidden,
+                        is_system: system,
+                        is_symlink: entry.file_type().is_symlink(),
+                        mode: crate::models::file_entry::unix_mode(&m),
+                        ..Default::default()
+                    });
+                }
+                if options.archives && !m.is_dir() && is_archive(path) {
+                    match search_archive(path, &params, &cancellation) {
+                        Ok(entries) => batch.extend(entries),
+                        Err(_) if cancellation.load(Ordering::Relaxed) => return Ok(()),
+                        Err(error) => {
+                            log::warn!("Archive search skipped {}: {error}", path.display());
+                            if sender
+                                .send(QuickSearchEvent::ArchiveSkipped {
+                                    path: path.to_string_lossy().into_owned(),
+                                    detail: error.to_string(),
+                                })
+                                .is_err()
+                            {
+                                return Ok(());
                             }
                         }
                     }
@@ -454,22 +455,16 @@ fn is_office_doc(path: &std::path::Path) -> bool {
     )
 }
 
-fn is_binary_file(path: &std::path::Path) -> bool {
-    if is_office_doc(path) {
-        return false;
-    }
-
-    let mut file = match crate::utils::open_regular::open_regular(path) {
-        Ok(f) => f,
-        Err(_) => return true,
-    };
-
-    let mut buffer = [0u8; 1024];
-    match file.read(&mut buffer) {
-        // UTF-16 text holds zero bytes too: its byte order mark tells it apart.
-        Ok(n) => utf16_text::byte_order(&buffer[..n]).is_none() && buffer[..n].contains(&0),
-        Err(_) => true,
-    }
+/// A regular file and its first bytes, when they look like text: the file is opened
+/// once, to tell text from binary and then to search it.
+fn open_text(path: &std::path::Path) -> Option<(File, Vec<u8>)> {
+    let mut file = crate::utils::open_regular::open_regular(path).ok()?;
+    let mut start = vec![0u8; 1024];
+    let read = file.read(&mut start).ok()?;
+    start.truncate(read);
+    // UTF-16 text holds zero bytes too: its byte order mark tells it apart.
+    let binary = utf16_text::byte_order(&start).is_none() && start.contains(&0);
+    (!binary).then_some((file, start))
 }
 
 /// Bound each blocking read and check cancellation before/after it. A regular
@@ -532,40 +527,42 @@ fn file_contains_content(
     ignore_accents: bool,
     cancellation: &AtomicBool,
 ) -> std::io::Result<bool> {
-    if cancellation.load(Ordering::Relaxed) || is_binary_file(path) || is_cloud_placeholder(path) {
+    // A placeholder is left before anything opens it.
+    if cancellation.load(Ordering::Relaxed) || is_cloud_placeholder(path) {
         return Ok(false);
     }
+    let office = is_office_doc(path);
+    let text = if office { None } else {
+        let Some(text) = open_text(path) else { return Ok(false) };
+        Some(text)
+    };
     let vol_id = get_physical_disk_id(path);
     let lock = DISK_IO_LOCKS.entry(vol_id).or_insert_with(|| Arc::new(Mutex::new(()))).clone();
     let Some(_guard) = content_lock(&lock, cancellation) else { return Ok(false); };
-    if is_office_doc(path) {
-        let text = crate::platform::platform().office_search_text(path, &|| {
-            if cancellation.load(Ordering::Relaxed) { Err(std::io::ErrorKind::Interrupted.into()) } else { Ok(()) }
-        })?;
-        Ok(text_reader_contains_content(std::io::Cursor::new(text), pattern, ignore_accents, cancellation))
-    } else {
-        Ok(read_file_and_check(path, pattern, ignore_accents, cancellation))
+    match text {
+        Some((file, start)) => Ok(text_contains_content(file, start, pattern, ignore_accents, cancellation)),
+        None => {
+            let text = crate::platform::platform().office_search_text(path, &|| {
+                if cancellation.load(Ordering::Relaxed) { Err(std::io::ErrorKind::Interrupted.into()) } else { Ok(()) }
+            })?;
+            Ok(text_reader_contains_content(std::io::Cursor::new(text), pattern, ignore_accents, cancellation))
+        }
     }
 }
 
-fn read_file_and_check(
-    path: &std::path::Path,
+/// Searches a file opened by [`open_text`], its first bytes already read.
+fn text_contains_content(
+    file: File,
+    start: Vec<u8>,
     pattern: &ContentPattern,
     ignore_accents: bool,
     cancellation: &AtomicBool,
 ) -> bool {
-    let mut file = match crate::utils::open_regular::open_regular(path) {
-        Ok(f) => f,
-        Err(_) => return false,
-    };
-    let mut mark = [0u8; 2];
-    let utf16 = file.read_exact(&mut mark).ok().and_then(|()| utf16_text::byte_order(&mark));
-    if std::io::Seek::rewind(&mut file).is_err() {
-        return false;
-    }
+    let utf16 = utf16_text::byte_order(&start);
+    let reader = std::io::Cursor::new(start).chain(file);
     match utf16 {
-        Some(big_endian) => text_reader_contains_content(utf16_text::Utf16Reader::new(file, big_endian), pattern, ignore_accents, cancellation),
-        None => text_reader_contains_content(file, pattern, ignore_accents, cancellation),
+        Some(big_endian) => text_reader_contains_content(utf16_text::Utf16Reader::new(reader, big_endian), pattern, ignore_accents, cancellation),
+        None => text_reader_contains_content(reader, pattern, ignore_accents, cancellation),
     }
 }
 
