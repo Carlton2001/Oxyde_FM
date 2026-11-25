@@ -693,6 +693,10 @@ impl Platform for LinuxPlatform {
         Ok(())
     }
 
+    fn mount_place(&self, path: &std::path::Path) -> Option<super::MountPlace> {
+        super::linux_mount_place::status_at(path).ok().map(|status| status.place.shared())
+    }
+
     fn folder_denies_writes(&self, path: &std::path::Path) -> bool {
         super::linux_write_access::denies_writes(path)
     }

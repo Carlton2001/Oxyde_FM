@@ -14,10 +14,13 @@ impl Place {
     /// Whether `inner` is on this file system and, when both are known, this mount: a walk
     /// that stays inside never reaches another file system nor a bind mount.
     pub(super) fn holds(self, inner: Place) -> bool {
-        self.device == inner.device && match (self.mount, inner.mount) {
-            (Some(own), Some(other)) => own == other,
-            _ => true,
-        }
+        self.shared().holds(inner.shared())
+    }
+
+    /// The same place for code outside the platform.
+    pub(super) fn shared(self) -> super::MountPlace {
+        let (major, minor) = self.device;
+        super::MountPlace::new(u64::from(major) << 32 | u64::from(minor), self.mount)
     }
 
     /// Whether an item at this place, inside a folder at `parent`, is mounted there. Btrfs
@@ -41,6 +44,11 @@ pub(super) struct Status {
 /// `name` in `folder`, not followed if it is a link.
 pub(super) fn status(folder: impl AsFd, name: impl rustix::path::Arg) -> rustix::io::Result<Status> {
     read(folder, name, AtFlags::SYMLINK_NOFOLLOW)
+}
+
+/// The item at `path`, not followed if it is a link.
+pub(super) fn status_at(path: &std::path::Path) -> rustix::io::Result<Status> {
+    read(rustix::fs::CWD, path, AtFlags::SYMLINK_NOFOLLOW)
 }
 
 /// The item `item` holds, which may be opened with `O_PATH`.

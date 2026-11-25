@@ -89,6 +89,31 @@ pub struct FileIdentity {
     kind: u8,
 }
 
+/// The file system and mount an item lies on: a walk that stays on its own never counts
+/// another file system nor a folder bind-mounted inside it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MountPlace {
+    device: u64,
+    /// Unknown where the system does not tell mounts apart.
+    mount: Option<u64>,
+}
+
+impl MountPlace {
+    #[cfg_attr(target_os = "windows", allow(dead_code))]
+    pub(crate) fn new(device: u64, mount: Option<u64>) -> Self {
+        Self { device, mount }
+    }
+
+    /// Whether `inner` lies on this file system and, when both are known, this mount.
+    pub fn holds(self, inner: MountPlace) -> bool {
+        self.device == inner.device
+            && match (self.mount, inner.mount) {
+                (Some(own), Some(other)) => own == other,
+                _ => true,
+            }
+    }
+}
+
 /// Keeps a platform cancellation monitor alive only for its owning I/O scope.
 #[doc(hidden)]
 pub struct IoCancellationGuard {
@@ -872,6 +897,11 @@ pub trait Platform: Send + Sync {
     /// disk image, locked card. Blocking; never call it on a network drive.
     fn volume_is_read_only(&self, _root: &std::path::Path) -> bool {
         false
+    }
+    /// Where `path` lies, not followed if it is a link; `None` where unknown, and walks
+    /// are then not held to their mount. Blocking.
+    fn mount_place(&self, _path: &std::path::Path) -> Option<MountPlace> {
+        None
     }
     /// Whether the user may not create, rename or remove entries in this folder, as
     /// Nautilus greys its write actions; false when unknown. Blocking.

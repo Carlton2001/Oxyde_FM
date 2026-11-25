@@ -134,6 +134,9 @@ fn scan(
     let files_acc = files.clone();
     let worker_cancel = cancellation.clone();
     let worker_turbo = turbo.clone();
+    // Like Nautilus, a folder mounted inside (another file system, a bind mount) is
+    // counted but not entered.
+    let root_place = crate::platform::platform().mount_place(path);
     let walker = jwalk::WalkDir::new(path)
         .skip_hidden(false)
         .follow_links(false)
@@ -160,7 +163,7 @@ fn scan(
             let (mut directory_size, mut directory_files, mut directory_folders) =
                 (0u64, 0u64, 0u64);
             let listed = listed_file_sizes(path);
-            for entry in children.iter().flatten() {
+            for entry in children.iter_mut().flatten() {
                 if worker_cancel.cancelled() {
                     children.clear();
                     return;
@@ -175,6 +178,11 @@ fn scan(
                     }
                 } else if entry.file_type().is_dir() {
                     directory_folders += 1;
+                    if root_place.is_some_and(|root| {
+                        crate::platform::platform().mount_place(&entry.path()).is_some_and(|place| !root.holds(place))
+                    }) {
+                        entry.read_children = None;
+                    }
                 }
             }
             if let Some((size, files)) = listed {
@@ -246,6 +254,10 @@ pub(crate) fn excluded(path: &Path) -> bool {
 #[cfg(test)]
 #[path = "folder_sizes/tests/turbo.rs"]
 mod turbo_tests;
+
+#[cfg(all(test, target_os = "linux"))]
+#[path = "folder_sizes/tests/mounts.rs"]
+mod mount_tests;
 
 #[cfg(test)]
 mod tests {
