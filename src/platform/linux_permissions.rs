@@ -18,18 +18,25 @@ mod enclosed;
 pub(super) fn read(path: &Path) -> io::Result<UnixPermissions> {
     let stat = rustix::fs::stat(path)?;
     let euid = rustix::process::geteuid();
-    let account = |database, id| Account { id, name: name(database, id).unwrap_or_else(|| id.to_string()) };
-    let owner = account("passwd", stat.st_uid);
-    let group = account("group", stat.st_gid);
     // As Nautilus: an administrator may give any account, the owner one of its groups.
-    let (mut owners, mut groups) = if euid.is_root() {
-        (all("passwd"), all("group"))
+    let gids = if euid.is_root() {
+        Vec::new()
     } else {
         let mut gids = rustix::process::getgroups()?;
         gids.push(rustix::process::getegid());
         let mut gids: Vec<u32> = gids.into_iter().map(|gid| gid.as_raw()).collect();
         gids.sort_unstable();
         gids.dedup();
+        gids
+    };
+    learn_names("passwd", [stat.st_uid]);
+    learn_names("group", gids.iter().copied().chain([stat.st_gid]));
+    let account = |database, id| Account { id, name: name(database, id).unwrap_or_else(|| id.to_string()) };
+    let owner = account("passwd", stat.st_uid);
+    let group = account("group", stat.st_gid);
+    let (mut owners, mut groups) = if euid.is_root() {
+        (all("passwd"), all("group"))
+    } else {
         (Vec::new(), gids.into_iter().map(|gid| account("group", gid)).collect())
     };
     if euid.is_root() && !owners.iter().any(|account| account.id == owner.id) {
@@ -99,6 +106,26 @@ fn getent(database: &str, keys: &[String]) -> Vec<Vec<String>> {
         .map(|line| line.split(':').map(str::to_owned).collect::<Vec<_>>())
         .filter(|fields| fields.len() >= 3)
         .collect()
+}
+
+/// Asks NSS in one `getent` for the names of `ids` not known yet, rather than one
+/// process for each of the user's groups.
+fn learn_names(database: &'static str, ids: impl IntoIterator<Item = u32>) {
+    let mut missing: Vec<u32> = {
+        let accounts = accounts();
+        ids.into_iter().filter(|id| !accounts.names.contains_key(&(database, *id))).collect()
+    };
+    missing.sort_unstable();
+    missing.dedup();
+    if missing.is_empty() {
+        return;
+    }
+    let found = getent(database, &missing.iter().map(u32::to_string).collect::<Vec<_>>());
+    let mut accounts = accounts();
+    for id in missing {
+        let name = found.iter().find(|fields| fields[2].parse() == Ok(id)).map(|fields| fields[0].clone());
+        accounts.names.insert((database, id), name);
+    }
 }
 
 /// The cache is not held during `getent`: other Properties windows keep their answers.
