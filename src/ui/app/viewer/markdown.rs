@@ -170,6 +170,7 @@ impl Viewer {
             return div().into_any_element();
         };
         let blocks = document.blocks.clone();
+        let blocks_for_copy = document.blocks.clone();
         let handle = cx.entity().downgrade();
         let selection = document.selection;
         let copied = document.copied.as_ref().map(|(index, _)| *index);
@@ -186,14 +187,18 @@ impl Viewer {
                 let table = (0..=index).rev().find(|row| matches!(blocks[*row].kind, Kind::TableRow(true, _))).unwrap_or(index);
                 let hover = handle.clone();
                 let button = header.then(|| {
-                    // Tab-separated rows paste as a table in spreadsheets.
-                    let source = blocks[index..]
-                        .iter()
-                        .enumerate()
-                        .take_while(|(offset, row)| matches!(row.kind, Kind::TableRow(false, _)) || *offset == 0)
-                        .map(|(_, row)| row.text.strip_suffix('\t').unwrap_or(&row.text))
-                        .collect::<Vec<_>>()
-                        .join("\n");
+                    // Assembled on the press, not at each render: a table may be long.
+                    let rows = blocks_for_copy.clone();
+                    let source = move || {
+                        // Tab-separated rows paste as a table in spreadsheets.
+                        rows.borrow()[index..]
+                            .iter()
+                            .enumerate()
+                            .take_while(|(offset, row)| matches!(row.kind, Kind::TableRow(false, _)) || *offset == 0)
+                            .map(|(_, row)| row.text.strip_suffix('\t').unwrap_or(&row.text))
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    };
                     let done = copied == Some(index);
                     // Same inset as on code blocks, from the table's own edges.
                     copy_button(index, source, done, &handle, cx)
@@ -406,7 +411,8 @@ impl Viewer {
                 });
             if matches!(block.kind, Kind::Code) {
                 // A fenced block reads as its own framed, monospace panel.
-                let source = block.text.clone();
+                let code = blocks_for_copy.clone();
+                let source = move || code.borrow().get(index).map(|block| block.text.clone()).unwrap_or_default();
                 let done = copied == Some(index);
                 let group: SharedString = format!("viewer-markdown-code-{index}").into();
                 let button = copy_button(index, source, done, &handle, cx)
@@ -487,7 +493,7 @@ fn alert_style(alert: BlockQuoteKind, theme: &crate::ui::theme::OxydeTheme) -> (
 
 /// The copy button at a code block's or table's top right; a check replaces
 /// its icon for a moment after a copy.
-fn copy_button(index: usize, source: String, done: bool, handle: &WeakEntity<Viewer>, cx: &App) -> Stateful<Div> {
+fn copy_button(index: usize, source: impl Fn() -> String + 'static, done: bool, handle: &WeakEntity<Viewer>, cx: &App) -> Stateful<Div> {
     let theme = *cx.theme();
     let copy = handle.clone();
     div()
@@ -510,7 +516,7 @@ fn copy_button(index: usize, source: String, done: bool, handle: &WeakEntity<Vie
         .on_mouse_down(MouseButton::Left, move |_, _, cx| {
             // Never starts a text selection under the button.
             cx.stop_propagation();
-            cx.write_to_clipboard(ClipboardItem::new_string(source.clone()));
+            cx.write_to_clipboard(ClipboardItem::new_string(source()));
             let _ = copy.update(cx, |this, cx| this.show_code_copied(index, cx));
         })
         .child(
