@@ -1070,7 +1070,13 @@ impl Element for TextInputElement {
                 selected_range.end
             });
             let offset = input.horizontal_offset;
-            window.with_content_mask(Some(ContentMask { bounds }), |window| {
+            // Scrolled text is clipped sideways only: a fallback font (CJK) lays the line out
+            // taller than the field, and the composition's underline falls below it.
+            let mask = Bounds::from_corners(
+                point(bounds.left(), bounds.top() - line_h),
+                point(bounds.right(), bounds.bottom() + line_h),
+            );
+            window.with_content_mask(Some(ContentMask { bounds: mask }), |window| {
                 // A lost device or a full atlas skips this frame's text instead of ending Oxyde.
                 if !selected_range.is_empty() {
                     if let Err(error) = line.paint_background(
