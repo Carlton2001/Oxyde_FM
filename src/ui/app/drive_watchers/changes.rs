@@ -121,10 +121,20 @@ impl Observed {
     }
 }
 
+#[cfg(target_os = "linux")]
+mod shared;
+
+enum Backend {
+    Own(Box<dyn Watcher + Send>),
+    /// Emptied once released.
+    #[cfg(target_os = "linux")]
+    Shared(Option<shared::Registration>),
+}
+
 pub struct DirectoryWatcher {
     pub(super) polling: bool,
     pub(super) recursive: bool,
-    watcher: Box<dyn Watcher + Send>,
+    backend: Backend,
     failed: Arc<AtomicBool>,
 }
 
@@ -135,6 +145,17 @@ impl DirectoryWatcher {
         recursive: bool,
         changes: WatcherChanges,
     ) -> notify::Result<Self> {
+        #[cfg(target_os = "linux")]
+        if !polling && !recursive {
+            if let Some(registration) = shared::watch(path, changes.clone())? {
+                return Ok(Self {
+                    polling,
+                    recursive,
+                    backend: Backend::Shared(Some(registration)),
+                    failed: Arc::new(AtomicBool::new(false)),
+                });
+            }
+        }
         // Recursive polling walks the whole subtree: do not repeat that every
         // two seconds on removable or unidentified storage.
         let interval = std::time::Duration::from_secs(if recursive { 30 } else { 2 });
@@ -207,7 +228,7 @@ impl DirectoryWatcher {
         Ok(Self {
             polling,
             recursive,
-            watcher,
+            backend: Backend::Own(watcher),
             failed,
         })
     }
@@ -217,18 +238,33 @@ impl DirectoryWatcher {
     }
 
     pub(in crate::ui::app) fn release(mut self, path: &str) -> Result<(), String> {
+        let watcher = match &mut self.backend {
+            Backend::Own(watcher) => watcher,
+            #[cfg(target_os = "linux")]
+            Backend::Shared(registration) => return registration.take().map_or(Ok(()), shared::release),
+        };
         // A failed unwatch must not skip the barrier below: the watcher is dropped anyway.
-        let unwatched = self
-            .watcher
+        let unwatched = watcher
             .unwatch(&decode(path))
             .map_err(|error| error.to_string());
         // The configure reply is a FIFO barrier for Windows' queued unwatch.
-        let configured = self
-            .watcher
+        let configured = watcher
             .configure(Config::default())
             .map(|_| ())
             .map_err(|error| error.to_string());
         unwatched.and(configured)
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for DirectoryWatcher {
+    fn drop(&mut self) {
+        // An own watcher stops with its instance; a shared watch has to be removed.
+        if let Backend::Shared(registration) = &mut self.backend {
+            if let Some(registration) = registration.take() {
+                let _ = shared::release(registration);
+            }
+        }
     }
 }
 
