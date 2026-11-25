@@ -362,7 +362,7 @@ impl PreviewTask {
                             if let Some(content) = content {
                                 let snippet =
                                     content.lines().take(15).collect::<Vec<_>>().join("\n");
-                                Some(PreviewData::Text(snippet))
+                                Some(PreviewData::Text(snippet.into()))
                             } else {
                                 None
                             }
@@ -381,7 +381,7 @@ impl PreviewTask {
                         })
                         .await;
                         if let Ok(content) = content {
-                            Some(PreviewData::Text(content))
+                            Some(PreviewData::Text(content.into()))
                         } else {
                             None
                         }
