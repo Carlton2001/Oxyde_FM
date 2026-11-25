@@ -28,12 +28,7 @@ pub(in crate::ui::app::viewer) fn has_tree(file: &FileEntry) -> bool {
     (file.is_dir && !oxyde_lib::platform::platform().is_remote_uri(&file.path)) || archive_of(file).is_some()
 }
 
-struct Read {
-    folder: Folder,
-    contents: Vec<(String, Contents)>,
-}
-
-fn read_local(path: &str, listing: Listing, cancelled: &AtomicBool) -> Result<Read, Failure> {
+fn read_local(path: &str, listing: Listing) -> Result<Folder, Failure> {
     let (entries, complete) = oxyde_lib::commands::io::list_local_dir_bounded(
         path, listing.show_hidden, listing.show_system, READ_PER_FOLDER,
     )
@@ -43,16 +38,21 @@ fn read_local(path: &str, listing: Listing, cancelled: &AtomicBool) -> Result<Re
     })?;
     let mut entries = entries;
     crate::ui::workspace::resolve_native_kinds(&mut entries);
-    let folder = Folder::new(entries, complete, listing.sort);
+    Ok(Folder::new(entries, complete, listing.sort))
+}
+
+/// Whether each folder holds entries, and folders: opened one by one, up to a
+/// thousand, after its level shows.
+fn read_contents(folders: Vec<String>, listing: Listing, cancelled: &AtomicBool) -> Vec<(String, Contents)> {
     let mut contents = Vec::new();
-    for entry in folder.shown().iter().filter(|entry| entry.is_dir) {
+    for path in folders {
         if cancelled.load(Ordering::Relaxed) {
             break;
         }
-        let (entries, subfolders) = oxyde_lib::commands::io::visible_contents(&entry.path, listing.show_hidden, listing.show_system);
-        contents.push((entry.path.clone(), Contents { entries, subfolders }));
+        let (entries, subfolders) = oxyde_lib::commands::io::visible_contents(&path, listing.show_hidden, listing.show_system);
+        contents.push((path, Contents { entries, subfolders }));
     }
-    Ok(Read { folder, contents })
+    contents
 }
 
 struct Indexed {
@@ -181,21 +181,22 @@ impl Viewer {
     fn read_tree_level(&mut self, path: String, cx: &mut Context<Self>) {
         let generation = self.generation;
         let Some(tree) = self.tree_mut(generation) else { return };
-        let (listing, cancelled) = (tree.listing, tree.cancelled.clone());
+        let listing = tree.listing;
         let target = path.clone();
-        let work = self.load_work(move || Ok::<_, String>(read_local(&target, listing, &cancelled)));
+        let work = self.load_work(move || Ok::<_, String>(read_local(&target, listing)));
         cx.spawn(async move |this, cx| {
             let result = work.await;
             let _ = this.update(cx, |this, cx| {
                 let Some(tree) = this.tree_mut(generation) else { return };
+                let mut folders = Vec::new();
                 let level = match result {
-                    Ok((Ok(read), _completion)) => {
-                        tree.contents.extend(read.contents);
+                    Ok((Ok(folder), _completion)) => {
+                        folders = folder.shown().iter().filter(|entry| entry.is_dir).map(|entry| entry.path.clone()).collect();
                         // The pane's order may have changed during the read.
                         if listing.sort == tree.listing.sort {
-                            Level::Ready(read.folder)
+                            Level::Ready(folder)
                         } else {
-                            Level::Ready(read.folder.resorted(tree.listing.sort))
+                            Level::Ready(folder.resorted(tree.listing.sort))
                         }
                     }
                     Ok((Err(failure), _)) => Level::Failed(failure),
@@ -204,6 +205,33 @@ impl Viewer {
                 tree.levels.insert(path, level);
                 tree.refresh(row_height());
                 cx.notify();
+                // The level shows first; its folders' chevrons follow.
+                if !folders.is_empty() {
+                    this.read_tree_contents(folders, cx);
+                }
+            });
+        })
+        .detach();
+    }
+
+    fn read_tree_contents(&mut self, folders: Vec<String>, cx: &mut Context<Self>) {
+        let generation = self.generation;
+        let Some(tree) = self.tree_mut(generation) else { return };
+        let (listing, cancelled) = (tree.listing, tree.cancelled.clone());
+        let work = self.load_work(move || Ok::<_, String>(read_contents(folders, listing, &cancelled)));
+        cx.spawn(async move |this, cx| {
+            let result = work.await;
+            let _ = this.update(cx, |this, cx| {
+                let Some(tree) = this.tree_mut(generation) else { return };
+                // A visibility change read the tree again meanwhile: these counts are stale.
+                if (tree.listing.show_hidden, tree.listing.show_system) != (listing.show_hidden, listing.show_system) {
+                    return;
+                }
+                if let Ok((contents, _completion)) = result {
+                    tree.contents.extend(contents);
+                    tree.refresh(row_height());
+                    cx.notify();
+                }
             });
         })
         .detach();
