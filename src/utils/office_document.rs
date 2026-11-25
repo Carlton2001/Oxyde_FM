@@ -64,10 +64,14 @@ fn entry(archive: &mut Archive, name: &str) -> Result<String, CommandError> {
     let entry = archive
         .by_name(name)
         .map_err(|error| CommandError::Other(error.to_string()))?;
-    let mut xml = Vec::new();
-    entry.take(MAX_XML_BYTES.min(MAX_DOCUMENT_BYTES - bytes)).read_to_end(&mut xml)?;
+    let limit = MAX_XML_BYTES.min(MAX_DOCUMENT_BYTES - bytes);
+    // Sized from the declared length, within the budget: a growing buffer
+    // could hold twice the part, and a lossy copy once more.
+    let mut xml = Vec::with_capacity(entry.size().min(limit) as usize);
+    entry.take(limit).read_to_end(&mut xml)?;
     PARTS_READ.with(|read| read.set((bytes + xml.len() as u64, parts + 1)));
-    Ok(String::from_utf8_lossy(&xml).into_owned())
+    Ok(String::from_utf8(xml)
+        .unwrap_or_else(|error| String::from_utf8_lossy(error.as_bytes()).into_owned()))
 }
 
 /// Visits every tag with the text that precedes it; `false` stops the walk.
