@@ -72,3 +72,27 @@ fn releasing_an_older_watch_of_a_folder_watched_again_keeps_the_newer_one() {
     std::thread::sleep(Duration::from_millis(300));
     assert!(!changes.lock().unwrap().contains_key(&path));
 }
+
+#[test]
+fn polled_folders_share_one_instance_and_each_change_reaches_its_folder() {
+    let root = tempfile::tempdir().unwrap();
+    let changes: WatcherChanges = Default::default();
+    let watchers: Vec<_> = (0..40)
+        .map(|index| {
+            let folder = root.path().join(index.to_string());
+            std::fs::create_dir(&folder).unwrap();
+            let path = text(&folder);
+            let watcher = DirectoryWatcher::create(&path, true, false, changes.clone()).unwrap();
+            (path, watcher)
+        })
+        .collect();
+    std::fs::write(root.path().join("30").join("new"), b"x").unwrap();
+    assert!(reported(&changes, &watchers[30].0));
+    assert_eq!(changes.lock().unwrap().len(), 1);
+    // Released, a folder no longer reports.
+    let (path, watcher) = watchers.into_iter().nth(30).unwrap();
+    watcher.release(&path).unwrap();
+    changes.lock().unwrap().clear();
+    std::fs::write(root.path().join("30").join("other"), b"x").unwrap();
+    assert!(!reported(&changes, &path));
+}

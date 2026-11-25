@@ -145,9 +145,13 @@ impl DirectoryWatcher {
         recursive: bool,
         changes: WatcherChanges,
     ) -> notify::Result<Self> {
+        // Recursive polling walks the whole subtree: do not repeat that every
+        // two seconds on removable or unidentified storage.
+        let interval = std::time::Duration::from_secs(if recursive { 30 } else { 2 });
         #[cfg(target_os = "linux")]
-        if !polling && !recursive {
-            if let Some(registration) = shared::watch(path, changes.clone())? {
+        if !recursive {
+            let kind = if polling { shared::Kind::Poll(interval) } else { shared::Kind::Inotify };
+            if let Some(registration) = shared::watch(path, kind, changes.clone())? {
                 return Ok(Self {
                     polling,
                     recursive,
@@ -156,9 +160,6 @@ impl DirectoryWatcher {
                 });
             }
         }
-        // Recursive polling walks the whole subtree: do not repeat that every
-        // two seconds on removable or unidentified storage.
-        let interval = std::time::Duration::from_secs(if recursive { 30 } else { 2 });
         Self::with_poll_interval(path, polling, recursive, changes, interval)
     }
 
