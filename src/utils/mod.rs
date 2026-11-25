@@ -24,6 +24,7 @@ pub mod open_regular;
 pub mod preview;
 pub mod preview_protocol;
 pub mod audio_metadata;
+pub(crate) mod base64_bytes;
 pub(crate) mod visibility;
 
 pub mod hardware {

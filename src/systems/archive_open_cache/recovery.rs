@@ -33,44 +33,11 @@ impl Stamp {
 struct Content {
     prefix_size: u64,
     prefix_hash: String,
-    #[serde(with = "next_bytes")]
+    /// In base64: as an array of numbers, a 256 KiB block made a proof of
+    /// about 940 KB, and DPAPI's cost follows the size of what it seals.
+    #[serde(with = "crate::utils::base64_bytes")]
     next: Vec<u8>,
     provenance: Option<Vec<u8>>,
-}
-/// The pending block in base64: as an array of numbers, a 256 KiB block made
-/// a proof of about 940 KB, and DPAPI's cost follows the size of what it seals.
-/// Proofs written as arrays by earlier versions still read.
-mod next_bytes {
-    use base64::Engine;
-    use serde::de::{self, SeqAccess, Visitor};
-    use std::fmt;
-
-    pub(super) fn serialize<S: serde::Serializer>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&base64::engine::general_purpose::STANDARD.encode(bytes))
-    }
-
-    pub(super) fn deserialize<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Vec<u8>, D::Error> {
-        struct Bytes;
-        impl<'de> Visitor<'de> for Bytes {
-            type Value = Vec<u8>;
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("base64 text or an array of bytes")
-            }
-            fn visit_str<E: de::Error>(self, text: &str) -> Result<Vec<u8>, E> {
-                base64::engine::general_purpose::STANDARD
-                    .decode(text)
-                    .map_err(E::custom)
-            }
-            fn visit_seq<A: SeqAccess<'de>>(self, mut items: A) -> Result<Vec<u8>, A::Error> {
-                let mut bytes = Vec::new();
-                while let Some(byte) = items.next_element()? {
-                    bytes.push(byte);
-                }
-                Ok(bytes)
-            }
-        }
-        deserializer.deserialize_any(Bytes)
-    }
 }
 impl Default for Content {
     fn default() -> Self {

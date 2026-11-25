@@ -100,3 +100,12 @@ fn rejects_non_audio_and_caps_tag_text() {
     );
     assert_eq!(bounded("a\0b"), "ab");
 }
+
+#[test]
+fn cover_pixels_travel_as_base64_and_arrays_still_read() {
+    let cover = Cover { width: 1, height: 1, pixels: vec![0, 1, 254, 255] };
+    let text = serde_json::to_string(&cover).unwrap();
+    assert!(text.contains("\"pixels\":\"AAH+/w==\""), "{text}");
+    let read: Cover = serde_json::from_str(&text.replace("\"AAH+/w==\"", "[0,1,254,255]")).unwrap();
+    assert_eq!(read.pixels, cover.pixels);
+}
