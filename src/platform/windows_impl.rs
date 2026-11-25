@@ -522,6 +522,7 @@ impl Platform for WindowsPlatform {
             .map_err(|error| error.to_string())?;
         if is_background {
             super::windows_shell::new_menu::remove_new_submenu(&mut items);
+            super::windows_shell::sharing::add_folder_sharing_submenu(path, &mut items);
         }
         Ok(items)
     }
@@ -550,11 +551,15 @@ impl Platform for WindowsPlatform {
     fn execute_native_context_menu_item(
         &self,
         path: &[String],
-        id: i32,
+        item: &crate::models::WinMenuItem,
         is_background: bool,
     ) -> Result<(), String> {
-        super::windows_shell::execute_native_menu_item(path.to_vec(), id, is_background)
-            .map_err(|error| error.to_string())
+        if is_background && item.is_folder_sharing_command {
+            super::windows_shell::sharing::execute_folder_sharing_command(path, item)
+        } else {
+            super::windows_shell::execute_native_menu_item(path.to_vec(), item.id, is_background)
+        }
+        .map_err(|error| error.to_string())
     }
 
     fn is_network_path(&self, path: &std::path::Path) -> bool {

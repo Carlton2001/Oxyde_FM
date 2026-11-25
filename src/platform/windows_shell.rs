@@ -11,6 +11,8 @@ use super::windows_com::{take_string, ComApartment, TaskMemory};
 use crate::models::{CommandError, QuickAccessItem, WinMenuItem};
 
 pub(super) mod new_menu;
+pub(super) mod sharing;
+
 
 fn read_verb_with(read: impl FnOnce(&mut [u8]) -> windows::core::Result<()>) -> Option<String> {
     let mut buffer = [0u8; 128];
@@ -240,17 +242,26 @@ pub(super) fn get_native_context_menu_items(
     paths: Vec<String>,
     is_background: bool,
 ) -> Result<Vec<WinMenuItem>, CommandError> {
+    with_menu_snapshot(&paths, is_background, None, |_, items| Ok(items))
+}
+
+fn with_menu_snapshot<T>(
+    paths: &[String],
+    is_background: bool,
+    only_popup: Option<&str>,
+    read: impl FnOnce(&windows::Win32::UI::Shell::IContextMenu, Vec<WinMenuItem>) -> Result<T, CommandError>,
+) -> Result<T, CommandError> {
     use windows::core::Interface;
     use windows::Win32::Foundation::{LPARAM, WPARAM};
     use windows::Win32::UI::Shell::{
         IContextMenu, IContextMenu2, IContextMenu3, CMF_CANRENAME, CMF_EXPLORE, CMF_NORMAL,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetMenuItemCount, GetMenuItemID, GetMenuStringW, GetSubMenu, MF_BYPOSITION,
-        WM_INITMENUPOPUP,
+        GetMenuItemCount, GetMenuItemID, GetMenuState, GetMenuStringW, GetSubMenu, MF_BYPOSITION,
+        MF_DISABLED, MF_GRAYED, WM_INITMENUPOPUP,
     };
 
-    with_context_menu(&paths, is_background, |context_menu| {
+    with_context_menu(paths, is_background, |context_menu| {
         let menu = query_menu(context_menu, CMF_NORMAL | CMF_EXPLORE | CMF_CANRENAME)?;
         let hmenu = menu.0;
 
@@ -262,6 +273,8 @@ pub(super) fn get_native_context_menu_items(
             context_menu: &IContextMenu,
             cm2: Option<&IContextMenu2>,
             cm3: Option<&IContextMenu3>,
+            only_popup: Option<&str>,
+            enabled_only: bool,
         ) -> Vec<WinMenuItem> {
             unsafe {
                 let count = GetMenuItemCount(Some(hmenu));
@@ -285,9 +298,26 @@ pub(super) fn get_native_context_menu_items(
                 for i in 0..count {
                     let id = GetMenuItemID(hmenu, i);
                     let submenu = GetSubMenu(hmenu, i);
+                    let has_submenu = !submenu.is_invalid();
+                    if let Some(expected) = only_popup {
+                        if !has_submenu || !popup_id(hmenu, i)
+                            .and_then(|id| canonical_verb(context_menu, id))
+                            .is_some_and(|verb| verb.eq_ignore_ascii_case(expected))
+                        {
+                            continue;
+                        }
+                    }
+                    if enabled_only {
+                        let state = GetMenuState(hmenu, i as u32, MF_BYPOSITION);
+                        if state & (MF_DISABLED | MF_GRAYED).0 != 0
+                            || (!has_submenu && !(1..=0x7FFF).contains(&id))
+                        {
+                            continue;
+                        }
+                    }
 
                     // If it has a submenu, we MUST initialize it for extensions like NanaZip
-                    if !submenu.is_invalid() {
+                    if has_submenu {
                         let wparam = WPARAM(submenu.0 as usize);
                         let lparam = LPARAM((i & 0xFFFF) as isize); // loword: index, hiword: fSystemMenu
                         if let Some(cm) = cm2 {
@@ -308,14 +338,14 @@ pub(super) fn get_native_context_menu_items(
                         continue;
                     }
 
-                    let is_new_menu = !submenu.is_invalid() && new_menu::new_label(label.trim());
+                    let is_new_menu = has_submenu && new_menu::new_label(label.trim());
 
                     // Filter standard verbs. GetMenuItemID has no ID for a popup, but
                     // its item can carry one with a canonical verb, whatever the
                     // language: "openas" for Open with.
                     let verb = canonical_verb(
                         context_menu,
-                        if submenu.is_invalid() { id } else { popup_id(hmenu, i).unwrap_or(id) },
+                        if has_submenu { popup_id(hmenu, i).unwrap_or(id) } else { id },
                     );
                     // "Open in Oxyde" (`windows_folder_handler/menu.rs`) means nothing inside Oxyde.
                     if verb.as_deref().is_some_and(|verb| verb.eq_ignore_ascii_case("Oxyde")) {
@@ -327,7 +357,7 @@ pub(super) fn get_native_context_menu_items(
                             if forbidden_verbs.iter().any(|&v| verb.contains(v)) {
                                 // If it's a submenu, we generally want to keep it (like "New" or context extensions)
                                 // unless it's one of the explicitly forbidden actions
-                                if submenu.is_invalid() {
+                                if !has_submenu {
                                     continue;
                                 }
                             }
@@ -340,8 +370,14 @@ pub(super) fn get_native_context_menu_items(
                         item_verb = Some(verb);
                     }
 
-                    let children = if !submenu.is_invalid() {
-                        scrape_level(submenu, context_menu, cm2, cm3)
+                    let children = if has_submenu {
+                        let children = scrape_level(submenu, context_menu, cm2, cm3, None, enabled_only);
+                        // The Shell can advertise a popup without any commands (for
+                        // example, sharing on a folder background).
+                        if children.is_empty() {
+                            continue;
+                        }
+                        children
                     } else {
                         Vec::new()
                     };
@@ -350,7 +386,8 @@ pub(super) fn get_native_context_menu_items(
                         id: id as i32,
                         label,
                         verb: item_verb,
-                        has_submenu: !submenu.is_invalid(),
+                        has_submenu,
+                        is_folder_sharing_command: false,
                         children,
                     });
                 }
@@ -358,9 +395,8 @@ pub(super) fn get_native_context_menu_items(
             }
         }
 
-        let items = scrape_level(hmenu, context_menu, cm2.as_ref(), cm3.as_ref());
-
-        Ok(items)
+        let items = scrape_level(hmenu, context_menu, cm2.as_ref(), cm3.as_ref(), only_popup, only_popup.is_some());
+        read(context_menu, items)
     })
 }
 

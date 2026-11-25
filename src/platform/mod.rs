@@ -1131,14 +1131,14 @@ pub trait Platform: Send + Sync {
         names: &mut dyn Iterator<Item = String>,
     ) -> std::io::Result<std::path::PathBuf>;
 
-    /// Executes a command ID from a previously built native context-menu snapshot.
+    /// Executes a command from a previously built native context-menu snapshot.
     fn execute_native_context_menu_item(
         &self,
         path: &[String],
-        id: i32,
+        item: &crate::models::WinMenuItem,
         is_background: bool,
     ) -> Result<(), String> {
-        let _ = (path, id, is_background);
+        let _ = (path, item, is_background);
         Err("Native context menus are unavailable on this platform".to_string())
     }
 }

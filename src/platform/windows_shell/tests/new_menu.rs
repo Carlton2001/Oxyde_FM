@@ -36,6 +36,7 @@ fn removes_only_the_new_submenu_without_changing_other_command_ids() {
         label: label.into(),
         verb: verb.map(str::to_owned),
         has_submenu,
+        is_folder_sharing_command: false,
         children: Vec::new(),
     };
     for (title, verb) in [("Nouveau", None), ("Neu", None), ("Créer", Some("New"))] {

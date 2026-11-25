@@ -217,6 +217,7 @@ impl OxydeApp {
                     label: cx.i18n().text(Message::NativeMenuLoading).to_string(),
                     verb: None,
                     has_submenu: false,
+                    is_folder_sharing_command: false,
                     children: Vec::new(),
                 }],
             },
@@ -299,6 +300,7 @@ impl OxydeApp {
                                 label: message,
                                 verb: None,
                                 has_submenu: false,
+                                is_folder_sharing_command: false,
                                 children: Vec::new(),
                             }];
                         }
@@ -314,7 +316,7 @@ impl OxydeApp {
     pub(crate) fn execute_native_context_menu_item(
         &mut self,
         path: Vec<String>,
-        id: i32,
+        item: oxyde_lib::models::WinMenuItem,
         is_background: bool,
         creates_item: bool,
         cx: &mut Context<Self>,
@@ -322,7 +324,7 @@ impl OxydeApp {
         let opens_media = !is_background && self.context_menus.iter().any(|menu| {
             match &menu.content {
                 ContextMenuContent::NativeItems { items, .. } => {
-                    native_action_opens_media(items, id, false)
+                    native_action_opens_media(items, item.id, false)
                 }
                 _ => false,
             }
@@ -338,8 +340,8 @@ impl OxydeApp {
         } else {
             None
         };
-        self.run_native_menu_action(path, tab_id, false, move |path| {
-            oxyde_lib::platform::platform().execute_native_context_menu_item(path, id, is_background)
+        self.run_native_menu_action(path, tab_id, item.is_folder_sharing_command, move |path| {
+            oxyde_lib::platform::platform().execute_native_context_menu_item(path, &item, is_background)
         }, cx);
     }
 
