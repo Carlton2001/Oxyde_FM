@@ -1288,6 +1288,8 @@ mod windows_final_path;
 #[cfg(target_os = "windows")]
 mod windows_recycle_bin;
 #[cfg(target_os = "windows")]
+mod windows_write_access;
+#[cfg(target_os = "windows")]
 mod windows_shell;
 #[cfg(target_os = "windows")]
 mod windows_shell_selection;

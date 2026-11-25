@@ -541,6 +541,12 @@ impl Platform for WindowsPlatform {
     fn volume_is_read_only(&self, root: &std::path::Path) -> bool {
         super::windows_drives::volume_is_read_only(root)
     }
+    fn folder_denies_writes(&self, path: &std::path::Path) -> bool {
+        super::windows_write_access::denies_writes(path)
+    }
+    fn denied_subfolders(&self, folder: &std::path::Path, subfolders: Vec<String>) -> Vec<String> {
+        super::windows_write_access::denied_subfolders(folder, subfolders)
+    }
 
     fn list_network_vicinity(&self) -> Result<Vec<crate::models::FileEntry>, String> {
         super::network::list_network_vicinity().map_err(|error| error.to_string())

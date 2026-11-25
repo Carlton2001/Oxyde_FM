@@ -637,20 +637,11 @@ impl OxydeApp {
                 .await;
                 let result = match result {
                     Ok(entries) => {
-                        let subfolders: Vec<String> = entries.iter()
-                            .filter(|entry| entry.is_dir)
-                            .map(|entry| entry.path.clone())
-                            .collect();
-                        let listed = path.clone();
-                        let denied_subfolders = if archive_root.is_some() || subfolders.is_empty() {
-                            Default::default()
+                        // Asked once the list shows: an archive's members have no permissions.
+                        let subfolders: Vec<String> = if archive_root.is_some() {
+                            Vec::new()
                         } else {
-                            tokio::task::spawn_blocking(move || {
-                                oxyde_lib::platform::platform()
-                                    .denied_subfolders(std::path::Path::new(&listed), subfolders)
-                                    .into_iter()
-                                    .collect::<std::collections::HashSet<_>>()
-                            }).await.unwrap_or_default()
+                            entries.iter().filter(|entry| entry.is_dir).map(|entry| entry.path.clone()).collect()
                         };
                         let owner = super::file_preparation::Owner::Listing {
                             id: tab_id.clone(), path: path.clone(), request: request_id,
@@ -675,7 +666,7 @@ impl OxydeApp {
                             });
                             return;
                         }
-                        Ok(denied_subfolders)
+                        Ok(subfolders)
                     }
                     Err(error) => Err(error),
                 };
@@ -691,6 +682,7 @@ impl OxydeApp {
                     // A tab can be moved to another pane while its listing is in flight.
                     // Its stable id, not the pane captured at request time, owns the result.
                     let mut refresh_subdirectory_flags = false;
+                    let mut subfolders = Vec::new();
                     let mut vanished = false;
                     let mut locked = None;
                     if let Some(tab) = this.state.find_tab_mut(&tab_id) {
@@ -699,10 +691,10 @@ impl OxydeApp {
                         }
                         let restored = std::mem::take(&mut tab.restored);
                         match result {
-                            Ok(denied_subfolders) => {
+                            Ok(listed) => {
+                                subfolders = listed;
                                 tab.archive_root = archive_root;
                                 tab.denied_folder = denied.then(|| path.clone());
-                                tab.denied_subfolders = std::sync::Arc::new(denied_subfolders);
                                 if tab.archive_root.is_some() { tab.reset_folder_sizes(); }
                                 tab.queue_missing_folder_sizes();
                                 tab.load_status = crate::ui::workspace::TabLoadStatus::Ready;
@@ -729,6 +721,9 @@ impl OxydeApp {
                             }
                             Err(error) => {
                                 tab.clear_files();
+                                // A folder that refuses listing may refuse writes too (System
+                                // Volume Information): its menus must not offer them.
+                                tab.denied_folder = denied.then(|| path.clone());
                                 tab.load_status = crate::ui::errors::path_load_status(&error);
                                 log::warn!("Cannot list {}: {error:?}", path);
                                 locked = Some(error.to_string());
@@ -760,6 +755,7 @@ impl OxydeApp {
                     }
                     this.reconcile_watchers(cx);
                     this.schedule_folder_sizes(&tab_id, cx);
+                    this.request_denied_subfolders(tab_id.clone(), path.clone(), subfolders, cx);
                     if refresh_subdirectory_flags {
                         let handle = handle_for_subdirectory_check.clone();
                         let tab_id = tab_id.clone();

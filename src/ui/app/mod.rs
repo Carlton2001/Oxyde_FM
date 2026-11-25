@@ -12,6 +12,7 @@ pub(crate) mod trash_settings;
 pub(crate) mod properties;
 pub(crate) mod disk_images;
 mod drive_watchers;
+mod write_access;
 pub mod layout;
 pub mod navigation;
 mod sizes;
