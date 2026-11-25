@@ -701,6 +701,10 @@ impl Platform for LinuxPlatform {
         super::linux_write_access::denied_subfolders(folder, subfolders)
     }
 
+    fn undeletable_entries(&self, folder: &std::path::Path) -> Vec<String> {
+        super::linux_write_access::undeletable_entries(folder)
+    }
+
     fn is_network_path(&self, path: &std::path::Path) -> bool {
         super::hardware::is_network_path(path)
     }

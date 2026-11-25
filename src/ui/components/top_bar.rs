@@ -134,6 +134,8 @@ pub fn render_top_bar(
         && active_tab.archive_root.is_none();
     // Nothing can be written here: write actions hide, New folder stays disabled.
     let read_only = view.is_read_only_location(&pane_id, &current_path);
+    // Others' entries in a sticky folder (`/tmp`) can be neither cut nor removed.
+    let selection_locked = active_tab.selected_paths.iter().any(|path| active_tab.undeletable_entries.contains(path));
 
     let undo_tooltip = history_state.undo.map(|operation| {
         super::history_actions::operation_label(_cx.i18n(), Message::UndoOperation, operation)
@@ -230,10 +232,10 @@ pub fn render_top_bar(
                     if undo_blocked_by_overwrite { _cx.i18n().text(Message::UndoOverwriteUnavailable).to_string() }
                     else { undo_tooltip.clone().unwrap_or_default() }, 1),
                 (!is_trash_path && can_redo, "redo-btn", "icons/redo-2.svg", Message::Redo, redo_tooltip.clone().unwrap_or_default(), 2),
-                (selected && (ordinary || is_trash_path) && !view.trash_busy && !read_only, "cut-btn", "icons/scissors.svg", Message::Cut, "Ctrl+X".into(), 3),
+                (selected && (ordinary || is_trash_path) && !view.trash_busy && !read_only && !selection_locked, "cut-btn", "icons/scissors.svg", Message::Cut, "Ctrl+X".into(), 3),
                 (selected && !is_trash_path && !is_network_neighborhood, "copy-btn", "icons/copy.svg", Message::Copy, "Ctrl+C".into(), 4),
                 (ordinary && view.clipboard_has_files && !read_only, "paste-btn", "icons/clipboard-paste.svg", Message::Paste, "Ctrl+V".into(), 5),
-                (selected && !is_trash_path && !is_network_neighborhood && active_tab.archive_root.is_none() && !read_only,
+                (selected && !is_trash_path && !is_network_neighborhood && active_tab.archive_root.is_none() && !read_only && !selection_locked,
                     "delete-btn", if permanent_delete { "icons/trash-2.svg" } else { "icons/trash.svg" },
                     if permanent_delete { Message::TrashDeletePermanent } else { Message::Delete }, String::new(), 6),
                 (is_trash_path && selected, "trash-restore-btn", "icons/rotate-ccw.svg", Message::TrashRestoreSelection, String::new(), 8),

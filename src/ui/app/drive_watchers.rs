@@ -59,7 +59,9 @@ impl OxydeApp {
     pub(crate) fn is_read_only_location(&self, pane_id: &str, path: &str) -> bool {
         let tab = self.state.find_pane(pane_id).map(|pane| pane.active_tab());
         let in_fixed_archive = tab.and_then(|tab| tab.archive_root.as_deref()).is_some_and(fixed_archive);
-        let denied = tab.is_some_and(|tab| in_denied_folder(tab.denied_folder.as_deref(), path));
+        let denied = tab.is_some_and(|tab| {
+            in_denied_folder(tab.denied_folder.as_deref(), path) || tab.undeletable_entries.contains(path)
+        });
         in_fixed_archive || denied || on_read_only_volume(path, &self.write_protection)
     }
 

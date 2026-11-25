@@ -106,6 +106,7 @@ impl TabState {
             archive_root: None,
             denied_folder: None,
             denied_subfolders: Default::default(),
+            undeletable_entries: Default::default(),
             files: Default::default(),
             show_size_histogram: false,
             size_calculation: None,

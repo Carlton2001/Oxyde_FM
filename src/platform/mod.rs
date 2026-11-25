@@ -883,6 +883,11 @@ pub trait Platform: Send + Sync {
     fn denied_subfolders(&self, _folder: &std::path::Path, _subfolders: Vec<String>) -> Vec<String> {
         Vec::new()
     }
+    /// The entries of `folder` the user may not rename or remove although the folder
+    /// accepts writes, as in a sticky `/tmp`. Blocking.
+    fn undeletable_entries(&self, _folder: &std::path::Path) -> Vec<String> {
+        Vec::new()
+    }
     /// Blocking network operations; call on a background worker.
     fn map_network_drive(&self, letter: String, path: String, reconnect: bool, username: Option<String>, password: Option<String>) -> Result<(), String>;
     fn disconnect_network_drive(&self, path: String, force: bool) -> Result<(), NetworkDisconnectError>;

@@ -179,6 +179,8 @@ pub struct TabState {
     /// Its listed subfolders whose permissions refuse the user's writes: drops onto them
     /// are refused.
     pub denied_subfolders: std::sync::Arc<std::collections::HashSet<String>>,
+    /// Its entries the user may not rename or remove (others' files in `/tmp`).
+    pub undeletable_entries: std::sync::Arc<std::collections::HashSet<String>>,
     pub files: std::sync::Arc<Vec<FileEntry>>,
     pub show_size_histogram: bool,
     pub size_calculation: Option<std::sync::Arc<gpui::Task<()>>>,
