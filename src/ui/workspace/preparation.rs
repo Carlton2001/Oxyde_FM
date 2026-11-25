@@ -31,10 +31,22 @@ pub(crate) struct Prepared {
     filtered: Arc<Vec<FileEntry>>,
     /// The column values, `None` when the files are those of the tab.
     columns: Option<(HashSet<String>, HashSet<(u64, bool, bool)>)>,
+    /// `columns` holds only the appended files' values, added to the tab's.
+    columns_appended: bool,
     changed_sizes: Vec<String>,
 }
 impl Request {
     pub(crate) fn calculate(self) -> Prepared {
+        // Batches added to files already in order: only the batch is resolved, sorted
+        // and summarized, then merged in.
+        if let (FileUpdate::Append(additions), true) = (&self.update, self.sorted) {
+            let mut additions = additions.to_vec();
+            resolve_native_kinds(&mut additions);
+            let columns = column_values(&additions);
+            let files = Arc::new(super::sorting::merge_sorted(&self.source, additions, self.column, self.direction));
+            let filtered = self.filters.snapshot(&files, self.calendar.today);
+            return Prepared { request: self, files, filtered, columns: Some(columns), columns_appended: true, changed_sizes: Vec::new() };
+        }
         let mut changed_sizes = Vec::new();
         let mut files = match &self.update {
             FileUpdate::Replace(files) | FileUpdate::Listing(files) => files.clone(),
@@ -96,27 +108,24 @@ impl Request {
             } else {
                 super::sorting::sort_files
             };
-            sort(
-                Arc::make_mut(&mut files).as_mut_slice(),
-                self.column,
-                self.direction,
-            );
+            // New folder sizes move nothing unless the files are ordered by size.
+            let in_order = self.sorted && matches!(self.update, FileUpdate::FolderSizes(_)) && self.column != SortColumn::Size;
+            if !in_order {
+                sort(
+                    Arc::make_mut(&mut files).as_mut_slice(),
+                    self.column,
+                    self.direction,
+                );
+            }
         }
         let filtered = self.filters.snapshot(&files, self.calendar.today);
-        let columns = (!unchanged).then(|| {
-            let mut types = HashSet::new();
-            let mut sizes = HashSet::new();
-            for file in files.iter() {
-                types.insert(crate::ui::components::file_list::file_type_label(file));
-                sizes.insert((file.size, file.is_dir, file.is_calculated));
-            }
-            (types, sizes)
-        });
+        let columns = (!unchanged).then(|| column_values(&files));
         Prepared {
             request: self,
             files,
             filtered,
             columns,
+            columns_appended: false,
             changed_sizes,
         }
     }
@@ -166,8 +175,13 @@ impl TabState {
         self.cached_filtered_files = result.filtered;
         self.presentation_cache.get_mut().take();
         if let Some((types, sizes)) = result.columns {
-            self.column_type_labels = types;
-            self.column_size_values = sizes;
+            if result.columns_appended {
+                self.column_type_labels.extend(types);
+                self.column_size_values.extend(sizes);
+            } else {
+                self.column_type_labels = types;
+                self.column_size_values = sizes;
+            }
             self.column_measurement_key = None;
         }
         self.calendar_reference = Some(result.request.calendar);
@@ -187,6 +201,16 @@ mod unchanged_tests;
 #[cfg(all(test, target_os = "windows"))]
 #[path = "preparation/tests/native_kinds.rs"]
 mod native_kind_tests;
+
+fn column_values(files: &[FileEntry]) -> (HashSet<String>, HashSet<(u64, bool, bool)>) {
+    let mut types = HashSet::new();
+    let mut sizes = HashSet::new();
+    for file in files {
+        types.insert(crate::ui::components::file_list::file_type_label(file));
+        sizes.insert((file.size, file.is_dir, file.is_calculated));
+    }
+    (types, sizes)
+}
 
 /// Native categories of files by extension, which icons and their colors follow.
 /// A batch cache avoids repeated Shell calls, including for unknown extensions; it is
