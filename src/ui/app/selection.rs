@@ -326,6 +326,17 @@ impl OxydeApp {
 
 /// What a selection rectangle selects: what it covers, added to the selection before
 /// it with Shift, toggled against it with Ctrl. The file chooser shares it.
+impl OxydeApp {
+    /// What a rectangle starting now adds to: the selection when Ctrl or Shift is
+    /// held, nothing otherwise, so a plain click copies no selection.
+    pub(crate) fn rectangle_initial_selection(&self, pane_id: &str, modifiers: Modifiers) -> std::sync::Arc<std::collections::HashSet<String>> {
+        if !modifiers.control && !modifiers.shift {
+            return Default::default();
+        }
+        std::sync::Arc::new(self.state.find_pane(pane_id).map(|pane| pane.active_tab().selected_paths.clone()).unwrap_or_default())
+    }
+}
+
 pub(crate) fn rectangle_selection<T: Clone + Eq + std::hash::Hash>(
     initial: &std::collections::HashSet<T>,
     covered: std::collections::HashSet<T>,

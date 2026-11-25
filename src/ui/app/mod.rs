@@ -150,7 +150,8 @@ pub enum DragTarget {
         start_pos: Point<Pixels>,
         current_pos: Point<Pixels>,
         modifiers: Modifiers,
-        initial_selection: std::collections::HashSet<String>,
+        /// Empty unless the rectangle adds to it: shared, never copied while it moves.
+        initial_selection: std::sync::Arc<std::collections::HashSet<String>>,
     },
 }
 

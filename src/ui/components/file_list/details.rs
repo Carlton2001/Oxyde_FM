@@ -300,7 +300,7 @@ pub(super) fn render_details_file_list(
                                             start_pos: pos,
                                             current_pos: pos,
                                             modifiers,
-                                            initial_selection: this.state.find_pane(&p_id_cap).map(|p| p.active_tab().selected_paths.clone()).unwrap_or_default(),
+                                            initial_selection: this.rectangle_initial_selection(&p_id_cap, modifiers),
                                         });
                                         cx.notify();
                                     });
@@ -386,7 +386,7 @@ pub(super) fn render_details_file_list(
                                 start_pos: pos,
                                 current_pos: pos,
                                 modifiers,
-                                initial_selection: this.state.find_pane(&p_id_cap).map(|p| p.active_tab().selected_paths.clone()).unwrap_or_default(),
+                                initial_selection: this.rectangle_initial_selection(&p_id_cap, modifiers),
                             });
                             cx.notify();
                             });
@@ -422,7 +422,7 @@ pub(super) fn render_details_file_list(
                                 start_pos: pos,
                                 current_pos: pos,
                                 modifiers,
-                                initial_selection: this.state.find_pane(&p_id_cap).map(|p| p.active_tab().selected_paths.clone()).unwrap_or_default(),
+                                initial_selection: this.rectangle_initial_selection(&p_id_cap, modifiers),
                             });
                             cx.notify();
                             });

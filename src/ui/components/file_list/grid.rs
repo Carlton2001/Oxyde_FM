@@ -373,11 +373,7 @@ pub(super) fn render_grid_file_list(
                                 pane.active_tab_mut().selection_anchor = None;
                             }
                         }
-                        let initial_selection = this
-                            .state
-                            .find_pane(&pid)
-                            .map(|pane| pane.active_tab().selected_paths.clone())
-                            .unwrap_or_default();
+                        let initial_selection = this.rectangle_initial_selection(&pid, modifiers);
                         this.drag_target = Some(DragTarget::SelectionRectangle {
                             pane_id: pid.clone(),
                             start_pos: position,
