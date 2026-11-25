@@ -39,15 +39,42 @@ fn data_dirs() -> Vec<PathBuf> {
     home.into_iter().chain(system.split(':').map(PathBuf::from)).collect()
 }
 
-fn globs() -> &'static [Glob] {
-    static GLOBS: OnceLock<Vec<Glob>> = OnceLock::new();
+/// The globs of a database, indexed: a name is looked up by itself and by each of its
+/// suffixes, instead of being matched against every glob.
+struct Globs {
+    globs: Vec<Glob>,
+    /// Literal names and `*suffix` globs, by their ASCII lowercase text (the case
+    /// `glob` ignores), each list in file order.
+    literals: HashMap<String, Vec<usize>>,
+    suffixes: HashMap<String, Vec<usize>>,
+    full: Vec<usize>,
+}
+
+impl Globs {
+    fn new(globs: Vec<Glob>) -> Self {
+        let mut index = Self { globs: Vec::new(), literals: HashMap::new(), suffixes: HashMap::new(), full: Vec::new() };
+        for (position, glob) in globs.iter().enumerate() {
+            let pattern = glob.pattern.as_str().to_ascii_lowercase();
+            match glob.kind {
+                GlobKind::Literal => index.literals.entry(pattern).or_default().push(position),
+                GlobKind::Suffix(_) => index.suffixes.entry(pattern[1..].to_owned()).or_default().push(position),
+                GlobKind::Full => index.full.push(position),
+            }
+        }
+        index.globs = globs;
+        index
+    }
+}
+
+fn globs() -> &'static Globs {
+    static GLOBS: OnceLock<Globs> = OnceLock::new();
     GLOBS.get_or_init(|| {
         let mut globs = Vec::new();
         for dir in data_dirs() {
             let Ok(text) = std::fs::read_to_string(dir.join("mime/globs2")) else { continue };
             globs.extend(parse(&text));
         }
-        globs
+        Globs::new(globs)
     })
 }
 
@@ -76,9 +103,10 @@ fn parse(text: &str) -> Vec<Glob> {
         .collect()
 }
 
-/// Content rules of every data directory, highest priority first.
-fn magic_sections() -> &'static [magic::Section] {
-    static SECTIONS: OnceLock<Vec<magic::Section>> = OnceLock::new();
+/// Content rules of every data directory, highest priority first, and how many bytes
+/// of a file they read.
+fn magic_sections() -> &'static (Vec<magic::Section>, usize) {
+    static SECTIONS: OnceLock<(Vec<magic::Section>, usize)> = OnceLock::new();
     SECTIONS.get_or_init(|| {
         let mut sections: Vec<_> = data_dirs()
             .into_iter()
@@ -86,7 +114,8 @@ fn magic_sections() -> &'static [magic::Section] {
             .flat_map(|bytes| magic::parse(&bytes))
             .collect();
         sections.sort_by_key(|section| std::cmp::Reverse(section.priority));
-        sections
+        let extent = magic::extent(&sections);
+        (sections, extent)
     })
 }
 
@@ -181,27 +210,34 @@ fn can_be_executable(parents: &HashMap<String, Vec<String>>, mime: &str) -> bool
 /// else the longest matching `*suffix`, then the other globs if that left fewer than two.
 /// Exact names ignore case unless marked otherwise. Globs try the exact case first,
 /// then ignore case for those that allow it, when nothing matched.
-fn by_name<'a>(globs: &'a [Glob], name: &str) -> Vec<&'a str> {
-    let literal = globs.iter().filter(|glob| glob.kind == GlobKind::Literal).find(|glob| {
+fn by_name<'a>(globs: &'a Globs, name: &str) -> Vec<&'a str> {
+    let lowercase = name.to_ascii_lowercase();
+    let literal = globs.literals.get(&lowercase).into_iter().flatten().map(|&index| &globs.globs[index]).find(|glob| {
         glob.pattern.matches_with(name, glob::MatchOptions { case_sensitive: glob.case_sensitive, ..Default::default() })
     });
     if let Some(glob) = literal {
         return vec![glob.mime.as_str()];
     }
-    let exact = by_glob(globs, name, true);
-    if exact.is_empty() { by_glob(globs, name, false) } else { exact }
+    // The `*suffix` globs that may match: those of each ending of the name, in file order.
+    let mut candidates: Vec<usize> = lowercase.char_indices()
+        .flat_map(|(start, _)| globs.suffixes.get(&lowercase[start..]).into_iter().flatten().copied())
+        .chain(globs.suffixes.get("").into_iter().flatten().copied())
+        .collect();
+    candidates.sort_unstable();
+    let exact = by_glob(globs, &candidates, name, true);
+    if exact.is_empty() { by_glob(globs, &candidates, name, false) } else { exact }
 }
 
-fn by_glob<'a>(globs: &'a [Glob], name: &str, exact: bool) -> Vec<&'a str> {
+fn by_glob<'a>(globs: &'a Globs, candidates: &[usize], name: &str, exact: bool) -> Vec<&'a str> {
     let matches = |glob: &&Glob| {
         let case_sensitive = exact || glob.case_sensitive;
         glob.pattern.matches_with(name, glob::MatchOptions { case_sensitive, ..Default::default() })
     };
-    let suffixes: Vec<_> = globs.iter().filter(|glob| matches!(glob.kind, GlobKind::Suffix(_))).filter(matches).collect();
+    let suffixes: Vec<_> = candidates.iter().map(|&index| &globs.globs[index]).filter(matches).collect();
     let longest = suffixes.iter().filter_map(|glob| match glob.kind { GlobKind::Suffix(length) => Some(length), _ => None }).max();
     let mut found: Vec<_> = suffixes.into_iter().filter(|glob| glob.kind == GlobKind::Suffix(longest.unwrap_or(0))).collect();
     if found.len() < 2 {
-        found.extend(globs.iter().filter(|glob| glob.kind == GlobKind::Full).filter(matches));
+        found.extend(globs.full.iter().map(|&index| &globs.globs[index]).filter(matches));
     }
     found.sort_by_key(|glob| std::cmp::Reverse(glob.weight));
     let mut types: Vec<&str> = Vec::new();
@@ -222,9 +258,9 @@ fn looks_like_text(data: &[u8]) -> bool {
 /// As `g_content_type_guess` given the start of the file: a content rule of priority
 /// 80 or more wins; otherwise it decides between the types the name allows, else the
 /// name's heaviest type; without a name, the content alone, then text or unknown.
-fn by_content<'a>(sections: &'a [magic::Section], path: &Path, named: &[&'a str]) -> &'a str {
+fn by_content<'a>(sections: &'a [magic::Section], extent: usize, path: &Path, named: &[&'a str]) -> &'a str {
     let mut data = Vec::new();
-    let limit = magic::extent(sections).clamp(4096, 1 << 16) as u64;
+    let limit = extent.clamp(4096, 1 << 16) as u64;
     if std::fs::File::open(path).and_then(|file| file.take(limit).read_to_end(&mut data)).is_err() {
         return named.first().copied().unwrap_or(UNKNOWN);
     }
@@ -288,7 +324,10 @@ pub(super) fn type_name(path: &Path, is_dir: bool) -> &'static str {
         match named[..] {
             _ if empty => ZERO_SIZE,
             [only] => only,
-            _ => by_content(magic_sections(), path, &named),
+            _ => {
+                let (sections, extent) = magic_sections();
+                by_content(sections, *extent, path, &named)
+            }
         }
     }
 }

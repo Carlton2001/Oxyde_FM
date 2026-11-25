@@ -12,7 +12,7 @@ const SAMPLE: &str = "# generated\n\
 
 #[test]
 fn names_follow_the_specification_order() {
-    let globs = parse(SAMPLE);
+    let globs = Globs::new(parse(SAMPLE));
     assert_eq!(by_name(&globs, "photo.PNG"), ["image/png"]);
     assert_eq!(by_name(&globs, "archive.tar.gz"), ["application/x-compressed-tar"]);
     assert_eq!(by_name(&globs, "notes.gz"), ["application/gzip"]);
@@ -22,6 +22,9 @@ fn names_follow_the_specification_order() {
     assert_eq!(by_name(&globs, "Makefile"), ["text/x-makefile"]);
     assert_eq!(by_name(&globs, "both.amb"), ["text/x-a", "text/x-b"]);
     assert!(by_name(&globs, "notes").is_empty());
+    assert_eq!(by_name(&globs, "ARCHIVE.TAR.GZ"), ["application/x-compressed-tar"]);
+    assert_eq!(by_name(&globs, ".png"), ["image/png"]);
+    assert_eq!(by_name(&globs, "MAKEFILE"), ["text/x-makefile"]);
 }
 
 /// A magic file with two sections: PNG at offset 0, and a masked word searched in a
@@ -59,12 +62,12 @@ fn a_file_without_known_name_is_described_by_its_content() {
     let binary = root.path().join("blob");
     std::fs::write(&binary, [0x01, 0x8b, 0, 0xff]).unwrap();
     let sections = magic::parse(&sample_magic());
-    assert_eq!(by_content(&sections, &text, &[]), TEXT);
-    assert_eq!(by_content(&sections, &binary, &[]), UNKNOWN);
+    assert_eq!(by_content(&sections, magic::extent(&sections), &text, &[]), TEXT);
+    assert_eq!(by_content(&sections, magic::extent(&sections), &binary, &[]), UNKNOWN);
     let png = root.path().join("image");
     std::fs::write(&png, b"\x89PNG\r\n\x1a\n").unwrap();
-    assert_eq!(by_content(&sections, &png, &[]), "image/png");
-    assert_eq!(by_content(&sections, &binary, &["text/x-a", "text/x-b"]), "text/x-a");
+    assert_eq!(by_content(&sections, magic::extent(&sections), &png, &[]), "image/png");
+    assert_eq!(by_content(&sections, magic::extent(&sections), &binary, &["text/x-a", "text/x-b"]), "text/x-a");
 }
 
 /// Reads the database installed on this system.
