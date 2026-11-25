@@ -30,6 +30,22 @@ fn zip_jobs_preserve_order_content_and_requested_level() {
 }
 
 #[test]
+fn small_members_reuse_encoder_threads_within_admission() {
+    let mut jobs = ZipJobs::new();
+    let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    for id in 0..50 {
+        while jobs.full(10, 2) {
+            jobs.drain_one(&mut writer, &|| Ok(())).unwrap();
+        }
+        jobs.push(empty_entry(id, format!("f{id}"), false, 10), vec![b'a'; 10], 6)
+            .unwrap();
+    }
+    jobs.drain(&mut writer, &|| Ok(())).unwrap();
+    assert!(jobs.pool.workers.len() <= 2);
+    assert_eq!(zip::ZipArchive::new(writer.finish().unwrap()).unwrap().len(), 50);
+}
+
+#[test]
 fn admission_bounds_jobs_and_buffers_and_propagates_cancellation() {
     let mut jobs = ZipJobs::new();
     jobs.push(empty_entry(0, "a".into(), false, 0), Vec::new(), 1)
