@@ -87,8 +87,14 @@ impl Element for FramedContent {
         self.content.paint(window, cx);
         let id = Window::window_handle(window).window_id();
         let state = cx.default_global::<Surfaces>();
-        let rows = state.rows.get(&id).cloned().unwrap_or_default();
-        if state.previous_rows.get(&id) != Some(&rows) {
+        // Compared in place: the table is copied only when it changed.
+        let changed = match (state.previous_rows.get(&id), state.rows.get(&id)) {
+            (Some(previous), Some(rows)) => previous != rows,
+            (Some(previous), None) => !previous.is_empty(),
+            (None, _) => true,
+        };
+        if changed {
+            let rows = state.rows.get(&id).cloned().unwrap_or_default();
             state.previous_rows.insert(id, rows);
             let parent = self.root.read(cx).spec.parent;
             cx.defer(move |cx| {
