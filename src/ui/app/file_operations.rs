@@ -289,6 +289,9 @@ impl OxydeApp {
                         break;
                     };
                     let changed = previous.as_ref() != Some(&progress);
+                    if changed {
+                        cx.update(|cx| crate::ui::components::operations::sync_taskbar_progress(&operations, cx));
+                    }
                     let op_type = progress.op_type.clone();
                     let status = progress.status.clone();
                     previous = Some(progress);
@@ -360,6 +363,7 @@ impl OxydeApp {
                 }
                 // Copied, failed or cancelled: the staged streamed files go.
                 handle.update(&mut cx, |this, _| this.drop_stagings.remove(&op_id));
+                cx.update(|cx| crate::ui::components::operations::sync_taskbar_progress(&operations, cx));
             }
         })
         .detach();

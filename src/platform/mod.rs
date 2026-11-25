@@ -302,6 +302,18 @@ pub enum FileChooserParent {
     Windows(isize),
 }
 
+/// What a taskbar entry shows of the running operations.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TaskbarProgress {
+    None,
+    /// Operations still measuring what they will do.
+    Indeterminate,
+    /// The share done, from 0 to 1.
+    Running(f32),
+    /// Every running operation is paused.
+    Paused(f32),
+}
+
 #[derive(Debug)]
 pub struct InstanceMessage {
     pub request: InstanceRequest,
@@ -412,6 +424,9 @@ pub trait Platform: Send + Sync {
     fn cursor_client_position(&self, _handle: raw_window_handle::RawWindowHandle) -> Option<[i32; 2]> { None }
     /// Open the native window menu at the pointer, for a right click on a custom title bar.
     fn show_window_system_menu(&self, _window: raw_window_handle::RawWindowHandle) -> Result<(), String> { Ok(()) }
+    /// Show the file operations' progress on the window's taskbar entry, where the
+    /// system has one. Call on the UI thread.
+    fn set_taskbar_progress(&self, _window: raw_window_handle::RawWindowHandle, _progress: TaskbarProgress) {}
     /// Blocking native session. Call only on a background worker; cancellation stops its process.
     fn play_viewer_media(&self, _path: &std::path::Path, _control: &ViewerMediaControl) -> std::io::Result<()> {
         Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "Native media playback unavailable"))
@@ -1228,6 +1243,8 @@ mod windows_file_drag;
 mod windows_window_owner;
 #[cfg(target_os = "windows")]
 mod windows_system_menu;
+#[cfg(target_os = "windows")]
+mod windows_taskbar_progress;
 
 #[cfg(target_os = "windows")]
 mod windows_hover_window;

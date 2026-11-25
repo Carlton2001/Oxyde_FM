@@ -7,11 +7,13 @@ mod footer;
 mod items;
 mod lifecycle;
 mod list;
+mod taskbar;
 mod view;
 
 pub(crate) use compact::render_operation_progress;
 pub use footer::render_operations_footer;
 pub(crate) use lifecycle::{close_operations_windows, open_operations_window};
+pub(crate) use taskbar::sync_taskbar_progress;
 
 use crate::ui::app::OxydeApp;
 use gpui::*;
