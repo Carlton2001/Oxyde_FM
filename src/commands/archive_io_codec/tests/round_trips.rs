@@ -31,3 +31,19 @@ fn small_tar_members_share_source_and_progress_round_trips() {
     assert!(plain.exchanges < 900, "{}", plain.exchanges);
     assert!(compressed.exchanges < 900, "{}", compressed.exchanges);
 }
+
+#[test]
+fn selecting_one_zip_member_reads_neighbour_headers_not_their_data() {
+    let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Stored);
+    for index in 0..20u8 {
+        zip.start_file(format!("photo{index}.jpg"), options).unwrap();
+        zip.write_all(&vec![index; 300 * 1024]).unwrap();
+    }
+    let bytes = zip.finish().unwrap().into_inner();
+    let result = decoded(Format::Zip, bytes, Some("photo7.jpg"), 300 * 1024);
+    assert_eq!(result.extracted.values().next().unwrap(), &vec![7; 300 * 1024]);
+    // A full window per local header made it 5.7 MB.
+    assert!(result.read_bytes < 512 * 1024, "{}", result.read_bytes);
+}

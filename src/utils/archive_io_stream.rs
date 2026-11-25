@@ -87,25 +87,37 @@ impl<T: Exchange> Seek for Reader<T> {
     }
 }
 
+/// First window after a jump: a ZIP local header or a TAR header, without the
+/// neighbouring member's data.
+const FIRST_WINDOW: usize = 4096;
+
 /// Keeps the last fetched window across seeks. `io::BufReader` discards its
 /// buffer on every relative seek, which multiplies source requests for codecs
-/// that reposition between small reads (ZIP).
+/// that reposition between small reads (ZIP). The window starts small after a
+/// jump and doubles while reads stay sequential, up to `capacity`: reading the
+/// local header of each member of a ZIP of large files fetches kilobytes, not
+/// a full window each.
 pub struct WindowReader<R> {
     inner: R,
     window: Vec<u8>,
     start: u64,
     cursor: u64,
     capacity: usize,
+    next: usize,
+    fetched_end: Option<u64>,
 }
 
 impl<R> WindowReader<R> {
     pub fn new(inner: R, capacity: usize) -> Self {
+        let capacity = capacity.max(1);
         Self {
             inner,
             window: Vec::new(),
             start: 0,
             cursor: 0,
-            capacity: capacity.max(1),
+            capacity,
+            next: FIRST_WINDOW.min(capacity),
+            fetched_end: None,
         }
     }
 }
@@ -117,23 +129,31 @@ impl<R: Read + Seek> Read for WindowReader<R> {
         }
         let end = self.start + self.window.len() as u64;
         if self.cursor < self.start || self.cursor >= end {
+            self.next = if self.fetched_end == Some(self.cursor) {
+                self.next.saturating_mul(2).min(self.capacity)
+            } else {
+                FIRST_WINDOW.min(self.capacity)
+            };
             self.inner.seek(SeekFrom::Start(self.cursor))?;
-            if output.len() >= self.capacity {
+            if output.len() >= self.next {
                 let count = self.inner.read(output)?;
                 self.cursor += count as u64;
+                self.fetched_end = Some(self.cursor);
                 return Ok(count);
             }
-            self.window.resize(self.capacity, 0);
+            self.window.resize(self.next, 0);
             let count = self.inner.read(&mut self.window);
             let count = match count {
                 Ok(count) => count,
                 Err(error) => {
                     self.window.clear();
+                    self.fetched_end = None;
                     return Err(error);
                 }
             };
             self.window.truncate(count);
             self.start = self.cursor;
+            self.fetched_end = Some(self.cursor + count as u64);
             if count == 0 {
                 return Ok(0);
             }
