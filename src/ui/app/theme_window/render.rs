@@ -89,7 +89,7 @@ impl ThemeWindow {
         };
         let modified = draft.is_modified();
         row.when(draft.id.is_some(), |row| row.child(self.button("theme-delete", Message::ThemeDelete,
-                ButtonVariant::Secondary, true, &self.stops.delete, |this, _, cx| this.delete_draft(cx), cx)))
+                ButtonVariant::Secondary, true, &self.stops.delete, |this, window, cx| this.ask_delete(window, cx), cx)))
             .child(self.button("theme-cancel", Message::Cancel, ButtonVariant::Secondary, modified,
                 &self.stops.cancel, |this, window, cx| this.revert_draft(window, cx), cx))
             .child(self.button("theme-save", Message::ThemeSave, ButtonVariant::Primary, modified,
@@ -115,7 +115,11 @@ impl Render for ThemeWindow {
         let picker_left = self.draft.is_none()
             && [&self.stops.field, &self.stops.hue, &self.stops.delete, &self.stops.cancel, &self.stops.save]
                 .iter().any(|stop| stop.is_focused(window));
-        if picker_left || window.focused(cx).is_none() {
+        if self.prompt.is_some() {
+            if !self.stops.prompt_cancel.is_focused(window) && !self.stops.prompt_confirm.is_focused(window) {
+                window.focus(&self.stops.prompt_cancel, cx);
+            }
+        } else if picker_left || window.focused(cx).is_none() {
             window.focus(&self.focus, cx);
         }
         let (name, colors) = match &choice {
@@ -148,14 +152,21 @@ impl Render for ThemeWindow {
             .capture_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
                 let modifiers = event.keystroke.modifiers;
                 if event.keystroke.key == "tab" && !(modifiers.control || modifiers.alt || modifiers.platform) {
-                    this.cycle(modifiers.shift, window, cx);
+                    match this.prompt_order() {
+                        Some(order) => {
+                            dialog::cycle(&order, modifiers.shift, window, cx);
+                            cx.notify();
+                        }
+                        None => this.cycle(modifiers.shift, window, cx),
+                    }
                     cx.stop_propagation();
                 }
             }))
             .on_key_down(move |event, window, cx| {
                 if event.keystroke.key == "escape" {
                     let _ = keys.update(cx, |this, cx| {
-                        if this.draft.as_ref().is_some_and(|draft| draft.id.is_none()) { this.discard_draft(cx) } else { this.close(window, cx) }
+                        if this.prompt.is_some() { this.answer_prompt(false, window, cx) }
+                        else if this.draft.as_ref().is_some_and(|draft| draft.id.is_none()) { this.discard_draft(cx) } else { this.close(window, cx) }
                     });
                     cx.stop_propagation();
                 }
@@ -169,6 +180,7 @@ impl Render for ThemeWindow {
                 .child(div().flex_1())
                 .child(action_button("theme-close", cx.i18n().text(Message::Close), false, cx)
                     .on_click(cx.listener(|this, _, window, cx| this.close(window, cx)))))
+            .when_some(self.render_prompt(cx), |frame, prompt| frame.child(prompt))
             .when(self.drag.is_some(), |frame| frame.child(pointer_drag(cx.entity(),
                 |this: &mut ThemeWindow, event: &MouseMoveEvent, cx| this.drag_picker(event.position, cx),
                 |this: &mut ThemeWindow, cx| { this.drag = None; cx.notify(); })));

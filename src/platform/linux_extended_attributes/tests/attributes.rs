@@ -60,3 +60,16 @@ fn a_refused_attribute_is_named_and_does_not_stop_the_others() {
     assert!(error.to_string().contains("user.:"), "{error}");
     assert_eq!(names(&read(&file).unwrap()), ["user.kept"]);
 }
+
+#[test]
+fn a_file_system_that_keeps_answering_erange_ends_the_read() {
+    let mut reads = 0;
+    let result = sized(|| Ok(16), |_| {
+        reads += 1;
+        Err(Errno::RANGE)
+    });
+    assert_eq!(result, Err(Errno::RANGE));
+    assert_eq!(reads, ATTEMPTS);
+    assert_eq!(sized(|| Ok(LIMIT + 1), |_| unreachable!()), Err(Errno::TOOBIG));
+    assert_eq!(sized(|| Ok(3), |buffer| { buffer.copy_from_slice(b"abc"); Ok(3) }), Ok(b"abc".to_vec()));
+}

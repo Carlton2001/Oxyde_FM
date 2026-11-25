@@ -227,7 +227,7 @@ impl OxydeApp {
                                                 cx.defer(move |cx| {
                                                     app_handle.update(cx, |this, cx| {
                                                         let is_already_open = this.context_menus.get(m_idx + 1)
-                                                            .map(|m| matches!(&m.content, ContextMenuContent::NativeItems { items, .. } if items.first().map(|it| it.id) == sub_items_cap.first().map(|it| it.id)))
+                                                            .map(|m| matches!(&m.content, ContextMenuContent::NativeItems { items, .. } if *items == sub_items_cap))
                                                             .unwrap_or(false);
 
                                                         if !is_already_open {

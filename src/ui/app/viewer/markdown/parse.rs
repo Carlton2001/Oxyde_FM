@@ -4,8 +4,10 @@ use std::{
     ops::Range,
     path::Path,
     sync::Arc,
-    time::{Duration, Instant},
 };
+
+/// Code a document colors, counted in bytes so the same file always shows the same.
+const MAX_HIGHLIGHTED_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone)]
 pub(super) enum Kind {
@@ -62,6 +64,19 @@ fn local_image(base: &str, destination: &str) -> Option<String> {
     {
         return None;
     }
+    // Inside the document's folder, and never a device Windows would open instead.
+    let unsafe_part = |part: &std::ffi::OsStr| {
+        part.to_str().is_none_or(|part| {
+            cfg!(windows) && oxyde_lib::utils::archive_security::reserved_windows_name(part)
+        })
+    };
+    if path.components().any(|component| match component {
+        std::path::Component::Normal(part) => unsafe_part(part),
+        std::path::Component::CurDir => false,
+        _ => true,
+    }) {
+        return None;
+    }
     let full = Path::new(base).parent()?.join(path);
     Some(full.to_string_lossy().into_owned())
 }
@@ -96,7 +111,8 @@ struct Builder<'a> {
     notes: Vec<(usize, Block)>,
     task: Option<Task>,
     language: String,
-    started: Instant,
+    /// Code bytes colored so far, against `MAX_HIGHLIGHTED_BYTES`.
+    highlighted: usize,
 }
 
 impl Builder<'_> {
@@ -109,7 +125,8 @@ impl Builder<'_> {
         }
         let text = std::mem::take(&mut self.text);
         let mut spans = std::mem::take(&mut self.spans);
-        if matches!(self.kind, Kind::Code) && self.started.elapsed() < Duration::from_millis(200) {
+        if matches!(self.kind, Kind::Code) && self.highlighted + text.len() <= MAX_HIGHLIGHTED_BYTES {
+            self.highlighted += text.len();
             spans = super::super::text::code_highlights(&self.language, &text)
                 .into_iter()
                 .map(|(range, syntax)| Span {
@@ -246,7 +263,7 @@ pub(super) fn parse_progressively(
         notes: Vec::new(),
         task: None,
         language: String::new(),
-        started: Instant::now(),
+        highlighted: 0,
     };
     let options = Options::ENABLE_TABLES
         | Options::ENABLE_STRIKETHROUGH

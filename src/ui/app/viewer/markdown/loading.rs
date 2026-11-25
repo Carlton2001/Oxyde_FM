@@ -14,7 +14,10 @@ impl Viewer {
         // At most two batches wait for the UI. Dropping the receiver also
         // releases a producer waiting to publish after a file/mode change.
         let (sender, mut batches) = tokio::sync::mpsc::channel(2);
+        // A deletion of the file waits until the reading is over.
+        let reading = self.jobs.register(&path);
         let work = crate::ui::preview_jobs::load_viewer(move || {
+            let _reading = reading;
             let cancelled = || sender.is_closed() || wanted.load(Ordering::Acquire) != generation;
             if cancelled() {
                 return Ok(false);
@@ -120,7 +123,15 @@ impl Markdown {
         let start = blocks.len();
         let count = batch.len();
         let anchor = self.list.logical_scroll_top();
+        let end = |blocks: &[super::Block]| blocks.last().map_or((0, 0), |block| (blocks.len() - 1, block.text.len()));
+        // A selection of the whole document (Ctrl+A while it loads) takes in what follows.
+        let whole = self.selection.is_some_and(|selection| selection.anchor == (0, 0) && selection.head == end(&blocks));
         blocks.extend(batch);
+        if whole {
+            if let Some(selection) = &mut self.selection {
+                selection.head = end(&blocks);
+            }
+        }
         self.list.splice(start..start, count);
         // splice does not restart measure_all after its initial layout. Mark
         // just the new rows for measurement, retaining existing row heights.

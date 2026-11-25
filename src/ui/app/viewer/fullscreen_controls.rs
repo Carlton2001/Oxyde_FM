@@ -17,6 +17,8 @@ pub(super) struct Controls {
     timer: Option<Task<()>>,
     window: Option<WindowHandle<ControlsWindow>>,
     pending: bool,
+    /// The bar could not open: no new attempt, nor log, until fullscreen ends.
+    failed: bool,
     revision: u64,
     rect: [i32; 4],
 }
@@ -148,14 +150,19 @@ impl Viewer {
             }
             return;
         }
-        if self.fullscreen_controls.pending {
+        if self.fullscreen_controls.pending || self.fullscreen_controls.failed {
             return;
         }
+        let raw_owner = match HasWindowHandle::window_handle(window).map(|raw| raw.as_raw()) {
+            Ok(raw) => raw,
+            Err(error) => {
+                log::error!("Cannot open fullscreen playback controls: {error}");
+                self.fullscreen_controls.failed = true;
+                return;
+            }
+        };
         self.fullscreen_controls.pending = true;
         let revision = self.fullscreen_controls.revision;
-        let Ok(raw_owner) = HasWindowHandle::window_handle(window).map(|raw| raw.as_raw()) else {
-            return;
-        };
 
         let initial = Bounds::new(window.bounds().origin, size(width, height));
         let rem = window.rem_size();
@@ -205,7 +212,10 @@ impl Viewer {
                     // The bar stacks itself above the surface (`place_viewer_overlay`);
                     // the worker never restacks its surface over the overlays.
                     Ok(handle) => this.fullscreen_controls.window = Some(handle),
-                    Err(error) => log::error!("Cannot open fullscreen playback controls: {error}"),
+                    Err(error) => {
+                        log::error!("Cannot open fullscreen playback controls: {error}");
+                        this.fullscreen_controls.failed = true;
+                    }
                 }
                 cx.notify();
             });

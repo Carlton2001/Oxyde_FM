@@ -38,7 +38,7 @@ pub(crate) fn render_archive_password_dialog(
         window,
         cx,
     );
-    let field = if prompt.wrong {
+    let field = if prompt.wrong || prompt.too_long {
         field
             .with_animation(
                 SharedString::from(format!("archive-password-shake-{}", prompt.shake_id)),
@@ -59,7 +59,9 @@ pub(crate) fn render_archive_password_dialog(
         .gap(rems(0.375))
         .child(div().pb(rems(0.375)).child(cx.i18n().text_with_args(Message::ArchivePasswordPrompt, &args)))
         .child(form_row(cx.i18n().text(Message::NetworkPassword), field, cx));
-    if prompt.wrong {
+    if prompt.too_long {
+        body = body.child(crate::ui::components::modal::field_error(cx.i18n().text(Message::ArchivePasswordTooLong), theme));
+    } else if prompt.wrong {
         body = body.child(crate::ui::components::modal::field_error(cx.i18n().text(Message::ArchivePasswordWrong), theme));
     }
     let (cancel, submit, close) = (handle.clone(), handle.clone(), handle.clone());

@@ -38,6 +38,7 @@ impl PropertiesWindow {
             let handle = cx.entity();
             let mut inputs = Vec::new();
             for value in values {
+                let changed = handle.clone();
                 let submit = handle.clone();
                 let cancel = handle.clone();
                 let context = handle.clone();
@@ -46,7 +47,14 @@ impl PropertiesWindow {
                         cx,
                         "",
                         value,
-                        |_, _, _| {},
+                        // A field edited: the message about the last OK no longer applies.
+                        move |_, _, cx| {
+                            changed.update(cx, |this, cx| {
+                                if this.properties_dialog.as_mut().and_then(|dialog| dialog.validation_error.take()).is_some() {
+                                    cx.notify();
+                                }
+                            })
+                        },
                         move |window, cx| {
                             submit.update(cx, |this, cx| this.accept_properties(window, cx))
                         },
@@ -71,6 +79,9 @@ impl PropertiesWindow {
             dialog.run_window = run_window;
         }
         let dialog = self.properties_dialog.as_mut().unwrap();
+        if dialog.tab != tab {
+            dialog.validation_error = None;
+        }
         dialog.tab = tab;
         dialog.run_menu = None;
         if let Some(edit) = &mut dialog.permissions {
@@ -108,7 +119,9 @@ impl PropertiesWindow {
             .iter()
             .map(|input| input.read(cx).content().to_string())
             .collect();
-        if fields[0].trim().is_empty() || fields.iter().any(|value| value.contains('\0')) {
+        // A Shell-only shortcut (a Control Panel item) has no path: kept empty, it stays as it is.
+        let emptied = fields[0].trim().is_empty() && fields[0] != info.target;
+        if emptied || fields.iter().any(|value| value.contains('\0')) {
             self.properties_dialog.as_mut().unwrap().validation_error =
                 Some(Message::ShortcutInvalidTarget);
             cx.notify();
@@ -145,8 +158,15 @@ impl PropertiesWindow {
         window.focus(&dialog.ok_focus, cx);
         cx.notify();
         let window_handle = window.window_handle();
+        let owner = self.owner.clone();
         cx.spawn(async move |this, cx| {
             let result = oxyde_lib::commands::io::set_shortcut_info(path, info).await;
+            // Written: the main window shows it, even when this window closed meanwhile.
+            if result.is_ok() {
+                if let Some(owner) = owner.upgrade() {
+                    let _ = owner.update(cx, |owner, cx| owner.refresh_all(cx));
+                }
+            }
             let _ = window_handle.update(cx, |_, window, cx| {
                 this.update(cx, |this, cx| {
                     let Some(dialog) = this
@@ -158,12 +178,7 @@ impl PropertiesWindow {
                     };
                     dialog.saving = false;
                     match result {
-                        Ok(()) => {
-                            this.close_file_properties(window, cx);
-                            if let Some(owner) = this.owner.upgrade() {
-                                owner.update(cx, |owner, cx| owner.refresh_all(cx));
-                            }
-                        }
+                        Ok(()) => this.close_file_properties(window, cx),
                         Err(error) => dialog.error = Some(error.to_string()),
                     }
                     cx.notify();

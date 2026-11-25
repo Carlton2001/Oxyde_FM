@@ -20,15 +20,20 @@ pub(crate) struct ArchivePasswordPrompt {
     pub archive: PathBuf,
     /// The previous password was refused.
     pub wrong: bool,
+    /// The typed password is longer than an archive password may be.
+    pub too_long: bool,
     pub input: Entity<TextInput>,
     /// Kept as typed: an input calling back cannot be read while it updates.
-    pub value: String,
+    /// Each replaced copy is wiped.
+    pub value: zeroize::Zeroizing<String>,
     /// The typed password is being checked.
     pub checking: bool,
     /// The eye shows the typed characters.
     pub revealed: bool,
     /// Restarts the field's shake for each refusal.
     pub shake_id: u64,
+    /// Identifies the running check: a cancelled one's result must not end a newer one.
+    check: u64,
     /// The field takes the focus back at the next frame, after a refusal.
     pub refocus: std::cell::Cell<bool>,
     pub focus: FocusHandle,
@@ -108,7 +113,10 @@ impl OxydeApp {
     ) -> bool {
         let Some(failure) = password_failure(detail) else { return false };
         let wrong = failure == ArchivePasswordFailure::Wrong;
-        if wrong {
+        // A refusal arriving while a new password is checked came from the old one:
+        // forgetting it would drop the password being checked.
+        let checking = self.archive_password.as_ref().is_some_and(|prompt| prompt.checking && prompt.archive == archive);
+        if wrong && !checking {
             archive_password::forget(archive);
         }
         let archive = archive.to_path_buf();
@@ -149,7 +157,8 @@ impl OxydeApp {
                 String::new(),
                 move |text, _, cx| change.update(cx, |this, _| {
                     if let Some(prompt) = &mut this.archive_password {
-                        prompt.value = text.to_string();
+                        prompt.value = zeroize::Zeroizing::new(text.to_string());
+                        prompt.too_long = false;
                     }
                 }),
                 move |window, cx| submit.update(cx, |this, cx| this.answer_archive_password(false, window, cx)),
@@ -165,11 +174,13 @@ impl OxydeApp {
         self.archive_password = Some(ArchivePasswordPrompt {
             archive,
             wrong,
+            too_long: false,
             input,
-            value: String::new(),
+            value: Default::default(),
             checking: false,
             revealed: false,
             shake_id: 0,
+            check: 0,
             refocus: Default::default(),
             focus: cx.focus_handle(),
             controls: (0..2).map(|_| cx.focus_handle()).collect(),
@@ -193,27 +204,43 @@ impl OxydeApp {
             return;
         }
         let Some(prompt) = self.archive_password.as_mut().filter(|prompt| !prompt.checking) else { return };
-        let Some(secret) = ArchiveSecret::new(std::mem::take(&mut prompt.value)) else { return };
+        // Refused before any check, as a wrong one is: the field shakes and says why.
+        if prompt.value.len() > archive_password::MAX_BYTES {
+            prompt.too_long = true;
+            prompt.shake_id = prompt.shake_id.wrapping_add(1);
+            cx.notify();
+            return;
+        }
+        let Some(secret) = ArchiveSecret::new(std::mem::take(&mut *prompt.value)) else { return };
         prompt.checking = true;
+        static CHECKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        let check = CHECKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        prompt.check = check;
         let archive = prompt.archive.clone();
         cx.notify();
         cx.spawn(async move |this, cx| {
-            let check = archive.clone();
+            let path = archive.clone();
             let result = tokio::task::spawn_blocking(move || {
                 // Resolving the archive's real path reads the disk.
-                archive_password::remember(&check, secret);
-                oxyde_lib::commands::archive::verify_archive_password(&check)
+                archive_password::remember(&path, secret);
+                oxyde_lib::commands::archive::verify_archive_password(&path)
             })
             .await;
             let wrong = matches!(&result, Ok(Err(error))
                 if password_failure(&error.to_string()) == Some(ArchivePasswordFailure::Wrong));
-            let _ = this.update(cx, |this, cx| this.finish_password_check(&archive, wrong, cx));
+            let _ = this.update(cx, |this, cx| this.finish_password_check(&archive, check, wrong, cx));
         })
         .detach();
     }
 
-    fn finish_password_check(&mut self, archive: &Path, wrong: bool, cx: &mut Context<Self>) {
-        if self.archive_password.as_ref().is_none_or(|prompt| prompt.archive != archive || !prompt.checking) {
+    fn finish_password_check(&mut self, archive: &Path, check: u64, wrong: bool, cx: &mut Context<Self>) {
+        if self.archive_password.as_ref().is_none_or(|prompt| prompt.check != check || !prompt.checking) {
+            // Cancelled while checking: the password was remembered unconfirmed. A newer
+            // check of the same archive owns what is remembered now.
+            let newer = self.archive_password.as_ref().is_some_and(|prompt| prompt.checking && prompt.archive == archive);
+            if !newer {
+                archive_password::forget(archive);
+            }
             return;
         }
         if wrong {

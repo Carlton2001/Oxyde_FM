@@ -48,6 +48,18 @@ impl Mode {
     }
 }
 
+/// A worker's error is shown as is: without control or bidirectional formatting
+/// characters, it cannot reorder or hide the text around it.
+fn displayable(message: &str) -> String {
+    message
+        .chars()
+        .filter(|c| {
+            !c.is_control()
+                && !matches!(c, '\u{061C}' | '\u{200E}' | '\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}')
+        })
+        .collect()
+}
+
 fn invalid() -> io::Error {
     io::Error::new(
         io::ErrorKind::InvalidData,
@@ -239,9 +251,7 @@ fn decode_io(
         if count > MAX_ERROR || bytes.len() != count {
             return Err(invalid());
         }
-        return Ok(Err(CommandError::ArchiveError(
-            text(&mut bytes, count)?.into(),
-        )));
+        return Ok(Err(CommandError::ArchiveError(displayable(&text(&mut bytes, count)?))));
     }
     if status != [0] {
         return Err(invalid());
@@ -315,6 +325,10 @@ fn decode_io(
     checkpoint()?;
     Ok(Ok(entries))
 }
+
+#[cfg(test)]
+#[path = "archive_listing_protocol/tests/display.rs"]
+mod display_tests;
 
 #[cfg(test)]
 mod tests {

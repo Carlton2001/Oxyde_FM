@@ -9,3 +9,22 @@ fn verbatim_drive_and_share_prefixes_keep_their_storage_kind() {
     assert!(is_network_path(Path::new(r"\\?\UNC\host\share")));
     assert_eq!(is_ssd(Path::new(r"\\?\C:\Users")), is_ssd(Path::new(r"C:\Users")));
 }
+
+#[test]
+fn non_ascii_first_character_is_not_a_drive_letter() {
+    assert_eq!(drive_letter(r"c:\x"), Some('C'));
+    assert_eq!(drive_letter(r"é:\x"), None);
+    assert_eq!(drive_letter("1:"), None);
+    assert!(!is_network_path(Path::new(r"é:\x")));
+    assert!(!is_ssd(Path::new(r"é:\x")));
+    assert_eq!(get_physical_disk_id(Path::new(r"é:\x")), 0);
+}
+
+#[test]
+fn drive_root_volume_is_named_by_its_letter() {
+    assert_eq!(folder_mounted_volume(r"C:\Windows\System32"), None);
+    assert_eq!(
+        get_physical_disk_id(Path::new(r"C:\Windows\a.txt")),
+        get_physical_disk_id(Path::new(r"\\?\C:\Windows\b.txt"))
+    );
+}

@@ -32,6 +32,9 @@ pub(super) struct Markdown {
     origin: (selection::Position, selection::Position),
 }
 
+/// Decoded images a document keeps at once.
+const MAX_MARKDOWN_IMAGES: usize = 32;
+
 enum ImageState {
     Pending { _task: Task<()> },
     Ready(Arc<RenderImage>),
@@ -89,16 +92,37 @@ impl Viewer {
     }
 
     fn request_markdown_image(&mut self, index: usize, path: String, cx: &mut Context<Self>) {
+        // An image being deleted stays closed; a deletion waits for one being read.
+        if self.deletion_blocks(&path) {
+            return;
+        }
         let Content::Markdown(document) = &mut self.content else {
             return;
         };
-        if document.images.contains_key(&index) || document.images.len() >= 32 {
+        if document.images.contains_key(&index) {
             return;
         }
+        if document.images.len() >= MAX_MARKDOWN_IMAGES {
+            // Only painted rows ask: the image farthest from this one has scrolled away
+            // and is asked again if it comes back.
+            let Some(farthest) = document.images.iter()
+                .filter(|(_, state)| !matches!(state, ImageState::Pending { .. }))
+                .map(|(shown, _)| *shown)
+                .max_by_key(|shown| shown.abs_diff(index))
+            else {
+                return;
+            };
+            if let Some(ImageState::Ready(image)) = document.images.remove(&farthest) {
+                super::content::retire_images(vec![image], cx);
+            }
+            document.list.remeasure_items(farthest..farthest + 1);
+        }
+        let reading = self.jobs.register(&path);
         let renderer = cx.svg_renderer();
         let generation = self.generation;
         let wanted = self.wanted.clone();
         let work = crate::ui::preview_jobs::load(move || {
+            let _reading = reading;
             if wanted.load(std::sync::atomic::Ordering::Acquire) != generation {
                 return Err("Markdown image no longer shown".to_string());
             }

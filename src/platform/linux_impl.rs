@@ -765,7 +765,9 @@ impl Platform for LinuxPlatform {
         }
     }
 
-    fn set_thread_priority(&self, _priority: ThreadPriority) {}
+    fn set_thread_priority(&self, priority: ThreadPriority) {
+        super::linux_io_priority::set(priority);
+    }
 
     fn file_attributes(&self, _metadata: &std::fs::Metadata, name: &str) -> (bool, bool, bool) {
         // GIO treats dot files as hidden and `~` files as backups; Nautilus hides both.

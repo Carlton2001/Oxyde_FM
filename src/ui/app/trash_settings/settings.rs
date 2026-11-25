@@ -78,16 +78,29 @@ impl OxydeApp {
                     .filter(|drive| matches!(drive.drive_type.as_str(), "fixed" | "removable")
                         && oxyde_lib::platform::platform().has_recycle_bin(std::path::Path::new(&drive.path)))
                     .collect();
+                // What can be read shows; the first failure is reported beside it.
+                let mut failure = None;
                 let usage = runtime
                     .block_on(oxyde_lib::commands::ops::get_total_recycle_bin_usage())
-                    .map_err(|error| error.to_string())?;
-                let configs = drives
-                    .iter()
-                    .map(|drive| {
-                        oxyde_lib::platform::platform().recycle_bin_config(drive.path.clone())
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok::<_, String>((drives, configs, usage))
+                    .unwrap_or_else(|error| {
+                        failure.get_or_insert(error.to_string());
+                        (0, 0)
+                    });
+                let mut readable = Vec::new();
+                let mut configs = Vec::new();
+                for drive in drives {
+                    match oxyde_lib::platform::platform().recycle_bin_config(drive.path.clone()) {
+                        Ok(config) => {
+                            readable.push(drive);
+                            configs.push(config);
+                        }
+                        Err(error) => {
+                            log::warn!("Cannot read the Recycle Bin settings of {}: {error}", drive.path);
+                            failure.get_or_insert(error);
+                        }
+                    }
+                }
+                Ok::<_, String>((readable, configs, usage, failure))
             })
             .await;
             let _ = this.update(cx, |this, cx| {
@@ -101,11 +114,12 @@ impl OxydeApp {
                 if let Some(dialog) = &mut this.trash_settings {
                     dialog.loading = false;
                     match result {
-                        Ok(Ok((drives, configs, usage))) => {
+                        Ok(Ok((drives, configs, usage, failure))) => {
                             dialog.drives = drives;
                             dialog.initial = configs.clone();
                             dialog.configs = configs;
                             dialog.usage = usage;
+                            dialog.error = failure;
                         }
                         Ok(Err(error)) => dialog.error = Some(error),
                         Err(error) => dialog.error = Some(error.to_string()),
@@ -167,10 +181,11 @@ impl OxydeApp {
         {
             return;
         }
+        // An edited value, emptied included, is checked before another drive shows.
         if self
             .trash_settings
             .as_ref()
-            .is_some_and(|dialog| !dialog.value.is_empty())
+            .is_some_and(|dialog| dialog.value_dirty)
             && !self.commit_trash_capacity()
         {
             cx.notify();
@@ -228,28 +243,35 @@ impl OxydeApp {
         cx.notify();
         cx.spawn(async move |this, cx| {
             let result = tokio::task::spawn_blocking(move || {
-                for config in &changed {
-                    oxyde_lib::platform::platform().set_recycle_bin_config(config.clone())?;
+                let mut saved = Vec::new();
+                for config in changed {
+                    if let Err(error) = oxyde_lib::platform::platform().set_recycle_bin_config(config.clone()) {
+                        return (saved, Some(error));
+                    }
+                    saved.push(config);
                 }
-                Ok::<_, String>(changed)
+                (saved, None)
             })
             .await;
             let _ = this.update(cx, |this, cx| {
-                match result {
-                    Ok(Ok(configs)) => {
-                        this.trash_delete_policy.saved(&configs);
+                let (saved, failure) = result.unwrap_or_else(|error| (Vec::new(), Some(error.to_string())));
+                // What was written is the state now, whether the rest failed or not.
+                this.trash_delete_policy.saved(&saved);
+                match failure {
+                    None => {
                         this.config.confirm_delete = confirm;
                         this.save_preferences(cx);
                         this.trash_settings = None;
                     }
-                    result => {
+                    Some(error) => {
                         if let Some(dialog) = &mut this.trash_settings {
                             dialog.busy = false;
-                            dialog.error = Some(match result {
-                                Ok(Err(error)) => error,
-                                Err(error) => error.to_string(),
-                                _ => unreachable!(),
-                            });
+                            for config in &saved {
+                                if let Some(initial) = dialog.initial.iter_mut().find(|initial| initial.drive_path == config.drive_path) {
+                                    *initial = config.clone();
+                                }
+                            }
+                            dialog.error = Some(error);
                         }
                     }
                 }
@@ -282,8 +304,10 @@ impl OxydeApp {
         cx.spawn(async move |this, cx| {
             let result = tokio::task::spawn_blocking(|| {
                 tokio::runtime::Handle::current().block_on(async {
-                    oxyde_lib::commands::ops::empty_trash().await?;
-                    oxyde_lib::commands::ops::get_total_recycle_bin_usage().await
+                    // Read again even after a failure: part of the Trash may be gone.
+                    let emptied = oxyde_lib::commands::ops::empty_trash().await;
+                    let usage = oxyde_lib::commands::ops::get_total_recycle_bin_usage().await;
+                    (emptied, usage)
                 })
             })
             .await;
@@ -291,8 +315,14 @@ impl OxydeApp {
                 if let Some(dialog) = &mut this.trash_settings {
                     dialog.busy = false;
                     match result {
-                        Ok(Ok(usage)) => dialog.usage = usage,
-                        Ok(Err(error)) => dialog.error = Some(error.to_string()),
+                        Ok((emptied, usage)) => {
+                            if let Ok(usage) = &usage {
+                                dialog.usage = *usage;
+                            }
+                            if let Some(error) = emptied.err().or(usage.err()) {
+                                dialog.error = Some(error.to_string());
+                            }
+                        }
                         Err(error) => dialog.error = Some(error.to_string()),
                     }
                 }

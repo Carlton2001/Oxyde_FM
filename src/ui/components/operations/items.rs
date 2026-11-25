@@ -11,7 +11,10 @@ use crate::ui::components::input::{InputAppearance, TextInput, TextInputOptions}
 use crate::ui::workspace::SortDirection;
 use gpui::*;
 use oxyde_lib::models::FileEntry;
-use oxyde_lib::systems::file_ops::{FileOpType, FileOperation, ItemOutcome};
+use oxyde_lib::systems::file_ops::{FileOpType, FileOperation, ItemOutcome, OpStatus};
+
+/// How often a sort by state follows a running operation's outcomes.
+const STATE_SORT_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -116,6 +119,12 @@ pub(super) fn arrange(
     shown
 }
 
+/// Where a copied or moved `source` went: the path the operation planned for it,
+/// renamed when a conflict kept both, else `folder` with its name.
+fn moved_to(destinations: &HashMap<PathBuf, PathBuf>, folder: &Path, source: &Path) -> Option<PathBuf> {
+    destinations.get(source).cloned().or_else(|| source.file_name().map(|name| folder.join(name)))
+}
+
 /// Metadata column widths, in the file list's units.
 #[derive(Clone, Copy, Default)]
 struct Widths {
@@ -129,6 +138,8 @@ pub(super) struct Items {
     pub(super) operation: Option<String>,
     kind: Option<FileOpType>,
     destination: Option<PathBuf>,
+    /// Where each item went, renamed or not, as the operation planned it.
+    destinations: Arc<HashMap<PathBuf, PathBuf>>,
     /// The folder every item comes from; without one, a Location column names each.
     origin: Option<PathBuf>,
     rows: Arc<Vec<Item>>,
@@ -139,6 +150,12 @@ pub(super) struct Items {
     pub(super) list: UniformListScrollHandle,
     loading: bool,
     load_task: Option<Task<()>>,
+    /// The operation had ended when its rows were read: they no longer change.
+    settled: bool,
+    /// When the State column last sorted rows of a running operation.
+    arranged_at: Option<std::time::Instant>,
+    /// Raised when the rows being read are no longer wanted: their thread stops early.
+    load_cancelled: Arc<std::sync::atomic::AtomicBool>,
     arrange_task: Option<Task<()>>,
     /// The selected row, as an index into `rows`.
     selected: Option<usize>,
@@ -157,6 +174,7 @@ impl Default for Items {
             operation: None,
             kind: None,
             destination: None,
+            destinations: Arc::default(),
             origin: None,
             rows: Arc::default(),
             shown: Arc::default(),
@@ -166,6 +184,9 @@ impl Default for Items {
             list: UniformListScrollHandle::new(),
             loading: false,
             load_task: None,
+            settled: false,
+            arranged_at: None,
+            load_cancelled: Arc::default(),
             arrange_task: None,
             selected: None,
             input: None,
@@ -174,6 +195,13 @@ impl Default for Items {
             widths: Widths::default(),
             pane_width: Default::default(),
         }
+    }
+}
+
+/// A closed window stops the rows it was still reading.
+impl Drop for Items {
+    fn drop(&mut self) {
+        self.load_cancelled.store(true, std::sync::atomic::Ordering::Relaxed);
     }
 }
 
@@ -189,7 +217,7 @@ impl OperationsPanelView {
                 move |value, _, cx| {
                     let _ = weak.update(cx, |this, cx| {
                         this.items.query = value.to_lowercase();
-                        this.arrange_items(cx);
+                        this.arrange_items(true, cx);
                     });
                 },
                 |_, _| {},
@@ -211,21 +239,50 @@ impl OperationsPanelView {
     }
 
     /// Lists `operation`'s items again when another operation is selected.
+    /// Once the operation ends, its rows are read again: moved items show their size
+    /// and type where they went. Meanwhile a sort by state follows the outcomes.
     pub(super) fn follow_items(&mut self, operation: &FileOperation, cx: &mut Context<Self>) {
+        let ended = matches!(operation.status, OpStatus::Completed | OpStatus::Cancelled | OpStatus::Error(_));
         if self.items.operation.as_deref() == Some(operation.id.as_str()) {
+            if self.items.loading || self.items.settled {
+                return;
+            }
+            if ended {
+                self.load_items(operation, false, cx);
+            } else if self.items.sort == Column::State
+                && self.items.arrange_task.is_none()
+                && self.items.arranged_at.is_none_or(|at| at.elapsed() >= STATE_SORT_INTERVAL)
+            {
+                self.items.arranged_at = Some(std::time::Instant::now());
+                self.arrange_items(false, cx);
+            }
             return;
         }
+        self.load_items(operation, true, cx);
+    }
+
+    /// Reads `operation`'s rows; `fresh` when it was just chosen, which also clears the
+    /// selection and the scroll.
+    fn load_items(&mut self, operation: &FileOperation, fresh: bool, cx: &mut Context<Self>) {
         let items = &mut self.items;
+        items.settled = matches!(operation.status, OpStatus::Completed | OpStatus::Cancelled | OpStatus::Error(_));
         items.operation = Some(operation.id.clone());
         items.kind = Some(operation.op_type.clone());
         items.destination = operation.destination.clone();
+        items.destinations = Arc::new(operation.item_destinations());
+        let destinations = items.destinations.clone();
         items.origin = operation.source_parent.clone();
-        items.rows = Arc::default();
-        items.shown = Arc::default();
-        items.selected = None;
+        if fresh {
+            items.rows = Arc::default();
+            items.shown = Arc::default();
+            items.selected = None;
+            items.list = UniformListScrollHandle::new();
+        }
         items.loading = true;
         items.arrange_task = None;
-        items.list = UniformListScrollHandle::new();
+        items.load_cancelled.store(true, std::sync::atomic::Ordering::Relaxed);
+        let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        items.load_cancelled = cancelled.clone();
         let sources = operation.sources.clone();
         // Moved and copied items are found at their destination once their source is gone.
         let destination = matches!(operation.op_type, FileOpType::Copy | FileOpType::Move)
@@ -241,8 +298,10 @@ impl OperationsPanelView {
                 .spawn(async move {
                     let rows: Vec<Item> = sources
                         .iter()
+                        // Another operation chosen: its disk reads stop here.
+                        .take_while(|_| !cancelled.load(std::sync::atomic::Ordering::Relaxed))
                         .map(|source| {
-                            let moved = destination.as_ref().zip(source.file_name()).map(|(folder, name)| folder.join(name));
+                            let moved = destination.as_ref().and_then(|folder| moved_to(&destinations, folder, source));
                             Item::new(source, icons::resolve_entry(source, moved.as_deref()).ok(), shared_folder)
                         })
                         .collect();
@@ -257,7 +316,7 @@ impl OperationsPanelView {
                 this.items.revision += 1;
                 // A filter or a sort typed while loading was not applied to these rows.
                 if (&this.items.query, this.items.sort, this.items.direction) != (&launched, sort, direction) {
-                    this.arrange_items(cx);
+                    this.arrange_items(true, cx);
                 }
                 cx.notify();
             });
@@ -266,7 +325,8 @@ impl OperationsPanelView {
     }
 
     /// Filters and sorts the loaded rows again, off the UI thread.
-    fn arrange_items(&mut self, cx: &mut Context<Self>) {
+    /// `to_top` when the user changed the filter or the order, not when outcomes moved.
+    fn arrange_items(&mut self, to_top: bool, cx: &mut Context<Self>) {
         let rows = self.items.rows.clone();
         let (query, sort, direction) = (self.items.query.clone(), self.items.sort, self.items.direction);
         let outcomes = self.selected_outcomes(cx);
@@ -277,7 +337,10 @@ impl OperationsPanelView {
                 .await;
             let _ = this.update(cx, |this, cx| {
                 this.items.shown = shown;
-                this.items.list.scroll_to_item(0, ScrollStrategy::Top);
+                this.items.arrange_task = None;
+                if to_top {
+                    this.items.list.scroll_to_item(0, ScrollStrategy::Top);
+                }
                 cx.notify();
             });
         }));
@@ -303,7 +366,7 @@ impl OperationsPanelView {
             self.items.sort = column;
             self.items.direction = SortDirection::Ascending;
         }
-        self.arrange_items(cx);
+        self.arrange_items(true, cx);
         cx.notify();
     }
 
@@ -316,9 +379,7 @@ impl OperationsPanelView {
         let mut candidates = Vec::new();
         match (&self.items.kind, &self.items.destination) {
             (Some(FileOpType::Copy | FileOpType::Move), Some(folder)) => {
-                if let Some(name) = source.file_name() {
-                    candidates.push(folder.join(name));
-                }
+                candidates.extend(moved_to(&self.items.destinations, folder, &source));
             }
             (Some(FileOpType::Compress), Some(archive)) => candidates.push(archive.clone()),
             _ => {}

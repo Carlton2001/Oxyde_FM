@@ -47,6 +47,10 @@ theme-intro = Un tema de Oxyde se reduce a seis colores. Todos los demás se der
 theme-create-hint = Para crear su tema, parta del más parecido: elíjalo en la lista y luego «Crear a partir de este tema».
 theme-create = Crear a partir de este tema
 theme-delete = Eliminar
+theme-delete-question = ¿Eliminar el tema «{ $name }»? Esta acción no se puede deshacer.
+theme-unsaved-title = Cambios sin guardar
+theme-leave-question = ¿Descartar los cambios de «{ $name }»?
+theme-discard = Descartar
 theme-save = Guardar
 theme-name = Nombre
 theme-new-name = { $name } personalizado
@@ -413,6 +417,7 @@ new-file-numbered = Nuevo archivo ({ $number })
 native-menu-empty = No hay comandos disponibles
 
 native-menu-failed = No se pudo cargar el menú del sistema: { $detail }
+native-menu-timeout = El menú del sistema no responde
 
 drag-items = { $count ->
     [one] { $number } elemento
@@ -706,6 +711,7 @@ disk-image-open-failed = No se pudo abrir la imagen. { $detail }
 disk-image-busy = Una operación de archivos sigue usando esta imagen.
 
 disk-image-no-volume = No se ha asignado ningún volumen accesible a esta imagen.
+volume-change-in-progress = Ya se está montando o expulsando una unidad o imagen.
 
 advanced-settings = Configuración
 
@@ -819,6 +825,10 @@ duplicate-files = { $file_count ->
 duplicate-group = Grupo { $index }
 
 duplicate-failed = La búsqueda ha fallado: { $error }
+duplicate-unreadable = { $count ->
+    [one] No se pudo leer { $number } archivo y no se ha comparado.
+   *[other] No se pudieron leer { $number } archivos y no se han comparado.
+    }
 
 duplicate-size-range = { $min } – { $max }
 
@@ -931,6 +941,7 @@ properties-file-system = Sistema de archivos
 properties-copy-name-double-click = Doble clic para copiar el nombre
 
 toast-copied = Copiado al portapapeles
+copy-too-large = La selección es demasiado grande para copiarla (más de 64 MB).
 toast-cut = Cortado al portapapeles
 toast-names-copied = { $count ->
     [one] { $number } nombre copiado
@@ -1174,6 +1185,7 @@ storage-unavailable = No se pudo acceder a los datos de Oxyde. En modo portátil
 properties-selection-items = { $number } elementos
 properties-total-size = Tamaño total
 properties-multiple-locations = Varias ubicaciones
+properties-unreadable = Ilegibles
 operations-affected-items = { $count ->
     [1] Elemento de la operación ({ $number })
    *[other] Elementos de la operación ({ $number })

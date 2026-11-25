@@ -147,7 +147,7 @@ pub(crate) fn clear_grid_thumbnails(cx: &mut App) {
     crate::ui::audio_covers::clear();
     let sources = cx.default_global::<Owners>().reset();
     for source in sources {
-        crate::ui::components::tooltip::invalidate_media_preview(&source.path);
+        crate::ui::components::tooltip::invalidate_media_preview(&source.path, cx);
         evict(&source, cx);
     }
 }

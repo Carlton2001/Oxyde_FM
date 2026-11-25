@@ -51,7 +51,7 @@ impl Folder {
     /// order, since sorting part of a folder would misrepresent it.
     pub(super) fn new(mut entries: Vec<FileEntry>, complete: bool, sort: (SortColumn, SortDirection)) -> Self {
         let folders = entries.iter().filter(|entry| entry.is_dir).count();
-        let file_bytes = entries.iter().filter(|entry| !entry.is_dir).map(|entry| entry.size).sum();
+        let file_bytes = entries.iter().filter(|entry| !entry.is_dir).fold(0u64, |sum, entry| sum.saturating_add(entry.size));
         let total = entries.len();
         if complete {
             crate::ui::workspace::sort_files(&mut entries, sort.0, sort.1);
@@ -124,9 +124,9 @@ pub(super) fn subtree_totals<'a>(root: &str, levels: impl Iterator<Item = (&'a S
         let inside = path == root
             || path.strip_prefix(root).is_some_and(|rest| rest.starts_with(std::path::is_separator));
         if inside {
-            totals.folders += folder.folders as u64;
-            totals.files += folder.files as u64;
-            totals.bytes += folder.file_bytes;
+            totals.folders = totals.folders.saturating_add(folder.folders as u64);
+            totals.files = totals.files.saturating_add(folder.files as u64);
+            totals.bytes = totals.bytes.saturating_add(folder.file_bytes);
         }
     }
     totals
@@ -235,7 +235,8 @@ impl Tree {
             return Toggle::Refused;
         }
         self.expanded.insert(path.to_owned());
-        if self.levels.contains_key(path) {
+        // A level that failed is read again when its folder opens again.
+        if self.levels.get(path).is_some_and(|level| !matches!(level, Level::Failed(_))) {
             return Toggle::Changed;
         }
         self.levels.insert(path.to_owned(), Level::Loading);

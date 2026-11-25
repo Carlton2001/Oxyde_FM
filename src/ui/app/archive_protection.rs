@@ -9,7 +9,8 @@ pub(crate) struct ArchiveProtection {
     /// Password and confirmation.
     pub inputs: [Entity<TextInput>; 2],
     /// Kept as typed: an input calling back cannot be read while it updates.
-    pub values: [String; 2],
+    /// Each replaced copy is wiped.
+    pub values: [zeroize::Zeroizing<String>; 2],
     /// Each field's eye shows its characters.
     pub revealed: [bool; 2],
     /// Format row, protection row, Cancel and Compress, as Tab reaches them.
@@ -38,7 +39,7 @@ impl OxydeApp {
                     String::new(),
                     move |text, _, cx| change.update(cx, |this, cx| {
                         if let Some(protection) = &mut this.archive_protection {
-                            protection.values[index] = text.to_string();
+                            protection.values[index] = zeroize::Zeroizing::new(text.to_string());
                         }
                         this.rename_error = None;
                         cx.notify();
@@ -94,7 +95,7 @@ impl OxydeApp {
         if password != confirmation {
             return Err(Message::ArchivePasswordMismatch);
         }
-        ArchiveSecret::new(password.clone()).map(Some).ok_or(Message::ArchivePasswordTooLong)
+        ArchiveSecret::new(String::clone(password)).map(Some).ok_or(Message::ArchivePasswordTooLong)
     }
 
     /// Tab order of the compression dialog: name, format, protection, the two password

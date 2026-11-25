@@ -5,7 +5,8 @@ use std::sync::{
 };
 
 /// Independent walks: at most 4 normal / 16 Turbo SSD workers, or 2 HDD workers.
-type PoolCell = OnceCell<Result<Arc<rayon::ThreadPool>, String>>;
+/// Only a built pool is kept: a failed build (threads refused for a moment) is retried.
+type PoolCell = OnceCell<Arc<rayon::ThreadPool>>;
 
 pub(super) struct ScanPools {
     busy: [AtomicBool; 2],
@@ -57,7 +58,7 @@ impl ScanPoolLease {
             (1, self.pools.ssd_workers.min(2))
         };
         let cell = &self.pools.pools[self.index][kind];
-        cell.get_or_init(|| super::make_pool(workers)).clone()
+        cell.get_or_try_init(|| super::make_pool(workers)).cloned()
     }
 }
 

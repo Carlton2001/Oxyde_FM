@@ -227,6 +227,8 @@ pub struct FileDragPreview {
 pub struct OxydeApp {
     pub state: WorkspaceState,
     pub(crate) viewers: std::collections::HashMap<String, Entity<viewer::Viewer>>,
+    /// Deletions running, by operation: a Viewer opened meanwhile keeps their files closed.
+    pub(super) viewer_deletions: std::collections::HashMap<String, Vec<std::path::PathBuf>>,
     pub handle: Option<Entity<Self>>,
     pub(crate) next_file_request: u64,
     pub(crate) next_native_menu_request: u64,
@@ -308,6 +310,8 @@ pub struct OxydeApp {
     pub(super) watcher_pending_listings: std::collections::HashSet<String>,
     pub _path_watchers: std::collections::HashMap<String, drive_watchers::DirectoryWatcher>,
     pub(super) pending_watchers: std::collections::HashMap<String, (u64, bool, bool)>,
+    /// Paths whose watcher could not be created, with the time of the last attempt.
+    pub(super) failed_watchers: std::collections::HashMap<String, std::time::Instant>,
     pub(super) next_watcher_request: u64,
     pub(super) drive_metadata_ready: bool,
     pub(super) drive_refresh_epoch: u64,
@@ -324,6 +328,9 @@ pub struct OxydeApp {
     /// None until read, or without a portal.
     pub(crate) chooses_files: Option<bool>,
     pub(super) changing_file_chooser: bool,
+    /// Counts the changes of the folder handler and file chooser settings: a reading
+    /// begun before one is stale.
+    pub(super) system_setting_revision: u64,
     /// Folder watching and listings started, which a file chooser alone does not need.
     browsing: bool,
     pub(crate) peek_status: oxyde_lib::platform::PeekStatus,
@@ -333,6 +340,8 @@ pub struct OxydeApp {
     /// UDisks2 object being mounted from the sidebar.
     pub(crate) mounting_volume: Option<String>,
     pub(crate) mounted_disk_images: Vec<oxyde_lib::platform::MountedDiskImage>,
+    /// Disk images whose readability is being checked before they open.
+    pub(super) probing_disk_images: std::collections::HashSet<String>,
     pub(super) disk_image_refresh_task: Option<Task<()>>,
     pub(crate) shift_delete: bool,
     pub(crate) trash_delete_policy: trash_settings::DeletePolicy,
@@ -378,7 +387,7 @@ pub struct OxydeApp {
     pub drag_target_default_copy: bool,
     /// The hovered drop target refuses writes (read-only volume or archive): the ghost says so.
     pub(crate) drag_target_refused: bool,
-    pub(crate) drag_tab_switch: Option<(String, usize)>,
+    pub(crate) drag_tab_switch: Option<drag::DragTabSwitch>,
 
     pub editing_path: Option<String>,
     /// Whether the item being renamed is a folder, whose name has no extension.
@@ -415,6 +424,8 @@ pub struct OxydeApp {
     file_operation_notice: Option<(Message, String)>,
     /// Items a failed deletion left behind, offered for retry with the matching notice.
     delete_retry: Option<file_operations::DeleteRetry>,
+    /// Failure notices reported while another is shown, with their retries.
+    queued_notices: std::collections::VecDeque<((Message, String), Option<file_operations::DeleteRetry>)>,
     toasts: Vec<Toast>,
     next_toast_id: u64,
     pub(crate) update_status: UpdateStatus,
@@ -481,6 +492,7 @@ impl OxydeApp {
         Self {
             state,
             viewers: Default::default(),
+            viewer_deletions: Default::default(),
             handle: None,
             next_file_request: 0,
             next_native_menu_request: 0,
@@ -554,6 +566,7 @@ impl OxydeApp {
             watcher_pending_listings: Default::default(),
             _path_watchers: std::collections::HashMap::new(),
             pending_watchers: std::collections::HashMap::new(),
+            failed_watchers: std::collections::HashMap::new(),
             next_watcher_request: 0,
             drive_metadata_ready: false,
             drive_refresh_epoch: 0,
@@ -566,6 +579,7 @@ impl OxydeApp {
             changing_folder_handler: false,
             chooses_files: None,
             changing_file_chooser: false,
+            system_setting_revision: 0,
             browsing: false,
             peek_status: Default::default(),
             _drive_refresh_task: None,
@@ -573,6 +587,7 @@ impl OxydeApp {
             ejecting_drive: false,
             mounting_volume: None,
             mounted_disk_images: Vec::new(),
+            probing_disk_images: std::collections::HashSet::new(),
             disk_image_refresh_task: None,
             network_dialog: None,
             remote_login: None,
@@ -654,6 +669,7 @@ impl OxydeApp {
             drop_stagings: Default::default(),
             file_operation_notice: None,
             delete_retry: None,
+            queued_notices: std::collections::VecDeque::new(),
             toasts: Vec::new(),
             next_toast_id: 0,
             update_status: UpdateStatus::Idle,

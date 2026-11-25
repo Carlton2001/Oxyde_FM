@@ -61,7 +61,14 @@ impl FileChooserWindow {
             );
             match opened {
                 Ok(prompt) => {
-                    let _ = chooser.update(cx, |this, _, _| this.overwrite = Some((prompt, targets)));
+                    // A prompt asked meanwhile goes; the chooser closed meanwhile takes this one along.
+                    let adopted = chooser.update(cx, |this, _, cx| {
+                        this.close_overwrite(cx);
+                        this.overwrite = Some((prompt, targets));
+                    });
+                    if adopted.is_err() {
+                        let _ = prompt.update(cx, |_, window, _| window.remove_window());
+                    }
                 }
                 Err(error) => log::error!("Cannot ask before replacing files: {error}"),
             }

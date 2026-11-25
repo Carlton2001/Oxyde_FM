@@ -130,8 +130,26 @@ fn expand_home(text: &str, home: Option<&std::path::Path>) -> String {
 }
 
 pub(crate) fn navigation_path_text(text: &str) -> String {
-    let path = native_path_text(&expand_home(text.trim(), dirs::home_dir().as_deref()));
+    let path = native_path_text(&expand_home(trim_path_text(text), dirs::home_dir().as_deref()));
     if path == NETWORK_TEXT { "__network_vincinity__".to_string() } else { path }
+}
+
+/// Windows drops the spaces around a name; elsewhere a name may begin or end with one,
+/// so only line breaks and tabs go, and spaces before an absolute path. A URI carries
+/// its spaces encoded, so it loses those around it too.
+fn trim_path_text(text: &str) -> &str {
+    if cfg!(target_os = "windows") {
+        return text.trim();
+    }
+    let text = text.trim_matches(['\r', '\n', '\t']);
+    let start = text.trim_start_matches(' ');
+    if start.contains("://") {
+        start.trim_end_matches(' ')
+    } else if start.starts_with(['/', '~']) {
+        start
+    } else {
+        text
+    }
 }
 
 fn completion_matches(name: &str, prefix: &str) -> bool {
@@ -1166,6 +1184,13 @@ mod completion_tests {
             "\\\\SERVEUR\\Partage commun"
         );
         assert_eq!(super::navigation_path_text("smb://SERVEUR/"), "smb://SERVEUR/");
+        if !cfg!(target_os = "windows") {
+            assert_eq!(super::trim_path_text("  /home/a/dossier \n"), "/home/a/dossier ");
+            assert_eq!(super::trim_path_text(" nom "), " nom ");
+            assert_eq!(super::trim_path_text(" smb://SERVEUR/ "), "smb://SERVEUR/");
+        } else {
+            assert_eq!(super::trim_path_text(" C:\\Users "), "C:\\Users");
+        }
         assert_eq!(super::native_path_text("trash://"), "trash://");
         assert_eq!(super::native_path_text("search://query"), "search://query");
         if cfg!(target_os = "windows") {

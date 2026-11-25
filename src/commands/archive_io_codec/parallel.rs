@@ -1,6 +1,14 @@
 //! Bounded codec work: IPC stays on the calling thread, CPU jobs own only bytes.
 use super::super::*;
-use std::{collections::VecDeque, io::Cursor, sync::mpsc, thread::JoinHandle};
+use std::{
+    collections::VecDeque,
+    io::Cursor,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc,
+    },
+    thread::JoinHandle,
+};
 
 const MIB: usize = 1024 * 1024;
 pub(super) const ZIP_BUFFER: u64 = 256 * MIB as u64;
@@ -61,9 +69,14 @@ struct Job {
     memory: usize,
     handle: Option<JoinHandle<()>>,
     result: mpsc::Receiver<io::Result<Vec<u8>>>,
+    /// Set when the job's output is no longer wanted, such as on cancellation.
+    abandoned: Arc<AtomicBool>,
 }
 impl Drop for Job {
     fn drop(&mut self) {
+        // The encoder checks this between chunks: joining does not wait for a
+        // whole compression nobody will read.
+        self.abandoned.store(true, Ordering::Relaxed);
         if let Some(handle) = self.handle.take() {
             let _ = handle.join();
         }
@@ -91,6 +104,8 @@ impl ZipJobs {
         // DEFLATE data. Include it instead of assuming output <= source bytes.
         let memory = bytes.len() * 3 + 8 * MIB;
         let (sender, result) = mpsc::sync_channel(1);
+        let abandoned = Arc::new(AtomicBool::new(false));
+        let encoder_abandoned = abandoned.clone();
         let handle = std::thread::Builder::new()
             .name("zip-encode".into())
             .spawn(move || {
@@ -110,7 +125,12 @@ impl ZipJobs {
                         writer
                             .start_file(entry.name, options)
                             .map_err(io::Error::other)?;
-                        writer.write_all(&bytes)?;
+                        for chunk in bytes.chunks(MIB) {
+                            if encoder_abandoned.load(Ordering::Relaxed) {
+                                return Err(io::ErrorKind::Interrupted.into());
+                            }
+                            writer.write_all(chunk)?;
+                        }
                     }
                     Ok(writer.finish().map_err(io::Error::other)?.into_inner())
                 })();
@@ -121,6 +141,7 @@ impl ZipJobs {
             memory,
             handle: Some(handle),
             result,
+            abandoned,
         });
         Ok(())
     }

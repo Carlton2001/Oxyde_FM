@@ -99,6 +99,10 @@ pub(crate) trait LinuxClient {
     fn write_to_clipboard(&self, item: ClipboardItem);
     fn read_from_primary(&self) -> Option<ClipboardItem>;
     fn read_from_clipboard(&self) -> Option<ClipboardItem>;
+    // Oxyde: whether another application's selection offers a type, without reading it.
+    fn clipboard_offers(&self, _mime_type: &str) -> bool {
+        false
+    }
     fn active_window(&self) -> Option<AnyWindowHandle>;
     fn window_stack(&self) -> Option<Vec<AnyWindowHandle>>;
     fn run(&self);
@@ -808,6 +812,10 @@ impl<P: LinuxClient + 'static> Platform for LinuxPlatform<P> {
 
     fn read_from_clipboard(&self) -> Option<ClipboardItem> {
         self.inner.read_from_clipboard()
+    }
+
+    fn clipboard_offers(&self, mime_type: &str) -> bool {
+        self.inner.clipboard_offers(mime_type)
     }
 
     fn add_recent_document(&self, _path: &Path) {}

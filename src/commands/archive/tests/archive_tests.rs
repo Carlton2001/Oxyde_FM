@@ -494,3 +494,20 @@ fn preview_index_lists_nested_members_and_stops_when_cancelled() {
     let cancelled = std::sync::atomic::AtomicBool::new(true);
     assert!(index_archive_for_preview(&archive, &cancelled).is_err());
 }
+
+#[test]
+fn listing_a_folder_the_archive_no_longer_has_fails() {
+    use std::io::Write;
+    let dir = tempfile::tempdir().unwrap();
+    let archive = dir.path().join("folders.zip");
+    let mut writer = zip::ZipWriter::new(File::create(&archive).unwrap());
+    let options = zip::write::SimpleFileOptions::default();
+    writer.add_directory("empty/", options).unwrap();
+    writer.start_file("implicit/file.txt", options).unwrap();
+    writer.write_all(b"data").unwrap();
+    writer.finish().unwrap();
+    let list = |internal: &str| list_archive_contents(archive.to_string_lossy().into_owned(), internal.into());
+    assert!(list("empty").unwrap().is_empty());
+    assert_eq!(list("implicit").unwrap().len(), 1);
+    assert!(list("gone").is_err());
+}

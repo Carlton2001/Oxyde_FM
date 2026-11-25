@@ -224,6 +224,7 @@ impl AdvancedSearchWindow {
             unit_menu: None,
             unit_menu_dismissed: None,
             calendar_dismissed: None,
+            calendar_day: 1,
             unit_bounds: None,
             handle: cx.entity().downgrade(),
             scrollbar_origins: std::collections::HashMap::new(),

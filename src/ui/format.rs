@@ -6,11 +6,15 @@ pub struct DateFormatPreference(pub DateFormat);
 #[cfg(test)]
 #[path = "format/tests/transfer_collision.rs"]
 mod transfer_collision_tests;
+#[cfg(test)]
+#[path = "format/tests/input.rs"]
+mod input_tests;
 pub mod permissions;
 impl gpui::Global for DateFormatPreference {}
 
 pub fn drive_label(label: &str, path: &str, i18n: &crate::ui::i18n::I18n) -> String {
-    let path = path.trim_end_matches(['/', '\\']);
+    // A root keeps its separator: `/` would otherwise name nothing.
+    let path = Some(path.trim_end_matches(['/', '\\'])).filter(|path| !path.is_empty()).unwrap_or(path);
     if label.is_empty() || label == "Local Disk" {
         let mut args = crate::ui::i18n::FluentArgs::new();
         args.set("drive", path);
@@ -67,6 +71,10 @@ pub fn size_in_bytes(value: &str, unit: usize) -> Result<Option<u64>, ()> {
         return Ok(None);
     }
     let (whole, fraction) = value.split_once('.').unwrap_or((&value, ""));
+    // Digits only: `parse` would also take a sign.
+    if !whole.bytes().chain(fraction.bytes()).all(|byte| byte.is_ascii_digit()) {
+        return Err(());
+    }
     let multiplier = 1024u128.checked_pow(unit as u32).ok_or(())?;
     let whole = whole
         .parse::<u128>()
@@ -154,9 +162,12 @@ pub fn date_pattern(format: DateFormat) -> &'static str {
 /// A day typed in the chosen format, or as ISO 8601 whatever the format.
 pub fn parse_day(text: &str, format: DateFormat) -> Option<chrono::NaiveDate> {
     let text = text.trim();
+    use chrono::Datelike;
     chrono::NaiveDate::parse_from_str(text, date_pattern(format))
         .or_else(|_| chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d"))
         .ok()
+        // A year of one or two digits is no year 26: the year is typed whole.
+        .filter(|day| day.year() >= 1000)
 }
 
 fn format_datetime(date: NaiveDateTime, format: DateFormat) -> String {

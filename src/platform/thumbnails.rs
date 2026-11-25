@@ -124,18 +124,27 @@ fn cached_thumbnail(
     let source = Path::new(&path);
     let metadata =
         fs::metadata(source).map_err(|error| CommandError::IoError(error.to_string()))?;
-    let modified_ns = metadata
+    // Without a modification date the key could not tell an edited file apart.
+    let Some(modified_ns) = metadata
         .modified()
         .ok()
         .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
-        .map_or(0, |duration| duration.as_nanos());
+        .map(|duration| duration.as_nanos())
+    else {
+        return generate(path);
+    };
     let Some(cache_root) = crate::app_paths::cache_dir() else {
         log::warn!("Cannot resolve the user cache directory; thumbnail will not be cached");
         return generate(path);
     };
     let cache_dir = cache_root.join("thumbnails");
+    // Windows names are case-insensitive: `C:\A.png` and `c:\a.png` share an entry.
+    #[cfg(target_os = "windows")]
+    let key_path = path.to_lowercase();
+    #[cfg(not(target_os = "windows"))]
+    let key_path = path.as_str();
     let key =
-        blake3::hash(format!("v2|{kind}|{}|{}|{modified_ns}", path, metadata.len()).as_bytes())
+        blake3::hash(format!("v2|{kind}|{key_path}|{}|{modified_ns}", metadata.len()).as_bytes())
             .to_hex();
     let cache_file = cache_dir.join(format!("{key}.jpg"));
 
@@ -254,12 +263,17 @@ pub(super) fn get_office_thumbnail_uncached(path: String) -> Result<RgbaImage, C
     let file = fs::File::open(path).map_err(|error| CommandError::IoError(error.to_string()))?;
     let mut archive =
         zip::ZipArchive::new(file).map_err(|error| CommandError::Other(error.to_string()))?;
+    // A damaged first candidate gives way to the next.
+    let mut failure = CommandError::Other("No office thumbnail".to_string());
     for name in ["docProps/thumbnail.jpeg", "Thumbnails/thumbnail.png"] {
         if let Ok(entry) = archive.by_name(name) {
-            return decode_office_thumbnail(entry);
+            match decode_office_thumbnail(entry) {
+                Ok(image) => return Ok(image),
+                Err(error) => failure = error,
+            }
         }
     }
-    Err(CommandError::Other("No office thumbnail".to_string()))
+    Err(failure)
 }
 
 #[cfg(not(target_os = "windows"))]

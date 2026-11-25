@@ -53,6 +53,10 @@ impl OxydeApp {
             // Prefer virtual ISO9660 browsing; mount the images the reader cannot
             // decode, such as UDF-only discs or IMG files holding a FAT filesystem.
             let mountable = image.can_mount_disk_image();
+            // A double click checks and opens the image once.
+            if !self.probing_disk_images.insert(path.clone()) {
+                return;
+            }
             let pane = pane_id.to_string();
             let origin = self
                 .state
@@ -67,6 +71,7 @@ impl OxydeApp {
                 .await
                 .unwrap_or(false);
                 let _ = this.update(cx, |this, cx| {
+                    this.probing_disk_images.remove(&path);
                     if !new_tab
                         && this.state.find_pane(&pane).map(|pane| {
                             (pane.active_tab().id.clone(), pane.active_tab().path.clone())
@@ -114,6 +119,8 @@ impl OxydeApp {
     ) {
         self.context_menus.clear();
         if self.ejecting_drive {
+            // One volume change at a time: say why this one does not start.
+            self.toast(super::ToastKind::Info, Message::VolumeChangeInProgress, String::new(), 0, cx);
             cx.notify();
             return;
         }

@@ -37,6 +37,10 @@ theme-intro = Un thème Oxyde tient en six couleurs. Toutes les autres en sont d
 theme-create-hint = Pour créer votre thème, partez de celui qui s’en rapproche le plus : choisissez-le dans la liste, puis « Créer à partir de ce thème ».
 theme-create = Créer à partir de ce thème
 theme-delete = Supprimer
+theme-delete-question = Supprimer le thème « { $name } » ? Cette action est définitive.
+theme-unsaved-title = Modifications non enregistrées
+theme-leave-question = Abandonner les modifications de « { $name } » ?
+theme-discard = Abandonner
 theme-save = Enregistrer
 theme-name = Nom
 theme-new-name = { $name } personnalisé
@@ -274,6 +278,7 @@ new-file-name = Nouveau fichier
 new-file-numbered = Nouveau fichier ({ $number })
 native-menu-empty = Aucune commande disponible
 native-menu-failed = Chargement du menu natif échoué : { $detail }
+native-menu-timeout = Le menu système ne répond pas
 drag-items = { $count ->
     [one] { $number } élément
    *[other] { $number } éléments
@@ -477,6 +482,7 @@ disk-image-unmount-failed = Impossible de démonter l’image. { $detail }
 disk-image-open-failed = Impossible d’ouvrir l’image. { $detail }
 disk-image-busy = Une opération de fichiers utilise encore cette image.
 disk-image-no-volume = Aucun volume accessible n’a été attribué à cette image.
+volume-change-in-progress = Un lecteur ou une image est déjà en cours de montage ou d’éjection.
 
 advanced-settings = Paramètres
 advanced-help = Aide
@@ -539,6 +545,10 @@ duplicate-files = { $file_count ->
     }
 duplicate-group = Groupe { $index }
 duplicate-failed = La recherche a échoué : { $error }
+duplicate-unreadable = { $count ->
+    [one] { $number } fichier n'a pas pu être lu et n'a pas été comparé.
+   *[other] { $number } fichiers n'ont pas pu être lus et n'ont pas été comparés.
+    }
 duplicate-size-range = { $min } – { $max }
 duplicate-disk = Disque #{ $disk }
 duplicate-go-to-folder = Cliquez pour aller au dossier
@@ -640,6 +650,7 @@ properties-file-system = Système de fichiers
 properties-copy-name-double-click = Copier le nom sur double clic
 
 toast-copied = Copié dans le presse-papier
+copy-too-large = La sélection est trop grande pour être copiée (plus de 64 Mo).
 toast-cut = Coupé dans le presse-papier
 toast-names-copied = { $count ->
     [one] { $number } nom copié
@@ -883,6 +894,7 @@ storage-unavailable = Impossible d’accéder aux données d’Oxyde. En mode po
 properties-selection-items = { $number } éléments
 properties-total-size = Taille totale
 properties-multiple-locations = Plusieurs emplacements
+properties-unreadable = Illisibles
 operations-affected-items = { $count ->
     [1] Élément concerné ({ $number })
    *[other] Éléments concernés ({ $number })

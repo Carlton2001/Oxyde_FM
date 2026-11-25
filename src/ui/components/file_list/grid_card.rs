@@ -104,7 +104,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
         .bg(if is_selected { theme.selected } else { pane_fill })
         .group("file-grid-card")
         .relative().when(!is_selected, |d| d.hover(|d| d.bg(theme.hover)))
-        .when(show_tooltips, |d| d.file_tooltip(h.clone(), pid.clone(), path.clone(), cx, Tooltip::for_item(file.clone(), search_results, show_media_previews, provisional_size)))
+        .when(show_tooltips, |d| d.file_tooltip(h.clone(), pid.clone(), path.clone(), Tooltip::item_revision(&file, provisional_size), cx, Tooltip::for_item(file.clone(), search_results, show_media_previews, provisional_size)))
         .on_mouse_down(MouseButton::Left, {
             let path = path.clone();
             let h = h.clone();

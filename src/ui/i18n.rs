@@ -95,6 +95,7 @@ pub enum Message {
     ToastUndo,
     ToastRedo,
     ToastCopied,
+    CopyTooLarge,
     ToastCut,
     ToastNamesCopied,
     ToastPathsCopied,
@@ -117,6 +118,7 @@ pub enum Message {
     DiskImageOpenFailed,
     DiskImageBusy,
     DiskImageNoVolume,
+    VolumeChangeInProgress,
     Cancel,
     RenameTitle,
     RenameNamePlaceholder,
@@ -170,6 +172,10 @@ pub enum Message {
     ThemeCreateHint,
     ThemeCreate,
     ThemeDelete,
+    ThemeDeleteQuestion,
+    ThemeUnsavedTitle,
+    ThemeLeaveQuestion,
+    ThemeDiscard,
     ThemeSave,
     ThemeName,
     ThemeNewName,
@@ -323,6 +329,7 @@ pub enum Message {
     PropertiesSelectionItems,
     PropertiesTotalSize,
     PropertiesMultipleLocations,
+    PropertiesUnreadable,
     PropertiesDrive,
     PropertiesFileSystem,
 
@@ -483,6 +490,7 @@ pub enum Message {
     DuplicateFiles,
     DuplicateGroup,
     DuplicateFailed,
+    DuplicateUnreadable,
     DuplicateDisk,
 
     Undo,
@@ -870,6 +878,7 @@ pub enum Message {
     NewFileNumbered,
     NativeMenuEmpty,
     NativeMenuFailed,
+    NativeMenuTimeout,
     DragItems,
     NativeMenuLoading,
     LocalDrive,
@@ -894,6 +903,7 @@ impl Message {
             Self::DiskImageOpenFailed => "disk-image-open-failed",
             Self::DiskImageBusy => "disk-image-busy",
             Self::DiskImageNoVolume => "disk-image-no-volume",
+            Self::VolumeChangeInProgress => "volume-change-in-progress",
             Self::Cancel => "common-cancel",
             Self::RenameTitle => "rename-title",
             Self::RenameNamePlaceholder => "rename-name-placeholder",
@@ -947,6 +957,10 @@ impl Message {
             Self::ThemeCreateHint => "theme-create-hint",
             Self::ThemeCreate => "theme-create",
             Self::ThemeDelete => "theme-delete",
+            Self::ThemeDeleteQuestion => "theme-delete-question",
+            Self::ThemeUnsavedTitle => "theme-unsaved-title",
+            Self::ThemeLeaveQuestion => "theme-leave-question",
+            Self::ThemeDiscard => "theme-discard",
             Self::ThemeSave => "theme-save",
             Self::ThemeName => "theme-name",
             Self::ThemeNewName => "theme-new-name",
@@ -1098,6 +1112,7 @@ impl Message {
             Self::PropertiesSelectionItems => "properties-selection-items",
             Self::PropertiesTotalSize => "properties-total-size",
             Self::PropertiesMultipleLocations => "properties-multiple-locations",
+            Self::PropertiesUnreadable => "properties-unreadable",
             Self::PropertiesDrive => "properties-drive",
             Self::PropertiesFileSystem => "properties-file-system",
             Self::Properties => "menu-properties",
@@ -1245,6 +1260,7 @@ impl Message {
             Self::ToastUndo => "toast-undo",
             Self::ToastRedo => "toast-redo",
             Self::ToastCopied => "toast-copied",
+            Self::CopyTooLarge => "copy-too-large",
             Self::ToastCut => "toast-cut",
             Self::ToastNamesCopied => "toast-names-copied",
             Self::ToastPathsCopied => "toast-paths-copied",
@@ -1340,6 +1356,7 @@ impl Message {
             Self::DuplicateFiles => "duplicate-files",
             Self::DuplicateGroup => "duplicate-group",
             Self::DuplicateFailed => "duplicate-failed",
+            Self::DuplicateUnreadable => "duplicate-unreadable",
             Self::DuplicateDisk => "duplicate-disk",
 
             Self::Undo => "navigation-undo",
@@ -1726,6 +1743,7 @@ impl Message {
             Self::NewFileNumbered => "new-file-numbered",
             Self::NativeMenuEmpty => "native-menu-empty",
             Self::NativeMenuFailed => "native-menu-failed",
+            Self::NativeMenuTimeout => "native-menu-timeout",
             Self::DragItems => "drag-items",
             Self::NativeMenuLoading => "native-menu-loading",
             Self::LocalDrive => "local-drive",
@@ -1816,11 +1834,22 @@ impl I18n {
             if errors.is_empty() {
                 return text.into_owned().into();
             }
-            log::warn!("Cannot format UI message {key}: {errors:?}");
+            if first_report(key) {
+                log::warn!("Cannot format UI message {key}: {errors:?}");
+            }
         }
-        log::warn!("No usable translation for UI message {key}");
+        if first_report(key) {
+            log::warn!("No usable translation for UI message {key}");
+        }
         format!("[{key}]").into()
     }
+}
+
+/// A faulty message is drawn every frame: say so once per key, not at each frame.
+fn first_report(key: &str) -> bool {
+    static REPORTED: std::sync::Mutex<Option<std::collections::HashSet<String>>> = std::sync::Mutex::new(None);
+    let mut reported = REPORTED.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    reported.get_or_insert_with(Default::default).insert(key.to_owned())
 }
 
 pub trait I18nContext {
@@ -1986,6 +2015,7 @@ mod tests {
                 Message::DiskImageOpenFailed,
                 Message::DiskImageBusy,
                 Message::DiskImageNoVolume,
+                Message::VolumeChangeInProgress,
                 Message::Cancel,
                 Message::RenameTitle,
                 Message::RenameNamePlaceholder,
@@ -2039,6 +2069,10 @@ mod tests {
                 Message::ThemeCreateHint,
                 Message::ThemeCreate,
                 Message::ThemeDelete,
+                Message::ThemeDeleteQuestion,
+                Message::ThemeUnsavedTitle,
+                Message::ThemeLeaveQuestion,
+                Message::ThemeDiscard,
                 Message::ThemeSave,
                 Message::ThemeName,
                 Message::ThemeNewName,
@@ -2190,6 +2224,7 @@ mod tests {
                 Message::PropertiesSelectionItems,
                 Message::PropertiesTotalSize,
                 Message::PropertiesMultipleLocations,
+                Message::PropertiesUnreadable,
                 Message::PropertiesDrive,
                 Message::PropertiesFileSystem,
 
@@ -2272,6 +2307,7 @@ mod tests {
                 Message::ToastUndo,
                 Message::ToastRedo,
                 Message::ToastCopied,
+                Message::CopyTooLarge,
                 Message::ToastCut,
                 Message::ToastNamesCopied,
                 Message::ToastPathsCopied,
@@ -2367,6 +2403,7 @@ mod tests {
                 Message::DuplicateFiles,
                 Message::DuplicateGroup,
                 Message::DuplicateFailed,
+                Message::DuplicateUnreadable,
                 Message::DuplicateSizeRange,
                 Message::DuplicateDisk,
 
@@ -2754,6 +2791,7 @@ mod tests {
                 Message::NewFileNumbered,
                 Message::NativeMenuEmpty,
                 Message::NativeMenuFailed,
+                Message::NativeMenuTimeout,
                 Message::DragItems,
                 Message::NativeMenuLoading,
                 Message::LocalDrive,

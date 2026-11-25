@@ -91,9 +91,8 @@ impl Viewer {
 
     /// Sized by its parent: the whole Viewer, or the player bar's place under an audio card.
     pub(super) fn unavailable_file_notice(&self, cx: &mut Context<Self>) -> Div {
-        let owner = self.owner.clone();
-        let file = self.file.clone();
-        let source_tab = self.source.tab.clone();
+        self.open_offered.set(self.file.is_some());
+        let handle = cx.entity().downgrade();
         let missing = self.media.as_ref().and_then(|media| media.control.info()).filter(|info| info.missing_decoders != 0);
         div().flex().flex_col().items_center().justify_center()
             .gap(rems(1.0)).p(rems(1.0))
@@ -102,22 +101,29 @@ impl Viewer {
                 Some(info) => body.child(super::media_labels::missing_codec_notice(&info, cx)),
                 None => body.child(wrapping(cx.i18n().text(Message::ViewerFileUnavailable))),
             })
-            .when_some(file, |body, file| body.child(
+            .when(self.file.is_some(), |body| body.child(
                 crate::ui::elements::button::Button::new("viewer-open-file")
                     .label(cx.i18n().text(Message::Open))
                     .icon("icons/external-link.svg")
                     .on_click(move |_, cx| {
-                        let _ = owner.update(cx, |owner, cx| {
-                            let mut pane_id = None;
-                            owner.state.layout.visit_panes(&mut |pane| {
-                                if pane.active_tab().id == source_tab { pane_id = Some(pane.id.clone()); }
-                            });
-                            if let Some(pane_id) = pane_id {
-                                owner.open_file_item(&pane_id, file.path.clone(), file.is_dir, cx);
-                            }
-                        });
+                        let _ = handle.update(cx, |this, cx| this.open_in_application(cx));
                     })
             ))
+    }
+
+    /// Opens the shown file as its pane would, in its default application.
+    pub(super) fn open_in_application(&self, cx: &mut App) {
+        let Some(file) = self.file.clone() else { return };
+        let source_tab = self.source.tab.clone();
+        let _ = self.owner.update(cx, |owner, cx| {
+            let mut pane_id = None;
+            owner.state.layout.visit_panes(&mut |pane| {
+                if pane.active_tab().id == source_tab { pane_id = Some(pane.id.clone()); }
+            });
+            if let Some(pane_id) = pane_id {
+                owner.open_file_item(&pane_id, file.path.clone(), file.is_dir, cx);
+            }
+        });
     }
 
     pub(super) fn render_content(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {

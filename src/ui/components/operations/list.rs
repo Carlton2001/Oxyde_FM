@@ -21,6 +21,11 @@ pub(super) const WIDTH: Rems = rems(17.5);
 /// The narrowest list, and the room it leaves the detail at least.
 const MIN_WIDTH: Rems = rems(12.0);
 const MIN_DETAIL: Rems = rems(28.0);
+
+/// The widest the list gets in a window `viewport` wide.
+fn max_list_width(viewport: f32) -> f32 {
+    (viewport - rem_pixels(MIN_DETAIL).as_f32()).max(rem_pixels(MIN_WIDTH).as_f32())
+}
 /// Corners of a section's box.
 const BOX_RADIUS: Rems = rems(0.375);
 
@@ -204,7 +209,7 @@ impl OperationsPanelView {
     /// The list's width now: as dragged, within what the window leaves the detail.
     pub(super) fn list_display_width(&self, window: &Window) -> f32 {
         let default = rem_pixels(WIDTH).as_f32();
-        let max = (window.viewport_size().width.as_f32() - rem_pixels(MIN_DETAIL).as_f32()).max(rem_pixels(MIN_WIDTH).as_f32());
+        let max = max_list_width(window.viewport_size().width.as_f32());
         self.list_width
             .map_or(default, |width| width * self.rem_px)
             .clamp(rem_pixels(MIN_WIDTH).as_f32(), max)
@@ -244,7 +249,8 @@ impl OperationsPanelView {
     }
 
     /// The edge's drag, as the file chooser's sidebar.
-    pub(super) fn resize_list(&mut self, event: &MouseMoveEvent, cx: &mut Context<Self>) {
+    /// `viewport`: the window's width, which leaves the detail its minimum.
+    pub(super) fn resize_list(&mut self, event: &MouseMoveEvent, viewport: f32, cx: &mut Context<Self>) {
         if !event.dragging() {
             self.finish_list_resize(cx);
             cx.notify();
@@ -252,7 +258,7 @@ impl OperationsPanelView {
         }
         // Kept within bounds as shown, so a drag past them does not linger in the setting.
         let shown = event.position.x.as_f32() - self.grab_offset;
-        let width = shown.max(rem_pixels(MIN_WIDTH).as_f32()) / self.rem_px.max(1.0);
+        let width = shown.clamp(rem_pixels(MIN_WIDTH).as_f32(), max_list_width(viewport)) / self.rem_px.max(1.0);
         if self.list_width != Some(width) {
             self.list_width = Some(width);
             cx.notify();

@@ -1,8 +1,33 @@
 use crate::models::{CommandError, SidebarNode};
 use crate::utils::path_security::validate_path;
 use std::fs;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+
+/// How an entry is a folder of the tree: `Some(true)` for a link to one (a junction, a
+/// folder link, or a symbolic link to a folder under Unix), as in the listing.
+fn tree_folder(path: &Path, metadata: &fs::Metadata, is_reparse_point: bool) -> Option<bool> {
+    if crate::models::file_entry::is_directory_link(metadata, is_reparse_point) {
+        return Some(true);
+    }
+    if metadata.is_dir() {
+        return Some(is_reparse_point);
+    }
+    // Followed once, for the link itself: a dangling one or a link to a file is not a folder.
+    (metadata.is_symlink() && cfg!(unix) && fs::metadata(path).is_ok_and(|target| target.is_dir())).then_some(true)
+}
+
+/// Whether `path` holds a folder, a link to one included, to show its arrow.
+fn holds_folder(path: &Path) -> bool {
+    fs::read_dir(path).is_ok_and(|entries| {
+        entries.filter_map(Result::ok).any(|entry| match entry.file_type() {
+            Ok(kind) if kind.is_dir() => true,
+            Ok(kind) => kind.is_symlink() && cfg!(unix) && entry.path().is_dir(),
+            Err(_) => false,
+        })
+    })
+}
 
 pub async fn get_sidebar_nodes(path: String) -> Result<Vec<SidebarNode>, CommandError> {
     tokio::task::spawn_blocking(move || get_sidebar_nodes_blocking(path))
@@ -32,20 +57,11 @@ fn get_sidebar_nodes_blocking(path: String) -> Result<Vec<SidebarNode>, CommandE
 
         let name = entry.file_name().to_string_lossy().to_string();
         let (is_hidden, is_system, is_reparse_point) = attributes.of(&metadata, &name);
-        // A junction or a folder link is a folder of the tree, as in the listing.
-        if !metadata.is_dir() && !crate::models::file_entry::is_directory_link(&metadata, is_reparse_point) {
+        let node_path = entry.path();
+        if tree_folder(&node_path, &metadata, is_reparse_point).is_none() {
             continue;
         }
-
-        // Efficiently check for subdirectories
-        let mut node_has_subdirs = false;
-
-        let node_path = entry.path();
-        if let Ok(sub_entries) = fs::read_dir(&node_path) {
-            node_has_subdirs = sub_entries
-                .filter_map(|e| e.ok())
-                .any(|sub_entry| sub_entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false));
-        }
+        let node_has_subdirs = holds_folder(&node_path);
 
         nodes.push(SidebarNode {
             name,
@@ -128,20 +144,12 @@ fn get_subtree_nodes_blocking(
             let name = entry.file_name().to_string_lossy().to_string();
             let (is_hidden, is_system, is_reparse_point) =
                 attributes.of(&metadata, &name);
-            if !metadata.is_dir() && !crate::models::file_entry::is_directory_link(&metadata, is_reparse_point) {
-                continue;
-            }
-
             let node_path = entry.path();
-            let mut node_has_subdirs = false;
-
-            if !is_reparse_point {
-                if let Ok(sub_entries) = fs::read_dir(&node_path) {
-                    node_has_subdirs = sub_entries
-                        .filter_map(|e| e.ok())
-                        .any(|se| se.file_type().map(|ft| ft.is_dir()).unwrap_or(false));
-                }
-            }
+            let Some(link) = tree_folder(&node_path, &metadata, is_reparse_point) else {
+                continue;
+            };
+            // A link is not walked into, which could loop; it opens on its own.
+            let node_has_subdirs = !link && holds_folder(&node_path);
 
             nodes.push(SidebarNode {
                 name,
@@ -178,3 +186,7 @@ fn is_bulk_expand_excluded(path: &str, name: &str) -> bool {
 #[cfg(test)]
 #[path = "sidebar/tests/expand_all.rs"]
 mod expand_all_tests;
+
+#[cfg(all(test, unix))]
+#[path = "sidebar/tests/links.rs"]
+mod links_tests;

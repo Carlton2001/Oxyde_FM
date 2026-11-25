@@ -87,6 +87,8 @@ pub(crate) struct Viewer {
     blocked: bool,
     focus: FocusHandle,
     focus_pending: bool,
+    /// The last frame offered to open the file in its application: Enter does it.
+    open_offered: std::cell::Cell<bool>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -201,7 +203,8 @@ impl OxydeApp {
             let owner = cx.entity();
             let initial = source.clone();
             let options = (self.config.viewer_markdown_rendered, self.config.viewer_syntax_highlighting, self.config.viewer_media_autoplay);
-            let viewer = cx.new(|cx| Viewer::new(owner, id.clone(), initial, options, cx));
+            let deletions = self.viewer_deletions.clone();
+            let viewer = cx.new(|cx| Viewer::with_deletions(owner, id.clone(), initial, options, deletions, cx));
             self.viewers.insert(id, viewer);
         }
     }
@@ -283,11 +286,25 @@ impl Source {
 }
 
 impl Viewer {
+    /// For the native window tests, which run on Windows.
+    #[cfg(all(test, target_os = "windows"))]
     fn new(
         owner: Entity<OxydeApp>,
         tab_id: String,
         source: Source,
         options: (bool, bool, bool),
+        cx: &mut Context<Self>,
+    ) -> Self {
+        Self::with_deletions(owner, tab_id, source, options, Default::default(), cx)
+    }
+
+    /// `deletions` are those running when the Viewer opens: their files stay closed.
+    fn with_deletions(
+        owner: Entity<OxydeApp>,
+        tab_id: String,
+        source: Source,
+        options: (bool, bool, bool),
+        deletions: std::collections::HashMap<String, Vec<std::path::PathBuf>>,
         cx: &mut Context<Self>,
     ) -> Self {
         let subscription = cx.observe(&owner, |this, owner, cx| {
@@ -324,7 +341,7 @@ impl Viewer {
             wanted: Default::default(),
             loading: None,
             jobs: Default::default(),
-            deletions: Default::default(),
+            deletions,
             scroll: Default::default(),
             preparation: None,
             media: None,
@@ -344,6 +361,7 @@ impl Viewer {
             blocked: false,
             focus: cx.focus_handle(),
             focus_pending: false,
+            open_offered: Default::default(),
             _subscriptions: vec![subscription],
         };
         this.set_source(source, cx);

@@ -126,6 +126,7 @@ impl OxydeApp {
                 oxyde_lib::systems::file_ops::FileOpType::Extract,
                 vec![source],
                 destination,
+                None,
                 cx,
             );
         }
@@ -136,6 +137,7 @@ impl OxydeApp {
         kind: oxyde_lib::systems::file_ops::FileOpType,
         sources: Vec<std::path::PathBuf>,
         destination: std::path::PathBuf,
+        password: Option<oxyde_lib::utils::archive_password::ArchiveSecret>,
         cx: &mut Context<Self>,
     ) {
         let Some(handle) = self.handle.clone() else {
@@ -156,6 +158,7 @@ impl OxydeApp {
                         this.archive_quality_for_path(operation.destination.as_ref().unwrap());
                     operation.archive_qualities = this.archive_qualities();
                     operation.set_turbo(this.config.default_turbo_mode);
+                    operation.archive_password = password;
                     let id =
                         this.file_ops
                             .queue_operation_on(&runtime, this.history.clone(), operation);

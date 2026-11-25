@@ -10,6 +10,9 @@ use gpui::prelude::*;
 use gpui::*;
 use oxyde_lib::models::ConflictAction;
 
+/// Levels of indentation shown in the advanced list; deeper rows align with the last.
+const MAX_INDENT: usize = 6;
+
 fn status_dot(category: usize, cx: &App) -> impl IntoElement {
     let t = *cx.theme();
     div()
@@ -112,6 +115,7 @@ pub(super) fn render_advanced_body(
         .flex_1()
         .min_h_0()
         .overflow_y_scroll()
+        .track_scroll(&pending.dialog.list_scroll)
         .py(rems(0.5))
         .pl(rems(1.25));
     let depth = pending
@@ -133,7 +137,8 @@ pub(super) fn render_advanced_body(
             .gap(rems(0.75))
             .py(rems(0.5))
             .pl(rems(
-                0.5 + ancestors(&path).count().saturating_sub(depth) as f32,
+                // Deep trees stop indenting so the name keeps its room.
+                0.5 + ancestors(&path).count().saturating_sub(depth).min(MAX_INDENT) as f32,
             ))
             .pr(rems(0.75))
             .border_l(rems(0.1875))

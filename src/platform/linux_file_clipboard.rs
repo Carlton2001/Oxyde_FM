@@ -62,6 +62,10 @@ impl FileClipboard for LinuxFileClipboard {
     fn has_file_format(&self) -> bool {
         selection().is_some()
     }
+
+    fn external_files_type(&self) -> Option<&'static str> {
+        wayland::session().then_some(wayland::FORMAT)
+    }
 }
 
 #[cfg(test)]

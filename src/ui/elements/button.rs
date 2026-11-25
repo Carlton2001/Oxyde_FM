@@ -87,9 +87,9 @@ impl RenderOnce for Button {
             .rounded(ACTION_BUTTON_RADIUS)
             .border(rems(0.0625))
             .border_color(theme.border)
+            // Acts on release over the button, so a press dragged away cancels it.
             .when_some(self.on_click, |container, on_click| {
-                container
-                    .on_mouse_down(MouseButton::Left, move |_, window, cx| on_click(window, cx))
+                container.on_click(move |_, window, cx| on_click(window, cx))
             })
             .children(self.icon.map(|path| {
                 svg()

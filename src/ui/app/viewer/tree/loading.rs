@@ -72,7 +72,7 @@ fn read_archive(archive: PathBuf, root: &str, listing: Listing, cancelled: &Atom
     })?;
     let mut entries = entries;
     crate::ui::workspace::resolve_native_kinds(&mut entries);
-    let extracted = entries.iter().filter(|entry| !entry.is_dir).map(|entry| entry.size).sum();
+    let extracted = entries.iter().filter(|entry| !entry.is_dir).fold(0u64, |sum, entry| sum.saturating_add(entry.size));
     let levels: HashMap<String, Folder> = archive_levels(&archive, entries)
         .into_iter()
         .map(|(path, entries)| (path, Folder::new(entries, true, listing.sort)))
@@ -152,7 +152,12 @@ impl Viewer {
             );
             let _ = sender.unbounded_send((Default::default(), if complete { Count::Done } else { Count::Capped }));
         });
-        if spawned.is_err() {
+        if let Err(error) = spawned {
+            // No count running: show none rather than one that never ends.
+            log::warn!("Viewer could not count the tree: {error}");
+            if let Some(tree) = self.tree_mut(generation) {
+                tree.totals = None;
+            }
             return;
         }
         cx.spawn(async move |this, cx| {

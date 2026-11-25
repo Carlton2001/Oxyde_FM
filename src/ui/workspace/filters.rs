@@ -150,7 +150,8 @@ impl CompiledFilters<'_> {
                 .is_some_and(|path| path.to_string_lossy().to_lowercase().contains(&self.location));
         let matches_search = match &self.search {
             Some(Ok(pattern)) => pattern.matches(&f.name.to_lowercase()),
-            Some(Err(_)) => false,
+            // A pattern still being typed (`[a`) searches its text rather than emptying the list.
+            Some(Err(_)) => f.name.to_lowercase().contains(&filters.trash_search),
             None => filters.trash_search.is_empty() || f.name.to_lowercase().contains(&filters.trash_search),
         };
         matches_type && matches_name && matches_search && matches_size && matches_permissions && matches_date && matches_deleted && matches_location
@@ -332,7 +333,10 @@ impl TabState {
         &self,
         reference: &CalendarReference,
     ) -> Option<CalendarFilterRequest> {
-        if (self.filter_dates.is_empty() && self.filter_deleted.is_empty()) || self.calendar_reference.as_ref() == Some(reference) {
+        // A custom range reads days in the local time zone too: a new offset moves its bounds.
+        let calendar = !self.filter_dates.is_empty() || !self.filter_deleted.is_empty()
+            || self.filter_date_range.is_some() || self.filter_deleted_range.is_some();
+        if !calendar || self.calendar_reference.as_ref() == Some(reference) {
             return None;
         }
         Some(CalendarFilterRequest {

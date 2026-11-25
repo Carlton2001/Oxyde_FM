@@ -45,7 +45,7 @@ pub fn undo_failure(error: &CommandError) -> (Message, String) {
         };
         (message, failure.path.clone())
     } else {
-        (Message::UndoFailed, format!("{error:?}"))
+        (Message::UndoFailed, error.to_string())
     }
 }
 
@@ -88,7 +88,7 @@ pub fn redo_failure(error: &CommandError) -> (Message, String) {
         };
         (message, failure.path.clone())
     } else {
-        (Message::RedoFailed, format!("{error:?}"))
+        (Message::RedoFailed, error.to_string())
     }
 }
 
@@ -131,16 +131,19 @@ pub fn rename_message(error: &CommandError) -> Message {
         None => {}
     }
     match error {
-        CommandError::IoError(message)
-            if message.to_ascii_lowercase().contains("already exists") =>
-        {
-            Message::RenameAlreadyExists
-        }
+        CommandError::IoError(message) if already_exists(message) => Message::RenameAlreadyExists,
         CommandError::PathNotFound(_) => Message::RenameNotFound,
         CommandError::AccessDenied(_) => Message::RenameAccessDenied,
         CommandError::IoError(_) | CommandError::PathError(_) => Message::RenameInvalidName,
         _ => Message::RenameUnavailable,
     }
+}
+
+/// The system's text is in its language; its code is not. Oxyde's own errors say it in English.
+fn already_exists(message: &str) -> bool {
+    // ERROR_FILE_EXISTS and ERROR_ALREADY_EXISTS on Windows, EEXIST elsewhere.
+    let codes: &[&str] = if cfg!(windows) { &["(os error 80)", "(os error 183)"] } else { &["(os error 17)"] };
+    codes.iter().any(|code| message.contains(code)) || message.to_ascii_lowercase().contains("already exists")
 }
 
 #[cfg(test)]
@@ -437,6 +440,12 @@ mod tests {
             rename_message(&CommandError::IoError(
                 "Rename target already exists: D:\\Tests\\2".to_string()
             )),
+            Message::RenameAlreadyExists
+        );
+        // A localized system text still carries its code.
+        let code = if cfg!(windows) { 183 } else { 17 };
+        assert_eq!(
+            rename_message(&CommandError::IoError(format!("Impossible de créer un fichier déjà existant. (os error {code})"))),
             Message::RenameAlreadyExists
         );
     }

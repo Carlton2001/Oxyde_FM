@@ -29,13 +29,28 @@ pub enum PasswordSave {
     Permanently,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum RemoteAnswer {
     Login { user: String, domain: String, password: String, save: PasswordSave },
     Anonymous,
     /// The index of the chosen answer to a question.
     Choice(usize),
     Cancel,
+}
+
+/// Never prints the credentials, should an answer reach a log or a panic message.
+impl std::fmt::Debug for RemoteAnswer {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Login { save, .. } => formatter
+                .debug_struct("Login")
+                .field("save", save)
+                .finish_non_exhaustive(),
+            Self::Anonymous => formatter.write_str("Anonymous"),
+            Self::Choice(index) => formatter.debug_tuple("Choice").field(index).finish(),
+            Self::Cancel => formatter.write_str("Cancel"),
+        }
+    }
 }
 
 /// Where a connected location is browsed.

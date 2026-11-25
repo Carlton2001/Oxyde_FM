@@ -1,5 +1,5 @@
 //! Volumes of a split RAR, found by their names as WinRAR writes them: `name.part1.rar`,
-//! `name.part2.rar`… or `name.rar`, `name.r00`, `name.r01`… A set is the consecutive
+//! `name.part2.rar`… or `name.rar`, `name.r00`, `name.r01`… `name.s00`… A set is the consecutive
 //! volumes that exist; a missing one ends it, and decoding then reports the cut.
 use super::archive_io_protocol::MAX_VOLUMES;
 use std::path::{Path, PathBuf};
@@ -54,13 +54,16 @@ fn names(path: &Path) -> Option<Box<dyn Fn(usize) -> Option<PathBuf>>> {
             }));
         }
     }
-    // The old naming: the `.rar` first, then `.r00` to `.r99`.
+    // The old naming: the `.rar` first, then `.r00` to `.r99`, which WinRAR
+    // continues with `.s00` to `.s99` and so on to `.z99`.
     let (stem, upper) = (name[..stem_length].to_owned(), name.ends_with('R'));
     Some(Box::new(move |index| match index {
         0 => Some(folder.join(&name)),
-        1..=100 => {
-            let letter = if upper { 'R' } else { 'r' };
-            Some(folder.join(format!("{stem}.{letter}{:02}", index - 1)))
+        1..=900 => {
+            let number = index - 1;
+            let letter = char::from(b'r' + (number / 100) as u8);
+            let letter = if upper { letter.to_ascii_uppercase() } else { letter };
+            Some(folder.join(format!("{stem}.{letter}{:02}", number % 100)))
         }
         _ => None,
     }))

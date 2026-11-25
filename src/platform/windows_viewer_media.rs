@@ -34,6 +34,15 @@ mod info;
 const DEADLINE: Duration = Duration::from_secs(15);
 /// A source not on this disk (OneDrive, a slow share) may take longer to give its metadata.
 const LOAD_DEADLINE: Duration = Duration::from_secs(60);
+/// Each report is followed by the last seek the worker applied, as on Linux.
+const REPORT_FRAME: usize = MEDIA_REPORT_BYTES + 4;
+
+fn report_frame(report: [u8; MEDIA_REPORT_BYTES], applied_seek: u32) -> [u8; REPORT_FRAME] {
+    let mut frame = [0; REPORT_FRAME];
+    frame[..MEDIA_REPORT_BYTES].copy_from_slice(&report);
+    frame[MEDIA_REPORT_BYTES..].copy_from_slice(&applied_seek.to_le_bytes());
+    frame
+}
 
 pub(super) fn supervise(path: &Path, control: &ViewerMediaControl) -> io::Result<()> {
     supervise_in(&std::env::current_exe()?, path, control)
@@ -88,13 +97,16 @@ fn supervise_in(executable: &Path, path: &Path, control: &ViewerMediaControl) ->
         }
         .map_err(native)?;
         if available > 0 {
-            let mut bytes = [0; MEDIA_REPORT_BYTES * 8];
-            let amount = output.read(&mut bytes[..(available as usize).min(MEDIA_REPORT_BYTES * 8)])?;
+            let mut bytes = [0; REPORT_FRAME * 8];
+            let amount = output.read(&mut bytes[..(available as usize).min(REPORT_FRAME * 8)])?;
             pending.extend_from_slice(&bytes[..amount]);
-            while pending.len() >= MEDIA_REPORT_BYTES {
+            while pending.len() >= REPORT_FRAME {
                 let report: [u8; MEDIA_REPORT_BYTES] =
                     pending[..MEDIA_REPORT_BYTES].try_into().expect("report length");
-                pending.drain(..MEDIA_REPORT_BYTES);
+                let seek_id = u32::from_le_bytes(
+                    pending[MEDIA_REPORT_BYTES..REPORT_FRAME].try_into().expect("seek length"),
+                );
+                pending.drain(..REPORT_FRAME);
                 if report[0] == super::viewer_media::MEDIA_INFO {
                     let info = super::viewer_media::decode_media_info(&report)
                         .ok_or_else(|| io::Error::other("Invalid media worker info"))?;
@@ -104,7 +116,10 @@ fn supervise_in(executable: &Path, path: &Path, control: &ViewerMediaControl) ->
                 let (status, position, duration, dimensions) = decode_media_report(&report)
                     .ok_or_else(|| io::Error::other("Invalid media worker status"))?;
                 control.status.store(status, Ordering::Release);
-                control.position_ms.store(position, Ordering::Release);
+                // A position from before the latest seek would pull the progress bar back.
+                if seek_id == command.seek_id {
+                    control.position_ms.store(position, Ordering::Release);
+                }
                 control.duration_ms.store(duration, Ordering::Release);
                 control.video_dimensions.store((u64::from(dimensions[0]) << 32) | u64::from(dimensions[1]), Ordering::Release);
                 if status == MEDIA_FAILED {
@@ -459,7 +474,7 @@ pub(super) fn run(path: &Path) -> io::Result<()> {
             }
             let value = status.load(Ordering::Acquire);
             if value == MEDIA_FAILED || (value == 0 && started.elapsed() > LOAD_DEADLINE) {
-                output.write_all(&encode_media_report(MEDIA_FAILED, 0, 0, [0, 0]))?;
+                output.write_all(&report_frame(encode_media_report(MEDIA_FAILED, 0, 0, [0, 0]), applied_seek))?;
                 output.flush()?;
                 return Err(io::Error::other("System media playback failed"));
             }
@@ -546,14 +561,17 @@ pub(super) fn run(path: &Path) -> io::Result<()> {
             if let Some(Ok(read)) = info_request.as_ref().map(|receiver| receiver.try_recv()) {
                 info_request = None;
                 info_sent = true;
-                output.write_all(&super::viewer_media::encode_media_info(&read))?;
+                output.write_all(&report_frame(super::viewer_media::encode_media_info(&read), applied_seek))?;
                 output.flush()?;
             }
             if heartbeat.elapsed() >= Duration::from_millis(100) {
                 let (position, duration) = player.progress();
                 let (mut width, mut height) = (0, 0);
                 let _ = player.engine.GetNativeVideoSize(Some(&mut width), Some(&mut height));
-                output.write_all(&encode_media_report(value, position, duration, [width, height]))?;
+                output.write_all(&report_frame(
+                    encode_media_report(value, position, duration, [width, height]),
+                    applied_seek,
+                ))?;
                 output.flush()?;
                 heartbeat = Instant::now();
             }

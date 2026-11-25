@@ -45,6 +45,8 @@ pub struct AdvancedSearchWindow {
     unit_menu_dismissed: Option<std::time::Instant>,
     /// When the date picker of a field last closed, before its button sees the press.
     calendar_dismissed: Option<(usize, std::time::Instant)>,
+    /// Day of the month the picker returns to after a shorter month (31 after February).
+    calendar_day: u32,
     /// The unit button, under which its list opens at its width.
     unit_bounds: Option<Bounds<Pixels>>,
     handle: WeakEntity<Self>,

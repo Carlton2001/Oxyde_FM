@@ -446,21 +446,7 @@ impl Platform for WindowsPlatform {
     }
 
     fn finish_process_shutdown(&self) -> Result<(), String> {
-        // An answer given as the last window closed is still on its way to the application.
-        super::windows_file_dialog::finish_answers();
-        super::windows_preview_worker::shutdown_image_session();
-        super::windows_preview_worker::shutdown_icon_session();
-        super::windows_icon_persistence::shutdown();
-        // A captured shutdown dump showed the final thread spinning in Intel's
-        // igd10um64xe through d3d11 / Windows.Data.Pdf during process detach,
-        // after main, GPUI and Tokio had finished. ExitProcess (including
-        // std::process::exit) still invokes those DLL callbacks.
-        // All application cleanup must have completed before reaching this API.
-        unsafe {
-            windows::Win32::System::Threading::TerminateProcess(
-                windows::Win32::System::Threading::GetCurrentProcess(), 0,
-            ).map_err(|error| error.to_string())
-        }
+        shutdown_with(0)
     }
 
     fn install_disk_image_autoplay_handler(&self, window: raw_window_handle::RawWindowHandle) -> Result<(), String> {
@@ -1409,5 +1395,24 @@ mod bulk_expand_tests {
             "Windows-old",
             drive
         ));
+    }
+}
+
+/// Finishes the process with `code` once the shared cleanup is done.
+pub(super) fn shutdown_with(code: u32) -> Result<(), String> {
+    // An answer given as the last window closed is still on its way to the application.
+    super::windows_file_dialog::finish_answers();
+    super::windows_preview_worker::shutdown_image_session();
+    super::windows_preview_worker::shutdown_icon_session();
+    super::windows_icon_persistence::shutdown();
+    // A captured shutdown dump showed the final thread spinning in Intel's
+    // igd10um64xe through d3d11 / Windows.Data.Pdf during process detach,
+    // after main, GPUI and Tokio had finished. ExitProcess (including
+    // std::process::exit) still invokes those DLL callbacks.
+    // All application cleanup must have completed before reaching this API.
+    unsafe {
+        windows::Win32::System::Threading::TerminateProcess(
+            windows::Win32::System::Threading::GetCurrentProcess(), code,
+        ).map_err(|error| error.to_string())
     }
 }

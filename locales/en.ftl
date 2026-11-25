@@ -32,6 +32,10 @@ theme-intro = An Oxyde theme comes down to six colors. Every other color derives
 theme-create-hint = To create your theme, start from the closest one: pick it in the list, then “Create from this theme”.
 theme-create = Create from this theme
 theme-delete = Delete
+theme-delete-question = Delete the theme “{ $name }”? This cannot be undone.
+theme-unsaved-title = Unsaved changes
+theme-leave-question = Discard the changes to “{ $name }”?
+theme-discard = Discard
 theme-save = Save
 theme-name = Name
 theme-new-name = Custom { $name }
@@ -268,6 +272,7 @@ new-file-name = New file
 new-file-numbered = New file ({ $number })
 native-menu-empty = No commands available
 native-menu-failed = Could not load native menu: { $detail }
+native-menu-timeout = The system menu is not responding
 drag-items = { $count ->
     [one] { $number } item
    *[other] { $number } items
@@ -471,6 +476,7 @@ disk-image-unmount-failed = Could not unmount the image. { $detail }
 disk-image-open-failed = Could not open the image. { $detail }
 disk-image-busy = A file operation is still using this image.
 disk-image-no-volume = No accessible volume was assigned to this image.
+volume-change-in-progress = A drive or image is already being mounted or ejected.
 
 advanced-settings = Settings
 advanced-help = Help
@@ -533,6 +539,10 @@ duplicate-files = { $file_count ->
     }
 duplicate-group = Group { $index }
 duplicate-failed = Search failed: { $error }
+duplicate-unreadable = { $count ->
+    [one] { $number } file could not be read and was not compared.
+   *[other] { $number } files could not be read and were not compared.
+    }
 duplicate-size-range = { $min } – { $max }
 duplicate-disk = Disk #{ $disk }
 duplicate-go-to-folder = Click to go to the folder
@@ -634,6 +644,7 @@ properties-file-system = File system
 properties-copy-name-double-click = Double-click to copy the name
 
 toast-copied = Copied to clipboard
+copy-too-large = The selection is too large to copy (over 64 MB).
 toast-cut = Cut to clipboard
 toast-names-copied = { $count ->
     [one] { $number } name copied
@@ -877,6 +888,7 @@ storage-unavailable = Could not access Oxyde data. In portable mode, the data fo
 properties-selection-items = { $number } items
 properties-total-size = Total size
 properties-multiple-locations = Multiple locations
+properties-unreadable = Unreadable
 operations-affected-items = { $count ->
     [1] Item involved ({ $number })
    *[other] Items involved ({ $number })

@@ -39,6 +39,7 @@ pub fn run_if_requested() -> bool {
     })();
     if let Err(error) = result {
         let _ = writeln!(io::stderr(), "Audio metadata worker failed: {error}");
+        let _ = crate::platform::finish_failed_worker_shutdown();
     }
     let _ = crate::platform::finish_archive_worker_shutdown();
     true

@@ -118,21 +118,39 @@ pub(super) fn render_sidebar_rail(
         });
         deepest_root(current, roots).map(str::to_string)
     });
-    for item in &view.state.sidebar_items {
-        if !super::sidebar_item_visible(
-            item,
-            view.show_hidden,
-            view.show_system,
-            view.show_network(),
-        ) {
-            continue;
-        }
+    for item in super::visible_sidebar_items(
+        &view.state.sidebar_items,
+        view.show_hidden,
+        view.show_system,
+        view.show_network(),
+    ) {
         // Sections part as in the expanded tree; the places, pinned menu included, end first.
         if let SidebarItem::Header(_) = item {
             if let Some(pinned) = pinned.take() {
                 entries = entries.child(pinned);
             }
             entries = entries.child(crate::ui::elements::separator::horizontal(theme.border).px_2());
+            continue;
+        }
+        // An unmounted volume mounts on a click, as its row in the tree.
+        if let SidebarItem::Volume { volume } = item {
+            let label = super::volume_row::name(volume, cx.i18n());
+            let id = volume.id.clone();
+            let mount = handle.clone();
+            entries = entries.child(
+                sidebar_button_with_tooltip(
+                    format!("rail-volume-{}", volume.id),
+                    Tooltip::text(label),
+                    Some(if volume.removable { "icons/usb.svg" } else { "icons/hard-drive.svg" }),
+                    None,
+                    theme,
+                    true,
+                    false,
+                    move |_, _, cx| mount.update(cx, |this, cx| this.mount_volume(id.clone(), cx)),
+                )
+                .w_full()
+                .h(RAIL_ROW),
+            );
             continue;
         }
         let (path, label, icon, text) = match item {
@@ -223,8 +241,8 @@ pub(super) fn render_sidebar_rail(
             .on_mouse_down(MouseButton::Right, move |event, _, cx| {
                 cx.stop_propagation();
                 let items = match &menu_item {
-                    SidebarItem::Drive { drive, .. } => super::menus::drive_context_menu(
-                        cx.i18n(),
+                    SidebarItem::Drive { drive, .. } => super::menus::drive_menu_with_image(
+                        cx,
                         menu.clone(),
                         menu_path.clone(),
                         oxyde_lib::platform::platform().volumes().actions(drive),

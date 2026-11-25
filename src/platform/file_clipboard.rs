@@ -17,6 +17,11 @@ pub trait FileClipboard: Send + Sync {
     /// Checks whether files are offered, without opening or reading the clipboard.
     /// Paste must still validate its payload.
     fn has_file_format(&self) -> bool;
+    /// The clipboard type in which other applications offer files that `get_files`
+    /// reads, when the interface's clipboard knows offered types without reading them.
+    fn external_files_type(&self) -> Option<&'static str> {
+        None
+    }
     /// Hands the paste to the system when it offers files Oxyde cannot copy itself
     /// (virtual files, paths not written yet). Returns whether it did.
     fn paste_with_system(&self, _target: &str) -> Result<bool, String> {

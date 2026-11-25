@@ -8,6 +8,8 @@ const SECTION: &str = "preferred";
 pub(super) const ADDED: &str = "# Added by Oxyde for its file chooser.";
 /// Opens a file Oxyde wrote from the system's configuration, followed by its path.
 pub(super) const CREATED: &str = "# Written by Oxyde from ";
+/// Opens a file Oxyde wrote while the system had no configuration.
+const CREATED_ALONE: &str = "# Written by Oxyde; the system had no portal configuration.";
 
 fn section(line: &str) -> Option<&str> {
     line.trim().strip_prefix('[')?.strip_suffix(']').map(str::trim)
@@ -130,6 +132,18 @@ pub(super) fn without_portal(text: &str, id: &str) -> String {
 /// A file Oxyde wrote from `source`'s configuration, as Oxyde writes it.
 pub(super) fn created(source: &str, contents: &str) -> String {
     format!("{CREATED}{source}\n{contents}")
+}
+
+/// A file Oxyde writes when the system has no configuration to start from.
+pub(super) fn created_alone() -> String {
+    format!("{CREATED_ALONE}\n")
+}
+
+/// A file Oxyde wrote alone that no longer sets anything: sections, comments, blanks.
+pub(super) fn empty_creation(text: &str) -> bool {
+    let mut lines = text.lines();
+    lines.next() == Some(CREATED_ALONE)
+        && lines.map(str::trim).all(|line| line.is_empty() || line.starts_with('#') || section(line).is_some())
 }
 
 /// The configuration a file Oxyde wrote came from, and the rest of the file.

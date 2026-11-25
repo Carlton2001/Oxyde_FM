@@ -64,5 +64,12 @@ fn cancellation_and_missing_files_do_not_publish_an_incomplete_total() {
         .to_string_lossy()
         .into_owned();
     assert!(inspect_selection(std::slice::from_ref(&missing), &AtomicBool::new(true)).is_err());
-    assert!(inspect_selection(&[missing], &AtomicBool::new(false)).is_err());
+    assert!(inspect_selection(std::slice::from_ref(&missing), &AtomicBool::new(false)).is_err());
+    // Beside a readable file, the missing one is counted apart instead of failing all.
+    let present = root.path().join("present.txt");
+    std::fs::write(&present, [0; 4]).unwrap();
+    let paths = [present.to_string_lossy().into_owned(), missing];
+    let (summary, _, permissions) = inspect_selection(&paths, &AtomicBool::new(false)).unwrap();
+    assert_eq!((summary.files, summary.size, summary.unreadable), (1, 4, 1));
+    assert!(permissions.is_none());
 }

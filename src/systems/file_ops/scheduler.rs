@@ -312,6 +312,19 @@ impl FileOperationManager {
                         std::path::Component::ParentDir => {
                             parts.pop();
                         }
+                        // `\\?\C:\x` and `C:\x` reserve the same path.
+                        std::path::Component::Prefix(prefix) => parts.push(match prefix.kind() {
+                            std::path::Prefix::Disk(letter) | std::path::Prefix::VerbatimDisk(letter) => {
+                                format!("{}:", char::from(letter))
+                            }
+                            std::path::Prefix::UNC(server, share)
+                            | std::path::Prefix::VerbatimUNC(server, share) => format!(
+                                "//{}/{}",
+                                server.to_string_lossy(),
+                                share.to_string_lossy()
+                            ),
+                            _ => prefix.as_os_str().to_string_lossy().into_owned(),
+                        }),
                         other => parts.push(other.as_os_str().to_string_lossy().into_owned()),
                     }
                 }

@@ -24,6 +24,7 @@ enum Odf {
 }
 
 pub fn document(file: std::fs::File, extension: &str) -> Result<String, CommandError> {
+    PARTS_READ.with(|read| read.set((0, 0)));
     let mut archive =
         zip::ZipArchive::new(file).map_err(|error| CommandError::Other(error.to_string()))?;
     match extension.to_ascii_lowercase().as_str() {
@@ -46,13 +47,26 @@ pub fn document(file: std::fs::File, extension: &str) -> Result<String, CommandE
 
 type Archive = zip::ZipArchive<std::fs::File>;
 
+/// Decompressed bytes and parts read for the current document: many highly
+/// compressible sheets or slides must not each get the whole part budget.
+const MAX_DOCUMENT_BYTES: u64 = 2 * MAX_XML_BYTES;
+const MAX_PARTS: usize = 4096;
+thread_local! {
+    static PARTS_READ: std::cell::Cell<(u64, usize)> = const { std::cell::Cell::new((0, 0)) };
+}
+
 /// One bounded, decompressed XML part.
 fn entry(archive: &mut Archive, name: &str) -> Result<String, CommandError> {
+    let (bytes, parts) = PARTS_READ.with(std::cell::Cell::get);
+    if bytes >= MAX_DOCUMENT_BYTES || parts >= MAX_PARTS {
+        return Err(CommandError::Other("Office document exceeds the text extraction budget".into()));
+    }
     let entry = archive
         .by_name(name)
         .map_err(|error| CommandError::Other(error.to_string()))?;
     let mut xml = Vec::new();
-    entry.take(MAX_XML_BYTES).read_to_end(&mut xml)?;
+    entry.take(MAX_XML_BYTES.min(MAX_DOCUMENT_BYTES - bytes)).read_to_end(&mut xml)?;
+    PARTS_READ.with(|read| read.set((bytes + xml.len() as u64, parts + 1)));
     Ok(String::from_utf8_lossy(&xml).into_owned())
 }
 
@@ -112,16 +126,25 @@ impl Builder {
         self.line(tag, text.trim_end());
     }
     fn line(&mut self, tag: &str, text: &str) {
-        if self.full() {
+        // Room for the tag, its tab and the newline: a longer line is cut, so the
+        // Viewer shows the start of a huge paragraph instead of failing.
+        let Some(room) = MAX_OUTPUT_BYTES
+            .checked_sub(self.output.len() + tag.len() + 2)
+            .filter(|room| *room > 0)
+        else {
             return;
+        };
+        let mut end = text.len().min(room);
+        while !text.is_char_boundary(end) {
+            end -= 1;
         }
-        let clean: String = text
-            .chars()
-            .map(|c| if c == '\n' || c == '\r' || c == '\t' { ' ' } else { c })
-            .collect();
         self.output.push_str(tag);
         self.output.push('\t');
-        self.output.push_str(&clean);
+        self.output.extend(
+            text[..end]
+                .chars()
+                .map(|c| if c == '\n' || c == '\r' || c == '\t' { ' ' } else { c }),
+        );
         self.output.push('\n');
     }
     fn cell(&mut self) {
@@ -141,11 +164,7 @@ impl Builder {
         }
         if cells.iter().any(|cell| !cell.is_empty()) {
             let row = cells.join(&CELL_SEPARATOR.to_string());
-            if !self.full() {
-                self.output.push_str("tr\t");
-                self.output.push_str(&row.replace(['\n', '\r', '\t'], " "));
-                self.output.push('\n');
-            }
+            self.line("tr", &row);
         }
     }
 }
@@ -215,7 +234,7 @@ fn decode_entity(entity: &str) -> Option<char> {
     }
 }
 
-fn push_text(target: &mut String, text: &str) {
+pub(crate) fn push_text(target: &mut String, text: &str) {
     let mut rest = text;
     while let Some(index) = rest.find('&') {
         target.push_str(&rest[..index]);
@@ -239,8 +258,15 @@ fn push_text(target: &mut String, text: &str) {
 
 fn parse(xml: &str, odf: Option<Odf>) -> String {
     let mut builder = Builder { tag: "p", ..Default::default() };
+    let mut fallback = 0usize;
     tags(xml, |text, name, tag, closing| {
-        if builder.in_text && !text.is_empty() {
+        // Word saves a text box twice, in `mc:Choice` and in `mc:Fallback` for older
+        // readers: only the first copy is text.
+        if fallback_tag(name, tag, closing, &mut fallback) || fallback > 0 {
+            return !builder.full();
+        }
+        // Past the output budget the rest of a paragraph would only be cut.
+        if builder.in_text && !text.is_empty() && builder.paragraph.len() < MAX_OUTPUT_BYTES {
             push_text(&mut builder.paragraph, text);
         }
         match odf {
@@ -255,11 +281,30 @@ fn parse(xml: &str, odf: Option<Odf>) -> String {
     builder.output
 }
 
+/// Tracks the depth of `mc:Fallback` elements; `true` for their own tags.
+pub(super) fn fallback_tag(name: &str, tag: &str, closing: bool, depth: &mut usize) -> bool {
+    if name != "mc:Fallback" {
+        return false;
+    }
+    if closing {
+        *depth = depth.saturating_sub(1);
+    } else if !tag.ends_with('/') {
+        *depth += 1;
+    }
+    true
+}
+
+/// `<w:tab/>` in a run is a tab; with a position it defines a paragraph's tab stop.
+pub(super) fn is_tab_stop(tag: &str) -> bool {
+    attribute(tag, "w:pos").is_some()
+}
+
 fn parse_word(builder: &mut Builder, name: &str, tag: &str, closing: bool) {
     match (name, closing) {
         ("w:t", false) => builder.in_text = !tag.ends_with('/'),
         ("w:t", true) => builder.in_text = false,
-        ("w:tab", false) => builder.paragraph.push(' '),
+        // A tab stop definition (`<w:tabs><w:tab w:pos=…/>`) is no tab character.
+        ("w:tab", false) if !is_tab_stop(tag) => builder.paragraph.push(' '),
         ("w:br" | "w:cr", false) => builder.paragraph.push(' '),
         ("w:pStyle", false) => {
             if let Some(tag) = attribute(tag, "w:val").and_then(heading) {

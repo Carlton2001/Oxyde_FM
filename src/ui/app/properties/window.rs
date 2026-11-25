@@ -55,6 +55,17 @@ impl OxydeApp {
             .detach();
             return;
         }
+        // The same items' Properties already open come forward, measured once.
+        for open in cx.windows() {
+            let Some(open) = open.downcast::<PropertiesWindow>() else { continue };
+            let same = open.read(cx).is_ok_and(|properties| {
+                properties.properties_dialog.as_ref().is_some_and(|dialog| dialog.paths == paths)
+            });
+            if same {
+                let _ = open.update(cx, |_, window, _| window.activate_window());
+                return;
+            }
+        }
         let owner = cx.entity().downgrade();
         let owner_window = window.window_handle();
         let drive = self

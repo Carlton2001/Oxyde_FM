@@ -10,8 +10,8 @@
 | 2. Gros chantiers | M17, M67, reste de M43, M31, M32 | faisables, mais refonte |
 | 3. Impossibles ou choix volontaires | F26, F72, F119, WM1 (reste), M14, M88 (icônes), F77, ordre de deux lancements | à laisser, sauf décision contraire |
 | 4. Besoin d'une autre machine | M57/M58, E9/E10 sous Linux, faibles Linux F45 à F69 | session Linux (WM6 hors périmètre, 2026-11-19) |
-| 5. Faibles non examinés | archives, noyau et interface (voir annexe) | à traiter petit à petit |
-| 6. Optimisations (série O) | 86 constats (voir annexe) | à mesurer avant tout changement |
+| 5. Faibles non examinés | archives, noyau et interface (voir annexe) | suivi dans `102-faibles.md` (avec les faibles Linux) |
+| 6. Optimisations (série O) | 86 constats (voir annexe) | suivi dans `103-optimisations.md` |
 
 ## 1. Corrigeables dès à présent
 

@@ -168,3 +168,22 @@ fn a_selected_mount_point_is_not_emptied() {
         assert_eq!(std::fs::read(shown.join("inner/data")).unwrap(), b"kept");
     }
 }
+
+#[test]
+fn an_entry_the_listing_passed_is_found_by_another_pass() {
+    for workers in [1, 4] {
+        let (_root, folder) = tree();
+        let deep = folder.join("sub/deep");
+        let planted = AtomicBool::new(false);
+        remove(&parent(&folder), &folder, workers, &|| {
+            // Once deep is gone, sub gains a file its listing has most likely read past.
+            if !deep.exists() && folder.join("sub").exists() && !planted.swap(true, Ordering::Relaxed) {
+                std::fs::write(folder.join("sub/late"), b"late").unwrap();
+            }
+            Ok(())
+        })
+        .unwrap();
+        assert!(planted.load(Ordering::Relaxed), "{workers}");
+        assert!(!folder.exists(), "{workers}");
+    }
+}

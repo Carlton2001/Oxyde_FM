@@ -139,6 +139,35 @@ impl Drop for HistoryOperation<'_> {
     }
 }
 
+/// Checking a backup hashes it: the interface pushes entries (a new folder) and
+/// must not read a redo stack full of deletions on its thread.
+fn cleanup_off_caller(expired: Vec<Transaction>) {
+    if expired.is_empty() {
+        return;
+    }
+    // Tests check the cleanup itself as soon as the entry expires.
+    if cfg!(test) {
+        expired.iter().for_each(cleanup_metadata_backups);
+        return;
+    }
+    let expired = std::sync::Arc::new(std::sync::Mutex::new(Some(expired)));
+    let pending = expired.clone();
+    let spawned = std::thread::Builder::new()
+        .name("history-cleanup".into())
+        .spawn(move || {
+            let expired = pending.lock().unwrap_or_else(|e| e.into_inner()).take();
+            for transaction in expired.into_iter().flatten() {
+                cleanup_metadata_backups(&transaction);
+            }
+        });
+    if spawned.is_err() {
+        let expired = expired.lock().unwrap_or_else(|e| e.into_inner()).take();
+        for transaction in expired.into_iter().flatten() {
+            cleanup_metadata_backups(&transaction);
+        }
+    }
+}
+
 fn push_entry(state: &mut HistoryState, transaction: Transaction, expired: &mut Vec<Transaction>) {
     state.undo_stack.push(transaction);
     expired.append(&mut state.redo_stack);
@@ -177,9 +206,7 @@ impl HistoryManager {
                 push_entry(&mut data.history, transaction, &mut expired);
             }
         }
-        for transaction in expired {
-            cleanup_metadata_backups(&transaction);
-        }
+        cleanup_off_caller(expired);
     }
 
     /// Update only an idle NewFolder entry whose recorded object was renamed.

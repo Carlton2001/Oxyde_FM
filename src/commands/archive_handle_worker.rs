@@ -37,6 +37,8 @@ fn directory(
     let prefix = relative_archive_path(internal)?;
     let mut seen = std::collections::HashSet::new();
     let mut files = Vec::new();
+    // A folder that the archive no longer has is an error, not an empty listing.
+    let mut found = prefix.as_os_str().is_empty();
     for mut entry in entries {
         let relative = Path::new(&entry.path)
             .strip_prefix(path)
@@ -44,6 +46,7 @@ fn directory(
         let Ok(relative) = relative.strip_prefix(&prefix) else {
             continue;
         };
+        found = true;
         let mut parts = relative.components();
         let Some(first) = parts.next() else {
             continue;
@@ -63,6 +66,11 @@ fn directory(
             .into_owned();
         entry.name = name;
         files.push(entry);
+    }
+    if !found {
+        return Err(CommandError::ArchiveError(
+            super::archive::DIRECTORY_NOT_FOUND.into(),
+        ));
     }
     Ok(files)
 }

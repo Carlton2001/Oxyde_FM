@@ -116,7 +116,7 @@ impl OxydeApp {
                     for tab in &pane.tabs {
                         for file in tab.files.iter() {
                             crate::ui::components::icons::invalidate_file_icon_assets(&file.path, cx);
-                            crate::ui::components::tooltip::invalidate_media_preview(&file.path);
+                            crate::ui::components::tooltip::invalidate_media_preview(&file.path, cx);
                         }
                     }
                 });

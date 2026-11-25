@@ -7,6 +7,9 @@ use std::{
     sync::{Arc, Mutex, OnceLock, Weak},
 };
 
+/// Distinct covers the pool tracks at once.
+const MAX_SHARED: usize = 4096;
+
 #[derive(Default)]
 struct Pool(HashMap<blake3::Hash, Weak<RenderImage>>);
 
@@ -22,12 +25,11 @@ impl Pool {
             return shared;
         }
         self.0.retain(|_, image| image.strong_count() > 0);
-        if self.0.len() >= 4096 {
-            if let Some(key) = self.0.keys().next().copied() {
-                self.0.remove(&key);
-            }
+        // Every entry still shared: the new image goes unshared rather than one of
+        // them, which a later identical cover would then copy.
+        if self.0.len() < MAX_SHARED {
+            self.0.insert(key, Arc::downgrade(&image));
         }
-        self.0.insert(key, Arc::downgrade(&image));
         image
     }
 }

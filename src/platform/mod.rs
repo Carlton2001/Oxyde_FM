@@ -1180,6 +1180,10 @@ mod linux_update;
 #[cfg(not(target_os = "windows"))]
 mod linux_download;
 #[cfg(not(target_os = "windows"))]
+mod linux_process;
+#[cfg(not(target_os = "windows"))]
+mod linux_io_priority;
+#[cfg(not(target_os = "windows"))]
 mod linux_signature;
 #[cfg(not(target_os = "windows"))]
 pub use linux_trash::{KdeLimitAction, KdeTrashLimits, TrashRetention};
@@ -1305,6 +1309,14 @@ pub(crate) fn finish_archive_worker_shutdown() -> Result<(), String> {
     {
         platform().finish_process_shutdown()
     }
+}
+
+/// Ends a worker whose request failed with exit code 1: its parent checks the
+/// status and reports a failed worker, not an empty or truncated reply.
+/// Only the Windows handle workers use it.
+#[cfg(target_os = "windows")]
+pub(crate) fn finish_failed_worker_shutdown() -> Result<(), String> {
+    windows_impl::shutdown_with(1)
 }
 
 /// Internal worker dispatch; never called by the UI to bypass process isolation.

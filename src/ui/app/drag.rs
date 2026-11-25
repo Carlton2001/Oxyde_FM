@@ -9,7 +9,6 @@ pub(super) mod external;
 pub(crate) mod outgoing;
 #[cfg(target_os = "windows")]
 pub(super) mod native;
-#[cfg(not(target_os = "windows"))]
 pub(super) mod volumes;
 
 fn actionable_drop_paths(mut paths: Vec<String>, target: &str) -> Vec<String> {
@@ -60,12 +59,11 @@ mod modifier_tests;
 mod native_input_tests;
 
 /// Returns true if `src` and `dst` are on different drives/volumes.
-/// On Windows this compares the root prefix (e.g. "C:" vs "D:").
+/// On Windows this compares the drive or share (`\\?\` forms included), then the
+/// volumes mounted in folders.
 #[cfg(target_os = "windows")]
 pub fn drives_differ(src: &str, dst: &str) -> bool {
-    let src_root = std::path::Path::new(src).components().next();
-    let dst_root = std::path::Path::new(dst).components().next();
-    src_root != dst_root
+    volumes::roots_differ(src, dst) || volumes::mounts_differ(src, dst)
 }
 
 /// Every absolute Linux path starts with `/`: compare mount points instead.
@@ -292,8 +290,16 @@ impl OxydeApp {
 
     /// What the hovered drop target decides for an internal drag: the default operation
     /// and whether it takes nothing. Returns true when it refuses, so it takes no highlight.
+    /// Nothing is dropped where nothing can be written: a read-only volume or archive,
+    /// the Trash, the network list, or search results.
+    pub(crate) fn refuses_drop(&self, target: &str) -> bool {
+        matches!(target, "trash://" | "__network_vincinity__")
+            || target.starts_with("search://")
+            || self.is_read_only_path(target)
+    }
+
     pub(crate) fn note_drag_target(&mut self, paths: &[String], target: &str, cx: &mut Context<Self>) -> bool {
-        let refused = self.is_read_only_path(target);
+        let refused = self.refuses_drop(target);
         let default_copy = paths.first().is_some_and(|path| drives_differ(path, target));
         if self.drag_target_refused != refused {
             self.drag_target_refused = refused;
@@ -355,6 +361,9 @@ impl OxydeApp {
     }
 
     pub(crate) fn execute_file_drop(&mut self, paths: Vec<String>, target: String, cx: &mut Context<Self>) {
+        if self.refuses_drop(&target) {
+            return;
+        }
         let paths = actionable_drop_paths(paths, &target);
         if self.drag_copy_mode {
             self.execute_file_copy(paths, target, cx);
@@ -566,6 +575,19 @@ impl OxydeApp {
 /// Hover time over a tab before a drag activates it.
 const DRAG_TAB_SWITCH_DELAY: std::time::Duration = std::time::Duration::from_millis(600);
 
+/// A tab waiting for drag activation; dropping it cancels its timer.
+pub(crate) struct DragTabSwitch {
+    pane_id: String,
+    tab_ix: usize,
+    _timer: Task<()>,
+}
+
+impl DragTabSwitch {
+    fn targets(&self, pane_id: &str, tab_ix: usize) -> bool {
+        self.pane_id == pane_id && self.tab_ix == tab_ix
+    }
+}
+
 impl OxydeApp {
     /// Activates the hovered tab once the drag pointer has rested on it long enough.
     pub(crate) fn hover_tab_during_drag(&mut self, pane_id: &str, tab_ix: usize, cx: &mut Context<Self>) {
@@ -575,28 +597,25 @@ impl OxydeApp {
             self.drag_tab_switch = None;
             return;
         }
-        let target = (pane_id.to_owned(), tab_ix);
-        if self.drag_tab_switch.as_ref() == Some(&target) {
+        if self.drag_tab_switch.as_ref().is_some_and(|switch| switch.targets(pane_id, tab_ix)) {
             return;
         }
-        self.drag_tab_switch = Some(target.clone());
-        cx.spawn(async move |this, cx| {
+        let pane = pane_id.to_owned();
+        let timer = cx.spawn(async move |this, cx| {
             cx.background_executor().timer(DRAG_TAB_SWITCH_DELAY).await;
             let _ = this.update(cx, |this, cx| {
-                if this.drag_tab_switch.as_ref() == Some(&target) {
-                    this.drag_tab_switch = None;
-                    if cx.has_active_drag() {
-                        this.switch_tab(&target.0, target.1, cx);
-                    }
+                this.drag_tab_switch = None;
+                if cx.has_active_drag() {
+                    this.switch_tab(&pane, tab_ix, cx);
                 }
             });
-        })
-        .detach();
+        });
+        self.drag_tab_switch = Some(DragTabSwitch { pane_id: pane_id.to_owned(), tab_ix, _timer: timer });
     }
 
     /// Cancels a pending drag activation when the pointer leaves that tab.
     pub(crate) fn leave_tab_during_drag(&mut self, pane_id: &str, tab_ix: usize) {
-        if self.drag_tab_switch.as_ref().is_some_and(|(pane, ix)| pane == pane_id && *ix == tab_ix) {
+        if self.drag_tab_switch.as_ref().is_some_and(|switch| switch.targets(pane_id, tab_ix)) {
             self.drag_tab_switch = None;
         }
     }

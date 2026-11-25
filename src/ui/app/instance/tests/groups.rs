@@ -9,10 +9,21 @@ fn items_open_one_tab_per_folder_in_their_order() {
     ]);
 }
 
+#[cfg(not(target_os = "windows"))]
+#[test]
+fn a_root_item_opens_itself_once_beside_its_children() {
+    let items = ["/", "/etc", "/"].map(String::from).to_vec();
+    assert_eq!(by_folder(items), [
+        ("/".to_string(), Vec::new()),
+        ("/".to_string(), vec!["/etc".to_string()]),
+    ]);
+}
+
 #[test]
 fn a_tab_shows_a_folder_whatever_its_trailing_separator() {
     assert!(shows("/home/me/", "/home/me"));
     assert!(shows("/", "/"));
     assert!(!shows("/home/me", "/home/me2"));
     assert_eq!(shows(r"C:\Users\Me", r"c:\users\me\"), cfg!(target_os = "windows"));
+    assert_eq!(shows(r"\\?\C:\Users\Me", "c:/users/me"), cfg!(target_os = "windows"));
 }

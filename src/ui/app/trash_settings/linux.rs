@@ -52,6 +52,15 @@ fn format_percent(percent: f64) -> String {
     text.strip_suffix(".0").map(str::to_string).unwrap_or(text)
 }
 
+/// The percentage typed, or the one read when the field still shows it: the field rounds
+/// to one decimal, and KDE's 12.34 would otherwise be saved as 12.3.
+fn typed_percent(text: &str, read: f64) -> Option<f64> {
+    if text.trim() == format_percent(read) {
+        return Some(read);
+    }
+    parse_percent(text)
+}
+
 impl OxydeApp {
     fn trash_number_input(&self, field: Field, window: &mut Window, cx: &mut Context<Self>) -> Entity<TextInput> {
         let h = self.handle.as_ref().unwrap().clone();
@@ -173,7 +182,7 @@ impl OxydeApp {
         let valid = match &mut dialog.retention {
             TrashRetention::Gnome { days, .. } => parse_days(&dialog.days_value).map(|value| *days = value).is_some(),
             TrashRetention::Kde(limits) => match limits.get_mut(dialog.selected) {
-                Some(limits) => match (parse_days(&dialog.days_value), parse_percent(&dialog.percent_value)) {
+                Some(limits) => match (parse_days(&dialog.days_value), typed_percent(&dialog.percent_value, limits.percent)) {
                     (Some(days), Some(percent)) => {
                         limits.days = days;
                         limits.percent = percent;

@@ -21,6 +21,40 @@ fn detail(path: &str, error: &PermissionError, cx: &App) -> String {
 }
 
 impl PropertiesWindow {
+    /// Reads again the permissions of `paths`, off the UI thread, as the items' loaded state.
+    fn reload_permissions(&mut self, paths: Vec<String>, revision: u64, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let fresh = cx
+                .background_spawn(async move {
+                    paths
+                        .into_iter()
+                        .filter_map(|path| {
+                            let loaded = oxyde_lib::commands::io::get_file_properties(path.clone()).ok()?.permissions?;
+                            Some((path, loaded))
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                let Some(edit) = this
+                    .properties_dialog
+                    .as_mut()
+                    .filter(|dialog| dialog.revision == revision)
+                    .and_then(|dialog| dialog.permissions.as_mut())
+                else {
+                    return;
+                };
+                for (path, loaded) in fresh {
+                    if let Some(item) = edit.items.iter_mut().find(|item| item.path == path) {
+                        item.loaded = loaded;
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     pub(in crate::ui::app::properties) fn save_permissions(
         &mut self,
         changes: Vec<(String, PermissionChange)>,
@@ -103,6 +137,16 @@ impl PropertiesWindow {
                             args.set("detail", first.clone());
                             dialog.error = Some(cx.i18n().text_with_args(Message::PermissionsIncomplete, &args).to_string());
                         }
+                    }
+                    // Changed since the window opened: what they have now is read again, so
+                    // that OK applies the choices over it instead of failing each time.
+                    let changed: Vec<String> = results
+                        .iter()
+                        .filter(|(_, result)| matches!(result, Err(PermissionError::Changed)))
+                        .map(|(path, _)| path.clone())
+                        .collect();
+                    if !changed.is_empty() {
+                        this.reload_permissions(changed, revision, cx);
                     }
                     if results.iter().any(|(_, result)| applied(result)) {
                         if let Some(owner) = this.owner.upgrade() {

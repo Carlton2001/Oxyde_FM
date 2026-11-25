@@ -2,6 +2,9 @@ use super::{Annuler, OxydeApp, PendingFileOperation, Refaire, ToastKind};
 use crate::ui::i18n::{I18nContext, Message};
 use gpui::*;
 
+/// Notices waiting behind the one shown.
+const MAX_QUEUED_NOTICES: usize = 8;
+
 /// What a failed deletion left behind, tied to the notice it was reported with.
 #[derive(Clone)]
 pub(crate) struct DeleteRetry {
@@ -150,11 +153,11 @@ impl OxydeApp {
                     }
                     Ok(Err(error)) => {
                         log::warn!("Streamed drop failed: {error}");
-                        this.file_operation_notice = Some((Message::PrepareFailed, error));
+                        this.report_notice((Message::PrepareFailed, error), None);
                         cx.notify();
                     }
                     Err(error) => {
-                        this.file_operation_notice = Some((Message::PrepareFailed, format!("{error}")));
+                        this.report_notice((Message::PrepareFailed, format!("{error}")), None);
                         cx.notify();
                     }
                 });
@@ -220,13 +223,11 @@ impl OxydeApp {
                         this.queue_file_operation(paths, target_dir, is_move, None, runtime, staging, cx)
                     }
                     Ok(Err(error)) => {
-                        this.file_operation_notice =
-                            Some((Message::PrepareFailed, format!("{error}")));
+                        this.report_notice((Message::PrepareFailed, format!("{error}")), None);
                         cx.notify();
                     }
                     Err(error) => {
-                        this.file_operation_notice =
-                            Some((Message::PrepareFailed, format!("{error}")));
+                        this.report_notice((Message::PrepareFailed, format!("{error}")), None);
                         cx.notify();
                     }
                 });
@@ -324,8 +325,7 @@ impl OxydeApp {
                                 }
                                 // The alert below reports the kept files; a toast would repeat it.
                                 let recovery = this.refresh_after_archive_recovery(&error, cx).is_some();
-                                this.delete_retry = retry;
-                                this.file_operation_notice = Some((if recovery { Message::ArchiveRecoveryNotice } else { Message::TransferFailed }, error));
+                                this.report_notice((if recovery { Message::ArchiveRecoveryNotice } else { Message::TransferFailed }, error), retry);
                                 cx.notify();
                             });
                             break;
@@ -408,7 +408,8 @@ fn delete_retry(
     };
     let mut paths: Vec<String> = outcomes
         .into_iter()
-        .filter(|(path, outcome)| *outcome != ItemOutcome::Completed && path.exists())
+        // A broken link is still there to delete.
+        .filter(|(path, outcome)| *outcome != ItemOutcome::Completed && std::fs::symlink_metadata(path).is_ok())
         .map(|(path, _)| path.to_string_lossy().into_owned())
         .collect();
     paths.sort();
@@ -416,9 +417,22 @@ fn delete_retry(
 }
 
 impl OxydeApp {
+    /// Shows a failure's notice, or queues it behind the one shown so that neither it
+    /// nor the shown one's retry is lost.
+    pub(crate) fn report_notice(&mut self, notice: (Message, String), retry: Option<DeleteRetry>) {
+        if self.file_operation_notice.is_none() {
+            self.file_operation_notice = Some(notice);
+            self.delete_retry = retry;
+        } else if self.queued_notices.len() < MAX_QUEUED_NOTICES {
+            self.queued_notices.push_back((notice, retry));
+        } else {
+            log::warn!("Operation notice dropped, {MAX_QUEUED_NOTICES} already wait: {}", notice.1);
+        }
+    }
+
     pub(crate) fn retry_failed_delete(&mut self, cx: &mut Context<Self>) {
         let retry = self.delete_retry.take();
-        self.file_operation_notice = None;
+        self.dismiss_notice();
         if let Some(retry) = retry {
             self.queue_trash_delete(retry.paths, retry.permanent, cx);
         }

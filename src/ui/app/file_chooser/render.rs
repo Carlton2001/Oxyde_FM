@@ -44,6 +44,9 @@ impl Render for FileChooserWindow {
         self.apply_band(cx);
         self.hide_tooltip_for_band(window, cx);
         self.window_width = window.viewport_size().width.as_f32() / logical(1.0);
+        if std::mem::take(&mut self.refocus) && window.focused(cx).is_none() {
+            window.focus(&self.focus, cx);
+        }
         // Another folder: its entries' tooltips go, as the main window's do with its path.
         if self.tooltip_folder != self.folder {
             self.tooltip_folder = self.folder.clone();

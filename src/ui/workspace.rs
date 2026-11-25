@@ -281,6 +281,9 @@ pub struct TabStripState {
     /// While something is dragged near an edge of an overflowing strip: how deep the
     /// pointer is in the edge band (negative on the left), and the last scroll step.
     pub drag_scroll: std::rc::Rc<std::cell::Cell<Option<(f32, std::time::Instant)>>>,
+    /// When the chain of frames scrolling the strip last ran: a drag back into the band
+    /// before its next frame keeps that chain rather than starting a second one.
+    pub drag_scroll_frame: std::rc::Rc<std::cell::Cell<Option<std::time::Instant>>>,
 }
 
 #[derive(Clone)]

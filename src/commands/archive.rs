@@ -262,6 +262,8 @@ fn directory_entries(
     let relative_prefix = relative_archive_path(internal_prefix)?;
     let mut seen = HashSet::new();
     let mut files = Vec::new();
+    // A folder that the archive no longer has is an error, not an empty listing.
+    let mut found = relative_prefix.as_os_str().is_empty();
     for mut entry in entries {
         let relative = Path::new(&entry.path)
             .strip_prefix(path)
@@ -269,6 +271,7 @@ fn directory_entries(
         let Ok(relative) = relative.strip_prefix(&relative_prefix) else {
             continue;
         };
+        found = true;
         let mut parts = relative.components();
         let Some(first) = parts.next() else {
             continue;
@@ -289,8 +292,13 @@ fn directory_entries(
         entry.name = name;
         files.push(entry);
     }
+    if !found {
+        return Err(CommandError::ArchiveError(DIRECTORY_NOT_FOUND.into()));
+    }
     Ok(files)
 }
+
+pub(crate) const DIRECTORY_NOT_FOUND: &str = "Archive directory not found";
 
 fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, CommandError> {
     let mut entries = Vec::new();
@@ -304,6 +312,7 @@ fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, 
         format!("{normalized}/")
     };
     let mut seen: HashSet<String> = HashSet::new();
+    let mut found = normalized.is_empty();
 
     // Listing needs only the 7z header; do not decompress every file while navigating.
     for entry in super::archive_seven_open::indexed_files(path, &|| Ok(()))? {
@@ -312,6 +321,7 @@ fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, 
             .map_err(|_| CommandError::ArchiveError("Invalid archive entry path".into()))?
             .to_string_lossy()
             .replace('\\', "/");
+        found |= name == normalized || name.starts_with(&prefix);
         if name.starts_with(&prefix) && name != prefix {
             let relative = &name[prefix.len()..];
             let parts: Vec<&str> = relative
@@ -349,6 +359,9 @@ fn list_seven_zip(path: &Path, internal_prefix: &str) -> Result<Vec<FileEntry>, 
                 }
             }
         }
+    }
+    if !found {
+        return Err(CommandError::ArchiveError(DIRECTORY_NOT_FOUND.into()));
     }
 
     Ok(entries)

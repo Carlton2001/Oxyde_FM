@@ -1,9 +1,12 @@
 //! HTTPS GET through curl, or wget when curl is missing: the tools install.sh itself
 //! needs, which follow the user's proxy variables and the system's certificates.
-use std::io::{self, Read};
-use std::process::{Command, Stdio};
+use std::io;
+use std::process::Command;
+use std::time::Duration;
 
 const USER_AGENT: &str = concat!("Oxyde/", env!("CARGO_PKG_VERSION"));
+/// The whole download, beyond curl's own `--max-time`: wget has no total limit.
+const TIMEOUT: Duration = Duration::from_secs(620);
 
 /// Download `url` into memory, refusing bodies larger than `limit` bytes.
 pub(super) fn download(url: &str, limit: usize) -> io::Result<Vec<u8>> {
@@ -33,33 +36,36 @@ fn curl(url: &str, limit: usize) -> Command {
     command
 }
 
+/// `--no-config` ignores ~/.wgetrc. Wget2 (Fedora's `wget`) also refuses a redirect to
+/// HTTP under `--https-only`, and then ends successfully without a body; wget 1 applies
+/// that option only to recursive downloads. The signature checks what arrives.
 fn wget(url: &str) -> Command {
     let mut command = Command::new("wget");
-    command.args(["--quiet", "--https-only", "--max-redirect=5", "--timeout=15", "--output-document=-"])
+    command.args(["--no-config", "--quiet", "--https-only", "--max-redirect=5", "--timeout=15",
+        "--output-document=-"])
         .arg(format!("--user-agent={USER_AGENT}"))
         .arg(url);
     command
 }
 
-fn run(mut command: Command, limit: usize) -> io::Result<Vec<u8>> {
+fn run(command: Command, limit: usize) -> io::Result<Vec<u8>> {
     let tool = command.get_program().to_string_lossy().into_owned();
-    let mut child = command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
-    let mut body = Vec::new();
-    let read = child.stdout.take().expect("piped stdout").take(limit as u64 + 1).read_to_end(&mut body);
-    if body.len() > limit {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err(io::Error::new(io::ErrorKind::FileTooLarge, "The download exceeds its size limit"));
-    }
-    let output = child.wait_with_output()?;
-    read?;
+    let output = super::linux_process::output_within(command, TIMEOUT, limit).map_err(|error| match error.kind() {
+        io::ErrorKind::FileTooLarge => io::Error::new(io::ErrorKind::FileTooLarge, "The download exceeds its size limit"),
+        io::ErrorKind::TimedOut => io::Error::new(io::ErrorKind::TimedOut, "The download took too long"),
+        _ => error,
+    })?;
     if !output.status.success() {
         let message = String::from_utf8_lossy(&output.stderr);
         let message = message.lines().rev().map(str::trim).find(|line| !line.is_empty())
             .map_or_else(|| format!("{tool} failed with {}", output.status), |line| format!("{tool}: {line}"));
         return Err(io::Error::other(message));
     }
-    Ok(body)
+    // Nothing Oxyde downloads is empty: a refused redirect.
+    if output.stdout.is_empty() {
+        return Err(io::Error::other(format!("{tool}: the server sent nothing")));
+    }
+    Ok(output.stdout)
 }
 
 #[cfg(test)]

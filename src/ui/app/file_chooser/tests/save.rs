@@ -54,3 +54,26 @@ fn strict_types_give_the_shown_filter_s_extension_to_names_it_does_not_show() {
     let any = FileTypeFilter { name: "All".into(), patterns: vec![FileTypePattern::Glob("*".into())] };
     assert_eq!(strictly_typed(PathBuf::from("/f/notes"), &any), PathBuf::from("/f/notes"));
 }
+
+#[test]
+fn a_read_only_file_is_refused_and_a_writable_one_kept_unchanged() {
+    let folder = tempfile::tempdir().unwrap();
+    let (writable, locked) = (folder.path().join("a.txt"), folder.path().join("b.txt"));
+    std::fs::write(&writable, b"kept").unwrap();
+    std::fs::write(&locked, b"kept").unwrap();
+    let mut permissions = std::fs::metadata(&locked).unwrap().permissions();
+    permissions.set_readonly(true);
+    std::fs::set_permissions(&locked, permissions).unwrap();
+    assert!(!super::read_only(&writable));
+    // Root writes whatever the permissions say.
+    #[cfg(unix)]
+    let root = rustix::process::geteuid().is_root();
+    #[cfg(not(unix))]
+    let root = false;
+    assert_eq!(super::read_only(&locked), !root);
+    assert_eq!(std::fs::read(&writable).unwrap(), b"kept");
+    let mut permissions = std::fs::metadata(&locked).unwrap().permissions();
+    #[allow(clippy::permissions_set_readonly_false)]
+    permissions.set_readonly(false);
+    std::fs::set_permissions(&locked, permissions).unwrap();
+}

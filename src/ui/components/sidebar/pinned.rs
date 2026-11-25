@@ -10,7 +10,7 @@ pub(crate) fn render_pinned_menu(view: &OxydeApp, handle: Entity<OxydeApp>, wind
         let origin = view.context_anchor_points.get("sidebar-pinned").copied().unwrap_or_default();
         // Include the rail's trailing padding so the menu starts outside
         // the sidebar, while clicks on the button still reach its toggle.
-        let bounds = Bounds::new(origin, size(window.rem_size() * 2.5, window.rem_size() * 2.0));
+        let bounds = Bounds::new(origin, size(window.rem_size() * 2.5, super::RAIL_WIDTH.to_pixels(window.rem_size())));
         crate::ui::components::popup::show("pinned-rail", crate::ui::components::popup::PopupAnchor::beside(bounds, false), handle.clone(), window, cx,
             |view| view.sidebar_collapsed && view.pinned_rail_open,
             |view, window, cx| render_pinned_contents(view, cx.entity(), window, cx),
@@ -59,7 +59,9 @@ fn render_pinned_contents(
         .get("sidebar-pinned")
         .copied()
         .unwrap_or_default();
-    let button_bounds = Bounds::new(origin, size(window.rem_size() * 2.0, window.rem_size() * 2.0));
+    // The button's whole cell, square in the rail: a press on its edge is the button's.
+    let cell = super::RAIL_WIDTH.to_pixels(window.rem_size());
+    let button_bounds = Bounds::new(origin, size(cell, cell));
     let menu = crate::ui::components::select_menu::surface(theme)
         .id("pinned-rail-menu")
         .w(rems(17.0))

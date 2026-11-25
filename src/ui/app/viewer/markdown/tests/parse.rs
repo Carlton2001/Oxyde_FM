@@ -36,9 +36,15 @@ fn local_images_resolve_relative_paths_and_remote_images_keep_alt_text() {
         "file:///C:/image.png",
         "data:image/png;base64,xx",
         "/image.png",
+        "../image.png",
+        "images/../../image.png",
     ] {
         assert!(local_image("C:/docs/readme.md", destination).is_none());
     }
+    for device in ["NUL", "images/con.png", "COM1.jpg"] {
+        assert_eq!(local_image("C:/docs/readme.md", device).is_none(), cfg!(windows), "{device}");
+    }
+    assert!(local_image("C:/docs/readme.md", "./images/a.png").is_some());
 }
 
 #[test]

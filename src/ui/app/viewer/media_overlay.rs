@@ -84,6 +84,8 @@ pub(super) struct Overlay {
     owner_raw: Option<RawWindowHandle>,
     scale: f32,
     pending: bool,
+    /// No popup could open: no new attempt, nor log, until the overlay closes.
+    failed: bool,
     revision: u64,
 }
 
@@ -416,11 +418,17 @@ impl Viewer {
             return;
         }
         // Create the popups on the first hover only.
-        if self.overlay.pending || !Part::ALL.iter().any(|part| self.overlay.shown(*part, neighbors)) {
+        if self.overlay.pending || self.overlay.failed
+            || !Part::ALL.iter().any(|part| self.overlay.shown(*part, neighbors)) {
             return;
         }
-        let Ok(raw_owner) = HasWindowHandle::window_handle(window).map(|raw| raw.as_raw()) else {
-            return;
+        let raw_owner = match HasWindowHandle::window_handle(window).map(|raw| raw.as_raw()) {
+            Ok(raw) => raw,
+            Err(error) => {
+                log::error!("Cannot open Viewer media controls: {error}");
+                self.overlay.failed = true;
+                return;
+            }
         };
         self.overlay.pending = true;
         let revision = self.overlay.revision;
@@ -474,6 +482,7 @@ impl Viewer {
                 this.overlay.pending = false;
                 let current = this.overlay.revision == revision;
                 if current {
+                    this.overlay.failed = opened.is_empty();
                     this.overlay.popups = opened.clone();
                 }
                 cx.notify();

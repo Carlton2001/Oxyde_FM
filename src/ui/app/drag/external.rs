@@ -91,7 +91,7 @@ fn choose_effect(
 
 /// Nothing is dropped where nothing can be written: the source shows a refusal.
 fn drop_effect(paths: &[String], target: &str, modifiers: Modifiers, app: &OxydeApp) -> FileDropEffect {
-    if app.is_read_only_path(target) {
+    if app.refuses_drop(target) {
         return FileDropEffect::None;
     }
     choose_effect(paths, target, modifiers, &app.external_drop)

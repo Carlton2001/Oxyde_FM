@@ -100,7 +100,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
             .w(px(total_w))
             .bg(if is_selected { theme.selected } else if is_active_pane { theme.active_background } else { theme.background })
             .when(!is_selected, |s| s.hover(|s| s.bg(theme.hover)))
-            .when(show_tooltips, |d| d.file_tooltip(h.clone(), p_id.clone(), path.clone(), cx, Tooltip::for_item(file.clone(), search_results, show_media_previews, provisional_size)))
+            .when(show_tooltips, |d| d.file_tooltip(h.clone(), p_id.clone(), path.clone(), Tooltip::item_revision(&file, provisional_size), cx, Tooltip::for_item(file.clone(), search_results, show_media_previews, provisional_size)))
             .on_mouse_down(MouseButton::Left, {
                 let p = path.clone();
                 let h_inner_inner = h.clone();

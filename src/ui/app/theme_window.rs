@@ -4,6 +4,7 @@
 mod draft;
 mod editor;
 mod list;
+mod prompt;
 mod render;
 
 use super::OxydeApp;
@@ -18,7 +19,9 @@ pub(crate) fn close_theme_windows(cx: &mut App) -> bool {
     let mut closed = false;
     for handle in cx.windows() {
         if let Some(handle) = handle.downcast::<ThemeWindow>() {
-            closed |= handle.update(cx, |_, window, cx| {
+            closed |= handle.update(cx, |this, window, cx| {
+                // The draft's preview goes with it, or the main window would keep it.
+                this.discard_draft(cx);
                 crate::ui::components::tool_window::close_transients(window, cx);
                 window.remove_window()
             }).is_ok();
@@ -42,11 +45,15 @@ struct Stops {
     save: FocusHandle,
     field: FocusHandle,
     hue: FocusHandle,
+    prompt_cancel: FocusHandle,
+    prompt_confirm: FocusHandle,
 }
 
 pub struct ThemeWindow {
     owner: WeakEntity<OxydeApp>,
     draft: Option<ThemeDraft>,
+    /// A question covering the window, answered before anything else.
+    prompt: Option<prompt::ThemePrompt>,
     focus: FocusHandle,
     stops: Stops,
     field_bounds: MeasuredBounds,
@@ -128,6 +135,7 @@ impl ThemeWindow {
         Self {
             owner,
             draft: None,
+            prompt: None,
             focus,
             stops: Stops {
                 create: cx.focus_handle(),
@@ -136,6 +144,8 @@ impl ThemeWindow {
                 save: cx.focus_handle(),
                 field: cx.focus_handle(),
                 hue: cx.focus_handle(),
+                prompt_cancel: cx.focus_handle(),
+                prompt_confirm: cx.focus_handle(),
             },
             field_bounds: Default::default(),
             hue_bounds: Default::default(),

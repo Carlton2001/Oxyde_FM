@@ -36,6 +36,10 @@ pub(super) fn failure(error: rars::Error, tried: bool) -> CommandError {
         rars::ErrorKind::PasswordRequired => ArchivePasswordFailure::Required.into(),
         rars::ErrorKind::BadPassword if tried => ArchivePasswordFailure::Wrong.into(),
         rars::ErrorKind::BadPassword => ArchivePasswordFailure::Required.into(),
+        // A valid archive past one of the bounds set in `options`, not a damaged one.
+        rars::ErrorKind::ResourceLimit => {
+            CommandError::ArchiveError(format!("RAR archive exceeds Oxyde's processing limits: {error}"))
+        }
         _ => match error.root_cause() {
             rars::Error::Io(io) => io::Error::new(io.kind, io.message.clone()).into(),
             _ => CommandError::ArchiveError(format!("Invalid RAR archive: {error}")),
@@ -142,16 +146,21 @@ pub(super) fn verify(path: &Path, file: File, sample: u64) -> Option<ArchivePass
         Ok(archive) => archive,
         Err(error) => return refusal(error),
     };
-    let chosen = archive
+    let solid = archive.is_solid();
+    let mut encrypted = archive
         .members()
         .enumerate()
-        .filter(|(_, member)| member.meta.is_encrypted && !member.meta.is_directory && !member.meta.is_redirection)
-        .min_by_key(|(_, member)| member.meta.unpacked_size)?
-        .0;
+        .filter(|(_, member)| member.meta.is_encrypted && !member.meta.is_directory && !member.meta.is_redirection);
+    // A solid archive decodes every member before the chosen one: take the first.
+    let chosen = if solid {
+        encrypted.next()
+    } else {
+        encrypted.min_by_key(|(_, member)| member.meta.unpacked_size)
+    }?
+    .0;
     if secret.is_none() {
         return Some(ArchivePasswordFailure::Required);
     }
-    let solid = archive.is_solid();
     let mut index = 0;
     let result = archive.extract_with_control(options(secret.as_ref(), ArchiveLimits::LISTING), |member| {
         let current = index;

@@ -260,7 +260,7 @@ pub fn render_top_bar(
                         .on_mouse_down(MouseButton::Left, move |event, _, cx| {
                             h.update(cx, |this, cx| {
                                 this.shift_delete = event.modifiers.shift;
-                                this.state.active_pane_id = p.clone();
+                                this.activate_pane(&p, cx);
                                 match action {
                                     0 => { if let Some(parent) = &parent { this.navigate_to(&p, parent.clone(), cx); } }
                                     1 => this.execute_undo(cx),

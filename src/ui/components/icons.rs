@@ -1,4 +1,5 @@
 mod colors;
+mod system_cache;
 pub use colors::FileIconPalette;
 
 use once_cell::sync::Lazy;
@@ -190,8 +191,10 @@ pub static WORD_EXTENSIONS: Lazy<HashSet<&'static str>> =
 pub static EXCEL_EXTENSIONS: Lazy<HashSet<&'static str>> =
     Lazy::new(|| ["xls", "xlsx", "ods", "csv", "tsv", "numbers", "xlsm"].into());
 
+// `.key` is left to certificates: off macOS, it is a private key far more often
+// than a Keynote presentation.
 pub static POWERPOINT_EXTENSIONS: Lazy<HashSet<&'static str>> =
-    Lazy::new(|| ["ppt", "pptx", "odp", "key", "pps", "ppsx"].into());
+    Lazy::new(|| ["ppt", "pptx", "odp", "pps", "ppsx"].into());
 
 pub static DATABASE_EXTENSIONS: Lazy<HashSet<&'static str>> =
     Lazy::new(|| ["accdb", "mdb", "db", "sqlite", "sqlite3"].into());
@@ -481,13 +484,15 @@ pub(crate) fn render_file_icon(
         SharedString::from(oxyde_lib::platform::platform().file_icon_source(&path, matches!(icon, IconType::Folder | IconType::FolderOpen), preserve_path)),
         large,
     );
+    // Keyed by the file itself rather than by its type: an icon of its own.
+    let unique = source.0.as_ref() == path;
     img(move |window: &mut Window, cx: &mut App| {
         if source.0.as_ref() == "oxyde_dir_generic" {
             if let Some(images) = cx.try_global::<SystemFolderImages>().and_then(|images| images.0.as_ref()) {
                 return Some(Ok(images[usize::from(large)].clone()));
             }
         }
-        window.use_asset::<SystemIconAsset>(&source, cx)
+        system_cache::use_icon(&source, unique, window, cx)
     })
         .size(size)
         .object_fit(ObjectFit::Contain)

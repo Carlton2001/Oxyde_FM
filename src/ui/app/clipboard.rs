@@ -10,12 +10,14 @@ impl OxydeApp {
     pub(crate) fn execute_copy_text(&mut self, names_only: bool, cx: &mut Context<Self>) {
         let Some(pane) = self.state.find_pane(&self.state.active_pane_id) else { return; };
         let tab = pane.active_tab();
-        let text = tab.filtered_files().iter()
+        let lines = tab.filtered_files().iter()
             .filter(|file| tab.selected_paths.contains(&file.path))
             .map(|file| if names_only { file.name.clone() } else { file.path.clone() })
-            .collect::<Vec<_>>().join("\n");
+            .collect::<Vec<_>>();
+        // Counted by item: a name may hold a line break.
+        let count = lines.len();
+        let text = lines.join("\n");
         if !text.is_empty() {
-            let count = text.lines().count();
             cx.write_to_clipboard(ClipboardItem::new_string(text));
             self.toast(ToastKind::Info, if names_only { Message::ToastNamesCopied } else { Message::ToastPathsCopied }, String::new(), count, cx);
         }

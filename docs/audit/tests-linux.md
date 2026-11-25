@@ -162,6 +162,28 @@ Paquets installés dans la VM WSL pour ces tests : `wl-clipboard`, `udisks2` (se
 - [ ] « Annuler : Supprimer » proposé sur un volume en lecture seule : l'historique est global ; non corrigé, à décider.
 - [ ] Infobulle « This preview could not be loaded » sur un membre d'archive (7z chiffré, ISO) : probablement aperçus d'archive non pris en charge ; non examiné.
 
+## Faibles Linux de 102-faibles (2026-11-24)
+
+Corrigés sous WSL Fedora 45 (`51ec43ca..552e8bb6`). Reste à faire sur une vraie machine :
+
+- [x] Compiler et lancer `cargo test` sous WSL après `cargo build --bins` (workers changés : F57, F58). Fait le 2026-11-25 : `check-linux.sh --offline` propre, 860 + 656 tests verts, intégration verte (`--test-threads=1`), `linux_permissions` sous `unshare` 16 verts. Un échec trouvé et corrigé (`200c20c7`) : F233 gardait l'espace final d'une URI tapée (`network:/// `).
+- [ ] F45 (`ab2a45b0`, patch GPUI `clipboard_offers`) : sous GNOME Wayland puis KDE Wayland, copier des fichiers dans Nautilus (puis Dolphin) : « Coller » est actif dans Oxyde avant tout collage, et colle les fichiers ; copier du texte seul : « Coller » des fichiers reste inactif.
+- [ ] F46 (`6bb4475e`) : coller dans Oxyde pendant qu'une application qui possède le presse-papiers est figée (`kill -STOP`) : Oxyde reprend la main en 3 s environ, sans processus `wl-paste` restant.
+- [ ] F49 (`02a00de6`) : partage SMB ou SFTP monté par GVfs, serveur figé ou débranché : ouvrir le partage ou le démonter échoue au bout de 30 s au plus, sans geler la fenêtre.
+- [ ] F50 (`424b7f35`) : « Ouvrir avec » une application dont le lancement échoue (fichier `.desktop` dont `Exec` est introuvable) : elle n'est pas retenue comme application par défaut ou récente de ce type.
+- [ ] F55 (`299a84a0`) : sans `/usr/share/xdg-desktop-portal/*-portals.conf` propre à Oxyde, définir Oxyde comme sélecteur puis le retirer : le fichier de `~/.config/xdg-desktop-portal/` qu'Oxyde avait écrit est supprimé ; pendant un partage d'écran (visio), changer ce réglage ne coupe pas le partage (redémarrage du portail différé).
+- [ ] F56 (`14d85fa3`) : ouvrir le sélecteur de fichiers d'Oxyde depuis Firefox plusieurs fois de suite : il répond toujours, sans délai.
+- [ ] F57 (`8d6ef65d`) : vidéo dans l'aperçu, déplacer la tête de lecture tout de suite après l'ouverture puis plusieurs fois vite : la lecture va à la dernière position demandée.
+- [ ] F59 (`cce830d8`) : ouvrir un fichier d'une clé USB dont le chemin contient des espaces dans un programme qui le garde ouvert, puis éjecter : le message nomme ce programme.
+- [ ] F61 (`44dbf2e9`) : un dossier ordinaire nommé `Trash` ou `.Trash-1000` dans un sous-dossier n'est pas traité comme une corbeille (pas de vue Corbeille, suppression normale).
+- [ ] F62 (`d8f449b4`) : profil neuf sans `~/.config/gtk-3.0` : ajouter un signet dans Nautilus : il apparaît dans la barre latérale d'Oxyde sans redémarrage.
+- [ ] F65 (`532c6ffe`) : document Office dont la première miniature intégrée est endommagée et une seconde valide : miniature affichée.
+- [ ] F66 (`34c2cb3a`) : pendant une grosse copie en priorité basse, `ionice -p <tid>` du thread de copie indique `best-effort: prio 7` (BFQ seulement pour un effet réel).
+- [ ] F86 (`e77d6bf5`) : ouvrir puis extraire une archive RAR en plusieurs volumes : contenu complet, comme avant.
+- [ ] F87 (`70b5bdb8`) : renommer un membre d'une grosse archive et, pendant la reconstruction, modifier l'archive avec un autre programme : la reconstruction est annulée et l'archive modifiée est gardée telle quelle.
+- [ ] F124 (`2d015312`) : lien symbolique vers un dossier dans l'arbre de la barre latérale : affiché avec sa flèche et dépliable ; « Tout développer » sur le parent n'entre pas dedans.
+- [ ] F209 (`d6ac0f67`) : sous KDE, avec un pourcentage de corbeille non entier dans `ktrashrc` (12,34), ouvrir les réglages de la corbeille et valider sans toucher au champ : `ktrashrc` garde 12.34.
+
 ## Tests X11 (non prévus)
 
 Sortis de leurs lots : l'utilisateur ne compte pas les faire. Ils restent ouverts, sans échéance.

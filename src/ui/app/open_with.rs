@@ -146,7 +146,7 @@ impl OxydeApp {
                 .unwrap_or_else(|error| Err(error.to_string()));
             if let Err(error) = result {
                 let _ = this.update(cx, |this, cx| {
-                    this.file_operation_notice = Some((Message::OpenWithFailed, error));
+                    this.report_notice((Message::OpenWithFailed, error), None);
                     cx.notify();
                 });
             }
@@ -224,12 +224,17 @@ impl OxydeApp {
         .detach();
     }
 
-    /// Opens with the selected application when `open`, then closes the prompt.
+    /// Opens with the selected application when `open`, then closes the prompt. With
+    /// nothing to open yet, the applications still loading, the prompt stays.
     pub(crate) fn answer_open_with(&mut self, open: bool, cx: &mut Context<Self>) {
         let Some(prompt) = self.open_with.take() else { return };
         let chosen = prompt.selected.filter(|index| prompt.visible().contains(index)).and_then(|index| prompt.choices.as_ref()?.get(index));
-        if let (true, Some(choice)) = (open, chosen) {
-            self.open_with_application(choice.id.clone(), prompt.paths.clone(), prompt.remember, cx);
+        match (open, chosen) {
+            (true, Some(choice)) => {
+                self.open_with_application(choice.id.clone(), prompt.paths.clone(), prompt.remember, cx);
+            }
+            (true, None) => self.open_with = Some(prompt),
+            (false, _) => {}
         }
         cx.notify();
     }

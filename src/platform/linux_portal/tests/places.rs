@@ -102,3 +102,29 @@ fn portal_files_name_their_bus_for_file_choosing_only() {
     assert_eq!(backend_name("[portal]\nDBusName=org.freedesktop.impl.portal.desktop.oo7\nInterfaces=org.freedesktop.impl.portal.Secret;\n"), None);
     assert_eq!(portal_file(), format!("[portal]\nDBusName={NAME}\nInterfaces=org.freedesktop.impl.portal.FileChooser;\n"));
 }
+
+#[test]
+fn without_a_system_configuration_the_file_oxyde_wrote_goes_with_it() {
+    let root = tempfile::tempdir().unwrap();
+    let places = places(root.path());
+    edit_config(&places, true).unwrap();
+    let user = places.user_config();
+    assert_eq!(conf::portals(&std::fs::read_to_string(&user).unwrap()), [ID]);
+    assert!(places.named());
+    edit_config(&places, false).unwrap();
+    assert!(!user.exists());
+    // A setting the user added since keeps the file.
+    edit_config(&places, true).unwrap();
+    let changed = std::fs::read_to_string(&user).unwrap() + "org.freedesktop.impl.portal.Secret=gnome-keyring;
+";
+    std::fs::write(&user, &changed).unwrap();
+    edit_config(&places, false).unwrap();
+    assert!(std::fs::read_to_string(&user).unwrap().contains("Secret=gnome-keyring;"));
+}
+
+#[test]
+fn portal_objects_in_use_are_the_children_introspection_lists() {
+    let empty = r#"<node><interface name="org.freedesktop.DBus.Introspectable"/></node>"#;
+    assert!(!has_children(empty));
+    assert!(has_children(r#"<node><node name="1_42"/></node>"#));
+}

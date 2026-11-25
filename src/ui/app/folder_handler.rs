@@ -7,11 +7,12 @@ use gpui::Context;
 impl OxydeApp {
     /// Reads the system's choice off the UI thread; the row stays hidden until known.
     pub(crate) fn refresh_folder_handler(&mut self, cx: &mut Context<Self>) {
+        let revision = self.system_setting_revision;
         cx.spawn(async move |this, cx| {
             let state = tokio::task::spawn_blocking(|| oxyde_lib::platform::platform().opens_folders_by_default())
                 .await.ok().flatten();
             let _ = this.update(cx, |this, cx| {
-                if !this.changing_folder_handler && this.opens_folders != state {
+                if !this.changing_folder_handler && this.system_setting_revision == revision && this.opens_folders != state {
                     this.opens_folders = state;
                     cx.notify();
                 }
@@ -29,6 +30,7 @@ impl OxydeApp {
         let enabled = !current;
         self.opens_folders = Some(enabled);
         self.changing_folder_handler = true;
+        self.system_setting_revision = self.system_setting_revision.wrapping_add(1);
         cx.notify();
         let previous = self.config.folder_handler_before.clone();
         cx.spawn(async move |this, cx| {
@@ -53,7 +55,9 @@ impl OxydeApp {
                     }
                     Err(error) => {
                         log::warn!("Changing the default application for folders stopped: {error}");
-                        this.opens_folders = Some(current);
+                        // The change may have been made in part: read it again.
+                        this.opens_folders = None;
+                        this.refresh_folder_handler(cx);
                         this.settings_error = Some(Message::SettingsDefaultFileManagerError);
                     }
                 }

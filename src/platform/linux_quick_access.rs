@@ -29,12 +29,17 @@ impl QuickAccess for LinuxQuickAccess {
         bookmarks::unpin(&file().ok_or_else(unavailable)?, path).map_err(CommandError::from)
     }
 
-    /// GTK replaces the file on each change: watch its folder, when it exists.
+    /// GTK replaces the file on each change: watch its folder. A new profile has none
+    /// until Nautilus adds a first bookmark, so it is created as GTK creates it.
     fn watch(&self, revision: std::sync::Arc<std::sync::atomic::AtomicU64>)
         -> Result<Option<Box<dyn Send>>, String> {
-        let Some(folder) = file().as_deref().and_then(Path::parent).filter(|folder| folder.is_dir()).map(Path::to_path_buf) else {
+        let Some(folder) = file().as_deref().and_then(Path::parent).map(Path::to_path_buf) else {
             return Ok(None);
         };
+        if let Err(error) = std::os::unix::fs::DirBuilderExt::mode(std::fs::DirBuilder::new().recursive(true), 0o700).create(&folder) {
+            log::warn!("Cannot create {} to watch the bookmarks: {error}", folder.display());
+            return Ok(None);
+        }
         crate::systems::quick_access_watcher::watch(&folder, revision).map(|watcher| Some(Box::new(watcher) as Box<dyn Send>))
     }
 }

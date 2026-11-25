@@ -362,3 +362,21 @@ fn manual_launch_takes_priority_over_earlier_waiting_operations() {
         drop(held);
     });
 }
+
+#[cfg(target_os = "windows")]
+#[test]
+fn verbatim_and_plain_paths_reserve_the_same_items() {
+    let operation = |source: &str| {
+        FileOperation::new(FileOpType::Delete, vec![PathBuf::from(source)], None, None)
+    };
+    for (left, right) in [
+
+        (r"\\?\C:\Data\x", r"c:\data\x"),
+        (r"\\?\UNC\server\share\x", r"\\SERVER\share\x"),
+    ] {
+        assert!(FileOperationManager::paths_overlap(
+            &FileOperationManager::reserved_paths(&operation(left)),
+            &FileOperationManager::reserved_paths(&operation(right))
+        ));
+    }
+}

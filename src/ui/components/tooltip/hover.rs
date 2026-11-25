@@ -74,6 +74,10 @@ struct Session {
     timing: Timing,
     tooltip: Option<AnyView>,
     task: Option<Task<()>>,
+    /// What the hovered item looked like when its tooltip was built.
+    revision: Option<(String, u64)>,
+    /// The item changed under the pointer: its tooltip is built again at the next frame.
+    refresh: Option<Builder>,
 }
 impl Session {
     fn clear(&mut self) {
@@ -81,6 +85,8 @@ impl Session {
         self.tooltip = None;
         self.scope = None;
         self.task = None;
+        self.revision = None;
+        self.refresh = None;
     }
 }
 
@@ -158,6 +164,7 @@ fn hover(
     scope: Scope,
     key: String,
     builder: Builder,
+    item_revision: Option<u64>,
     hovered: bool,
     window: &mut Window,
     cx: &mut App,
@@ -178,6 +185,8 @@ fn hover(
         }
         session.scope = Some(scope.clone());
         session.task = None;
+        session.revision = item_revision.map(|revision| (key.clone(), revision));
+        session.refresh = None;
         let immediate = session.timing.enter(key.clone());
         let revision = session.timing.revision;
         if immediate {
@@ -287,11 +296,14 @@ pub(crate) trait SharedTooltipExt {
         cx: &mut App,
         builder: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
     ) -> Self;
+    /// `revision` changes with what the tooltip shows of the item: a change while it
+    /// is shown builds it again.
     fn file_tooltip(
         self,
         owner: Entity<OxydeApp>,
         pane: String,
         key: String,
+        revision: u64,
         cx: &mut App,
         builder: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
     ) -> Self;
@@ -303,10 +315,16 @@ impl SharedTooltipExt for Stateful<Div> {
         owner: Entity<OxydeApp>,
         pane: String,
         key: String,
+        revision: u64,
         cx: &mut App,
         builder: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
     ) -> Self {
-        self.shared_tooltip(owner, HoverRegion::Files(pane), key, cx, builder)
+        let builder: Builder = Rc::new(builder);
+        if note_revision(&key, revision, &builder, cx) {
+            // The key is the item's path: its preview is read again too.
+            super::invalidate_media_preview(&key, cx);
+        }
+        register(self, owner, HoverRegion::Files(pane), key, Some(revision), builder, cx)
     }
 
     fn shared_tooltip(
@@ -317,29 +335,56 @@ impl SharedTooltipExt for Stateful<Div> {
         cx: &mut App,
         builder: impl Fn(&mut Window, &mut App) -> AnyView + 'static,
     ) -> Self {
-        initialize(cx);
-        let owner = owner.downgrade();
-        let builder: Builder = Rc::new(builder);
-        self.on_hover(move |hovered, window, cx| {
-            let Some(owner) = owner.upgrade() else {
-                clear(window, cx);
-                return;
-            };
-            let Some(scope) = Scope::new(&owner, &region, cx) else {
-                return;
-            };
-            hover(
-                scope.clone(),
-                key.clone(),
-                builder.clone(),
-                *hovered,
-                window,
-                cx,
-            )
-        })
-        .on_mouse_down(MouseButton::Left, |_, window, cx| clear(window, cx))
-        .on_mouse_down(MouseButton::Right, |_, window, cx| clear(window, cx))
+        register(self, owner, region, key, None, Rc::new(builder), cx)
     }
+}
+
+/// A hovered item drawn again with other contents asks its tooltip to follow;
+/// `true` when it did.
+fn note_revision(key: &str, revision: u64, builder: &Builder, cx: &mut App) -> bool {
+    let mut changed = false;
+    for session in cx.default_global::<Sessions>().windows.values_mut() {
+        let Some((hovered, shown)) = &mut session.revision else { continue };
+        if hovered == key && *shown != revision && session.timing.hovered.as_deref() == Some(key) {
+            *shown = revision;
+            session.refresh = Some(builder.clone());
+            changed = true;
+        }
+    }
+    changed
+}
+
+fn register(
+    element: Stateful<Div>,
+    owner: Entity<OxydeApp>,
+    region: HoverRegion,
+    key: String,
+    item_revision: Option<u64>,
+    builder: Builder,
+    cx: &mut App,
+) -> Stateful<Div> {
+    initialize(cx);
+    let owner = owner.downgrade();
+    element.on_hover(move |hovered, window, cx| {
+        let Some(owner) = owner.upgrade() else {
+            clear(window, cx);
+            return;
+        };
+        let Some(scope) = Scope::new(&owner, &region, cx) else {
+            return;
+        };
+        hover(
+            scope.clone(),
+            key.clone(),
+            builder.clone(),
+            item_revision,
+            *hovered,
+            window,
+            cx,
+        )
+    })
+    .on_mouse_down(MouseButton::Left, |_, window, cx| clear(window, cx))
+    .on_mouse_down(MouseButton::Right, |_, window, cx| clear(window, cx))
 }
 
 /// Gaps hide the tooltip immediately while keeping the session warm briefly.
@@ -394,6 +439,15 @@ pub(crate) fn region_container(
             if active.tag != scope.tag || !bounds.contains(&window.mouse_position()) {
                 clear(window, cx);
                 return;
+            }
+            // The hovered item changed while its tooltip shows: build it again.
+            let session = cx.default_global::<Sessions>().windows.get_mut(&id).unwrap();
+            if let Some(builder) = session.refresh.take().filter(|_| session.tooltip.is_some()) {
+                let (key, revision) = (session.timing.hovered.clone(), session.timing.revision);
+                if let Some(key) = key {
+                    let view = builder(window, cx);
+                    handover::replace(active.clone(), key, revision, view, window, cx);
+                }
             }
             let session = cx.default_global::<Sessions>().windows.get(&id).unwrap();
             if let Some(view) = session.tooltip.clone() {

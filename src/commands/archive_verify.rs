@@ -48,7 +48,14 @@ fn zip(file: File, secret: Option<&ArchiveSecret>) -> Option<ArchivePasswordFail
     };
     let size = entry.size();
     match sample(&mut entry, size) {
-        Err(error) if error.to_string().contains("Invalid checksum") => Some(ArchivePasswordFailure::Wrong),
+        // A ZipCrypto key passing its one-byte check by chance decrypts noise, which
+        // fails the checksum or, when compressed, the decompression itself.
+        Err(error)
+            if error.kind() == io::ErrorKind::InvalidData
+                || error.to_string().contains("Invalid checksum") =>
+        {
+            Some(ArchivePasswordFailure::Wrong)
+        }
         _ => None,
     }
 }
@@ -61,8 +68,15 @@ fn seven(file: File, secret: Option<&ArchiveSecret>) -> Option<ArchivePasswordFa
         Ok(archive) => archive,
         Err(error) => return archive_password::seven_failure(&error, tried),
     };
-    // Every block of an archive made by 7-Zip shares its key: the smallest one decides.
-    let block = (0..archive.blocks.len()).min_by_key(|block| archive.blocks[*block].get_unpack_size())?;
+    // Every block of an archive made by 7-Zip shares its key: the smallest encrypted
+    // one decides. A clear block would accept any password.
+    let block = (0..archive.blocks.len())
+        .filter(|block| {
+            archive.blocks[*block].coders.iter().any(|coder| {
+                coder.encoder_method_id() == sevenz_rust2::EncoderMethod::ID_AES256_SHA256
+            })
+        })
+        .min_by_key(|block| archive.blocks[*block].get_unpack_size())?;
     let result = sevenz_rust2::BlockDecoder::new(1, block, &archive, &password, &mut source)
         .for_each_entries(&mut |entry, input| {
             sample(input, entry.size())?;

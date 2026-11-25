@@ -64,7 +64,7 @@ pub(crate) fn extract(
         if sheet && name == "xl/sharedStrings.xml" {
             shared = true;
         }
-        if (word && name == "word/document.xml")
+        if (word && word_text_part(&name))
             || (sheet && name.starts_with("xl/worksheets/") && name.ends_with(".xml"))
             || (slides && name.starts_with("ppt/slides/") && name.ends_with(".xml"))
             || (odf && name == "content.xml")
@@ -169,6 +169,16 @@ impl Text {
     }
 }
 
+/// The body and the other Word parts written in paragraphs: headers, footers,
+/// footnotes, endnotes and comments.
+fn word_text_part(name: &str) -> bool {
+    let Some(file) = name.strip_prefix("word/").filter(|file| !file.contains('/')) else {
+        return false;
+    };
+    matches!(file, "document.xml" | "footnotes.xml" | "endnotes.xml" | "comments.xml")
+        || ((file.starts_with("header") || file.starts_with("footer")) && file.ends_with(".xml"))
+}
+
 fn paragraphs(
     xml: &str,
     word: bool,
@@ -179,7 +189,12 @@ fn paragraphs(
     let mut in_text = false;
     let mut notes = false;
     let mut odf_depth = 0usize;
+    let mut fallback = 0usize;
     visit(xml, checkpoint, |text, name, tag, closing| {
+        // The second copy of a Word text box, as in the Viewer.
+        if super::fallback_tag(name, tag, closing, &mut fallback) || fallback > 0 {
+            return Ok(());
+        }
         if in_text && !notes {
             output.append(text)?;
         }
@@ -212,7 +227,10 @@ fn paragraphs(
             if name == paragraph && closing {
                 output.end_line()?;
             }
-            if matches!(name, "w:tab" | "w:br" | "w:cr" | "a:br") && !closing {
+            if matches!(name, "w:tab" | "w:br" | "w:cr" | "a:br")
+                && !closing
+                && !(name == "w:tab" && super::is_tab_stop(tag))
+            {
                 output.append(" ")?;
             }
         }

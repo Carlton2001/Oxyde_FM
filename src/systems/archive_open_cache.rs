@@ -234,7 +234,8 @@ impl CacheEntry {
                 "Archive cache entry exceeded its file size limit",
             ));
         }
-        self._session.acquire()?;
+        // The entry is private until its marker names the original: hash it before
+        // taking the lock other windows and instances wait for.
         let metadata = fs::metadata(&path)?;
         let original = Original {
             path: path
@@ -245,6 +246,7 @@ impl CacheEntry {
             modified: metadata.modified().ok(),
             hash: hash_file(&mut File::open(&path)?, metadata.len())?,
         };
+        self._session.acquire()?;
         self.marker.set_len(0)?;
         use std::io::{Seek, SeekFrom};
         self.marker.seek(SeekFrom::Start(0))?;

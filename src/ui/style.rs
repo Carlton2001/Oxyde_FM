@@ -110,11 +110,10 @@ pub struct GridGeometry {
 impl GridGeometry {
     pub fn for_viewport(layout: CardLayout, viewport: f32, scrollbar_width: f32) -> Self {
         let min_width = layout.min_width();
-        let columns = ((viewport - logical(20.0)) / min_width)
-            .floor()
-            .max(1.0) as usize;
         let content_width =
             (viewport - logical(20.0) - scrollbar_width).max(min_width + logical(4.0));
+        // Counted in the width the cells share, so none falls below its minimum.
+        let columns = (content_width / min_width).floor().max(1.0) as usize;
         Self {
             columns,
             content_width,

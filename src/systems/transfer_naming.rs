@@ -12,6 +12,13 @@ pub(crate) fn same_entry(source: &Path, target: &Path) -> bool {
     let compare = || -> io::Result<bool> {
         let source_parent = HeldParents::new(source)?;
         let target_parent = HeldParents::new(target)?;
+        // Hard links share the file's identity under other folders: the same entry
+        // also needs the same folder.
+        if platform().file_identity(source_parent.directory())?
+            != platform().file_identity(target_parent.directory())?
+        {
+            return Ok(false);
+        }
         let source = platform().track_source_item(source_parent.directory(), source)?;
         let target = platform().track_source_item(target_parent.directory(), target)?;
         Ok(platform().file_identity(&source)? == platform().file_identity(&target)?)
@@ -103,6 +110,10 @@ pub(super) fn copy_name(
 #[cfg(test)]
 #[path = "transfer_naming/tests/long_names.rs"]
 mod long_name_tests;
+
+#[cfg(test)]
+#[path = "transfer_naming/tests/hard_links.rs"]
+mod hard_link_tests;
 
 #[cfg(test)]
 mod tests {

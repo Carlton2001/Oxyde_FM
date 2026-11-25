@@ -47,6 +47,10 @@ theme-intro = Ein Oxyde-Design besteht aus sechs Farben. Alle anderen werden dar
 theme-create-hint = Um ein eigenes Design zu erstellen, gehen Sie vom ähnlichsten aus: Wählen Sie es in der Liste und dann „Aus diesem Design erstellen“.
 theme-create = Aus diesem Design erstellen
 theme-delete = Löschen
+theme-delete-question = Das Design „{ $name }“ löschen? Dies kann nicht rückgängig gemacht werden.
+theme-unsaved-title = Ungespeicherte Änderungen
+theme-leave-question = Die Änderungen an „{ $name }“ verwerfen?
+theme-discard = Verwerfen
 theme-save = Speichern
 theme-name = Name
 theme-new-name = { $name } angepasst
@@ -413,6 +417,7 @@ new-file-numbered = Neue Datei ({ $number })
 native-menu-empty = Keine Befehle verfügbar
 
 native-menu-failed = Systemmenü konnte nicht geladen werden: { $detail }
+native-menu-timeout = Das Systemmenü reagiert nicht
 
 drag-items = { $count ->
     [one] { $number } Element
@@ -706,6 +711,7 @@ disk-image-open-failed = Abbild konnte nicht geöffnet werden. { $detail }
 disk-image-busy = Ein Dateivorgang verwendet dieses Abbild noch.
 
 disk-image-no-volume = Diesem Abbild wurde kein zugängliches Volume zugewiesen.
+volume-change-in-progress = Ein Laufwerk oder Abbild wird bereits eingebunden oder ausgeworfen.
 
 advanced-settings = Einstellungen
 
@@ -819,6 +825,10 @@ duplicate-files = { $file_count ->
 duplicate-group = Gruppe { $index }
 
 duplicate-failed = Suche fehlgeschlagen: { $error }
+duplicate-unreadable = { $count ->
+    [one] { $number } Datei konnte nicht gelesen werden und wurde nicht verglichen.
+   *[other] { $number } Dateien konnten nicht gelesen werden und wurden nicht verglichen.
+    }
 
 duplicate-size-range = { $min } – { $max }
 
@@ -931,6 +941,7 @@ properties-file-system = Dateisystem
 properties-copy-name-double-click = Doppelklicken, um den Namen zu kopieren
 
 toast-copied = In die Zwischenablage kopiert
+copy-too-large = Die Auswahl ist zu groß zum Kopieren (über 64 MB).
 toast-cut = In die Zwischenablage ausgeschnitten
 toast-names-copied = { $count ->
     [one] { $number } Name kopiert
@@ -1174,6 +1185,7 @@ storage-unavailable = Auf die Oxyde-Daten konnte nicht zugegriffen werden. Im po
 properties-selection-items = { $number } Elemente
 properties-total-size = Gesamtgröße
 properties-multiple-locations = Mehrere Speicherorte
+properties-unreadable = Nicht lesbar
 operations-affected-items = { $count ->
     [1] Betroffenes Element ({ $number })
    *[other] Betroffene Elemente ({ $number })

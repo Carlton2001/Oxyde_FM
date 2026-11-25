@@ -257,7 +257,7 @@ mod tests {
     #[test]
     fn rows_keep_sort_order_separate_grid_groups_and_skip_collapsed_entries() {
         let now = Local::now().timestamp_millis() as u64;
-        let files = [0, now, now, 0, now].map(|modified| FileEntry {
+        let files = [1, now, now, 1, now].map(|modified| FileEntry {
             modified,
             ..FileEntry::default()
         });

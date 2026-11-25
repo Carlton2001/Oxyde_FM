@@ -4,7 +4,8 @@
 //! service file that starts Oxyde without a main window when nothing serves that name,
 //! and the FileChooser line of the user's `portals.conf`, which puts Oxyde before the
 //! portals it named. Those stay the fallback, and get the line back when the choice is
-//! turned off. The portal reads these files when it starts only: each change restarts it.
+//! turned off. The portal reads these files when it starts only: each change restarts it,
+//! once no application has a session (screen cast, remote desktop) or a dialog open.
 mod chooser;
 mod conf;
 mod forward;
@@ -244,11 +245,15 @@ fn edit_config(places: &Places, enabled: bool) -> std::io::Result<()> {
         Err(_) if !enabled => return Ok(()),
         Err(_) => match places.config() {
             Some(source) => conf::created(&source.to_string_lossy(), &std::fs::read_to_string(&source)?),
-            None => String::new(),
+            None => conf::created_alone(),
         },
     };
     let edited = if enabled { conf::with_portal(&text, ID) } else { conf::without_portal(&text, ID) };
     if !enabled {
+        // Left behind, it would hide a configuration the system gets later.
+        if conf::empty_creation(&edited) {
+            return remove(&path);
+        }
         if let Some((source, rest)) = conf::creation(&edited) {
             if std::fs::read_to_string(source).is_ok_and(|original| original.trim_end() == rest.trim_end()) {
                 return remove(&path);
@@ -264,6 +269,65 @@ fn edit_config(places: &Places, enabled: bool) -> std::io::Result<()> {
 /// Answers for the portal on the session's connection, or lets the name go.
 pub(super) fn serve(enabled: bool) {
     super::linux_instance::own_name(NAME, enabled);
+}
+
+/// Where the portal exports what applications are using: sessions (screen casts, remote
+/// desktops) and requests whose dialog has not answered. A restart would end them.
+const IN_USE: [&str; 2] = ["/org/freedesktop/portal/desktop/session", "/org/freedesktop/portal/desktop/request"];
+const PORTAL: &str = "org.freedesktop.portal.Desktop";
+
+/// Whether introspection data lists child objects.
+fn has_children(xml: &str) -> bool {
+    xml.contains("<node name=")
+}
+
+/// A portal that is not running has nothing to lose; asking it would start it.
+fn portal_in_use(connection: &zbus::blocking::Connection) -> bool {
+    let running = connection.call_method(Some("org.freedesktop.DBus"), "/org/freedesktop/DBus",
+        Some("org.freedesktop.DBus"), "NameHasOwner", &(PORTAL,))
+        .and_then(|reply| reply.body().deserialize::<bool>());
+    if !matches!(running, Ok(true)) {
+        return false;
+    }
+    IN_USE.iter().any(|path| {
+        connection.call_method(Some(PORTAL), *path, Some("org.freedesktop.DBus.Introspectable"), "Introspect", &())
+            .and_then(|reply| reply.body().deserialize::<String>())
+            .is_ok_and(|xml| has_children(&xml))
+    })
+}
+
+/// Restarts the portal once nothing is using it, from a thread of its own. Past an hour
+/// in use, the change waits for the next session.
+fn restart_portal_when_idle() {
+    static WAITING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if WAITING.swap(true, std::sync::atomic::Ordering::AcqRel) {
+        return;
+    }
+    let waiter = std::thread::Builder::new().name("portal-restart".into()).spawn(|| {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3600);
+        let mut waited = false;
+        loop {
+            let in_use = super::linux_instance::connection().is_some_and(portal_in_use);
+            if !in_use {
+                restart_portal();
+                break;
+            }
+            if std::time::Instant::now() >= deadline {
+                log::warn!("{SERVICE} stayed in use; the file chooser changes at the next session");
+                break;
+            }
+            if !waited {
+                log::info!("{SERVICE} is in use; it restarts for the file chooser once free");
+                waited = true;
+            }
+            std::thread::sleep(std::time::Duration::from_secs(5));
+        }
+        WAITING.store(false, std::sync::atomic::Ordering::Release);
+    });
+    if let Err(error) = waiter {
+        WAITING.store(false, std::sync::atomic::Ordering::Release);
+        log::warn!("Cannot wait to restart {SERVICE}: {error}");
+    }
 }
 
 /// The portal reads its configuration and portals only when it starts.
@@ -293,7 +357,7 @@ pub(super) fn set(enabled: bool) -> Result<(), String> {
     }
     super::linux_instance::reload_services();
     serve(enabled);
-    restart_portal();
+    restart_portal_when_idle();
     Ok(())
 }
 
@@ -316,7 +380,7 @@ pub(super) fn follow() {
     serve(true);
     // Started for a call, which a restart would take from its application.
     if portal_changed && !launched() {
-        restart_portal();
+        restart_portal_when_idle();
     }
 }
 

@@ -166,6 +166,47 @@ pub(super) fn automatic_badge(cx: &App) -> impl IntoElement {
     tag(Message::ConflictAutomatic, cx.theme().text_muted, cx)
 }
 
+/// The row Up, Down, Home or End selects among the shown `rows`, with its position.
+pub(super) fn next_row(rows: &[usize], selected: usize, key: &str) -> Option<(usize, usize)> {
+    let last = rows.len().checked_sub(1)?;
+    let current = rows.iter().position(|&row| row == selected);
+    let position = match key {
+        "up" => current.map_or(0, |position| position.saturating_sub(1)),
+        "down" => current.map_or(0, |position| (position + 1).min(last)),
+        "home" => 0,
+        "end" => last,
+        _ => return None,
+    };
+    Some((rows[position], position))
+}
+
+/// Up, Down, Home and End move through the advanced list; Left and Right fold
+/// and unfold the selected folder. `false` when the key is not one of them.
+pub(super) fn list_key(p: &mut PendingFileOperation, key: &str) -> bool {
+    if !p.dialog.advanced {
+        return false;
+    }
+    if matches!(key, "left" | "right") {
+        let Some(conflict) = p.conflicts.get(p.dialog.selected).filter(|conflict| conflict.source.is_dir) else {
+            return false;
+        };
+        let path = conflict.source.path.clone();
+        if key == "left" { p.dialog.collapsed.insert(path); } else { p.dialog.collapsed.remove(&path); }
+        return true;
+    }
+    let rows = visible(p);
+    let Some((row, position)) = next_row(&rows, p.dialog.selected, key) else {
+        return false;
+    };
+    p.dialog.selected = row;
+    p.dialog.list_scroll.scroll_to_item(position);
+    true
+}
+
 #[cfg(test)]
 #[path = "controls/tests/activation.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "controls/tests/keyboard.rs"]
+mod keyboard_tests;

@@ -386,6 +386,19 @@ pub(super) fn drive_context_menu(i18n: &I18n, h: Entity<OxydeApp>, path: String,
     super::super::context_menu_sections(items, i18n)
 }
 
+/// The drive's menu, with « Unmount disk image » when an image Oxyde mounted backs it.
+pub(super) fn drive_menu_with_image(cx: &App, h: Entity<OxydeApp>, path: String, releases: DriveActions, is_remote: bool) -> Vec<DropdownItem> {
+    use crate::ui::i18n::I18nContext;
+    let items = drive_context_menu(cx.i18n(), h.clone(), path.clone(), releases, is_remote);
+    // Where the drive unmounts itself (Linux), its Unmount already releases the image.
+    let image = (!releases.unmount && !releases.eject).then(|| h.read(cx).mounted_image_for_drive(&path)).flatten();
+    let Some(image) = image else { return items };
+    let action = DropdownItem::new(cx.i18n().text(Message::UnmountDiskImage).to_string(), move |_, cx| {
+        h.update(cx, |this, cx| this.change_disk_image(image.clone(), true, None, cx));
+    }).icon(IconName::ExternalLink);
+    super::super::context_menu_sections(super::super::network::insert_after_open(items, vec![action], cx.i18n()), cx.i18n())
+}
+
 /// The parent of the distributions is no folder: it has no properties or shell menu.
 pub(super) fn linux_context_menu(i18n: &I18n, h: Entity<OxydeApp>) -> Vec<DropdownItem> {
     super::super::context_menu_sections(open_items(i18n, h, oxyde_lib::platform::WSL_ROOT.to_string()), i18n)

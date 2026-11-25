@@ -174,15 +174,16 @@ fn icon_file(icon: &str) -> Option<PathBuf> {
     None
 }
 
-/// Opens `paths` with the application `id`. `remember` makes it the default for their
-/// types, as « Always use for this file type »; otherwise it is recorded as last used,
-/// which GIO then recommends.
+/// Opens `paths` with the application `id`. Once it has started, `remember` makes it the
+/// default for their types, as « Always use for this file type »; otherwise it is
+/// recorded as last used, which GIO then recommends. One that fails is neither.
 pub(in crate::platform) fn launch(id: &str, paths: &[String], remember: bool) -> Result<(), String> {
     let gio = gio().ok_or("GIO is unavailable")?;
     let name = text(id);
     // SAFETY: an identifier; the application returned is owned.
     let app = Owned::new(gio, unsafe { (gio.g_desktop_app_info_new)(name.as_ptr()) })
         .ok_or_else(|| format!("No application {id}"))?;
+    start(gio, &app, id, paths)?;
     for content_type in content_types(paths) {
         let content_type = text(&content_type);
         let mut error = std::ptr::null_mut();
@@ -194,6 +195,10 @@ pub(in crate::platform) fn launch(id: &str, paths: &[String], remember: bool) ->
             }
         }
     }
+    Ok(())
+}
+
+fn start(gio: &'static Gio, app: &Owned, id: &str, paths: &[String]) -> Result<(), String> {
     let uris: Vec<_> = paths.iter().map(|path| {
         let path = text(path);
         // SAFETY: a path; the file is owned and its URI copied.

@@ -11,6 +11,11 @@ fn paths_match_respects_platform_case_and_separators() {
         assert!(paths_match("D:/", "d:\\"));
         assert!(paths_match(r"\\?\C:\Long\Path", r"c:\long\path\"));
         assert!(paths_match(r"\\?\UNC\server\share\folder", r"\\SERVER\share\folder"));
+        // Linux names keep their case inside a WSL distribution; its root and name do not.
+        assert!(!paths_match(r"\\wsl.localhost\Ubuntu\home\A", r"\\wsl.localhost\Ubuntu\home\a"));
+        assert!(paths_match(r"\\wsl$\ubuntu\home\A", r"\\WSL.localhost\Ubuntu\home\A\"));
+        assert!(paths_match(r"\\wsl.localhost\Ubuntu", r"\\wsl.localhost\UBUNTU\"));
+        assert!(path_within(Path::new(r"\\wsl.localhost\Ubuntu\home\A\x"), Path::new(r"\\wsl$\UBUNTU\home\A")));
     }
     #[cfg(not(target_os = "windows"))]
     assert!(!paths_match("/home/User", "/home/user"));

@@ -19,21 +19,21 @@ pub trait FileClipboard: Send + Sync {
     // `text`: system clipboard text, which makes a selection offered as text stale.
     fn get_files(&self, text: Option<String>) -> Result<(Vec<String>, bool), String>;
     fn has_file_format(&self) -> bool;
+    // The type other applications offer files in, checked against the interface's clipboard.
+    fn external_files_type(&self) -> Option<&'static str>;
 }
 ```
 
 - **Windows** (`windows_file_clipboard.rs`) delegates to `clipboard.rs` (`CF_HDROP`, `Preferred DropEffect`). When the clipboard offers only virtual files (`FileGroupDescriptorW`), or `CF_HDROP` paths none of which exists yet, paste falls back to the shell's own Paste verb on the target folder (`windows_system_paste.rs`): Windows then shows its progress and conflict dialogs. A selection of which only some paths are gone stays Oxyde's paste, which reports them. VMware Tools needs this: a host file arrives as virtual file, a host folder as a staging path (`%TEMP%\vmware-<user>\VMwareDnD\…`) that it fills only when the shell pastes; reading `CF_HDROP` or `IFileOperation::CopyItems` does not trigger it. Its drag and drop already gives real paths.
-- **Linux** (`linux_file_clipboard.rs`) keeps the selection in memory, for all the process's windows. A cut selection pastes only once: its sources have moved. When `wl-copy` is installed, a `wl-copy --foreground` process offers it in Nautilus's format and exits as soon as another selection replaces it, which makes the selection stale. On paste, a stale selection gives way to `wl-paste`, which reads files copied or cut elsewhere (`linux_file_clipboard/wayland.rs`).
+- **Linux** (`linux_file_clipboard.rs`) keeps the selection in memory, for all the process's windows. A cut selection pastes only once: its sources have moved. The interface writes the paths as text; under Wayland, the patched GPUI also offers them as files (`text/uri-list`, `x-special/gnome-copied-files`, `application/x-kde-cutselection`). On paste, a selection whose text was replaced gives way to `wl-paste`, which reads files copied or cut elsewhere (`linux_file_clipboard/wayland.rs`), killed after 3 seconds if the clipboard owner does not answer.
 
 ## Behavior outside Windows
 
-- Without `wl-copy`, copying or cutting writes the paths as text through GPUI, one per line. With it, the clipboard holds only the files, and "Copy path" remains the way to get text.
-- Paste first takes files GPUI provides from another application (copy), then Oxyde's selection while the system clipboard still offers it (without `wl-copy`, while its text is what Oxyde wrote). Otherwise, files read by `wl-paste`.
-- Without `wl-copy`, after text is copied elsewhere the Paste button stays active until the first paste; with it, the button greys out at the next poll. It does not activate for files copied elsewhere, since detecting them would run `wl-paste` at each poll, but Ctrl+V pastes them.
-
-Under GNOME, lacking a background clipboard protocol, `wl-copy` takes focus for a moment: the window flickers at each copy or cut and open menus close, with no lost focus. This is accepted, because exchanging with the desktop's file manager matters more. It does not happen under KDE and wlroots compositors, where `wl-copy` uses `ext-data-control`.
+- Copying or cutting writes the paths as text through GPUI, one per line.
+- Paste first takes files GPUI provides from another application (copy), then Oxyde's selection while the system clipboard's text is what Oxyde wrote. Otherwise, files read by `wl-paste`.
+- After text is copied elsewhere the Paste button stays active until the first paste. Under Wayland it also activates for files another application offers in Nautilus's format: GPUI keeps the types of the current offer, and `App::clipboard_offers` checks them at each poll without reading the clipboard or starting `wl-paste`. The offer only reaches Oxyde while one of its windows has the keyboard, as Wayland sends it.
 
 ## Pitfalls
 
 - Test on an NTFS volume, not just Btrfs: some copy engine defects only appear with FUSE.
-- GPUI limits can be worked around outside GPUI: a helper process (`wl-copy`) carries what GPUI's Wayland loop cannot offer.
+- GPUI limits can be worked around outside GPUI, as `wl-paste` reads what GPUI's synchronous Wayland read would block the interface on.

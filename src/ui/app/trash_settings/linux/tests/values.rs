@@ -1,4 +1,4 @@
-use super::{format_percent, parse_days, parse_percent};
+use super::{format_percent, parse_days, parse_percent, typed_percent};
 
 #[test]
 fn retention_days_are_positive_and_bounded() {
@@ -17,4 +17,11 @@ fn size_limits_accept_decimal_commas_and_stay_a_share_of_the_disk() {
     assert_eq!(parse_percent("101"), None);
     assert_eq!(format_percent(10.0), "10");
     assert_eq!(format_percent(5.5), "5.5");
+}
+
+#[test]
+fn an_untouched_percentage_keeps_the_decimals_kde_wrote() {
+    assert_eq!(typed_percent(&format_percent(12.34), 12.34), Some(12.34));
+    assert_eq!(typed_percent("12.5", 12.34), Some(12.5));
+    assert_eq!(typed_percent("0", 12.34), None);
 }

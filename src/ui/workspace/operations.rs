@@ -1,16 +1,11 @@
 use super::{LayoutAxis, LayoutNode, PaneState, SortColumn, TabState, WorkspaceState};
-use oxyde_lib::commands::system::{get_drives, get_quick_access_items};
 
 impl WorkspaceState {
+    /// Reads nothing from the system: volumes and Quick Access arrive from the
+    /// watcher tasks, which survey at once, so an unreachable drive never delays
+    /// the first window.
     pub fn new() -> Self {
-        let drives = get_drives(Some(true));
-        let pinned_items = get_quick_access_items().unwrap_or_default();
         let initial_path = dirs::home_dir()
-            .or_else(|| {
-                drives
-                    .first()
-                    .map(|drive| std::path::PathBuf::from(&drive.path))
-            })
             .unwrap_or_else(|| std::path::PathBuf::from(std::path::MAIN_SEPARATOR.to_string()));
         let default_tab = TabState::new(
             "tab-0".to_string(),
@@ -21,9 +16,9 @@ impl WorkspaceState {
         let pane_id = initial_pane.id.clone();
 
         let mut state = Self {
-            pinned_items,
+            pinned_items: Vec::new(),
             onedrive_items: Vec::new(),
-            drives,
+            drives: Vec::new(),
             unmounted_volumes: Vec::new(),
             layout: LayoutNode::Pane(Box::new(initial_pane)),
             active_pane_id: pane_id,
@@ -199,8 +194,14 @@ impl WorkspaceState {
 
     pub fn close_tab_id(&mut self, pane_id: &str, tab_idx: usize) {
         let mut pane_count = 0;
-        self.layout.visit_panes(&mut |_| pane_count += 1);
-        if pane_count == 1 {
+        let mut explorers = 0;
+        self.layout.visit_panes(&mut |pane| {
+            pane_count += 1;
+            explorers += usize::from(!pane.active_tab().is_viewer());
+        });
+        // The last explorer stays beside a Viewer, which is never the active pane.
+        let last_explorer = explorers == 1 && !self.is_viewer_pane(pane_id);
+        if pane_count == 1 || last_explorer {
             let Some(pane) = self.find_pane(pane_id) else {
                 return;
             };

@@ -52,9 +52,10 @@ impl OxydeApp {
             let mut current = root;
             let mut loaded = Vec::new();
             for (index, target) in targets.iter().enumerate() {
-                // Refresh the immediate parent so newly created folders can be revealed.
+                // Refresh the immediate parent so newly created folders can be revealed,
+                // and any cached level that lacks the next folder: it was made since.
                 let nodes = if index + 1 < targets.len() {
-                    cached.get(&current).cloned()
+                    cached.get(&current).filter(|nodes| nodes.iter().any(|node| paths_match(&node.path, target))).cloned()
                 } else { None };
                 let nodes = match nodes {
                     Some(nodes) => nodes,
@@ -88,7 +89,7 @@ impl OxydeApp {
                     &this.state.sidebar_items, &path, this.show_hidden, this.show_system, this.show_network(),
                 ) {
                     this.sidebar_selected_path = Some(current);
-                    let visible: Vec<_> = this.state.sidebar_items.iter().filter(|item| crate::ui::components::sidebar::sidebar_item_visible(item, this.show_hidden, this.show_system, this.show_network())).collect();
+                    let visible: Vec<_> = crate::ui::components::sidebar::visible_sidebar_items(&this.state.sidebar_items, this.show_hidden, this.show_system, this.show_network()).collect();
                     let top: f32 = crate::ui::scale::rem_pixels(crate::ui::components::sidebar::LIST_PADDING).as_f32() + visible.iter().take(index).map(|item| crate::ui::components::sidebar::sidebar_item_height(item)).sum::<f32>();
                     let height = visible.get(index).map(|item| crate::ui::components::sidebar::sidebar_item_height(item)).unwrap_or(0.0);
                     let scroll = this.sidebar_scroll.0.borrow().base_handle.clone();
@@ -155,7 +156,11 @@ impl OxydeApp {
                     }
                     // A folder collapsed during the walk stays collapsed.
                     let Ok(tree) = result else { return; };
-                    if cancel.load(Ordering::Relaxed) {
+                    // Read with other visibility settings: newer nodes must not be replaced.
+                    if cancel.load(Ordering::Relaxed)
+                        || this.show_hidden != show_hidden
+                        || this.show_system != show_system
+                    {
                         return;
                     }
                     this.state.expanded_paths.insert(path);
@@ -239,7 +244,7 @@ impl OxydeApp {
                     this.pending_sidebar_requests.remove(&path);
                     match result {
                         Ok(nodes) if this.state.expanded_paths.contains(&path)
-                            || this.state.drives.iter().any(|drive| drive.path == path) => {
+                            || this.state.drives.iter().any(|drive| paths_match(&drive.path, &path)) => {
                             this.state.sidebar_nodes.insert(path, nodes);
                             this.state.refresh_sidebar();
                             this.reconcile_watchers(cx);
@@ -434,7 +439,9 @@ impl OxydeApp {
     }
 
     pub fn close_tab(&mut self, pane_id: &str, tab_idx: usize, cx: &mut Context<Self>) {
+        let active = self.active_tab_id(pane_id);
         self.state.close_tab_id(pane_id, tab_idx);
+        self.end_breadcrumb_edit_if_tab_changed(pane_id, active, cx);
         let reload = self.state.find_pane(pane_id).and_then(|pane| {
             (pane.active_tab().files.is_empty()
                 && matches!(
@@ -464,10 +471,24 @@ impl OxydeApp {
     }
 
     pub fn close_other_tabs(&mut self, pane_id: &str, tab_idx: usize, cx: &mut Context<Self>) {
+        let active = self.active_tab_id(pane_id);
         self.state.close_other_tabs(pane_id, tab_idx);
+        self.end_breadcrumb_edit_if_tab_changed(pane_id, active, cx);
         self.reconcile_watchers(cx);
         self.save_workspace(cx);
         cx.notify();
+    }
+
+    fn active_tab_id(&self, pane_id: &str) -> Option<String> {
+        self.state.find_pane(pane_id).map(|pane| pane.active_tab().id.clone())
+    }
+
+    /// The path typed in a pane belongs to the tab it was typed in: another tab shown
+    /// there, or the pane gone, ends its edit.
+    fn end_breadcrumb_edit_if_tab_changed(&mut self, pane_id: &str, before: Option<String>, cx: &mut Context<Self>) {
+        if self.breadcrumb_pane_id.as_deref() == Some(pane_id) && self.active_tab_id(pane_id) != before {
+            self.cancel_breadcrumb_edit(cx);
+        }
     }
 
     pub fn load_path(&mut self, pane_id: &str, path: String, cx: &mut Context<Self>) {
@@ -809,8 +830,7 @@ fn sidebar_reveal_index(
     show_network: bool,
 ) -> Option<usize> {
     use crate::ui::workspace::SidebarItem;
-    items.iter()
-        .filter(|item| crate::ui::components::sidebar::sidebar_item_visible(item, show_hidden, show_system, show_network))
+    crate::ui::components::sidebar::visible_sidebar_items(items, show_hidden, show_system, show_network)
         .position(|item| match item {
             SidebarItem::Drive { drive, .. } => paths_match(&drive.path, path),
             SidebarItem::Directory { node, .. } => paths_match(&node.path, path),

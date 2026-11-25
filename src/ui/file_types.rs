@@ -80,7 +80,6 @@ const CODE_NAMES: &[&str] = &[
     "exs",
     "f",
     "f90",
-    "fasl",
     "fastfile",
     "fcgi",
     "fish",
@@ -250,7 +249,6 @@ const CODE_NAMES: &[&str] = &[
     "vbs",
     "vcxproj",
     "vue",
-    "wasm",
     "wscript",
     "xaml",
     "xhtml",
@@ -265,9 +263,17 @@ const CODE_NAMES: &[&str] = &[
 static CODE_SUFFIXES: LazyLock<HashSet<&'static str>> =
     LazyLock::new(|| CODE_NAMES.iter().copied().collect());
 
+/// Compiled formats that a syntax lists, which are no text to show.
+const BINARY_CODE: &[&str] = &["fasl", "wasm"];
+/// Words that name code as an extension (`app.config`), not as a whole file name.
+const EXTENSION_ONLY: &[&str] = &["build", "builder", "config"];
+
 pub(crate) fn is_code_file(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
-    if CODE_SUFFIXES.contains(name.as_str()) { return true; }
+    if std::path::Path::new(&name).extension().is_some_and(|extension| BINARY_CODE.iter().any(|binary| extension == *binary)) {
+        return false;
+    }
+    if CODE_SUFFIXES.contains(name.as_str()) && !EXTENSION_ONLY.contains(&name.as_str()) { return true; }
     // Compound extensions and dotfiles share the same catalog as simple suffixes.
     name.match_indices('.').any(|(at, _)| CODE_SUFFIXES.contains(&name[at + 1..]))
 }

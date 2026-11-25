@@ -135,6 +135,15 @@ impl FileOperation {
         }
     }
 
+    /// Where each source was planned to go, under the name a conflict gave it
+    /// (« keep both » renames it); sources not planned yet are absent.
+    pub fn item_destinations(&self) -> HashMap<PathBuf, PathBuf> {
+        self.item_progress
+            .iter()
+            .filter_map(|(source, progress)| Some((source.clone(), progress.destination.clone()?)))
+            .collect()
+    }
+
     pub(super) fn snapshot_item_outcomes(&self) -> HashMap<PathBuf, ItemOutcome> {
         let terminal = FileOperationManager::is_final(&self.status);
         let archive = self.item_tracking_atomic;

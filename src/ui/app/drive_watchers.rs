@@ -26,6 +26,9 @@ fn fixed_archive(root: &std::path::Path) -> bool {
         .is_some_and(oxyde_lib::utils::archive::ArchiveFormat::writable)
 }
 
+/// Wait before creating again a watcher that failed, unless the drives change.
+const WATCHER_RETRY: std::time::Duration = std::time::Duration::from_secs(60);
+
 impl OxydeApp {
     /// Whether nothing can be written at `path` shown in `pane_id`: its volume
     /// refuses writes, or the pane browses an archive Oxyde cannot rewrite.
@@ -185,13 +188,14 @@ impl OxydeApp {
         }).detach();
     }
 
-    /// Mounts a sidebar volume in the background, then opens it in the active pane.
+    /// Mounts a sidebar volume in the background, then opens it in the pane active at the request.
     pub(crate) fn mount_volume(&mut self, id: String, cx: &mut Context<Self>) {
         self.context_menus.clear();
         if self.mounting_volume.is_some() || self.ejecting_drive {
             return;
         }
         self.mounting_volume = Some(id.clone());
+        let origin_pane = self.state.active_pane_id.clone();
         cx.notify();
         cx.spawn(async move |this, cx| {
             use oxyde_lib::platform::VolumeError;
@@ -209,7 +213,12 @@ impl OxydeApp {
                         this.apply_drive_snapshot(drives, cx);
                         this.reconcile_watchers(cx);
                         this.sidebar_selected_path = Some(path.clone());
-                        let pane = this.state.active_pane_id.clone();
+                        // The pane that asked, unless it was closed meanwhile.
+                        let pane = if this.state.find_pane(&origin_pane).is_some() {
+                            origin_pane
+                        } else {
+                            this.state.active_pane_id.clone()
+                        };
                         this.navigate_to(&pane, path, cx);
                         None
                     }
@@ -258,7 +267,6 @@ impl OxydeApp {
                         if let Ok((roots, unmounted, policies)) = tokio::task::spawn_blocking(|| {
                             let roots = oxyde_lib::platform::platform().volumes().roots();
                             let unmounted = oxyde_lib::platform::platform().volumes().unmounted();
-                            #[cfg(not(target_os = "windows"))]
                             super::drag::volumes::replace_mount_points(
                                 oxyde_lib::platform::platform().volumes().mount_points());
                             let policies = super::trash_settings::read_drive_policy(&roots);
@@ -338,6 +346,10 @@ impl OxydeApp {
                         oxyde_lib::platform::platform().file_clipboard().has_file_format()
                     }).await.unwrap_or(false);
                     h.update(&mut cx, |this, cx| {
+                        // Files another file manager copied, from the types its offer announced.
+                        let clipboard_has_files = clipboard_has_files
+                            || oxyde_lib::platform::platform().file_clipboard().external_files_type()
+                                .is_some_and(|mime_type| cx.clipboard_offers(mime_type));
                         if this.clipboard_has_files != clipboard_has_files {
                             this.clipboard_has_files = clipboard_has_files;
                             cx.notify();
@@ -474,6 +486,8 @@ impl OxydeApp {
             self.sidebar_selected_path = None;
         }
         self.state.drives = drives;
+        // Inserted media or a new drive: try the failed watchers again at once.
+        self.failed_watchers.clear();
         self.redirect_removed_drive_tabs(&removed, cx);
         self.state.refresh_sidebar();
         cx.notify();
@@ -536,9 +550,13 @@ impl OxydeApp {
                     .detach();
             }
         }
+        self.failed_watchers.retain(|path, _| wanted.contains_key(path));
         for (path, (polling, recursive)) in wanted {
             if self._path_watchers.contains_key(&path) || self.pending_watchers.contains_key(&path)
             {
+                continue;
+            }
+            if self.failed_watchers.get(&path).is_some_and(|failed| failed.elapsed() < WATCHER_RETRY) {
                 continue;
             }
             self.next_watcher_request = self.next_watcher_request.wrapping_add(1);
@@ -552,7 +570,7 @@ impl OxydeApp {
                     .background_executor()
                     .spawn(async move { DirectoryWatcher::create(&worker_path, polling, recursive, changes) })
                     .await;
-                if let Err(error) = &result { log::warn!("Cannot watch {path}: {error}"); }
+                let error = result.as_ref().err().map(ToString::to_string);
                 let mut result = result.ok();
                 let _ = this.update(cx, |this, cx| {
                     if !this.ejecting_drive
@@ -562,6 +580,12 @@ impl OxydeApp {
                         let installed = result.is_some();
                         if let Some(watcher) = result.take() {
                             this._path_watchers.insert(path.clone(), watcher);
+                            this.failed_watchers.remove(&path);
+                        } else if let Some(error) = &error {
+                            // Logged once until the path can be watched again.
+                            if this.failed_watchers.insert(path.clone(), std::time::Instant::now()).is_none() {
+                                log::warn!("Cannot watch {path}: {error}");
+                            }
                         }
                         {
                             let mut ids = Vec::new();

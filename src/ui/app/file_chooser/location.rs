@@ -41,7 +41,12 @@ pub(super) fn typed_path(text: &str, folder: &Path, home: Option<&Path>) -> Path
         match component {
             Component::Normal(name) => resolved.push(name),
             Component::ParentDir => { resolved.pop(); }
-            Component::Prefix(_) | Component::RootDir if cfg!(target_os = "windows") => resolved.push(component),
+            // `D:` alone names the drive's root, not its process-wide current folder.
+            Component::Prefix(_) if cfg!(target_os = "windows") => {
+                resolved.push(component);
+                resolved.push(Component::RootDir);
+            }
+            Component::RootDir if cfg!(target_os = "windows") => resolved.push(component),
             Component::RootDir | Component::CurDir | Component::Prefix(_) => {}
         }
     }

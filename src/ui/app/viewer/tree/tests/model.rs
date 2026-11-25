@@ -71,6 +71,15 @@ fn only_folders_with_entries_open_and_their_level_loads_once() {
     assert!(matches!(tree.flatten()[2], Row::Entry { chevron: Chevron::None, .. }));
     tree.contents.insert("/r/b".into(), contents(true, true));
     assert!(matches!(tree.flatten()[2], Row::Entry { chevron: Chevron::Collapsed, subfolders: true, .. }));
+    // A level that failed is read again on the next opening.
+    tree.levels.insert("/r/b".into(), Level::Failed(Failure::Unreadable));
+    assert_eq!(tree.toggle("/r/b"), Toggle::Load);
+}
+
+#[test]
+fn sizes_saturate_instead_of_overflowing() {
+    let folder = Folder::new(vec![entry("/r/a", false, u64::MAX), entry("/r/b", false, 2)], true, sort());
+    assert_eq!(folder.file_bytes, u64::MAX);
 }
 
 #[test]

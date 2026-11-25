@@ -29,7 +29,8 @@ fn windows_unsafe(part: &str) -> bool {
     part.ends_with(['.', ' ']) || part.contains(['<', '>', ':', '"', '|', '?', '*']) || reserved_windows_name(part)
 }
 
-fn reserved_windows_name(name: &str) -> bool {
+/// A device name Windows opens whatever the folder or extension: `NUL.txt`, `COM1`.
+pub fn reserved_windows_name(name: &str) -> bool {
     let base = name
         .split('.')
         .next()
