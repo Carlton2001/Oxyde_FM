@@ -354,7 +354,15 @@ pub async fn find_duplicates(
             }
         }
 
-        let vol_semaphores: Arc<DashMap<u64, Arc<Mutex<()>>>> = Arc::new(DashMap::new());
+        // One file at a time per disk that pays for seeks; a solid-state disk
+        // reads several at once, bounded by the pool.
+        let vol_semaphores: Arc<DashMap<u64, Option<Arc<Mutex<()>>>>> = Arc::new(DashMap::new());
+        let disk_lock = |path: &Path| {
+            vol_semaphores
+                .entry(get_physical_disk_id(path))
+                .or_insert_with(|| (!is_ssd(path)).then(|| Arc::new(Mutex::new(()))))
+                .clone()
+        };
         let hashed = AtomicUsize::new(0);
         report(DuplicateStage::Hashing, 0, total_to_hash);
         let hash_total = total_to_hash;
@@ -364,12 +372,8 @@ pub async fn find_duplicates(
                 if cancel_flag.load(Ordering::Relaxed) {
                     return None;
                 }
-                let vol_id = get_physical_disk_id(&path);
-                let lock = vol_semaphores
-                    .entry(vol_id)
-                    .or_insert_with(|| Arc::new(Mutex::new(())))
-                    .clone();
-                let _guard = lock.lock().unwrap();
+                let lock = disk_lock(&path);
+                let _guard = lock.as_ref().map(|lock| lock.lock().unwrap());
                 let limit = if size > PARTIAL_HASH_SIZE as u64 {
                     Some(PARTIAL_HASH_SIZE)
                 } else {
@@ -419,12 +423,8 @@ pub async fn find_duplicates(
                 if cancel_flag.load(Ordering::Relaxed) {
                     return None;
                 }
-                let vol_id = get_physical_disk_id(&path);
-                let lock = vol_semaphores
-                    .entry(vol_id)
-                    .or_insert_with(|| Arc::new(Mutex::new(())))
-                    .clone();
-                let _guard = lock.lock().unwrap();
+                let lock = disk_lock(&path);
+                let _guard = lock.as_ref().map(|lock| lock.lock().unwrap());
                 let limit = if size > PARTIAL_HASH_SIZE as u64 {
                     Some(PARTIAL_HASH_SIZE)
                 } else {
@@ -474,12 +474,8 @@ pub async fn find_duplicates(
                 if cancel_flag.load(Ordering::Relaxed) {
                     return None;
                 }
-                let vol_id = get_physical_disk_id(&path);
-                let lock = vol_semaphores
-                    .entry(vol_id)
-                    .or_insert_with(|| Arc::new(Mutex::new(())))
-                    .clone();
-                let _guard = lock.lock().unwrap();
+                let lock = disk_lock(&path);
+                let _guard = lock.as_ref().map(|lock| lock.lock().unwrap());
                 let hash = hash_or_skip(calculate_hash(&path, None, false, &cancel_flag))?;
                 let count = hashed.fetch_add(1, Ordering::Relaxed) + 1;
                 if count.is_multiple_of(20) {
