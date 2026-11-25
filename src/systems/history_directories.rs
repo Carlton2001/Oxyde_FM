@@ -29,10 +29,18 @@ pub(crate) struct Directories {
 impl Directories {
     pub fn prepare(paths: &[PathBuf], removed: &[PathBuf]) -> io::Result<Self> {
         let mut result = Self::default();
+        // Journals list the parent of every file: each distinct folder is
+        // resolved once, and the removal plan is looked up by ancestor.
+        let removed_set: std::collections::HashSet<&Path> =
+            removed.iter().map(PathBuf::as_path).collect();
+        let mut seen = std::collections::HashSet::new();
         for path in paths.iter().chain(removed) {
+            if !seen.insert(path.as_path()) {
+                continue;
+            }
             let mut root = path.as_path();
             loop {
-                if !removed.iter().any(|directory| root.starts_with(directory)) {
+                if !root.ancestors().any(|ancestor| removed_set.contains(ancestor)) {
                     // A pre-existing junction parent is resolved once by HeldParents.
                     // Children in the removal plan are opened separately without reparse.
                     match std::fs::metadata(root) {
