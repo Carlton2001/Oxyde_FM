@@ -10,6 +10,8 @@ impl Drop for PopupMenuGuard {
 use super::windows_com::{take_string, ComApartment, TaskMemory};
 use crate::models::{CommandError, QuickAccessItem, WinMenuItem};
 
+pub(super) mod new_menu;
+
 fn read_verb_with(read: impl FnOnce(&mut [u8]) -> windows::core::Result<()>) -> Option<String> {
     let mut buffer = [0u8; 128];
     read(&mut buffer).ok()?;
@@ -181,19 +183,15 @@ try {{
     )
 }
 
-pub(super) fn get_native_context_menu_items(
-    paths: Vec<String>,
+fn with_context_menu<T>(
+    paths: &[String],
     is_background: bool,
-) -> Result<Vec<WinMenuItem>, CommandError> {
-    use windows::core::{Interface, PCWSTR};
-    use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+    use_menu: impl FnOnce(&windows::Win32::UI::Shell::IContextMenu) -> Result<T, CommandError>,
+) -> Result<T, CommandError> {
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::Shell::{
-        IContextMenu, IContextMenu2, IContextMenu3, IShellFolder, SHBindToParent,
-        SHParseDisplayName, CMF_CANRENAME, CMF_EXPLORE, CMF_NORMAL,
-    };
-    use windows::Win32::UI::WindowsAndMessaging::{
-        GetMenuItemCount, GetMenuItemID, GetMenuStringW, GetSubMenu, MF_BYPOSITION,
-        WM_INITMENUPOPUP,
+        IContextMenu, IShellFolder, SHBindToParent, SHParseDisplayName,
     };
 
     let path = paths.first().ok_or_else(|| CommandError::SystemError("Empty Shell selection".into()))?;
@@ -216,7 +214,7 @@ pub(super) fn get_native_context_menu_items(
             .map_err(|e| CommandError::SystemError(format!("SHBindToParent failed: {:?}", e)))?;
 
         let context_menu: IContextMenu = if !is_background && paths.len() > 1 {
-            super::windows_shell_selection::selection_context_menu(&paths)?
+            super::windows_shell_selection::selection_context_menu(paths)?
         } else if is_background {
             // For background menu, we need the IShellFolder of the target itself
             let target_folder: IShellFolder = parent_folder
@@ -234,7 +232,26 @@ pub(super) fn get_native_context_menu_items(
                 .map_err(|e| CommandError::SystemError(format!("GetUIObjectOf failed: {}", e)))?
         };
 
-        let menu = query_menu(&context_menu, CMF_NORMAL | CMF_EXPLORE | CMF_CANRENAME)?;
+        use_menu(&context_menu)
+    }
+}
+
+pub(super) fn get_native_context_menu_items(
+    paths: Vec<String>,
+    is_background: bool,
+) -> Result<Vec<WinMenuItem>, CommandError> {
+    use windows::core::Interface;
+    use windows::Win32::Foundation::{LPARAM, WPARAM};
+    use windows::Win32::UI::Shell::{
+        IContextMenu, IContextMenu2, IContextMenu3, CMF_CANRENAME, CMF_EXPLORE, CMF_NORMAL,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetMenuItemCount, GetMenuItemID, GetMenuStringW, GetSubMenu, MF_BYPOSITION,
+        WM_INITMENUPOPUP,
+    };
+
+    with_context_menu(&paths, is_background, |context_menu| {
+        let menu = query_menu(context_menu, CMF_NORMAL | CMF_EXPLORE | CMF_CANRENAME)?;
         let hmenu = menu.0;
 
         let cm2: Option<IContextMenu2> = context_menu.cast().ok();
@@ -291,8 +308,7 @@ pub(super) fn get_native_context_menu_items(
                         continue;
                     }
 
-                    let is_new_menu =
-                        label.to_lowercase().contains("nouveau") || label.to_lowercase() == "new";
+                    let is_new_menu = !submenu.is_invalid() && new_menu::new_label(label.trim());
 
                     // Filter standard verbs. GetMenuItemID has no ID for a popup, but
                     // its item can carry one with a canonical verb, whatever the
@@ -342,10 +358,10 @@ pub(super) fn get_native_context_menu_items(
             }
         }
 
-        let items = scrape_level(hmenu, &context_menu, cm2.as_ref(), cm3.as_ref());
+        let items = scrape_level(hmenu, context_menu, cm2.as_ref(), cm3.as_ref());
 
         Ok(items)
-    }
+    })
 }
 
 pub(super) fn execute_native_menu_item(
@@ -353,57 +369,20 @@ pub(super) fn execute_native_menu_item(
     id: i32,
     is_background: bool,
 ) -> Result<(), CommandError> {
-    use windows::core::{Interface, PCWSTR};
+    use windows::core::Interface;
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::Shell::{
-        IContextMenu, IContextMenu2, IContextMenu3, IShellFolder, SHBindToParent,
-        SHParseDisplayName, CMF_CANRENAME, CMF_EXPLORE, CMF_NORMAL,
+        IContextMenu2, IContextMenu3, CMF_CANRENAME, CMF_EXPLORE, CMF_NORMAL,
     };
 
     if !(1..=0x7FFF).contains(&id) {
         return Err(CommandError::SystemError("Invalid Shell command ID".into()));
     }
 
-    let path = paths.first().ok_or_else(|| CommandError::SystemError("Empty Shell selection".into()))?;
-    if is_background && paths.len() != 1 { return Err(CommandError::SystemError("Background menu requires one folder".into())); }
-    let pb = super::windows_shell_selection::shell_path(path)?;
-    let path_norm = pb.to_string_lossy().replace("/", "\\");
-    let path_u16: Vec<u16> = path_norm.encode_utf16().chain(std::iter::once(0)).collect();
-
-    unsafe {
-        let _com =
-            ComApartment::sta().map_err(|error| CommandError::SystemError(error.to_string()))?;
-
+    with_context_menu(&paths, is_background, |context_menu| {
         let main_hwnd = HWND::default(); // needs proper HWND for full functionality
-
-        let mut pidl_full = std::ptr::null_mut();
-        SHParseDisplayName(PCWSTR(path_u16.as_ptr()), None, &mut pidl_full, 0, None)
-            .map_err(|e| CommandError::SystemError(format!("SHParseDisplayName failed: {}", e)))?;
-
-        let _pidl = TaskMemory::new(pidl_full);
-        let mut pidl_relative = std::ptr::null_mut();
-        let parent_folder: IShellFolder = SHBindToParent(pidl_full, Some(&mut pidl_relative))
-            .map_err(|e| CommandError::SystemError(format!("SHBindToParent failed: {:?}", e)))?;
-
-        let context_menu: IContextMenu = if !is_background && paths.len() > 1 {
-            super::windows_shell_selection::selection_context_menu(&paths)?
-        } else if is_background {
-            let target_folder: IShellFolder = parent_folder
-                .BindToObject(pidl_relative, None)
-                .map_err(|e| CommandError::SystemError(format!("BindToObject failed: {:?}", e)))?;
-
-            target_folder
-                .CreateViewObject(main_hwnd)
-                .map_err(|e| CommandError::SystemError(format!("CreateViewObject failed: {}", e)))?
-        } else {
-            let pidl_relative_slice = [pidl_relative as *const _];
-            parent_folder
-                .GetUIObjectOf(main_hwnd, &pidl_relative_slice, None)
-                .map_err(|e| CommandError::SystemError(format!("GetUIObjectOf failed: {}", e)))?
-        };
-
         // We MUST call QueryContextMenu before InvokeCommand so the extension knows what IDs we are talking about
-        let menu = query_menu(&context_menu, CMF_NORMAL | CMF_EXPLORE | CMF_CANRENAME)?;
+        let menu = query_menu(context_menu, CMF_NORMAL | CMF_EXPLORE | CMF_CANRENAME)?;
         let hmenu = menu.0;
 
         // CRITICAL: For submenus like "New", we must initialize them so the extension populates the IDs
@@ -442,10 +421,9 @@ pub(super) fn execute_native_menu_item(
         init_all_submenus(hmenu, cm2.as_ref(), cm3.as_ref());
 
         invoke_menu_with(id as u32, main_hwnd, |info| {
-            context_menu.InvokeCommand(info)
-        })?;
-    }
-    Ok(())
+            unsafe { context_menu.InvokeCommand(info) }
+        })
+    })
 }
 
 pub(super) fn get_quick_access_items() -> Result<Vec<QuickAccessItem>, CommandError> {

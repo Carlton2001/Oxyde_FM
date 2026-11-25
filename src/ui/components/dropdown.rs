@@ -39,6 +39,10 @@ pub enum IconName {
     CheckboxFile { checked: bool, path: String, icon: crate::ui::components::icons::IconType, system: bool },
     Folder,
     NativeFolder(String),
+    #[cfg(target_os = "windows")]
+    FileType { path: String, icon: crate::ui::components::icons::IconType, system: bool },
+    #[cfg(target_os = "windows")]
+    ShellIcon(std::sync::Arc<RenderImage>),
     /// An image file, such as an application's icon; the window icon when missing.
     Image(Option<std::path::PathBuf>),
     HardDrive,
@@ -426,6 +430,11 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                     let key_hover = on_hover_list.clone();
                                     let key_bounds = row_bounds.clone();
                                     let submenu: Option<crate::ui::components::popup::keyboard::Action> = if item.has_submenu { key_hover.map(|hover| Rc::new(move |window: &mut Window, cx: &mut App| { let position = key_bounds.get().map(|bounds| bounds.origin).unwrap_or_default(); hover(original_ix, crate::ui::components::popup::owner_point(window, cx, position), cx); }) as crate::ui::components::popup::keyboard::Action) } else { None };
+                                    let click_submenu = if self_is_context_menu && item.label == cx.i18n().text(Message::NewItem).as_ref() {
+                                        submenu.clone()
+                                    } else {
+                                        None
+                                    };
                                     let key_action = if item.has_submenu && !split_copy { submenu.clone().unwrap_or(key_action) } else { key_action };
                                     let row = div()
                                         // Keep action hover state stable across menu renders.
@@ -449,6 +458,10 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                         })
                                         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                                             if !is_dimmed {
+                                                if let Some(open) = &click_submenu {
+                                                    open(window, cx);
+                                                    return;
+                                                }
                                                 crate::ui::components::popup::with_owner(window, cx, |window, cx| {
                                                 (on_click)(window, cx);
                                                 if !stay_open {
@@ -471,6 +484,16 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                                 path.clone(), crate::ui::components::icons::IconType::Folder,
                                                                 rems(1.0), &theme, true, false,
                                                             )).when(item.is_dimmed, |d| d.opacity(0.5));
+                                                        }
+                                                        #[cfg(target_os = "windows")]
+                                                        if let IconName::FileType { path, icon, system } = icon {
+                                                            return d.child(crate::ui::components::icons::render_file_icon(
+                                                                path.clone(), *icon, rems(1.0), &theme, *system, false,
+                                                            ));
+                                                        }
+                                                        #[cfg(target_os = "windows")]
+                                                        if let IconName::ShellIcon(image) = icon {
+                                                            return d.child(img(image.clone()).size_full().object_fit(ObjectFit::Contain));
                                                         }
                                                         if let IconName::Image(Some(path)) = icon {
                                                             return d.child(img(path.clone()).size_full().object_fit(ObjectFit::Contain))
@@ -503,6 +526,10 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                                         "icons/square.svg"
                                                                     }
                                                                     IconName::NativeFolder(_) => "icons/folder.svg",
+                                                                    #[cfg(target_os = "windows")]
+                                                                    IconName::FileType { icon, .. } => icon.path(),
+                                                                    #[cfg(target_os = "windows")]
+                                                                    IconName::ShellIcon(_) => unreachable!("Shell bitmap rendered above"),
                                                                     IconName::Image(_) => "icons/app-window.svg",
                                                                     IconName::Folder => "icons/folder.svg",
                                                                     IconName::HardDrive => {

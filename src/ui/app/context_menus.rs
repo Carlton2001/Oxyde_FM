@@ -4,16 +4,16 @@ use crate::ui::i18n::{FluentArgs, I18n, I18nContext, Message};
 use crate::ui::scale::logical;
 use gpui::*;
 
-const NATIVE_MENU_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+pub(super) const NATIVE_MENU_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 /// Loads whose Shell call is still running, timed out or not.
 const MAX_NATIVE_MENU_LOADS: usize = 4;
 static NATIVE_MENU_LOADS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 /// Counts one native menu load until its Shell call returns.
-struct NativeMenuLoad;
+pub(super) struct NativeMenuLoad;
 
 impl NativeMenuLoad {
-    fn start() -> Option<Self> {
+    pub(super) fn start() -> Option<Self> {
         use std::sync::atomic::Ordering;
         NATIVE_MENU_LOADS
             .try_update(Ordering::AcqRel, Ordering::Acquire, |loads| {
@@ -333,19 +333,31 @@ impl OxydeApp {
                 self.pause_viewer_media_for_external_open(path, cx);
             }
         }
-        let Some(handle) = self.handle.clone() else {
-            return;
+        let tab_id = if creates_item {
+            self.state.layout.find_pane(&self.state.active_pane_id).map(|pane| pane.active_tab().id.clone())
+        } else {
+            None
         };
-        let tab_id = self
-            .state
-            .layout
-            .find_pane(&self.state.active_pane_id)
-            .map(|pane| pane.active_tab().id.clone());
+        self.run_native_menu_action(path, tab_id, false, move |path| {
+            oxyde_lib::platform::platform().execute_native_context_menu_item(path, id, is_background)
+        }, cx);
+    }
+
+    pub(super) fn run_native_menu_action(
+        &mut self,
+        path: Vec<String>,
+        rename_tab: Option<String>,
+        report_failure: bool,
+        execute: impl FnOnce(&[String]) -> Result<(), String> + Send + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(handle) = self.handle.clone() else { return };
+        let track_creation = rename_tab.is_some();
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
                 let result = tokio::task::spawn_blocking(move || {
-                    let before = if creates_item {
+                    let before = if track_creation {
                         std::fs::read_dir(&path[0]).ok().map(|entries| {
                             entries
                                 .filter_map(Result::ok)
@@ -360,11 +372,7 @@ impl OxydeApp {
                     let invoked_at = std::time::SystemTime::now()
                         .checked_sub(std::time::Duration::from_secs(2))
                         .unwrap_or(std::time::UNIX_EPOCH);
-                    oxyde_lib::platform::platform().execute_native_context_menu_item(
-                        &path,
-                        id,
-                        is_background,
-                    )?;
+                    execute(&path)?;
                     if let Some(before) = before {
                         for _ in 0..20 {
                             let added: Vec<_> = std::fs::read_dir(&path[0])
@@ -397,19 +405,23 @@ impl OxydeApp {
                     Ok::<_, String>(None)
                 })
                 .await;
-                match result {
-                    Ok(Ok(Some((path, is_dir)))) => {
-                        handle.update(&mut cx, |this, cx| {
-                            if let Some(tab_id) = tab_id {
+                handle.update(&mut cx, |this, cx| {
+                    match result.map_err(|error| error.to_string()).and_then(|result| result) {
+                        Ok(Some((path, is_dir))) => {
+                            if let Some(tab_id) = rename_tab {
                                 this.queue_created_item_rename(tab_id, path, is_dir, cx);
                             }
-                        });
+                        }
+                        Ok(None) => {}
+                        Err(error) => {
+                            log::warn!("Native context-menu action failed: {error}");
+                            if report_failure {
+                                this.toast(super::ToastKind::Error, Message::ToastFailed, error, 0, cx);
+                            }
+                        }
                     }
-                    Ok(Ok(None)) => {}
-                    Ok(Err(error)) => log::warn!("Native context-menu action failed: {error:?}"),
-                    Err(error) => log::warn!("Native context-menu worker failed: {error}"),
-                }
-                handle.update(&mut cx, |_, cx| cx.notify());
+                    cx.notify();
+                });
             }
         })
         .detach();

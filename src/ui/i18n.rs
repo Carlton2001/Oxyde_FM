@@ -334,6 +334,9 @@ pub enum Message {
     PropertiesFileSystem,
 
     MoreOptions,
+    NewItem,
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    NewEmptyFile,
     NewFolder,
     NewFile,
     DuplicateTab,
@@ -1117,6 +1120,8 @@ impl Message {
             Self::PropertiesFileSystem => "properties-file-system",
             Self::Properties => "menu-properties",
             Self::MoreOptions => "menu-more-options",
+            Self::NewItem => "menu-new-item",
+            Self::NewEmptyFile => "menu-new-empty-file",
             Self::NewFolder => "menu-new-folder",
             Self::NewFile => "menu-new-file",
             Self::DuplicateTab => "menu-duplicate-tab",

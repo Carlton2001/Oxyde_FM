@@ -518,8 +518,33 @@ impl Platform for WindowsPlatform {
         path: &[String],
         is_background: bool,
     ) -> Result<Vec<crate::models::WinMenuItem>, String> {
-        super::windows_shell::get_native_context_menu_items(path.to_vec(), is_background)
-            .map_err(|error| error.to_string())
+        let mut items = super::windows_shell::get_native_context_menu_items(path.to_vec(), is_background)
+            .map_err(|error| error.to_string())?;
+        if is_background {
+            super::windows_shell::new_menu::remove_new_submenu(&mut items);
+        }
+        Ok(items)
+    }
+
+    fn shell_new_templates(&self) -> std::io::Result<Vec<super::ShellNewTemplate>> {
+        super::windows_shell_new::templates()
+    }
+
+    fn shell_new_menu(&self, folder: &str, icons: bool) -> Result<Vec<super::ShellNewEntry>, String> {
+        super::windows_shell::new_menu::entries(folder, icons).map_err(|error| error.to_string())
+    }
+
+    fn execute_shell_new_command(&self, folder: &str, command: &super::ShellNewCommand) -> Result<(), String> {
+        super::windows_shell::new_menu::execute(folder, command).map_err(|error| error.to_string())
+    }
+
+    fn create_shell_new_file(
+        &self,
+        folder: &std::path::Path,
+        template: &super::ShellNewTemplate,
+        names: &mut dyn Iterator<Item = String>,
+    ) -> std::io::Result<std::path::PathBuf> {
+        super::windows_shell_new::create_file(folder, template, names)
     }
 
     fn execute_native_context_menu_item(

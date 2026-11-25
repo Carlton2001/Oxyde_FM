@@ -3,6 +3,13 @@ use crate::ui::components::input::{InputAppearance, TextInput, TextInputOptions}
 use crate::ui::i18n::{FluentArgs, I18n, I18nContext, Message};
 use gpui::*;
 
+enum NewItem {
+    Folder,
+    EmptyFile,
+    #[cfg(target_os = "windows")]
+    Template(std::sync::Arc<oxyde_lib::platform::ShellNewTemplate>),
+}
+
 impl OxydeApp {
     pub(crate) fn rename_context_item(
         &mut self,
@@ -414,15 +421,26 @@ impl OxydeApp {
     }
 
     pub fn create_new_folder(&mut self, pane_id: &str, cx: &mut Context<Self>) {
-        self.create_new_item(pane_id, true, cx);
+        self.create_new_item(pane_id, NewItem::Folder, cx);
     }
 
     /// Creates an empty file without extension, then starts renaming it.
     pub fn create_new_file(&mut self, pane_id: &str, cx: &mut Context<Self>) {
-        self.create_new_item(pane_id, false, cx);
+        self.create_new_item(pane_id, NewItem::EmptyFile, cx);
     }
 
-    fn create_new_item(&mut self, pane_id: &str, is_dir: bool, cx: &mut Context<Self>) {
+    #[cfg(target_os = "windows")]
+    pub(super) fn create_new_template(
+        &mut self,
+        pane_id: &str,
+        template: std::sync::Arc<oxyde_lib::platform::ShellNewTemplate>,
+        cx: &mut Context<Self>,
+    ) {
+        self.create_new_item(pane_id, NewItem::Template(template), cx);
+    }
+
+    fn create_new_item(&mut self, pane_id: &str, item: NewItem, cx: &mut Context<Self>) {
+        let is_dir = matches!(item, NewItem::Folder);
         if let Some(pane) = self.state.layout.find_pane(pane_id) {
             let current_path = pane.active_tab().path.clone();
             if current_path.starts_with("search://") || Self::location_is_virtual(&current_path)
@@ -445,7 +463,8 @@ impl OxydeApp {
                         let current_path = current_path.clone();
                         move || {
                             let i18n = I18n::for_language(language);
-                            let in_archive = oxyde_lib::utils::archive::resolve_virtual_path(std::path::Path::new(&current_path)).is_some();
+                            let folder = std::path::Path::new(&current_path);
+                            let in_archive = oxyde_lib::utils::archive::resolve_virtual_path(folder).is_some();
                             let name = |counter: usize| {
                                 if counter == 0 {
                                     i18n.text(name_key).to_string()
@@ -456,17 +475,26 @@ impl OxydeApp {
                                         .replace(['\u{2068}', '\u{2069}'], "")
                                 }
                             };
+                            #[cfg(target_os = "windows")]
+                            if let NewItem::Template(template) = item {
+                                if in_archive {
+                                    return Err(std::io::Error::from(std::io::ErrorKind::InvalidInput));
+                                }
+                                return oxyde_lib::platform::platform()
+                                    .create_shell_new_file(folder, &template, &mut (0..).map(name))
+                                    .map(|path| (path, None, false));
+                            }
                             if is_dir && in_archive {
                                 // One extraction and one rebuild, whichever name is free.
                                 return oxyde_lib::commands::archive::create_numbered_archive_directory(
-                                    std::path::Path::new(&current_path),
+                                    folder,
                                     &mut (0..).map(name),
                                     &quality,
                                 )
                                 .map(|path| (path, None, true));
                             }
                             for counter in 0.. {
-                                let path = std::path::Path::new(&current_path).join(name(counter));
+                                let path = folder.join(name(counter));
                                 let created = if !is_dir {
                                     // Archives only receive folders from here.
                                     oxyde_lib::commands::io::create_local_file(&path).map(|()| None)

@@ -129,6 +129,8 @@ menu-rename = Renommer
 menu-delete = Supprimer
 menu-properties = Propriétés
 menu-more-options = Plus d’options
+menu-new-item = Nouveau
+menu-new-empty-file = Fichier vide
 menu-new-folder = Nouveau dossier
 menu-new-file = Nouveau fichier
 menu-duplicate-tab = Dupliquer l’onglet
@@ -298,7 +300,7 @@ sidebar-collapse = Réduire le panneau
 sidebar-expand = Agrandir le panneau
 
 settings-windows-icons = Icônes Windows
-settings-windows-icons-description = Utiliser les icônes Windows des fichiers et dossiers dans les vues liste et grille.
+settings-windows-icons-description = Utiliser les icônes Windows des fichiers et dossiers.
 
 settings-checkboxes = Cases à cocher de sélection
 settings-checkboxes-description = Sélectionner plusieurs éléments sans maintenir Ctrl.
