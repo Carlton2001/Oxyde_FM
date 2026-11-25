@@ -198,14 +198,36 @@ impl ThemeWindow {
         }
     }
 
+    /// Derives the draft's theme off the UI thread, a pale accent taking tens of
+    /// milliseconds: a drag in the picker previews the latest colors once the
+    /// previous derivation ends, never a queue of stale ones.
     pub(super) fn preview(&mut self, cx: &mut Context<Self>) {
-        if let Some(draft) = &self.draft {
-            let colors = draft.colors;
-            let _ = self.owner.update(cx, |app, cx| {
-                let theme = OxydeTheme::from_colors(colors, app.color_vision());
-                app.preview_theme(theme, cx)
-            });
+        let Some(draft) = &self.draft else { return };
+        self.preview_wanted = Some(draft.colors);
+        if self.previewing {
+            return;
         }
+        self.previewing = true;
+        cx.spawn(async move |this, cx| loop {
+            let Ok(Some((colors, vision))) = this.update(cx, |this, cx| {
+                let wanted = this.preview_wanted.take()
+                    .zip(this.owner.read_with(cx, |app, _| app.color_vision()).ok());
+                // Checked and cleared together: a later preview starts a new loop.
+                this.previewing = wanted.is_some();
+                wanted
+            }) else { return };
+            let theme = cx.background_spawn(async move { OxydeTheme::from_colors(colors, vision) }).await;
+            let applied = this.update(cx, |this, cx| {
+                // A draft closed meanwhile has restored the saved theme.
+                if this.draft.is_some() {
+                    let _ = this.owner.update(cx, |app, cx| app.preview_theme(theme, cx));
+                }
+            });
+            if applied.is_err() {
+                return;
+            }
+        })
+        .detach();
     }
 
     /// The saved theme becomes the selection and stays open in the editor.
