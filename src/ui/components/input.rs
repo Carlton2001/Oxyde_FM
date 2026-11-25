@@ -72,6 +72,8 @@ pub struct TextInput {
     completion_index: usize,
     completion_chosen: bool,
     completion_task: Option<Task<()>>,
+    /// Set when the completion is replaced: an archive listing stops its worker.
+    completion_cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
     completion_epoch: u64,
     completion_bounds: Option<Bounds<Pixels>>,
     completion_anchor: Option<Bounds<Pixels>>,
@@ -269,6 +271,7 @@ impl TextInput {
             completion_index: 0,
             completion_chosen: false,
             completion_task: None,
+            completion_cancel: Default::default(),
             completion_epoch: 0,
             completion_bounds: None,
             completion_anchor: None,
@@ -657,6 +660,7 @@ impl TextInput {
     fn dismiss_completions(&mut self, cx: &mut Context<Self>) {
         self.completion_epoch += 1;
         self.completion_task = None;
+        self.completion_cancel.store(true, std::sync::atomic::Ordering::Relaxed);
         self.completion_chosen = false;
         if !self.completions.is_empty() {
             self.completions.clear();
@@ -670,6 +674,7 @@ impl TextInput {
         }
         self.completion_epoch += 1;
         self.completion_task = None;
+        self.completion_cancel.store(true, std::sync::atomic::Ordering::Relaxed);
         self.completions.clear();
         self.completion_index = 0;
         self.completion_chosen = false;
@@ -682,6 +687,8 @@ impl TextInput {
         };
         let epoch = self.completion_epoch;
         let (show_hidden, show_system) = self.path_visibility;
+        self.completion_cancel = Default::default();
+        let cancelled = self.completion_cancel.clone();
         let entity = cx.weak_entity();
         self.completion_task = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
@@ -690,10 +697,12 @@ impl TextInput {
                     .timer(std::time::Duration::from_millis(150))
                     .await;
                 let listed = expand_home(&parent, dirs::home_dir().as_deref());
-                let result = oxyde_lib::commands::io::list_dir(
+                // Unsorted: only the few matching folders are sorted, below.
+                let result = oxyde_lib::commands::io::list_dir_unsorted_until(
                     listed,
                     Some(show_hidden),
                     Some(show_system),
+                    cancelled,
                 )
                 .await;
                 let paths = cx.background_executor().spawn(async move {
