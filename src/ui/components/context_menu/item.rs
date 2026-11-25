@@ -113,9 +113,10 @@ pub(super) fn oxyde_context_menu_items_raw(
                         this.context_menus.clear();
                         let p_id = this.state.active_pane_id.clone();
                         let paths = this.context_action_paths(&p);
+                        let paths: std::collections::HashSet<&str> = paths.iter().map(String::as_str).collect();
                         let directories: Vec<_> = this.state.find_pane(&p_id)
                             .into_iter().flat_map(|pane| pane.active_tab().files.iter())
-                            .filter(|file| paths.contains(&file.path)
+                            .filter(|file| paths.contains(file.path.as_str())
                                 && (file.is_dir
                                     || file.is_navigable_archive()
                                     || file.needs_mount_for_browsing()))
@@ -179,9 +180,10 @@ pub(super) fn oxyde_context_menu_items_raw(
                     h.update(app, |this, cx| {
                         this.context_menus.clear();
                         let paths = this.context_action_paths(&p);
+                        let paths: std::collections::HashSet<&str> = paths.iter().map(String::as_str).collect();
                         let directories: Vec<_> = this.state.find_pane(&this.state.active_pane_id)
                             .into_iter().flat_map(|pane| pane.active_tab().files.iter())
-                            .filter(|file| file.is_dir && paths.contains(&file.path))
+                            .filter(|file| file.is_dir && paths.contains(file.path.as_str()))
                             .map(|file| file.path.clone()).collect();
                         for path in directories {
                             this.change_favorite(path, is_pinned, cx);

@@ -61,13 +61,13 @@ fn inspect_selection(
         unreadable,
     };
     let mut directories = Vec::new();
+    let selected_directories: std::collections::HashSet<&std::path::Path> = properties.iter()
+        .filter(|p| p.is_dir)
+        .map(|p| std::path::Path::new(&p.path))
+        .collect();
     for p in &properties {
         // A directory scan already includes selected descendants from search results.
-        if properties.iter().any(|parent| {
-            parent.is_dir
-                && parent.path != p.path
-                && std::path::Path::new(&p.path).starts_with(&parent.path)
-        }) {
+        if std::path::Path::new(&p.path).ancestors().skip(1).any(|parent| selected_directories.contains(parent)) {
             continue;
         }
         if p.is_dir {

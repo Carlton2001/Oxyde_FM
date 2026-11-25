@@ -353,9 +353,10 @@ impl OxydeApp {
     }
 
     pub(crate) fn tab_drop_directories(&self, data: &super::FileDragData) -> Vec<String> {
+        let dragged: std::collections::HashSet<&str> = data.paths.iter().map(String::as_str).collect();
         self.state.find_pane(&data.source_pane_id)
             .map(|pane| pane.tabs.iter().flat_map(|tab| tab.files.iter())
-                .filter(|file| file.is_dir && data.paths.contains(&file.path))
+                .filter(|file| file.is_dir && dragged.contains(file.path.as_str()))
                 .map(|file| file.path.clone()).collect::<std::collections::BTreeSet<_>>()
                 .into_iter().collect()).unwrap_or_default()
     }
