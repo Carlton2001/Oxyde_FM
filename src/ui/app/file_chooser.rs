@@ -110,6 +110,8 @@ pub struct FileChooserWindow {
     back: Vec<String>,
     forward: Vec<String>,
     entries: Arc<Vec<FileEntry>>,
+    /// The entries `column_values` were gathered from.
+    measured_entries: std::sync::Weak<Vec<FileEntry>>,
     /// The entries the list shows, filtered and sorted, and how many are folders.
     shown: Arc<Vec<FileEntry>>,
     folders: usize,
@@ -444,6 +446,7 @@ impl FileChooserWindow {
             back: Vec::new(),
             forward: Vec::new(),
             entries: Arc::new(Vec::new()),
+            measured_entries: std::sync::Weak::new(),
             shown: Arc::new(Vec::new()),
             folders: 0,
             column_values: Default::default(),

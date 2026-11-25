@@ -104,7 +104,8 @@ impl FileChooserWindow {
         let (show_hidden, show_system) = (self.show_hidden, self.show_system);
         let typed = !self.directory && self.filters.iter().any(super::arrange::names_mime_types);
         self.listing_task = Some(cx.spawn(async move |this, cx| {
-            let listed = oxyde_lib::commands::io::list_dir(folder.clone(), Some(show_hidden), Some(show_system)).await;
+            // Arranging sorts: the listing need not.
+            let listed = oxyde_lib::commands::io::list_dir_unsorted(folder.clone(), Some(show_hidden), Some(show_system)).await;
             let mut pending = Vec::new();
             let _ = this.update(cx, |this, cx| {
                 match listed {
@@ -172,11 +173,15 @@ impl FileChooserWindow {
         let filter = self.filter.text.clone();
         let admission = self.admission.clone();
         let (sort, direction) = (self.options.sort, self.options.direction);
+        // A filter keystroke or a sort leaves the entries, and their columns, as they were.
+        // A Weak keeps its allocation: another listing cannot take the same address.
+        let measure = !std::ptr::eq(self.measured_entries.as_ptr(), Arc::as_ptr(&entries));
+        let measured = Arc::downgrade(&entries);
         self.arranging = true;
         self.arrange_task = Some(cx.spawn(async move |this, cx| {
             let arranged = cx.background_spawn(async move {
                 let platform = oxyde_lib::platform::platform();
-                super::arrange::arrange(&entries, &filter, &admission, &|mime, pattern| platform.content_type_matches(mime, pattern), sort, direction)
+                super::arrange::arrange(&entries, &filter, &admission, &|mime, pattern| platform.content_type_matches(mime, pattern), sort, direction, measure)
             }).await;
             let _ = this.update(cx, |this, cx| {
                 this.arranging = false;
@@ -188,9 +193,12 @@ impl FileChooserWindow {
                 }
                 this.folders = arranged.folders;
                 this.shown = Arc::new(arranged.shown);
-                if this.column_values.0 != arranged.types || this.column_values.1 != arranged.sizes {
+                if measure && (this.column_values.0 != arranged.types || this.column_values.1 != arranged.sizes) {
                     this.column_values = Arc::new((arranged.types, arranged.sizes));
                     this.column_revision += 1;
+                }
+                if measure {
+                    this.measured_entries = measured;
                 }
                 // Sorting a folder that could not be listed keeps saying why.
                 if !matches!(this.listing, Listing::Failed(_)) {
