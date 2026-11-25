@@ -38,7 +38,16 @@ impl OxydeApp {
         if text == " " && (self.type_select.prefix.is_empty()
             || self.type_select.last.is_none_or(|last| last.elapsed() > RESET_DELAY)) { return false; }
         let prefix = self.type_select.push(text, Instant::now()).to_owned();
-        let rows = display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, 1);
+        // The list's rows are those its rendering built; the grid's are in the same order.
+        let presentation;
+        let built;
+        let rows: &[DisplayRow] = if tab.view_mode.cards().is_none() {
+            presentation = tab.presentation(None, 1);
+            &presentation.rows
+        } else {
+            built = display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, 1);
+            &built
+        };
         let order: Vec<usize> = rows.iter().filter_map(|row| match row {
             DisplayRow::Files(indices) => Some(indices.iter().copied()), _ => None,
         }).flatten().collect();
@@ -53,9 +62,12 @@ impl OxydeApp {
         if let Some(pane) = self.state.find_pane(&pane_id) {
             let tab = pane.active_tab();
             let width = self.list_bounds.get(&pane_id).map_or(self.list_width, |bounds| bounds.size.width);
-            let columns = tab.card_columns(width);
-            let rows = display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, columns);
-            scroll_row_into_view(tab, &rows, index);
+            if tab.view_mode.cards().is_none() {
+                scroll_row_into_view(tab, &tab.presentation(None, 1).rows, index);
+            } else {
+                let rows = display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, tab.card_columns(width));
+                scroll_row_into_view(tab, &rows, index);
+            }
         }
         true
     }
@@ -69,7 +81,11 @@ impl OxydeApp {
 pub(super) fn find_match(names: &[&str], current: Option<usize>, prefix: &str) -> Option<usize> {
     let first = prefix.chars().next()?;
     let count = names.len();
-    let starts = |i: usize, text: &str| names[i].to_lowercase().starts_with(text);
+    // Lowercased as it is read, without a copy of each name.
+    let starts = |i: usize, text: &str| {
+        let mut name = names[i].chars().flat_map(char::to_lowercase);
+        text.chars().all(|expected| name.next() == Some(expected))
+    };
     // Searches in display order, from the current item (included or not).
     let search = |text: &str, include_current: bool| {
         let (start, skip) = match current {
