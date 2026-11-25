@@ -18,7 +18,6 @@ use crate::ui::workspace::TabLoadStatus;
 use crate::ui::style::TabularFigures;
 use gpui::prelude::*;
 use gpui::*;
-use oxyde_lib::models::FileEntry;
 
 pub(super) fn render_grid_file_list(
     view: &OxydeApp,
@@ -33,9 +32,10 @@ pub(super) fn render_grid_file_list(
     let trash_panel = tab.path == "trash://";
     let calculating_sizes = tab.size_calculation.is_some() || tab.folder_sizes.has_pending() || tab.folder_sizes.has_ready();
     let files = tab.cached_filtered_files.clone();
-    let selected = tab.selected_paths.clone();
+    let selection = tab.selection_snapshot();
+    let selected = selection.paths.clone();
     // A drag carries only what the filters show, never a hidden or vanished entry.
-    let drag_selection = std::rc::Rc::new(tab.actionable_selection());
+    let drag_selection = selection.shown.clone();
     let inline_rename = view.inline_rename;
     let editing_path = view.editing_path.clone();
     let editing_view = view.editing_view.clone();
@@ -511,20 +511,11 @@ pub(super) fn render_grid_file_list(
                 .child(cx.i18n().text_with_args(Message::StatusFiles, &file_args))
                 .children(super::filter_status::chip(tab, &pane_id, handle.clone(), theme, cx))
                 .when(!selected.is_empty(), |bar| {
-                    let entries: Vec<&FileEntry> = files
-                        .iter()
-                        .filter(|file| selected.contains(&file.path))
-                        .collect();
-                    let folder_count = entries.iter().filter(|file| file.is_dir).count();
-                    let file_count = entries.len().saturating_sub(folder_count);
-                    let size: u64 = entries
-                        .iter()
-                        .filter(|file| !file.is_dir || file.is_calculated)
-                        .map(|file| file.size)
-                        .sum();
+                    let (folder_count, file_count, size) = (selection.folders, selection.file_count, selection.bytes);
+                    let count = selection.shown.len();
                     let mut args = FluentArgs::new();
-                    args.set("count", entries.len());
-                    args.set("number", format_number(entries.len() as u64, lang));
+                    args.set("count", count);
+                    args.set("number", format_number(count as u64, lang));
                     args.set("folder_count", folder_count);
                     args.set("file_count", file_count);
                     args.set("folders", format_number(folder_count as u64, lang));

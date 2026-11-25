@@ -308,8 +308,9 @@ impl OxydeApp {
     pub(crate) fn all_files_selected(&self, pane_id: &str) -> bool {
         self.state.find_pane(pane_id).is_some_and(|pane| {
             let tab = pane.active_tab();
+            // Read at each render of the header: the list's snapshot already counts it.
             let files = tab.filtered_files();
-            !files.is_empty() && files.iter().all(|file| tab.selected_paths.contains(&file.path))
+            !files.is_empty() && tab.selection_snapshot().shown.len() == files.len()
         })
     }
 

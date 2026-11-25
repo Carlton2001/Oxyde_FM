@@ -223,6 +223,7 @@ pub struct TabState {
     pub collapsed_groups: std::collections::HashSet<crate::ui::date_groups::GroupKey>,
     pub cached_filtered_files: std::sync::Arc<Vec<FileEntry>>,
     presentation_cache: std::cell::RefCell<Option<std::sync::Arc<presentation::Presentation>>>,
+    selection_cache: std::cell::RefCell<Option<std::rc::Rc<tab::SelectionSnapshot>>>,
     filter_cache_revision: u64,
     /// The order the last preparation left `files` in. Valid for that vector only:
     /// its Weak keeps the address from another.
