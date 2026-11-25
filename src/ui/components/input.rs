@@ -135,14 +135,21 @@ pub(crate) fn navigation_path_text(text: &str) -> String {
 }
 
 /// Windows drops the spaces around a name; elsewhere a name may begin or end with one,
-/// so only line breaks and tabs go, and spaces before an absolute path.
+/// so only line breaks and tabs go, and spaces before an absolute path. A URI carries
+/// its spaces encoded, so it loses those around it too.
 fn trim_path_text(text: &str) -> &str {
     if cfg!(target_os = "windows") {
         return text.trim();
     }
     let text = text.trim_matches(['\r', '\n', '\t']);
     let start = text.trim_start_matches(' ');
-    if start.starts_with(['/', '~']) || start.contains("://") { start } else { text }
+    if start.contains("://") {
+        start.trim_end_matches(' ')
+    } else if start.starts_with(['/', '~']) {
+        start
+    } else {
+        text
+    }
 }
 
 fn completion_matches(name: &str, prefix: &str) -> bool {
@@ -1180,6 +1187,7 @@ mod completion_tests {
         if !cfg!(target_os = "windows") {
             assert_eq!(super::trim_path_text("  /home/a/dossier \n"), "/home/a/dossier ");
             assert_eq!(super::trim_path_text(" nom "), " nom ");
+            assert_eq!(super::trim_path_text(" smb://SERVEUR/ "), "smb://SERVEUR/");
         } else {
             assert_eq!(super::trim_path_text(" C:\\Users "), "C:\\Users");
         }
