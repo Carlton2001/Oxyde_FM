@@ -124,3 +124,18 @@ fn active_handle_blocks_recovery_then_releases_it_without_adopting_unknown_data(
     drop(reader);
     assert!(reclaim(&path).unwrap());
 }
+
+#[test]
+fn pending_block_is_base64_and_earlier_arrays_still_read() {
+    let content = Content {
+        next: vec![0, 1, 254, 255],
+        ..Content::default()
+    };
+    let text = serde_json::to_string(&content).unwrap();
+    assert!(text.contains("\"next\":\"AAH+/w==\""), "{text}");
+    let legacy = text.replace("\"AAH+/w==\"", "[0,1,254,255]");
+    let read: Content = serde_json::from_str(&legacy).unwrap();
+    assert_eq!(read.next, content.next);
+    let read: Content = serde_json::from_str(&text).unwrap();
+    assert_eq!(read.next, content.next);
+}
