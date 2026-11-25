@@ -72,23 +72,45 @@ struct ChunkWriter<'a, T> {
     offset: u64,
 }
 
+/// Reports decoded bytes to the broker by blocks of `MAX_BLOCK`, plus the rest
+/// at the end of the stream: a report per read would cost two round trips for
+/// each 512-byte TAR header. A stream left before its end, as TAR leaves its
+/// zero blocks, reports less than one block too few; the worker's own budget
+/// still counts every byte.
 struct ReportedReader<'a, R, T> {
     reader: R,
     connection: &'a Connection<T>,
+    pending: u64,
+}
+impl<'a, R, T> ReportedReader<'a, R, T> {
+    fn new(reader: R, connection: &'a Connection<T>) -> Self {
+        Self {
+            reader,
+            connection,
+            pending: 0,
+        }
+    }
 }
 impl<R: Read, T: Exchange> Read for ReportedReader<'_, R, T> {
     fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
         let count = self.reader.read(bytes)?;
-        if count != 0 {
+        self.pending += count as u64;
+        while self.pending >= MAX_BLOCK as u64 || (count == 0 && self.pending != 0) {
+            let reported = self.pending.min(MAX_BLOCK as u64);
             notify(
                 self.connection,
-                Frame::new(Message::Decoded {
-                    bytes: count as u64,
-                }),
+                Frame::new(Message::Decoded { bytes: reported }),
             )?;
+            self.pending -= reported;
         }
         Ok(count)
     }
+}
+
+/// Codecs and TAR read their source in small pieces, and each request to the
+/// broker is a round trip: read it by blocks of `MAX_BLOCK`.
+fn source<T: Exchange>(connection: &Connection<T>, size: u64) -> WindowReader<Reader<T>> {
+    WindowReader::new(Reader::new(connection.clone(), 0, size), MAX_BLOCK)
 }
 impl<T: Exchange> Write for ChunkWriter<'_, T> {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
@@ -250,7 +272,7 @@ fn decode<T: Exchange + Send + 'static>(
     match format {
         Format::Zip => {
             let mut archive =
-                zip::ZipArchive::new(WindowReader::new(Reader::new(connection.clone(), 0, size), MAX_BLOCK))
+                zip::ZipArchive::new(source(connection, size))
                     .map_err(io::Error::other)?;
             budget.check_entry_count(archive.len())?;
             let mut selection = None;
@@ -342,7 +364,7 @@ fn decode<T: Exchange + Send + 'static>(
         }
         Format::Iso => {
             super::archive_iso_open::stream_iso(
-                Reader::new(connection.clone(), 0, size),
+                source(connection, size),
                 size,
                 requested.as_deref(),
                 budget,
@@ -445,10 +467,7 @@ fn decode_seven<T: Exchange>(
             sevenz_rust2::BlockDecoder::new(1, block, &archive, &password, &mut source)
                 .for_each_entries(&mut |candidate, input| {
                     let mut input = BudgetReader {
-                        reader: ReportedReader {
-                            reader: input,
-                            connection,
-                        },
+                        reader: ReportedReader::new(input, connection),
                         budget,
                         checkpoint,
                     };
@@ -511,7 +530,7 @@ fn tar_reader<T: Exchange + 'static>(
     format: Format,
     size: u64,
 ) -> io::Result<Box<dyn Read>> {
-    let source = Reader::new(connection.clone(), 0, size);
+    let source = source(connection, size);
     match format.tar_codec() {
         Some(codec) => codec.decoder(source),
         None if format == Format::Tar => Ok(Box::new(source)),
@@ -548,10 +567,7 @@ fn decode_tar<T: Exchange + 'static>(
     // a fresh source cursor. The hash ties the two traversals to the selected data.
     let mut selection = None;
     let mut archive = tar::Archive::new(BudgetReader {
-        reader: ReportedReader {
-            reader: tar_reader(connection, format, size)?,
-            connection,
-        },
+        reader: ReportedReader::new(tar_reader(connection, format, size)?, connection),
         budget,
         checkpoint,
     });
@@ -587,10 +603,7 @@ fn decode_tar<T: Exchange + 'static>(
         let second = ArchiveBudget::new(budget.limits());
         let check = || budget.checkpoint(checkpoint);
         let mut archive = tar::Archive::new(BudgetReader {
-            reader: ReportedReader {
-                reader: tar_reader(connection, format, size)?,
-                connection,
-            },
+            reader: ReportedReader::new(tar_reader(connection, format, size)?, connection),
             budget: &second,
             checkpoint: &check,
         });
@@ -645,10 +658,7 @@ fn decode_stream<T: Exchange + 'static>(
         return Err(invalid().into());
     }
     let mut first = BudgetReader {
-        reader: ReportedReader {
-            reader: codec.decoder(Reader::new(connection.clone(), 0, size))?,
-            connection,
-        },
+        reader: ReportedReader::new(codec.decoder(source(connection, size))?, connection),
         budget,
         checkpoint,
     };
@@ -663,10 +673,7 @@ fn decode_stream<T: Exchange + 'static>(
     let second = ArchiveBudget::new(budget.limits());
     let check = || budget.checkpoint(checkpoint);
     let mut input = BudgetReader {
-        reader: ReportedReader {
-            reader: codec.decoder(Reader::new(connection.clone(), 0, size))?,
-            connection,
-        },
+        reader: ReportedReader::new(codec.decoder(source(connection, size))?, connection),
         budget: &second,
         checkpoint: &check,
     };
@@ -811,6 +818,7 @@ mod tests {
         state: Option<ExtractionState>,
         extracted: HashMap<u64, Vec<u8>>,
         read_bytes: u64,
+        exchanges: u64,
         finished: bool,
     }
     impl Broker {
@@ -825,6 +833,7 @@ mod tests {
                 state: None,
                 extracted: HashMap::new(),
                 read_bytes: 0,
+                exchanges: 0,
                 finished: false,
             }
         }
@@ -895,6 +904,7 @@ mod tests {
     }
     impl Exchange for Broker {
         fn exchange(&mut self, frame: Frame) -> io::Result<Frame> {
+            self.exchanges += 1;
             let mut request = Vec::new();
             self.worker.write(&mut request, &frame)?;
             let frame = self.parent.read(&mut request.as_slice())?;
@@ -1172,6 +1182,7 @@ mod tests {
     }
 
     mod passwords;
+    mod round_trips;
 }
 #[cfg(test)]
 #[path = "archive_io_codec/tests/large_zip.rs"]
