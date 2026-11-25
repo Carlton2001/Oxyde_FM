@@ -57,6 +57,7 @@ impl DirectoryChanges {
         self.children.clear();
     }
 
+    #[cfg(test)]
     fn record(&mut self, root: &str, event: &Event) {
         self.apply(Observed::of(root, event));
     }
