@@ -91,6 +91,7 @@ impl OxydeApp {
                         current_pos: event.position,
                         modifiers: press.modifiers,
                         initial_selection: press.initial_selection,
+                        covered: None,
                     });
                     cx.notify();
                 }

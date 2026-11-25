@@ -152,6 +152,9 @@ pub enum DragTarget {
         modifiers: Modifiers,
         /// Empty unless the rectangle adds to it: shared, never copied while it moves.
         initial_selection: std::sync::Arc<std::collections::HashSet<String>>,
+        /// The indices the rectangle covered when the selection was last set, `None`
+        /// before.
+        covered: Option<std::sync::Arc<[usize]>>,
     },
 }
 

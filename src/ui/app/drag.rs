@@ -550,22 +550,10 @@ impl OxydeApp {
                         }
                     }
                 }
-                DragTarget::SelectionRectangle {
-                    ref pane_id,
-                    start_pos,
-                    modifiers,
-                    ref initial_selection,
-                    ..
-                } => {
-                    let current_pos = pos;
-                    let initial_selection_cap = initial_selection.clone();
-                    self.drag_target = Some(DragTarget::SelectionRectangle {
-                        pane_id: pane_id.clone(),
-                        start_pos,
-                        current_pos,
-                        modifiers,
-                        initial_selection: initial_selection_cap,
-                    });
+                DragTarget::SelectionRectangle { .. } => {
+                    if let Some(DragTarget::SelectionRectangle { current_pos, .. }) = &mut self.drag_target {
+                        *current_pos = pos;
+                    }
                     cx.notify();
                 }
             }

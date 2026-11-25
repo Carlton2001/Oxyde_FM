@@ -301,6 +301,7 @@ pub(super) fn render_details_file_list(
                                             current_pos: pos,
                                             modifiers,
                                             initial_selection: this.rectangle_initial_selection(&p_id_cap, modifiers),
+                                covered: None,
                                         });
                                         cx.notify();
                                     });
@@ -387,6 +388,7 @@ pub(super) fn render_details_file_list(
                                 current_pos: pos,
                                 modifiers,
                                 initial_selection: this.rectangle_initial_selection(&p_id_cap, modifiers),
+                                covered: None,
                             });
                             cx.notify();
                             });
@@ -423,6 +425,7 @@ pub(super) fn render_details_file_list(
                                 current_pos: pos,
                                 modifiers,
                                 initial_selection: this.rectangle_initial_selection(&p_id_cap, modifiers),
+                                covered: None,
                             });
                             cx.notify();
                             });

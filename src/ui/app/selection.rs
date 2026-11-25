@@ -126,7 +126,17 @@ impl OxydeApp {
             );
             let grid_width = grid.content_width;
             let grid_columns = grid.columns;
-            let rows = crate::ui::date_groups::display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, if grid_mode { grid_columns } else { 1 });
+            // The list's own rows, already built for its rendering; the grid's columns
+            // follow another width, which would push the list's out of their cache.
+            let presentation;
+            let built;
+            let rows: &[crate::ui::date_groups::DisplayRow] = if grid_mode {
+                built = crate::ui::date_groups::display_rows(tab.filtered_files(), tab.grouping(), &tab.collapsed_groups, grid_columns);
+                &built
+            } else {
+                presentation = tab.presentation(None, 1);
+                &presentation.rows
+            };
 
             // --- Auto-scroll, modelled on GTK list views (Nautilus) ---
             // Starts inside an edge band and grows linearly with the pointer's depth
@@ -166,7 +176,7 @@ impl OxydeApp {
                 let visible_list_h = if grid_mode { bounds.size.height.max(1.0) }
                     else { (bounds.size.height - crate::ui::style::column_header_height()).max(1.0) };
                 let trailing_height = crate::ui::style::row_height();
-                let content_h = (crate::ui::date_groups::content_height(&rows, cards) + trailing_height).max(1.0);
+                let content_h = (crate::ui::date_groups::content_height(rows, cards) + trailing_height).max(1.0);
                 let max_scroll = (content_h - visible_list_h).max(0.0);
 
                 new_scroll_y = new_scroll_y.clamp(-max_scroll, 0.0);
@@ -188,6 +198,7 @@ impl OxydeApp {
                 start_pos,
                 modifiers,
                 initial_selection,
+                covered,
                 ..
             }) = &mut self.drag_target
             {
@@ -204,8 +215,8 @@ impl OxydeApp {
                 let rect_bottom = start_pos.y.as_f32().max(current_pos.y.as_f32());
                 let card_width = grid_width / grid_columns as f32;
                 let mut top = bounds.origin.y + scroll_y + if grid_mode { 0.0 } else { crate::ui::style::column_header_height() };
-                let mut current_rect_paths = std::collections::HashSet::new();
-                for row in &rows {
+                let mut current_rect = Vec::new();
+                for row in rows {
                     let height = crate::ui::date_groups::row_height(row, cards);
                     if let crate::ui::date_groups::DisplayRow::Files(indices) = row {
                         for (column, index) in indices.iter().enumerate() {
@@ -213,13 +224,18 @@ impl OxydeApp {
                             let right = left + card_width - logical(8.0);
                             let bottom = top + height - if grid_mode { logical(8.0) } else { 0.0 };
                             if top < rect_bottom && bottom > rect_top && (!grid_mode || (left < rect_right && right > rect_left)) {
-                                current_rect_paths.insert(files[*index].path.clone());
+                                current_rect.push(*index);
                             }
                         }
                     }
                     top += height;
                 }
-                tab.selected_paths = rectangle_selection(&initial_selection_cap, current_rect_paths, modifiers);
+                // Most movements stay within the same rows: the selection is the same.
+                if covered.as_deref() != Some(current_rect.as_slice()) {
+                    let current_rect_paths = current_rect.iter().map(|index| files[*index].path.clone()).collect();
+                    tab.selected_paths = rectangle_selection(&initial_selection_cap, current_rect_paths, modifiers);
+                    *covered = Some(current_rect.into());
+                }
                 if !modifiers.control && !modifiers.shift {
                     tab.selection_anchor = None;
                 }

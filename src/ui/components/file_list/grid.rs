@@ -380,6 +380,7 @@ pub(super) fn render_grid_file_list(
                             current_pos: position,
                             modifiers,
                             initial_selection,
+                            covered: None,
                         });
                         cx.notify();
                     });
