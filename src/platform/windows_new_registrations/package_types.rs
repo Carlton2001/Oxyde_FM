@@ -13,7 +13,10 @@ const UAP4: &str = "http://schemas.microsoft.com/appx/manifest/uap/windows10/4";
 const UAP10: &str = "http://schemas.microsoft.com/appx/manifest/uap/windows10/10";
 const MAX_MANIFEST_BYTES: u64 = 8 * 1024 * 1024;
 
-pub(super) fn visit_installed(mut visit: impl FnMut(&str, &str)) -> windows::core::Result<()> {
+/// Visits each label and extension, and whether creating the file launches the package.
+pub(super) fn visit_installed(
+    mut visit: impl FnMut(&str, &str, bool),
+) -> windows::core::Result<()> {
     let _com = super::super::windows_com::ComApartment::mta_or_existing()?;
     let packages = PackageManager::new()?.FindPackagesByUserSecurityIdWithPackageTypes(
         &HSTRING::new(),
@@ -41,16 +44,16 @@ pub(super) fn visit_installed(mut visit: impl FnMut(&str, &str)) -> windows::cor
         }
         let name = name.to_string_lossy();
         let full_name = full_name.to_string_lossy();
-        visit_manifest(&manifest, |label, extension| {
+        visit_manifest(&manifest, |label, extension, program| {
             if let Some(label) = package_display_name(&name, &full_name, label) {
-                visit(&label, extension);
+                visit(&label, extension, program);
             }
         });
     }
     Ok(())
 }
 
-fn visit_manifest(manifest: &str, mut visit: impl FnMut(&str, &str)) {
+fn visit_manifest(manifest: &str, mut visit: impl FnMut(&str, &str, bool)) {
     let Ok(document) = Document::parse(manifest.trim_start_matches('\u{feff}')) else {
         return;
     };
@@ -89,8 +92,9 @@ fn visit_manifest(manifest: &str, mut visit: impl FnMut(&str, &str)) {
                 .find(|child| child.has_tag_name((UAP, "DisplayName")))?
                 .text()
         });
+        let program = node.has_attribute((UAP10, "ShellNewCommandParameters"));
         if let Some(label) = label.map(str::trim).filter(|label| !label.is_empty()) {
-            visit(label, extension);
+            visit(label, extension, program);
         }
     }
 }

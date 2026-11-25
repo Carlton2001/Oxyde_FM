@@ -480,9 +480,32 @@ impl OxydeApp {
                                 if in_archive {
                                     return Err(std::io::Error::from(std::io::ErrorKind::InvalidInput));
                                 }
-                                return oxyde_lib::platform::platform()
-                                    .create_shell_new_file(folder, &template, &mut (0..).map(name))
-                                    .map(|path| (path, None, false));
+                                // As Explorer: the registration's own name, or New and the type.
+                                let base = template.item_name.clone().unwrap_or_else(|| {
+                                    let mut args = FluentArgs::new();
+                                    args.set("type", template.label.as_str());
+                                    i18n.text_with_args(Message::NewTemplateName, &args)
+                                        .replace(['\u{2068}', '\u{2069}'], "")
+                                });
+                                let template_name = |counter: usize| {
+                                    if counter == 0 {
+                                        return base.clone();
+                                    }
+                                    let mut args = FluentArgs::new();
+                                    args.set("name", base.as_str());
+                                    args.set("number", counter);
+                                    i18n.text_with_args(Message::NewItemNumbered, &args)
+                                        .replace(['\u{2068}', '\u{2069}'], "")
+                                };
+                                let platform = oxyde_lib::platform::platform();
+                                return match platform.create_shell_new_file(folder, &template, &mut (0..).map(template_name)) {
+                                    // A type name unfit for a file name falls back to Oxyde's.
+                                    Err(error) if error.kind() == std::io::ErrorKind::InvalidInput => {
+                                        platform.create_shell_new_file(folder, &template, &mut (0..).map(name))
+                                    }
+                                    result => result,
+                                }
+                                .map(|path| (path, None, false));
                             }
                             if is_dir && in_archive {
                                 // One extraction and one rebuild, whichever name is free.

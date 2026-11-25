@@ -15,13 +15,15 @@ use windows::Win32::UI::Shell::{
 };
 use windows::core::{GUID, PCWSTR, PWSTR, w};
 
-mod icon_types;
 mod package_types;
-pub(super) use icon_types::icon_types;
+mod types;
+pub(super) use types::shell_new_types;
 
 pub struct ShellNewTemplate {
     pub label: String,
     pub extension: String,
+    /// Name Windows gives the new file, without its extension (`ItemName`).
+    pub item_name: Option<String>,
     contents: Contents,
 }
 
@@ -152,7 +154,7 @@ fn file_name_part(name: &str) -> bool {
             .any(|ch| ch.is_control() || r#"\/:*?"<>|"#.contains(ch))
 }
 
-fn registered_extension(name: &str) -> bool {
+pub(super) fn registered_extension(name: &str) -> bool {
     name.strip_prefix('.')
         .is_some_and(|suffix| file_name_part(suffix) && !suffix.contains('.'))
 }
@@ -235,15 +237,20 @@ fn registration_label(root: HKEY, registration: &Registration, extension: &str) 
         .or_else(|| association_name(extension))
 }
 
+/// A program or a Shell handler takes over once Windows has created the file:
+/// a wizard such as the shortcut's, or an application opening it.
+fn runs_program(registration: &Registration) -> bool {
+    [w!("Command"), w!("Handler")]
+        .into_iter()
+        .any(|value| has_value(&registration.key, value, RRF_RT_ANY))
+}
+
 fn find_template(root: HKEY, extension: String) -> Option<ShellNewTemplate> {
     let registration = registration(root, &extension)?;
 
     // Windows owns the UI and effects of these registrations, including its shortcut wizard.
     // They remain available in Oxyde's native Shell menu.
-    if [w!("Command"), w!("Handler"), w!("Directory")]
-        .into_iter()
-        .any(|value| has_value(&registration.key, value, RRF_RT_ANY))
-    {
+    if runs_program(&registration) || has_value(&registration.key, w!("Directory"), RRF_RT_ANY) {
         return None;
     }
     let contents = if has_value(&registration.key, w!("NullFile"), RRF_RT_ANY) {
@@ -257,9 +264,14 @@ fn find_template(root: HKEY, extension: String) -> Option<ShellNewTemplate> {
     };
     let label =
         registration_label(root, &registration, &extension).unwrap_or_else(|| extension.clone());
+    let item_name = string(&registration.key, w!("ItemName"))
+        .and_then(display_string)
+        .map(|name| name.trim().to_owned())
+        .filter(|name| file_name_part(name));
     Some(ShellNewTemplate {
         label,
         extension,
+        item_name,
         contents,
     })
 }
@@ -377,5 +389,5 @@ fn registry_data(root: HKEY, path: &str) -> io::Result<Vec<u8>> {
 }
 
 #[cfg(test)]
-#[path = "windows_shell_new/tests/templates.rs"]
+#[path = "windows_new_registrations/tests/templates.rs"]
 mod tests;

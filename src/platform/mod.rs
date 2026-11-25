@@ -1311,9 +1311,9 @@ mod windows_shell;
 #[cfg(target_os = "windows")]
 pub use windows_shell::new_menu::{ShellNewCommand, ShellNewEntry};
 #[cfg(target_os = "windows")]
-mod windows_shell_new;
+mod windows_new_registrations;
 #[cfg(target_os = "windows")]
-pub use windows_shell_new::ShellNewTemplate;
+pub use windows_new_registrations::ShellNewTemplate;
 #[cfg(target_os = "windows")]
 mod windows_shell_selection;
 #[cfg(target_os = "windows")]

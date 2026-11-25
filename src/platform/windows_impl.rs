@@ -527,7 +527,7 @@ impl Platform for WindowsPlatform {
     }
 
     fn shell_new_templates(&self) -> std::io::Result<Vec<super::ShellNewTemplate>> {
-        super::windows_shell_new::templates()
+        super::windows_new_registrations::templates()
     }
 
     fn shell_new_menu(&self, folder: &str, icons: bool) -> Result<Vec<super::ShellNewEntry>, String> {
@@ -544,7 +544,7 @@ impl Platform for WindowsPlatform {
         template: &super::ShellNewTemplate,
         names: &mut dyn Iterator<Item = String>,
     ) -> std::io::Result<std::path::PathBuf> {
-        super::windows_shell_new::create_file(folder, template, names)
+        super::windows_new_registrations::create_file(folder, template, names)
     }
 
     fn execute_native_context_menu_item(

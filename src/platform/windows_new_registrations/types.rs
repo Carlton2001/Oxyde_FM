@@ -1,15 +1,21 @@
 //! Type metadata for native New menu entries. The Shell still supplies the commands.
 
-use super::{HKEY_CLASSES_ROOT, extensions, package_types, registration, registration_label};
-use std::collections::HashMap;
+use super::{
+    HKEY_CLASSES_ROOT, extensions, package_types, registration, registration_label, runs_program,
+};
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 const REFRESH_INTERVAL: Duration = Duration::from_secs(60);
-static CACHE: Mutex<Option<(Instant, Arc<IconTypes>)>> = Mutex::new(None);
+static CACHE: Mutex<Option<(Instant, Arc<ShellNewTypes>)>> = Mutex::new(None);
 
 #[derive(Default)]
-pub(in crate::platform) struct IconTypes(HashMap<String, Option<String>>);
+pub(in crate::platform) struct ShellNewTypes {
+    by_label: HashMap<String, Option<String>>,
+    /// Extensions whose creation hands the new file to a program or a wizard.
+    programs: HashSet<String>,
+}
 
 fn label_key(label: &str) -> String {
     label
@@ -20,10 +26,13 @@ fn label_key(label: &str) -> String {
         .collect()
 }
 
-impl IconTypes {
-    fn add(&mut self, label: &str, extension: &str) {
+impl ShellNewTypes {
+    fn add(&mut self, label: &str, extension: &str, program: bool) {
         let extension = extension.to_lowercase();
-        self.0
+        if program {
+            self.programs.insert(extension.clone());
+        }
+        self.by_label
             .entry(label_key(label))
             .and_modify(|entry| {
                 if entry
@@ -37,11 +46,15 @@ impl IconTypes {
     }
 
     pub(in crate::platform) fn extension(&self, label: &str) -> Option<&str> {
-        self.0.get(&label_key(label)).and_then(Option::as_deref)
+        self.by_label.get(&label_key(label)).and_then(Option::as_deref)
+    }
+
+    pub(in crate::platform) fn runs_program(&self, extension: &str) -> bool {
+        self.programs.contains(&extension.to_lowercase())
     }
 }
 
-pub(in crate::platform) fn icon_types() -> Arc<IconTypes> {
+pub(in crate::platform) fn shell_new_types() -> Arc<ShellNewTypes> {
     if let Some((_, types)) = CACHE
         .lock()
         .unwrap()
@@ -51,20 +64,20 @@ pub(in crate::platform) fn icon_types() -> Arc<IconTypes> {
         return types.clone();
     }
 
-    let mut types = IconTypes::default();
+    let mut types = ShellNewTypes::default();
     let root = HKEY_CLASSES_ROOT;
     if let Ok(extensions) = extensions(root) {
         for extension in extensions {
             if let Some(registration) = registration(root, &extension) {
                 if let Some(label) = registration_label(root, &registration, &extension) {
-                    types.add(&label, &extension);
+                    types.add(&label, &extension, runs_program(&registration));
                 }
             }
         }
     }
-    if let Err(error) =
-        package_types::visit_installed(|label, extension| types.add(label, extension))
-    {
+    if let Err(error) = package_types::visit_installed(|label, extension, program| {
+        types.add(label, extension, program)
+    }) {
         log::debug!("Cannot read packaged Shell New types: {error}");
     }
     let types = Arc::new(types);
@@ -73,5 +86,5 @@ pub(in crate::platform) fn icon_types() -> Arc<IconTypes> {
 }
 
 #[cfg(test)]
-#[path = "tests/icon_types.rs"]
+#[path = "tests/types.rs"]
 mod tests;

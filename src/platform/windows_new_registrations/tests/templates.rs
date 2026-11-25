@@ -102,6 +102,15 @@ fn reads_direct_and_progid_registrations_and_uses_windows_value_precedence() {
         matches!(template.contents, Contents::File(path) if path == Path::new("direct.oxyde-test"))
     );
 
+    assert_eq!(template.item_name, None);
+    text(&direct, w!("ItemName"), " Direct item ");
+    assert_eq!(
+        registry.template(".oxyde-test").unwrap().item_name.as_deref(),
+        Some("Direct item")
+    );
+    text(&direct, w!("ItemName"), "Not: a name");
+    assert_eq!(registry.template(".oxyde-test").unwrap().item_name, None);
+
     text(&direct, w!("Command"), "handled by Windows");
     assert!(registry.template(".oxyde-test").is_none());
 }
@@ -116,6 +125,7 @@ fn creates_an_empty_file_or_copies_a_model_without_overwriting() {
     let mut template = ShellNewTemplate {
         label: "Test".into(),
         extension: ".test".into(),
+        item_name: None,
         contents: Contents::File(source),
     };
 
@@ -140,6 +150,7 @@ fn rejects_non_local_names_and_leaves_no_file_when_a_model_is_missing() {
     let mut template = ShellNewTemplate {
         label: "Test".into(),
         extension: ".test".into(),
+        item_name: None,
         contents: Contents::Empty,
     };
     for name in [r"..\elsewhere", "file:stream", "trailing."] {

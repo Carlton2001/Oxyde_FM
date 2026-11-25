@@ -19,6 +19,8 @@ use windows::core::Interface;
 pub struct ShellNewCommand {
     pub label: String,
     verb: Option<String>,
+    /// Rank among the commands sharing this label and verb, so that each stays reachable.
+    occurrence: usize,
 }
 
 pub struct ShellNewEntry {
@@ -26,6 +28,9 @@ pub struct ShellNewEntry {
     pub extension: Option<String>,
     /// Native BGRA pixels, when Windows publishes a bitmap for the command.
     pub icon: Option<RgbaImage>,
+    /// Windows hands the new file to a program or a wizard, such as the shortcut's,
+    /// which may still rename or delete it: Oxyde must not rename it as well.
+    pub runs_program: bool,
 }
 
 fn label(menu: HMENU, index: u32) -> String {
@@ -73,7 +78,7 @@ pub(in crate::platform) fn remove_new_submenu(items: &mut Vec<WinMenuItem>) {
                 || new_label(item.label.trim()))
     });
     let index = index.or_else(|| {
-        let folder = clean_label(&super::super::windows_shell_new::folder_menu_label()?);
+        let folder = clean_label(&super::super::windows_new_registrations::folder_menu_label()?);
         unique(items.iter().enumerate().filter_map(|(index, item)| {
             (item.has_submenu
                 && item
@@ -113,7 +118,7 @@ fn with_new_submenu<T>(
         let menu = query_menu(context, CMF_NORMAL | CMF_EXPLORE | CMF_CANRENAME)?;
         let cm2 = context.cast::<IContextMenu2>().ok();
         let cm3 = context.cast::<IContextMenu3>().ok();
-        let system_folder_label = super::super::windows_shell_new::folder_menu_label();
+        let system_folder_label = super::super::windows_new_registrations::folder_menu_label();
         let submenus = (0..unsafe { GetMenuItemCount(Some(menu.0)) }).filter_map(|index| {
             let submenu = unsafe { GetSubMenu(menu.0, index) };
             (!submenu.is_invalid()).then_some((index, submenu))
@@ -131,14 +136,16 @@ fn with_new_submenu<T>(
 
         // Some Windows languages expose only a translated caption for New. Its
         // first command is the standard folder entry when creation is available.
+        // New sits near the end of the menu: search from there, so that the
+        // submenus before it (Send to, Share) are not populated for nothing.
         let Some(system_folder_label) = system_folder_label.as_deref() else {
             return Ok(None);
         };
-        let found = submenus.filter_map(|(index, submenu)| {
+        let found = submenus.rev().find(|&(index, submenu)| {
             init_submenu(submenu, index, cm2.as_ref(), cm3.as_ref());
-            (label(submenu, 0) == clean_label(system_folder_label)).then_some(submenu)
+            label(submenu, 0) == clean_label(system_folder_label)
         });
-        Ok(unique(found).map(|submenu| read(context, submenu, Some(system_folder_label))))
+        Ok(found.map(|(_, submenu)| read(context, submenu, Some(system_folder_label))))
     })
 }
 
@@ -147,12 +154,21 @@ fn unique<T>(mut items: impl Iterator<Item = T>) -> Option<T> {
     items.next().is_none().then_some(first)
 }
 
+fn number_occurrences<'a>(commands: impl Iterator<Item = &'a mut ShellNewCommand>) {
+    let mut seen: Vec<(String, Option<String>)> = Vec::new();
+    for command in commands {
+        let key = (command.label.clone(), command.verb.clone());
+        command.occurrence = seen.iter().filter(|previous| **previous == key).count();
+        seen.push(key);
+    }
+}
+
 fn commands(
     context: &IContextMenu,
     menu: HMENU,
     icons: bool,
-) -> impl Iterator<Item = (u32, ShellNewCommand, HBITMAP)> + '_ {
-    (0..unsafe { GetMenuItemCount(Some(menu)) }).filter_map(move |index| {
+) -> Vec<(u32, ShellNewCommand, HBITMAP)> {
+    let mut commands: Vec<_> = (0..unsafe { GetMenuItemCount(Some(menu)) }).filter_map(|index| {
         let mut info = MENUITEMINFOW {
             cbSize: size_of::<MENUITEMINFOW>() as u32,
             fMask: MIIM_ID | MIIM_STATE,
@@ -173,8 +189,11 @@ fn commands(
             return None;
         }
         let verb = canonical_verb(context, info.wID);
-        Some((info.wID, ShellNewCommand { label, verb }, info.hbmpItem))
+        Some((info.wID, ShellNewCommand { label, verb, occurrence: 0 }, info.hbmpItem))
     })
+    .collect();
+    number_occurrences(commands.iter_mut().map(|(_, command, _)| command));
+    commands
 }
 
 fn bitmap_image(bitmap: HBITMAP) -> Option<RgbaImage> {
@@ -193,22 +212,36 @@ pub(in crate::platform) fn entries(
     folder: &str,
     icons: bool,
 ) -> Result<Vec<ShellNewEntry>, CommandError> {
+    use super::super::windows_new_registrations::{registered_extension, shell_new_types};
+
     let mut entries: Vec<_> = with_new_submenu(folder, |context, menu, system_folder_label| {
         commands(context, menu, icons)
+            .into_iter()
             .filter(|(_, command, _)| !folder_label(&command.label, system_folder_label))
             .map(|(_, command, bitmap)| ShellNewEntry {
                 command,
                 extension: None,
                 icon: bitmap_image(bitmap),
+                runs_program: false,
             })
             .collect()
     })?
     .unwrap_or_default();
-    if entries.iter().any(|entry| entry.icon.is_none()) {
-        let types = super::super::windows_shell_new::icon_types();
-        for entry in entries.iter_mut().filter(|entry| entry.icon.is_none()) {
-            entry.extension = types.extension(&entry.command.label).map(str::to_owned);
-        }
+    if entries.is_empty() {
+        return Ok(entries);
+    }
+    let types = shell_new_types();
+    for entry in &mut entries {
+        let verb = entry.command.verb.as_deref();
+        // The Shell names a file type's command after its extension; the label
+        // only identifies the others.
+        let extension = verb
+            .filter(|verb| registered_extension(verb))
+            .map(str::to_lowercase)
+            .or_else(|| types.extension(&entry.command.label).map(str::to_owned));
+        entry.runs_program = verb.is_some_and(|verb| verb.eq_ignore_ascii_case("NewLink"))
+            || extension.as_deref().is_some_and(|extension| types.runs_program(extension));
+        entry.extension = extension;
     }
     Ok(entries)
 }
@@ -224,6 +257,7 @@ pub(in crate::platform) fn execute(
         // registrations change. Match inside this submenu before invoking.
         let id = unique(
             commands(context, menu, false)
+                .into_iter()
                 .filter_map(|(id, command, _)| (&command == chosen).then_some(id)),
         )
         .ok_or_else(unavailable)?;

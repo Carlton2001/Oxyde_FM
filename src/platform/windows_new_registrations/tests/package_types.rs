@@ -18,14 +18,14 @@ fn reads_the_new_label_or_association_name_only_for_registered_new_types() {
           </files:FileTypeAssociation>
         </Package>"#;
     let mut types = Vec::new();
-    visit_manifest(manifest, |label, extension| {
-        types.push((label.to_owned(), extension.to_owned()))
+    visit_manifest(manifest, |label, extension, program| {
+        types.push((label.to_owned(), extension.to_owned(), program))
     });
     assert_eq!(
         types,
         [
-            ("ms-resource:Resources/NewBitmap".into(), ".bmp".into()),
-            ("Default & document".into(), ".script".into()),
+            ("ms-resource:Resources/NewBitmap".into(), ".bmp".into(), false),
+            ("Default & document".into(), ".script".into(), true),
         ]
     );
 }

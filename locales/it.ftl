@@ -415,6 +415,8 @@ new-folder-name = Nuova cartella
 new-folder-numbered = Nuova cartella ({ $number })
 new-file-name = Nuovo file
 new-file-numbered = Nuovo file ({ $number })
+new-template-name = Nuovo { $type }
+new-item-numbered = { $name } ({ $number })
 
 native-menu-empty = Nessun comando disponibile
 

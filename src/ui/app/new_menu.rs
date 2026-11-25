@@ -15,8 +15,14 @@ const CATALOG_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
 #[derive(Default)]
 pub(super) struct Catalog {
     request: Option<(Source, Instant)>,
+    /// Kept from one folder to the next while the new folder's list loads: the
+    /// New menu hardly depends on the folder, and the open submenu must not grow
+    /// under the pointer.
     rows: Vec<Row>,
+    /// Whether `rows` carry Windows icons.
+    rows_icons: bool,
     load: Option<Task<()>>,
+    /// The New submenu open while a load runs, refreshed when it ends.
     pending_menu: Option<(UniformListScrollHandle, Target)>,
 }
 
@@ -28,7 +34,11 @@ struct Source {
 
 #[derive(Clone)]
 enum Action {
-    Shell(ShellNewCommand),
+    Shell {
+        command: ShellNewCommand,
+        /// Rename the created item, unless Windows hands it to a program.
+        rename: bool,
+    },
     Template(Arc<ShellNewTemplate>),
 }
 
@@ -70,7 +80,10 @@ fn load_rows(source: &Source) -> Vec<Row> {
                 Row {
                     label,
                     icon,
-                    action: Action::Shell(entry.command),
+                    action: Action::Shell {
+                        command: entry.command,
+                        rename: !entry.runs_program,
+                    },
                 }
             })
             .collect(),
@@ -78,18 +91,28 @@ fn load_rows(source: &Source) -> Vec<Row> {
             if let Err(error) = other {
                 log::warn!("Cannot read the Windows New submenu: {error}");
             }
-            platform()
-                .shell_new_templates()
-                .unwrap_or_default()
-                .into_iter()
-                .map(|template| Row {
-                    label: template.label.clone(),
-                    icon: file_icon(Some(&template.extension), source.icons),
-                    action: Action::Template(Arc::new(template)),
-                })
-                .collect()
+            template_rows(source.icons)
         }
     }
+}
+
+/// The registrations Oxyde can create itself, when the Shell's submenu is unavailable.
+fn template_rows(icons: bool) -> Vec<Row> {
+    platform()
+        .shell_new_templates()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|template| Row {
+            label: template.label.clone(),
+            icon: file_icon(Some(&template.extension), icons),
+            action: Action::Template(Arc::new(template)),
+        })
+        .collect()
+}
+
+fn same_labels(left: &[Row], right: &[Row]) -> bool {
+    left.len() == right.len()
+        && left.iter().zip(right).all(|(left, right)| left.label == right.label)
 }
 
 #[derive(Clone)]
@@ -127,16 +150,25 @@ impl OxydeApp {
             tab_id: tab.id.clone(),
             path: tab.path.clone(),
         };
+        let (click_handle, click_target) = (handle.clone(), target.clone());
         Some(
-            DropdownItem::new(i18n.text(Message::NewItem).to_string(), |_, _| {})
-                .icon(IconName::Plus)
-                .stay_open(true)
-                .has_submenu(true)
-                .on_hover(move |position, open_left, app| {
-                    handle.update(app, |this, cx| {
-                        this.open_new_menu(target.clone(), position, open_left, cx)
-                    });
-                }),
+            // A click opens the submenu again once the keyboard has closed it.
+            DropdownItem::new(i18n.text(Message::NewItem).to_string(), move |_, app| {
+                click_handle.update(app, |this, cx| {
+                    if let [root] = this.context_menus.as_slice() {
+                        let (position, open_left) = (root.position, root.open_left);
+                        this.open_new_menu(click_target.clone(), position, open_left, cx);
+                    }
+                });
+            })
+            .icon(IconName::Plus)
+            .stay_open(true)
+            .has_submenu(true)
+            .on_hover(move |position, open_left, app| {
+                handle.update(app, |this, cx| {
+                    this.open_new_menu(target.clone(), position, open_left, cx)
+                });
+            }),
         )
     }
 
@@ -170,35 +202,61 @@ impl OxydeApp {
         }
         if !same_source {
             catalog.load = None;
-            catalog.rows.clear();
             catalog.pending_menu = None;
             catalog.request = None;
+            if catalog.rows_icons != source.icons {
+                catalog.rows.clear();
+            }
         }
         let Some(load) = NativeMenuLoad::start() else {
             return;
         };
         catalog.request = Some((source.clone(), Instant::now()));
+        let icons = source.icons;
         let timer = cx.background_executor().timer(NATIVE_MENU_TIMEOUT);
         catalog.load = Some(cx.spawn(async move |this, cx| {
             let worker = tokio::task::spawn_blocking(move || {
                 let _load = load;
                 load_rows(&source)
             });
-            let result = futures::future::select(worker, timer).await;
+            let loaded = match futures::future::select(worker, timer).await {
+                futures::future::Either::Left((Ok(rows), _)) => Some(rows),
+                futures::future::Either::Left((Err(error), _)) => {
+                    log::warn!("Windows New menu task failed: {error}");
+                    None
+                }
+                futures::future::Either::Right(_) => {
+                    log::warn!("Windows New menu load timed out");
+                    None
+                }
+            };
+            let failed = loaded.is_none();
+            // The registry's list stands in for a Shell that failed or hangs.
+            let rows = match loaded {
+                Some(rows) => rows,
+                None => tokio::task::spawn_blocking(move || template_rows(icons))
+                    .await
+                    .unwrap_or_default(),
+            };
             let _ = this.update(cx, |this, cx| {
                 let catalog = &mut this.new_menu_catalog;
                 catalog.load = None;
-                match result {
-                    futures::future::Either::Left((Ok(rows), _)) => catalog.rows = rows,
-                    futures::future::Either::Left((Err(error), _)) => {
-                        log::warn!("Windows New menu task failed: {error}")
-                    }
-                    futures::future::Either::Right(_) => {
-                        log::warn!("Windows New menu load timed out")
-                    }
+                if failed {
+                    // Ask the Shell again at the next opening rather than in a minute.
+                    catalog.request = None;
                 }
+                let kept = catalog.rows_icons == icons && !catalog.rows.is_empty();
+                // A failure keeps the Shell's last list rather than the registry's.
+                let changed = if failed && kept {
+                    false
+                } else {
+                    let previous = std::mem::replace(&mut catalog.rows, rows);
+                    catalog.rows_icons = icons;
+                    !kept || !same_labels(&previous, &catalog.rows)
+                };
                 if let Some((scroll, target)) = catalog.pending_menu.take() {
-                    if target.still_writable(this)
+                    if changed
+                        && target.still_writable(this)
                         && this
                             .context_menus
                             .get(1)
@@ -226,7 +284,7 @@ impl OxydeApp {
         self.request_new_menu_catalog(target.path.clone(), cx);
         let scroll_handle = UniformListScrollHandle::new();
         let catalog = &mut self.new_menu_catalog;
-        if catalog.load.is_some() && catalog.rows.is_empty() {
+        if catalog.load.is_some() {
             catalog.pending_menu = Some((scroll_handle.clone(), target.clone()));
         }
         let items = self.new_menu_items(&target, cx);
@@ -300,9 +358,9 @@ impl OxydeApp {
                     app.update(cx, |this, cx| {
                         if target.still_writable(this) {
                             match action.clone() {
-                                Action::Shell(command) => this.run_native_menu_action(
+                                Action::Shell { command, rename } => this.run_native_menu_action(
                                     vec![target.path.clone()],
-                                    Some(target.tab_id.clone()),
+                                    rename.then(|| target.tab_id.clone()),
                                     true,
                                     move |path| {
                                         platform().execute_shell_new_command(&path[0], &command)

@@ -9,6 +9,27 @@ fn keeps_literal_ampersands_and_rejects_ambiguous_commands() {
 }
 
 #[test]
+fn numbers_commands_sharing_a_label_and_a_verb() {
+    let command = |label: &str, verb: Option<&str>| ShellNewCommand {
+        label: label.into(),
+        verb: verb.map(str::to_owned),
+        occurrence: 9,
+    };
+    let mut commands = [
+        command("Document", Some(".doc")),
+        command("Document", Some(".doc")),
+        command("Document", Some(".txt")),
+        command("Document", None),
+        command("Document", Some(".doc")),
+    ];
+    number_occurrences(commands.iter_mut());
+    assert_eq!(
+        commands.map(|command| command.occurrence),
+        [0, 1, 0, 0, 2]
+    );
+}
+
+#[test]
 fn removes_only_the_new_submenu_without_changing_other_command_ids() {
     let item = |id, label: &str, has_submenu, verb: Option<&str>| WinMenuItem {
         id,
@@ -51,7 +72,7 @@ fn reads_the_same_entries_as_more_options_and_invokes_a_fresh_command() {
             item.has_submenu && (item.verb.as_deref() == Some("new") || new_label(&item.label))
         })
         .expect("the Windows background menu has a New submenu");
-    let system_folder_label = super::super::super::windows_shell_new::folder_menu_label();
+    let system_folder_label = super::super::super::windows_new_registrations::folder_menu_label();
     let expected: Vec<_> = new_submenu
         .children
         .iter()
@@ -85,7 +106,7 @@ fn reads_the_same_entries_as_more_options_and_invokes_a_fresh_command() {
     assert_eq!(comparable, expected);
 
     let folder_command = with_new_submenu(&folder, |context, menu, system_label| {
-        commands(context, menu, false).find_map(|(_, command, _)| {
+        commands(context, menu, false).into_iter().find_map(|(_, command, _)| {
             folder_label(&command.label, system_label).then_some(command)
         })
     })
@@ -95,6 +116,7 @@ fn reads_the_same_entries_as_more_options_and_invokes_a_fresh_command() {
     let forged = ShellNewCommand {
         label: "Oxyde missing command".into(),
         verb: folder_command.verb.clone(),
+        occurrence: 0,
     };
     assert!(execute(&folder, &forged).is_err());
     assert_eq!(temp.path().read_dir().unwrap().count(), 0);
@@ -122,16 +144,16 @@ fn resolves_file_types_for_installed_lucide_entries() {
     let entries = entries(temp.path().to_str().unwrap(), false).unwrap();
     assert!(!entries.is_empty());
     let expected = [
-        (&["Image bitmap", "Bitmap image"][..], ".bmp"),
-        (&["Document texte", "Text Document"][..], ".txt"),
-        (&["Python Script"][..], ".py"),
-        (&["Google Docs"][..], ".gdoc"),
-        (&["Google Sheets"][..], ".gsheet"),
-        (&["Google Slides"][..], ".gslides"),
-        (&["Raccourci", "Shortcut"][..], ".lnk"),
-        (&["Dessin OpenDocument", "OpenDocument Drawing"][..], ".odg"),
+        (&["Image bitmap", "Bitmap image"][..], ".bmp", false),
+        (&["Document texte", "Text Document"][..], ".txt", false),
+        (&["Python Script"][..], ".py", false),
+        (&["Google Docs"][..], ".gdoc", true),
+        (&["Google Sheets"][..], ".gsheet", true),
+        (&["Google Slides"][..], ".gslides", true),
+        (&["Raccourci", "Shortcut"][..], ".lnk", true),
+        (&["Dessin OpenDocument", "OpenDocument Drawing"][..], ".odg", false),
     ];
-    for (labels, extension) in expected {
+    for (labels, extension, runs_program) in expected {
         if let Some(entry) = entries.iter().find(|entry| {
             labels
                 .iter()
@@ -143,6 +165,8 @@ fn resolves_file_types_for_installed_lucide_entries() {
                 "{}",
                 entry.command.label
             );
+            // The shortcut wizard and Google Drive own their file; Oxyde renames the others.
+            assert_eq!(entry.runs_program, runs_program, "{}", entry.command.label);
         }
     }
     eprintln!(

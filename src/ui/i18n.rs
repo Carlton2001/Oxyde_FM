@@ -879,6 +879,10 @@ pub enum Message {
     NewFolderNumbered,
     NewFileName,
     NewFileNumbered,
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    NewTemplateName,
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+    NewItemNumbered,
     NativeMenuEmpty,
     NativeMenuFailed,
     NativeMenuTimeout,
@@ -1746,6 +1750,8 @@ impl Message {
             Self::NewFolderNumbered => "new-folder-numbered",
             Self::NewFileName => "new-file-name",
             Self::NewFileNumbered => "new-file-numbered",
+            Self::NewTemplateName => "new-template-name",
+            Self::NewItemNumbered => "new-item-numbered",
             Self::NativeMenuEmpty => "native-menu-empty",
             Self::NativeMenuFailed => "native-menu-failed",
             Self::NativeMenuTimeout => "native-menu-timeout",
@@ -2794,6 +2800,8 @@ mod tests {
                 Message::NewFolderNumbered,
                 Message::NewFileName,
                 Message::NewFileNumbered,
+                Message::NewTemplateName,
+                Message::NewItemNumbered,
                 Message::NativeMenuEmpty,
                 Message::NativeMenuFailed,
                 Message::NativeMenuTimeout,
@@ -2836,6 +2844,7 @@ mod tests {
             args.set("mode", "Date");
             args.set("percentage", 100);
             args.set("name", "Oxyde");
+            args.set("type", "Document");
             args.set("size", "1,5 Ko");
             args.set("folders", "1");
             args.set("files", "1");
