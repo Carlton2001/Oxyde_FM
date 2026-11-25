@@ -24,7 +24,8 @@ pub struct DuplicateWindow {
     /// Keyboard stops of the three criteria checkboxes.
     option_focus: [FocusHandle; 3],
     groups: Arc<Vec<DuplicateGroup>>,
-    collapsed: HashSet<usize>,
+    /// Shared with the filtering task: a keystroke does not copy it.
+    collapsed: std::sync::Arc<HashSet<usize>>,
     filter: Entity<TextInput>,
     query: String,
     filtered: Vec<usize>,

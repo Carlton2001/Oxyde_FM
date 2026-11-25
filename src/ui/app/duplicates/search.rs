@@ -17,7 +17,7 @@ impl DuplicateWindow {
         self.groups = Arc::new(vec![]);
         self.filtered.clear();
         self.result_rows = Arc::default();
-        self.collapsed.clear();
+        self.collapsed = Default::default();
         self.filter_task = None;
         self.filtering = false;
         self.results_scroll.set_offset(point(px(0.0), px(0.0)));
@@ -66,7 +66,7 @@ impl DuplicateWindow {
                             this.groups = Arc::new(groups);
                             this.filtered.clear();
                             this.result_rows = Arc::default();
-                            this.collapsed.clear();
+                            this.collapsed = Default::default();
                             this.update_filter(cx);
                         }
                         Err(e) => this.error = Some(e.to_string()),

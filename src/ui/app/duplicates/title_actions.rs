@@ -30,9 +30,9 @@ impl DuplicateWindow {
                 move |_, _, cx| {
                     collapse.update(cx, |this, cx| {
                         if can_collapse {
-                            this.collapsed.extend(0..this.groups.len());
+                            this.collapsed = std::sync::Arc::new((0..this.groups.len()).collect());
                         } else {
-                            this.collapsed.clear();
+                            this.collapsed = Default::default();
                         }
                         this.prepare_results(false, cx);
                         cx.notify();

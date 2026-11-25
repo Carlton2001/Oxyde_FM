@@ -182,8 +182,9 @@ impl DuplicateWindow {
             .gap(rems(0.75))
             .overflow_hidden()
             .on_click(cx.listener(move |this, _, _, cx| {
-                if !this.collapsed.remove(&index) {
-                    this.collapsed.insert(index);
+                let collapsed = std::sync::Arc::make_mut(&mut this.collapsed);
+                if !collapsed.remove(&index) {
+                    collapsed.insert(index);
                 }
                 this.prepare_results(false, cx);
                 cx.notify();
