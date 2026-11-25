@@ -33,6 +33,7 @@ Nautilus does not speak SMB itself: GIO asks GVfs to mount the location, GVfs as
 - GVfs skips the host key question for `localhost` and `127.0.0.1` (`NoHostAuthenticationForLocalhost`).
 - Without `gvfs-fuse`, a share has no local path: only listing remains possible.
 - A tab restored on a since-unmounted share returns to the home folder.
+- A server that stops answering holds every read of its FUSE path, uninterruptibly, until it answers or `gvfsd-fuse` stops. A tab listing there gives up after 30 s (`Platform::listing_limit`, as GIO's listings and unmounting do) and says the server did not answer, the read left behind; a refresh of a folder already shown keeps its list. Each polled volume has its own polling thread, so a stuck share stops only its own change detection, and its folders are unwatched on a thread of their own: closing Oxyde does not wait for the server. The process itself ends only once those reads return.
 
 ## Testing
 
