@@ -36,11 +36,16 @@ pub(super) enum Target {
 
 /// Reads what `path` holds, on the disk: run it off the UI thread.
 pub(super) fn target(path: &Path) -> Target {
-    match std::fs::metadata(path) {
-        Ok(metadata) if metadata.is_dir() => Target::Folder,
+    // The entry itself first: a link alone is followed, and a free name costs one
+    // request less, a round trip on a share.
+    match std::fs::symlink_metadata(path) {
+        Ok(entry) if entry.file_type().is_symlink() => match std::fs::metadata(path) {
+            Ok(metadata) if metadata.is_dir() => Target::Folder,
+            // A dangling link: saving would write where it points.
+            _ => Target::File,
+        },
+        Ok(entry) if entry.is_dir() => Target::Folder,
         Ok(_) => Target::File,
-        // A dangling link: saving would write where it points.
-        Err(_) if std::fs::symlink_metadata(path).is_ok() => Target::File,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound && path.parent().is_some_and(Path::is_dir) => Target::Free,
         Err(_) => Target::Unreachable,
     }
@@ -126,6 +131,11 @@ fn extended(path: &Path, found: Target, extension: Option<&str>) -> Option<PathB
 /// without one. Reads the disk: run it off the UI thread.
 pub(super) fn resolved(path: PathBuf, extension: Option<&str>) -> (PathBuf, Target) {
     let found = target(&path);
+    resolved_from(path, found, extension)
+}
+
+/// [`resolved`], `found` being what `path` already holds.
+fn resolved_from(path: PathBuf, found: Target, extension: Option<&str>) -> (PathBuf, Target) {
     match extended(&path, found, extension) {
         Some(named) => {
             let found = target(&named);
@@ -228,11 +238,16 @@ impl FileChooserWindow {
         let folder = self.folder.clone();
         self.name.task = Some(cx.spawn_in(window, async move |this, cx| {
             let (path, found, refused) = cx.background_spawn(async move {
-                let path = match strict {
-                    Some(filter) if target(&path) != Target::Folder => strictly_typed(path, &filter),
-                    _ => path,
+                let found = target(&path);
+                let (path, found) = match strict {
+                    Some(filter) if found != Target::Folder => {
+                        let typed = strictly_typed(path.clone(), &filter);
+                        // Read once more only when the name changed.
+                        if typed == path { (path, found) } else { let found = target(&typed); (typed, found) }
+                    }
+                    _ => (path, found),
                 };
-                let (path, found) = resolved(path, extension.as_deref());
+                let (path, found) = resolved_from(path, found, extension.as_deref());
                 let refused = refuse_read_only && found == Target::File && read_only(&path);
                 (path, found, refused)
             }).await;
