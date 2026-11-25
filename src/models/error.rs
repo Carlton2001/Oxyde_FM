@@ -17,6 +17,24 @@ impl TransferDestinationCollision {
     }
 }
 
+/// A permanent deletion that would enter another file system or a mount (bind mount,
+/// subvolume) inside the selection: refused, the other side kept.
+#[derive(Debug)]
+pub struct MountNotEntered {
+    pub path: String,
+}
+impl fmt::Display for MountNotEntered {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Mount not entered: {}", self.path)
+    }
+}
+impl std::error::Error for MountNotEntered {}
+impl MountNotEntered {
+    pub fn from_message(message: &str) -> Option<&str> {
+        message.split_once("Mount not entered: ").map(|(_, path)| path)
+    }
+}
+
 /// Archives hold neither symbolic links nor their targets: opening and
 /// extraction refuse link entries, so compression refuses them too.
 #[derive(Debug)]

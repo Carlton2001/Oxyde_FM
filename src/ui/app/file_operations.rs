@@ -405,6 +405,10 @@ fn delete_retry(
     error: &str,
 ) -> Option<DeleteRetry> {
     use oxyde_lib::systems::file_ops::{FileOpType, ItemOutcome};
+    // Closing programs would not help: the mount stays until unmounted.
+    if oxyde_lib::models::error::MountNotEntered::from_message(error).is_some() {
+        return None;
+    }
     let permanent = match op_type {
         FileOpType::Trash => false,
         FileOpType::Delete => true,

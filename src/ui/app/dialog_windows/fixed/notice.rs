@@ -9,7 +9,7 @@ use crate::ui::i18n::{FluentArgs, I18n, I18nContext, Message};
 use crate::ui::theme::{OxydeTheme, ThemeContext};
 use gpui::prelude::*;
 use gpui::*;
-use oxyde_lib::models::error::{ArchiveRecoveryFailure, DeleteBatchFailure};
+use oxyde_lib::models::error::{ArchiveRecoveryFailure, DeleteBatchFailure, MountNotEntered};
 
 impl OxydeApp {
     /// Closes the notice shown; the next one queued takes its place.
@@ -55,7 +55,8 @@ fn notice(key: Message, detail: &str, retry: bool, i18n: &I18n) -> Notice {
         };
     }
     let batch = DeleteBatchFailure::from_message(detail);
-    if batch.is_some() || retry {
+    // Only a deletion stops at a mount; retrying would not get past it.
+    if batch.is_some() || retry || MountNotEntered::from_message(detail).is_some() {
         let (heading, note, cause) = match &batch {
             Some(batch) => {
                 let mut args = FluentArgs::new();

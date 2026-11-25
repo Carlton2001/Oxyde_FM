@@ -50,3 +50,18 @@ fn a_stale_trash_selection_is_translated_in_every_language() {
         assert!(!error_detail(&detail, &i18n).contains("were not purged"));
     }
 }
+
+#[test]
+fn a_deletion_refused_at_a_mount_is_translated_with_its_path() {
+    use crate::ui::i18n::{FluentArgs, I18n, Message};
+    let path = "/home/user/b/lien";
+    let failure = oxyde_lib::models::error::MountNotEntered { path: path.into() };
+    for language in Language::ALL {
+        let i18n = I18n::for_language(language);
+        let translated = error_detail(&failure.to_string(), &i18n);
+        let mut args = FluentArgs::new();
+        args.set("path", path);
+        assert_eq!(translated, i18n.text_with_args(Message::DeleteMountNotEntered, &args));
+        assert!(!translated.contains("Mount not entered"));
+    }
+}

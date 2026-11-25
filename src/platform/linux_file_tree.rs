@@ -57,7 +57,20 @@ fn located(path: &Path, error: impl Into<io::Error>) -> io::Error {
 }
 
 fn not_entered(path: &Path) -> io::Error {
-    located(path, io::Error::other("another file system is mounted here; it was not entered"))
+    io::Error::other(crate::models::error::MountNotEntered { path: path.to_string_lossy().into_owned() })
+}
+
+/// A mount point inside the folder `frame` holds, from the mount table. A Btrfs subvolume
+/// is not mounted: the walk itself stops at it.
+fn mounted_inside(frame: &Frame) -> Option<PathBuf> {
+    use std::os::fd::AsRawFd;
+    let own = std::fs::read_link(format!("/proc/self/fd/{}", frame.fd().ok()?.as_raw_fd())).ok()?;
+    crate::platform::platform()
+        .volumes()
+        .mount_points()
+        .into_iter()
+        .map(PathBuf::from)
+        .find(|point| point != &own && point.starts_with(&own))
 }
 
 /// Opens a child folder that `status` described, refusing a replacement or another mount.
@@ -157,6 +170,10 @@ pub(super) fn remove(parent: &File, path: &Path, workers: usize, checkpoint: Che
         return Err(not_entered(path));
     }
     let root = enter(parent, name, path, item.place, item.inode)?;
+    // The walk would stop at a mount further down, after removing what it met first.
+    if let Some(inner) = mounted_inside(&root) {
+        return Err(not_entered(&inner));
+    }
     if workers <= 1 {
         return drain(root, parent, item.place, checkpoint);
     }

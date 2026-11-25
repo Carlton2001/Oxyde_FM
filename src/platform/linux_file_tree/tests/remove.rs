@@ -143,10 +143,13 @@ fn a_bind_mount_inside_is_never_entered() {
         if !bind(&shown, &mount) {
             return;
         }
+        let before = walk(&folder);
         let error = remove(&parent(&folder), &folder, workers, &|| Ok(())).unwrap_err();
+        let after = walk(&folder);
         unbind(&mount);
         assert!(error.to_string().contains("not entered"), "{workers}: {error}");
         assert_eq!(std::fs::read(shown.join("data")).unwrap(), b"kept");
+        assert_eq!(after, before, "{workers}: refused before anything goes");
     }
 }
 

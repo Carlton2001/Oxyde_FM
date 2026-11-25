@@ -583,6 +583,11 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
         args.set("path", display_paths(path));
         return i18n.text_with_args(Message::TransferDestinationCollision, &args).to_string();
     }
+    if let Some(path) = oxyde_lib::models::error::MountNotEntered::from_message(detail) {
+        let mut args = FluentArgs::new();
+        args.set("path", display_paths(path));
+        return i18n.text_with_args(Message::DeleteMountNotEntered, &args).to_string();
+    }
     if let Some(path) = oxyde_lib::models::error::ArchiveLinkRefusal::from_message(detail) {
         let mut args = FluentArgs::new();
         args.set("path", display_paths(path));

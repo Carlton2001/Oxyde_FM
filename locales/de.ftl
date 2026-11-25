@@ -1218,6 +1218,7 @@ settings-onedrive-description = OneDrive in der Seitenleiste anzeigen, wenn es e
 
 trash-restore-summary = Wiederherstellung beendet: { $restored } Element(e) wiederhergestellt, { $failed } fehlgeschlagen. Andere Elemente wurden verarbeitet. Fehlerdetails stehen im Protokoll.
 transfer-destination-collision = Mehrere ausgewählte Elemente würden dasselbe Ziel verwenden: { $path }. Benennen Sie sie um oder übertragen Sie sie einzeln. Es wurden keine Dateien übertragen.
+delete-mount-not-entered = Unter { $path } befindet sich ein anderer Datenträger oder ein eingehängter Ordner: Oxyde löscht nicht darin. Hängen Sie ihn zuerst aus.
 archive-link-refused = Ein Archiv kann keinen symbolischen Link enthalten: { $path }. Oxyde lehnt Links beim Öffnen und Entpacken von Archiven ab, damit keine Extraktion außerhalb ihres Ziels schreiben kann. Es wurde nichts geändert.
 
 grouping = Gruppieren nach

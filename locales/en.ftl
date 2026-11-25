@@ -921,6 +921,7 @@ settings-onedrive-description = Show OneDrive in the sidebar when configured.
 
 trash-restore-summary = Restoration finished: { $restored } item(s) restored, { $failed } failed. Other items were processed. See the log for error details.
 transfer-destination-collision = Several selected items would use the same destination: { $path }. Rename them or transfer them separately. No files have been transferred.
+delete-mount-not-entered = Another volume or a mounted folder is at { $path }: Oxyde does not enter it to delete. Unmount it first.
 archive-link-refused = An archive cannot contain a symbolic link: { $path }. Oxyde refuses links when opening and extracting archives, so that no extraction can write outside its destination. Nothing has been changed.
 
 grouping = Group by
