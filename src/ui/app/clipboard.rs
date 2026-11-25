@@ -66,11 +66,9 @@ impl OxydeApp {
         let text = None;
         #[cfg(not(target_os = "windows"))]
         let text = {
-            // Files another application announces are read on the worker below: reading
-            // here would hold the interface while their owner does not answer.
-            let announced = oxyde_lib::platform::platform().file_clipboard().external_files_types()
-                .iter().any(|mime_type| cx.clipboard_offers(mime_type));
-            let system = if announced { None } else { cx.read_from_clipboard() };
+            // Another application's clipboard is never read here: the interface would wait
+            // as long as its owner does not answer. Its files are read on the worker below.
+            let system = if foreign_clipboard(cx) { None } else { cx.read_from_clipboard() };
             // Files another application offers through GPUI come first, as in Zed. Oxyde's
             // own files go through its file clipboard, which knows whether they are cut.
             if let Some(paths) = system.as_ref().filter(|item| !own_files(item)).and_then(external_paths) {
@@ -119,6 +117,27 @@ fn files_item(paths: &[String], text: String, cut: bool) -> ClipboardItem {
             ClipboardEntry::ExternalPaths(ExternalPaths(paths.iter().map(Into::into).collect())),
         ],
     }
+}
+
+/// Types GPUI reads from another application's clipboard: text, then images.
+#[cfg(not(target_os = "windows"))]
+const READ_TYPES: [&str; 2] = ["text/plain;charset=utf-8", "UTF8_STRING"];
+
+/// Whether Paste can skip GPUI's read of the system clipboard, where the platform reads
+/// other applications' files itself (Wayland). Oxyde's own text is needed only while it
+/// holds files: GPUI answers it from memory as long as Oxyde owns the clipboard, and
+/// another application that took it announces what it offers.
+#[cfg(not(target_os = "windows"))]
+fn foreign_clipboard(cx: &App) -> bool {
+    let clipboard = oxyde_lib::platform::platform().file_clipboard();
+    let files = clipboard.external_files_types();
+    if files.is_empty() {
+        return false;
+    }
+    use ImageFormat::*;
+    let images = [Png, Jpeg, Webp, Gif, Svg, Bmp, Tiff, Ico, Pnm].map(ImageFormat::mime_type);
+    !clipboard.has_file_format()
+        || files.iter().chain(&READ_TYPES).chain(&images).any(|mime_type| cx.clipboard_offers(mime_type))
 }
 
 #[cfg(not(target_os = "windows"))]
