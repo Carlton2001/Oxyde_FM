@@ -398,7 +398,11 @@ impl VideoLayout {
                 "Invalid video frame dimensions or stride".into(),
             ));
         }
-        let (out_w, out_h) = if width >= height {
+        // A small video keeps its size: the preview scales it on the GPU, rather than
+        // each frame being enlarged here and sent four times larger through the pipe.
+        let (out_w, out_h) = if width <= VIDEO_THUMB_SIZE && height <= VIDEO_THUMB_SIZE {
+            (width, height)
+        } else if width >= height {
             (
                 VIDEO_THUMB_SIZE,
                 ((u64::from(VIDEO_THUMB_SIZE) * u64::from(height)) / u64::from(width)).max(1)
