@@ -4,6 +4,8 @@ Hover previews stay in memory; grid thumbnails have a separate disk cache. Loadi
 
 [Office search](search.md#office-content-search) uses its own LPAC mode of `oxyde-image-worker`, a separate admission and a text response bounded to 8 MiB. It does not reuse hover previews' truncated output.
 
+Files inside archives have neither a hover preview nor a grid thumbnail, as in the Viewer: their tooltip shows the metadata alone.
+
 Starting a file ghost immediately closes the hover preview, pending preparation included. Hovers stay disabled during drag and drop, even when no drop target accepts.
 
 ## Hover and presentation

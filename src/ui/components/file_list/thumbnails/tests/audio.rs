@@ -14,3 +14,15 @@ fn grid_admits_audio_by_extension_or_native_kind_and_hover_recognizes_audio() {
     assert!(Source::for_file(&file).audio);
     assert!(!supports_thumbnail(&FileEntry { name: "notes.txt".into(), ..Default::default() }));
 }
+
+#[test]
+fn files_inside_archives_have_no_thumbnail() {
+    for name in ["photo.png", "song.mp3", "film.mp4", "manual.pdf"] {
+        let file = FileEntry {
+            name: name.into(),
+            archive_path: Some(std::sync::Arc::new("/tmp/archive.7z".into())),
+            ..Default::default()
+        };
+        assert!(!supports_thumbnail(&file), "{name}");
+    }
+}

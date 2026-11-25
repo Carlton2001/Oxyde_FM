@@ -172,6 +172,8 @@ impl Tooltip {
                 location, extra, notice, network: None,
                 size: (file.size, file.is_dir, file.is_calculated), mode: file.mode, date: file.modified,
             };
+            // Files inside archives have no preview, as in the Viewer: their path is not on disk.
+            let previews = previews && file.archive_path.is_none();
             Self::new_for_file(crate::ui::format::entry_name(&file, cx.i18n()), file.path.clone(), info, previews, cx).into()
         }
     }
