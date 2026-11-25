@@ -304,6 +304,8 @@ impl FileOperationManager {
                 whole_folders.push((selected.clone(), dest_root));
                 continue;
             }
+            #[cfg(all(target_os = "windows", not(test)))]
+            let archive_roots: Vec<PathBuf> = op.lock().unwrap().archive_owned_roots.iter().map(|(root, _)| root.clone()).collect();
             let mut walker = crate::systems::source_selection::SourceWalk::new(selected.clone());
             loop {
                 #[cfg(all(target_os = "windows", not(test)))]
@@ -316,8 +318,10 @@ impl FileOperationManager {
                 })
                 .map_err(|error| format!("Cannot enumerate source {:?}: {error}", src))?
                 else { break; };
+                // Only archive workspace items have an owner to check: other
+                // entries are not opened at planning.
                 #[cfg(all(target_os = "windows", not(test)))]
-                { let (_parents, file) = entry.open_archive().map_err(|e| e.to_string())?; Self::verify_archive_item(op, &entry.resolved_path(), &file).map_err(|e| e.to_string())?; }
+                if archive_roots.iter().any(|root| entry.resolved_path().starts_with(root)) { let (_parents, file) = entry.open_archive().map_err(|e| e.to_string())?; Self::verify_archive_item(op, &entry.resolved_path(), &file).map_err(|e| e.to_string())?; }
                 let relative = entry
                     .path()
                     .strip_prefix(src)
