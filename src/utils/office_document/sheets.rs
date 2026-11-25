@@ -105,13 +105,15 @@ pub(super) fn xlsx(archive: &mut Archive) -> Result<String, CommandError> {
                 ("v" | "t", false) => in_value = !tag.ends_with('/'),
                 ("v" | "t", true) => in_value = false,
                 ("c", true) => {
-                    let shown = match kind.as_str() {
-                        "s" => value.trim().parse::<usize>().ok().and_then(|index| strings.get(index)).cloned().unwrap_or_default(),
-                        "b" => if value.trim() == "1" { "TRUE".into() } else { "FALSE".into() },
-                        _ => value.clone(),
-                    };
+                    // One copy, into the cell: kept columns only.
                     if let Some(cell) = current.and_then(|index| builder.cells.get_mut(index)) {
-                        *cell = shown.trim().to_owned();
+                        let shown = match kind.as_str() {
+                            "s" => value.trim().parse::<usize>().ok().and_then(|index| strings.get(index)).map_or("", String::as_str),
+                            "b" => if value.trim() == "1" { "TRUE" } else { "FALSE" },
+                            _ => value.as_str(),
+                        };
+                        cell.clear();
+                        cell.push_str(shown.trim());
                     }
                 }
                 _ => {}
