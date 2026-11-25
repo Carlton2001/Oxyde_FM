@@ -32,10 +32,12 @@ pub(super) fn render_sidebar_tree(
         .iter()
         .map(|i| i.path.clone())
         .collect();
-    let sidebar_items: Vec<SidebarItem> =
+    // Shared with the list's row callback rather than copied for it.
+    let sidebar_items: std::rc::Rc<Vec<SidebarItem>> = std::rc::Rc::new(
         visible_sidebar_items(&view.state.sidebar_items, show_hidden, show_system, view.show_network())
             .cloned()
-            .collect();
+            .collect(),
+    );
     let theme = *_cx.theme();
     let use_system_icons = cfg!(target_os = "windows") && view.use_system_icons();
 
@@ -115,7 +117,7 @@ pub(super) fn render_sidebar_tree(
     let mut reorder_slots = Vec::new();
     if view.pinned_reorder.is_some() {
         let mut top = padding;
-        for item in &sidebar_items {
+        for item in sidebar_items.iter() {
             if let SidebarItem::Pinned { item: pinned } = item {
                 if !pinned.name.is_empty() && pinned_paths.contains(&pinned.path) {
                     reorder_slots.push(reorder::Slot { top, height: sidebar_item_height(item), path: pinned.path.clone() });
