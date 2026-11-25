@@ -142,6 +142,7 @@ impl TabState {
             cached_filtered_files: Default::default(),
             presentation_cache: Default::default(),
             filter_cache_revision: 0,
+            files_sorted: None,
             calendar_reference: None,
             type_col_width: 100.0,
             size_col_width: 100.0,

@@ -224,6 +224,9 @@ pub struct TabState {
     pub cached_filtered_files: std::sync::Arc<Vec<FileEntry>>,
     presentation_cache: std::cell::RefCell<Option<std::sync::Arc<presentation::Presentation>>>,
     filter_cache_revision: u64,
+    /// The order the last preparation left `files` in. Valid for that vector only:
+    /// its Weak keeps the address from another.
+    files_sorted: Option<(SortColumn, SortDirection, std::sync::Weak<Vec<oxyde_lib::models::FileEntry>>)>,
     calendar_reference: Option<CalendarReference>,
     pub type_col_width: f32,
     pub size_col_width: f32,
