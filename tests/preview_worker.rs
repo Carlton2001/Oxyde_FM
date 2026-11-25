@@ -375,9 +375,10 @@ fn actual_video_worker_streams_pixels_timestamps_and_releases_source_on_stop() {
         )
         .unwrap();
         assert_eq!(frames.len(), 2);
-        assert_eq!(frames[0].0.dimensions(), (640, 640));
-        let first = frames[0].0.get_pixel(320, 320).0;
-        let second = frames[1].0.get_pixel(320, 320).0;
+        // A video smaller than the preview keeps its size.
+        assert_eq!(frames[0].0.dimensions(), (16, 16));
+        let first = frames[0].0.get_pixel(8, 8).0;
+        let second = frames[1].0.get_pixel(8, 8).0;
         assert!(first[0] < 10 && first[2] > 240, "{first:?}");
         assert!(second[0] > 240 && second[2] < 10, "{second:?}");
         assert_eq!(frames[0].1, Duration::ZERO);
