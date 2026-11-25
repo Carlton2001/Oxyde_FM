@@ -433,6 +433,12 @@ pub(super) struct RemoteMount {
 }
 
 /// GVfs mounts appear as folders of one FUSE mount, named after their mount spec.
+/// GVfs's FUSE view waits on a server that stopped answering for as long as it does,
+/// where GIO's own calls give up: a listing there gives up after `UNATTENDED`.
+pub(super) fn listing_limit(path: &Path) -> Option<Duration> {
+    fuse_root().is_some_and(|root| path.starts_with(root)).then_some(UNATTENDED)
+}
+
 pub(super) fn fuse_root() -> Option<PathBuf> {
     dirs::runtime_dir().map(|runtime| runtime.join("gvfs"))
 }

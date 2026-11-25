@@ -618,23 +618,37 @@ impl OxydeApp {
             self.connect_remote_tab(tab_id, request_id, path, cx);
             return;
         }
+        let limit = oxyde_lib::platform::platform().listing_limit(std::path::Path::new(&path));
+        let deadline = limit.map(|limit| cx.background_executor().timer(limit));
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
                 let context_path = path.clone();
-                let (archive_root, denied) = tokio::task::spawn_blocking(move || {
-                    let path = std::path::Path::new(&context_path);
-                    let archive = oxyde_lib::utils::archive::resolve_virtual_path(path).map(|(archive, _)| archive);
-                    let denied = archive.is_none() && oxyde_lib::platform::platform().folder_denies_writes(path);
-                    (archive, denied)
-                }).await.unwrap_or((None, false));
-                let result = list_dir(
-                    path.clone(),
-                    Some(show_hidden),
-                    Some(show_system),
-                    cancelled.clone(),
-                )
-                .await;
+                let listed_path = path.clone();
+                let listing_cancelled = cancelled.clone();
+                let listing = Box::pin(async move {
+                    let (archive_root, denied) = tokio::task::spawn_blocking(move || {
+                        let path = std::path::Path::new(&context_path);
+                        let archive = oxyde_lib::utils::archive::resolve_virtual_path(path).map(|(archive, _)| archive);
+                        let denied = archive.is_none() && oxyde_lib::platform::platform().folder_denies_writes(path);
+                        (archive, denied)
+                    }).await.unwrap_or((None, false));
+                    let result = list_dir(listed_path, Some(show_hidden), Some(show_system), listing_cancelled).await;
+                    (archive_root, denied, result)
+                });
+                // A server that stopped answering holds the read: the tab says so in time.
+                let (archive_root, denied, result) = match deadline {
+                    None => listing.await,
+                    Some(deadline) => match futures::future::select(listing, deadline).await {
+                        futures::future::Either::Left((listed, _)) => listed,
+                        futures::future::Either::Right(_) => {
+                            cancelled.store(true, std::sync::atomic::Ordering::Release);
+                            log::warn!("Gave up listing {path}: the server did not answer in time");
+                            let error = oxyde_lib::models::error::ServerNoAnswer { path: path.clone() };
+                            (None, false, Err(oxyde_lib::models::CommandError::IoError(error.to_string())))
+                        }
+                    },
+                };
                 let result = match result {
                     Ok(entries) => {
                         // Asked once the list shows: an archive's members have no permissions.
@@ -714,7 +728,9 @@ impl OxydeApp {
                                     && !tab.files.is_empty()
                                     && matches!(
                                         crate::ui::errors::path_load_status(&error),
-                                        crate::ui::workspace::TabLoadStatus::Error(Message::PathLoadFailed)
+                                        crate::ui::workspace::TabLoadStatus::Error(
+                                            Message::PathLoadFailed | Message::PathServerNoAnswer
+                                        )
                                     ) =>
                             {
                                 log::warn!("Cannot refresh {}, keeping its list: {error:?}", path);

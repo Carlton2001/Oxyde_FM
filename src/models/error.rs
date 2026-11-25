@@ -35,6 +35,23 @@ impl MountNotEntered {
     }
 }
 
+/// A listing given up on a server that did not answer in time; the read is left behind.
+#[derive(Debug)]
+pub struct ServerNoAnswer {
+    pub path: String,
+}
+impl fmt::Display for ServerNoAnswer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Server did not answer: {}", self.path)
+    }
+}
+impl std::error::Error for ServerNoAnswer {}
+impl ServerNoAnswer {
+    pub fn from_message(message: &str) -> bool {
+        message.contains("Server did not answer: ")
+    }
+}
+
 /// Archives hold neither symbolic links nor their targets: opening and
 /// extraction refuse link entries, so compression refuses them too.
 #[derive(Debug)]

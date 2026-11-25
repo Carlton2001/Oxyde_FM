@@ -391,6 +391,7 @@ path-error-not-found = No se encontró esta carpeta o ya no está disponible.
 path-error-access-denied = Carpeta protegida (Se requieren derechos de administrador)
 
 path-error-failed = No se pudo abrir esta carpeta. Compruebe la ruta e inténtelo de nuevo.
+path-error-server-no-answer = El servidor no respondió a tiempo. Inténtelo de nuevo cuando esté accesible.
 
 undo-failed = No se pudo deshacer: { $detail }
 undo-copy-identity-changed = Este elemento ya no corresponde al objeto copiado originalmente: { $detail }. Se detuvo Deshacer para conservar sus archivos.

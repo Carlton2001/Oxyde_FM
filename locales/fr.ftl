@@ -261,6 +261,7 @@ date-older = Plus ancien
 path-error-not-found = Ce dossier est introuvable ou n’est plus disponible.
 path-error-access-denied = Dossier protégé (Droits administrateur requis)
 path-error-failed = Impossible d’ouvrir ce dossier. Vérifiez le chemin et réessayez.
+path-error-server-no-answer = Le serveur n’a pas répondu à temps. Réessayez quand il sera joignable.
 
 ## File operations
 undo-failed = Annulation impossible : { $detail }

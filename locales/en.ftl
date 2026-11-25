@@ -255,6 +255,7 @@ date-older = Older
 path-error-not-found = This folder was not found or is no longer available.
 path-error-access-denied = Protected folder (Administrator rights required)
 path-error-failed = Could not open this folder. Check the path and try again.
+path-error-server-no-answer = The server did not answer in time. Try again once it is reachable.
 
 ## File operations
 undo-failed = Could not undo: { $detail }

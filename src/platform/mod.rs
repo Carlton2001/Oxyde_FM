@@ -887,6 +887,11 @@ pub trait Platform: Send + Sync {
     }
 
     fn is_network_path(&self, path: &std::path::Path) -> bool;
+    /// How long a folder listing waits for the server holding `path` before giving up,
+    /// the read left behind; `None` waits as long as the file system does.
+    fn listing_limit(&self, _path: &std::path::Path) -> Option<std::time::Duration> {
+        None
+    }
     /// Whether deleting on this path's volume can recycle, known before asking:
     /// Windows has no Recycle Bin on shares, SUBST, removable or optical drives.
     /// Blocking; call on a background worker.

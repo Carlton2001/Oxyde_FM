@@ -391,6 +391,7 @@ path-error-not-found = Questa cartella non è stata trovata o non è più dispon
 path-error-access-denied = Cartella protetta (Sono richiesti diritti di amministratore)
 
 path-error-failed = Impossibile aprire la cartella. Controlla il percorso e riprova.
+path-error-server-no-answer = Il server non ha risposto in tempo. Riprova quando sarà raggiungibile.
 
 undo-failed = Impossibile annullare: { $detail }
 undo-copy-identity-changed = Questo elemento non corrisponde più all’oggetto copiato originale: { $detail }. L’annullamento è stato interrotto per preservare i file.

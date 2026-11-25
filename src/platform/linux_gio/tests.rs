@@ -179,6 +179,15 @@ fn a_share_seen_through_gvfs_fuse_has_no_trash() {
 }
 
 #[test]
+fn listings_through_gvfs_fuse_give_up_on_an_unanswering_server() {
+    use crate::platform::Platform;
+    let Some(root) = fuse_root() else { return };
+    let platform = crate::platform::linux_impl::LinuxPlatform;
+    assert_eq!(platform.listing_limit(&root.join("smb-share:server=host,share=s/dossier")), Some(UNATTENDED));
+    assert_eq!(platform.listing_limit(std::path::Path::new("/tmp")), None);
+}
+
+#[test]
 fn a_watched_call_reports_its_expired_limit_and_ends_with_its_call() {
     let Some(gio) = gio() else { return };
     let never = AtomicBool::new(false);

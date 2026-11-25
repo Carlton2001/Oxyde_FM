@@ -712,6 +712,9 @@ impl Platform for LinuxPlatform {
     fn is_network_path(&self, path: &std::path::Path) -> bool {
         super::hardware::is_network_path(path)
     }
+    fn listing_limit(&self, path: &std::path::Path) -> Option<std::time::Duration> {
+        super::linux_gio::listing_limit(path)
+    }
     /// GVfs's FUSE view of a network share has no trash to send to: Nautilus offers the
     /// permanent deletion there.
     fn has_recycle_bin(&self, path: &std::path::Path) -> bool {

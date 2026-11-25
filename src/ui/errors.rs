@@ -113,6 +113,9 @@ pub fn path_load_message(error: &CommandError) -> Message {
         Some(oxyde_lib::models::error::ArchivePasswordFailure::Wrong) => return Message::ArchivePasswordRejected,
         None => {}
     }
+    if oxyde_lib::models::error::ServerNoAnswer::from_message(&error.to_string()) {
+        return Message::PathServerNoAnswer;
+    }
     match error {
         CommandError::PathNotFound(_) => Message::PathNotFound,
         CommandError::AccessDenied(_) => Message::PathAccessDenied,
@@ -149,6 +152,15 @@ fn already_exists(message: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_listing_given_up_on_its_server_says_so_in_every_language() {
+        use crate::ui::i18n::{I18n, Language};
+        let error = CommandError::IoError(oxyde_lib::models::error::ServerNoAnswer { path: "/run/user/1000/gvfs/x".into() }.to_string());
+        assert_eq!(path_load_message(&error), Message::PathServerNoAnswer);
+        for language in Language::ALL {
+            assert!(!I18n::for_language(language).text(Message::PathServerNoAnswer).contains("path-error"));
+        }
+    }
     #[test]
     fn undo_recovery_error_translates_locations_without_exposing_technical_details() {
         use crate::ui::i18n::{I18n, Language};

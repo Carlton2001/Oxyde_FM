@@ -391,6 +391,7 @@ path-error-not-found = Dieser Ordner wurde nicht gefunden oder ist nicht mehr ve
 path-error-access-denied = Geschützter Ordner (Administratorrechte erforderlich)
 
 path-error-failed = Ordner konnte nicht geöffnet werden. Prüfen Sie den Pfad und versuchen Sie es erneut.
+path-error-server-no-answer = Der Server hat nicht rechtzeitig geantwortet. Versuchen Sie es erneut, sobald er erreichbar ist.
 
 undo-failed = Rückgängig machen fehlgeschlagen: { $detail }
 undo-copy-identity-changed = Dieses Element entspricht nicht mehr dem ursprünglich kopierten Objekt: { $detail }. Das Rückgängigmachen wurde zum Schutz Ihrer Dateien abgebrochen.
