@@ -641,7 +641,13 @@ properties-link-target = Link target
 properties-used = Used space
 properties-capacity = Capacity
 properties-contains = Contains
-properties-counts = { $files } files, { $folders } folders
+properties-counts = { $file_count ->
+    [one] { $files } file
+   *[other] { $files } files
+    }, { $folder_count ->
+    [one] { $folders } folder
+   *[other] { $folders } folders
+    }
 properties-drive = Drive
 properties-file-system = File system
 

@@ -273,6 +273,8 @@ pub(super) fn render(
             let mut args = FluentArgs::new();
             args.set("files", crate::ui::format::format_number(files, cx.i18n().language()));
             args.set("folders", crate::ui::format::format_number(folders, cx.i18n().language()));
+            args.set("file_count", files as u64);
+            args.set("folder_count", folders as u64);
             details = details.child(row(
                 cx.i18n().text(Message::PropertiesContains),
                 cx.i18n().text_with_args(Message::PropertiesCounts, &args).to_string(),

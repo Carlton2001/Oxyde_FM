@@ -938,7 +938,13 @@ properties-link-target = Linkziel
 properties-used = Belegter Speicher
 properties-capacity = Kapazität
 properties-contains = Inhalt
-properties-counts = { $files } Dateien, { $folders } Ordner
+properties-counts = { $file_count ->
+    [one] { $files } Datei
+   *[other] { $files } Dateien
+    }, { $folder_count ->
+    [one] { $folders } Ordner
+   *[other] { $folders } Ordner
+    }
 properties-drive = Laufwerk
 properties-file-system = Dateisystem
 

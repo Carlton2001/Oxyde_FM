@@ -216,6 +216,8 @@ pub(super) fn render(
         let mut args = FluentArgs::new();
         args.set("files", crate::ui::format::format_number(summary.files, cx.i18n().language()));
         args.set("folders", crate::ui::format::format_number(summary.folders, cx.i18n().language()));
+        args.set("file_count", summary.files as u64);
+        args.set("folder_count", summary.folders as u64);
         let details = super::section::card(theme)
             .child(row(
                 cx.i18n().text(Message::ColumnLocation),

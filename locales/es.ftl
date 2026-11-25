@@ -938,7 +938,13 @@ properties-link-target = Destino del enlace
 properties-used = Espacio utilizado
 properties-capacity = Capacidad
 properties-contains = Contenido
-properties-counts = { $files } archivos, { $folders } carpetas
+properties-counts = { $file_count ->
+    [one] { $files } archivo
+   *[other] { $files } archivos
+    }, { $folder_count ->
+    [one] { $folders } carpeta
+   *[other] { $folders } carpetas
+    }
 properties-drive = Unidad
 properties-file-system = Sistema de archivos
 
