@@ -219,6 +219,9 @@ pub struct X11ClientState {
     pub(crate) pre_edit_text: Option<String>,
     pub(crate) composing: bool,
     pub(crate) pre_key_char_down: Option<Keystroke>,
+    // Oxyde: keys pressed and not yet released, so that X11's key repeat, which sends
+    // KeyPress again (its KeyRelease filtered out), reports `is_held`.
+    pub(crate) pressed_keys: HashSet<xproto::Keycode>,
     pub(crate) cursor_handle: cursor::Handle,
     pub(crate) cursor_styles: HashMap<xproto::Window, CursorStyle>,
     pub(crate) cursor_cache: HashMap<CursorStyle, Option<xproto::Cursor>>,
@@ -561,6 +564,7 @@ impl X11Client {
 
             compose_state,
             pre_edit_text: None,
+            pressed_keys: HashSet::new(),
             pre_key_char_down: None,
             composing: false,
 
@@ -991,6 +995,7 @@ impl X11Client {
                 let window = self.get_window(event.event)?;
                 window.set_active(true);
                 let mut state = self.0.borrow_mut();
+                state.pressed_keys.clear();
                 state.keyboard_focused_window = Some(event.event);
                 if let Some(handler) = state.xim_handler.as_mut() {
                     handler.window = event.event;
@@ -1004,6 +1009,7 @@ impl X11Client {
                 let mut state = self.0.borrow_mut();
                 // Set last scroll values to `None` so that a large delta isn't created if scrolling is done outside the window (the valuator is global)
                 reset_all_pointer_device_scroll_positions(&mut state.pointer_device_states);
+                state.pressed_keys.clear();
                 state.keyboard_focused_window = None;
                 if let Some(compose_state) = state.compose_state.as_mut() {
                     compose_state.reset();
@@ -1079,6 +1085,7 @@ impl X11Client {
                 let modifiers = modifiers_from_state(event.state);
                 state.modifiers = modifiers;
                 state.pre_key_char_down.take();
+                let is_held = !state.pressed_keys.insert(event.detail);
                 let key_event_state = xkb_state_for_key_event(&state.xkb, event.state);
 
                 let keystroke = {
@@ -1132,13 +1139,14 @@ impl X11Client {
                 drop(state);
                 window.handle_input(PlatformInput::KeyDown(gpui::KeyDownEvent {
                     keystroke,
-                    is_held: false,
+                    is_held,
                     prefer_character_input: false,
                 }));
             }
             Event::KeyRelease(event) => {
                 let window = self.get_window(event.event)?;
                 let mut state = self.0.borrow_mut();
+                state.pressed_keys.remove(&event.detail);
 
                 let modifiers = modifiers_from_state(event.state);
                 state.modifiers = modifiers;

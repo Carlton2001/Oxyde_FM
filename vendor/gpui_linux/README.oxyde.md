@@ -99,3 +99,7 @@ compare both copies to the new upstream.
   implement `set_input_region` with the SHAPE extension's input shape, in device pixels. A
   client-decorated window's shadow then lets clicks through to the window beneath, as GTK
   does on X11; upstream ignored the region there.
+- `gpui_linux/src/linux/x11/client.rs`: a key pressed again before its release reports
+  `is_held`, as Wayland does. X11's key repeat sends KeyPress again (GPUI already drops the
+  KeyRelease that comes with it); upstream marked every press as new, so holding Enter on a
+  button of the conflict dialog answered every remaining conflict.
