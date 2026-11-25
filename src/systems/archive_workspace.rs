@@ -198,9 +198,11 @@ impl ArchiveWorkspace {
         if crate::platform::platform().file_identity(&original_file).map_err(|e| e.to_string())? != original_identity {
             return Err(crate::models::error::ArchiveSourceConflict.to_string());
         }
-        // Windows protects source data for the initial read. On other systems
+        // Windows protects source data for the initial read: its share mode
+        // refuses writers, except perhaps through a network redirector. Elsewhere
         // validate it again before accepting the temporary view.
-        if fingerprint(&mut source, checkpoint, &budget).map_err(|e| e.to_string())? != original_hash
+        let reread = !cfg!(target_os = "windows") || crate::platform::platform().is_network_path(&archive);
+        if (reread && fingerprint(&mut source, checkpoint, &budget).map_err(|e| e.to_string())? != original_hash)
             || crate::platform::platform().read_archive_output_provenance(parents.directory(), &source, &archive).map_err(|e| e.to_string())? != original_provenance {
             return Err(crate::models::error::ArchiveSourceConflict.to_string());
         }
