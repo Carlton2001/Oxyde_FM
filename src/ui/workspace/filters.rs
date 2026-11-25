@@ -175,35 +175,77 @@ impl CalendarFilterRequest {
     }
 }
 
+/// The value scans of [`TabState::column_filter_flags`], with what they read: a header
+/// renders at each frame, and a choice covering every type would label every file.
+#[derive(Clone)]
+pub(crate) struct FlagScan {
+    files: std::sync::Weak<Vec<FileEntry>>,
+    today: chrono::NaiveDate,
+    types: std::collections::HashSet<String>,
+    sizes: std::collections::HashSet<SizeCategory>,
+    permissions: std::collections::HashSet<u32>,
+    dates: std::collections::HashSet<DateGroup>,
+    deleted: std::collections::HashSet<DateGroup>,
+    /// Types, sizes, permissions, dates and deletion dates.
+    found: [bool; 5],
+}
+
 impl TabState {
     /// Which header indicators are lit. Checking every value present filters nothing, so it
     /// lights none; a range or a typed text always does.
     pub(crate) fn column_filter_flags(&self) -> ColumnFilterFlags {
+        let today = chrono::Local::now().date_naive();
+        let mut cache = self.filter_flags_cache.borrow_mut();
+        let fresh = cache.as_ref().is_some_and(|scan| {
+            std::ptr::eq(scan.files.as_ptr(), std::sync::Arc::as_ptr(&self.files))
+                && scan.today == today
+                && scan.types == self.filter_types
+                && scan.sizes == self.filter_sizes
+                && scan.permissions == self.filter_permissions
+                && scan.dates == self.filter_dates
+                && scan.deleted == self.filter_deleted
+        });
+        if !fresh {
+            *cache = Some(FlagScan {
+                files: std::sync::Arc::downgrade(&self.files),
+                today,
+                types: self.filter_types.clone(),
+                sizes: self.filter_sizes.clone(),
+                permissions: self.filter_permissions.clone(),
+                dates: self.filter_dates.clone(),
+                deleted: self.filter_deleted.clone(),
+                found: self.scan_filter_values(today),
+            });
+        }
+        let [types, sizes, permissions, dates, deleted] = cache.as_ref().expect("just filled").found;
+        ColumnFilterFlags {
+            name: !self.filter_name.is_empty(),
+            location: !self.filter_original_location.is_empty(),
+            types,
+            sizes: self.filter_size_range.is_some() || sizes,
+            permissions,
+            dates: self.filter_date_range.is_some() || dates,
+            deleted: self.filter_deleted_range.is_some() || deleted,
+        }
+    }
+
+    /// Whether some present value is left out by each value filter.
+    fn scan_filter_values(&self, today: chrono::NaiveDate) -> [bool; 5] {
         let permissions = !self.filter_permissions.is_empty() && self.files.iter()
             .any(|file| file.mode.is_some_and(|mode| !self.filter_permissions.contains(&mode)));
         let types = !self.filter_types.is_empty() && self.files.iter().any(|file| {
             !self.filter_types.contains(&crate::ui::components::file_list::file_type_label(file))
         });
-        let sizes = self.filter_size_range.is_some() || !self.filter_sizes.is_empty() && self.files.iter().any(|file| {
+        let sizes = !self.filter_sizes.is_empty() && self.files.iter().any(|file| {
             SizeCategory::ALL.iter().find(|category| category.matches(file.size))
                 .is_some_and(|category| !self.filter_sizes.contains(category))
         });
-        let dates = self.filter_date_range.is_some() || !self.filter_dates.is_empty() &&
-            crate::ui::date_groups::counts_by_date(&self.files, chrono::Local::now().date_naive())
+        let dates = !self.filter_dates.is_empty() &&
+            crate::ui::date_groups::counts_by_date(&self.files, today)
                 .keys().any(|group| !self.filter_dates.contains(group));
-        let deleted = self.filter_deleted_range.is_some() || !self.filter_deleted.is_empty() && {
-            let today = chrono::Local::now().date_naive();
-            self.files.iter().filter_map(deleted_ms).any(|ms| !self.filter_deleted.contains(&DateGroup::for_timestamp(ms, today)))
-        };
-        ColumnFilterFlags {
-            name: !self.filter_name.is_empty(),
-            location: !self.filter_original_location.is_empty(),
-            types,
-            sizes,
-            permissions,
-            dates,
-            deleted,
-        }
+        let deleted = !self.filter_deleted.is_empty() &&
+            self.files.iter().filter_map(deleted_ms).any(|ms| !self.filter_deleted.contains(&DateGroup::for_timestamp(ms, today)));
+        [types, sizes, permissions, dates, deleted]
     }
 
     /// Whether any column filter is set, even one that keeps every entry.
