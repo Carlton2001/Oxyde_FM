@@ -206,7 +206,7 @@ fn write_thumbnail_cache(
                 .write_image(image, image.width(), image.height(), image::ExtendedColorType::Rgba8)
                 .map_err(std::io::Error::other);
         }
-        let rgb = image::DynamicImage::ImageRgba8(image.clone()).to_rgb8();
+        let rgb: image::RgbImage = image::buffer::ConvertBuffer::convert(image);
         image::codecs::jpeg::JpegEncoder::new_with_quality(file, 75)
             .encode_image(&image::DynamicImage::ImageRgb8(rgb))
             .map_err(std::io::Error::other)
@@ -398,7 +398,11 @@ impl VideoLayout {
                 "Invalid video frame dimensions or stride".into(),
             ));
         }
-        let (out_w, out_h) = if width >= height {
+        // A small video keeps its size: the preview scales it on the GPU, rather than
+        // each frame being enlarged here and sent four times larger through the pipe.
+        let (out_w, out_h) = if width <= VIDEO_THUMB_SIZE && height <= VIDEO_THUMB_SIZE {
+            (width, height)
+        } else if width >= height {
             (
                 VIDEO_THUMB_SIZE,
                 ((u64::from(VIDEO_THUMB_SIZE) * u64::from(height)) / u64::from(width)).max(1)

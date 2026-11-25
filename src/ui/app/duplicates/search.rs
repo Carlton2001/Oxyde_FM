@@ -17,7 +17,7 @@ impl DuplicateWindow {
         self.groups = Arc::new(vec![]);
         self.filtered.clear();
         self.result_rows = Arc::default();
-        self.collapsed.clear();
+        self.collapsed = Default::default();
         self.filter_task = None;
         self.filtering = false;
         self.results_scroll.set_offset(point(px(0.0), px(0.0)));
@@ -66,7 +66,7 @@ impl DuplicateWindow {
                             this.groups = Arc::new(groups);
                             this.filtered.clear();
                             this.result_rows = Arc::default();
-                            this.collapsed.clear();
+                            this.collapsed = Default::default();
                             this.update_filter(cx);
                         }
                         Err(e) => this.error = Some(e.to_string()),
@@ -110,8 +110,10 @@ impl DuplicateWindow {
                         .filter(|(_, group)| {
                             needle.is_empty()
                                 || group.files.iter().any(|file| {
-                                    file.path.to_lowercase().contains(&needle)
-                                        || file.name.to_lowercase().contains(&needle)
+                                    contains_folded(&file.path, &needle)
+                                        // The name ends the path: already searched.
+                                        || (!file.path.ends_with(file.name.as_str())
+                                            && contains_folded(&file.name, &needle))
                                 })
                         })
                         .map(|(index, _)| index)
@@ -136,3 +138,16 @@ impl DuplicateWindow {
         }));
     }
 }
+
+/// Whether `haystack`, lowercased, holds `needle`, already lowercased and not
+/// empty. An ASCII path, the common case, is not copied at each keystroke.
+fn contains_folded(haystack: &str, needle: &str) -> bool {
+    if haystack.is_ascii() && needle.is_ascii() {
+        return haystack.as_bytes().windows(needle.len()).any(|window| window.eq_ignore_ascii_case(needle.as_bytes()));
+    }
+    haystack.to_lowercase().contains(needle)
+}
+
+#[cfg(test)]
+#[path = "tests/search.rs"]
+mod tests;

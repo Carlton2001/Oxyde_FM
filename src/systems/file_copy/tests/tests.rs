@@ -174,6 +174,7 @@
             &destination,
             false,
             None,
+            None,
             Some("expected journal hash"),
             parents,
             &mut |_| Ok(()),

@@ -96,8 +96,22 @@ impl NameMatcher {
     }
 
     /// Whether `text` compiles in that mode: a plain text always does.
+    /// The panel asks at each render: the last answer is kept, a regex compiled once.
     pub(crate) fn is_valid(text: &str, regex: bool) -> bool {
-        text.is_empty() || !matches!(Self::new(text, regex), Self::All)
+        thread_local! {
+            static LAST: std::cell::RefCell<Option<(String, bool, bool)>> = const { std::cell::RefCell::new(None) };
+        }
+        if text.is_empty() {
+            return true;
+        }
+        LAST.with_borrow_mut(|last| match last {
+            Some((known, mode, valid)) if known == text && *mode == regex => *valid,
+            _ => {
+                let valid = !matches!(Self::new(text, regex), Self::All);
+                *last = Some((text.to_owned(), regex, valid));
+                valid
+            }
+        })
     }
 
     pub(crate) fn matches(&self, name: &str) -> bool {

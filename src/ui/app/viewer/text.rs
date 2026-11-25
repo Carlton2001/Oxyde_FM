@@ -30,7 +30,7 @@ pub(super) struct TextFile {
     text: Arc<String>,
     /// Byte offset where each logical line starts.
     lines: Arc<Vec<Offset>>,
-    highlights: Arc<Vec<syntax::Span>>,
+    highlights: Arc<Vec<Arc<[syntax::Span]>>>,
     /// Path still to analyse, then the running analysis; the text is shown first.
     highlight_path: Option<String>,
     highlighting: Option<Task<()>>,
@@ -142,7 +142,9 @@ pub(super) struct Rows {
     text: Arc<String>,
     rows: Arc<Vec<Offset>>,
     lines: Arc<Vec<Offset>>,
-    highlights: Arc<Vec<syntax::Span>>,
+    /// The analysis's chunks, in order and never empty: a new one is added without
+    /// copying the others, which the rows being drawn still hold.
+    highlights: Arc<Vec<Arc<[syntax::Span]>>>,
     columns: usize,
 }
 
@@ -185,9 +187,12 @@ impl Rows {
         let end = self.rows.get(index + 1).map_or(self.text.len(), |end| *end as usize);
         let source = self.text[start..end].trim_end_matches(['\n', '\r']);
         let end = start + source.len();
-        let first = self.highlights.partition_point(|span| span.range.end <= start);
+        let chunk = self.highlights.partition_point(|chunk| chunk.last().is_none_or(|span| span.range.end <= start));
+        let first = self.highlights.get(chunk).map_or(0, |spans| spans.partition_point(|span| span.range.end <= start));
         let indent = self.indent(index);
-        self.highlights[first..].iter().take_while(|span| span.range.start < end).map(|span| {
+        let spans = self.highlights.iter().skip(chunk).enumerate()
+            .flat_map(|(offset, spans)| spans[if offset == 0 { first } else { 0 }..].iter());
+        spans.take_while(|span| span.range.start < end).map(|span| {
             let range = span.range.start.max(start) - start..span.range.end.min(end) - start;
             let expanded = |offset| indent + offset + source[..offset].bytes().filter(|byte| *byte == b'\t').count() * (TAB_COLUMNS - 1);
             let color = match span.kind {
@@ -330,7 +335,7 @@ impl Viewer {
                     }
                     let Content::Text(text) = &mut this.content else { return false };
                     if !chunk.is_empty() {
-                        Arc::make_mut(&mut text.highlights).extend(chunk);
+                        Arc::make_mut(&mut text.highlights).push(chunk.into());
                         cx.notify();
                     }
                     true

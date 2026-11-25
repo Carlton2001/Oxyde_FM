@@ -62,6 +62,17 @@ impl FileChooserWindow {
         folders
     }
 
+    /// How many rows [`Self::tree_folders`] gives `root`, without building them.
+    pub(super) fn tree_folder_count(&self, root: &str) -> usize {
+        if self.tree.expanded.contains(root) { self.count_folders(root) } else { 0 }
+    }
+
+    fn count_folders(&self, parent: &str) -> usize {
+        self.tree.nodes.get(parent).into_iter().flatten().filter(|node| self.shows_node(node))
+            .map(|node| 1 + if self.tree.expanded.contains(&node.path) { self.count_folders(&node.path) } else { 0 })
+            .sum()
+    }
+
     fn push_folders(&self, parent: &str, depth: usize, folders: &mut Vec<TreeFolder>) {
         for node in self.tree.nodes.get(parent).into_iter().flatten().filter(|node| self.shows_node(node)) {
             let expanded = self.tree.expanded.contains(&node.path);

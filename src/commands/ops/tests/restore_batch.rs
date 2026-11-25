@@ -39,3 +39,12 @@ fn original_path_and_id_restore_only_once_in_either_order() {
         assert!(report.failures.is_empty());
     }
 }
+
+#[test]
+fn requests_by_id_keep_only_their_entries_and_original_paths_keep_all() {
+    let items = vec![item("first"), item("second"), item("third")];
+    let by_id = requested_by_id(items.clone(), &["/bin/second".into(), "/BIN/second".into()]);
+    assert_eq!(by_id.iter().map(|item| item.name.clone()).collect::<Vec<_>>(), vec!["second"]);
+    assert_eq!(requested_by_id(items.clone(), &["/bin/second".into(), "/original/first".into()]).len(), 3);
+    assert_eq!(requested_by_id(items, &["/bin/missing".into()]).len(), 3);
+}

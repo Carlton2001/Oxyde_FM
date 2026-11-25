@@ -57,15 +57,49 @@ impl DirectoryChanges {
         self.children.clear();
     }
 
+    #[cfg(test)]
     fn record(&mut self, root: &str, event: &Event) {
-        if event.need_rescan() || event.paths.is_empty() {
+        self.apply(Observed::of(root, event));
+    }
+
+    fn apply(&mut self, observed: Observed) {
+        if observed.rescan {
             self.rescan();
             return;
         }
+        self.listing |= observed.listing;
+        for child in observed.children {
+            if self.all_sizes {
+                break;
+            }
+            self.children.insert(child);
+            if self.children.len() > 256 {
+                self.all_sizes = true;
+                self.children.clear();
+            }
+        }
+    }
+}
+
+/// What one event changes under its root, worked out before the shared queue
+/// is locked: other watchers' callbacks do not wait on these comparisons.
+struct Observed {
+    rescan: bool,
+    listing: bool,
+    children: Vec<String>,
+}
+
+impl Observed {
+    fn of(root: &str, event: &Event) -> Self {
+        let mut observed = Self { rescan: false, listing: false, children: Vec::new() };
+        if event.need_rescan() || event.paths.is_empty() {
+            observed.rescan = true;
+            return observed;
+        }
         for path in &event.paths {
             if paths_match(&encode(path), root) {
-                self.rescan();
-                continue;
+                observed.rescan = true;
+                return observed;
             }
             // Compare whole ancestors, including Windows case/separator aliases.
             // This requires no metadata and also handles deleted/renamed paths.
@@ -75,20 +109,15 @@ impl DirectoryChanges {
                     .is_some_and(|parent| paths_match(&encode(parent), root))
             });
             let Some(child) = child else {
-                self.rescan();
-                continue;
+                observed.rescan = true;
+                return observed;
             };
             if child == path {
-                self.listing = true;
+                observed.listing = true;
             }
-            if !self.all_sizes {
-                self.children.insert(encode(child));
-                if self.children.len() > 256 {
-                    self.all_sizes = true;
-                    self.children.clear();
-                }
-            }
+            observed.children.push(encode(child));
         }
+        observed
     }
 }
 
@@ -140,14 +169,18 @@ impl DirectoryWatcher {
             {
                 return;
             }
+            let observed = match result {
+                Ok(event) => Some(Observed::of(&watched_path, &event)),
+                Err(error) => {
+                    log::warn!("Directory watcher for {watched_path}: {error}");
+                    None
+                }
+            };
             if let Ok(mut queue) = changes.lock() {
                 let change = queue.entry(watched_path.clone()).or_default();
-                match result {
-                    Ok(event) => change.record(&watched_path, &event),
-                    Err(error) => {
-                        log::warn!("Directory watcher for {watched_path}: {error}");
-                        change.rescan();
-                    }
+                match observed {
+                    Some(observed) => change.apply(observed),
+                    None => change.rescan(),
                 }
             }
         };

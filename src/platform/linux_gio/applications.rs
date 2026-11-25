@@ -93,6 +93,7 @@ pub(in crate::platform) fn choices(paths: &[String]) -> Result<Vec<ApplicationCh
     let every = unsafe { applications(gio, (gio.g_app_info_get_all)()) };
     let mut seen = HashSet::new();
     let mut found = Vec::new();
+    let icons = IconFolders::new();
     let groups = [
         (ApplicationFit::Recommended, recommended),
         (ApplicationFit::Related, all),
@@ -106,7 +107,7 @@ pub(in crate::platform) fn choices(paths: &[String]) -> Result<Vec<ApplicationCh
             if id.is_empty() || !(is_default || shown(gio, app.1)) || !seen.insert(id.clone()) {
                 continue;
             }
-            found.push(choice(gio, id, &app, is_default, fit));
+            found.push(choice(gio, id, &app, is_default, fit, &icons));
         }
         if fit != ApplicationFit::Recommended {
             found[start..].sort_by_cached_key(|choice: &ApplicationChoice| choice.name.to_lowercase());
@@ -120,7 +121,7 @@ pub(in crate::platform) fn choices(paths: &[String]) -> Result<Vec<ApplicationCh
     Ok(found)
 }
 
-fn choice(gio: &Gio, id: String, app: &Owned, is_default: bool, fit: ApplicationFit) -> ApplicationChoice {
+fn choice(gio: &Gio, id: String, app: &Owned, is_default: bool, fit: ApplicationFit, icons: &IconFolders) -> ApplicationChoice {
     // SAFETY: a live application; its name and icon belong to it, the icon text is copied.
     let (name, icon) = unsafe {
         let name = borrowed((gio.g_app_info_get_display_name)(app.1));
@@ -129,12 +130,34 @@ fn choice(gio: &Gio, id: String, app: &Owned, is_default: bool, fit: Application
         (name, icon)
     };
     let name = if name.is_empty() { id.trim_end_matches(".desktop").to_owned() } else { name };
-    let icon = icon.and_then(|icon| icon_file(&String::from_utf8_lossy(&icon)));
+    let icon = icon.and_then(|icon| icon_file(&String::from_utf8_lossy(&icon), icons));
     ApplicationChoice { id, name, icon, is_default, fit }
 }
 
+/// The folders an application icon is looked for in, in order, each read once for the
+/// whole list of applications rather than probed file by file for each of them.
+struct IconFolders(Vec<(PathBuf, HashSet<std::ffi::OsString>)>);
+
+impl IconFolders {
+    fn new() -> Self {
+        let mut bases = vec![dirs::data_dir().unwrap_or_default()];
+        let data_dirs = std::env::var("XDG_DATA_DIRS").ok().filter(|dirs| !dirs.is_empty())
+            .unwrap_or_else(|| "/usr/local/share:/usr/share".to_owned());
+        bases.extend(std::env::split_paths(&data_dirs));
+        let home_icons = dirs::home_dir().map(|home| home.join(".icons"));
+        const SIZES: [&str; 10] = ["scalable", "512x512", "256x256", "128x128", "96x96", "64x64", "48x48", "32x32", "24x24", "16x16"];
+        let themes = home_icons.into_iter().chain(bases.iter().map(|base| base.join("icons")));
+        let sized = themes.flat_map(|theme| SIZES.map(|size| theme.join("hicolor").join(size).join("apps")));
+        let pixmaps = bases.iter().map(|base| base.join("pixmaps"));
+        Self(sized.chain(pixmaps).filter_map(|folder| {
+            let names = std::fs::read_dir(&folder).ok()?.filter_map(|entry| Some(entry.ok()?.file_name())).collect();
+            Some((folder, names))
+        }).collect())
+    }
+}
+
 /// The image of a themed icon, from `hicolor` where applications install theirs.
-fn icon_file(icon: &str) -> Option<PathBuf> {
+fn icon_file(icon: &str, folders: &IconFolders) -> Option<PathBuf> {
     if icon.starts_with('/') {
         return Some(PathBuf::from(icon)).filter(|path| path.is_file());
     }
@@ -144,29 +167,15 @@ fn icon_file(icon: &str) -> Option<PathBuf> {
         None if icon.starts_with(". ") => return None,
         None => vec![icon],
     };
-    let mut bases = vec![dirs::data_dir().unwrap_or_default()];
-    let data_dirs = std::env::var("XDG_DATA_DIRS").ok().filter(|dirs| !dirs.is_empty())
-        .unwrap_or_else(|| "/usr/local/share:/usr/share".to_owned());
-    bases.extend(std::env::split_paths(&data_dirs));
-    let home_icons = dirs::home_dir().map(|home| home.join(".icons"));
-    const SIZES: [&str; 10] = ["scalable", "512x512", "256x256", "128x128", "96x96", "64x64", "48x48", "32x32", "24x24", "16x16"];
     for name in names.iter().filter(|name| !name.contains('/')) {
-        let themes = home_icons.iter().cloned().chain(bases.iter().map(|base| base.join("icons")));
-        for theme in themes {
-            for size in SIZES {
-                for extension in ["svg", "png"] {
-                    let path = theme.join("hicolor").join(size).join("apps").join(format!("{name}.{extension}"));
+        for (folder, files) in &folders.0 {
+            for extension in ["svg", "png"] {
+                let file = format!("{name}.{extension}");
+                if files.contains(std::ffi::OsStr::new(&file)) {
+                    let path = folder.join(file);
                     if path.is_file() {
                         return Some(path);
                     }
-                }
-            }
-        }
-        for base in &bases {
-            for extension in ["svg", "png"] {
-                let path = base.join("pixmaps").join(format!("{name}.{extension}"));
-                if path.is_file() {
-                    return Some(path);
                 }
             }
         }

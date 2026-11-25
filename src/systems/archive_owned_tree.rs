@@ -151,7 +151,7 @@ impl OwnedTree {
         if self.tree.as_ref().unwrap().retained_identity(path)? != identity {
             return Err(io::Error::other("Created archive directory changed"));
         }
-        self.directories.insert(
+        let old = self.directories.insert(
             path.into(),
             Owned {
                 path: path.into(),
@@ -160,7 +160,10 @@ impl OwnedTree {
                 identity,
             },
         );
-        self.name_bytes = self.name_bytes.saturating_add(path.as_os_str().len());
+        self.name_bytes = self
+            .name_bytes
+            .saturating_sub(old.map_or(0, |entry| entry.path.as_os_str().len()))
+            .saturating_add(path.as_os_str().len());
         self.check_journal_path(path)?;
         self.check_journal_budget()?;
         #[cfg(target_os = "windows")]
@@ -460,12 +463,18 @@ impl OwnedTree {
         checkpoint: &mut dyn FnMut() -> io::Result<()>,
     ) -> io::Result<()> {
         let path = self.resolved(path)?;
-        let files: Vec<_> = self
-            .files
-            .keys()
-            .filter(|key| key.starts_with(&path))
-            .cloned()
-            .collect();
+        // A file has no descendants: removing each of many selected files
+        // does not scan the whole tree.
+        let single = self.files.contains_key(&path);
+        let files: Vec<_> = if single {
+            vec![path.clone()]
+        } else {
+            self.files
+                .keys()
+                .filter(|key| key.starts_with(&path))
+                .cloned()
+                .collect()
+        };
         for key in files {
             checkpoint()?;
             let entry = self.files.remove(&key).unwrap();
@@ -484,6 +493,9 @@ impl OwnedTree {
             }
             self.name_bytes = self.name_bytes.saturating_sub(entry.path.as_os_str().len());
             drop(entry); // Release the last tracker before deleting an empty ancestor.
+        }
+        if single {
+            return Ok(());
         }
         let mut directories: Vec<_> = self
             .directories
@@ -506,12 +518,6 @@ impl OwnedTree {
             self.name_bytes = self.name_bytes.saturating_sub(entry.path.as_os_str().len());
             drop(entry);
         }
-        self.name_bytes = self
-            .files
-            .keys()
-            .chain(self.directories.keys())
-            .map(|path| path.as_os_str().len())
-            .sum();
         Ok(())
     }
     #[cfg(test)]
@@ -663,6 +669,7 @@ mod tests {
             platform().file_identity(&tree.root.tracking).unwrap()
         );
         drop(tree.create_file(&root.join("folder/owned")).unwrap());
+        drop(tree.create_file(&root.join("single")).unwrap());
         tree.release();
         tree.create_directory(&root.join("added")).unwrap();
         let selected = platform()
@@ -687,6 +694,16 @@ mod tests {
         assert!(!root.join("folder/owned").exists());
         tree.remove_selected(&root.join("added"), &mut || Ok(()))
             .unwrap();
+        tree.remove_selected(&root.join("single"), &mut || Ok(()))
+            .unwrap();
+        assert!(!root.join("single").exists());
+        let names: usize = tree
+            .files
+            .keys()
+            .chain(tree.directories.keys())
+            .map(|path| path.as_os_str().len())
+            .sum();
+        assert_eq!(tree.name_bytes, names);
         drop(tree);
         assert!(!root.join("added").exists());
         assert_eq!(std::fs::read(root.join("folder/foreign")).unwrap(), b"keep");

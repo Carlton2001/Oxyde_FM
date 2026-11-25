@@ -108,13 +108,91 @@ pub fn decode(bytes: &[u8]) -> io::Result<Reply> {
 }
 
 pub fn decode_with(bytes: &[u8], limits: Limits) -> io::Result<Reply> {
+    build(layout_of(bytes, limits)?, bytes)
+}
+
+/// As [`decode_with`], reusing `bytes` for a single image: a Viewer image of
+/// tens of megapixels is not held twice.
+pub fn decode_owned_with(mut bytes: Vec<u8>, limits: Limits) -> io::Result<Reply> {
+    match layout_of(&bytes, limits)? {
+        Layout::Images { frames, limited, natural_size } if frames.len() == 1 => {
+            let span = &frames[0];
+            bytes.truncate(span.start + span.length);
+            bytes.drain(..span.start);
+            let image = RgbaImage::from_raw(span.width, span.height, bytes).ok_or_else(invalid)?;
+            Ok(Reply::Images {
+                frames: vec![Frame::from_parts(image, 0, 0, span.delay)],
+                limited,
+                natural_size,
+            })
+        }
+        layout => build(layout, &bytes),
+    }
+}
+
+/// What a reply holds, checked as [`decode_with`] checks it, without copying
+/// its pixels.
+pub enum ReplyKind {
+    Images(usize),
+    /// Whether the text is empty.
+    Text(bool),
+    Error,
+}
+
+pub fn reply_kind_with(bytes: &[u8], limits: Limits) -> io::Result<ReplyKind> {
+    Ok(match layout_of(bytes, limits)? {
+        Layout::Images { frames, .. } => ReplyKind::Images(frames.len()),
+        Layout::Text(range) => ReplyKind::Text(range.is_empty()),
+        Layout::Error { .. } => ReplyKind::Error,
+    })
+}
+
+/// Where a frame's pixels lie in a reply.
+struct Span {
+    start: usize,
+    length: usize,
+    width: u32,
+    height: u32,
+    delay: Delay,
+}
+
+/// A checked reply whose pixels and text are still in its bytes.
+enum Layout {
+    Images { frames: Vec<Span>, limited: bool, natural_size: Option<(u32, u32)> },
+    Text(std::ops::Range<usize>),
+    Error { limit: bool, detail: std::ops::Range<usize> },
+}
+
+fn build(layout: Layout, bytes: &[u8]) -> io::Result<Reply> {
+    // Text ranges were checked as UTF-8 by layout_of.
+    let text = |range: std::ops::Range<usize>| {
+        std::str::from_utf8(&bytes[range]).map(str::to_owned).map_err(|_| invalid())
+    };
+    Ok(match layout {
+        Layout::Images { frames, limited, natural_size } => {
+            let mut images = Vec::with_capacity(frames.len());
+            for span in frames {
+                let mut owned = Vec::new();
+                owned.try_reserve_exact(span.length).map_err(io::Error::other)?;
+                owned.extend_from_slice(&bytes[span.start..span.start + span.length]);
+                let image = RgbaImage::from_raw(span.width, span.height, owned).ok_or_else(invalid)?;
+                images.push(Frame::from_parts(image, 0, 0, span.delay));
+            }
+            Reply::Images { frames: images, limited, natural_size }
+        }
+        Layout::Text(range) => Reply::Text(text(range)?),
+        Layout::Error { limit, detail } => Reply::Error { limit, detail: text(detail)? },
+    })
+}
+
+fn layout_of(bytes: &[u8], limits: Limits) -> io::Result<Layout> {
     if bytes.len() > limits.pixels + 16 * 1024 || !bytes.starts_with(b"OXYP1") {
         return Err(invalid());
     }
     let mut input = Cursor::new(&bytes[5..]);
     let mut kind = [0];
     input.read_exact(&mut kind)?;
-    let reply = match kind[0] {
+    let layout = match kind[0] {
         0 => {
             let mut flag = [0];
             input.read_exact(&mut flag)?;
@@ -146,29 +224,25 @@ pub fn decode_with(bytes: &[u8], limits: Limits) -> io::Result<Reply> {
                     return Err(invalid());
                 }
                 let offset = input.position() as usize;
-                let pixels = input
-                    .get_ref()
-                    .get(offset..offset + length)
-                    .ok_or_else(invalid)?;
-                let mut owned = Vec::new();
-                owned.try_reserve_exact(length).map_err(io::Error::other)?;
-                owned.extend_from_slice(pixels);
-                let image = RgbaImage::from_raw(width, height, owned).ok_or_else(invalid)?;
+                if input.get_ref().get(offset..offset + length).is_none() {
+                    return Err(invalid());
+                }
                 input.set_position((offset + length) as u64);
-                frames.push(Frame::from_parts(
-                    image,
-                    0,
-                    0,
+                frames.push(Span {
+                    start: 5 + offset,
+                    length,
+                    width,
+                    height,
                     // The worker already turns a delay under 20 ms into 100 ms; a reply that
                     // does not must not spin the interface without a pause.
-                    if u64::from(num) < 20 * u64::from(den) {
+                    delay: if u64::from(num) < 20 * u64::from(den) {
                         Delay::from_numer_denom_ms(100, 1)
                     } else {
                         Delay::from_numer_denom_ms(num, den)
                     },
-                ));
+                });
             }
-            Reply::Images {
+            Layout::Images {
                 frames,
                 limited: flag[0] & 1 != 0,
                 natural_size,
@@ -184,14 +258,15 @@ pub fn decode_with(bytes: &[u8], limits: Limits) -> io::Result<Reply> {
                 .get_ref()
                 .get(offset..offset + length)
                 .ok_or_else(invalid)?;
-            let text = std::str::from_utf8(text).map_err(|_| invalid())?.to_owned();
+            std::str::from_utf8(text).map_err(|_| invalid())?;
             input.set_position((offset + length) as u64);
+            let range = 5 + offset..5 + offset + length;
             if kind[0] == 3 {
-                Reply::Text(text)
+                Layout::Text(range)
             } else {
-                Reply::Error {
+                Layout::Error {
                     limit: kind[0] == 1,
-                    detail: text,
+                    detail: range,
                 }
             }
         }
@@ -200,12 +275,16 @@ pub fn decode_with(bytes: &[u8], limits: Limits) -> io::Result<Reply> {
     if input.position() as usize != bytes.len() - 5 {
         return Err(invalid());
     }
-    Ok(reply)
+    Ok(layout)
 }
 
 #[cfg(test)]
 #[path = "preview_protocol/tests/delays.rs"]
 mod delay_tests;
+
+#[cfg(test)]
+#[path = "preview_protocol/tests/owned.rs"]
+mod owned_tests;
 
 #[cfg(test)]
 mod tests {

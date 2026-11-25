@@ -3,12 +3,25 @@ use oxyde_lib::models::{ConflictAction, ConflictEntry};
 use std::collections::HashMap;
 
 impl ConflictDialogState {
+    #[cfg(test)]
     pub(super) fn record_choice(
         &mut self,
         conflicts: &[ConflictEntry],
         index: usize,
         action: ConflictAction,
     ) {
+        self.record_choices(conflicts, &[index], action);
+    }
+
+    /// [`Self::record_choice`] for each of `indices` in turn, the folders' automatic
+    /// descendants updated in one pass over the conflicts rather than one per folder.
+    pub(super) fn record_choices(
+        &mut self,
+        conflicts: &[ConflictEntry],
+        indices: &[usize],
+        action: ConflictAction,
+    ) {
+        let Some(&index) = indices.first() else { return };
         let first = self.advanced && !self.opposite_initialized;
         if first {
             self.opposite_initialized = true;
@@ -27,18 +40,26 @@ impl ConflictDialogState {
                 self.automatic.insert(path);
             }
         }
-        let selected = &conflicts[index];
-        self.resolutions
-            .insert(selected.source.path.clone(), action);
-        self.automatic.remove(&selected.source.path);
-        if selected.source.is_dir && !first {
-            // Update automatic children, preserving explicit exceptions.
-            for c in conflicts {
-                if self.automatic.contains(&c.source.path)
-                    && ancestors(&c.source.path).any(|a| a == selected.source.path)
-                {
-                    self.resolutions.insert(c.source.path.clone(), action);
-                }
+        let mut folders = std::collections::HashSet::new();
+        for (position, &index) in indices.iter().enumerate() {
+            let selected = &conflicts[index];
+            self.resolutions
+                .insert(selected.source.path.clone(), action);
+            self.automatic.remove(&selected.source.path);
+            // The very first choice leaves the others their opposite default.
+            if selected.source.is_dir && !(first && position == 0) {
+                folders.insert(selected.source.path.as_str());
+            }
+        }
+        if folders.is_empty() {
+            return;
+        }
+        // Update automatic children, preserving explicit exceptions.
+        for c in conflicts {
+            if self.automatic.contains(&c.source.path)
+                && ancestors(&c.source.path).any(|a| folders.contains(a))
+            {
+                self.resolutions.insert(c.source.path.clone(), action);
             }
         }
     }
@@ -119,6 +140,10 @@ pub(super) fn filtered_indices(
         .map(|(i, _)| i)
         .collect()
 }
+#[cfg(test)]
+#[path = "rules/tests/bulk.rs"]
+mod bulk_tests;
+
 #[cfg(test)]
 mod tests {
     use super::{category, decision, filtered_indices, ConflictDialogState};

@@ -71,7 +71,8 @@ struct FileInfo {
 #[derive(Clone)]
 enum PreviewData {
     Image(Arc<RenderImage>),
-    Text(String),
+    /// Shared: the task is copied at each state check and the text at each render.
+    Text(SharedString),
 }
 
 type PreviewPixels = (Arc<RenderImage>, Option<(u32, u32)>);

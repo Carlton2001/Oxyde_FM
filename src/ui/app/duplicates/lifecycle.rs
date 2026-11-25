@@ -208,7 +208,7 @@ impl DuplicateWindow {
             options,
             option_focus: [(); 3].map(|_| cx.focus_handle()),
             groups: Arc::new(vec![]),
-            collapsed: HashSet::new(),
+            collapsed: Default::default(),
             filter,
             query: String::new(),
             filtered: Vec::new(),

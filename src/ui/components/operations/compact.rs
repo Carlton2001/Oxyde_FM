@@ -7,6 +7,17 @@ use gpui::prelude::*;
 use gpui::*;
 use oxyde_lib::systems::file_ops::{FileOpType, OpStatus};
 
+/// The share of an operation done: by bytes, else by files; past 1 while it finalizes.
+pub(super) fn completed_share(op: &oxyde_lib::systems::file_ops::OperationProgress) -> f64 {
+    if op.total_bytes > 0 {
+        op.processed_bytes as f64 / op.total_bytes as f64
+    } else if op.total_files > 0 {
+        op.processed_files as f64 / op.total_files as f64
+    } else {
+        0.0
+    }
+}
+
 /// One nonblocking notification per active operation, sharing the completion stack.
 pub(crate) fn render_operation_progress(app: &OxydeApp, cx: &Context<OxydeApp>) -> Vec<AnyElement> {
     let theme = *cx.theme();
@@ -24,13 +35,7 @@ pub(crate) fn render_operation_progress(app: &OxydeApp, cx: &Context<OxydeApp>) 
                 FileOpType::Compress => (Message::OpCompress, "icons/archive.svg"),
                 FileOpType::Extract => (Message::OpExtract, "icons/archive-restore.svg"),
             };
-            let ratio = if op.total_bytes > 0 {
-                op.processed_bytes as f64 / op.total_bytes as f64
-            } else if op.total_files > 0 {
-                op.processed_files as f64 / op.total_files as f64
-            } else {
-                0.0
-            };
+            let ratio = completed_share(&op);
             let finalizing = matches!(op.status, OpStatus::Running) && ratio >= 1.0;
             let paused = matches!(op.status, OpStatus::Paused);
             let ratio = ratio.clamp(0.0, 1.0) as f32;

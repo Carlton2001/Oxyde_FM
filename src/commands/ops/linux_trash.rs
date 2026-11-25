@@ -6,6 +6,8 @@ use crate::platform::platform;
 use crate::utils::path_text::encode;
 use log::info;
 use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, PoisonError};
 
 pub fn list_trash() -> Result<Vec<TrashEntry>, CommandError> {
     let mut entries = list_trash_unsorted()?;
@@ -48,15 +50,57 @@ fn entry(item: &trash::TrashItem) -> Option<TrashEntry> {
 }
 
 /// Original location and deletion time of a listed content path, for Properties.
-pub(crate) fn trash_properties_metadata(path: &std::path::Path) -> Option<(String, Option<i64>)> {
-    // Listed content always lies in a `files` directory; skip the listing elsewhere.
-    if !path.components().any(|component| component.as_os_str() == "files") {
+pub(crate) fn trash_properties_metadata(path: &Path) -> Option<(String, Option<i64>)> {
+    // Listed content is `$trash/files/<name>`, beside its record
+    // `$trash/info/<name>.trashinfo`: without that record, skip the listing.
+    let parent = path.parent()?;
+    if parent.file_name()? != "files" {
         return None;
     }
+    let mut record = parent.parent()?.join("info").join(path.file_name()?).into_os_string();
+    record.push(".trashinfo");
+    let stamp = RecordStamp::of(Path::new(&record))?;
+    // The properties of a selection ask once per item: one listing serves them all
+    // while each record stays the one it was read from.
+    static LISTED: Mutex<Option<HashMap<PathBuf, (RecordStamp, String, Option<i64>)>>> = Mutex::new(None);
+    let mut listed = LISTED.lock().unwrap_or_else(PoisonError::into_inner);
+    let known = |listed: &Option<HashMap<_, _>>| listed.as_ref()
+        .and_then(|items: &HashMap<PathBuf, (RecordStamp, String, Option<i64>)>| items.get(path))
+        .filter(|(known, _, _)| *known == stamp)
+        .map(|(_, original, deleted)| (original.clone(), *deleted));
+    if let Some(found) = known(&listed) {
+        return Some(found);
+    }
     let items = platform().list_trash_items().ok()?;
-    let item = items.iter().find(|item| platform().trash_content_path(item).as_deref() == Some(path))?;
-    Some((encode(&item.original_path()),
-        item.time_deleted.checked_mul(1000).filter(|time| *time >= 0)))
+    *listed = Some(items.iter().filter_map(|item| {
+        let stamp = RecordStamp::of(Path::new(&item.id))?;
+        let deleted = item.time_deleted.checked_mul(1000).filter(|time| *time >= 0);
+        Some((platform().trash_content_path(item)?, (stamp, encode(&item.original_path()), deleted)))
+    }).collect());
+    known(&listed)
+}
+
+/// Identifies a `.trashinfo` record: a record written again, or another item trashed
+/// under the same name, differs.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct RecordStamp {
+    device: u64,
+    inode: u64,
+    modified: (i64, i64),
+    len: u64,
+}
+
+impl RecordStamp {
+    fn of(record: &Path) -> Option<Self> {
+        use std::os::unix::fs::MetadataExt;
+        let metadata = std::fs::symlink_metadata(record).ok().filter(std::fs::Metadata::is_file)?;
+        Some(Self {
+            device: metadata.dev(),
+            inode: metadata.ino(),
+            modified: (metadata.mtime(), metadata.mtime_nsec()),
+            len: metadata.len(),
+        })
+    }
 }
 
 /// A request names an item by its content path, or by its original path when exactly
@@ -85,8 +129,9 @@ fn select_keyed(items: Vec<(String, trash::TrashItem)>, paths: Vec<String>) -> (
         }
         let matches = by_content.get(path.as_str()).or_else(|| by_original.get(&path));
         match matches.map(Vec::as_slice) {
-            // An item requested under both of its paths is still selected once.
-            Some([index]) => if !chosen.contains(index) { chosen.push(*index) },
+            // An item requested under both of its paths is still selected once: the
+            // second take below finds it gone.
+            Some([index]) => chosen.push(*index),
             Some(_) => failures.push((path, TrashRestoreIssue::Ambiguous)),
             None => failures.push((path, TrashRestoreIssue::Unavailable)),
         }

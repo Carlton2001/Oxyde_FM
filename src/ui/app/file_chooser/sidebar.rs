@@ -211,7 +211,7 @@ impl FileChooserWindow {
         let content_h = self.sidebar_content_height();
         let scroll = self.sidebar_scroll.clone();
         let viewport_h = scroll.bounds().size.height.as_f32();
-        let overflows = self.sidebar_overflows();
+        let overflows = overflows(viewport_h, content_h);
         let entity_id = cx.entity().entity_id();
         div()
             .w(px(self.sidebar_display_width()))
@@ -251,7 +251,7 @@ impl FileChooserWindow {
     fn sidebar_content_height(&self) -> f32 {
         let places = &self.places;
         let section = !places.drives.is_empty() || !places.volumes.is_empty();
-        let folders: usize = places.drives.iter().map(|drive| self.tree_folders(&drive.path).len()).sum();
+        let folders: usize = places.drives.iter().map(|drive| self.tree_folder_count(&drive.path)).sum();
         rem_pixels(LIST_PADDING).as_f32() * 2.0
             + rem_pixels(ENTRY_HEIGHT).as_f32() * (places.folders.len() + places.drives.len() + places.volumes.len()) as f32
             + crate::ui::components::sidebar::folder_row::height() * folders as f32
@@ -289,8 +289,7 @@ impl FileChooserWindow {
 
     /// Whether the places overflow their list, which then shows a vertical scrollbar.
     fn sidebar_overflows(&self) -> bool {
-        let viewport_h = self.sidebar_scroll.bounds().size.height.as_f32();
-        viewport_h > 0.0 && self.sidebar_content_height() > viewport_h + 1.0
+        overflows(self.sidebar_scroll.bounds().size.height.as_f32(), self.sidebar_content_height())
     }
 
     /// Double click on the edge: the width of the widest row, as the main sidebar's.
@@ -353,4 +352,8 @@ impl FileChooserWindow {
             cx.notify();
         }
     }
+}
+
+fn overflows(viewport_h: f32, content_h: f32) -> bool {
+    viewport_h > 0.0 && content_h > viewport_h + 1.0
 }

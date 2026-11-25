@@ -67,31 +67,80 @@ pub(super) fn seven_options(
 
 struct Job {
     memory: usize,
-    handle: Option<JoinHandle<()>>,
     result: mpsc::Receiver<io::Result<Vec<u8>>>,
     /// Set when the job's output is no longer wanted, such as on cancellation.
     abandoned: Arc<AtomicBool>,
 }
 impl Drop for Job {
     fn drop(&mut self) {
-        // The encoder checks this between chunks: joining does not wait for a
+        // The encoder checks this between chunks: the pool does not finish a
         // whole compression nobody will read.
         self.abandoned.store(true, Ordering::Relaxed);
-        if let Some(handle) = self.handle.take() {
-            let _ = handle.join();
+    }
+}
+
+type Task = Box<dyn FnOnce() + Send>;
+
+/// Encoder threads reused across members: a thread per member cost about
+/// 50 µs each, more than encoding a small file. Threads are added while more
+/// jobs are pending than there are threads, so admission still bounds them.
+struct Pool {
+    sender: Option<mpsc::Sender<Task>>,
+    receiver: Arc<std::sync::Mutex<mpsc::Receiver<Task>>>,
+    workers: Vec<JoinHandle<()>>,
+}
+impl Pool {
+    fn new() -> Self {
+        let (sender, receiver) = mpsc::channel();
+        Self {
+            sender: Some(sender),
+            receiver: Arc::new(std::sync::Mutex::new(receiver)),
+            workers: Vec::new(),
+        }
+    }
+    fn run(&mut self, pending: usize, task: Task) -> io::Result<()> {
+        if self.workers.len() < pending {
+            let receiver = self.receiver.clone();
+            self.workers.push(
+                std::thread::Builder::new()
+                    .name("zip-encode".into())
+                    .spawn(move || loop {
+                        let task = receiver.lock().map_err(|_| ()).and_then(|r| r.recv().map_err(|_| ()));
+                        let Ok(task) = task else { break };
+                        // A panicking job drops its result sender: drain_one
+                        // reports it, and the thread stays for the next job.
+                        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(task));
+                    })?,
+            );
+        }
+        self.sender
+            .as_ref()
+            .ok_or_else(|| io::Error::other("ZIP encoder stopped"))?
+            .send(task)
+            .map_err(|_| io::Error::other("ZIP encoder disconnected"))
+    }
+}
+impl Drop for Pool {
+    fn drop(&mut self) {
+        self.sender = None;
+        for worker in self.workers.drain(..) {
+            let _ = worker.join();
         }
     }
 }
 
 pub(super) struct ZipJobs {
+    // Jobs drop first: abandoned, the pool skips their remaining chunks.
     jobs: VecDeque<Job>,
     memory: usize,
+    pool: Pool,
 }
 impl ZipJobs {
     pub(super) fn new() -> Self {
         Self {
             jobs: VecDeque::new(),
             memory: 0,
+            pool: Pool::new(),
         }
     }
     pub(super) fn full(&self, size: u64, count: usize) -> bool {
@@ -106,40 +155,38 @@ impl ZipJobs {
         let (sender, result) = mpsc::sync_channel(1);
         let abandoned = Arc::new(AtomicBool::new(false));
         let encoder_abandoned = abandoned.clone();
-        let handle = std::thread::Builder::new()
-            .name("zip-encode".into())
-            .spawn(move || {
-                let result = (|| {
-                    let mut writer = zip::ZipWriter::new(Cursor::new(Vec::with_capacity(
-                        bytes.len() + bytes.len() / 100 + 65536,
-                    )));
-                    let options = super::zip_options(&entry, level);
-                    if entry.directory {
-                        writer
-                            .add_directory(
-                                format!("{}/", entry.name.trim_end_matches('/')),
-                                options,
-                            )
-                            .map_err(io::Error::other)?;
-                    } else {
-                        writer
-                            .start_file(entry.name, options)
-                            .map_err(io::Error::other)?;
-                        for chunk in bytes.chunks(MIB) {
-                            if encoder_abandoned.load(Ordering::Relaxed) {
-                                return Err(io::ErrorKind::Interrupted.into());
-                            }
-                            writer.write_all(chunk)?;
+        let task: Task = Box::new(move || {
+            let result = (|| {
+                let mut writer = zip::ZipWriter::new(Cursor::new(Vec::with_capacity(
+                    bytes.len() + bytes.len() / 100 + 65536,
+                )));
+                let options = super::zip_options(&entry, level);
+                if entry.directory {
+                    writer
+                        .add_directory(
+                            format!("{}/", entry.name.trim_end_matches('/')),
+                            options,
+                        )
+                        .map_err(io::Error::other)?;
+                } else {
+                    writer
+                        .start_file(entry.name, options)
+                        .map_err(io::Error::other)?;
+                    for chunk in bytes.chunks(MIB) {
+                        if encoder_abandoned.load(Ordering::Relaxed) {
+                            return Err(io::ErrorKind::Interrupted.into());
                         }
+                        writer.write_all(chunk)?;
                     }
-                    Ok(writer.finish().map_err(io::Error::other)?.into_inner())
-                })();
-                let _ = sender.send(result);
-            })?;
+                }
+                Ok(writer.finish().map_err(io::Error::other)?.into_inner())
+            })();
+            let _ = sender.send(result);
+        });
+        self.pool.run(self.jobs.len() + 1, task)?;
         self.memory += memory;
         self.jobs.push_back(Job {
             memory,
-            handle: Some(handle),
             result,
             abandoned,
         });
@@ -150,7 +197,7 @@ impl ZipJobs {
         writer: &mut zip::ZipWriter<W>,
         checkpoint: &dyn Fn() -> io::Result<()>,
     ) -> io::Result<()> {
-        let Some(mut job) = self.jobs.pop_front() else {
+        let Some(job) = self.jobs.pop_front() else {
             return Ok(());
         };
         let bytes = loop {
@@ -163,11 +210,6 @@ impl ZipJobs {
                 }
             }
         };
-        job.handle
-            .take()
-            .unwrap()
-            .join()
-            .map_err(|_| io::Error::other("ZIP encoder panicked"))?;
         self.memory -= job.memory;
         let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).map_err(io::Error::other)?;
         let file = archive.by_index(0).map_err(io::Error::other)?;

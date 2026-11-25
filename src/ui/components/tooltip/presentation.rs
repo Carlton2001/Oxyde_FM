@@ -47,6 +47,30 @@ fn shape(window: &Window, text: &SharedString, size: Rems, weight: FontWeight) -
     }], None)
 }
 
+/// [`ShapedLine::x_for_index`] answered from a table built once: the wrapping asks it
+/// for each grapheme, and each of its calls walks the glyphs from the start.
+fn glyph_positions(line: &ShapedLine) -> impl Fn(usize) -> f32 {
+    let glyphs = line.runs.iter().flat_map(|run| run.glyphs.iter()).map(|glyph| (glyph.index, glyph.position.x.as_f32()));
+    positions(glyphs.collect(), line.width.as_f32())
+}
+
+/// `glyphs` as (byte index, x) in shaping order, `width` past the last one.
+fn positions(mut glyphs: Vec<(usize, f32)>, width: f32) -> impl Fn(usize) -> f32 {
+    // The highest index reached so far: glyphs out of byte order still find, as
+    // `x_for_index` does, the first glyph at or past the index.
+    let mut reached = 0;
+    for (index, _) in &mut glyphs {
+        reached = reached.max(*index);
+        *index = reached;
+    }
+    let table = glyphs;
+    move |index| table.get(table.partition_point(|(reached, _)| *reached < index)).map_or(width, |(_, x)| *x)
+}
+
+#[cfg(test)]
+#[path = "presentation/tests/positions.rs"]
+mod positions_tests;
+
 fn filename_line_ranges(name: &str, width: f32, x_for_index: impl Fn(usize) -> f32) -> Vec<std::ops::Range<usize>> {
     text_line_ranges(name, width, true, x_for_index)
 }
@@ -235,9 +259,9 @@ impl Render for DuplicateResultTooltip {
         let wrap = |text: SharedString, size: Rems, weight: FontWeight, location: bool| {
             let line = shape(window, &text, size, weight);
             let ranges = if location {
-                location_line_ranges(&text, content_width, |index| line.x_for_index(index).as_f32())
+                location_line_ranges(&text, content_width, glyph_positions(&line))
             } else {
-                text_line_ranges(&text, content_width, false, |index| line.x_for_index(index).as_f32())
+                text_line_ranges(&text, content_width, false, glyph_positions(&line))
             };
             ranges.into_iter().map(|range| text[range].to_string()).collect::<Vec<_>>()
         };
@@ -308,14 +332,14 @@ impl Render for Tooltip {
             tooltip_width = (natural + px(1.0) + chrome).max(rem_pixels(ITEM_MINIMUM_WIDTH)).min(maximum_width);
             let content = (tooltip_width - chrome - px(1.0)).as_f32().max(1.0);
             body_lines = shaped.iter().flat_map(|(text, line)| {
-                location_line_ranges(text, content, |index| line.x_for_index(index).as_f32())
+                location_line_ranges(text, content, glyph_positions(&line))
                     .into_iter().map(|range| SharedString::from(text[range].to_string()))
             }).collect();
             notice_lines = notice.iter().flat_map(|(text, line)| {
-                location_line_ranges(text, (content - notice_chrome.as_f32()).max(1.0), |index| line.x_for_index(index).as_f32())
+                location_line_ranges(text, (content - notice_chrome.as_f32()).max(1.0), glyph_positions(&line))
                     .into_iter().map(|range| SharedString::from(text[range].to_string()))
             }).collect();
-            filename_line_ranges(&self.title, content, |index| title.x_for_index(index).as_f32())
+            filename_line_ranges(&self.title, content, glyph_positions(&title))
                 .into_iter().map(|range| self.title[range].to_string().into()).collect()
         } else if self.wrap_title {
             // Text shaping takes one line at a time: the label's own breaks stay, and each
@@ -329,7 +353,7 @@ impl Render for Tooltip {
             tooltip_width = (natural + chrome + px(1.0)).min(maximum_width);
             let content = (tooltip_width - chrome - px(1.0)).as_f32().max(1.0);
             paragraphs.iter().flat_map(|(paragraph, line)| {
-                let lines: Vec<SharedString> = location_line_ranges(paragraph, content, |index| line.x_for_index(index).as_f32())
+                let lines: Vec<SharedString> = location_line_ranges(paragraph, content, glyph_positions(&line))
                     .into_iter().map(|range| SharedString::from(paragraph[range].to_string())).collect();
                 // An empty paragraph keeps its blank line.
                 if lines.is_empty() { vec![SharedString::default()] } else { lines }
@@ -351,7 +375,7 @@ impl Render for Tooltip {
             tooltip_width = (title_width.max(meta_width) + chrome + px(1.0)).min(maximum_width);
             let content_width = (tooltip_width - chrome - px(1.0)).as_f32().max(1.0);
             meta_lines = Some(shaped_meta.iter().flat_map(|(text, line)| {
-                location_line_ranges(text, content_width, |index| line.x_for_index(index).as_f32())
+                location_line_ranges(text, content_width, glyph_positions(&line))
                     .into_iter().map(|range| SharedString::from(text[range].to_string()))
             }).collect());
             vec![self.title.clone()]

@@ -53,7 +53,7 @@ fn virtual_targets_and_recursive_or_noop_drops_are_rejected() {
     assert!(transfer_paths(&data, source).is_empty());
     assert!(transfer_paths(&data, &format!("{source}/child")).is_empty());
     assert_eq!(
-        transfer_paths(&data, &format!("{source}-other")),
+        *transfer_paths(&data, &format!("{source}-other")),
         vec![source.to_owned()]
     );
 }

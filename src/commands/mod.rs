@@ -1,4 +1,5 @@
 pub mod archive;
+pub mod archive_probe;
 #[doc(hidden)]
 pub mod archive_io_codec;
 #[doc(hidden)]

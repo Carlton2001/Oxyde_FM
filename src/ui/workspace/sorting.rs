@@ -75,65 +75,101 @@ impl PartialEq for ListingTie {
 }
 impl Eq for ListingTie {}
 
-fn sort(files: &mut [FileEntry], col: SortColumn, direction: SortDirection, listed: bool) {
-    // Build each normalized key once; keep folders first in both directions.
-    #[derive(PartialEq, Eq, PartialOrd, Ord)]
-    enum Value {
-        Text(String),
-        Number(u64),
-        Deleted(Option<i64>),
-        Mode(Option<u32>),
-        Location(Option<std::path::PathBuf>),
-    }
+// Build each normalized key once; keep folders first in both directions.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum Value {
+    Text(String),
+    Number(u64),
+    Deleted(Option<i64>),
+    Mode(Option<u32>),
+    Location(Option<std::path::PathBuf>),
+}
 
-    let key = |file: &FileEntry| {
-        let name = NaturalName(file.name.to_lowercase());
-        let value = match col {
-            SortColumn::Name => Value::Text(String::new()),
-            SortColumn::Type => Value::Text(
-                std::path::Path::new(&file.name)
-                    .extension()
-                    .and_then(|extension| extension.to_str())
-                    .unwrap_or("")
-                    .to_lowercase(),
-            ),
-            SortColumn::Size => Value::Number(file.size),
-            SortColumn::Permissions => Value::Mode(file.mode),
-            SortColumn::Modified => Value::Number(file.modified),
-            SortColumn::DeletedAt => Value::Deleted(file.deleted_time),
-            SortColumn::OriginalLocation => Value::Text(
-                file.original_path
-                    .as_deref()
-                    .and_then(|path| std::path::Path::new(path).parent())
-                    .map(|path| path.to_string_lossy().to_lowercase())
-                    .unwrap_or_default(),
-            ),
-            SortColumn::Location => Value::Location(
-                std::path::Path::new(&file.path)
-                    .parent()
-                    .map(std::path::Path::to_path_buf),
-            ),
-        };
-        (value, name)
+fn key(file: &FileEntry, col: SortColumn) -> (Value, NaturalName) {
+    let name = NaturalName(file.name.to_lowercase());
+    let value = match col {
+        SortColumn::Name => Value::Text(String::new()),
+        SortColumn::Type => Value::Text(
+            std::path::Path::new(&file.name)
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .unwrap_or("")
+                .to_lowercase(),
+        ),
+        SortColumn::Size => Value::Number(file.size),
+        SortColumn::Permissions => Value::Mode(file.mode),
+        SortColumn::Modified => Value::Number(file.modified),
+        SortColumn::DeletedAt => Value::Deleted(file.deleted_time),
+        SortColumn::OriginalLocation => Value::Text(
+            file.original_path
+                .as_deref()
+                .and_then(|path| std::path::Path::new(path).parent())
+                .map(|path| path.to_string_lossy().to_lowercase())
+                .unwrap_or_default(),
+        ),
+        SortColumn::Location => Value::Location(
+            std::path::Path::new(&file.path)
+                .parent()
+                .map(std::path::Path::to_path_buf),
+        ),
     };
+    (value, name)
+}
+
+fn sort(files: &mut [FileEntry], col: SortColumn, direction: SortDirection, listed: bool) {
     match direction {
         SortDirection::Ascending => files.sort_by_cached_key(|file| {
             (
                 !file.is_dir,
-                key(file),
+                key(file, col),
                 ListingTie(listed.then(|| file.name.clone())),
             )
         }),
         SortDirection::Descending => files.sort_by_cached_key(|file| {
             (
                 !file.is_dir,
-                std::cmp::Reverse(key(file)),
+                std::cmp::Reverse(key(file, col)),
                 ListingTie(listed.then(|| file.name.clone())),
             )
         }),
     }
 }
 
+/// [`sort_files`] of `sorted` followed by `additions`, from the additions alone: each
+/// is sorted, then placed by binary search after its equals. The list a search fills
+/// in batches is then neither keyed nor sorted again at each batch.
+pub(crate) fn merge_sorted(
+    sorted: &[FileEntry],
+    mut additions: Vec<FileEntry>,
+    col: SortColumn,
+    direction: SortDirection,
+) -> Vec<FileEntry> {
+    sort_files(&mut additions, col, direction);
+    let order = |file: &FileEntry| (!file.is_dir, key(file, col));
+    let mut merged = Vec::with_capacity(sorted.len() + additions.len());
+    let mut copied = 0;
+    for addition in additions {
+        let wanted = order(&addition);
+        let end = copied + sorted[copied..].partition_point(|file| {
+            let existing = order(file);
+            match direction {
+                SortDirection::Ascending => existing <= wanted,
+                // Folders stay first; the key alone is reversed.
+                SortDirection::Descending => existing.0 < wanted.0 || (existing.0 == wanted.0 && existing.1 >= wanted.1),
+            }
+        });
+        merged.extend_from_slice(&sorted[copied..end]);
+        copied = end;
+        merged.push(addition);
+    }
+    merged.extend_from_slice(&sorted[copied..]);
+    merged
+}
+
 #[cfg(test)]
 #[path = "sorting/tests/natural.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "sorting/tests/merge.rs"]
+mod merge_tests;

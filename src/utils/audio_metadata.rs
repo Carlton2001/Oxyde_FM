@@ -39,7 +39,9 @@ pub struct AudioFormat {
 pub struct Cover {
     pub width: u32,
     pub height: u32,
-    /// BGRA pixels, already decoded by the worker.
+    /// BGRA pixels, already decoded by the worker; base64 in the worker's
+    /// reply, where an array of numbers made a 1 MiB cover 3 to 4 MB of text.
+    #[serde(with = "crate::utils::base64_bytes")]
     pub pixels: Vec<u8>,
 }
 

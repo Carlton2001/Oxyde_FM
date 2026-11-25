@@ -77,6 +77,8 @@ pub(crate) fn render_open_with_dialog(
     let prompt = view.open_with.as_ref().expect("open with prompt");
     let theme = *cx.theme();
     let i18n = cx.i18n();
+    // Filtered once a render: each choice's name is lowercased and stripped of accents.
+    let visible = prompt.visible();
     let intro = match &prompt.paths[..] {
         [only] => {
             let mut args = FluentArgs::new();
@@ -105,12 +107,11 @@ pub(crate) fn render_open_with_dialog(
         .bg(theme.background);
     match &prompt.choices {
         None => list = list.child(div().p(rems(0.5)).text_color(theme.text_muted).child(i18n.text(Message::OpenWithLoading))),
-        Some(choices) if prompt.visible().is_empty() => {
+        Some(choices) if visible.is_empty() => {
             let _ = choices;
             list = list.child(div().p(rems(0.5)).text_color(theme.text_muted).child(i18n.text(Message::OpenWithNone)));
         }
         Some(choices) => {
-            let visible = prompt.visible();
             for (fit, heading) in SECTIONS {
                 let shown: Vec<_> = visible.iter().copied().filter(|index| choices[*index].fit == fit).collect();
                 if shown.is_empty() {
@@ -156,7 +157,7 @@ pub(crate) fn render_open_with_dialog(
         .child(list)
         .child(remember);
     let (cancel, open, close) = (handle.clone(), handle.clone(), handle.clone());
-    let can_open = prompt.selected.is_some_and(|index| prompt.visible().contains(&index));
+    let can_open = prompt.selected.is_some_and(|index| visible.contains(&index));
     let modal = Modal::new("open-with", i18n.text(Message::OpenWith), body)
         .title_icon("icons/app-window.svg")
         .on_close(move |_, cx| close.update(cx, |view, cx| view.answer_open_with(false, cx)))

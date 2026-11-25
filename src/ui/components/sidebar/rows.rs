@@ -45,7 +45,7 @@ pub(super) fn render_sidebar_rows(
         show_tooltips, use_system_icons, mounting_volume, pinned_reorder, pinned_shifts,
     } = presentation;
     let (row_w, show_tooltips, use_system_icons) = (*row_w, *show_tooltips, *use_system_icons);
-    let items  = items_for_list.to_vec();
+    let items  = items_for_list;
     let sel    = sel.clone();
     range.map(|i| {
         let theme    = *OxydeTheme::global(cx);

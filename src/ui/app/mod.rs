@@ -150,7 +150,11 @@ pub enum DragTarget {
         start_pos: Point<Pixels>,
         current_pos: Point<Pixels>,
         modifiers: Modifiers,
-        initial_selection: std::collections::HashSet<String>,
+        /// Empty unless the rectangle adds to it: shared, never copied while it moves.
+        initial_selection: std::sync::Arc<std::collections::HashSet<String>>,
+        /// The indices the rectangle covered when the selection was last set, `None`
+        /// before.
+        covered: Option<std::sync::Arc<[usize]>>,
     },
 }
 
@@ -275,8 +279,6 @@ pub struct OxydeApp {
     pub(crate) hovered_card: Option<(String, String)>,
     /// Touchpad scrolling with Ctrl held, added up until it changes the grid's size.
     pub(crate) grid_wheel: f32,
-    /// Start of the operations halo cycle, and when its last cycle ends once operations stop.
-    pub(crate) operations_breath: std::cell::Cell<Option<(std::time::Instant, Option<std::time::Instant>)>>,
     pub grab_offset: f32,
     pub sidebar_width: f32,
     pub(crate) sidebar_collapsed: bool,
@@ -533,7 +535,6 @@ impl OxydeApp {
             scroll_zone_hover: None,
             hovered_card: None,
             grid_wheel: 0.0,
-            operations_breath: Default::default(),
             grab_offset: 0.0,
             sidebar_width,
             window_corners: Corners::default(),

@@ -6,7 +6,7 @@ pub(super) struct ItemPress {
     pane_id: String,
     position: Point<Pixels>,
     modifiers: Modifiers,
-    initial_selection: HashSet<String>,
+    initial_selection: std::sync::Arc<HashSet<String>>,
     was_selected: bool,
 }
 
@@ -27,11 +27,7 @@ impl OxydeApp {
             pane_id: pane_id.to_owned(),
             position: event.position,
             modifiers: event.modifiers,
-            initial_selection: self
-                .state
-                .find_pane(pane_id)
-                .map(|pane| pane.active_tab().selected_paths.clone())
-                .unwrap_or_default(),
+            initial_selection: self.rectangle_initial_selection(pane_id, event.modifiers),
             was_selected: self
                 .state
                 .find_pane(pane_id)
@@ -95,6 +91,7 @@ impl OxydeApp {
                         current_pos: event.position,
                         modifiers: press.modifiers,
                         initial_selection: press.initial_selection,
+                        covered: None,
                     });
                     cx.notify();
                 }

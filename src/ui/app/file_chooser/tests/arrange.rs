@@ -30,23 +30,23 @@ fn sample() -> Vec<FileEntry> {
 #[test]
 fn folders_stay_first_in_the_main_windows_order() {
     let entries = sample();
-    let ascending = arrange(&entries, "", &Admission::default(), &no_mime, SortColumn::Name, SortDirection::Ascending);
+    let ascending = arrange(&entries, "", &Admission::default(), &no_mime, SortColumn::Name, SortDirection::Ascending, true);
     assert_eq!(names(&ascending.shown), ["archive", "Photos", "a.TXT", "b2.png", "b10.txt"]);
     assert_eq!(ascending.folders, 2);
-    let descending = arrange(&entries, "", &Admission::default(), &no_mime, SortColumn::Name, SortDirection::Descending);
+    let descending = arrange(&entries, "", &Admission::default(), &no_mime, SortColumn::Name, SortDirection::Descending, true);
     assert_eq!(names(&descending.shown), ["Photos", "archive", "b10.txt", "b2.png", "a.TXT"]);
-    let size = arrange(&entries, "", &Admission::default(), &no_mime, SortColumn::Size, SortDirection::Ascending);
+    let size = arrange(&entries, "", &Admission::default(), &no_mime, SortColumn::Size, SortDirection::Ascending, true);
     assert_eq!(names(&size.shown), ["archive", "Photos", "b2.png", "a.TXT", "b10.txt"]);
 }
 
 #[test]
 fn the_filter_matches_names_without_regard_to_case_and_columns_measure_everything() {
     let entries = sample();
-    let filtered = arrange(&entries, "TXT", &Admission::default(), &no_mime, SortColumn::Name, SortDirection::Ascending);
+    let filtered = arrange(&entries, "TXT", &Admission::default(), &no_mime, SortColumn::Name, SortDirection::Ascending, true);
     assert_eq!(names(&filtered.shown), ["a.TXT", "b10.txt"]);
     assert_eq!(filtered.folders, 0);
     assert_eq!(filtered.sizes.len(), 4);
-    assert!(arrange(&entries, "zzz", &Admission::default(), &no_mime, SortColumn::Name, SortDirection::Ascending).shown.is_empty());
+    assert!(arrange(&entries, "zzz", &Admission::default(), &no_mime, SortColumn::Name, SortDirection::Ascending, true).shown.is_empty());
 }
 
 #[test]
@@ -74,7 +74,7 @@ fn the_sidebar_resizes_within_the_main_bounds_and_leaves_the_pane_its_minimum() 
 fn the_request_admits_folders_always_and_files_of_the_type_shown() {
     let entries = sample();
     let folders = Admission { folders_only: true, ..Default::default() };
-    let shown = arrange(&entries, "", &folders, &no_mime, SortColumn::Name, SortDirection::Ascending);
+    let shown = arrange(&entries, "", &folders, &no_mime, SortColumn::Name, SortDirection::Ascending, true);
     assert_eq!(names(&shown.shown), ["archive", "Photos"]);
     // Shell patterns keep case, as GTK's do, except on Windows, where names have
     // none; MIME types come from the files read.
@@ -85,7 +85,7 @@ fn the_request_admits_folders_always_and_files_of_the_type_shown() {
     let content_types = Arc::new(HashMap::from([("/f/b2.png".to_owned(), "image/png"), ("/f/a.TXT".to_owned(), "text/plain")]));
     let typed = Admission { types: Some(filter), content_types, ..Default::default() };
     let media = |mime: &str, pattern: &str| pattern.strip_suffix("/*").is_some_and(|media| mime.starts_with(media));
-    let shown = arrange(&entries, "", &typed, &media, SortColumn::Name, SortDirection::Ascending);
+    let shown = arrange(&entries, "", &typed, &media, SortColumn::Name, SortDirection::Ascending, true);
     if cfg!(target_os = "windows") {
         assert_eq!(names(&shown.shown), ["archive", "Photos", "a.TXT", "b2.png", "b10.txt"]);
     } else {
@@ -93,8 +93,8 @@ fn the_request_admits_folders_always_and_files_of_the_type_shown() {
     }
     // A filter without rules lets no file through.
     let empty = Admission { types: Some(FileTypeFilter { name: "None".into(), patterns: Vec::new() }), ..Default::default() };
-    assert_eq!(arrange(&entries, "", &empty, &no_mime, SortColumn::Name, SortDirection::Ascending).folders, 2);
-    assert_eq!(arrange(&entries, "", &empty, &no_mime, SortColumn::Name, SortDirection::Ascending).shown.len(), 2);
+    assert_eq!(arrange(&entries, "", &empty, &no_mime, SortColumn::Name, SortDirection::Ascending, true).folders, 2);
+    assert_eq!(arrange(&entries, "", &empty, &no_mime, SortColumn::Name, SortDirection::Ascending, true).shown.len(), 2);
 }
 
 #[test]

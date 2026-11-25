@@ -37,7 +37,11 @@ unsafe extern "system" {
 struct Directory {
     object: File,
     reader: File,
+    names: Names,
 }
+
+/// Small: a deletion keeps one buffer per level of the folder being walked.
+const WALK_BUFFER: usize = 4 * 1024;
 
 fn directory_reader(parent: &File, leaf: &std::ffi::OsStr) -> io::Result<File> {
     // The mutation handle already denies directory renaming. Reopen only this
@@ -52,55 +56,96 @@ fn directory_reader(parent: &File, leaf: &std::ffi::OsStr) -> io::Result<File> {
     )
 }
 
-fn next_name(reader: &File, buffer: &mut [u32], restart: bool) -> io::Result<Option<OsString>> {
-    let mut status = IoStatusBlock {
-        status: 0,
-        information: 0,
-    };
-    let capacity = std::mem::size_of_val(buffer);
-    let result = unsafe {
-        NtQueryDirectoryFile(
-            reader.as_raw_handle(),
-            std::ptr::null_mut(),
-            std::ptr::null(),
-            std::ptr::null(),
-            &mut status,
-            buffer.as_mut_ptr().cast(),
-            capacity as u32,
-            12,
-            1,
-            std::ptr::null(),
-            restart as u8,
-        )
-    };
-    if end_of_listing(result, restart) {
-        return Ok(None);
+/// The names of one directory handle, read a buffer of entries at a time: on
+/// a share, one entry per query costs one round trip per entry.
+struct Names {
+    buffer: Vec<u32>,
+    filled: usize,
+    /// The next entry in `buffer`, `None` once it is spent.
+    offset: Option<usize>,
+    first: bool,
+}
+
+impl Names {
+    fn new(bytes: usize) -> Self {
+        Self { buffer: vec![0; bytes.div_ceil(4)], filled: 0, offset: None, first: true }
     }
-    if result < 0 {
-        return Err(io::Error::from_raw_os_error(unsafe { RtlNtStatusToDosError(result) } as i32));
+
+    fn fill(&mut self, reader: &File) -> io::Result<bool> {
+        let mut status = IoStatusBlock {
+            status: 0,
+            information: 0,
+        };
+        let capacity = std::mem::size_of_val(self.buffer.as_slice());
+        let first = std::mem::replace(&mut self.first, false);
+        let result = unsafe {
+            NtQueryDirectoryFile(
+                reader.as_raw_handle(),
+                std::ptr::null_mut(),
+                std::ptr::null(),
+                std::ptr::null(),
+                &mut status,
+                self.buffer.as_mut_ptr().cast(),
+                capacity as u32,
+                12,
+                0,
+                std::ptr::null(),
+                first as u8,
+            )
+        };
+        if end_of_listing(result, first) {
+            return Ok(false);
+        }
+        if result < 0 {
+            return Err(io::Error::from_raw_os_error(unsafe { RtlNtStatusToDosError(result) } as i32));
+        }
+        let size = status.information;
+        if !(12..=capacity).contains(&size) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Incomplete directory enumeration",
+            ));
+        }
+        self.filled = size;
+        self.offset = Some(0);
+        Ok(true)
     }
-    let size = status.information;
-    if !(12..=capacity).contains(&size) {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Incomplete directory enumeration",
-        ));
+
+    fn next(&mut self, reader: &File) -> io::Result<Option<OsString>> {
+        let offset = match self.offset {
+            Some(offset) => offset,
+            None => {
+                if !self.fill(reader)? {
+                    return Ok(None);
+                }
+                0
+            }
+        };
+        // Aligned owned storage, bounded by the checked number of returned bytes.
+        let bytes = unsafe { std::slice::from_raw_parts(self.buffer.as_ptr().cast::<u8>(), self.filled) };
+        let entry = &bytes[offset..];
+        let invalid = || io::Error::new(io::ErrorKind::InvalidData, "Invalid directory entry");
+        if entry.len() < 12 {
+            return Err(invalid());
+        }
+        let next = u32::from_le_bytes(entry[..4].try_into().unwrap()) as usize;
+        let length = u32::from_le_bytes(entry[8..12].try_into().unwrap()) as usize;
+        if length == 0 || !length.is_multiple_of(2) || length > entry.len() - 12 {
+            return Err(invalid());
+        }
+        // A following entry starts past this name and inside the returned bytes.
+        if next != 0 && (next < 12 + length || next >= entry.len()) {
+            return Err(invalid());
+        }
+        let name = OsString::from_wide(
+            &entry[12..12 + length]
+                .as_chunks::<2>().0.iter()
+                .map(|pair| u16::from_le_bytes(*pair))
+                .collect::<Vec<_>>(),
+        );
+        self.offset = (next != 0).then_some(offset + next);
+        Ok(Some(name))
     }
-    // Aligned owned storage, bounded by the checked number of returned bytes.
-    let bytes = unsafe { std::slice::from_raw_parts(buffer.as_ptr().cast::<u8>(), size) };
-    let next = u32::from_le_bytes(bytes[..4].try_into().unwrap());
-    let length = u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize;
-    if next != 0 || length == 0 || !length.is_multiple_of(2) || length > size - 12 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Invalid directory entry",
-        ));
-    }
-    let wide: Vec<_> = bytes[12..12 + length]
-        .as_chunks::<2>().0.iter()
-        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
-        .collect();
-    Ok(Some(OsString::from_wide(&wide)))
 }
 
 /// STATUS_NO_MORE_FILES ends every listing. Redirectors, WinFsp or Dokan
@@ -120,10 +165,8 @@ pub(super) fn enumerate(
     if !metadata.is_dir() || metadata.file_attributes() & 0x400 != 0 {
         return Err(io::Error::other("Source directory is no longer ordinary"));
     }
-    let mut buffer = vec![0u32; (64 * 1024 + 16) / 4];
-    let mut restart = true;
-    while let Some(name) = next_name(directory, &mut buffer, restart)? {
-        restart = false;
+    let mut names = Names::new(64 * 1024);
+    while let Some(name) = names.next(directory)? {
         if name != "." && name != ".." {
             visitor(name)?;
         }
@@ -148,7 +191,7 @@ pub(super) fn remove(
         return super::windows_file_moves::remove(&selected);
     }
     let reader = directory_reader(parent, leaf)?;
-    let root = Directory { object: selected, reader };
+    let root = Directory { object: selected, reader, names: Names::new(WALK_BUFFER) };
     if workers <= 1 {
         return traverse(root, checkpoint);
     }
@@ -174,22 +217,27 @@ fn remove_parallel(
     };
     let (sender, receiver) = mpsc::sync_channel::<Directory>(workers);
     let receiver = Mutex::new(receiver);
-    let (object, result) = std::thread::scope(|scope| {
-        for _ in 0..workers {
-            scope.spawn(|| loop {
-                let job = receiver.lock().unwrap_or_else(|p| p.into_inner()).recv();
-                let Ok(directory) = job else { break };
-                if stop.load(Ordering::Relaxed) {
-                    continue; // Release the queued handles undeleted.
-                }
-                if let Err(error) = traverse(directory, &guarded) {
-                    stop.store(true, Ordering::Relaxed);
-                    failure.lock().unwrap_or_else(|p| p.into_inner()).get_or_insert(error);
-                }
-            });
+    let worker = || loop {
+        let job = receiver.lock().unwrap_or_else(|p| p.into_inner()).recv();
+        let Ok(directory) = job else { break };
+        if stop.load(Ordering::Relaxed) {
+            continue; // Release the queued handles undeleted.
         }
-        let Directory { object, reader } = root;
-        let result = traverse_children(&object, &reader, &guarded, &mut |child| {
+        if let Err(error) = traverse(directory, &guarded) {
+            stop.store(true, Ordering::Relaxed);
+            failure.lock().unwrap_or_else(|p| p.into_inner()).get_or_insert(error);
+        }
+    };
+    let (object, result) = std::thread::scope(|scope| {
+        // Workers start with the subfolders they take: deleting many folders
+        // that hold only files starts no thread.
+        let mut started = 0;
+        let Directory { object, reader, mut names } = root;
+        let result = traverse_children(&object, &reader, &mut names, &guarded, &mut |child| {
+            if started < workers {
+                scope.spawn(&worker);
+                started += 1;
+            }
             sender.send(child).map_err(|_| io::Error::other("Deletion workers stopped"))
         });
         if result.is_err() {
@@ -223,13 +271,13 @@ fn open_for_delete(parent: &File, leaf: &std::ffi::OsStr) -> io::Result<File> {
 fn traverse_children(
     object: &File,
     reader: &File,
+    names: &mut Names,
     checkpoint: &(dyn Fn() -> io::Result<()> + Sync),
     subfolder: &mut dyn FnMut(Directory) -> io::Result<()>,
 ) -> io::Result<()> {
-    let mut buffer = vec![0u32; (64 * 1024 + 16) / 4];
     loop {
         checkpoint()?;
-        let Some(name) = next_name(reader, &mut buffer, false)? else {
+        let Some(name) = names.next(reader)? else {
             return Ok(());
         };
         if name == "." || name == ".." {
@@ -256,7 +304,7 @@ fn remove_or_open(
     let metadata = child.metadata()?;
     if metadata.is_dir() && metadata.file_attributes() & 0x400 == 0 {
         let reader = directory_reader(parent, name)?;
-        return Ok(Some(Directory { object: child, reader }));
+        return Ok(Some(Directory { object: child, reader, names: Names::new(WALK_BUFFER) }));
     }
     checkpoint()?;
     super::windows_file_moves::remove(&child)?;
@@ -268,12 +316,11 @@ fn traverse(
     checkpoint: &(dyn Fn() -> io::Result<()> + Sync),
 ) -> io::Result<()> {
     let mut stack = vec![root];
-    // One shared enumeration buffer; stack space and handles scale with depth,
-    // not with the number of children. No Rust recursion on untrusted trees.
-    let mut buffer = vec![0u32; (64 * 1024 + 16) / 4];
-    while let Some(directory) = stack.last() {
+    // Stack space, buffers and handles scale with depth, not with the number
+    // of children. No Rust recursion on untrusted trees.
+    while let Some(directory) = stack.last_mut() {
         checkpoint()?;
-        let Some(name) = next_name(&directory.reader, &mut buffer, false)? else {
+        let Some(name) = directory.names.next(&directory.reader)? else {
             let directory = stack.pop().unwrap();
             drop(directory.reader);
             checkpoint()?;
@@ -293,3 +340,7 @@ fn traverse(
 #[cfg(test)]
 #[path = "windows_file_tree/tests/listing_end.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "windows_file_tree/tests/listing.rs"]
+mod listing_tests;

@@ -89,7 +89,8 @@ impl CardBody<'_> {
         let path = self.path.clone();
         let is_dir = self.is_dir;
         div()
-            .id(SharedString::from(format!("rename-name-{}", self.path)))
+            // Within the card's own identifier, which already names the path.
+            .id("rename-name")
             .font_weight(FontWeight::MEDIUM)
             .when(shown, |d| d.child(self.name.clone()))
             // Its overlay shows the name: this line keeps the place and the click.
@@ -102,7 +103,7 @@ impl CardBody<'_> {
 
     fn kind_line(&self, kind: String) -> Stateful<Div> {
         div()
-            .id(SharedString::from(format!("size-provisional-grid-{}", self.path)))
+            .id("size-provisional-grid")
             .w_full()
             .h(CARD_DETAIL_HEIGHT)
             .line_height(CARD_DETAIL_HEIGHT)

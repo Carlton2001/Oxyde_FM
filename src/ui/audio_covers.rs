@@ -14,17 +14,14 @@ const MAX_SHARED: usize = 4096;
 struct Pool(HashMap<blake3::Hash, Weak<RenderImage>>);
 
 impl Pool {
-    fn share(&mut self, image: Arc<RenderImage>) -> Arc<RenderImage> {
-        let mut hash = blake3::Hasher::new();
-        let size = image.size(0);
-        hash.update(&(size.width.0 as u32).to_le_bytes());
-        hash.update(&(size.height.0 as u32).to_le_bytes());
-        hash.update(image.as_bytes(0).unwrap_or_default());
-        let key = hash.finalize();
+    fn share(&mut self, key: blake3::Hash, image: Arc<RenderImage>) -> Arc<RenderImage> {
         if let Some(shared) = self.0.get(&key).and_then(Weak::upgrade) {
             return shared;
         }
-        self.0.retain(|_, image| image.strong_count() > 0);
+        // Dropped covers are swept only once the pool fills, not at each new one.
+        if self.0.len() >= MAX_SHARED {
+            self.0.retain(|_, image| image.strong_count() > 0);
+        }
         // Every entry still shared: the new image goes unshared rather than one of
         // them, which a later identical cover would then copy.
         if self.0.len() < MAX_SHARED {
@@ -32,6 +29,16 @@ impl Pool {
         }
         image
     }
+}
+
+/// The pixels' identity, hashed before the pool is locked.
+fn pixels_key(image: &RenderImage) -> blake3::Hash {
+    let mut hash = blake3::Hasher::new();
+    let size = image.size(0);
+    hash.update(&(size.width.0 as u32).to_le_bytes());
+    hash.update(&(size.height.0 as u32).to_le_bytes());
+    hash.update(image.as_bytes(0).unwrap_or_default());
+    hash.finalize()
 }
 
 #[derive(Default)]
@@ -54,10 +61,11 @@ pub(crate) fn diagnostic_snapshot() -> Option<(usize, usize)> {
 }
 
 pub(crate) fn share(image: Arc<RenderImage>) -> Arc<RenderImage> {
+    let key = pixels_key(&image);
     POOL.get_or_init(Default::default)
         .lock()
         .unwrap()
-        .share(image)
+        .share(key, image)
 }
 
 pub(crate) fn invalidate(path: &str) {

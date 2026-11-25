@@ -20,7 +20,6 @@ use crate::ui::workspace::{PaneState, TabLoadStatus, ViewMode};
 use crate::ui::style::TabularFigures;
 use gpui::prelude::*;
 use gpui::*;
-use oxyde_lib::models::FileEntry;
 
 pub(super) fn render_details_file_list(
     view: &OxydeApp,
@@ -95,30 +94,23 @@ pub(super) fn render_details_file_list(
     let show_checkboxes = view.show_checkboxes();
     let show_media_previews = view.show_media_previews;
 
-    let selected_paths = active_tab.selected_paths.clone();
+    let selection = active_tab.selection_snapshot();
+    let selected_paths = selection.paths.clone();
     let displayed_folders = presentation.folders;
     let displayed_files = files.len().saturating_sub(displayed_folders);
-    let selected_entries: Vec<&FileEntry> = if selected_paths.is_empty() { Vec::new() } else { files
-        .iter()
-        .filter(|file| selected_paths.contains(&file.path))
-        .collect() };
     // A drag carries only what the filters show, never a hidden or vanished entry.
-    let drag_selection: std::rc::Rc<Vec<String>> = std::rc::Rc::new(selected_entries.iter().map(|file| file.path.clone()).collect());
-    let selected_folders = selected_entries.iter().filter(|file| file.is_dir).count();
-    let selected_files = selected_entries.len().saturating_sub(selected_folders);
-    let selected_bytes: u64 = selected_entries
-        .iter()
-        .filter(|file| !file.is_dir || file.is_calculated)
-        .map(|file| file.size)
-        .sum();
-    let selection_summary = if selected_entries.is_empty() {
+    let drag_selection = selection.shown.clone();
+    let selected_folders = selection.folders;
+    let selected_files = selection.file_count;
+    let selected_bytes = selection.bytes;
+    let selection_summary = if drag_selection.is_empty() {
         None
     } else {
         let mut args = FluentArgs::new();
-        args.set("count", selected_entries.len());
+        args.set("count", drag_selection.len());
         args.set(
             "number",
-            format_number(selected_entries.len() as u64, language),
+            format_number(drag_selection.len() as u64, language),
         );
         args.set("folder_count", selected_folders);
         args.set("file_count", selected_files);
@@ -300,7 +292,8 @@ pub(super) fn render_details_file_list(
                                             start_pos: pos,
                                             current_pos: pos,
                                             modifiers,
-                                            initial_selection: this.state.find_pane(&p_id_cap).map(|p| p.active_tab().selected_paths.clone()).unwrap_or_default(),
+                                            initial_selection: this.rectangle_initial_selection(&p_id_cap, modifiers),
+                                covered: None,
                                         });
                                         cx.notify();
                                     });
@@ -386,7 +379,8 @@ pub(super) fn render_details_file_list(
                                 start_pos: pos,
                                 current_pos: pos,
                                 modifiers,
-                                initial_selection: this.state.find_pane(&p_id_cap).map(|p| p.active_tab().selected_paths.clone()).unwrap_or_default(),
+                                initial_selection: this.rectangle_initial_selection(&p_id_cap, modifiers),
+                                covered: None,
                             });
                             cx.notify();
                             });
@@ -422,7 +416,8 @@ pub(super) fn render_details_file_list(
                                 start_pos: pos,
                                 current_pos: pos,
                                 modifiers,
-                                initial_selection: this.state.find_pane(&p_id_cap).map(|p| p.active_tab().selected_paths.clone()).unwrap_or_default(),
+                                initial_selection: this.rectangle_initial_selection(&p_id_cap, modifiers),
+                                covered: None,
                             });
                             cx.notify();
                             });

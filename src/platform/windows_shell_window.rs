@@ -66,6 +66,8 @@ struct Shown {
 
 struct Selection {
     items: RefCell<Vec<String>>,
+    /// The items already noted: a program may select thousands, one by one.
+    seen: RefCell<std::collections::HashSet<String>>,
     /// The window whose timer ends the wait.
     clock: HWND,
 }
@@ -194,9 +196,8 @@ impl IShellView_Impl for ShellWindow_Impl {
             path
         };
         if let Ok(path) = path {
-            let mut items = shown.selection.items.borrow_mut();
-            if !items.contains(&path) {
-                items.push(path);
+            if shown.selection.seen.borrow_mut().insert(path.clone()) {
+                shown.selection.items.borrow_mut().push(path);
             }
             unsafe { SetTimer(Some(shown.selection.clock), TIMER, SETTLE, None) };
         }
@@ -289,7 +290,7 @@ impl Standing {
         let lists = identifier_lists(folder)?;
         let windows: IShellWindows = unsafe { CoCreateInstance(&ShellWindows, None, CLSCTX_ALL) }?;
         let clock = hidden_window()?;
-        let selection = Rc::new(Selection { items: RefCell::default(), clock });
+        let selection = Rc::new(Selection { items: RefCell::default(), seen: RefCell::default(), clock });
         let mut listed = Vec::new();
         for (index, list) in lists.into_iter().enumerate() {
             let window = if index == 0 { Ok(clock) } else { hidden_window() };

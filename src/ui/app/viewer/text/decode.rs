@@ -21,7 +21,15 @@ pub(in super::super) fn decode(mut bytes: Vec<u8>) -> String {
             let truncated = utf8.error_len().is_none() && error.as_bytes().len() - utf8.valid_up_to() < 4;
             // UTF-8 characters elsewhere make it a UTF-8 file with a damaged byte, not legacy text.
             let utf8_elsewhere = error.as_bytes().utf8_chunks().any(|chunk| !chunk.valid().is_ascii());
-            if truncated || utf8_elsewhere {
+            if truncated {
+                // The text up to the cut, kept in place: no second copy of a large file.
+                let valid = utf8.valid_up_to();
+                let mut bytes = error.into_bytes();
+                bytes.truncate(valid);
+                let mut text = String::from_utf8(bytes).expect("valid up to the cut");
+                text.push(char::REPLACEMENT_CHARACTER);
+                text
+            } else if utf8_elsewhere {
                 String::from_utf8_lossy(error.as_bytes()).into_owned()
             } else {
                 error.as_bytes().iter().map(|&byte| cp1252(byte)).collect()

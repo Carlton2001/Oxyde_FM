@@ -15,13 +15,14 @@ fn utf16_text_files_are_searched_by_their_text() {
     for big_endian in [false, true] {
         let path = root.path().join(format!("export-{big_endian}.reg"));
         std::fs::write(&path, utf16("Windows Registry Editor\r\n\"Clé\"=\"Pomme 🍎\"\r\n", big_endian)).unwrap();
-        assert!(!is_binary_file(&path));
+        let search = |pattern: &ContentPattern| {
+            let (file, start) = open_text(&path).expect("text, not binary");
+            text_contains_content(file, start, pattern, false, &cancellation)
+        };
         for needle in ["Clé", "Pomme 🍎"] {
-            let pattern = ContentPattern::new(needle, true).unwrap();
-            assert!(read_file_and_check(&path, &pattern, false, &cancellation), "{needle} {big_endian}");
+            assert!(search(&ContentPattern::new(needle, true).unwrap()), "{needle} {big_endian}");
         }
-        let absent = ContentPattern::new("Poire", true).unwrap();
-        assert!(!read_file_and_check(&path, &absent, false, &cancellation));
+        assert!(!search(&ContentPattern::new("Poire", true).unwrap()));
     }
 }
 

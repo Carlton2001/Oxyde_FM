@@ -68,7 +68,7 @@ impl OxydeApp {
         cx.spawn(async move |this, cx| {
             let probe = path.clone();
             let refusal = tokio::task::spawn_blocking(move || {
-                oxyde_lib::commands::archive::list_archive_contents(probe, String::new())
+                oxyde_lib::commands::archive_probe::probe(probe)
                     .err()
                     .map(|error| error.to_string())
                     .filter(|detail| password_failure(detail).is_some())
@@ -81,6 +81,7 @@ impl OxydeApp {
                 let current = this.state.find_pane(&pane)
                     .map(|pane| (pane.active_tab().id.clone(), pane.active_tab().path.clone()));
                 if !new_tab && current != origin {
+                    oxyde_lib::commands::archive_probe::forget();
                     return;
                 }
                 let archive = PathBuf::from(&path);

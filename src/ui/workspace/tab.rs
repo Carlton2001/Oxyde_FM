@@ -141,7 +141,10 @@ impl TabState {
             collapsed_groups: Default::default(),
             cached_filtered_files: Default::default(),
             presentation_cache: Default::default(),
+            selection_cache: Default::default(),
+            filter_flags_cache: Default::default(),
             filter_cache_revision: 0,
+            files_sorted: None,
             calendar_reference: None,
             type_col_width: 100.0,
             size_col_width: 100.0,
@@ -183,6 +186,33 @@ impl TabState {
         &self.cached_filtered_files
     }
 
+    /// The selection as the list draws it, kept while neither the selection nor the
+    /// shown files change: a large selection is not copied and summed at each frame.
+    pub(crate) fn selection_snapshot(&self) -> std::rc::Rc<SelectionSnapshot> {
+        let mut cache = self.selection_cache.borrow_mut();
+        if let Some(cached) = cache.as_ref() {
+            if std::sync::Arc::ptr_eq(&cached.files, &self.cached_filtered_files) && *cached.paths == self.selected_paths {
+                return cached.clone();
+            }
+        }
+        let shown: Vec<&FileEntry> = if self.selected_paths.is_empty() {
+            Vec::new()
+        } else {
+            self.filtered_files().iter().filter(|file| self.selected_paths.contains(&file.path)).collect()
+        };
+        let folders = shown.iter().filter(|file| file.is_dir).count();
+        let snapshot = std::rc::Rc::new(SelectionSnapshot {
+            files: self.cached_filtered_files.clone(),
+            paths: std::rc::Rc::new(self.selected_paths.clone()),
+            folders,
+            file_count: shown.len() - folders,
+            bytes: shown.iter().filter(|file| !file.is_dir || file.is_calculated).map(|file| file.size).sum(),
+            shown: std::rc::Rc::new(shown.iter().map(|file| file.path.clone()).collect()),
+        });
+        *cache = Some(snapshot.clone());
+        snapshot
+    }
+
     /// The selected entries an action applies to, in display order: what the filters
     /// show, members of collapsed groups included. A selected path hidden by a filter or
     /// gone from the listing is never copied, moved, compressed or deleted.
@@ -214,3 +244,19 @@ mod renamed_selection_tests;
 #[cfg(test)]
 #[path = "tab/tests/actionable_selection.rs"]
 mod actionable_selection_tests;
+
+#[cfg(test)]
+#[path = "tab/tests/selection_snapshot.rs"]
+mod selection_snapshot_tests;
+
+/// What [`TabState::selection_snapshot`] keeps.
+pub(crate) struct SelectionSnapshot {
+    /// The shown files it was taken from.
+    files: std::sync::Arc<Vec<FileEntry>>,
+    pub(crate) paths: std::rc::Rc<std::collections::HashSet<String>>,
+    /// The shown selected paths, in display order: what a drag carries.
+    pub(crate) shown: std::rc::Rc<Vec<String>>,
+    pub(crate) folders: usize,
+    pub(crate) file_count: usize,
+    pub(crate) bytes: u64,
+}

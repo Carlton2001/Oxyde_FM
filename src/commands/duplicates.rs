@@ -354,7 +354,15 @@ pub async fn find_duplicates(
             }
         }
 
-        let vol_semaphores: Arc<DashMap<u64, Arc<Mutex<()>>>> = Arc::new(DashMap::new());
+        // One file at a time per disk that pays for seeks; a solid-state disk
+        // reads several at once, bounded by the pool.
+        let vol_semaphores: Arc<DashMap<u64, Option<Arc<Mutex<()>>>>> = Arc::new(DashMap::new());
+        let disk_lock = |path: &Path| {
+            vol_semaphores
+                .entry(get_physical_disk_id(path))
+                .or_insert_with(|| (!is_ssd(path)).then(|| Arc::new(Mutex::new(()))))
+                .clone()
+        };
         let hashed = AtomicUsize::new(0);
         report(DuplicateStage::Hashing, 0, total_to_hash);
         let hash_total = total_to_hash;
@@ -364,12 +372,8 @@ pub async fn find_duplicates(
                 if cancel_flag.load(Ordering::Relaxed) {
                     return None;
                 }
-                let vol_id = get_physical_disk_id(&path);
-                let lock = vol_semaphores
-                    .entry(vol_id)
-                    .or_insert_with(|| Arc::new(Mutex::new(())))
-                    .clone();
-                let _guard = lock.lock().unwrap();
+                let lock = disk_lock(&path);
+                let _guard = lock.as_ref().map(|lock| lock.lock().unwrap());
                 let limit = if size > PARTIAL_HASH_SIZE as u64 {
                     Some(PARTIAL_HASH_SIZE)
                 } else {
@@ -396,11 +400,13 @@ pub async fn find_duplicates(
                 .push(res.1);
         }
 
+        // The start hash stays in the key: files that only share their end
+        // are not sent to the full hash together.
         let mut end_check_list = Vec::new();
-        for ((size, _), files) in partial_start_groups {
+        for ((size, start), files) in partial_start_groups {
             if files.len() > 1 {
                 for path in files {
-                    end_check_list.push((size, path));
+                    end_check_list.push((size, start, path));
                 }
             }
         }
@@ -413,18 +419,14 @@ pub async fn find_duplicates(
         hashed.store(0, Ordering::Relaxed);
         let hash_total = total_end;
         report(DuplicateStage::Hashing, 0, hash_total);
-        let partial_end_results: Vec<Option<(u64, PathBuf, blake3::Hash)>> = end_check_list
+        let partial_end_results: Vec<Option<(u64, blake3::Hash, PathBuf, blake3::Hash)>> = end_check_list
             .into_par_iter()
-            .map(|(size, path)| {
+            .map(|(size, start, path)| {
                 if cancel_flag.load(Ordering::Relaxed) {
                     return None;
                 }
-                let vol_id = get_physical_disk_id(&path);
-                let lock = vol_semaphores
-                    .entry(vol_id)
-                    .or_insert_with(|| Arc::new(Mutex::new(())))
-                    .clone();
-                let _guard = lock.lock().unwrap();
+                let lock = disk_lock(&path);
+                let _guard = lock.as_ref().map(|lock| lock.lock().unwrap());
                 let limit = if size > PARTIAL_HASH_SIZE as u64 {
                     Some(PARTIAL_HASH_SIZE)
                 } else {
@@ -435,7 +437,7 @@ pub async fn find_duplicates(
                 if count.is_multiple_of(20) {
                     report(DuplicateStage::Hashing, count, hash_total);
                 }
-                Some((size, path, hash))
+                Some((size, start, path, hash))
             })
             .collect();
 
@@ -443,16 +445,17 @@ pub async fn find_duplicates(
             return Ok(vec![]);
         }
 
-        let mut partial_end_groups: HashMap<(u64, blake3::Hash), Vec<PathBuf>> = HashMap::new();
-        for res in partial_end_results.into_iter().flatten() {
+        let mut partial_end_groups: HashMap<(u64, blake3::Hash, blake3::Hash), Vec<PathBuf>> =
+            HashMap::new();
+        for (size, start, path, end) in partial_end_results.into_iter().flatten() {
             partial_end_groups
-                .entry((res.0, res.2))
+                .entry((size, start, end))
                 .or_default()
-                .push(res.1);
+                .push(path);
         }
 
         let mut final_check_list = Vec::new();
-        for ((size, _), files) in partial_end_groups {
+        for ((size, _, _), files) in partial_end_groups {
             if files.len() > 1 {
                 for path in files {
                     final_check_list.push((size, path));
@@ -474,12 +477,8 @@ pub async fn find_duplicates(
                 if cancel_flag.load(Ordering::Relaxed) {
                     return None;
                 }
-                let vol_id = get_physical_disk_id(&path);
-                let lock = vol_semaphores
-                    .entry(vol_id)
-                    .or_insert_with(|| Arc::new(Mutex::new(())))
-                    .clone();
-                let _guard = lock.lock().unwrap();
+                let lock = disk_lock(&path);
+                let _guard = lock.as_ref().map(|lock| lock.lock().unwrap());
                 let hash = hash_or_skip(calculate_hash(&path, None, false, &cancel_flag))?;
                 let count = hashed.fetch_add(1, Ordering::Relaxed) + 1;
                 if count.is_multiple_of(20) {

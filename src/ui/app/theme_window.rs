@@ -59,6 +59,9 @@ pub struct ThemeWindow {
     field_bounds: MeasuredBounds,
     hue_bounds: MeasuredBounds,
     drag: Option<PickerPart>,
+    /// Colors waiting for their preview, and whether one is being derived.
+    preview_wanted: Option<[u32; 6]>,
+    previewing: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -150,6 +153,8 @@ impl ThemeWindow {
             field_bounds: Default::default(),
             hue_bounds: Default::default(),
             drag: None,
+            preview_wanted: None,
+            previewing: false,
             _subscriptions: subscriptions,
         }
     }

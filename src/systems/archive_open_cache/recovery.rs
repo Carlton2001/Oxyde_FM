@@ -33,6 +33,9 @@ impl Stamp {
 struct Content {
     prefix_size: u64,
     prefix_hash: String,
+    /// In base64: as an array of numbers, a 256 KiB block made a proof of
+    /// about 940 KB, and DPAPI's cost follows the size of what it seals.
+    #[serde(with = "crate::utils::base64_bytes")]
     next: Vec<u8>,
     provenance: Option<Vec<u8>>,
 }

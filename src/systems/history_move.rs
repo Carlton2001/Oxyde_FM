@@ -271,7 +271,11 @@ fn move_bound_controlled(
         return Err(io::Error::other("Incomplete history move copy"));
     }
     let mut output = staging.open_output()?;
-    if hash(&mut output)? != original_hash || hash(&mut original)? != original_hash {
+    // Windows holds the source without write sharing since its hash: reading
+    // it again could only find the same bytes.
+    if hash(&mut output)? != original_hash
+        || (!cfg!(target_os = "windows") && hash(&mut original)? != original_hash)
+    {
         return Err(io::Error::other(
             "History move copy failed content verification",
         ));

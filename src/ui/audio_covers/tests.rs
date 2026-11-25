@@ -2,6 +2,12 @@ use super::Pool;
 use gpui::RenderImage;
 use std::sync::Arc;
 
+impl Pool {
+    fn share_hashed(&mut self, image: Arc<RenderImage>) -> Arc<RenderImage> {
+        self.share(super::pixels_key(&image), image)
+    }
+}
+
 fn image(width: u32, height: u32, color: [u8; 4]) -> Arc<RenderImage> {
     Arc::new(RenderImage::new(vec![image::Frame::new(
         image::RgbaImage::from_pixel(width, height, image::Rgba(color)),
@@ -60,16 +66,16 @@ fn hover_cache_reports_valid_hits_and_keeps_its_quota_separate_from_grid() {
 #[test]
 fn identical_covers_share_pixels_but_different_colors_or_dimensions_do_not() {
     let mut pool = Pool::default();
-    let first = pool.share(image(2, 1, [10, 20, 30, 255]));
-    let duplicate = pool.share(image(2, 1, [10, 20, 30, 255]));
+    let first = pool.share_hashed(image(2, 1, [10, 20, 30, 255]));
+    let duplicate = pool.share_hashed(image(2, 1, [10, 20, 30, 255]));
     assert!(Arc::ptr_eq(&first, &duplicate));
     assert!(!Arc::ptr_eq(
         &first,
-        &pool.share(image(2, 1, [30, 20, 10, 255]))
+        &pool.share_hashed(image(2, 1, [30, 20, 10, 255]))
     ));
     assert!(!Arc::ptr_eq(
         &first,
-        &pool.share(image(1, 2, [10, 20, 30, 255]))
+        &pool.share_hashed(image(1, 2, [10, 20, 30, 255]))
     ));
     let weak = Arc::downgrade(&first);
     drop(first);
@@ -78,4 +84,14 @@ fn identical_covers_share_pixels_but_different_colors_or_dimensions_do_not() {
         weak.upgrade().is_none(),
         "The content pool must not own images"
     );
+}
+
+#[test]
+fn a_full_pool_sweeps_dropped_covers_before_refusing_a_new_one() {
+    let mut pool = Pool::default();
+    for index in 0..super::MAX_SHARED as u32 {
+        drop(pool.share_hashed(image(1, 1, index.to_le_bytes())));
+    }
+    let kept = pool.share_hashed(image(2, 2, [1, 2, 3, 4]));
+    assert!(Arc::ptr_eq(&kept, &pool.share_hashed(image(2, 2, [1, 2, 3, 4]))));
 }

@@ -134,14 +134,14 @@ impl Viewer {
             Some(get_preview_type(&file.name))
         };
         let Some(kind) = kind else {
+            // Parsed with the reading, off the UI thread: a large workbook is long.
             let work = self.load_work(move || {
-                oxyde_lib::platform::platform().office_document(path)
+                oxyde_lib::platform::platform().office_document(path).map(|text| parse_document(&text))
             });
             self.finish(
                 generation,
                 work,
-                |text| {
-                    let blocks = parse_document(&text);
+                |blocks| {
                     // Measured once per width: the rail keeps its size while scrolling.
                     let list = ListState::new(blocks.len(), ListAlignment::Top, LIST_OVERDRAW).measure_all();
                     Content::Document(Arc::new(blocks), list)

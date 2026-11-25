@@ -3,6 +3,8 @@ use super::super::OxydeApp;
 use crate::ui::theme::ThemeContext;
 use gpui::{prelude::*, *};
 use oxyde_lib::platform::FileDropEffect;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub(crate) struct ExternalDropState {
     pub effect: FileDropEffect,
@@ -32,8 +34,38 @@ impl Default for ExternalDropState {
     }
 }
 
-fn paths(data: &ExternalPaths) -> Vec<String> {
-    data.paths()
+/// The same drag is examined at each movement and frame: its paths are converted,
+/// and filtered for each target under it, once.
+#[derive(Default)]
+struct Converted {
+    source: Vec<std::path::PathBuf>,
+    paths: Rc<Vec<String>>,
+    /// The few targets a drag passed over lately, latest last.
+    transfers: Vec<(String, Rc<Vec<String>>)>,
+}
+
+thread_local! {
+    static CONVERTED: RefCell<Converted> = RefCell::default();
+}
+
+fn paths(data: &ExternalPaths) -> Rc<Vec<String>> {
+    CONVERTED.with_borrow_mut(|cached| {
+        let source = data.paths();
+        let same = cached.source.len() == source.len()
+            && cached.source.iter().zip(source).all(|(old, new)| old.as_os_str() == new.as_os_str());
+        if !same {
+            *cached = Converted {
+                source: source.to_vec(),
+                paths: Rc::new(convert(source)),
+                transfers: Vec::new(),
+            };
+        }
+        cached.paths.clone()
+    })
+}
+
+fn convert(source: &[std::path::PathBuf]) -> Vec<String> {
+    source
         .iter()
         .map(|path| {
             let path_string = path.to_str()?;
@@ -43,16 +75,35 @@ fn paths(data: &ExternalPaths) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn transfer_paths(data: &ExternalPaths, target: &str) -> Vec<String> {
+fn transfer_paths(data: &ExternalPaths, target: &str) -> Rc<Vec<String>> {
+    let sources = paths(data);
+    CONVERTED.with_borrow_mut(|cached| {
+        if let Some((_, known)) = cached.transfers.iter().find(|(known, _)| known == target) {
+            return known.clone();
+        }
+        let found = Rc::new(transfers(&sources, target));
+        if cached.transfers.len() == 4 {
+            cached.transfers.remove(0);
+        }
+        cached.transfers.push((target.to_owned(), found.clone()));
+        found
+    })
+}
+
+fn transfers(sources: &[String], target: &str) -> Vec<String> {
     if !std::path::Path::new(target).is_absolute() || target.contains("://") {
         return Vec::new();
     }
-    super::actionable_drop_paths(paths(data), target)
+    #[cfg(target_os = "windows")]
+    let folded = target.replace('\\', "/").to_lowercase();
+    #[cfg(not(target_os = "windows"))]
+    let folded = target;
+    super::actionable_drop_paths(sources.to_vec(), target)
         .into_iter()
         .filter(|source| {
             #[cfg(target_os = "windows")]
-            let (source, target) = (source.replace('\\', "/").to_lowercase(), target.replace('\\', "/").to_lowercase());
-            !target.starts_with(&format!("{}/", source.trim_end_matches('/')))
+            let source = source.replace('\\', "/").to_lowercase();
+            !folded.starts_with(&format!("{}/", source.trim_end_matches('/')))
         })
         .collect()
 }
@@ -146,9 +197,9 @@ pub(crate) trait FileDropTargetExt: InteractiveElement + Sized {
                         app.import_streamed_files(streamed, target.clone(), cx);
                     }
                 } else if effect == FileDropEffect::Copy {
-                    app.execute_file_copy(paths, target.clone(), cx);
+                    app.execute_file_copy(paths.to_vec(), target.clone(), cx);
                 } else {
-                    app.execute_file_move(paths, target.clone(), cx);
+                    app.execute_file_move(paths.to_vec(), target.clone(), cx);
                 }
             });
         })
@@ -161,8 +212,9 @@ pub(crate) trait FileDropTargetExt: InteractiveElement + Sized {
                 if event.bounds.contains(&event.event.position) {
                     let paths = paths(event.drag(cx));
                     app.update(cx, |app, cx| {
-                        if app.external_drop.directory_paths != paths {
-                            app.external_drop.directory_paths = paths.clone();
+                        if app.external_drop.directory_paths != *paths {
+                            app.external_drop.directory_paths = paths.to_vec();
+                            let paths = paths.to_vec();
                             app.external_drop.directories.clear();
                             app.external_drop.directory_lease = std::rc::Rc::new(());
                             let lease = app.external_drop.directory_lease.clone();
@@ -203,7 +255,7 @@ pub(crate) trait FileDropTargetExt: InteractiveElement + Sized {
             app.update(cx, |app, cx| {
                 if app.external_drop.submitted
                     || !app.external_drop.can_copy
-                    || app.external_drop.directory_paths != paths
+                    || app.external_drop.directory_paths != *paths
                     || app.external_drop.directories.is_empty()
                 {
                     app.external_drop.effect = FileDropEffect::None;

@@ -43,9 +43,7 @@ pub(super) fn choose(handle: &Entity<OxydeApp>, action: ConflictAction, all: boo
         } else {
             vec![p.dialog.selected]
         };
-        for i in indices {
-            p.dialog.record_choice(&p.conflicts, i, action);
-        }
+        p.dialog.record_choices(&p.conflicts, &indices, action);
         let visible_indices: HashSet<_> = visible(p).into_iter().collect();
         let next = (p.dialog.selected + 1..p.conflicts.len())
             .chain(0..p.dialog.selected)

@@ -139,6 +139,10 @@ impl FileOperationManager {
                 .map(|source| source.file())
                 .or_else(|| copy_source.as_ref().map(|(_, file)| file))
                 .expect("selected copy source is held");
+            let source_parents = source_guard
+                .as_ref()
+                .map(|source| source.parents())
+                .or_else(|| copy_source.as_ref().map(|(parents, _)| parents));
             let resolved_source = selected.resolved_path();
             log::debug!(target: "oxyde_lib::copy_timing",
                 "copy_prepare op={} worker={} source={:?} destination_parent_s={:.6} source_open_s={:.6}",
@@ -150,6 +154,7 @@ impl FileOperationManager {
                 dest,
                 *replace_existing,
                 Some(source_file),
+                source_parents,
                 destination_parents,
                 &mut |bytes| {
                     #[cfg(test)]

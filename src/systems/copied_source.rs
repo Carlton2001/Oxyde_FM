@@ -43,6 +43,9 @@ impl CopiedSource {
     pub fn file(&self) -> &File {
         &self.file
     }
+    pub fn parents(&self) -> &super::path_parents::HeldParents {
+        &self._parents
+    }
     pub fn verify(
         &mut self,
         expected: &str,

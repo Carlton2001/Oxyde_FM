@@ -31,6 +31,25 @@ impl OxydeApp {
         })
     }
 
+    /// [`Self::file_for_action`] for each of `paths`, in one pass over the tabs.
+    pub(crate) fn files_for_action(&self, paths: &[String], is_dir: bool) -> Vec<oxyde_lib::models::FileEntry> {
+        let mut found: std::collections::HashMap<&str, Option<oxyde_lib::models::FileEntry>> =
+            paths.iter().map(|path| (path.as_str(), None)).collect();
+        let mut missing = found.len();
+        self.state.layout.visit_panes(&mut |pane| {
+            for file in pane.tabs.iter().flat_map(|tab| tab.files.iter()) {
+                if missing == 0 { return; }
+                if let Some(slot @ None) = found.get_mut(file.path.as_str()) {
+                    *slot = Some(file.clone());
+                    missing -= 1;
+                }
+            }
+        });
+        paths.iter().map(|path| found.get(path.as_str()).cloned().flatten().unwrap_or_else(|| {
+            oxyde_lib::models::FileEntry { path: path.clone(), is_dir, ..Default::default() }
+        })).collect()
+    }
+
     pub(super) fn archive_qualities(&self) -> std::collections::HashMap<String, String> {
         std::collections::HashMap::from([
             ("zip".into(), self.config.zip_quality.clone()),
@@ -120,7 +139,7 @@ impl OxydeApp {
     }
 
     pub fn execute_extract_archive(&mut self, path: String, cx: &mut Context<Self>) {
-        let files = self.context_action_paths(&path).iter().map(|path| self.file_for_action(path, false)).collect();
+        let files = self.files_for_action(&self.context_action_paths(&path), false);
         for (source, destination) in extraction_jobs(files) {
             self.queue_archive_operation(
                 oxyde_lib::systems::file_ops::FileOpType::Extract,

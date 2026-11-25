@@ -81,8 +81,9 @@ impl FileChooserWindow {
     }
 
     fn crumb_menu(&self, handle: Entity<Self>) -> GenericDropdown<Self> {
-        let entries = self.crumbs.menu.as_ref().map(|(_, _, entries)| entries.clone()).unwrap_or_default();
-        let items = entries.into_iter().map(|entry| {
+        // Rebuilt at each render while open: the entries are read, not copied whole.
+        let entries = self.crumbs.menu.as_ref().map(|(_, _, entries)| entries.as_slice()).unwrap_or_default();
+        let items = entries.iter().map(|entry| {
             let choose = handle.downgrade();
             let path = entry.path.clone();
             DropdownItem {

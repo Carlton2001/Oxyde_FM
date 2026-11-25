@@ -176,9 +176,10 @@ fn an_entry_the_listing_passed_is_found_by_another_pass() {
         let deep = folder.join("sub/deep");
         let planted = AtomicBool::new(false);
         remove(&parent(&folder), &folder, workers, &|| {
-            // Once deep is gone, sub gains a file its listing has most likely read past.
-            if !deep.exists() && folder.join("sub").exists() && !planted.swap(true, Ordering::Relaxed) {
-                std::fs::write(folder.join("sub/late"), b"late").unwrap();
+            // Once deep is gone, sub gains a file its listing has most likely read past;
+            // another worker may remove sub meanwhile, and a later call tries again.
+            if !deep.exists() && !planted.load(Ordering::Relaxed) && std::fs::write(folder.join("sub/late"), b"late").is_ok() {
+                planted.store(true, Ordering::Relaxed);
             }
             Ok(())
         })

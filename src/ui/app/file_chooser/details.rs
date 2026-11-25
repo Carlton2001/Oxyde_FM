@@ -43,7 +43,7 @@ impl FileChooserWindow {
         let measure = |text: &str, bold: bool, tabular: bool| measurements::column_text_width(window, cx, text, bold, tabular);
         let (types, sizes) = &*self.column_values;
         let type_width = types.iter().map(|label| measure(&measurements::type_column_text(label, i18n), false, false)).fold(0.0_f32, f32::max);
-        let size_width = sizes.iter().map(|&(size, directory, calculated)| measure(&measurements::size_column_text(size, directory, calculated, i18n), false, true)).fold(0.0_f32, f32::max);
+        let size_width = measurements::widest_tabular(sizes.iter().map(|&(size, directory, calculated)| measurements::size_column_text(size, directory, calculated, i18n)), |text| measure(text, false, true));
         // The chooser filters no column: no header reserves a filter mark.
         self.column_widths = ColumnWidths {
             file_type: crate::ui::style::metadata_column_width(type_width, measure(i18n.text(Message::ColumnType).as_ref(), true, false), false),

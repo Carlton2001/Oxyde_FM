@@ -123,7 +123,7 @@ fn load_path_mode(path: &Path, renderer: &SvgRenderer, mode: &str, policy: Polic
     };
     let reply = oxyde_lib::platform::platform()
         .run_preview_worker(mode, path)
-        .and_then(|bytes| oxyde_lib::utils::preview_protocol::decode_with(&bytes, limits))
+        .and_then(|bytes| oxyde_lib::utils::preview_protocol::decode_owned_with(bytes, limits))
         .map_err(|error| PreviewError::Worker(error.to_string()))?;
     match reply {
         oxyde_lib::utils::preview_protocol::Reply::Images { frames, limited, natural_size } => {

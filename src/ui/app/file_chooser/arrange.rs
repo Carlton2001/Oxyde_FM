@@ -122,7 +122,8 @@ pub(super) struct Arranged {
 
 /// The entries the request admits whose name holds `filter`, without regard to case,
 /// in the main window's order for `sort`. `mime_matches` tells whether a MIME type
-/// answers a filter's, as the system's database relates them.
+/// answers a filter's, as the system's database relates them. The values the columns
+/// are measured from depend on `entries` alone: only gathered when `measure`.
 pub(super) fn arrange(
     entries: &[FileEntry],
     filter: &str,
@@ -130,6 +131,7 @@ pub(super) fn arrange(
     mime_matches: &dyn Fn(&str, &str) -> bool,
     sort: SortColumn,
     direction: SortDirection,
+    measure: bool,
 ) -> Arranged {
     let filter = filter.to_lowercase();
     let types = admission.types.as_ref().map(Types::of);
@@ -142,7 +144,7 @@ pub(super) fn arrange(
         .collect();
     crate::ui::workspace::sort_files(&mut shown, sort, direction);
     let mut arranged = Arranged { folders: shown.iter().filter(|entry| entry.is_dir).count(), ..Default::default() };
-    for entry in entries {
+    for entry in entries.iter().filter(|_| measure) {
         arranged.types.insert(crate::ui::components::file_list::file_type_label(entry));
         arranged.sizes.insert((entry.size, entry.is_dir, entry.is_calculated));
     }

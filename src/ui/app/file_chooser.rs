@@ -110,6 +110,8 @@ pub struct FileChooserWindow {
     back: Vec<String>,
     forward: Vec<String>,
     entries: Arc<Vec<FileEntry>>,
+    /// The entries `column_values` were gathered from.
+    measured_entries: std::sync::Weak<Vec<FileEntry>>,
     /// The entries the list shows, filtered and sorted, and how many are folders.
     shown: Arc<Vec<FileEntry>>,
     folders: usize,
@@ -215,7 +217,11 @@ impl Places {
     /// so, and with the application's own before or after them.
     fn of(app: &OxydeApp, extras: &FileChooserExtras) -> Self {
         // As in Nautilus, the home folder heads the bookmarks without being one of them.
-        let home = dirs::home_dir().map(|home| Place { label: String::new(), path: home.to_string_lossy().into_owned(), home: true, added: false });
+        // Asked of the system once: this runs at each notification of the main window.
+        static HOME: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+        let home = HOME.get_or_init(|| dirs::home_dir().map(|home| home.to_string_lossy().into_owned()))
+            .clone()
+            .map(|path| Place { label: String::new(), path, home: true, added: false });
         let pinned = app.state.pinned_items.iter()
             .filter(|_| !extras.hide_pinned)
             .filter(|item| std::path::Path::new(&item.path).is_absolute())
@@ -440,6 +446,7 @@ impl FileChooserWindow {
             back: Vec::new(),
             forward: Vec::new(),
             entries: Arc::new(Vec::new()),
+            measured_entries: std::sync::Weak::new(),
             shown: Arc::new(Vec::new()),
             folders: 0,
             column_values: Default::default(),

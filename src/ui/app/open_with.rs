@@ -63,8 +63,9 @@ impl OxydeApp {
     pub(crate) fn open_with_paths(&self, clicked: &str) -> Vec<String> {
         let paths = self.context_action_paths(clicked);
         let Some(pane) = self.state.find_pane(&self.state.active_pane_id) else { return paths };
+        let wanted: std::collections::HashSet<&str> = paths.iter().map(String::as_str).collect();
         let files: Vec<_> = pane.active_tab().files.iter()
-            .filter(|file| paths.contains(&file.path) && offers(&file.path, file.is_dir))
+            .filter(|file| wanted.contains(file.path.as_str()) && offers(&file.path, file.is_dir))
             .map(|file| file.path.clone())
             .collect();
         if files.is_empty() { paths } else { files }

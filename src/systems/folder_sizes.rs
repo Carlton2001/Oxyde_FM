@@ -159,6 +159,7 @@ fn scan(
             }
             let (mut directory_size, mut directory_files, mut directory_folders) =
                 (0u64, 0u64, 0u64);
+            let listed = listed_file_sizes(path);
             for entry in children.iter().flatten() {
                 if worker_cancel.cancelled() {
                     children.clear();
@@ -166,13 +167,19 @@ fn scan(
                 }
                 follow_turbo_priority(worker_turbo.load(Ordering::Relaxed), ThreadPriority::Normal);
                 if entry.file_type().is_file() {
-                    directory_files += 1;
-                    if let Ok(metadata) = entry.metadata() {
-                        directory_size = directory_size.saturating_add(metadata.len());
+                    if listed.is_none() {
+                        directory_files += 1;
+                        if let Ok(metadata) = entry.metadata() {
+                            directory_size = directory_size.saturating_add(metadata.len());
+                        }
                     }
                 } else if entry.file_type().is_dir() {
                     directory_folders += 1;
                 }
+            }
+            if let Some((size, files)) = listed {
+                directory_size = size;
+                directory_files = files;
             }
             files_acc.fetch_add(directory_files, Ordering::Relaxed);
             folders_acc.fetch_add(directory_folders, Ordering::Relaxed);
@@ -191,6 +198,29 @@ fn scan(
         folders_count: folders.load(Ordering::Relaxed),
         files_count: files.load(Ordering::Relaxed),
     })
+}
+
+/// Size and count of the regular files directly in `path`, from one listing:
+/// on Windows it carries each size, where asking each entry opens the file.
+/// `None` elsewhere, or when the listing fails, to ask each entry instead.
+fn listed_file_sizes(path: &Path) -> Option<(u64, u64)> {
+    #[cfg(target_os = "windows")]
+    {
+        let (mut size, mut files) = (0u64, 0u64);
+        for entry in std::fs::read_dir(path).ok()? {
+            let entry = entry.ok()?;
+            if entry.file_type().ok()?.is_file() {
+                files += 1;
+                size = size.saturating_add(entry.metadata().ok()?.len());
+            }
+        }
+        Some((size, files))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = path;
+        None
+    }
 }
 
 struct RestorePoolPriority(Arc<rayon::ThreadPool>);

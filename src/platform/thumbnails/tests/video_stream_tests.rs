@@ -133,8 +133,8 @@
         assert!(VideoLayout::new(2, 2, i32::MIN).is_err());
         assert!(VideoLayout::new(u32::MAX, 2, 8).is_err());
         let mut layout = VideoLayout::new(2, 2, 12).unwrap();
-        layout.out_w = 2;
-        layout.out_h = 2;
+        assert_eq!((layout.out_w, layout.out_h), (2, 2));
+        assert_eq!((VideoLayout::new(1280, 720, 5120).unwrap().out_w, VideoLayout::new(1280, 720, 5120).unwrap().out_h), (640, 360));
         assert!(resize_video_frame(&[0; 19], layout).is_err());
         let pixels = [
             1, 2, 3, 0, 4, 5, 6, 0, 99, 99, 99, 99, 7, 8, 9, 0, 10, 11, 12, 0,
@@ -182,7 +182,7 @@
             buffer.SetCurrentLength(16).unwrap();
             sample.AddBuffer(&buffer).unwrap();
             let frame = subsample_frame(sample.clone(), layout).unwrap();
-            assert_eq!(frame.dimensions(), (640, 640));
+            assert_eq!(frame.dimensions(), (2, 2));
             assert_eq!(frame.get_pixel(0, 0).0, [30, 60, 90, 255]);
             buffer.SetCurrentLength(15).unwrap();
             assert!(subsample_frame(sample, layout).is_err());

@@ -267,3 +267,12 @@ fn the_umask_read_is_the_one_new_files_receive() {
     std::fs::OpenOptions::new().write(true).create_new(true).mode(0o666).open(&path).unwrap();
     assert_eq!(mode(&path), 0o666 & !umask().unwrap());
 }
+
+#[test]
+fn group_names_are_learned_in_one_question() {
+    let unknown = 3_999_999_991;
+    learn_names("group", [0, unknown, 0]);
+    let accounts = accounts();
+    assert_eq!(accounts.names.get(&("group", 0)), Some(&Some("root".to_owned())));
+    assert_eq!(accounts.names.get(&("group", unknown)), Some(&None));
+}
