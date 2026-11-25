@@ -148,23 +148,24 @@ fn get_subtree_nodes_blocking(
             let Some(link) = tree_folder(&node_path, &metadata, is_reparse_point) else {
                 continue;
             };
-            // A link is not walked into, which could loop; it opens on its own.
-            let node_has_subdirs = !link && holds_folder(&node_path);
+            let node_has_subdirs = holds_folder(&node_path);
 
-            nodes.push(SidebarNode {
+            nodes.push((SidebarNode {
                 name,
                 path: node_path.to_string_lossy().to_string(),
                 is_hidden,
                 is_system,
                 has_subdirs: node_has_subdirs,
-            });
+            }, link));
         }
 
-        nodes.sort_by_cached_key(|node| node.name.to_lowercase());
+        nodes.sort_by_cached_key(|(node, _)| node.name.to_lowercase());
 
-        // Push subdirs to stack before moving nodes into result
-        for node in &nodes {
+        // Push subdirs to stack before moving nodes into result. A link keeps its
+        // arrow but is not walked into, which could loop; it opens on its own.
+        for (node, link) in &nodes {
             if node.has_subdirs
+                && !link
                 && (show_hidden || !node.is_hidden)
                 && (show_system || !node.is_system)
                 && !is_bulk_expand_excluded(&node.path, &node.name)
@@ -173,7 +174,7 @@ fn get_subtree_nodes_blocking(
             }
         }
 
-        result.insert(current_path_str, nodes);
+        result.insert(current_path_str, nodes.into_iter().map(|(node, _)| node).collect());
     }
 
     Ok(result)

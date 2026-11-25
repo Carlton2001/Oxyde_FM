@@ -24,7 +24,7 @@ fn expand_all_does_not_walk_into_a_link() {
     let found = get_subtree_nodes_blocking(root.path().to_path_buf(), true, true, &AtomicBool::new(false)).unwrap();
     let top = &found[&root.path().to_string_lossy().into_owned()];
     let names: Vec<_> = top.iter().map(|node| (node.name.as_str(), node.has_subdirs)).collect();
-    assert_eq!(names, [("a", true), ("docs", false)]);
+    assert_eq!(names, [("a", true), ("docs", true)]);
     assert!(found.contains_key(&root.path().join("a").to_string_lossy().into_owned()));
     assert!(!found.contains_key(&root.path().join("docs").to_string_lossy().into_owned()));
 }
