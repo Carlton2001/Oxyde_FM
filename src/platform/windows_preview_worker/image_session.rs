@@ -5,7 +5,7 @@
 //! path access. Never reuse this session for Office, archives, PDF or video.
 use super::{native, DEADLINE, MEMORY_BYTES};
 use crate::commands::image_handle_worker::{SESSION_FLAG, SESSION_REQUESTS};
-use crate::utils::preview_protocol::{self, Reply};
+use crate::utils::preview_protocol::{self, ReplyKind};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     mpsc, OnceLock,
@@ -345,16 +345,17 @@ impl Session {
                 let side = if kind == AUDIO_THUMBNAIL_KIND { 128 } else { 512 };
                 preview_protocol::Limits { side, pixels: (side * side * 4) as usize }
             } else { preview_protocol::PREVIEW };
-        match preview_protocol::decode_with(&bytes, limits)? {
-            Reply::Images { frames, .. } => {
-                if (kind == AUDIO_KIND || kind == AUDIO_THUMBNAIL_KIND) && frames.len() != 1 {
+        // Checked without copying the pixels: the caller decodes the reply.
+        match preview_protocol::reply_kind_with(&bytes, limits)? {
+            ReplyKind::Images(frames) => {
+                if (kind == AUDIO_KIND || kind == AUDIO_THUMBNAIL_KIND) && frames != 1 {
                     return Err(io::Error::other("Unexpected audio cover frame count"));
                 }
             }
-            Reply::Text(text) if (kind == AUDIO_KIND || kind == AUDIO_THUMBNAIL_KIND) && text.is_empty() => {}
+            ReplyKind::Text(true) if kind == AUDIO_KIND || kind == AUDIO_THUMBNAIL_KIND => {}
             // Return the typed error to the UI while ensuring the session is
             // recycled before another document is granted to it.
-            Reply::Error { .. } => self.requests = SESSION_REQUESTS,
+            ReplyKind::Error => self.requests = SESSION_REQUESTS,
             _ => return Err(io::Error::other("Unexpected image session reply")),
         }
         self.last_used = Instant::now();

@@ -1,4 +1,5 @@
 use super::*;
+use crate::utils::preview_protocol::Reply;
 use lofty::{
     config::WriteOptions,
     picture::{MimeType, Picture, PictureType},
