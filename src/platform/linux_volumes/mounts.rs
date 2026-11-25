@@ -5,6 +5,8 @@ pub(super) struct MountEntry {
     pub point: String,
     pub fs_type: String,
     pub source: String,
+    /// The mount or its filesystem refuses writes, as `statvfs` reports `ST_RDONLY`.
+    pub read_only: bool,
 }
 
 /// Every mount of this process's namespace, in kernel order; empty when unreadable.
@@ -24,12 +26,16 @@ fn entries(table: &str) -> Vec<MountEntry> {
         .lines()
         .filter_map(|line| {
             let (mount, filesystem) = line.split_once(" - ")?;
+            let mut mount = mount.split(' ').skip(4);
             let mut filesystem = filesystem.split(' ');
-            Some(MountEntry {
-                point: unescape(mount.split(' ').nth(4)?),
-                fs_type: unescape(filesystem.next()?),
-                source: unescape(filesystem.next()?),
-            })
+            let point = unescape(mount.next()?);
+            let options = mount.next()?;
+            let fs_type = unescape(filesystem.next()?);
+            let source = unescape(filesystem.next()?);
+            let read_only = [options, filesystem.next().unwrap_or("")]
+                .iter()
+                .any(|options| options.split(',').any(|option| option == "ro"));
+            Some(MountEntry { point, fs_type, source, read_only })
         })
         .filter(|entry| entry.point.starts_with('/'))
         .collect()

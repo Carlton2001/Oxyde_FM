@@ -622,10 +622,12 @@ impl OxydeApp {
             let mut cx = cx.clone();
             async move {
                 let context_path = path.clone();
-                let archive_root = tokio::task::spawn_blocking(move || {
-                    oxyde_lib::utils::archive::resolve_virtual_path(std::path::Path::new(&context_path))
-                        .map(|(archive, _)| archive)
-                }).await.unwrap_or(None);
+                let (archive_root, denied) = tokio::task::spawn_blocking(move || {
+                    let path = std::path::Path::new(&context_path);
+                    let archive = oxyde_lib::utils::archive::resolve_virtual_path(path).map(|(archive, _)| archive);
+                    let denied = archive.is_none() && oxyde_lib::platform::platform().folder_denies_writes(path);
+                    (archive, denied)
+                }).await.unwrap_or((None, false));
                 let result = list_dir(
                     path.clone(),
                     Some(show_hidden),
@@ -635,6 +637,21 @@ impl OxydeApp {
                 .await;
                 let result = match result {
                     Ok(entries) => {
+                        let subfolders: Vec<String> = entries.iter()
+                            .filter(|entry| entry.is_dir)
+                            .map(|entry| entry.path.clone())
+                            .collect();
+                        let listed = path.clone();
+                        let denied_subfolders = if archive_root.is_some() || subfolders.is_empty() {
+                            Default::default()
+                        } else {
+                            tokio::task::spawn_blocking(move || {
+                                oxyde_lib::platform::platform()
+                                    .denied_subfolders(std::path::Path::new(&listed), subfolders)
+                                    .into_iter()
+                                    .collect::<std::collections::HashSet<_>>()
+                            }).await.unwrap_or_default()
+                        };
                         let owner = super::file_preparation::Owner::Listing {
                             id: tab_id.clone(), path: path.clone(), request: request_id,
                         };
@@ -658,7 +675,7 @@ impl OxydeApp {
                             });
                             return;
                         }
-                        Ok(())
+                        Ok(denied_subfolders)
                     }
                     Err(error) => Err(error),
                 };
@@ -682,8 +699,10 @@ impl OxydeApp {
                         }
                         let restored = std::mem::take(&mut tab.restored);
                         match result {
-                            Ok(()) => {
+                            Ok(denied_subfolders) => {
                                 tab.archive_root = archive_root;
+                                tab.denied_folder = denied.then(|| path.clone());
+                                tab.denied_subfolders = std::sync::Arc::new(denied_subfolders);
                                 if tab.archive_root.is_some() { tab.reset_folder_sizes(); }
                                 tab.queue_missing_folder_sizes();
                                 tab.load_status = crate::ui::workspace::TabLoadStatus::Ready;

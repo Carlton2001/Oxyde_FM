@@ -1,7 +1,7 @@
 use super::*;
 
 fn entry(point: &str, fs_type: &str, source: &str) -> MountEntry {
-    MountEntry { point: point.into(), fs_type: fs_type.into(), source: source.into() }
+    MountEntry { point: point.into(), fs_type: fs_type.into(), source: source.into(), read_only: false }
 }
 
 fn listed(entries: &[MountEntry]) -> Vec<(String, String)> {

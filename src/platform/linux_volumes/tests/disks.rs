@@ -2,7 +2,7 @@ use super::*;
 use std::os::unix::fs::symlink;
 
 fn entry(point: &str, fs_type: &str, source: &str) -> MountEntry {
-    MountEntry { point: point.into(), fs_type: fs_type.into(), source: source.into() }
+    MountEntry { point: point.into(), fs_type: fs_type.into(), source: source.into(), read_only: false }
 }
 
 /// A fake sysfs: an NVMe SSD with two partitions, a rotating disk, and a LUKS volume on it.

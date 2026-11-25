@@ -15,10 +15,24 @@ pub(super) fn path_on_drive(path: &str, root: &str) -> bool {
         .any(|ancestor| paths_match(&ancestor.to_string_lossy(), root))
 }
 
-/// Whether the innermost drive holding `path` refuses writes: under Linux, a
-/// read-only `/` leaves a writable `/home` mounted on it writable.
-fn on_read_only_volume(path: &str, drives: &[oxyde_lib::models::DriveInfo], read_only: &[String]) -> bool {
-    drive_of(path, drives).is_some_and(|drive| read_only.iter().any(|root| paths_match(root, &drive.path)))
+/// Whether the innermost mount holding `path` refuses writes. Under Linux, the list
+/// hides most mounts: a read-only `/` leaves the writable `/home` or `/var/home` mounted
+/// on it writable, and a link of `/` leads to where it points.
+fn on_read_only_volume(path: &str, protection: &oxyde_lib::platform::WriteProtection) -> bool {
+    let linked = protection.links.iter()
+        .filter_map(|(link, target)| {
+            let rest = std::path::Path::new(path).strip_prefix(link).ok()?;
+            let target = std::path::Path::new(target);
+            let resolved = if rest.as_os_str().is_empty() { target.to_path_buf() } else { target.join(rest) };
+            Some((link.len(), resolved))
+        })
+        .max_by_key(|(length, _)| *length)
+        .map(|(_, resolved)| resolved.to_string_lossy().into_owned());
+    let path = linked.as_deref().unwrap_or(path);
+    protection.mounts.iter()
+        .filter(|(point, _)| path_on_drive(path, point))
+        .max_by_key(|(point, _)| std::path::Path::new(point).components().count())
+        .is_some_and(|(_, read_only)| *read_only)
 }
 
 fn fixed_archive(root: &std::path::Path) -> bool {
@@ -29,26 +43,42 @@ fn fixed_archive(root: &std::path::Path) -> bool {
 /// Wait before creating again a watcher that failed, unless the drives change.
 const WATCHER_RETRY: std::time::Duration = std::time::Duration::from_secs(60);
 
+/// Whether `path` is the folder whose permissions refuse writes, or an entry directly in
+/// it, which cannot be renamed, moved or removed either.
+fn in_denied_folder(denied: Option<&str>, path: &str) -> bool {
+    denied.is_some_and(|folder| {
+        paths_match(path, folder)
+            || std::path::Path::new(path).parent().is_some_and(|parent| paths_match(&parent.to_string_lossy(), folder))
+    })
+}
+
 impl OxydeApp {
     /// Whether nothing can be written at `path` shown in `pane_id`: its volume
-    /// refuses writes, or the pane browses an archive Oxyde cannot rewrite.
+    /// refuses writes, the pane browses an archive Oxyde cannot rewrite, or the
+    /// permissions of the folder it shows refuse the user.
     pub(crate) fn is_read_only_location(&self, pane_id: &str, path: &str) -> bool {
-        let in_fixed_archive = self.state.find_pane(pane_id)
-            .and_then(|pane| pane.active_tab().archive_root.as_deref())
-            .is_some_and(fixed_archive);
-        in_fixed_archive || on_read_only_volume(path, &self.state.drives, &self.read_only_volumes)
+        let tab = self.state.find_pane(pane_id).map(|pane| pane.active_tab());
+        let in_fixed_archive = tab.and_then(|tab| tab.archive_root.as_deref()).is_some_and(fixed_archive);
+        let denied = tab.is_some_and(|tab| in_denied_folder(tab.denied_folder.as_deref(), path));
+        in_fixed_archive || denied || on_read_only_volume(path, &self.write_protection)
     }
 
     /// Whether nothing can be written into the folder `path`, wherever it is
-    /// shown: its volume refuses writes, or it lies in an archive a tab browses
-    /// and Oxyde cannot rewrite.
+    /// shown: its volume refuses writes, it lies in an archive a tab browses
+    /// and Oxyde cannot rewrite, or a tab listing it, or its parent, found its
+    /// permissions refuse the user. A folder no tab lists, as in the sidebar, is not
+    /// checked here: the operation reports it.
     pub(crate) fn is_read_only_path(&self, path: &str) -> bool {
-        let mut in_fixed_archive = false;
+        let mut refused = false;
         self.state.layout.visit_panes(&mut |pane| {
-            in_fixed_archive |= pane.tabs.iter().filter_map(|tab| tab.archive_root.as_deref())
-                .any(|root| fixed_archive(root) && path_on_drive(path, &root.to_string_lossy()));
+            refused |= pane.tabs.iter().any(|tab| {
+                tab.archive_root.as_deref()
+                    .is_some_and(|root| fixed_archive(root) && path_on_drive(path, &root.to_string_lossy()))
+                    || tab.denied_folder.as_deref().is_some_and(|folder| paths_match(path, folder))
+                    || tab.denied_subfolders.contains(path)
+            });
         });
-        in_fixed_archive || on_read_only_volume(path, &self.state.drives, &self.read_only_volumes)
+        refused || on_read_only_volume(path, &self.write_protection)
     }
 }
 
@@ -270,12 +300,8 @@ impl OxydeApp {
                             super::drag::volumes::replace_mount_points(
                                 oxyde_lib::platform::platform().volumes().mount_points());
                             let policies = super::trash_settings::read_drive_policy(&roots);
-                            let read_only: Vec<String> = roots.iter()
-                                .filter(|drive| drive.drive_type != "remote" && oxyde_lib::platform::platform()
-                                    .volume_is_read_only(std::path::Path::new(&drive.path)))
-                                .map(|drive| drive.path.clone())
-                                .collect();
-                            (roots, unmounted, (policies, read_only))
+                            let protection = oxyde_lib::platform::platform().volumes().write_protection(&roots);
+                            (roots, unmounted, (policies, protection))
                         }).await {
                             h.update(&mut cx, |this, cx| {
                                 if this.ejecting_drive || this.drive_refresh_epoch != epoch
@@ -300,12 +326,12 @@ impl OxydeApp {
                                 // apply_drive_roots rebuilds the sidebar.
                                 this.state.unmounted_volumes = unmounted;
                                 this.apply_drive_roots(roots, cx);
-                                let (policies, read_only) = policies;
+                                let (policies, protection) = policies;
                                 if this.trash_delete_policy.replace(policy_revision, policies) {
                                     cx.notify();
                                 }
-                                if this.read_only_volumes != read_only {
-                                    this.read_only_volumes = read_only;
+                                if this.write_protection != protection {
+                                    this.write_protection = protection;
                                     cx.notify();
                                 }
                                 if changed || details_due {

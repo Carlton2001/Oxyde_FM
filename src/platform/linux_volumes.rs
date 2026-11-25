@@ -1,6 +1,6 @@
 //! Linux volume domain: UDisks2 inventory, unmounting and ejection, mount table fallback
 //! and notifications.
-use super::{DriveActions, MountedDiskImage, UnmountedVolume, VolumeError, Volumes};
+use super::{DriveActions, MountedDiskImage, UnmountedVolume, VolumeError, Volumes, WriteProtection};
 use crate::models::DriveInfo;
 
 mod actions;
@@ -10,6 +10,7 @@ mod holders;
 mod images;
 mod inventory;
 mod mounts;
+mod protection;
 mod signals;
 mod udisks;
 mod watch;
@@ -83,6 +84,10 @@ impl Volumes for LinuxVolumes {
 
     fn mount_points(&self) -> Vec<String> {
         mounts::mount_points()
+    }
+
+    fn write_protection(&self, roots: &[DriveInfo]) -> WriteProtection {
+        protection::write_protection(&mounts::table(), roots)
     }
 
     fn watch(&self, revision: std::sync::Arc<std::sync::atomic::AtomicU64>)

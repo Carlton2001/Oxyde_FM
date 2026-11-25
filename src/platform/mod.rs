@@ -15,7 +15,7 @@ mod remote;
 pub use file_clipboard::FileClipboard;
 pub use remote::{PasswordSave, RemoteAnswer, RemoteError, RemoteLocation, RemotePrompt};
 pub use quick_access::QuickAccess;
-pub use volumes::{DriveActions, UnmountedVolume, VolumeError, Volumes};
+pub use volumes::{DriveActions, UnmountedVolume, VolumeError, Volumes, WriteProtection};
 
 #[derive(Debug)]
 pub enum NetworkDisconnectError {
@@ -858,6 +858,16 @@ pub trait Platform: Send + Sync {
     fn volume_is_read_only(&self, _root: &std::path::Path) -> bool {
         false
     }
+    /// Whether the user may not create, rename or remove entries in this folder, as
+    /// Nautilus greys its write actions; false when unknown. Blocking.
+    fn folder_denies_writes(&self, _path: &std::path::Path) -> bool {
+        false
+    }
+    /// Which of the `subfolders` listed in `folder` deny writes, as `folder_denies_writes`;
+    /// empty where asking each one would cost too much. Blocking.
+    fn denied_subfolders(&self, _folder: &std::path::Path, _subfolders: Vec<String>) -> Vec<String> {
+        Vec::new()
+    }
     /// Blocking network operations; call on a background worker.
     fn map_network_drive(&self, letter: String, path: String, reconnect: bool, username: Option<String>, password: Option<String>) -> Result<(), String>;
     fn disconnect_network_drive(&self, path: String, force: bool) -> Result<(), NetworkDisconnectError>;
@@ -1374,6 +1384,8 @@ mod linux_mount_place;
 mod linux_held;
 #[cfg(target_os = "linux")]
 mod linux_bulk_expand;
+#[cfg(target_os = "linux")]
+mod linux_write_access;
 
 #[cfg(target_os = "windows")]
 mod windows_trash_restore;

@@ -104,6 +104,8 @@ impl TabState {
             opened_at: None,
             path: path.clone(),
             archive_root: None,
+            denied_folder: None,
+            denied_subfolders: Default::default(),
             files: Default::default(),
             show_size_histogram: false,
             size_calculation: None,

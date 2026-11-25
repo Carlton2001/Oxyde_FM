@@ -28,3 +28,20 @@ fn malformed_escapes_are_kept_verbatim() {
     assert_eq!(unescape("/end\\04"), "/end\\04");
     assert_eq!(unescape("/tab\\011x"), "/tab\tx");
 }
+
+#[test]
+fn read_only_comes_from_the_mount_or_its_filesystem() {
+    let table = "\
+22 1 0:21 / / ro,relatime shared:1 - overlay composefs ro,lowerdir=/x
+23 22 0:22 /var /var rw,relatime shared:2 - btrfs /dev/vda3 rw,compress=zstd
+24 22 0:23 / /mnt/disc rw,nosuid - iso9660 /dev/sr0 ro
+25 22 0:24 / /mnt/rows rw,nosuid - ext4 /dev/sdb1 rw,errors=remount-ro
+";
+    let flags: Vec<_> = entries(table).into_iter().map(|entry| (entry.point, entry.read_only)).collect();
+    assert_eq!(flags, [
+        ("/".to_string(), true),
+        ("/var".to_string(), false),
+        ("/mnt/disc".to_string(), true),
+        ("/mnt/rows".to_string(), false),
+    ]);
+}

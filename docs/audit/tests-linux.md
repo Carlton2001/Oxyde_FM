@@ -184,6 +184,12 @@ Corrigés sous WSL Fedora 45 (`51ec43ca..552e8bb6`). Reste à faire sur une vrai
 - [ ] F124 (`2d015312`) : lien symbolique vers un dossier dans l'arbre de la barre latérale : affiché avec sa flèche et dépliable ; « Tout développer » sur le parent n'entre pas dedans.
 - [ ] F209 (`d6ac0f67`) : sous KDE, avec un pourcentage de corbeille non entier dans `ktrashrc` (12,34), ouvrir les réglages de la corbeille et valider sans toucher au champ : `ktrashrc` garde 12.34.
 
+## Racine en lecture seule (2026-11-25)
+
+- [ ] Fedora Silverblue : dans `~` (`/var/home/<user>`) puis via `/home/<user>`, Nouveau dossier, Renommer, Couper, Coller et Supprimer (vers la corbeille) sont proposés et fonctionnent ; dans `/usr`, ils restent masqués. Même chose sur SteamOS dans `/home`.
+- [ ] Dossier du système en écriture mais qui appartient à root (`/etc`, `/var/lib`) : Nouveau dossier grisé dans la barre, Nouveau, Coller, Couper, Renommer et Supprimer absents des menus, comme Nautilus ; `/tmp` garde ces actions.
+- [ ] Glisser un fichier depuis `~` sur la ligne `etc` en listant `/` : dépôt refusé, sans surbrillance ; sur `tmp` : accepté.
+
 ## Tests X11 (non prévus)
 
 Sortis de leurs lots : l'utilisateur ne compte pas les faire. Ils restent ouverts, sans échéance.

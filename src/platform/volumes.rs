@@ -19,6 +19,16 @@ pub struct UnmountedVolume {
     pub file_system: Option<String>,
 }
 
+/// Where writes are refused, read in the background and consulted while rendering.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WriteProtection {
+    /// Each mount with whether it refuses writes: the innermost holding a path decides.
+    pub mounts: Vec<(String, bool)>,
+    /// Symbolic links at the top of a read-only drive, with their lexical target: the
+    /// read-only `/` of Fedora Atomic reaches the writable `/var/home` through `/home`.
+    pub links: Vec<(String, String)>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VolumeError {
     /// The user dismissed the authentication dialog: nothing to report.
@@ -52,6 +62,19 @@ pub trait Volumes: Send + Sync {
     fn roots(&self) -> Vec<DriveInfo> { self.list(true) }
     /// Every mount point, hidden ones included, when roots alone do not separate volumes.
     fn mount_points(&self) -> Vec<String> { Vec::new() }
+    /// Which of `roots`, and of the mounts the list hides, refuse writes. Never stats a
+    /// network drive.
+    fn write_protection(&self, roots: &[DriveInfo]) -> WriteProtection {
+        let platform = super::platform();
+        WriteProtection {
+            mounts: roots.iter().map(|drive| {
+                let read_only = drive.drive_type != "remote"
+                    && platform.volume_is_read_only(std::path::Path::new(&drive.path));
+                (drive.path.clone(), read_only)
+            }).collect(),
+            links: Vec::new(),
+        }
+    }
     /// The returned guard owns the registration. Callbacks only increment revision.
     fn watch(&self, _revision: std::sync::Arc<std::sync::atomic::AtomicU64>)
         -> Result<Option<Box<dyn Send>>, String> { Ok(None) }
