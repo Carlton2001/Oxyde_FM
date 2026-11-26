@@ -35,7 +35,7 @@ Run a correctness trial first, on a small sample:
 
 ## Reading results
 
-- `total_s`: wall time of the pass, including folder creation, preparation, transfer, hashing, flush, publication and staging cleanup. Independent validation and final removal are excluded.
+- `total_s`: wall time of the pass, including folder creation, preparation, transfer, hashing, flush and keeping the output. Independent validation and final removal are excluded.
 - `transfer_s`: cumulative transfer time. Includes the native flush in `native` modes and inline BLAKE3 in `stream_blake3`.
 - `stream_flush_s`: explicit `sync_all` of the Rust engine. Zero for native does not mean no flush: it is in `transfer_s`.
 - `post_hash_s`: BLAKE3 re-read after copy, `native_blake3` only.

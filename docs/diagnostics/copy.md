@@ -30,10 +30,10 @@ Target: `oxyde_lib::copy_timing`, durations in seconds. For the exact inventory,
 | `native_s` | Platform copy, flush included, observed pauses excluded |
 | `flush_s`, `flush_calls` | Explicit flush calls; **time already in `native_s`** |
 | `hash_s` | BLAKE3 re-read of the destination, observed pauses excluded |
-| `publish_s` | Final rename, failed attempt included |
+| `publish_s` | Keeping the output: a replacement's rename over its target, failed attempt included |
 | `parents_s`, `checks_s` | Parent resolution and checks before copy/publication |
-| `staging_create_s`, `writer_release_s`, `output_open_s` | Private preparation, closing the writer and verified reopening |
-| `cleanup_s`, `remaining_s` | Staging destructor and unattributed remainder, without counting flush twice |
+| `output_prepare_s`, `writer_release_s`, `output_open_s` | Output preparation, closing the writer and verified reopening |
+| `cleanup_s`, `remaining_s` | Cleanup of an output not kept and unattributed remainder, without counting flush twice |
 
 ## Avoiding wrong conclusions
 

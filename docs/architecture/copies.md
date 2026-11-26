@@ -1,6 +1,6 @@
 # Linux copies
 
-Copying a file on Linux, including the copy in a cross-volume move: where it reads from, how it writes, and what it keeps from the original file and folders. Staging, the BLAKE3 re-read of the output, exclusive publication and history are shared. Windows native copy goes through `CopyFileEx`.
+Copying a file on Linux, including the copy in a cross-volume move: where it reads from, how it writes, and what it keeps from the original file and folders. Exclusive creation under the final name, the BLAKE3 re-read of the output, cleanup of a partial file and history are shared ([operations](operations.md#interrupted-operations)). Windows native copy goes through `CopyFileEx`.
 
 ## Rules
 

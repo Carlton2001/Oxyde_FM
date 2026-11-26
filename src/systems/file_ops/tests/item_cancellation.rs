@@ -40,7 +40,7 @@ impl Drop for Registration {
 mod speed_history_tests;
 
 #[test]
-fn cancelled_second_file_is_interrupted_after_staging_cleanup_not_partial() {
+fn cancelled_second_file_is_interrupted_after_its_partial_file_is_removed() {
     let temp = tempfile::tempdir().unwrap();
     let source = temp.path().join("source");
     let target = temp.path().join("target");
@@ -108,6 +108,6 @@ fn cancelled_second_file_is_interrupted_after_staging_cleanup_not_partial() {
     assert_eq!(
         std::fs::read_dir(&target).unwrap().count(),
         1,
-        "only the completed file remains; staging is cleaned"
+        "only the completed file remains; the partial one is removed"
     );
 }

@@ -1,17 +1,29 @@
-use super::{recover_in, write, Entry};
+use super::{recover_in, write_file, write_folder, Entry};
 use crate::platform::platform;
 use crate::systems::path_parents::HeldParents;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-/// A staging folder with a partial output and its note, as a copy leaves them.
+/// A partial file and its note, as a copy leaves them.
+fn partial(root: &Path, notes: &Path, name: &str) -> (PathBuf, Entry) {
+    let path = root.join(name);
+    let parents = HeldParents::new(&path).unwrap();
+    let mut output = platform().create_operation_output(parents.directory(), &path).unwrap();
+    output.write_all(b"partial copy").unwrap();
+    let identity = platform().file_identity(&output).unwrap();
+    let created = output.metadata().unwrap().created().ok();
+    let entry = write_file(notes, &path, identity, created).unwrap();
+    (path, entry)
+}
+
+/// A staging folder with a partial output and its note, as earlier versions left them.
 fn stage(root: &Path, notes: &Path, name: &str) -> (PathBuf, Entry) {
     let parents = HeldParents::new(&root.join("destination")).unwrap();
     let path = root.join(name);
     let (directory, pin) = platform().create_copy_staging(parents.directory(), &path).unwrap();
     let mut output = platform().create_operation_output(&directory, &path.join("output")).unwrap();
     output.write_all(b"partial copy").unwrap();
-    let entry = write(notes, &path, &directory, &pin).unwrap();
+    let entry = write_folder(notes, &path, &directory, &pin).unwrap();
     (path, entry)
 }
 
@@ -93,4 +105,79 @@ fn a_staging_on_an_unplugged_volume_is_cleaned_once_it_is_back() {
     assert_eq!(recovered.removed, std::slice::from_ref(&path));
     assert!(!path.exists());
     assert_eq!(std::fs::read_dir(&notes).unwrap().count(), 0);
+}
+
+#[test]
+fn a_partial_file_of_an_ended_process_is_removed() {
+    let root = tempfile::tempdir().unwrap();
+    let notes = root.path().join("notes");
+    let (path, entry) = partial(root.path(), &notes, "copy.bin");
+    end(entry);
+    std::fs::write(root.path().join("witness"), b"unowned").unwrap();
+    let recovered = recover_in(&notes);
+    assert_eq!(recovered.removed, std::slice::from_ref(&path));
+    assert!(recovered.kept.is_empty());
+    assert!(!path.exists());
+    assert_eq!(std::fs::read(root.path().join("witness")).unwrap(), b"unowned");
+    assert_eq!(std::fs::read_dir(&notes).unwrap().count(), 0);
+}
+
+#[test]
+fn a_running_copy_keeps_its_partial_file() {
+    let root = tempfile::tempdir().unwrap();
+    let notes = root.path().join("notes");
+    let (path, entry) = partial(root.path(), &notes, "copy.bin");
+    let recovered = recover_in(&notes);
+    assert!(recovered.removed.is_empty() && recovered.kept.is_empty());
+    assert!(path.exists());
+    drop(entry);
+    assert_eq!(std::fs::read_dir(&notes).unwrap().count(), 0);
+}
+
+#[test]
+fn a_file_that_took_the_partial_files_name_is_kept() {
+    let root = tempfile::tempdir().unwrap();
+    let notes = root.path().join("notes");
+    let (path, entry) = partial(root.path(), &notes, "copy.bin");
+    end(entry);
+    // Moved away, not removed: a filesystem may reuse a freed identifier.
+    std::fs::rename(&path, root.path().join("original")).unwrap();
+    std::fs::write(&path, b"the user's file").unwrap();
+    let recovered = recover_in(&notes);
+    assert!(recovered.removed.is_empty());
+    assert_eq!(recovered.kept, std::slice::from_ref(&path));
+    assert_eq!(std::fs::read(&path).unwrap(), b"the user's file");
+    assert_eq!(std::fs::read_dir(&notes).unwrap().count(), 0);
+}
+
+#[test]
+fn a_partial_file_without_a_creation_date_is_kept() {
+    let root = tempfile::tempdir().unwrap();
+    let notes = root.path().join("notes");
+    let path = root.path().join("copy.bin");
+    std::fs::write(&path, b"partial copy").unwrap();
+    let identity = platform().file_identity(&std::fs::File::open(&path).unwrap()).unwrap();
+    end(write_file(&notes, &path, identity, None).unwrap());
+    let recovered = recover_in(&notes);
+    assert_eq!(recovered.kept, std::slice::from_ref(&path));
+    assert!(path.exists());
+}
+
+#[test]
+fn a_partial_file_whose_folder_went_away_waits_for_it() {
+    let root = tempfile::tempdir().unwrap();
+    let notes = root.path().join("notes");
+    let volume = root.path().join("volume");
+    std::fs::create_dir(&volume).unwrap();
+    let (path, entry) = partial(&volume, &notes, "copy.bin");
+    end(entry);
+    let away = root.path().join("away");
+    std::fs::rename(&volume, &away).unwrap();
+    let recovered = recover_in(&notes);
+    assert!(recovered.removed.is_empty() && recovered.kept.is_empty());
+    assert_eq!(std::fs::read_dir(&notes).unwrap().count(), 1);
+    std::fs::rename(&away, &volume).unwrap();
+    let recovered = recover_in(&notes);
+    assert_eq!(recovered.removed, std::slice::from_ref(&path));
+    assert!(!path.exists());
 }

@@ -69,7 +69,7 @@ Known gap: a file opened from an encrypted archive stays decrypted in the open c
 
 ## Guarantees to preserve
 
-- Exclusive publication, destination checks and partial-effect recovery in the parent.
+- Exclusive creation, destination checks and partial-effect recovery in the parent. A new archive is created under its final name (`report (1).zip` when taken) and written there; one not finished is emptied and removed ([interrupted operations](operations.md#interrupted-operations)).
 - No adoption or purge of a foreign object or old cache without sufficient proof.
 - The recoverable Windows cache uses authenticated persistent proofs; lost/corrupted keys and incomplete states stay protected.
 - The Linux cache evicts only with a write lease on each file, proof no reader holds it open: see [Linux cache](linux-open-cache.md).

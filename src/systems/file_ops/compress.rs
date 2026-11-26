@@ -86,7 +86,7 @@ impl FileOperationManager {
         let base = destination_parents
             .resolved_path(&requested)
             .map_err(|error| error.to_string())?;
-        let (target, mut index) = Self::free_archive_path(&base, 0);
+        let (mut target, mut index) = Self::free_archive_path(&base, 0);
         #[cfg(not(test))]
         let budget = ArchiveBudget::new(_limits.unwrap_or(if retained.is_some() { ArchiveLimits::WORKSPACE } else { ArchiveLimits::EXTRACTION }));
         #[cfg(not(test))]
@@ -101,6 +101,19 @@ impl FileOperationManager {
         let total_bytes = entries.iter().map(|entry| entry.source.size()).sum();
         log::info!(target: "oxyde_lib::archive_timing", "archive_compress_plan entries={} source_bytes={} wall_s={:.6}", entries.len(), total_bytes, timing_started.elapsed().as_secs_f64());
         after_plan().map_err(|error| error.to_string())?;
+        // Created under its final name after planning, so it never lists itself.
+        #[cfg_attr(test, allow(unused_mut))]
+        let mut output = loop {
+            match crate::systems::compression_output::Output::create(&destination_parents, &target) {
+                Ok(output) => break output,
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                    // Each refusal moves past the taken name, from the original one.
+                    Self::archive_checkpoint(op)?;
+                    (target, index) = Self::free_archive_path(&base, index + 1);
+                }
+                Err(error) => return Err(error.to_string()),
+            }
+        };
         {
             let mut locked = op.lock().unwrap();
             if update_destination {
@@ -114,8 +127,6 @@ impl FileOperationManager {
                 OpStatus::Running
             };
         }
-        let mut output = crate::systems::compression_output::Output::new(&destination_parents)
-            .map_err(|error| error.to_string())?;
         let encoding_started = std::time::Instant::now();
         #[cfg(not(test))]
         {
@@ -262,18 +273,8 @@ impl FileOperationManager {
         let publication_started = std::time::Instant::now();
         Self::archive_checkpoint(op)?;
         output.file.sync_all().map_err(|error| error.to_string())?;
-        let mut final_target = target;
-        loop {
-            match output.publish(&destination_parents, &final_target) {
-                Ok(()) => break,
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                    // Each refusal moves past the taken name, from the original one.
-                    Self::archive_checkpoint(op)?;
-                    (final_target, index) = Self::free_archive_path(&base, index + 1);
-                }
-                Err(error) => return Err(error.to_string()),
-            }
-        }
+        output.keep(&destination_parents).map_err(|error| error.to_string())?;
+        let final_target = target;
         if let Some(completed) = completed { *completed = Some(output.file.try_clone().map_err(|e| e.to_string())?); }
         Self::archive_publication_finished(op);
         if update_destination {

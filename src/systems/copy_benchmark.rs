@@ -1,5 +1,5 @@
 //! Isolated data-copy benchmark. Never used by normal file operations/history.
-use super::{file_copy::Staging, path_parents::HeldParents};
+use super::{copy_output::Output, path_parents::HeldParents};
 use crate::platform::platform;
 use std::fs::File;
 use std::io::{self, Read, Write};
@@ -67,8 +67,7 @@ pub fn copy_one(source: &Path, destination: &Path, mode: Mode) -> io::Result<Mea
     }
     let parents = HeldParents::new(destination).map_err(|e| at("hold destination parents", e))?;
     let destination = parents.resolved_path(destination)?;
-    let staging =
-        Staging::with_prefix(&parents, ".oxyde-bench-").map_err(|e| at("create staging", e))?;
+    let written = Output::new(&parents, &destination, false).map_err(|e| at("prepare output", e))?;
     let mut result = Measurement {
         bytes: metadata.len(),
         ..Measurement::default()
@@ -80,10 +79,10 @@ pub fn copy_one(source: &Path, destination: &Path, mode: Mode) -> io::Result<Mea
             platform()
                 .copy_file_with_progress(
                     &source,
-                    &staging.file,
+                    written.path(),
                     Some(&input),
-                    &staging.directory,
-                    &mut |file| staging.capture_output(file),
+                    parents.directory(),
+                    &mut |file| written.capture(file),
                     &mut |_| Ok(()),
                 )
                 .map_err(|e| at("native copy/flush", e))?;
@@ -101,10 +100,10 @@ pub fn copy_one(source: &Path, destination: &Path, mode: Mode) -> io::Result<Mea
                 || {
                     platform().copy_file_with_progress(
                         &source,
-                        &staging.file,
+                        written.path(),
                         Some(&input),
-                        &staging.directory,
-                        &mut |file| staging.capture_output(file),
+                        parents.directory(),
+                        &mut |file| written.capture(file),
                         &mut |_| Ok(()),
                     )
                 },
@@ -117,8 +116,8 @@ pub fn copy_one(source: &Path, destination: &Path, mode: Mode) -> io::Result<Mea
         }
         Mode::StreamHash | Mode::Stream => {
             let mut output =
-                platform().create_operation_output(&staging.directory, &staging.file)?;
-            staging.capture_output(&output)?;
+                platform().create_operation_output(parents.directory(), written.path())?;
+            written.capture(&output)?;
             let mut hasher = matches!(mode, Mode::StreamHash).then(blake3::Hasher::new);
             let mut bytes = 0_u64;
             loop {
@@ -142,9 +141,9 @@ pub fn copy_one(source: &Path, destination: &Path, mode: Mode) -> io::Result<Mea
             }
         }
     }
-    let mut output = staging
-        .open_output()
-        .map_err(|e| at("open staged output", e))?;
+    let mut output = written
+        .open_verified()
+        .map_err(|e| at("open written output", e))?;
     if output.metadata()?.len() != result.bytes {
         return Err(io::Error::other("Copy size mismatch"));
     }
@@ -164,12 +163,12 @@ pub fn copy_one(source: &Path, destination: &Path, mode: Mode) -> io::Result<Mea
         result.post_hash = hash_started.elapsed();
     }
     let publish = Instant::now();
-    parents
-        .rename(&output, &staging.file, &destination, false)
-        .map_err(|e| at("publish output", e))?;
+    written
+        .keep(&parents, &output, false)
+        .map_err(|e| at("keep output", e))?;
     result.publish = publish.elapsed();
     drop(output);
-    drop(staging);
+    drop(written);
     result.total = started.elapsed();
     Ok(result)
 }
@@ -200,7 +199,7 @@ struct ParallelResult {
     digest: String,
 }
 
-/// Always join the reader, including on copy failure, before staging cleanup.
+/// Always join the reader, including on copy failure, before output cleanup.
 fn run_parallel(
     copy: impl FnOnce() -> io::Result<()>,
     hash: impl FnOnce() -> io::Result<String> + Send,

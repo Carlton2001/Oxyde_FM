@@ -32,9 +32,6 @@
                     "injected volume boundary",
                 ));
             }
-            if matches!(self.fault, Fault::Conflict) {
-                fs::write(&self.destination, b"external file")?;
-            }
             NativeIo.rename(file, source, destination, parents)
         }
         fn copy(
@@ -45,15 +42,11 @@
             parent: &File,
             created: &mut dyn FnMut(&File) -> io::Result<()>,
         ) -> io::Result<u64> {
-            #[cfg(target_os = "windows")]
-            assert!(
-                platform()
-                    .file_attributes(
-                        &fs::metadata(destination.parent().unwrap()).unwrap(),
-                        "staging",
-                    )
-                    .0
-            );
+            // Written under its own name, beside nothing else.
+            assert_eq!(destination.file_name(), self.destination.file_name());
+            if matches!(self.fault, Fault::Conflict) {
+                fs::write(&self.destination, b"external file")?;
+            }
             if matches!(self.fault, Fault::Copy) {
                 let output = fs::OpenOptions::new()
                     .write(true)
@@ -100,13 +93,9 @@
             fault,
         }
     }
-    fn assert_no_staging(root: &Path) {
+    fn assert_no_temporary(root: &Path) {
         assert!(fs::read_dir(root).unwrap().all(|entry| {
-            !entry
-                .unwrap()
-                .file_name()
-                .to_string_lossy()
-                .starts_with(".oxyde-history-")
+            !entry.unwrap().file_name().to_string_lossy().contains(".oxyde-")
         }));
     }
 
@@ -206,7 +195,7 @@
                 assert!(before.matches(&File::open(&ops.source).unwrap()).unwrap());
                 assert!(!ops.destination.exists());
             }
-            assert_no_staging(root.path());
+            assert_no_temporary(root.path());
         }
     }
 
@@ -352,7 +341,7 @@
             b"foreign destination"
         );
         assert_eq!(fs::read_dir(&outside).unwrap().count(), 2);
-        assert_no_staging(&selected);
+        assert_no_temporary(&selected);
         drop(ops);
         for link in [source_link, destination_link, template] {
             fs::remove_dir(link).unwrap();
@@ -361,7 +350,7 @@
 
     #[cfg(target_os = "windows")]
     #[test]
-    fn history_copy_refuses_a_new_destination_reparse_before_staging() {
+    fn history_copy_refuses_a_new_destination_reparse_before_writing() {
         use crate::platform::windows_reparse_tests::{Retarget, junction};
         struct RedirectBeforeCopy {
             retarget: Retarget,
@@ -500,7 +489,7 @@
         assert_eq!(fs::read(&source).unwrap(), b"selected data");
         assert_eq!(fs::read(&foreign).unwrap(), b"foreign data");
         assert!(!selected.join("output").exists());
-        assert_no_staging(&selected);
+        assert_no_temporary(&selected);
         drop(ops);
         fs::remove_dir(link).unwrap();
         fs::remove_dir(template).unwrap();
@@ -546,7 +535,7 @@
         let metadata = fs::metadata(&ops.destination).unwrap();
         assert_eq!(metadata.modified().unwrap(), modified);
         assert!(platform().file_attributes(&metadata, "").0);
-        assert_no_staging(root.path());
+        assert_no_temporary(root.path());
     }
 
     #[test]
@@ -557,10 +546,10 @@
         move_with(&ops, &ops.source, &ops.destination, Some(&expected)).unwrap();
         assert!(!ops.source.exists());
         assert_eq!(fs::read(&ops.destination).unwrap(), b"original bytes");
-        assert_no_staging(root.path());
+        assert_no_temporary(root.path());
     }
     #[test]
-    fn failed_or_corrupted_copy_keeps_source_and_removes_staging() {
+    fn failed_or_corrupted_copy_keeps_source_and_removes_the_copy() {
         for fault in [Fault::Copy, Fault::Corrupt] {
             let root = tempfile::tempdir().unwrap();
             let ops = fixture(root.path(), fault);
@@ -575,18 +564,18 @@
             );
             assert_eq!(fs::read(&ops.source).unwrap(), b"original bytes");
             assert!(!ops.destination.exists());
-            assert_no_staging(root.path());
+            assert_no_temporary(root.path());
         }
     }
     #[test]
-    fn publication_conflict_preserves_external_file_and_source() {
+    fn creation_conflict_preserves_external_file_and_source() {
         let root = tempfile::tempdir().unwrap();
         let ops = fixture(root.path(), Fault::Conflict);
         let error = move_with(&ops, &ops.source, &ops.destination, None).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
         assert_eq!(fs::read(&ops.source).unwrap(), b"original bytes");
         assert_eq!(fs::read(&ops.destination).unwrap(), b"external file");
-        assert_no_staging(root.path());
+        assert_no_temporary(root.path());
     }
     #[test]
     fn refused_source_deletion_removes_own_published_copy() {
@@ -596,7 +585,7 @@
         assert_eq!(error.to_string(), "injected delete failure");
         assert_eq!(fs::read(&ops.source).unwrap(), b"original bytes");
         assert!(!ops.destination.exists());
-        assert_no_staging(root.path());
+        assert_no_temporary(root.path());
     }
     #[test]
     fn changed_source_is_rejected_before_rename_or_copy() {
@@ -620,7 +609,7 @@
         assert_eq!(fs::read(&ops.source).unwrap(), b"original bytes");
         assert!(fs::metadata(&ops.source).unwrap().permissions().readonly());
         assert!(!ops.destination.exists());
-        assert_no_staging(root.path());
+        assert_no_temporary(root.path());
         let mut permissions = fs::metadata(&ops.source).unwrap().permissions();
         permissions.set_readonly(false);
         fs::set_permissions(&ops.source, permissions).unwrap();
@@ -704,6 +693,6 @@
             let metadata = fs::metadata(to).unwrap();
             assert!(!platform().file_attributes(&metadata, "fixture").0);
         }
-        assert_no_staging(first.path());
-        assert_no_staging(second.path());
+        assert_no_temporary(first.path());
+        assert_no_temporary(second.path());
     }
