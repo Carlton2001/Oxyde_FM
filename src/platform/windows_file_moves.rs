@@ -40,7 +40,7 @@ pub(super) fn hold_parent(path: &Path) -> Result<File> {
     super::windows_no_reparse::open(
         path,
         true,
-        GENERIC_READ.0,
+        super::windows_source_selection::READ_CONTENTS,
         FILE_SHARE_READ.0 | FILE_SHARE_WRITE.0,
         1,
     )

@@ -6,7 +6,7 @@ use std::path::Path;
 use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Storage::FileSystem::{
     COPY_FILE_COPY_SYMLINK, COPY_FILE_FAIL_IF_EXISTS, COPYPROGRESSROUTINE_PROGRESS, CopyFileExW,
-    FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_READ, FlushFileBuffers,
+    FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_READ, FILE_SHARE_WRITE, FlushFileBuffers,
     LPPROGRESS_ROUTINE_CALLBACK_REASON, PROGRESS_CONTINUE, PROGRESS_STOP,
 };
 use windows::core::PCWSTR;
@@ -98,13 +98,13 @@ pub(super) fn copy(
             "Copy destination parent is not an ordinary directory",
         ));
     }
-    // Read access suffices for Copy. Deny source writes/deletion during the
+    // Read access suffices for Copy. Deny source deletion during the
     // native call without requiring DELETE access from the source's ACL.
     let source_guard = if held_source.is_none() {
         Some(
             OpenOptions::new()
-                .read(true)
-                .share_mode(FILE_SHARE_READ.0)
+                .access_mode(super::windows_source_selection::READ_CONTENTS)
+                .share_mode(FILE_SHARE_READ.0 | FILE_SHARE_WRITE.0)
                 .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT.0)
                 .open(source)?,
         )

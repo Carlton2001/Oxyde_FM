@@ -32,7 +32,7 @@ fn hold_directory_with(path: &Path, allow_reparse: bool) -> io::Result<File> {
         OpenOptions::new()
             // Attribute-only access does not participate in Windows share checking.
             // Read access makes the omitted FILE_SHARE_DELETE block directory renames.
-            .read(true)
+            .access_mode(super::windows_source_selection::READ_CONTENTS)
             .share_mode(if allow_reparse {
                 FILE_SHARE_READ.0 | FILE_SHARE_WRITE.0
             } else {
@@ -55,7 +55,7 @@ fn hold_directory_with(path: &Path, allow_reparse: bool) -> io::Result<File> {
         // open the destination directory for adding a child. This does not
         // prohibit installing a NEW reparse point on an ordinary directory.
         return OpenOptions::new()
-            .read(true)
+            .access_mode(super::windows_source_selection::READ_CONTENTS)
             .share_mode(FILE_SHARE_READ.0)
             .custom_flags(FILE_FLAG_BACKUP_SEMANTICS.0 | FILE_FLAG_OPEN_REPARSE_POINT.0)
             .open(path);
