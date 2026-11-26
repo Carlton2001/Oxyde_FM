@@ -34,14 +34,28 @@ fn sample<R: Read + ?Sized>(reader: &mut R, size: u64) -> io::Result<()> {
     Ok(())
 }
 
+/// Members whose key check is read besides the sampled one. A wrong ZipCrypto key
+/// passes each member's one-byte check with odds of 1 in 256, independently: a stored
+/// member larger than `SAMPLE` has no checksum read, but several checks still refuse.
+const HEADER_CHECKS: usize = 8;
+
 fn zip(file: File, secret: Option<&ArchiveSecret>) -> Option<ArchivePasswordFailure> {
     let mut archive = zip::ZipArchive::new(BufReader::new(file)).ok()?;
-    let index = (0..archive.len())
+    let mut encrypted: Vec<_> = (0..archive.len())
         .filter_map(|index| archive.by_index_raw(index).ok().filter(|entry| entry.encrypted() && !entry.is_dir())
             .map(|entry| (entry.compressed_size(), index)))
-        .min()?
-        .1;
+        .collect();
+    encrypted.sort_unstable();
+    let (_, index) = *encrypted.first()?;
     let Some(secret) = secret else { return Some(ArchivePasswordFailure::Required) };
+    // Opening a member reads its key check without decoding its data.
+    for &(_, other) in encrypted.iter().skip(1).take(HEADER_CHECKS) {
+        if let Some(failure) = archive.by_index_decrypt(other, secret.expose().as_bytes()).err()
+            .and_then(|error| archive_password::zip_failure(&error))
+        {
+            return Some(failure);
+        }
+    }
     let mut entry = match archive.by_index_decrypt(index, secret.expose().as_bytes()) {
         Ok(entry) => entry,
         Err(error) => return archive_password::zip_failure(&error),
