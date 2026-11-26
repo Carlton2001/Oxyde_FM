@@ -48,6 +48,7 @@ pub(crate) fn extract(
     };
     let mut names = HashSet::new();
     let mut parts = Vec::new();
+    let mut sheet_extras = Vec::new();
     let mut name_bytes = 0usize;
     let mut shared = false;
     for index in 0..archive.len() {
@@ -70,6 +71,8 @@ pub(crate) fn extract(
             || (odf && name == "content.xml")
         {
             parts.push(name);
+        } else if sheet && sheet_extra_part(&name) {
+            sheet_extras.push(name);
         }
     }
     if parts.is_empty() {
@@ -98,6 +101,10 @@ pub(crate) fn extract(
         } else {
             paragraphs(&xml, word, odf, &mut output, checkpoint)?;
         }
+    }
+    for name in sheet_extras {
+        let xml = part(&mut archive, &name, &mut remaining, checkpoint)?;
+        sheet_extra(&xml, &mut output, checkpoint)?;
     }
     checkpoint()?;
     Ok(output.output)
@@ -233,6 +240,40 @@ fn paragraphs(
             {
                 output.append(" ")?;
             }
+        }
+        Ok(())
+    })?;
+    if !output.line.is_empty() {
+        output.end_line()?;
+    }
+    Ok(())
+}
+
+/// A workbook's notes (`xl/commentsN.xml`, also written for threaded comments) and
+/// charts (`xl/charts/chartN.xml`): text found nowhere in the cells.
+fn sheet_extra_part(name: &str) -> bool {
+    let file = |prefix: &str| {
+        name.strip_prefix(prefix)
+            .is_some_and(|rest| !rest.contains('/') && rest.ends_with(".xml"))
+    };
+    file("xl/comments") || file("xl/charts/chart")
+}
+
+/// A note's runs, a chart's titles and labels (`a:t`), and the series names and
+/// categories it caches as text (`c:v` in `c:strCache`); cached numbers are left out.
+fn sheet_extra(xml: &str, output: &mut Text, checkpoint: &dyn Fn() -> io::Result<()>) -> io::Result<()> {
+    let (mut in_text, mut cached_text) = (false, false);
+    visit(xml, checkpoint, |text, name, tag, closing| {
+        if in_text {
+            output.append(text)?;
+        }
+        let empty = tag.ends_with('/');
+        match name {
+            "t" | "a:t" => in_text = !closing && !empty,
+            "c:v" => in_text = cached_text && !closing && !empty,
+            "c:strCache" => cached_text = !closing && !empty,
+            "comment" | "a:p" | "c:pt" if closing && !output.line.is_empty() => output.end_line()?,
+            _ => {}
         }
         Ok(())
     })?;

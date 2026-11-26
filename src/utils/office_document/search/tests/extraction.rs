@@ -133,3 +133,25 @@ fn open_document_text_after_an_anchored_text_box_is_still_searched() {
     let text = extract(package(&[("content.xml", "<text:p>Before <draw:frame><draw:text-box><text:p>Boxed</text:p></draw:text-box></draw:frame> after</text:p>")]), "odt", &|| Ok(())).unwrap();
     assert!(text.contains("Before") && text.contains("Boxed") && text.contains("after"), "{text:?}");
 }
+
+#[test]
+fn workbook_notes_and_chart_text_are_searched_besides_the_cells() {
+    let file = package(&[
+        ("xl/worksheets/sheet1.xml", "<row><c t='inlineStr'><is><t>cell</t></is></c></row>"),
+        (
+            "xl/comments1.xml",
+            "<comments><commentList><comment ref='A1'><text><r><t>Author:</t></r><r><t xml:space='preserve'> check totals</t></r></text></comment></commentList></comments>",
+        ),
+        (
+            "xl/charts/chart1.xml",
+            "<c:chartSpace><c:chart><c:title><c:tx><c:rich><a:p><a:r><a:t>Quarterly sales</a:t></a:r></a:p></c:rich></c:tx></c:title>\
+             <c:ser><c:tx><c:strRef><c:strCache><c:pt idx='0'><c:v>Revenue</c:v></c:pt></c:strCache></c:strRef></c:tx>\
+             <c:val><c:numRef><c:numCache><c:pt idx='0'><c:v>42</c:v></c:pt></c:numCache></c:numRef></c:val></c:ser></c:chart></c:chartSpace>",
+        ),
+        ("xl/charts/style1.xml", "<cs:chartStyle><a:t>not a chart</a:t></cs:chartStyle>"),
+    ]);
+    assert_eq!(
+        extract(file, "xlsx", &|| Ok(())).unwrap(),
+        "cell\nAuthor: check totals\nQuarterly sales\nRevenue\n"
+    );
+}
