@@ -40,7 +40,7 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 
 | ID | Emplacement | État | Commits | Note |
 | --- | --- | --- | --- | --- |
-| F70 | `commands/archive_iso_open.rs:208` | corrigé (en partie) | 6e67bba6 | arbre Joliet lu quand l'image en a un (noms Unicode) ; Rock Ridge non pris en charge ; tests ; workers à reconstruire |
+| F70 | `commands/archive_iso_open.rs:208` | corrigé | 6e67bba6, a3e86604 | arbre Joliet lu quand l'image en a un (noms Unicode) ; Rock Ridge lu avant Joliet, comme le noyau (entrées NM, zones de suite CE, dossiers déplacés RE/CL, `rr_moved` vide masqué) : noms longs, casse, `;1` et point final gardés ; test, et vérifié sur des images de mkisofs et xorriso (avec et sans Joliet, avec déplacement des dossiers profonds) ; liens symboliques Rock Ridge listés comme fichiers vides ; workers à reconstruire |
 | F71 | `commands/archive_iso_open.rs:181 et :195` | corrigé | 6e67bba6 | bornes des enregistrements et bourrage calculés sur le secteur de 2048 octets ; taille de bloc limitée à 512–2048 |
 | F73 | `commands/archive.rs:239` | corrigé | 23825b4d | dossier interne absent : erreur « Archive directory not found » pour ZIP, RAR, TAR, flux, 7z (local et worker), comme ISO ; dossier vide ou implicite toujours listé ; test ; workers à reconstruire |
 | F74 | `commands/archive.rs:143` | obsolète |  | corrigé par d1302a19 : `list_archive_contents_checked` arrête le listage quand l'onglet l'abandonne |
