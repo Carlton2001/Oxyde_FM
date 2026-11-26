@@ -131,7 +131,7 @@ fn cached_thumbnail(
     kind: &str,
     generate: impl FnOnce(String) -> Result<RgbaImage, CommandError>,
 ) -> Result<RgbaImage, CommandError> {
-    let source = Path::new(&path);
+    let source = &crate::utils::path_text::decode(&path);
     let metadata =
         fs::metadata(source).map_err(|error| CommandError::IoError(error.to_string()))?;
     // Without a modification date the key could not tell an edited file apart.
