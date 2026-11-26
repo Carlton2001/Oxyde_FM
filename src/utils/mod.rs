@@ -20,6 +20,7 @@ pub mod disk_image;
 pub mod path_security;
 pub mod path_text;
 pub mod legacy_text;
+pub mod change_signal;
 pub mod open_regular;
 pub mod preview;
 pub mod preview_protocol;

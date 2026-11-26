@@ -26,7 +26,7 @@ impl QuickAccess for WindowsQuickAccess {
         )
     }
 
-    fn watch(&self, revision: std::sync::Arc<std::sync::atomic::AtomicU64>)
+    fn watch(&self, revision: std::sync::Arc<crate::utils::change_signal::ChangeSignal>)
         -> Result<Option<Box<dyn Send>>, String> {
         let root = std::env::var_os("APPDATA").ok_or("APPDATA is unavailable")?;
         let recent = std::path::PathBuf::from(root).join("Microsoft/Windows/Recent");

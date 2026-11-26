@@ -82,15 +82,15 @@ pub fn list_drive_roots() -> Vec<DriveInfo> {
 
 /// PnP interface notifications need no open volume/directory handles.
 pub fn watch_drive_changes(
-    revision: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    revision: std::sync::Arc<crate::utils::change_signal::ChangeSignal>,
 ) -> Result<Box<dyn Send>, String> {
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use crate::utils::change_signal::ChangeSignal;
     use windows::Win32::Devices::DeviceAndDriverInstallation::*;
     use windows::Win32::System::Ioctl::{GUID_DEVINTERFACE_DISK, GUID_DEVINTERFACE_VOLUME};
     struct Registration {
         handles: Vec<usize>,
         // Stable Arc allocation remains alive until all callbacks are unregistered.
-        revision: std::sync::Arc<AtomicU64>,
+        revision: std::sync::Arc<ChangeSignal>,
     }
     impl Drop for Registration {
         fn drop(&mut self) {
@@ -111,8 +111,8 @@ pub fn watch_drive_changes(
         if action == CM_NOTIFY_ACTION_DEVICEINTERFACEARRIVAL
             || action == CM_NOTIFY_ACTION_DEVICEINTERFACEREMOVAL
         {
-            // No IO, allocations or UI access inside a PnP callback.
-            unsafe { &*context.cast::<AtomicU64>() }.fetch_add(1, Ordering::Release);
+            // No IO or UI access inside a PnP callback: a counter and a wake.
+            unsafe { &*context.cast::<ChangeSignal>() }.notify();
         }
         0
     }
@@ -330,7 +330,7 @@ pub fn eject_drive(path: &str) -> Result<(), VolumeError> {
 mod eject_tests {
     #[test]
     fn native_drive_notifications_can_be_registered_and_released() {
-        let revision = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let revision = std::sync::Arc::new(crate::utils::change_signal::ChangeSignal::new());
         let guard = super::watch_drive_changes(revision.clone()).unwrap();
         drop(guard);
         // Registration context ownership is released after callbacks are unregistered.

@@ -17,7 +17,7 @@ impl Volumes for WindowsVolumes {
         mount_points()
     }
 
-    fn watch(&self, revision: std::sync::Arc<std::sync::atomic::AtomicU64>)
+    fn watch(&self, revision: std::sync::Arc<crate::utils::change_signal::ChangeSignal>)
         -> Result<Option<Box<dyn Send>>, String> {
         super::windows_drives::watch_drive_changes(revision).map(Some)
     }

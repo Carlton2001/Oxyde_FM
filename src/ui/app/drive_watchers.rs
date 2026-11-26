@@ -273,8 +273,7 @@ impl OxydeApp {
         self._drive_refresh_task = Some(cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
-                use std::sync::atomic::{AtomicU64, Ordering};
-                let revision = std::sync::Arc::new(AtomicU64::new(0));
+                let revision = std::sync::Arc::new(oxyde_lib::utils::change_signal::ChangeSignal::new());
                 let registration_revision = revision.clone();
                 let registration = tokio::task::spawn_blocking(move || {
                     oxyde_lib::platform::platform().volumes().watch(registration_revision)
@@ -290,7 +289,7 @@ impl OxydeApp {
                     _registration.is_some(), std::time::Instant::now());
                 loop {
                     let paused = h.update(&mut cx, |this, _| this.ejecting_drive);
-                    let observed = revision.load(Ordering::Acquire);
+                    let observed = revision.value();
                     if !paused && schedule.due(observed, std::time::Instant::now()) {
                         let details_due = schedule.details_due;
                         let (epoch, policy_revision) = h.update(&mut cx, |this, _| {
@@ -307,7 +306,7 @@ impl OxydeApp {
                         }).await {
                             h.update(&mut cx, |this, cx| {
                                 if this.ejecting_drive || this.drive_refresh_epoch != epoch
-                                    || revision.load(Ordering::Acquire) != observed { return; }
+                                    || revision.value() != observed { return; }
                                 let mut roots = roots;
                                 let missing: Vec<_> = this.state.drives.iter()
                                     .filter(|old| !roots.iter().any(|root| paths_match(&root.path, &old.path)))
@@ -351,7 +350,15 @@ impl OxydeApp {
                             });
                         }
                     }
-                    cx.background_executor().timer(std::time::Duration::from_millis(100)).await;
+                    // Woken by a notification or when the schedule is due; a release in
+                    // progress, which defers every survey, is checked again shortly.
+                    let wait = if paused {
+                        std::time::Duration::from_millis(100)
+                    } else {
+                        schedule.next.saturating_duration_since(std::time::Instant::now())
+                    };
+                    let timer = cx.background_executor().timer(wait);
+                    futures::future::select(std::pin::pin!(timer), std::pin::pin!(revision.changed())).await;
                 }
             }
         }));

@@ -31,7 +31,7 @@ impl QuickAccess for LinuxQuickAccess {
 
     /// GTK replaces the file on each change: watch its folder. A new profile has none
     /// until Nautilus adds a first bookmark, so it is created as GTK creates it.
-    fn watch(&self, revision: std::sync::Arc<std::sync::atomic::AtomicU64>)
+    fn watch(&self, revision: std::sync::Arc<crate::utils::change_signal::ChangeSignal>)
         -> Result<Option<Box<dyn Send>>, String> {
         let Some(folder) = file().as_deref().and_then(Path::parent).map(Path::to_path_buf) else {
             return Ok(None);

@@ -90,7 +90,7 @@ impl Volumes for LinuxVolumes {
         protection::write_protection(&mounts::table(), roots)
     }
 
-    fn watch(&self, revision: std::sync::Arc<std::sync::atomic::AtomicU64>)
+    fn watch(&self, revision: std::sync::Arc<crate::utils::change_signal::ChangeSignal>)
         -> Result<Option<Box<dyn Send>>, String> {
         watch::start(revision).map(|watch| Some(Box::new(watch) as Box<dyn Send>))
     }

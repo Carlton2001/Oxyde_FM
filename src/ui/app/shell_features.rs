@@ -1,8 +1,6 @@
 use super::*;
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Arc,
-};
+use oxyde_lib::utils::change_signal::ChangeSignal;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 impl OxydeApp {
@@ -170,7 +168,7 @@ impl OxydeApp {
 
     pub(super) fn start_shell_features_task(&mut self, cx: &mut Context<Self>) {
         self.shell_features_task = Some(cx.spawn(async move |this, cx| {
-            let revision = Arc::new(AtomicU64::new(0));
+            let revision = Arc::new(ChangeSignal::new());
             let callback_revision = revision.clone();
             let registration = tokio::task::spawn_blocking(move || {
                 oxyde_lib::platform::platform().quick_access().watch(callback_revision)
@@ -196,7 +194,7 @@ impl OxydeApp {
             let mut refresh = Instant::now().checked_sub(Duration::from_secs(10)).unwrap_or_else(Instant::now);
             loop {
                 let now = Instant::now();
-                let current = revision.load(Ordering::Acquire);
+                let current = revision.value();
                 if current != observed {
                     observed = current;
                     pending = Some(now);
@@ -231,9 +229,14 @@ impl OxydeApp {
                         }
                     }
                 }
-                cx.background_executor()
-                    .timer(Duration::from_millis(100))
-                    .await;
+                // Woken by a change, or when the debounce or the periodic refresh is due.
+                let now = Instant::now();
+                let mut wait = Duration::from_secs(5).saturating_sub(now.duration_since(refresh));
+                if let Some(changed) = pending {
+                    wait = wait.min(Duration::from_millis(350).saturating_sub(now.duration_since(changed)));
+                }
+                let timer = cx.background_executor().timer(wait);
+                futures::future::select(std::pin::pin!(timer), std::pin::pin!(revision.changed())).await;
             }
         }));
     }

@@ -5,7 +5,7 @@
 use rustix::event::{poll, PollFd, PollFlags};
 use rustix::pipe::{pipe_with, PipeFlags};
 use std::os::fd::OwnedFd;
-use std::sync::atomic::{AtomicU64, Ordering};
+use crate::utils::change_signal::ChangeSignal;
 use std::sync::Arc;
 
 /// Dropping the guard closes the pipe, which ends the watching thread.
@@ -15,7 +15,7 @@ pub(super) struct Watch {
     _gvfs: Option<super::signals::Signals>,
 }
 
-pub(super) fn start(revision: Arc<AtomicU64>) -> Result<Watch, String> {
+pub(super) fn start(revision: Arc<ChangeSignal>) -> Result<Watch, String> {
     let mounts = std::fs::File::open("/proc/self/mountinfo").map_err(|error| error.to_string())?;
     let (stopped, stop) = pipe_with(PipeFlags::CLOEXEC).map_err(|error| error.to_string())?;
     std::thread::Builder::new()
@@ -35,7 +35,7 @@ pub(super) fn start(revision: Arc<AtomicU64>) -> Result<Watch, String> {
     Ok(Watch { _stop: stop, _signals: signals, _gvfs: gvfs })
 }
 
-fn run(mounts: &std::fs::File, stopped: &OwnedFd, revision: &AtomicU64) {
+fn run(mounts: &std::fs::File, stopped: &OwnedFd, revision: &ChangeSignal) {
     // mountinfo is always readable; only PRI, with ERR, signals a change.
     let mut fds = [PollFd::new(mounts, PollFlags::PRI), PollFd::new(stopped, PollFlags::IN)];
     loop {
@@ -51,7 +51,7 @@ fn run(mounts: &std::fs::File, stopped: &OwnedFd, revision: &AtomicU64) {
             return;
         }
         if fds[0].revents().intersects(PollFlags::PRI | PollFlags::ERR) {
-            revision.fetch_add(1, Ordering::Release);
+            revision.notify();
         }
     }
 }

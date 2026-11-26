@@ -8,7 +8,7 @@ pub trait QuickAccess: Send + Sync {
     fn items(&self) -> Vec<QuickAccessItem>;
     fn pin(&self, path: &str) -> Result<(), CommandError>;
     fn unpin(&self, path: &str) -> Result<(), CommandError>;
-    /// The returned guard owns the watcher; callbacks only increment `revision`.
-    fn watch(&self, revision: std::sync::Arc<std::sync::atomic::AtomicU64>)
+    /// The returned guard owns the watcher; callbacks only notify `revision`.
+    fn watch(&self, revision: std::sync::Arc<crate::utils::change_signal::ChangeSignal>)
         -> Result<Option<Box<dyn Send>>, String>;
 }

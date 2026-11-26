@@ -3,7 +3,8 @@
 //! announces the network shares it mounts.
 use super::udisks::SERVICE;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use crate::utils::change_signal::ChangeSignal;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use zbus::blocking::{Connection, MessageIterator};
 use zbus::message::Type;
@@ -22,7 +23,7 @@ impl Drop for Signals {
     }
 }
 
-pub(super) fn start(revision: Arc<AtomicU64>) -> zbus::Result<Signals> {
+pub(super) fn start(revision: Arc<ChangeSignal>) -> zbus::Result<Signals> {
     // A connection of its own, so that waiting never holds the one blocking calls share.
     let connection = Connection::system()?;
     let rule = MatchRule::builder()
@@ -35,7 +36,7 @@ pub(super) fn start(revision: Arc<AtomicU64>) -> zbus::Result<Signals> {
 
 /// GVfs mounts network shares inside its single FUSE mount, which the mount table does
 /// not see change: its mount tracker announces them, for Oxyde as for Nautilus.
-pub(super) fn gvfs(revision: Arc<AtomicU64>) -> zbus::Result<Signals> {
+pub(super) fn gvfs(revision: Arc<ChangeSignal>) -> zbus::Result<Signals> {
     let connection = Connection::session()?;
     let rule = MatchRule::builder()
         .msg_type(Type::Signal)
@@ -46,7 +47,7 @@ pub(super) fn gvfs(revision: Arc<AtomicU64>) -> zbus::Result<Signals> {
 }
 
 fn listen(
-    connection: Connection, rule: MatchRule<'static>, revision: Arc<AtomicU64>, name: &str,
+    connection: Connection, rule: MatchRule<'static>, revision: Arc<ChangeSignal>, name: &str,
     relevant: fn(&zbus::Message) -> bool,
 ) -> zbus::Result<Signals> {
     let signals = MessageIterator::for_match_rule(rule, &connection, None)?;
@@ -61,7 +62,7 @@ fn listen(
                     return;
                 }
                 if relevant(&message) {
-                    revision.fetch_add(1, Ordering::Release);
+                    revision.notify();
                 }
             }
         })
