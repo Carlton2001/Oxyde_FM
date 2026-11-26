@@ -1090,6 +1090,7 @@ redo-move-incomplete = El movimiento se detuvo y algunos elementos no pudieron v
 
 undo-recovery-incomplete = Se ha detenido la acción de deshacer y algunos elementos no pudieron volver a su ubicación original. Se han conservado archivos o carpetas para su recuperación. Compruebe estas ubicaciones antes de volver a intentarlo: { $detail }.
 undo-staged-output-retained = Operación deshecha, pero algunas copias no se pudieron eliminar (puede que otro programa las esté usando). Elimínelas usted mismo: { $detail }
+undo-left-in-trash = Operación deshecha, pero algunos elementos permanecen en la { -trash }: nada prueba que los que se encuentran allí sean los eliminados. Restáurelos usted mismo desde la { -trash }: { $detail }
 preview-unavailable = No se pudo cargar esta vista previa. Intente abrir el archivo directamente.
 preview-image-limit = Esta imagen supera los límites de la vista previa. El archivo sigue siendo accesible.
 preview-animation-static = Vista previa estática: la animación supera los límites de la vista previa.

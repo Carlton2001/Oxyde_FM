@@ -53,6 +53,9 @@ impl OxydeApp {
                             let locations = report.retained.iter().map(|path| path.to_string_lossy()).collect::<Vec<_>>().join("
 ");
                             this.toast(ToastKind::Error, Message::UndoStagedOutputRetained, locations, 0, cx);
+                        } else if !report.left_in_trash.is_empty() {
+                            let locations = report.left_in_trash.iter().map(|path| path.to_string_lossy()).collect::<Vec<_>>().join("\n");
+                            this.toast(ToastKind::Error, Message::UndoLeftInTrash, locations, 0, cx);
                         } else if report.transaction.is_some() {
                             this.toast(ToastKind::Success, Message::ToastUndo, String::new(), 0, cx);
                         }

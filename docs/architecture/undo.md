@@ -21,6 +21,7 @@ Not recorded: permanent deletions, renames inside archives, archive operations, 
 The journal records what each operation actually did (files and folders created, moved or copied, with their identities and hashes) rather than its request. Undo and Redo act only on items that still match: an item changed, replaced or gone since stops the action with a notice (`ui/errors.rs`, `UndoMoveChanged`, `UndoNewFolderNotEmpty`…), and nothing is overwritten.
 
 - A copy that replaced existing files cannot be undone: the old contents are deliberately not kept. Its Redo is refused too, as it would need a new conflict resolution.
+- On Windows, an item whose identity could not be read when it was moved to the Recycle Bin (a volume without file identifiers) stays there on Undo, which restores the others and names it in a notice (`UndoLeftInTrash`); Redo skips it. Undo is refused only when no item of the operation has an identity.
 - One Undo or Redo runs at a time; a press while one runs is ignored.
 - A folder recreated by Undo or Redo takes back the attributes its source had (`directory_attributes`, Linux only).
 

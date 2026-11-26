@@ -221,16 +221,20 @@ fn entries(details: &TransactionDetails) -> Result<&[HistoryDeletedItem], Comman
     }
     let mut seen = std::collections::HashSet::new();
     for (path, entry) in details.paths.iter().zip(entries) {
-        if path != &entry.path
-            || entry.identity.is_none()
-            || !seen.insert(path.to_lowercase().replace('/', "\\"))
-        {
+        if path != &entry.path || !seen.insert(path.to_lowercase().replace('/', "\\")) {
             return Err(failure(path, false));
         }
     }
+    // An item recorded without identity stays in the Recycle Bin; it only refuses
+    // the whole journal when nothing else can be restored.
+    if entries.iter().all(|entry| entry.identity.is_none()) {
+        return Err(failure(&entries[0].path, false));
+    }
     Ok(entries)
 }
-pub(crate) fn undo(details: &TransactionDetails) -> Result<(), CommandError> {
+/// Restores the items whose identity was recorded and returns the others: nothing
+/// proves the item found in the Recycle Bin is the one deleted, so it stays there.
+pub(crate) fn undo(details: &TransactionDetails) -> Result<Vec<std::path::PathBuf>, CommandError> {
     let entries = entries(details)?;
     let items = platform()
         .list_trash_items()
@@ -239,7 +243,15 @@ pub(crate) fn undo(details: &TransactionDetails) -> Result<(), CommandError> {
         .iter()
         .map(crate::commands::ops::item_with_correct_restore_name)
         .collect();
-    restore_entries(entries, &mut |journal| platform().restore_trash_history(items.clone(), journal))
+    undo_with(entries, &mut |journal| platform().restore_trash_history(items.clone(), journal))
+}
+fn undo_with(entries: &[HistoryDeletedItem], restore: &mut dyn FnMut(&[HistoryDeletedItem]) -> Result<(), String>) -> Result<Vec<std::path::PathBuf>, CommandError> {
+    let (proven, unproven): (Vec<_>, Vec<_>) = entries
+        .iter()
+        .cloned()
+        .partition(|entry| entry.identity.is_some());
+    restore_entries(&proven, restore)?;
+    Ok(unproven.into_iter().map(|entry| entry.path.into()).collect())
 }
 fn restore_entries(entries: &[HistoryDeletedItem], restore: &mut dyn FnMut(&[HistoryDeletedItem]) -> Result<(), String>) -> Result<(), CommandError> {
     let mut pending = entries.to_vec();
@@ -552,6 +564,39 @@ mod tests {
             }
             assert_eq!(fs::read(&source).unwrap(), b"selected contents");
         }
+    }
+
+    #[test]
+    fn delete_undo_leaves_unproven_items_in_the_bin_and_redo_skips_them() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("selected");
+        fs::write(&source, b"selected contents").unwrap();
+        let proven = selected(&source);
+        proven.set_restored(false);
+        let unproven = HistoryDeletedItem::new(
+            root.path().join("unproven").to_string_lossy().into_owned(),
+            None,
+        );
+        let details = details(vec![proven.clone(), unproven.clone()]);
+        let mut restored = Vec::new();
+        let left = undo_with(entries(&details).unwrap(), &mut |journal| {
+            for entry in journal {
+                restored.push(entry.path.clone());
+                entry.set_restored(true);
+            }
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(restored, vec![proven.path.clone()]);
+        assert_eq!(left, vec![std::path::PathBuf::from(&unproven.path)]);
+        let mut deleted = Vec::new();
+        redo_with(entries(&details).unwrap(), &mut |path| {
+            deleted.push(path.to_path_buf());
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(deleted, vec![source.clone()]);
+        assert!(!proven.is_restored() && !unproven.is_restored());
     }
 
     #[test]

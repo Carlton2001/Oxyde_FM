@@ -304,10 +304,12 @@ fn recycle_history_paths(paths: Vec<PathBuf>) -> Result<(), CommandError> {
 }
 
 /// A completed undo, with the staged copies it could not remove afterwards
-/// (an antivirus holding them open, for example).
+/// (an antivirus holding them open, for example), and the deleted items left in
+/// the Recycle Bin because their identity was not recorded.
 pub struct UndoReport {
     pub transaction: Option<Transaction>,
     pub retained: Vec<PathBuf>,
+    pub left_in_trash: Vec<PathBuf>,
 }
 
 pub async fn undo_last_action(
@@ -320,11 +322,13 @@ pub async fn undo_last_action_report(
     history: &HistoryManager,
 ) -> Result<UndoReport, CommandError> {
     let mut retained = Vec::new();
+    #[cfg_attr(not(target_os = "windows"), allow(unused_mut))]
+    let mut left_in_trash = Vec::new();
     let Some(operation) = history
         .begin_undo()
         .map_err(|error| CommandError::Other(error.to_string()))?
     else {
-        return Ok(UndoReport { transaction: None, retained });
+        return Ok(UndoReport { transaction: None, retained, left_in_trash });
     };
     let transaction = Some(operation.transaction().clone());
 
@@ -344,7 +348,9 @@ pub async fn undo_last_action_report(
             }
             TransactionType::Delete => {
                 #[cfg(target_os = "windows")]
-                crate::systems::history_delete::undo(&tx.details)?;
+                {
+                    left_in_trash = crate::systems::history_delete::undo(&tx.details)?;
+                }
                 #[cfg(not(target_os = "windows"))]
                 match crate::systems::linux_trash_history::journal(&tx.details) {
                     Some(entries) => crate::systems::linux_trash_history::undo(entries).await?,
@@ -370,7 +376,7 @@ pub async fn undo_last_action_report(
         }
         operation.complete();
     }
-    Ok(UndoReport { transaction, retained })
+    Ok(UndoReport { transaction, retained, left_in_trash })
 }
 
 pub async fn redo_last_action(

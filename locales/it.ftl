@@ -1090,6 +1090,7 @@ redo-move-incomplete = Lo spostamento è stato interrotto e alcuni elementi non 
 
 undo-recovery-incomplete = L’annullamento è stato interrotto e alcuni elementi non sono tornati nella posizione originale. File o cartelle sono stati conservati per il recupero. Controlla queste posizioni prima di riprovare: { $detail }.
 undo-staged-output-retained = Operazione annullata, ma alcune copie non sono state rimosse (potrebbero essere in uso da un altro programma). Eliminale manualmente: { $detail }
+undo-left-in-trash = Operazione annullata, ma alcuni elementi restano nel { -trash }: nulla prova che quelli presenti siano gli elementi eliminati. Ripristinali manualmente dal { -trash }: { $detail }
 preview-unavailable = Impossibile caricare questa anteprima. Prova ad aprire il file direttamente.
 preview-image-limit = Questa immagine supera i limiti dell’anteprima. Il file rimane accessibile.
 preview-animation-static = Anteprima statica: l’animazione supera i limiti dell’anteprima.
