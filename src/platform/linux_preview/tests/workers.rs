@@ -120,3 +120,17 @@ fn a_named_pipe_is_refused_without_blocking() {
     rustix::fs::mknodat(rustix::fs::CWD, &pipe, rustix::fs::FileType::Fifo, rustix::fs::Mode::RUSR | rustix::fs::Mode::WUSR, 0).unwrap();
     assert_eq!(run_in(&oxyde, "image", &pipe).unwrap_err().kind(), io::ErrorKind::InvalidInput);
 }
+
+#[test]
+fn a_name_that_is_not_utf8_reaches_the_readers() {
+    use std::os::unix::ffi::OsStrExt;
+    let directory = tempfile::tempdir().unwrap();
+    let document = directory.path().join(std::ffi::OsStr::from_bytes(b"rapport \xe9t\xe9.docx"));
+    docx(&document, "contenu");
+    let Reply::Text(text) = reply("office-text", &document) else { panic!("office-text") };
+    assert!(text.contains("contenu"), "{text}");
+    let picture = directory.path().join(std::ffi::OsStr::from_bytes(b"rouge \xe9.png"));
+    png(&picture, 300);
+    let Reply::Images { frames, .. } = reply("thumbnail", &picture) else { panic!("thumbnail") };
+    assert_eq!(frames[0].buffer().dimensions(), (256, 256));
+}

@@ -22,7 +22,12 @@ const VIEWER_DEADLINE: Duration = Duration::from_secs(30);
 static SEARCH_SLOT: Mutex<()> = Mutex::new(());
 
 pub(super) fn run(mode: &str, path: &Path) -> io::Result<Vec<u8>> {
-    run_in(&std::env::current_exe()?, mode, path)
+    // A name that is not UTF-8 arrives as `path_text` writes it; no Unix path holds NUL.
+    let path = match path.to_str() {
+        Some(text) if crate::utils::path_text::is_encoded(text) => crate::utils::path_text::decode(text),
+        _ => path.to_path_buf(),
+    };
+    run_in(&std::env::current_exe()?, mode, &path)
 }
 
 fn run_in(executable: &Path, mode: &str, path: &Path) -> io::Result<Vec<u8>> {
@@ -82,7 +87,8 @@ pub(super) fn reply(mode: &str, path: &Path) -> Reply {
     let text = |result: Result<String, CommandError>| result.map_or_else(failure, Reply::Text);
     let image = |result: Result<image::RgbaImage, CommandError>| result.map_or_else(failure, one_frame);
     let extension = path.extension().and_then(|extension| extension.to_str()).unwrap_or_default();
-    let name = || path.to_str().map(str::to_owned).ok_or_else(|| CommandError::Other("Preview path is not Unicode".into()));
+    // The String-based readers decode what `path_text` writes: a name that is not UTF-8 too.
+    let name = || Ok::<_, CommandError>(crate::utils::path_text::encode(path));
     match mode {
         "thumbnail" => image(name().and_then(thumbnails::get_thumbnail_uncached)),
         "office" => image(name().and_then(thumbnails::get_office_thumbnail_uncached)),

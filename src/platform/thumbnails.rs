@@ -277,13 +277,13 @@ fn get_thumbnail_uncached(path: String) -> Result<RgbaImage, CommandError> {
 
 #[cfg(not(target_os = "windows"))]
 pub(super) fn get_thumbnail_uncached(path: String) -> Result<RgbaImage, CommandError> {
-    load_source_thumbnail(Path::new(&path))
+    load_source_thumbnail(&crate::utils::path_text::decode(&path))
         .map(|image| image.thumbnail(THUMB_SIZE, THUMB_SIZE).to_rgba8())
 }
 
 #[cfg(not(target_os = "windows"))]
 pub(super) fn get_office_thumbnail_uncached(path: String) -> Result<RgbaImage, CommandError> {
-    let file = fs::File::open(path).map_err(|error| CommandError::IoError(error.to_string()))?;
+    let file = fs::File::open(crate::utils::path_text::decode(&path)).map_err(|error| CommandError::IoError(error.to_string()))?;
     let mut archive =
         zip::ZipArchive::new(file).map_err(|error| CommandError::Other(error.to_string()))?;
     // A damaged first candidate gives way to the next.
@@ -774,7 +774,7 @@ fn shell_thumbnail_raw(path: &str) -> Result<RgbaImage, CommandError> {
 }
 
 pub(super) fn get_office_text_preview_local(path: String) -> Result<String, CommandError> {
-    let source = Path::new(&path);
+    let source = &crate::utils::path_text::decode(&path);
     let file = fs::File::open(source).map_err(|error| CommandError::IoError(error.to_string()))?;
     crate::utils::office_preview::text(file, source.extension().and_then(|ext| ext.to_str()).unwrap_or(""))
 }
