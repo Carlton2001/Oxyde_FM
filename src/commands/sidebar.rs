@@ -1,5 +1,6 @@
 use crate::models::{CommandError, SidebarNode};
 use crate::utils::path_security::validate_path;
+use crate::utils::path_text;
 use std::fs;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -48,7 +49,8 @@ fn get_sidebar_nodes_blocking(
     path: String,
     known: &std::collections::HashMap<String, bool>,
 ) -> Result<Vec<SidebarNode>, CommandError> {
-    let pb = validate_path(&path)?;
+    // A name that is not UTF-8 comes and goes as `path_text` writes it.
+    let pb = path_text::decode(&validate_path(&path)?.to_string_lossy());
 
     if !pb.is_dir() {
         return Err(CommandError::PathError(format!(
@@ -73,7 +75,7 @@ fn get_sidebar_nodes_blocking(
         if tree_folder(&node_path, &metadata, is_reparse_point).is_none() {
             continue;
         }
-        let node_path_text = node_path.to_string_lossy().to_string();
+        let node_path_text = path_text::encode(&node_path);
         let node_has_subdirs = known.get(&node_path_text).copied().unwrap_or_else(|| holds_folder(&node_path));
 
         nodes.push(SidebarNode {
@@ -101,7 +103,7 @@ pub async fn get_subtree_nodes(
 ) -> Result<std::collections::HashMap<String, Vec<SidebarNode>>, CommandError> {
     // The path checks touch the file system, which may stall on a disconnected share.
     tokio::task::spawn_blocking(move || {
-        let pb = validate_path(&path)?;
+        let pb = path_text::decode(&validate_path(&path)?.to_string_lossy());
         if !pb.is_dir() {
             return Err(CommandError::PathError(format!(
                 "Path is not a directory: {}",
@@ -135,7 +137,7 @@ fn get_subtree_nodes_blocking(
         if result.len() >= MAX_BULK_FOLDERS {
             break;
         }
-        let current_path_str = current_pb.to_string_lossy().to_string();
+        let current_path_str = path_text::encode(&current_pb);
 
         let entries = match fs::read_dir(&current_pb) {
             Ok(e) => e,
@@ -165,7 +167,7 @@ fn get_subtree_nodes_blocking(
 
             nodes.push((SidebarNode {
                 name,
-                path: node_path.to_string_lossy().to_string(),
+                path: path_text::encode(&node_path),
                 is_hidden,
                 is_system,
                 has_subdirs: node_has_subdirs,
@@ -183,7 +185,7 @@ fn get_subtree_nodes_blocking(
                 && (show_system || !node.is_system)
                 && !is_bulk_expand_excluded(&node.path, &node.name)
             {
-                stack.push(std::path::PathBuf::from(&node.path));
+                stack.push(path_text::decode(&node.path));
             }
         }
 

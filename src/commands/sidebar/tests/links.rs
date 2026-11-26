@@ -39,3 +39,19 @@ fn a_known_folder_keeps_its_arrow_without_being_opened() {
     // « a » holds a folder, but its known arrow is kept; « docs » is opened.
     assert_eq!(names, [("a", false), ("docs", true)]);
 }
+
+#[test]
+fn a_folder_whose_name_is_not_utf8_opens_and_is_walked() {
+    use std::os::unix::ffi::OsStrExt;
+    let root = tempfile::tempdir().unwrap();
+    let folder = root.path().join(std::ffi::OsStr::from_bytes(b"caf\xe9"));
+    std::fs::create_dir_all(folder.join("inner")).unwrap();
+    let nodes = get_sidebar_nodes_blocking(root.path().to_string_lossy().into_owned(), &Default::default()).unwrap();
+    assert_eq!(nodes.len(), 1);
+    assert_eq!(nodes[0].path, crate::utils::path_text::encode(&folder));
+    assert_eq!(nodes[0].name, "caf\u{fffd}");
+    let inner = get_sidebar_nodes_blocking(nodes[0].path.clone(), &Default::default()).unwrap();
+    assert_eq!(inner.iter().map(|node| node.name.as_str()).collect::<Vec<_>>(), ["inner"]);
+    let found = get_subtree_nodes_blocking(root.path().to_path_buf(), true, true, &AtomicBool::new(false)).unwrap();
+    assert_eq!(found[&nodes[0].path].len(), 1);
+}
