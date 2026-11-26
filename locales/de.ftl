@@ -398,6 +398,7 @@ undo-copy-identity-changed = Dieses Element entspricht nicht mehr dem ursprüngl
 undo-copy-unverified = Der Verlauf kann die Identität dieser Kopie nicht überprüfen: { $detail }. Ihre Dateien bleiben erhalten.
 
 undo-overwrite-unavailable = Diese Kopie kann nicht rückgängig gemacht werden, da vorhandene Dateien ersetzt wurden.
+undo-archive-unavailable = Dieser Archivvorgang kann nicht rückgängig gemacht werden.
 
 redo-failed = Wiederholen fehlgeschlagen: { $detail }
 redo-copy-source-changed = Die Quelle wurde seit dem Kopieren geändert: { $detail }. Das Wiederholen wurde zum Schutz Ihrer Dateien abgebrochen.

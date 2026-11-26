@@ -1,4 +1,5 @@
 use super::{FileOpType, FileOperation, FileOperationManager, OpStatus, RestoreNormalPriority};
+use crate::models::transaction::HistoryReach;
 use crate::models::{HistoryManager, Transaction, TransactionDetails, TransactionType};
 use crate::platform::{follow_turbo_priority, ThreadPriority};
 use std::sync::atomic::Ordering;
@@ -100,15 +101,23 @@ impl FileOperationManager {
             || !locked.moved_links.is_empty()
             || !locked.renamed_dirs.is_empty();
         if final_status == OpStatus::Completed || has_effects {
-            let virtual_effects = locked
+            let from_archive = locked
                 .sources
                 .iter()
-                .any(|p| crate::systems::archive_workspace::virtual_source(p).is_some())
-                || locked.destination.as_ref().is_some_and(|p| {
-                    crate::systems::archive_workspace::virtual_destination(p).is_some()
-                });
+                .any(|p| crate::systems::archive_workspace::virtual_source(p).is_some());
+            let into_archive = locked.destination.as_ref().is_some_and(|p| {
+                crate::systems::archive_workspace::virtual_destination(p).is_some()
+            });
+            // A copy out of an archive into a folder is undone like any copy, but its
+            // sources were a temporary view of the archive. History reverses no other
+            // transfer touching an archive: its entry only keeps Undo from going further.
+            let reach = match (from_archive, into_archive, &locked.op_type) {
+                (false, false, _) => HistoryReach::UndoAndRedo,
+                (true, false, FileOpType::Copy) => HistoryReach::UndoOnly,
+                _ => HistoryReach::Barrier,
+            };
             // A Redo moves its own entry.
-            let tx_type = if virtual_effects || locked.redo_copy.is_some() {
+            let tx_type = if locked.redo_copy.is_some() {
                 None
             } else {
                 match locked.op_type {
@@ -120,7 +129,7 @@ impl FileOperationManager {
                 }
             };
 
-            let has_undoable_effects = match locked.op_type {
+            let has_undoable_effects = reach == HistoryReach::Barrier || match locked.op_type {
                 FileOpType::Copy => {
                     !locked.created_files.is_empty()
                         || !locked.created_dirs.is_empty()
@@ -271,8 +280,13 @@ impl FileOperationManager {
                     ),
                 };
 
-                let tx = Transaction::new(t_type, details);
-                history_manager.push(tx);
+                let tx = match reach {
+                    HistoryReach::Barrier => Transaction::new(t_type, TransactionDetails::default()),
+                    // Nothing to redo from: the view of the archive is gone.
+                    HistoryReach::UndoOnly => Transaction::new(t_type, TransactionDetails { copied_files: Some(Vec::new()), ..details }),
+                    HistoryReach::UndoAndRedo => Transaction::new(t_type, details),
+                };
+                history_manager.push(tx.with_reach(reach));
             }
         }
         let operation = &*locked;

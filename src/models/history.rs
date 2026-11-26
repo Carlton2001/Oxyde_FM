@@ -1,4 +1,4 @@
-use crate::models::transaction::{Transaction, TransactionType};
+use crate::models::transaction::{HistoryReach, Transaction, TransactionType, UndoBlock};
 use std::sync::Mutex;
 
 fn cleanup_metadata_backups(transaction: &Transaction) {
@@ -57,7 +57,7 @@ pub(crate) struct HistoryState {
 pub struct HistorySummary {
     pub undo: Option<TransactionType>,
     pub redo: Option<TransactionType>,
-    pub undo_blocked_by_overwrite: bool,
+    pub undo_blocked: Option<UndoBlock>,
 }
 
 #[derive(Default)]
@@ -118,7 +118,9 @@ impl Drop for HistoryOperation<'_> {
                     match self.direction {
                         Direction::Undo => {
                             data.history.undo_stack.pop().expect("reserved undo entry");
-                            data.history.redo_stack.push(self.transaction.clone());
+                            if self.transaction.reach != HistoryReach::UndoOnly {
+                                data.history.redo_stack.push(self.transaction.clone());
+                            }
                         }
                         Direction::Redo => {
                             data.history.redo_stack.pop().expect("reserved redo entry");
@@ -277,7 +279,7 @@ impl HistoryManager {
                 .redo_stack
                 .last()
                 .map(|transaction| transaction.op_type),
-            undo_blocked_by_overwrite: undo.is_some_and(Transaction::undo_blocked_by_overwrite),
+            undo_blocked: undo.and_then(Transaction::undo_block),
         }
     }
 
@@ -378,8 +380,8 @@ mod tests {
             history.push(entry);
             assert_eq!(history.summary().undo, Some(kind));
             assert_eq!(
-                history.summary().undo_blocked_by_overwrite,
-                kind == TransactionType::Copy
+                history.summary().undo_blocked,
+                (kind == TransactionType::Copy).then_some(UndoBlock::Overwrite)
             );
             history.begin_undo().unwrap().unwrap().complete();
             assert_eq!(
@@ -387,7 +389,7 @@ mod tests {
                 HistorySummary {
                     undo: None,
                     redo: Some(kind),
-                    undo_blocked_by_overwrite: false,
+                    undo_blocked: None,
                 }
             );
             history.begin_redo().unwrap().unwrap().complete();

@@ -332,10 +332,16 @@ pub async fn undo_last_action_report(
 
     if let Some(ref tx) = transaction {
         info!("Undoing transaction: {:?}", tx.op_type);
-        if tx.undo_blocked_by_overwrite() {
-            return Err(CommandError::Other(
-                "This copy overwrote existing files and cannot be undone".to_string(),
-            ));
+        match tx.undo_block() {
+            Some(crate::models::transaction::UndoBlock::Overwrite) => {
+                return Err(CommandError::Other(
+                    "This copy overwrote existing files and cannot be undone".to_string(),
+                ))
+            }
+            Some(crate::models::transaction::UndoBlock::Archive) => {
+                return Err(CommandError::Other("This archive operation cannot be undone".to_string()))
+            }
+            None => {}
         }
         match tx.op_type {
             TransactionType::Copy => {

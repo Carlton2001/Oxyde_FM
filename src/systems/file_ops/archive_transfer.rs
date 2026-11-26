@@ -168,18 +168,21 @@ impl FileOperationManager {
                 &mut |_, _| {},
             ).map_err(|error| error.to_string())?;
         }
-        // These effects are not filesystem Undo entries: their paths may belong to a temporary view.
+        // These effects are not filesystem Undo entries: their paths may belong to a
+        // temporary view. A copy into a real folder keeps what it wrote there, for Undo.
         let mut locked = op.lock().unwrap();
-        locked.created_files.clear();
-        locked.created_dirs.clear();
-        locked.overwritten_files.clear();
+        if target_archive.is_some() || is_move {
+            locked.created_files.clear();
+            locked.created_dirs.clear();
+            locked.overwritten_files.clear();
+            locked.copied_file_hashes.clear();
+            locked.copied_file_identities.clear();
+            locked.copied_directory_identities.clear();
+            locked.created_links.clear();
+            locked.directory_attributes.clear();
+        }
         locked.copied_files.clear();
-        locked.copied_file_hashes.clear();
-        locked.copied_file_identities.clear();
-        locked.copied_directory_identities.clear();
-        locked.created_links.clear();
         locked.moved_links.clear();
-        locked.directory_attributes.clear();
         locked.renamed_dirs.clear();
         locked.moved_file_identities.clear();
         locked.moved_directory_identities.clear();

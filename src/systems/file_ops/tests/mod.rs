@@ -20,6 +20,7 @@ mod archive_moves;
 mod native_copy;
 mod copy_history;
 mod history_redo;
+mod archive_history;
 mod move_history;
 mod transfer_safety;
 mod destination_collisions;

@@ -398,6 +398,7 @@ undo-copy-identity-changed = Questo elemento non corrisponde più all’oggetto 
 undo-copy-unverified = La cronologia non consente di verificare l’identità di questa copia: { $detail }. I file sono stati conservati.
 
 undo-overwrite-unavailable = Questa copia non può essere annullata perché ha sostituito file esistenti.
+undo-archive-unavailable = Questa operazione su un archivio non può essere annullata.
 
 redo-failed = Impossibile ripetere: { $detail }
 redo-copy-source-changed = L’origine è cambiata dopo la copia: { $detail }. La ripetizione è stata interrotta per preservare i file.

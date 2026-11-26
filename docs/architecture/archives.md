@@ -48,7 +48,7 @@ A mutation rebuilds in the original's folder. The parent checks identity, size, 
 
 For a group, prepare all archives then publish while keeping originals until complete success; restore the group on failure. **This is neither atomic visibility nor a durable transaction after a crash.** Keep and report unrestorable backups.
 
-A move removes only sources actually copied; skipped conflicts stay. Archive mutations add no filesystem Undo/Redo. An external open uses a temporary copy, with no automatic reintegration of edits.
+A move removes only sources actually copied; skipped conflicts stay. A copy out of an archive into a folder is undone like a copy, without Redo ([undo](undo.md)); archive mutations and moves out of an archive have no Undo/Redo, and their history entry stops Undo there. An external open uses a temporary copy, with no automatic reintegration of edits.
 
 ### RAR
 

@@ -268,6 +268,7 @@ undo-failed = Annulation impossible : { $detail }
 undo-copy-identity-changed = Cet élément ne correspond plus à la copie originale : { $detail }. Annuler est interrompu pour préserver vos fichiers.
 undo-copy-unverified = L’historique ne permet pas de vérifier l’identité de cette copie : { $detail }. Les fichiers sont conservés.
 undo-overwrite-unavailable = Impossible d’annuler cette copie : elle a remplacé des fichiers existants.
+undo-archive-unavailable = Impossible d’annuler cette opération sur une archive.
 redo-failed = Rétablissement impossible : { $detail }
 redo-copy-source-changed = La source a changé depuis la copie : { $detail }. Rétablir est interrompu pour préserver vos fichiers.
 redo-copy-unverified = L’historique ne permet pas de vérifier cette copie : { $detail }. Relancez la copie depuis le dossier source.

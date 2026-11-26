@@ -262,6 +262,7 @@ undo-failed = Could not undo: { $detail }
 undo-copy-identity-changed = This item no longer matches the original copied object: { $detail }. Undo stopped to preserve your files.
 undo-copy-unverified = The history cannot verify the identity of this copy: { $detail }. Your files have been preserved.
 undo-overwrite-unavailable = This copy cannot be undone because it replaced existing files.
+undo-archive-unavailable = This archive operation cannot be undone.
 redo-failed = Could not redo: { $detail }
 redo-copy-source-changed = The source has changed since the copy: { $detail }. Redo stopped to preserve your files.
 redo-copy-unverified = The history cannot verify this copy: { $detail }. Start a new copy from the source folder.

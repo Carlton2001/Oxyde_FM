@@ -9,12 +9,15 @@ Ctrl + Z undoes the last recorded operation, Ctrl + Y or Ctrl + Shift + Z redoes
 | Operation | Recorded by | Undo |
 | --- | --- | --- |
 | Copy | `systems/file_ops/execution.rs` | Removes what the copy created, each file checked against its hash and identity |
+| Copy out of an archive into a folder | same | As a copy; the entry then goes, with no Redo: its sources were a temporary view of the archive |
 | Move | same | Moves items back, folders and links included |
 | Move to the trash | same, and `history_delete.rs` on Windows | Restores the items ([trash](trash.md#restoring)) |
 | Rename | `app/rename.rs`, `commands::io::record_captured_rename` | Gives the item its old name back, checked against the identity captured on its handle |
 | New folder | `app/rename.rs` | Removes the folder while it is still empty; naming it right after creation belongs to the creation, not a separate rename |
 
-Not recorded: permanent deletions, renames inside archives, archive operations, permission and property changes.
+Not recorded: permanent deletions, renames inside archives, compression and extraction commands, permission and property changes.
+
+Other transfers touching an archive (into it, inside it, a move out of it) are not reversed, but they leave an entry that stops Undo there (`HistoryReach::Barrier`): the button stays disabled with its reason (`UndoArchiveUnavailable`) instead of undoing an older action.
 
 ## Guarantees
 

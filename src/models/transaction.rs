@@ -7,7 +7,7 @@ pub enum TransactionType {
     NewFolder,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct TransactionDetails {
     pub paths: Vec<String>,
     pub deleted_items: Option<Vec<HistoryDeletedItem>>,
@@ -61,7 +61,28 @@ pub struct Transaction {
     pub id: String,
     pub op_type: TransactionType,
     pub details: TransactionDetails,
-    // Future: backup references for safe undo?
+    pub reach: HistoryReach,
+}
+
+/// What Undo and Redo can do with an entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HistoryReach {
+    #[default]
+    UndoAndRedo,
+    /// A copy out of an archive: it read a temporary view of the archive, which Redo
+    /// could not find again. Undone, the entry is dropped.
+    UndoOnly,
+    /// Another transfer touching an archive, which history does not reverse: the entry
+    /// keeps Undo from reaching an older action.
+    Barrier,
+}
+
+/// Why the last entry cannot be undone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UndoBlock {
+    /// The copy replaced files whose old contents are deliberately not kept.
+    Overwrite,
+    Archive,
 }
 
 impl Transaction {
@@ -70,18 +91,26 @@ impl Transaction {
             id: uuid::Uuid::new_v4().to_string(),
             op_type,
             details,
+            reach: HistoryReach::UndoAndRedo,
         }
     }
 
-    /// Copies that overwrote existing files cannot be undone because the old
-    /// contents are deliberately not kept as backups.
-    pub fn undo_blocked_by_overwrite(&self) -> bool {
-        matches!(&self.op_type, TransactionType::Copy)
+    pub fn with_reach(mut self, reach: HistoryReach) -> Self {
+        self.reach = reach;
+        self
+    }
+
+    pub fn undo_block(&self) -> Option<UndoBlock> {
+        if self.reach == HistoryReach::Barrier {
+            return Some(UndoBlock::Archive);
+        }
+        (matches!(&self.op_type, TransactionType::Copy)
             && self
                 .details
                 .overwritten_files
                 .as_ref()
-                .is_some_and(|files| !files.is_empty())
+                .is_some_and(|files| !files.is_empty()))
+        .then_some(UndoBlock::Overwrite)
     }
 }
 /// Journal snapshot without a long-lived handle: no file locks or delayed deletion.

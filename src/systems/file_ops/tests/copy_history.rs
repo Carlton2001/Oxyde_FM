@@ -244,7 +244,7 @@ fn overwrite_only_copy_is_recorded_as_non_undoable_history_entry() {
 
         let undo_stack = history.get_state().undo_stack;
         assert_eq!(undo_stack.len(), 1);
-        assert!(undo_stack[0].undo_blocked_by_overwrite());
+        assert_eq!(undo_stack[0].undo_block(), Some(crate::models::transaction::UndoBlock::Overwrite));
         assert_eq!(std::fs::read(&destination).unwrap(), b"new version");
         assert!(crate::commands::ops::undo_last_action(&history)
             .await

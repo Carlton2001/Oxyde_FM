@@ -398,6 +398,7 @@ undo-copy-identity-changed = Este elemento ya no corresponde al objeto copiado o
 undo-copy-unverified = El historial no permite verificar la identidad de esta copia: { $detail }. Se han conservado sus archivos.
 
 undo-overwrite-unavailable = Esta copia no se puede deshacer porque ha reemplazado archivos existentes.
+undo-archive-unavailable = Esta operación con un archivo comprimido no se puede deshacer.
 
 redo-failed = No se pudo rehacer: { $detail }
 redo-copy-source-changed = El origen ha cambiado desde la copia: { $detail }. Se detuvo Rehacer para conservar sus archivos.

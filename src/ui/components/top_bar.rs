@@ -122,8 +122,8 @@ pub fn render_top_bar(
 
     let history_state = view.history.summary();
     let has_undo_entry = history_state.undo.is_some();
-    let undo_blocked_by_overwrite = history_state.undo_blocked_by_overwrite;
-    let can_undo = has_undo_entry && !undo_blocked_by_overwrite;
+    let undo_blocked = history_state.undo_blocked;
+    let can_undo = has_undo_entry && undo_blocked.is_none();
     let can_redo = history_state.redo.is_some();
     let parent_path = if special_path_label.is_none() {
         std::path::Path::new(&current_path).parent().filter(|p| !p.as_os_str().is_empty())
@@ -229,8 +229,11 @@ pub fn render_top_bar(
                 (true, "up-btn", "icons/arrow-up.svg", Message::Up, "Alt+↑".into(), 0u8),
                 (ordinary, "new-folder-btn", "icons/folder-plus.svg", Message::NewFolder, "Ctrl+Shift+N".into(), 11),
                 (!is_trash_path && has_undo_entry, "undo-btn", "icons/undo-2.svg", Message::Undo,
-                    if undo_blocked_by_overwrite { _cx.i18n().text(Message::UndoOverwriteUnavailable).to_string() }
-                    else { undo_tooltip.clone().unwrap_or_default() }, 1),
+                    match undo_blocked {
+                        Some(oxyde_lib::models::transaction::UndoBlock::Overwrite) => _cx.i18n().text(Message::UndoOverwriteUnavailable).to_string(),
+                        Some(oxyde_lib::models::transaction::UndoBlock::Archive) => _cx.i18n().text(Message::UndoArchiveUnavailable).to_string(),
+                        None => undo_tooltip.clone().unwrap_or_default(),
+                    }, 1),
                 (!is_trash_path && can_redo, "redo-btn", "icons/redo-2.svg", Message::Redo, redo_tooltip.clone().unwrap_or_default(), 2),
                 (selected && (ordinary || is_trash_path) && !view.trash_busy && !read_only && !selection_locked, "cut-btn", "icons/scissors.svg", Message::Cut, "Ctrl+X".into(), 3),
                 (selected && !is_trash_path && !is_network_neighborhood, "copy-btn", "icons/copy.svg", Message::Copy, "Ctrl+C".into(), 4),

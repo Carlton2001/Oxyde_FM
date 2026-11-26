@@ -33,7 +33,7 @@ fn menu_items(i18n: &I18n, handle: Entity<OxydeApp>, view: &OxydeApp) -> Vec<Dro
     ]
     .into_iter()
     .filter_map(|(undo, operation, message, icon)| {
-        if view.history_operation_in_progress || (undo && summary.undo_blocked_by_overwrite) {
+        if view.history_operation_in_progress || (undo && summary.undo_blocked.is_some()) {
             return None;
         }
         let label = operation_label(i18n, message, operation?);
