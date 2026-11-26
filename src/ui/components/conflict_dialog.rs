@@ -63,6 +63,7 @@ impl Default for ConflictDialogState {
 impl ConflictDialogState {
     pub(crate) fn is_advanced(&self) -> bool { self.advanced }
     pub(crate) fn reset_focus(&mut self) { self.focus = None; }
+    pub(crate) fn focus_handle(&self) -> Option<FocusHandle> { self.focus.clone() }
 }
 pub(crate) fn render_conflict_dialog(
     pending_state: &mut PendingFileOperation,

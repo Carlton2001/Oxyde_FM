@@ -297,6 +297,21 @@ impl OxydeApp {
                             { crate::ui::components::tool_window::close_transients(window, cx); window.remove_window() }
                         });
                         let mut subscriptions = vec![observed, released];
+                        // A control that goes away focused (« Advanced » once pressed) left
+                        // nothing focused, and the keyboard reached nothing until a click.
+                        subscriptions.push(cx.on_focus_lost(window, |view: &mut DialogWindow, window, cx| {
+                            let Some(main) = view.owner.upgrade() else { return };
+                            let app = main.read(cx);
+                            let target = match view.kind {
+                                DialogKind::Conflict => app.pending_file_operations.front()
+                                    .and_then(|pending| pending.dialog.focus_handle()),
+                                DialogKind::Trash => app.trash_settings.as_ref().map(|dialog| dialog.focus.clone()),
+                                kind => Some(kind.initial_focus(app, cx).unwrap_or_else(|| view.focus.clone())),
+                            };
+                            if let Some(target) = target {
+                                window.focus(&target, cx);
+                            }
+                        }));
                         if kind.is_fixed() {
                             // A modal prompt is part of its owner: the owner header stays active
                             // with it, and follows it when the user leaves for another application.
