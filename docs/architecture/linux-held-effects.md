@@ -1,6 +1,6 @@
 # Effects through held directories on Linux
 
-Shared code prepares each file operation by holding its parent directories and verified objects (`HeldParents`, selection, staging), then asks `Platform` to act relative to them. This covers copying, moving, publishing, cleaning up and undoing. A folder renamed or replaced between check and effect receives nothing, and a substituted file is neither renamed nor deleted. Code: `linux_held.rs`, behind the existing `Platform` methods. Windows acts through its handles.
+Shared code prepares each file operation by holding its parent directories and verified objects (`HeldParents`, selection, written outputs), then asks `Platform` to act relative to them. This covers copying, moving, publishing, cleaning up and undoing. A folder renamed or replaced between check and effect receives nothing, and a substituted file is neither renamed nor deleted. Code: `linux_held.rs`, behind the existing `Platform` methods. Windows acts through its handles.
 
 ## Rules
 

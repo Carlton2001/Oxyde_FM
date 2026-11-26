@@ -218,6 +218,20 @@ Corrigés et mesurés sous WSL Fedora 45 (`c6409fba..6cc13488`), mesures dans `1
 - [x] Propriétaire du presse-papiers figé qui n'offre que du texte : Coller gelait 4 s (lecture GPUI) ; Oxyde ne lit plus le presse-papiers d'une autre application sur le fil de l'interface. Reste hors Oxyde : coller du texte dans un champ (barre d'adresse) depuis un propriétaire figé attend encore GPUI, comme dans Zed.
 - Clic droit juste après une navigation par la barre d'adresse : une fois, menu réduit à « Tout sélectionner » ; non reproduit. C'est le menu d'un onglet de résultats de recherche (Coller et Propriétés y sont retirés) : le chemin avait sans doute été tapé dans la recherche par le banc de test. Pas un défaut.
 
+## Copie directe sans dossier temporaire (2026-11-26)
+
+Les copies, compressions et déplacements annulés écrivent sous le nom final ; plus de `.oxyde-copy-`, `.oxyde-compress-`, `.oxyde-history-`.
+
+- [ ] Copier un gros fichier (plusieurs Go) vers ext4, puis vers une clé FAT/exFAT : pendant la copie, le fichier apparaît sous son nom dans Oxyde et Nautilus, aucun nom en `.oxyde-` ; à la fin, contenu identique (`b3sum`), mode et dates gardés.
+- [ ] Annuler au milieu de la même copie : le fichier partiel disparaît, rien d'autre n'est créé.
+- [ ] Remplacer un fichier existant, puis annuler au milieu : l'ancien contenu reste intact ; pendant la copie, un `.<nom>.oxyde-xxxxxx` caché apparaît à côté et disparaît à la fin ou à l'annulation.
+- [ ] NTFS par ntfs-3g (image `udisksctl loop-setup`) : copie, remplacement et annulation comme ci-dessus ; aucun `.fuse_hidden` ne reste après la fin.
+- [ ] Partage SMB par GVfs (`smb://`) : copie d'un nouveau fichier et annulation.
+- [ ] Dossier `0333` (écriture et traversée sans lecture) et dossier `1733` (dépôt, sticky) appartenant à un autre utilisateur : une copie d'un nouveau fichier réussit-elle ? Annuler : le fichier est vidé, puis nommé dans l'avis s'il ne peut pas être supprimé.
+- [ ] `kill -9` d'Oxyde au milieu d'une copie vers ext4, puis relance : notification « fichier partiel… supprimé » et fichier absent. Refaire sur ntfs-3g (pas de date de création) : le fichier partiel reste, journalisé comme gardé.
+- [ ] Compression ZIP puis TAR.ZST d'un dossier, annulée au milieu : l'archive partielle disparaît ; terminée, l'archive porte son nom (`(1)` si pris) dès le début de la compression.
+- [ ] Déplacer un fichier vers une clé USB, puis Annuler : il revient à sa place d'origine sans dossier `.oxyde-history-`.
+
 ## Tests X11 (non prévus)
 
 Sortis de leurs lots : l'utilisateur ne compte pas les faire. Ils restent ouverts, sans échéance.
