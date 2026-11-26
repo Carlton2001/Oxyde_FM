@@ -89,6 +89,14 @@ impl FileOperationManager {
             locked.status = OpStatus::Running;
         }
         let result = copy_files(files, &mut Shown { op, reported: 0 });
+        // All or nothing: a failed copy removed what it had published.
+        {
+            let mut locked = op.lock().unwrap();
+            let outcome = if result.is_ok() { super::ItemOutcome::Completed } else { super::ItemOutcome::NotProcessed };
+            for source in locked.sources.clone() {
+                locked.item_outcomes.insert(source, outcome);
+            }
+        }
         let status = result.as_ref().map(|_| ()).map_err(ToString::to_string);
         *job.0.result.lock().unwrap() = Some(result);
         status

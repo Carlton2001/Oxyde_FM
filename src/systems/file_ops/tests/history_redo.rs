@@ -85,6 +85,7 @@ fn a_redone_copy_runs_in_the_panel_and_records_no_entry_of_its_own() {
     assert_eq!((operation.processed_files, operation.total_files), (2, 2));
     assert_eq!(operation.processed_bytes, operation.total_bytes);
     assert_eq!(operation.total_bytes, 256 * 1024 + 4);
+    assert_eq!(operation.item_outcomes[&fixture.source], ItemOutcome::Completed);
     assert_eq!(std::fs::read(fixture.copied.join("note.txt")).unwrap(), b"note");
     assert_eq!(fixture.stacks(), (1, 0));
     assert_eq!(fixture.manager.list_operations().len(), 2);
@@ -101,7 +102,9 @@ fn a_redone_copy_stopped_from_the_panel_leaves_nothing_and_stays_to_redo() {
         assert!(manager.cancel_operation(id));
     });
     assert!(result.is_err());
-    assert_eq!(fixture.manager.get_operation(&id).unwrap().status, OpStatus::Cancelled);
+    let operation = fixture.manager.get_operation(&id).unwrap();
+    assert_eq!(operation.status, OpStatus::Cancelled);
+    assert_eq!(operation.item_outcomes[&fixture.source], ItemOutcome::NotProcessed);
     assert!(!fixture.copied.exists());
     assert_eq!(fixture.stacks(), (0, 1));
     assert!(Path::new(&fixture.source).join("nested/large.bin").is_file());
