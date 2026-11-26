@@ -48,7 +48,8 @@ Linux:
 [deletion](diagnostics/delete.md),
 [archive compression](diagnostics/archive-compression.md),
 [memory](diagnostics/memory.md),
-[shutdown](diagnostics/shutdown.md).
+[shutdown](diagnostics/shutdown.md),
+[enterprise networks](diagnostics/enterprise-networks.md).
 
 ## Security
 
