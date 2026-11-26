@@ -33,7 +33,7 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F65 | `platform/thumbnails.rs:230` | corrigé | 532c6ffe | candidat suivant essayé si le premier est endommagé ; test |
 | F66 | `platform/thread_priority.rs:17` | corrigé | 34c2cb3a | priorité d'E/S du thread (best-effort 7, défaut, 0) ; priorité CPU inchangée (un thread non privilégié ne peut pas la remonter) ; sans effet hors BFQ ; test |
 | F67 | `platform/viewer_media.rs:191` | corrigé | afc0480b | rapports du worker média Windows suivis du dernier seek appliqué (comme Linux) ; position ignorée tant que le seek demandé n'est pas appliqué ; workers à reconstruire ; à tester : glisser la barre de lecture |
-| F68 | `platform/network.rs:112, :214-216, :236 et :181` | corrigé (en partie) | 706942a9 | tampon aligné pour `NETRESOURCEW` ; serveurs connectés : `ERROR_MORE_DATA` agrandit le tampon, autre erreur journalisée ; reste : pas de délai ni d'annulation sur les partages d'un serveur (appel bloquant de WNet) |
+| F68 | `platform/network.rs:112, :214-216, :236 et :181` | corrigé | 706942a9, cedb9210 | tampon aligné pour `NETRESOURCEW` ; serveurs connectés : `ERROR_MORE_DATA` agrandit le tampon, autre erreur journalisée ; partages d'un serveur : l'onglet abandonne après 30 s (`Platform::listing_limit`, comme un partage GVfs) et dit que le serveur n'a pas répondu, l'appel WNet laissé derrière ; à vérifier sous Windows |
 | F69 | `platform/network.rs:320` | corrigé | 706942a9 | nom d'utilisateur retiré du journal ; mot de passe du mappage effacé après usage (`Zeroizing`) ; `Debug` de `RemoteAnswer` sans identifiants ; le texte saisi dans l'interface reste une `String` (voir F152) |
 
 ### Archives, systèmes de fichiers, historique et opérations
