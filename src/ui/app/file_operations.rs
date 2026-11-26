@@ -26,6 +26,16 @@ impl OxydeApp {
         if self.history_operation_in_progress {
             return;
         }
+        // The disabled button tells why; the shortcut says it the same way.
+        if let Some(block) = self.history.summary().undo_blocked {
+            let message = match block {
+                oxyde_lib::models::transaction::UndoBlock::Overwrite => Message::UndoOverwriteUnavailable,
+                oxyde_lib::models::transaction::UndoBlock::Archive => Message::UndoArchiveUnavailable,
+            };
+            self.toast(ToastKind::Info, message, String::new(), 0, cx);
+            cx.notify();
+            return;
+        }
         let history = self.history.clone();
         let Some(handle) = self.handle.clone() else {
             return;
