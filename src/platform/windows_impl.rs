@@ -572,6 +572,12 @@ impl Platform for WindowsPlatform {
     fn is_network_path(&self, path: &std::path::Path) -> bool {
         super::hardware::is_network_path(path)
     }
+    /// WNet lists a server's shares in one call that waits on the server and cannot be
+    /// cancelled: a server listing gives up after 30 seconds, as a GVfs share does.
+    fn listing_limit(&self, path: &std::path::Path) -> Option<std::time::Duration> {
+        crate::commands::io::is_network_server(&path.to_string_lossy())
+            .then_some(std::time::Duration::from_secs(30))
+    }
     fn has_recycle_bin(&self, path: &std::path::Path) -> bool {
         super::windows_recycle_bin::available(path)
     }
