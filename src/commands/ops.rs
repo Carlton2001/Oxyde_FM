@@ -366,8 +366,9 @@ pub async fn undo_last_action_report(
                         path: tx.details.paths.first().cloned().unwrap_or_default(),
                     }));
                 };
-                let old_pb = PathBuf::from(old);
-                let new_pb = PathBuf::from(new);
+                // Recorded as `path_text` writes them: a name that is not UTF-8 too.
+                let old_pb = crate::utils::path_text::decode(old);
+                let new_pb = crate::utils::path_text::decode(new);
                 crate::systems::item_rename::rename_from_history(&new_pb, &old_pb, tx.details.renamed_item_identity)?;
             }
             TransactionType::NewFolder => {
@@ -553,8 +554,9 @@ pub async fn redo_last_action(
                         path: tx.details.paths.first().cloned().unwrap_or_default(),
                     }));
                 };
-                let old_pb = PathBuf::from(old);
-                let new_pb = PathBuf::from(new);
+                // Recorded as `path_text` writes them: a name that is not UTF-8 too.
+                let old_pb = crate::utils::path_text::decode(old);
+                let new_pb = crate::utils::path_text::decode(new);
                 crate::systems::item_rename::rename_from_history(&old_pb, &new_pb, tx.details.renamed_item_identity)?;
             }
             TransactionType::NewFolder => {

@@ -7,7 +7,7 @@ fn runtime() -> tokio::runtime::Runtime {
 }
 
 fn rename(runtime: &tokio::runtime::Runtime, history: &HistoryManager, old: &std::path::Path, new: &std::path::Path) {
-    let (old, new) = (old.to_string_lossy().into_owned(), new.to_string_lossy().into_owned());
+    let (old, new) = (crate::utils::path_text::encode(old), crate::utils::path_text::encode(new));
     let proof = runtime
         .block_on(crate::commands::io::rename_item_controlled_with_identity(
             old.clone(), new.clone(), "normal".into(), Arc::new(AtomicBool::new(false)),
@@ -52,4 +52,21 @@ fn undo_refuses_an_item_replaced_since_the_rename() {
     assert!(runtime.block_on(undo_last_action(&history)).is_err());
     assert!(!old.exists());
     assert_eq!(std::fs::read(&new).unwrap(), b"another");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_rename_from_a_name_that_is_not_utf8_is_undone_and_redone() {
+    use std::os::unix::ffi::OsStrExt;
+    let root = tempfile::tempdir().unwrap();
+    let old = root.path().join(std::ffi::OsStr::from_bytes(b"caf\xe9.txt"));
+    let new = root.path().join("café.txt");
+    std::fs::write(&old, b"content").unwrap();
+    let history = HistoryManager::new();
+    let runtime = runtime();
+    rename(&runtime, &history, &old, &new);
+    runtime.block_on(undo_last_action(&history)).unwrap().unwrap();
+    assert!(old.exists() && !new.exists());
+    runtime.block_on(redo_last_action(&history)).unwrap().unwrap();
+    assert!(!old.exists() && new.exists());
 }
