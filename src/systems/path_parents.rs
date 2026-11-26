@@ -19,12 +19,19 @@ impl HeldParents {
         // Existing junctions are usable. Hold their names and resolved parents.
         // This does not prevent attribute-only reparse mutation: these guards
         // provide parent rename protection, not complete path confinement.
+        // A network server refuses any open of a folder the user may only
+        // traverse: such an ancestor cannot be held, and stays renamable.
+        let mut hold = |ancestor: &Path| match platform().hold_operation_directory(ancestor) {
+            Ok(handle) => Ok(handles.push(handle)),
+            Err(error) if error.kind() == io::ErrorKind::PermissionDenied => Ok(()),
+            Err(error) => Err(error),
+        };
         for ancestor in parent.ancestors().collect::<Vec<_>>().into_iter().rev() {
-            handles.push(platform().hold_operation_directory(ancestor)?);
+            hold(ancestor)?;
         }
         let resolved = platform().canonical_path(parent)?;
         for ancestor in resolved.ancestors().collect::<Vec<_>>().into_iter().rev() {
-            handles.push(platform().hold_operation_directory(ancestor)?);
+            hold(ancestor)?;
         }
         let directory = platform().hold_resolved_operation_directory(&resolved)?;
         if platform().canonical_path(parent)? != resolved {

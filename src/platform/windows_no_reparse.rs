@@ -161,12 +161,29 @@ fn open_by_components(
     let Some((last, parents)) = names.split_last() else {
         return open_name(native_name(&root), std::ptr::null_mut(), Some(directory), access, sharing, disposition, false);
     };
-    // FILE_TRAVERSE | FILE_READ_ATTRIBUTES, all sharing.
-    let mut parent = open_name(native_name(&root), std::ptr::null_mut(), Some(true), 0x20 | 0x80, 7, 1, false)?;
+    // FILE_TRAVERSE | FILE_READ_ATTRIBUTES, all sharing. A network server
+    // refuses any open of a folder the user may only traverse: the walk then
+    // resumes below it from the full name, which the server resolves itself.
+    let denied = |error: &io::Error| error.kind() == io::ErrorKind::PermissionDenied;
+    let mut prefix = root.clone();
+    let mut parent = match open_name(native_name(&root), std::ptr::null_mut(), Some(true), 0x20 | 0x80, 7, 1, false) {
+        Err(error) if denied(&error) => None,
+        result => Some(result?),
+    };
     for name in parents {
-        parent = open_relative(&parent, name, true, 0x20 | 0x80, 7, 1)?;
+        prefix.push(name);
+        parent = match match &parent {
+            Some(parent) => open_relative(parent, name, true, 0x20 | 0x80, 7, 1),
+            None => open_name(native_name(&prefix), std::ptr::null_mut(), Some(true), 0x20 | 0x80, 7, 1, false),
+        } {
+            Err(error) if denied(&error) => None,
+            result => Some(result?),
+        };
     }
-    open_relative(&parent, last, directory, access, sharing, disposition)
+    match parent {
+        Some(parent) => open_relative(&parent, last, directory, access, sharing, disposition),
+        None => open_name(native_name(absolute), std::ptr::null_mut(), Some(directory), access, sharing, disposition, false),
+    }
 }
 
 fn native_name(path: &Path) -> Vec<u16> {
