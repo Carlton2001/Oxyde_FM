@@ -2,7 +2,7 @@ use super::*;
 use std::io::Read;
 
 #[test]
-fn turbo_seven_can_pause_and_cancel_after_source_is_buffered_without_publication() {
+fn turbo_seven_can_pause_and_cancel_after_source_is_buffered_and_removes_its_archive() {
     let root = tempfile::tempdir().unwrap();
     let source = root.path().join("input");
     let mut state = 97u32;
@@ -35,7 +35,8 @@ fn turbo_seven_can_pause_and_cancel_after_source_is_buffered_without_publication
     assert_eq!(op.lock().unwrap().processed_bytes, bytes.len() as u64);
     op.lock().unwrap().pause_flag.store(true, Ordering::Release);
     std::thread::sleep(Duration::from_millis(350));
-    assert!(!output.exists());
+    // Written under its final name from the start, like 7-Zip; removed on cancel.
+    assert!(output.exists());
     assert!(!task.is_finished());
     let cancelled = Instant::now();
     op.lock()
