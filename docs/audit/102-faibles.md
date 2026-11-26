@@ -78,7 +78,7 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | ID | Emplacement | État | Commits | Note |
 | --- | --- | --- | --- | --- |
 | F124 | `commands/sidebar.rs:25-31, :45 et :120` | corrigé | 2d015312 | lien vers un dossier affiché avec sa flèche ; « Tout développer » n'y entre pas ; tests |
-| F125 | `commands/sidebar.rs:63-79` | corrigé (en partie) | 592da38b | repli et nouvelle demande l'annulaient déjà ; résultat écarté aussi si l'affichage des fichiers cachés ou système a changé ; lecteur déconnecté pendant le parcours non traité |
+| F125 | `commands/sidebar.rs:63-79` | corrigé | 592da38b, fc8c7c7c | repli et nouvelle demande l'annulaient déjà ; résultat écarté aussi si l'affichage des fichiers cachés ou système a changé ; lecteur retiré pendant le parcours : le parcours est annulé avec les autres données de ce lecteur (`apply_drive_snapshot`) et son résultat écarté |
 | F126 | `commands/system.rs:9-19` | corrigé | 4db5c2eb | commande sans appelant supprimée (l'interface passe par `Platform::open_item`) |
 | F127 | `commands/system.rs:33-53` | corrigé | 4db5c2eb, aa472749 | la purge tente icons et thumbnails puis rend la première erreur ; les écritures de miniatures passent par une génération de purge (verrou partagé) : la purge attend celle en cours, et une miniature générée avant elle n'est plus écrite après (Linux, où le cache s'écrit dans le processus) ; test |
 | F130 | `models/error.rs:131-143 et autres` | reporté |  | refonte : remplacer les marqueurs texte par des erreurs typées de bout en bout (workers compris) |
