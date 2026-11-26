@@ -52,8 +52,10 @@ fn decode_with(
     (result, broker)
 }
 
+/// The refusal as the parent receives it, through the worker's failure frame.
 fn refusal(result: Result<(), CommandError>) -> Option<ArchivePasswordFailure> {
-    ArchivePasswordFailure::from_message(&result.unwrap_err().to_string())
+    let frame = super::super::super::archive_io_worker::error_frame(&result.unwrap_err());
+    ArchivePasswordFailure::from_message(&crate::utils::archive_io_failure::failure(&frame).to_string())
 }
 
 #[test]
@@ -147,4 +149,12 @@ fn a_damaged_member_after_a_decoded_one_is_not_a_wrong_password() {
     let (result, _) = decode_with(Format::Zip, damaged_zipcrypto(), None, Some("correct horse"));
     let error = result.unwrap_err();
     assert_eq!(ArchivePasswordFailure::from_message(&error.to_string()), None, "{error}");
+}
+
+#[test]
+fn a_refusal_named_in_a_worker_text_travels_as_damage() {
+    let quoted = CommandError::ArchiveError(format!("Unsafe archive entry path: ../{}", ArchivePasswordFailure::Required));
+    let frame = super::super::super::archive_io_worker::error_frame(&quoted);
+    let error = crate::utils::archive_io_failure::failure(&frame);
+    assert_eq!(ArchivePasswordFailure::from_message(&error.to_string()), None);
 }

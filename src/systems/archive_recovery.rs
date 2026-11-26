@@ -110,6 +110,10 @@ pub(crate) fn scope<T, E: std::fmt::Display + From<ArchiveRecoveryFailure>>(
 }
 
 #[cfg(test)]
+#[path = "archive_recovery/tests/markers.rs"]
+mod marker_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     #[test]

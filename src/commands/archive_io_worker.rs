@@ -91,7 +91,12 @@ impl<R: Read, W: Write> Exchange for Client<R, W> {
 
 pub fn error_frame(error: &crate::models::CommandError) -> Frame {
     let detail = error.to_string();
-    let (cause, limit) = if let Some(failure) = ArchiveLimitFailure::from_message(&detail) {
+    let (cause, limit) = if let crate::models::CommandError::ArchivePassword(failure) = error {
+        (match failure {
+            ArchivePasswordFailure::Required => FailureKind::PasswordRequired,
+            ArchivePasswordFailure::Wrong => FailureKind::PasswordWrong,
+        }, 0)
+    } else if let Some(failure) = ArchiveLimitFailure::from_message(&detail) {
         (
             match failure.kind {
                 ArchiveLimitKind::Bytes => FailureKind::Bytes,
@@ -106,11 +111,6 @@ pub fn error_frame(error: &crate::models::CommandError) -> Frame {
         )
     } else if ArchiveSourceConflict::from_message(&detail) {
         (FailureKind::SourceChanged, 0)
-    } else if let Some(failure) = ArchivePasswordFailure::from_message(&detail) {
-        (match failure {
-            ArchivePasswordFailure::Required => FailureKind::PasswordRequired,
-            ArchivePasswordFailure::Wrong => FailureKind::PasswordWrong,
-        }, 0)
     } else {
         (FailureKind::Corrupt, 0)
     };

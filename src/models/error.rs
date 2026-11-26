@@ -492,8 +492,12 @@ pub struct ArchiveRecoveryFailure {
 }
 impl ArchiveRecoveryFailure {
     pub const MARKER: &str = "Archive recovery [archive-recovery]: ";
+    /// The report is the occurrence whose JSON runs to the end of the message: a name
+    /// quoted before it may repeat the marker.
     pub fn from_message(message: &str) -> Option<Self> {
-        let (_, value) = message.split_once(Self::MARKER)?;
+        message.match_indices(Self::MARKER).find_map(|(at, _)| Self::parse(&message[at + Self::MARKER.len()..]))
+    }
+    fn parse(value: &str) -> Option<Self> {
         if value.len() > 2 * 1024 * 1024 { return None; }
         let result: Self = serde_json::from_str(value).ok()?;
         if result.locations.is_empty() || result.locations.len() > 8 || result.locations.iter().map(String::len).sum::<usize>() > 256 * 1024 || result.cause.len() > 16 * 1024 { return None; }
@@ -531,6 +535,12 @@ impl ArchivePasswordFailure {
         else if message.contains(Self::WRONG) { Some(Self::Wrong) }
         else { None }
     }
+    /// A worker's refusal travels typed. In a worker's text, a refusal can only come
+    /// from a name it quotes, an archive entry's for instance: kept readable, it no
+    /// longer passes for one.
+    pub fn neutralize(text: &str) -> String {
+        text.replace("[archive-password-", "(archive-password-")
+    }
 }
 impl fmt::Display for ArchivePasswordFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -542,7 +552,7 @@ impl From<ArchivePasswordFailure> for std::io::Error {
     fn from(value: ArchivePasswordFailure) -> Self { Self::new(std::io::ErrorKind::InvalidInput, value) }
 }
 impl From<ArchivePasswordFailure> for CommandError {
-    fn from(value: ArchivePasswordFailure) -> Self { Self::ArchiveError(value.to_string()) }
+    fn from(value: ArchivePasswordFailure) -> Self { Self::ArchivePassword(value) }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -631,6 +641,8 @@ pub enum CommandError {
     PathError(String),
     SystemError(String),
     ArchiveError(String),
+    /// Typed so that workers report it as such, never recognized from their text.
+    ArchivePassword(ArchivePasswordFailure),
     ArchiveCache(ArchiveCacheIssue),
     HistoryCopy(HistoryCopyFailure),
     HistoryIdentity(HistoryIdentityFailure),
@@ -653,6 +665,7 @@ impl fmt::Display for CommandError {
             CommandError::PathError(msg) => write!(f, "Path Error: {}", msg),
             CommandError::SystemError(msg) => write!(f, "System Error: {}", msg),
             CommandError::ArchiveError(msg) => write!(f, "Archive Error: {}", msg),
+            CommandError::ArchivePassword(failure) => write!(f, "Archive Error: {failure}"),
             CommandError::ArchiveCache(issue) => issue.fmt(f),
             CommandError::HistoryCopy(failure) => failure.fmt(f),
             CommandError::HistoryIdentity(failure) => failure.fmt(f),
@@ -711,6 +724,12 @@ impl From<std::io::Error> for CommandError {
             .and_then(|e| e.downcast_ref::<ArchiveCacheIssue>())
         {
             return Self::ArchiveCache(*issue);
+        }
+        if let Some(failure) = err
+            .get_ref()
+            .and_then(|e| e.downcast_ref::<ArchivePasswordFailure>())
+        {
+            return Self::ArchivePassword(*failure);
         }
         CommandError::IoError(err.to_string())
     }

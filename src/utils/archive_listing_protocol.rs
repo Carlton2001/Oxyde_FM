@@ -1,6 +1,8 @@
 //! Untrusted worker metadata. The parent constructs every virtual path itself.
 use super::archive_security::relative_archive_path;
-use crate::models::error::{ArchiveLimitFailure, ArchiveLimitKind, ArchiveListingFailure};
+use crate::models::error::{
+    ArchiveLimitFailure, ArchiveLimitKind, ArchiveListingFailure, ArchivePasswordFailure,
+};
 use crate::models::{CommandError, FileEntry};
 use std::collections::HashSet;
 use std::io::{self, Read, Write};
@@ -9,6 +11,9 @@ use std::path::Path;
 pub const MAX_REPLY: usize = 32 * 1024 * 1024;
 const MAX_ENTRIES: usize = 100_000;
 const MAX_ERROR: usize = 4096;
+/// Reply statuses after the entries (0) and an error text (1).
+const PASSWORD_REQUIRED: u8 = 2;
+const PASSWORD_WRONG: u8 = 3;
 const MAGIC: &[u8; 8] = b"OXYARCH1";
 const INDEX_MAGIC: &[u8; 8] = b"OXYARIX1";
 #[derive(Clone, Copy)]
@@ -155,6 +160,15 @@ fn encode_mode(
                 output.write_all(entry.name.as_bytes())?;
             }
         }
+        // Its own status: the parent never recognizes a refusal in a worker's text.
+        Err(CommandError::ArchivePassword(failure)) => {
+            output.write_all(mode.magic())?;
+            output.write_all(&[match failure {
+                ArchivePasswordFailure::Required => PASSWORD_REQUIRED,
+                ArchivePasswordFailure::Wrong => PASSWORD_WRONG,
+            }])?;
+            output.write_all(&0u32.to_le_bytes())?;
+        }
         Err(error) => {
             let detail = error.to_string();
             let mut end = detail.len().min(MAX_ERROR);
@@ -251,7 +265,18 @@ fn decode_io(
         if count > MAX_ERROR || bytes.len() != count {
             return Err(invalid());
         }
-        return Ok(Err(CommandError::ArchiveError(displayable(&text(&mut bytes, count)?))));
+        let text = displayable(&text(&mut bytes, count)?);
+        return Ok(Err(CommandError::ArchiveError(ArchivePasswordFailure::neutralize(&text))));
+    }
+    if let Some(failure) = match status[0] {
+        PASSWORD_REQUIRED => Some(ArchivePasswordFailure::Required),
+        PASSWORD_WRONG => Some(ArchivePasswordFailure::Wrong),
+        _ => None,
+    } {
+        if count != 0 || !bytes.is_empty() {
+            return Err(invalid());
+        }
+        return Ok(Err(failure.into()));
     }
     if status != [0] {
         return Err(invalid());
@@ -329,6 +354,10 @@ fn decode_io(
 #[cfg(test)]
 #[path = "archive_listing_protocol/tests/display.rs"]
 mod display_tests;
+
+#[cfg(test)]
+#[path = "archive_listing_protocol/tests/passwords.rs"]
+mod password_tests;
 
 #[cfg(test)]
 mod tests {
