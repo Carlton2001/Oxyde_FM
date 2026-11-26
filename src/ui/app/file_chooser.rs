@@ -122,6 +122,9 @@ pub struct FileChooserWindow {
     measured: Option<(u32, crate::ui::i18n::Language, crate::ui::format::DateFormat, u64)>,
     /// Folders holding folders, which their row marks with a chevron.
     subfolders: HashMap<String, bool>,
+    /// Set by F5: the next listing opens every subfolder again for its chevron. Other
+    /// listings of the same folder open only the folders they do not know yet.
+    recheck_subfolders: bool,
     /// Positions in `shown`.
     selection: selection::Selection,
     listing: Listing,
@@ -454,6 +457,7 @@ impl FileChooserWindow {
             column_widths: ColumnWidths::default(),
             measured: None,
             subfolders: HashMap::new(),
+            recheck_subfolders: false,
             selection: Default::default(),
             listing: Listing::Loading,
             places: lent.places,

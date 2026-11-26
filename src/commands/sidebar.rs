@@ -30,12 +30,24 @@ fn holds_folder(path: &Path) -> bool {
 }
 
 pub async fn get_sidebar_nodes(path: String) -> Result<Vec<SidebarNode>, CommandError> {
-    tokio::task::spawn_blocking(move || get_sidebar_nodes_blocking(path))
+    get_sidebar_nodes_known(path, std::collections::HashMap::new()).await
+}
+
+/// As `get_sidebar_nodes`, but a folder found in `known` keeps the arrow given there
+/// instead of being opened again: each opening is a round trip on a network share.
+pub async fn get_sidebar_nodes_known(
+    path: String,
+    known: std::collections::HashMap<String, bool>,
+) -> Result<Vec<SidebarNode>, CommandError> {
+    tokio::task::spawn_blocking(move || get_sidebar_nodes_blocking(path, &known))
         .await
         .map_err(|e| CommandError::IoError(e.to_string()))?
 }
 
-fn get_sidebar_nodes_blocking(path: String) -> Result<Vec<SidebarNode>, CommandError> {
+fn get_sidebar_nodes_blocking(
+    path: String,
+    known: &std::collections::HashMap<String, bool>,
+) -> Result<Vec<SidebarNode>, CommandError> {
     let pb = validate_path(&path)?;
 
     if !pb.is_dir() {
@@ -61,11 +73,12 @@ fn get_sidebar_nodes_blocking(path: String) -> Result<Vec<SidebarNode>, CommandE
         if tree_folder(&node_path, &metadata, is_reparse_point).is_none() {
             continue;
         }
-        let node_has_subdirs = holds_folder(&node_path);
+        let node_path_text = node_path.to_string_lossy().to_string();
+        let node_has_subdirs = known.get(&node_path_text).copied().unwrap_or_else(|| holds_folder(&node_path));
 
         nodes.push(SidebarNode {
             name,
-            path: node_path.to_string_lossy().to_string(),
+            path: node_path_text,
             is_hidden,
             is_system,
             has_subdirs: node_has_subdirs,

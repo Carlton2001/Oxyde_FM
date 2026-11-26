@@ -22,7 +22,7 @@ impl FileChooserWindow {
         let m = key.modifiers;
         if m.platform || m.function { return false; }
         match (key.key.as_str(), m.control, m.alt, m.shift) {
-            ("f5", false, false, false) | ("r", true, false, false) => self.refresh(cx),
+            ("f5", false, false, false) | ("r", true, false, false) => self.reload(cx),
             ("f", true, false, false) => self.open_filter(window, cx),
             ("l", true, false, false) => self.begin_location(None, window, cx),
             ("h", true, false, false) => self.toggle_hidden(cx),

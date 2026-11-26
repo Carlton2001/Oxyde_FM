@@ -86,6 +86,12 @@ impl FileChooserWindow {
         self.follow_tree(cx);
     }
 
+    /// F5: lists the folder again and checks every subfolder's chevron again.
+    pub(super) fn reload(&mut self, cx: &mut Context<Self>) {
+        self.recheck_subfolders = true;
+        self.refresh(cx);
+    }
+
     /// Lists the folder again, the selection kept.
     pub(super) fn refresh(&mut self, cx: &mut Context<Self>) {
         let keep = self.kept();
@@ -155,8 +161,10 @@ impl FileChooserWindow {
 
     fn check_subfolders(&mut self, cx: &mut Context<Self>) {
         let folder = self.folder.clone();
+        // A navigation has cleared them; another listing of the folder keeps them.
+        let known = if std::mem::take(&mut self.recheck_subfolders) { Default::default() } else { self.subfolders.clone() };
         self.subfolder_task = Some(cx.spawn(async move |this, cx| {
-            let Ok(nodes) = oxyde_lib::commands::sidebar::get_sidebar_nodes(folder.clone()).await else { return };
+            let Ok(nodes) = oxyde_lib::commands::sidebar::get_sidebar_nodes_known(folder.clone(), known).await else { return };
             let _ = this.update(cx, |this, cx| {
                 if this.folder == folder {
                     this.update_tree(&folder, &nodes);
