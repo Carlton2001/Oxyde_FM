@@ -19,6 +19,10 @@ struct Context<'a> {
     captured: bool,
     progress: &'a mut dyn FnMut(u64) -> io::Result<()>,
     main_bytes: u64,
+    /// The main stream's writer once all its bytes are written, while no other
+    /// stream has started: kept to finish the file if a secondary stream is refused.
+    main_written: Option<File>,
+    secondary_started: bool,
     error: Option<io::Error>,
 }
 unsafe extern "system" fn callback(
@@ -48,6 +52,8 @@ unsafe extern "system" fn callback(
         }
         if stream == 1 {
             context.main_bytes = stream_copied.max(0) as u64;
+        } else {
+            context.secondary_started = true;
         }
         (context.progress)(context.main_bytes)?;
         // Flush each completed stream while the native write handle is still
@@ -55,6 +61,11 @@ unsafe extern "system" fn callback(
         if stream_copied == stream_size {
             let _timer = crate::systems::copy_diagnostics::Timer::start(crate::systems::copy_diagnostics::Phase::Flush);
             unsafe { FlushFileBuffers(destination) }.map_err(io_error)?;
+            if stream == 1 && context.main_written.is_none() {
+                let borrowed =
+                    std::mem::ManuallyDrop::new(unsafe { File::from_raw_handle(destination.0) });
+                context.main_written = Some(borrowed.try_clone()?);
+            }
         }
         Ok::<_, io::Error>(())
     }));
@@ -152,6 +163,8 @@ pub(super) fn copy(
         captured: false,
         progress,
         main_bytes: 0,
+        main_written: None,
+        secondary_started: false,
         error: None,
     };
     let result = unsafe {
@@ -171,5 +184,35 @@ pub(super) fn copy(
     if let Some(error) = context.error {
         return Err(error);
     }
-    result
+    match (result, context.main_written) {
+        // A drop folder lets its user create a file but not open it again to add
+        // an alternate stream, such as the Mark of the Web: Explorer keeps the
+        // file without it. The dates and attributes CopyFileEx would have applied
+        // last are set through the main stream's writer.
+        (Err(error), Some(written))
+            if error.kind() == ErrorKind::PermissionDenied
+                && !context.secondary_started
+                && context.main_bytes == metadata.len() =>
+        {
+            log::warn!(
+                "Alternate streams not copied to {}: {error}",
+                destination.display()
+            );
+            finish_without_streams(&written, &metadata)
+        }
+        (result, _) => result,
+    }
+}
+
+fn finish_without_streams(written: &File, source: &std::fs::Metadata) -> io::Result<()> {
+    use std::os::windows::fs::FileTimesExt;
+    let times = std::fs::FileTimes::new()
+        .set_accessed(source.accessed()?)
+        .set_modified(source.modified()?)
+        .set_created(source.created()?);
+    written.set_times(times)?;
+    if source.permissions().readonly() {
+        written.set_permissions(source.permissions())?;
+    }
+    Ok(())
 }

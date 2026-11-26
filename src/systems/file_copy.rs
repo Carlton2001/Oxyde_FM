@@ -118,7 +118,11 @@ fn write_output(
             {
                 attempt += 1;
             }
-            Err(error) => return Err(error),
+            Err(error) => {
+                // The output's cleanup may fail in turn and hide this cause.
+                log::warn!("Copy to {} failed: {error}", output.path().display());
+                return Err(error);
+            }
         }
     }
 }
