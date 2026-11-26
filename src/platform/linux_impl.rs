@@ -584,11 +584,11 @@ impl Platform for LinuxPlatform {
     }
 
     fn pdf_thumbnail(&self, path: String) -> Result<image::RgbaImage, crate::models::CommandError> {
-        super::linux_pdf::thumbnail(std::path::Path::new(&path), false)
+        super::linux_pdf::thumbnail(&crate::utils::path_text::decode(&path), false)
     }
 
     fn pdf_grid_thumbnail(&self, path: String) -> Result<image::RgbaImage, crate::models::CommandError> {
-        super::linux_pdf::thumbnail(std::path::Path::new(&path), true)
+        super::linux_pdf::thumbnail(&crate::utils::path_text::decode(&path), true)
     }
 
     fn open_pdf_session(&self, path: &std::path::Path) -> Result<Box<dyn super::PdfSession>, crate::models::CommandError> {
@@ -615,7 +615,7 @@ impl Platform for LinuxPlatform {
         mut on_frame: Box<dyn FnMut(image::RgbaImage, std::time::Duration) -> bool + Send>,
         cancelled: Box<dyn Fn() -> bool + Send>,
     ) -> Result<(), crate::models::CommandError> {
-        Ok(super::linux_video::stream(std::path::Path::new(&path), &mut on_frame, &cancelled)?)
+        Ok(super::linux_video::stream(&crate::utils::path_text::decode(&path), &mut on_frame, &cancelled)?)
     }
 
     fn viewer_media_parent(&self, handle: raw_window_handle::RawWindowHandle) -> Option<u64> {
@@ -642,7 +642,7 @@ impl Platform for LinuxPlatform {
     }
 
     fn decode_video_worker(&self, path: String, on_frame: &mut dyn FnMut(image::RgbaImage, std::time::Duration) -> bool) -> Result<(), crate::models::CommandError> {
-        super::linux_video::decode(std::path::Path::new(&path), on_frame)
+        super::linux_video::decode(&crate::utils::path_text::decode(&path), on_frame)
     }
 
     fn install_disk_image_autoplay_handler(&self, _window: raw_window_handle::RawWindowHandle) -> Result<(), String> {
@@ -923,7 +923,7 @@ impl Platform for LinuxPlatform {
 
     fn offers_terminal(&self) -> bool { true }
     fn open_terminal(&self, path: &str) -> Result<(), String> {
-        super::linux_terminal::open(std::path::Path::new(path))
+        super::linux_terminal::open(&crate::utils::path_text::decode(path))
     }
 
     /// Linux desktops share no properties dialog; Oxyde's own Properties window serves
