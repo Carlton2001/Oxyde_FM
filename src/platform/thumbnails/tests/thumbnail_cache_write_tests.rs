@@ -246,3 +246,20 @@
         assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
         drop(reader);
     }
+
+    #[test]
+    fn a_thumbnail_generated_before_a_purge_is_not_written_after_it() {
+        let root = tempfile::tempdir().unwrap();
+        let cache_file = root.path().join("entry.jpg");
+        let purges = std::sync::RwLock::new(0);
+        let expected = generated_image();
+        let result = cached_thumbnail_gated(&cache_file, &purges, || {
+            *purges.write().unwrap() += 1;
+            Ok(expected.clone())
+        });
+        assert_eq!(result.unwrap(), expected);
+        assert!(!cache_file.exists());
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 0);
+        cached_thumbnail_gated(&cache_file, &purges, || Ok(expected.clone())).unwrap();
+        assert!(cache_file.exists());
+    }

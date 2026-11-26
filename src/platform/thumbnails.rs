@@ -10,6 +10,16 @@ const THUMB_SIZE: u32 = 256;
 #[cfg(target_os = "windows")]
 const VIDEO_THUMB_SIZE: u32 = 640;
 static CACHE_TEMP_ID: AtomicU64 = AtomicU64::new(0);
+/// The cache's purge generation. Writing holds it shared; a purge holds it alone, so it
+/// waits for a thumbnail being written, and one generated before it is not written after.
+static CACHE_GATE: std::sync::RwLock<u64> = std::sync::RwLock::new(0);
+
+/// Held while the generated caches are removed (on Windows the icon writer has its own).
+pub(crate) fn pause_thumbnail_writes() -> impl Drop {
+    let mut generation = CACHE_GATE.write().unwrap_or_else(std::sync::PoisonError::into_inner);
+    *generation = generation.wrapping_add(1);
+    generation
+}
 
 #[derive(Clone, Copy)]
 struct ThumbnailDecodeLimits {
@@ -160,15 +170,28 @@ fn cached_thumbnail_in(
     cache_file: &Path,
     generate: impl FnOnce() -> Result<RgbaImage, CommandError>,
 ) -> Result<RgbaImage, CommandError> {
+    cached_thumbnail_gated(cache_file, &CACHE_GATE, generate)
+}
+
+fn cached_thumbnail_gated(
+    cache_file: &Path,
+    purges: &std::sync::RwLock<u64>,
+    generate: impl FnOnce() -> Result<RgbaImage, CommandError>,
+) -> Result<RgbaImage, CommandError> {
     let transparent_file = transparent_cache_file(cache_file);
     if let Ok(image) =
         load_cached_thumbnail(cache_file).or_else(|_| load_cached_thumbnail(&transparent_file))
     {
         return Ok(image.to_rgba8());
     }
+    let generation = *purges.read().unwrap_or_else(std::sync::PoisonError::into_inner);
     // Persistence is optional. Keep a generated image usable even when its cache
     // directory cannot be created, encoded, synchronized or published.
     let image = generate()?;
+    let gate = purges.read().unwrap_or_else(std::sync::PoisonError::into_inner);
+    if *gate != generation {
+        return Ok(image);
+    }
     let cache_file = if image.pixels().any(|pixel| pixel.0[3] != 255) {
         transparent_file.as_path()
     } else {

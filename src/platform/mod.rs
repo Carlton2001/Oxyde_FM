@@ -1272,6 +1272,7 @@ pub use linux_trash::{KdeLimitAction, KdeTrashLimits, TrashRetention};
 #[cfg(target_os = "windows")]
 pub mod network;
 mod thumbnails;
+pub(crate) use thumbnails::pause_thumbnail_writes;
 mod video_thumbnail;
 #[cfg(target_os = "windows")]
 mod windows_disk_images;
