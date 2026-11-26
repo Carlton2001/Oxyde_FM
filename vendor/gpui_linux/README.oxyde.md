@@ -103,3 +103,6 @@ compare both copies to the new upstream.
   `is_held`, as Wayland does. X11's key repeat sends KeyPress again (GPUI already drops the
   KeyRelease that comes with it); upstream marked every press as new, so holding Enter on a
   button of the conflict dialog answered every remaining conflict.
+- `gpui/src/svg_renderer.rs`: an image an SVG links to by name (`<image href="photo.png">`,
+  an absolute path) is not loaded; embedded `data:` images still are, as browsers show an SVG
+  image. Upstream read the named file, so previewing an SVG made Oxyde open another file.

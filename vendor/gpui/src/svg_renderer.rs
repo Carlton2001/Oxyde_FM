@@ -173,10 +173,17 @@ impl SvgRenderer {
                 default_fallback_selection(ch, fonts, db)
             },
         );
+        // Oxyde: an image an SVG links to by name is not loaded, as a browser shows an SVG
+        // image; embedded images still are. A previewed file must not open another one.
+        let default_hrefs = usvg::ImageHrefResolver::default();
         let options = usvg::Options {
             font_resolver: usvg::FontResolver {
                 select_font: font_resolver,
                 select_fallback: fallback_selection,
+            },
+            image_href_resolver: usvg::ImageHrefResolver {
+                resolve_data: default_hrefs.resolve_data,
+                resolve_string: Box::new(|_, _| None),
             },
             ..Default::default()
         };
