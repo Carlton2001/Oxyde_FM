@@ -501,6 +501,11 @@ impl OxydeApp {
             }));
         });
         self._subscriptions.push(subscription);
+        // A field that goes away focused (the address bar after Enter) left nothing focused,
+        // and the files' keys waited for a click on the title bar: as Zed's workspace, the
+        // window takes the focus back.
+        let refocus = cx.on_focus_lost(window, |this, window, cx| window.focus(&this.focus_handle, cx));
+        self._subscriptions.push(refocus);
     }
 }
 
