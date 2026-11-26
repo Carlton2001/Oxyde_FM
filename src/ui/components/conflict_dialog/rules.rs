@@ -118,6 +118,10 @@ pub(super) fn ancestors(path: &str) -> impl Iterator<Item = &str> {
     })
 }
 pub(super) fn decision(state: &ConflictDialogState, path: &str) -> Option<ConflictAction> {
+    // Asked for every conflict at each frame: no path is walked before a first choice.
+    if state.resolutions.is_empty() {
+        return None;
+    }
     state
         .resolutions
         .get(path)
@@ -129,13 +133,15 @@ pub(super) fn filtered_indices(
     state: &ConflictDialogState,
 ) -> Vec<usize> {
     let query = state.query.to_lowercase();
+    // Without a query or a folded folder, nothing is lowercased or walked: it runs per frame.
     conflicts
         .iter()
         .enumerate()
         .filter(|(_, c)| {
             (state.filter == 0 || category(c) == state.filter)
-                && c.name.to_lowercase().contains(&query)
-                && !ancestors(&c.source.path).any(|a| state.collapsed.contains(a))
+                && (query.is_empty() || c.name.to_lowercase().contains(&query))
+                && (state.collapsed.is_empty()
+                    || !ancestors(&c.source.path).any(|a| state.collapsed.contains(a)))
         })
         .map(|(i, _)| i)
         .collect()

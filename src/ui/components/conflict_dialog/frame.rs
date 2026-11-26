@@ -1,5 +1,4 @@
 use super::controls::{button, button_with_label, choose, edit, restore_focus};
-use super::rules::decision;
 use crate::ui::app::{OxydeApp, PendingFileOperation};
 use crate::ui::components::modal::Modal;
 use crate::ui::format::format_number;
@@ -51,11 +50,9 @@ pub(super) fn render_frame(
             rems(if advanced { 0.0 } else { 1.25 }),
         );
     if advanced {
-        let all_resolved = pending
-            .conflicts
-            .iter()
-            .all(|c| decision(&pending.dialog, &c.source.path).is_some());
         let (replace, skip) = pending.dialog.counts(&pending.conflicts);
+        // Every conflict with a decision is counted once, as a replacement or a skip.
+        let all_resolved = replace + skip == pending.conflicts.len();
         let mut args = FluentArgs::new();
         args.set("replace_count", replace);
         args.set("skip_count", skip);

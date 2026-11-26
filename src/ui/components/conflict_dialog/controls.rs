@@ -197,7 +197,7 @@ pub(super) fn list_key(p: &mut PendingFileOperation, key: &str) -> bool {
         return false;
     };
     p.dialog.selected = row;
-    p.dialog.list_scroll.scroll_to_item(position);
+    p.dialog.list_scroll.scroll_to_item(position, ScrollStrategy::Nearest);
     true
 }
 

@@ -33,7 +33,10 @@ pub(crate) struct ConflictDialogState {
     automatic: HashSet<String>,
     opposite_initialized: bool,
     /// The advanced list, scrolled to the row the keyboard selects.
-    list_scroll: ScrollHandle,
+    list_scroll: UniformListScrollHandle,
+    /// The shallowest conflict's depth, where the list's indentation starts: the conflicts
+    /// do not change, and walking every path each frame cost most of a hover.
+    depth: Option<usize>,
 }
 
 impl Default for ConflictDialogState {
@@ -52,7 +55,8 @@ impl Default for ConflictDialogState {
             resolutions: HashMap::new(),
             automatic: HashSet::new(),
             opposite_initialized: false,
-            list_scroll: ScrollHandle::new(),
+            list_scroll: UniformListScrollHandle::new(),
+            depth: None,
         }
     }
 }
@@ -114,6 +118,10 @@ pub(crate) fn render_conflict_dialog(
     pending.dialog.width = max_width;
     let width = pending.dialog.width.min(max_width);
     let sidebar_width = pending.dialog.sidebar_width.min(max_sidebar_width(width));
+    if advanced && pending.dialog.depth.is_none() {
+        let depth = pending.conflicts.iter().map(|c| rules::ancestors(&c.source.path).count()).min();
+        pending.dialog.depth = Some(depth.unwrap_or(0));
+    }
     let rows = visible(pending);
     let current = &pending.conflicts[pending.dialog.selected];
     let comparison = render_comparison(pending, system, &handle, cx);

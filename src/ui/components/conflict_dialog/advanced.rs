@@ -45,6 +45,14 @@ pub(super) fn render_advanced_body(
     let mut body = div().flex().flex_col().flex_1().min_h_0().gap(rems(0.0));
     use crate::ui::elements::segmented::SegmentPlace;
     let mut filters = crate::ui::elements::segmented::segmented("conflict-filters", None, t);
+    // One pass for the four counts: the list can hold tens of thousands of conflicts.
+    let mut counts = [pending.conflicts.len(), 0, 0, 0];
+    for conflict in &pending.conflicts {
+        match category(conflict) {
+            0 => {}
+            filter => counts[filter] += 1,
+        }
+    }
     for (filter, message) in [
         Message::ConflictAll,
         Message::ConflictIdentical,
@@ -54,11 +62,7 @@ pub(super) fn render_advanced_body(
     .into_iter()
     .enumerate()
     {
-        let count = pending
-            .conflicts
-            .iter()
-            .filter(|c| filter == 0 || category(c) == filter)
-            .count();
+        let count = counts[filter];
         let h = handle.clone();
         let selected = pending.dialog.filter == filter;
         filters = filters.child(
@@ -110,142 +114,27 @@ pub(super) fn render_advanced_body(
                 .child(div().flex_1().min_w_0().h_full().child(input)),
         );
     }
-    let mut list = div()
-        .id("conflict-list")
-        .flex_1()
-        .min_h_0()
-        .overflow_y_scroll()
-        .track_scroll(&pending.dialog.list_scroll)
-        .py(rems(0.5))
-        .pl(rems(1.25));
-    let depth = pending
-        .conflicts
-        .iter()
-        .map(|c| ancestors(&c.source.path).count())
-        .min()
-        .unwrap_or(0);
-    for &i in &rows {
-        let c = &pending.conflicts[i];
-        let h = handle.clone();
-        let collapse = handle.clone();
-        let path = c.source.path.clone();
-        let resolved = decision(&pending.dialog, &path);
-        let mut row = div()
-            .id(("conflict-row", i))
-            .flex()
-            .items_center()
-            .gap(rems(0.75))
-            .py(rems(0.5))
-            .pl(rems(
-                // Deep trees stop indenting so the name keeps its room.
-                0.5 + ancestors(&path).count().saturating_sub(depth).min(MAX_INDENT) as f32,
-            ))
-            .pr(rems(0.75))
-            .border_l(rems(0.1875))
-            .border_color(if i == pending.dialog.selected {
-                t.accent
-            } else {
-                gpui::transparent_black()
-            })
-            .bg(if i == pending.dialog.selected {
-                t.accent.opacity(0.08)
-            } else {
-                gpui::transparent_black()
-            })
-            .hover(|d| d.bg(t.hover))
-            .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                edit(&h, cx, |p| p.dialog.selected = i)
-            });
-        if c.source.is_dir {
-            row = row.child(
-                div()
-                    .id(("conflict-fold", i))
-                    .size(rems(1.25))
-                    .flex_none()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .child(
-                        svg()
-                            .path(if pending.dialog.collapsed.contains(&path) {
-                                "icons/chevron-right.svg"
-                            } else {
-                                "icons/chevron-down.svg"
-                            })
-                            .size(rems(0.875))
-                            .flex_none()
-                            .text_color(t.text),
-                    )
-                    .on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                        cx.stop_propagation();
-                        edit(&collapse, cx, |p| {
-                            if !p.dialog.collapsed.remove(&path) {
-                                p.dialog.collapsed.insert(path.clone());
-                            }
-                            let rows = visible(p);
-                            if !rows.contains(&p.dialog.selected) {
-                                if let Some(&i) = rows.first() {
-                                    p.dialog.selected = i;
-                                }
-                            }
-                        });
-                    }),
-            );
-        }
-        row = row
-            .when(!c.source.is_dir, |r| {
-                r.child(div().w(rems(1.25)).flex_none())
-            })
-            .child(conflict_icon(&c.source, rems(1.0), system, false, cx))
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .child(div().text_ellipsis().child(c.name.clone()))
-                    .child(
-                        div()
-                            .text_size(rems(0.75))
-                            .text_color(t.text_muted)
-                            .text_ellipsis()
-                            .child(parent(&c.source.path).to_string()),
-                    ),
-            );
-        let mut status = div().flex().flex_none().items_center().gap(rems(0.5));
-        if let Some(action) = resolved {
-            status = status.child(
-                svg()
-                    .path(if action == ConflictAction::Replace {
-                        "icons/circle-check.svg"
-                    } else {
-                        "icons/circle-x.svg"
-                    })
-                    .size(rems(0.75))
-                    .flex_none()
-                    .text_color(if action == ConflictAction::Replace {
-                        t.toast_success
-                    } else {
-                        t.error
-                    })
-                    .opacity(
-                        if pending.dialog.resolutions.contains_key(&c.source.path)
-                            && !pending.dialog.automatic.contains(&c.source.path)
-                        {
-                            1.0
-                        } else {
-                            0.45
-                        },
-                    ),
-            );
-        }
-        row = row.child(
-            status
-                .when(pending.dialog.automatic.contains(&c.source.path), |d| {
-                    d.child(automatic_badge(cx))
-                })
-                .child(status_dot(category(c), cx)),
-        );
-        list = list.child(row);
-    }
+    let depth = pending.dialog.depth.unwrap_or(0);
+    // Only the rows in view are built: a merge can bring tens of thousands of conflicts,
+    // and every hover rebuilt them all.
+    let source = handle.clone();
+    let empty = rows.is_empty();
+    let count = rows.len();
+    let list = uniform_list("conflict-list", count, move |range, _, cx| {
+        let Some(pending) = source.read(cx).pending_file_operations.front() else {
+            return Vec::new();
+        };
+        range
+            .filter_map(|position| rows.get(position).copied())
+            .filter(|&i| i < pending.conflicts.len())
+            .map(|i| conflict_row(pending, i, depth, system, &source, cx))
+            .collect()
+    })
+    .flex_1()
+    .min_h_0()
+    .track_scroll(&pending.dialog.list_scroll)
+    .py(rems(0.5))
+    .pl(rems(1.25));
     let legend = div()
         .flex()
         .flex_none()
@@ -315,7 +204,7 @@ pub(super) fn render_advanced_body(
                     .min_w_0()
                     .overflow_y_scroll()
                     .p(rems(1.25))
-                    .child(if rows.is_empty() {
+                    .child(if empty {
                         div()
                             .text_color(t.text_muted)
                             .child(cx.i18n().text(Message::ConflictEmpty))
@@ -326,4 +215,137 @@ pub(super) fn render_advanced_body(
             ),
     );
     body
+}
+
+/// One row of the advanced list: the conflict `i` of `pending`.
+fn conflict_row(
+    pending: &PendingFileOperation,
+    i: usize,
+    depth: usize,
+    system: bool,
+    handle: &Entity<OxydeApp>,
+    cx: &App,
+) -> AnyElement {
+    let t = *cx.theme();
+    let c = &pending.conflicts[i];
+    let h = handle.clone();
+    let collapse = handle.clone();
+    let path = c.source.path.clone();
+    let resolved = decision(&pending.dialog, &path);
+    let mut row = div()
+        .id(("conflict-row", i))
+        .w_full()
+        .flex()
+        .items_center()
+        .gap(rems(0.75))
+        .py(rems(0.5))
+        .pl(rems(
+            // Deep trees stop indenting so the name keeps its room.
+            0.5 + ancestors(&path).count().saturating_sub(depth).min(MAX_INDENT) as f32,
+        ))
+        .pr(rems(0.75))
+        .border_l(rems(0.1875))
+        .border_color(if i == pending.dialog.selected {
+            t.accent
+        } else {
+            gpui::transparent_black()
+        })
+        .bg(if i == pending.dialog.selected {
+            t.accent.opacity(0.08)
+        } else {
+            gpui::transparent_black()
+        })
+        .hover(|d| d.bg(t.hover))
+        .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+            edit(&h, cx, |p| p.dialog.selected = i)
+        });
+    if c.source.is_dir {
+        row = row.child(
+            div()
+                .id(("conflict-fold", i))
+                .size(rems(1.25))
+                .flex_none()
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(
+                    svg()
+                        .path(if pending.dialog.collapsed.contains(&path) {
+                            "icons/chevron-right.svg"
+                        } else {
+                            "icons/chevron-down.svg"
+                        })
+                        .size(rems(0.875))
+                        .flex_none()
+                        .text_color(t.text),
+                )
+                .on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                    cx.stop_propagation();
+                    edit(&collapse, cx, |p| {
+                        if !p.dialog.collapsed.remove(&path) {
+                            p.dialog.collapsed.insert(path.clone());
+                        }
+                        let rows = visible(p);
+                        if !rows.contains(&p.dialog.selected) {
+                            if let Some(&i) = rows.first() {
+                                p.dialog.selected = i;
+                            }
+                        }
+                    });
+                }),
+        );
+    }
+    row = row
+        .when(!c.source.is_dir, |r| {
+            r.child(div().w(rems(1.25)).flex_none())
+        })
+        .child(conflict_icon(&c.source, rems(1.0), system, false, cx))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .child(div().text_ellipsis().child(c.name.clone()))
+                .child(
+                    div()
+                        .text_size(rems(0.75))
+                        .text_color(t.text_muted)
+                        .text_ellipsis()
+                        .child(parent(&c.source.path).to_string()),
+                ),
+        );
+    let mut status = div().flex().flex_none().items_center().gap(rems(0.5));
+    if let Some(action) = resolved {
+        status = status.child(
+            svg()
+                .path(if action == ConflictAction::Replace {
+                    "icons/circle-check.svg"
+                } else {
+                    "icons/circle-x.svg"
+                })
+                .size(rems(0.75))
+                .flex_none()
+                .text_color(if action == ConflictAction::Replace {
+                    t.toast_success
+                } else {
+                    t.error
+                })
+                .opacity(
+                    if pending.dialog.resolutions.contains_key(&c.source.path)
+                        && !pending.dialog.automatic.contains(&c.source.path)
+                    {
+                        1.0
+                    } else {
+                        0.45
+                    },
+                ),
+        );
+    }
+    row = row.child(
+        status
+            .when(pending.dialog.automatic.contains(&c.source.path), |d| {
+                d.child(automatic_badge(cx))
+            })
+            .child(status_dot(category(c), cx)),
+    );
+    row.into_any_element()
 }
