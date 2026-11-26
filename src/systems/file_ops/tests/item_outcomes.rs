@@ -148,3 +148,21 @@ fn real_move_records_directory_completion_after_removal() {
     assert!(target.join("folder/child.txt").exists());
     assert_eq!(op.snapshot_item_outcomes()[&source], ItemOutcome::Completed);
 }
+
+#[test]
+fn an_item_inside_a_removed_selected_folder_completes_with_it() {
+    let mut op = FileOperation::new(
+        FileOpType::Trash,
+        vec!["folder".into(), "folder/inner".into(), "other".into(), "other/inner".into()],
+        None,
+        None,
+    );
+    op.item_complete(Path::new("folder"));
+    op.item_failed(Path::new("other"));
+    op.item_covered(Path::new("folder/inner"));
+    op.item_covered(Path::new("other/inner"));
+    op.status = OpStatus::Error(String::new());
+    let outcomes = op.snapshot_item_outcomes();
+    assert_eq!(outcomes[Path::new("folder/inner")], ItemOutcome::Completed);
+    assert_eq!(outcomes[Path::new("other/inner")], ItemOutcome::NotProcessed);
+}

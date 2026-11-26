@@ -91,6 +91,16 @@ impl FileOperation {
         }
     }
 
+    /// A selected item inside a selected folder goes with it: done when the folder is.
+    #[cfg(any(target_os = "windows", test))]
+    pub(super) fn item_covered(&mut self, path: &Path) {
+        let covered = path.ancestors().skip(1).filter_map(|folder| self.item_progress.get(folder))
+            .any(|folder| folder.removed && folder.done == folder.expected && !folder.failed);
+        if covered {
+            self.item_complete(path);
+        }
+    }
+
     pub(super) fn item_failed(&mut self, path: &Path) {
         if let Some(progress) = self.item_progress.get_mut(path) {
             progress.started = true;

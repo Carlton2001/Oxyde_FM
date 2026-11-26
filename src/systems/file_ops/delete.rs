@@ -294,8 +294,14 @@ impl FileOperationManager {
             }
             (selected, refused)
         };
+        // Items inside a selected folder go to the Recycle Bin with it.
         #[cfg(target_os = "windows")]
-        let selected = crate::systems::history_delete::collapse_roots(selected);
+        let (selected, covered) = {
+            let requested: Vec<_> = selected.iter().map(|entry| entry.path().to_path_buf()).collect();
+            let selected = crate::systems::history_delete::collapse_roots(selected);
+            let kept: std::collections::HashSet<_> = selected.iter().map(|entry| entry.path().to_path_buf()).collect();
+            (selected, requested.into_iter().filter(|path| !kept.contains(path)).collect::<Vec<_>>())
+        };
         #[cfg(target_os = "windows")]
         log::info!(target: "oxyde_lib::delete_timing", "trash_selection op={} selected={} wall_s={:.6}",
             op.lock().unwrap().id, selected.len(), selection_started.elapsed().as_secs_f64());
@@ -307,9 +313,16 @@ impl FileOperationManager {
         let refused_count = 0;
         op.lock().unwrap().total_files = real_sources.len() + refused_count;
         #[cfg(target_os = "windows")]
-        return Self::perform_selected_trash(op, selected, refused, crate::platform::ShellDeleteControl {
-            cancel: cancel_flag, pause: pause_flag, turbo: turbo_flag,
-        });
+        {
+            let result = Self::perform_selected_trash(op, selected, refused, crate::platform::ShellDeleteControl {
+                cancel: cancel_flag, pause: pause_flag, turbo: turbo_flag,
+            });
+            let mut locked = op.lock().unwrap();
+            for path in &covered {
+                locked.item_covered(path);
+            }
+            return result;
+        }
         #[cfg(not(target_os = "windows"))]
         {
             // A refused item must not prevent the rest of the selection from being trashed.
