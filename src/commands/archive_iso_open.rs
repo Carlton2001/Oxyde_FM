@@ -14,6 +14,9 @@ use std::io::{self, Read, Seek, SeekFrom};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+#[path = "archive_iso_open/rock_ridge.rs"]
+mod rock_ridge;
+
 fn invalid(message: &str) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, message)
 }
@@ -60,6 +63,8 @@ struct Record {
     extent: Extent,
     directory: bool,
     final_extent: bool,
+    /// After the identifier and its padding: Rock Ridge's entries.
+    system_use: Vec<u8>,
 }
 
 struct Entry {
@@ -120,11 +125,14 @@ fn record(bytes: &[u8], block_size: u64) -> io::Result<Record> {
     let offset = (location + bytes[1] as u64)
         .checked_mul(block_size)
         .ok_or_else(|| invalid("Invalid ISO extent offset"))?;
+    // An identifier of even length is followed by one padding byte.
+    let system_use = 33 + name_length + (1 - name_length % 2);
     Ok(Record {
         raw_name: bytes[33..33 + name_length].to_vec(),
         extent: Extent { offset, length },
         directory: bytes[25] & 2 != 0,
         final_extent: bytes[25] & 128 == 0,
+        system_use: bytes.get(system_use..).unwrap_or_default().to_vec(),
     })
 }
 
@@ -168,11 +176,20 @@ fn has_udf<R: Read + Seek>(image: &mut Image<'_, R>, primary: u64) -> bool {
 /// logical block size of the extents.
 const SECTOR: u64 = 2048;
 
-/// The tree to read: the Joliet one when the image has it, for Unicode names.
+/// The tree to read and where its names come from: Rock Ridge's in the primary tree,
+/// else the Joliet tree's Unicode ones, else the ISO 9660 identifiers.
 struct Tree {
     block_size: u64,
     root: Record,
-    joliet: bool,
+    names: Names,
+}
+
+#[derive(Clone, Copy)]
+enum Names {
+    Iso,
+    Joliet,
+    /// The bytes skipped before each record's system use area.
+    RockRidge { skip: usize },
 }
 
 fn volume_root(descriptor: &[u8; 2048]) -> io::Result<(u64, Record)> {
@@ -239,9 +256,12 @@ fn root_record<R: Read + Seek>(image: &mut Image<'_, R>) -> io::Result<Tree> {
     }
     let (block_size, root) =
         primary.ok_or_else(|| invalid("Missing ISO primary volume descriptor"))?;
+    if let Some(skip) = rock_ridge::detect(image, &root, block_size) {
+        return Ok(Tree { block_size, root, names: Names::RockRidge { skip } });
+    }
     Ok(match joliet {
-        Some((block_size, root)) => Tree { block_size, root, joliet: true },
-        None => Tree { block_size, root, joliet: false },
+        Some((block_size, root)) => Tree { block_size, root, names: Names::Joliet },
+        None => Tree { block_size, root, names: Names::Iso },
     })
 }
 
@@ -260,7 +280,7 @@ fn identifier(raw: &[u8], joliet: bool) -> io::Result<String> {
 }
 
 fn index<R: Read + Seek>(image: &mut Image<'_, R>) -> Result<Vec<Entry>, CommandError> {
-    let Tree { block_size, root, joliet } = root_record(image)?;
+    let Tree { block_size, root, names } = root_record(image)?;
     let mut directories = vec![(PathBuf::new(), root.extent)];
     let mut visited = HashSet::new();
     let mut paths = HashSet::new();
@@ -299,17 +319,43 @@ fn index<R: Read + Seek>(image: &mut Image<'_, R>) -> Result<Vec<Entry>, Command
             }
             image.read_at(position + 1, &mut bytes[1..length])?;
             position += length as u64;
-            let entry = record(&bytes[..length], block_size)?;
+            let mut entry = record(&bytes[..length], block_size)?;
             if entry.raw_name == [0] || entry.raw_name == [1] {
                 if !entry.directory || continuation.is_some() {
                     return Err(invalid("Invalid ISO special directory record").into());
                 }
                 continue;
             }
-            let identifier = identifier(&entry.raw_name, joliet)?;
-            // Match the existing ISO listing's version and trailing-dot handling.
-            let display = identifier.split(';').next().unwrap_or("");
-            let display = display.strip_suffix('.').unwrap_or(display);
+            let mut rock_ridge_name = None;
+            if let Names::RockRidge { skip } = names {
+                let fields = rock_ridge::fields(image, &entry, skip, block_size)?;
+                if fields.relocated {
+                    // Listed where the placeholder that points to it stands.
+                    if !entry.directory || continuation.is_some() {
+                        return Err(invalid("Invalid Rock Ridge relocated directory").into());
+                    }
+                    continue;
+                }
+                if let Some(block) = fields.child {
+                    if entry.directory || !entry.final_extent || continuation.is_some() {
+                        return Err(invalid("Invalid Rock Ridge child link").into());
+                    }
+                    entry.extent = rock_ridge::child_extent(image, block, block_size)?;
+                    entry.directory = true;
+                }
+                rock_ridge_name = fields.name;
+            }
+            // A Rock Ridge name is the file's own; an identifier loses its version and the
+            // dot of an empty extension, as the existing ISO listing shows it.
+            let display = match rock_ridge_name {
+                Some(name) => name,
+                None => {
+                    let identifier = identifier(&entry.raw_name, matches!(names, Names::Joliet))?;
+                    let display = identifier.split(';').next().unwrap_or("");
+                    display.strip_suffix('.').unwrap_or(display).to_owned()
+                }
+            };
+            let display = display.as_str();
             safe_iso_component(display)?;
             let path = parent.join(display);
             let relative = path
@@ -351,6 +397,18 @@ fn index<R: Read + Seek>(image: &mut Image<'_, R>) -> Result<Vec<Entry>, Command
         if continuation.is_some() {
             return Err(invalid("Incomplete ISO multi-extent file").into());
         }
+    }
+    if matches!(names, Names::RockRidge { .. }) {
+        // The folder that holds relocated directories, empty once they are listed where
+        // they belong: mkisofs names it `rr_moved`, xorriso `.rr_moved`.
+        let holds = |folder: &Path| entries.iter().any(|entry| entry.path.parent() == Some(folder));
+        let moved: Vec<PathBuf> = entries
+            .iter()
+            .filter(|entry| entry.directory && matches!(entry.path.to_str(), Some("rr_moved" | ".rr_moved")))
+            .map(|entry| entry.path.clone())
+            .filter(|path| !holds(path))
+            .collect();
+        entries.retain(|entry| !moved.contains(&entry.path));
     }
     Ok(entries)
 }
@@ -618,6 +676,10 @@ mod udf_tests;
 #[cfg(test)]
 #[path = "archive_iso_open/tests/joliet.rs"]
 mod joliet_tests;
+
+#[cfg(test)]
+#[path = "archive_iso_open/tests/rock_ridge.rs"]
+mod rock_ridge_tests;
 
 #[cfg(test)]
 mod tests {
