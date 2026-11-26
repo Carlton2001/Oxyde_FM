@@ -65,3 +65,24 @@ fn old_naming_continues_past_r99_with_s00() {
     assert_eq!(volumes.len(), 103);
     assert_eq!(volumes.last().unwrap(), &folder.path().join("big.s01"));
 }
+
+#[test]
+fn a_later_old_naming_volume_leads_to_its_first_volume() {
+    let folder = tempfile::tempdir().unwrap();
+    touch(folder.path(), &["film.rar", "film.r00", "film.r01", "film.r03", "Data.RAR", "Data.R00", "lone.r00"]);
+    let path = |name: &str| folder.path().join(name);
+    assert_eq!(first_volume_of_old_naming(&path("film.r01")), Some(path("film.rar")));
+    assert_eq!(first_volume_of_old_naming(&path("Data.R00")), Some(path("Data.RAR")));
+    // After a missing volume, or without a first one, the file is no volume of a set.
+    assert_eq!(first_volume_of_old_naming(&path("film.r03")), None);
+    assert_eq!(first_volume_of_old_naming(&path("lone.r00")), None);
+}
+
+#[test]
+fn only_old_naming_extensions_name_a_first_volume() {
+    assert_eq!(old_naming_first_volume(Path::new("/d/film.s42")), Some(PathBuf::from("/d/film.rar")));
+    assert_eq!(old_naming_first_volume(Path::new("/d/film.Z99")), Some(PathBuf::from("/d/film.RAR")));
+    for name in ["/d/film.rar", "/d/film.q00", "/d/film.r0", "/d/film.r001", "/d/.r00", "/d/script.r"] {
+        assert_eq!(old_naming_first_volume(Path::new(name)), None, "{name}");
+    }
+}

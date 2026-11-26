@@ -80,9 +80,40 @@ impl OxydeApp {
             self.open_disk_image(pane_id.to_string(), path, false, cx);
         } else if is_dir || navigable_archive {
             self.open_directory_item(pane_id, path, false, cx);
+        } else if entry.archive_path.is_none()
+            && oxyde_lib::utils::archive_volumes::old_naming_first_volume(&oxyde_lib::utils::path_text::decode(&path)).is_some()
+        {
+            self.open_old_naming_volume(pane_id, path, cx);
         } else {
             self.open_external_item(path, cx);
         }
+    }
+
+    /// `film.r03` opens its set from `film.rar`, as `film.part3.rar` does. Without that
+    /// first volume, or past a missing one, the file goes to its application.
+    fn open_old_naming_volume(&mut self, pane_id: &str, path: String, cx: &mut Context<Self>) {
+        let pane = pane_id.to_string();
+        let origin = self.state.find_pane(pane_id).map(|pane| (pane.active_tab().id.clone(), pane.active_tab().path.clone()));
+        cx.spawn(async move |this, cx| {
+            let volume = oxyde_lib::utils::path_text::decode(&path);
+            let first = tokio::task::spawn_blocking(move || {
+                oxyde_lib::utils::archive_volumes::first_volume_of_old_naming(&volume)
+            })
+            .await
+            .ok()
+            .flatten();
+            let _ = this.update(cx, |this, cx| match first {
+                Some(first) => {
+                    // The tab moved on meanwhile: the set does not replace what it shows now.
+                    if this.state.find_pane(&pane).map(|pane| (pane.active_tab().id.clone(), pane.active_tab().path.clone())) == origin {
+                        let first = oxyde_lib::utils::path_text::encode(&first);
+                        this.open_directory_item(&pane, first, false, cx);
+                    }
+                }
+                None => this.open_external_item(path, cx),
+            });
+        })
+        .detach();
     }
 
     pub fn execute_ouvrir(&mut self, cx: &mut Context<Self>) {

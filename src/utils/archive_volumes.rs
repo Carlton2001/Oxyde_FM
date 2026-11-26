@@ -36,6 +36,30 @@ pub fn rar_set_name(path: &Path) -> Option<(PathBuf, String)> {
     Some((path.with_file_name(first), stem[..dot].to_owned()))
 }
 
+/// The first volume a later volume of the old naming names, by its name alone
+/// (`film.r03` → `film.rar`). Touches no file.
+pub fn old_naming_first_volume(path: &Path) -> Option<PathBuf> {
+    let name = path.file_name()?.to_str()?;
+    let (stem, extension) = name.rsplit_once('.')?;
+    let letters = extension.as_bytes();
+    if stem.is_empty()
+        || letters.len() != 3
+        || !matches!(letters[0].to_ascii_lowercase(), b'r'..=b'z')
+        || !letters[1..].iter().all(u8::is_ascii_digit)
+    {
+        return None;
+    }
+    let rar = if letters[0].is_ascii_uppercase() { "RAR" } else { "rar" };
+    Some(path.with_file_name(format!("{stem}.{rar}")))
+}
+
+/// The first volume of the set a later volume of the old naming belongs to, when that
+/// first volume exists and the consecutive volumes reach `path`.
+pub fn first_volume_of_old_naming(path: &Path) -> Option<PathBuf> {
+    let first = old_naming_first_volume(path)?;
+    rar_volumes(&first).iter().any(|volume| volume == path).then_some(first)
+}
+
 /// The name of the set's volume at an index, from 0, following the naming of `path`.
 fn names(path: &Path) -> Option<Box<dyn Fn(usize) -> Option<PathBuf>>> {
     let name = path.file_name()?.to_str()?.to_owned();
