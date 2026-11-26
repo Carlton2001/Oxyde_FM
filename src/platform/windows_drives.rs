@@ -355,11 +355,11 @@ mod eject_tests {
 
 /// Whether the volume at `root` (`F:\`, a SUBST letter or a mount folder) refuses writes.
 pub(super) fn volume_is_read_only(root: &std::path::Path) -> bool {
-    use std::os::windows::ffi::OsStrExt;
     use windows::core::PCWSTR;
     use windows::Win32::Storage::FileSystem::GetVolumeInformationW;
     const FILE_READ_ONLY_VOLUME: u32 = 0x0008_0000;
-    let mut wide: Vec<u16> = root.as_os_str().encode_wide().collect();
+    let Ok(mut wide) = crate::utils::path_text::wide(root) else { return false };
+    wide.pop();
     if wide.last() != Some(&u16::from(b'\\')) {
         wide.push(u16::from(b'\\'));
     }

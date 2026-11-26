@@ -1,7 +1,6 @@
 //! Native virtual-storage calls. Callers already run these blocking operations
 //! outside GPUI. No shell, subprocess, or process-wide COM state is needed.
 use super::MountedDiskImage;
-use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::Foundation::{
@@ -30,12 +29,7 @@ fn status(result: WIN32_ERROR) -> Result<(), String> {
 }
 
 fn wide(path: &Path) -> Result<Vec<u16>, String> {
-    let mut text: Vec<_> = path.as_os_str().encode_wide().collect();
-    if text.contains(&0) {
-        return Err("A disk image path cannot contain NUL".into());
-    }
-    text.push(0);
-    Ok(text)
+    crate::utils::path_text::wide(path).map_err(|error| error.to_string())
 }
 
 fn open_device(path: &str) -> Result<DiskHandle, String> {

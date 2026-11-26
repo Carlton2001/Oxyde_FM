@@ -201,8 +201,12 @@ pub(super) fn file_bytes(paths: &[String]) -> Vec<u8> {
             .write_unaligned(header);
     }
     for path in paths {
-        for character in path.replace('/', "\\").encode_utf16().chain(Some(0)) {
-            bytes.extend_from_slice(&character.to_le_bytes());
+        // A name with a lone surrogate keeps it. Callers refuse a path that `wide`
+        // refuses: its NUL would end the list there.
+        let units = crate::utils::path_text::wide(path).unwrap_or_else(|_| vec![0]);
+        for unit in units {
+            let unit = if unit == u16::from(b'/') { u16::from(b'\\') } else { unit };
+            bytes.extend_from_slice(&unit.to_le_bytes());
         }
     }
     bytes.extend_from_slice(&0_u16.to_le_bytes());
@@ -234,6 +238,9 @@ fn publish(api: &dyn ClipboardApi, buffers: &mut [(u32, Buffer<'_>)]) -> Result<
 fn set_files_with(api: &dyn ClipboardApi, paths: &[String], cut: bool) -> Result<()> {
     if paths.is_empty() {
         return publish(api, &mut []);
+    }
+    for path in paths {
+        crate::utils::path_text::wide(path).map_err(|error| CommandError::PathError(error.to_string()))?;
     }
     // Prepare both formats before changing the previous clipboard contents.
     let format = api.effect_format()?;

@@ -157,6 +157,11 @@ pub(super) fn job(memory_bytes: usize) -> io::Result<OwnedHandle> {
 }
 
 pub(super) fn run(mode: &str, path: &Path) -> io::Result<Vec<u8>> {
+    // A name with a lone surrogate arrives as `path_text`'s text.
+    let path = &*crate::utils::path_text::decoded(path);
+    let session_input = |path: &Path| {
+        crate::utils::path_text::encode(path).len() + 5 <= crate::commands::icon_session_worker::MAX_INPUT
+    };
     if mode == "audio-cover" || mode == "audio-cover-thumbnail" {
         return image_session::run(path, if mode == "audio-cover-thumbnail" {
             image_session::AUDIO_THUMBNAIL_KIND
@@ -165,7 +170,7 @@ pub(super) fn run(mode: &str, path: &Path) -> io::Result<Vec<u8>> {
     if mode == "audio-metadata" {
         return run_audio_metadata_in(&std::env::current_exe()?.with_file_name("oxyde-image-worker.exe"), path);
     }
-    if (mode == "icon-small" || mode == "icon-large") && path.to_str().is_some_and(|path| path.len() + 5 <= crate::commands::icon_session_worker::MAX_INPUT) {
+    if (mode == "icon-small" || mode == "icon-large") && session_input(path) {
         return icon_session::run(path, mode == "icon-large");
     }
     if mode == "image-viewer" {
@@ -174,7 +179,7 @@ pub(super) fn run(mode: &str, path: &Path) -> io::Result<Vec<u8>> {
     if mode == "image" { return image_session::run(path, 0); }
     if mode == "image-thumbnail" { return image_session::run(path, 1); }
     if mode == "pdf" || mode == "pdf-thumbnail" {
-        if path.to_str().is_some_and(|path| path.len() + 5 <= crate::commands::icon_session_worker::MAX_INPUT) {
+        if session_input(path) {
             return icon_session::run_pdf(path, mode == "pdf-thumbnail");
         }
         let _source = super::platform().retain_archive_source(path)?;

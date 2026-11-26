@@ -18,7 +18,7 @@ use std::{
     time::{Duration, Instant},
 };
 use windows::{
-    core::{implement, w, HSTRING},
+    core::{implement, w},
     Win32::{
         Foundation::{HANDLE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM},
         Graphics::Gdi::{BeginPaint, ClientToScreen, EndPaint, PAINTSTRUCT},
@@ -229,7 +229,7 @@ impl Engine {
             // Playback starts once metadata is loaded, after any resume seek.
             engine
                 .engine
-                .SetSource(&windows::core::BSTR::from_wide(&HSTRING::from(path.as_os_str())))
+                .SetSource(&windows::core::BSTR::from_wide(&crate::utils::path_text::hstring(path)?))
                 .map_err(native)?;
             Ok(engine)
         }

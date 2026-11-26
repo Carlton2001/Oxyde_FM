@@ -57,7 +57,8 @@ pub(super) fn open(
     sharing: u32,
     disposition: u32,
 ) -> io::Result<File> {
-    let absolute = std::path::absolute(path)?;
+    // `absolute` refuses a NUL left over.
+    let absolute = std::path::absolute(crate::utils::path_text::decoded(path))?;
     match open_absolute(&absolute, directory, access, sharing, disposition) {
         Err(error) if refuses_reparse(&error) => match mounted::rebase(&absolute) {
             Some(rebased) => open_absolute(&rebased, directory, access, sharing, disposition),

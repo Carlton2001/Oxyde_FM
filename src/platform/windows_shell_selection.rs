@@ -34,7 +34,15 @@ pub(super) fn shell_path(path: &str) -> Result<std::path::PathBuf, CommandError>
             "The Windows Shell cannot address a name ending with a dot or a space: {path}"
         )));
     }
-    validate_path(path)
+    validate_path(path).map(|path| crate::utils::path_text::decoded(&path).into_owned())
+}
+
+/// `shell_path` for `SHParseDisplayName`: NUL-terminated, with backslashes. A name
+/// with a lone surrogate keeps it.
+pub(super) fn shell_wide(path: &str) -> Result<Vec<u16>, CommandError> {
+    let wide = crate::utils::path_text::wide(shell_path(path)?)
+        .map_err(|error| CommandError::PathError(error.to_string()))?;
+    Ok(wide.into_iter().map(|unit| if unit == u16::from(b'/') { u16::from(b'\\') } else { unit }).collect())
 }
 
 fn shell_selection(paths: &[String]) -> Result<IShellItemArray, CommandError> {
@@ -42,8 +50,7 @@ fn shell_selection(paths: &[String]) -> Result<IShellItemArray, CommandError> {
         let mut allocations = Vec::with_capacity(paths.len());
         let mut pidls = Vec::with_capacity(paths.len());
         for path in paths {
-            let normalized = shell_path(path)?.to_string_lossy().replace('/', "\\");
-            let wide: Vec<_> = normalized.encode_utf16().chain(Some(0)).collect();
+            let wide = shell_wide(path)?;
             let mut pidl = std::ptr::null_mut();
             SHParseDisplayName(PCWSTR(wide.as_ptr()), None, &mut pidl, 0, None)
                 .map_err(|error| CommandError::SystemError(error.to_string()))?;
@@ -84,17 +91,10 @@ fn properties_ui_object<T: windows::core::Interface>(paths: &[String]) -> Result
         let mut parents = Vec::with_capacity(paths.len());
         for path in paths {
             let validated = shell_path(path)?;
-            parents.push(
-                validated
-                    .parent()
-                    .map(|parent| parent.to_string_lossy().replace('/', "\\").to_lowercase()),
-            );
-            let wide: Vec<_> = validated
-                .to_string_lossy()
-                .replace('/', "\\")
-                .encode_utf16()
-                .chain(Some(0))
-                .collect();
+            parents.push(validated.parent().map(|parent| {
+                crate::utils::path_text::encode(parent).replace('/', "\\").to_lowercase()
+            }));
+            let wide = shell_wide(path)?;
             let mut pidl = std::ptr::null_mut();
             SHParseDisplayName(PCWSTR(wide.as_ptr()), None, &mut pidl, 0, None)
                 .map_err(|error| CommandError::SystemError(error.to_string()))?;

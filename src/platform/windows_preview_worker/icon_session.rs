@@ -76,10 +76,8 @@ pub(super) fn run_pdf(path: &Path, thumbnail: bool) -> io::Result<Vec<u8>> {
 
 fn run_kind(path: &Path, large: bool, kind: Kind) -> io::Result<Vec<u8>> {
     checkpoint()?;
-    let path = path
-        .to_str()
-        .ok_or_else(|| io::Error::other("Native preview path is not Unicode"))?
-        .to_owned();
+    // A name with a lone surrogate goes on as `path_text` writes it.
+    let path = crate::utils::path_text::encode(path);
     if path.is_empty() || path.len() + 5 > MAX_INPUT {
         return Err(io::Error::other("Native preview path exceeds session request limit"));
     }

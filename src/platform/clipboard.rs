@@ -115,9 +115,9 @@ pub(super) fn parse_dropfiles(bytes: &[u8]) -> Result<Vec<String>, CommandError>
             // GlobalSize may include unused padding after the logical payload.
             return Ok(files);
         } else {
-            let path = String::from_utf16(&name)
-                .map_err(|_| malformed("CF_HDROP", "invalid UTF-16 path"))?;
-            files.push(path);
+            // A name with a lone surrogate keeps it, as `path_text` writes it.
+            let path = <std::ffi::OsString as std::os::windows::ffi::OsStringExt>::from_wide(&name);
+            files.push(crate::utils::path_text::encode(std::path::Path::new(&path)));
             name.clear();
         }
     }

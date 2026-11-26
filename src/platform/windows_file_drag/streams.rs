@@ -291,7 +291,7 @@ fn write_medium(medium: &STGMEDIUM, entry: &Entry, path: &Path, buffer: &mut [u8
         TYMED_ISTORAGE => {
             // An Outlook message: a compound file.
             let source = unsafe { medium.u.pstg.as_ref() }.ok_or_else(|| Error::from(E_POINTER))?;
-            let name = HSTRING::from(path.as_os_str());
+            let name = crate::utils::path_text::hstring(path).map_err(io_error)?;
             let target = unsafe {
                 StgCreateDocfile(&name, STGM_READWRITE | STGM_SHARE_EXCLUSIVE | STGM_FAILIFTHERE, None)
             }?;

@@ -102,10 +102,10 @@ pub(super) const VIEWER_SIDE: u32 = crate::utils::preview_protocol::PREVIEW.side
 const MAX_LISTED_PAGES: u32 = 100_000;
 
 pub(super) fn open(path: &str) -> Result<PdfDocument, CommandError> {
-    let abs_path = std::fs::canonicalize(path)?;
-    let path_str = crate::utils::path_text::without_verbatim_prefix(&abs_path.to_string_lossy());
-    let file =
-        StorageFile::GetFileFromPathAsync(&windows::core::HSTRING::from(&path_str))?.join()?;
+    use crate::utils::path_text;
+    let abs_path = std::fs::canonicalize(path_text::decode(path))?;
+    let path_str = path_text::without_verbatim_prefix(&path_text::encode(&abs_path));
+    let file = StorageFile::GetFileFromPathAsync(&path_text::hstring(&path_str)?)?.join()?;
     Ok(PdfDocument::LoadFromFileAsync(&file)?.join()?)
 }
 

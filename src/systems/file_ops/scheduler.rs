@@ -341,7 +341,7 @@ impl FileOperationManager {
         PathSet::new(right).overlaps(left)
     }
 
-    /// Names that are not UTF-8 are refused before any effect: the operations
+    /// Names that are not valid Unicode are refused before any effect: the operations
     /// below rebuild paths from text and journal them as text.
     fn check_representable(op: &Arc<Mutex<FileOperation>>) -> Result<(), String> {
         let locked = op.lock().unwrap();
@@ -349,9 +349,10 @@ impl FileOperationManager {
             .sources
             .iter()
             .chain(locked.destination.iter())
-            .map(|path| path.to_string_lossy())
+            // Text or already decoded, such a name is refused alike.
+            .map(|path| crate::utils::path_text::encode(path))
             .collect();
-        crate::models::error::UnrepresentablePathFailure::check(paths.iter().map(|path| path.as_ref()))
+        crate::models::error::UnrepresentablePathFailure::check(paths.iter().map(String::as_str))
             .map_err(|failure| failure.to_string())
     }
 

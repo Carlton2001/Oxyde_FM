@@ -9,7 +9,7 @@
 //! whatever Explorer window is in the foreground. Opened among other selected items,
 //! the folder gets an Explorer window of its own, as Explorer gives each of them.
 use super::windows_com::ComApartment;
-use windows::core::{w, Interface, HSTRING, PCWSTR};
+use windows::core::{w, Interface, PCWSTR};
 use windows::Win32::Foundation::{CloseHandle, HWND};
 use windows::Win32::System::Com::{CoCreateInstance, CoTaskMemFree, IServiceProvider, CLSCTX_LOCAL_SERVER};
 use windows::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS};
@@ -119,7 +119,9 @@ fn started_by_explorer() -> bool {
 fn browse(browser: &IShellBrowser, folder: &str) -> windows::core::Result<()> {
     let mut item: *mut ITEMIDLIST = std::ptr::null_mut();
     unsafe {
-        SHParseDisplayName(PCWSTR(HSTRING::from(folder).as_ptr()), None, &mut item, 0, None)?;
+        let folder = crate::utils::path_text::hstring(folder)
+            .map_err(|error| windows::core::Error::new(windows::Win32::Foundation::E_INVALIDARG, error.to_string()))?;
+        SHParseDisplayName(PCWSTR(folder.as_ptr()), None, &mut item, 0, None)?;
         let browsed = browser.BrowseObject(item, SBSP_SAMEBROWSER | SBSP_ABSOLUTE);
         CoTaskMemFree(Some(item.cast()));
         browsed

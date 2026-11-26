@@ -9,7 +9,7 @@ use windows::Win32::UI::Shell::PropertiesSystem::{
 
 pub(super) fn friendly_name(path: &str) -> Result<Option<String>, String> {
     let _com = ComApartment::mta_or_existing().map_err(|error| error.to_string())?;
-    let wide: Vec<u16> = path.encode_utf16().chain(Some(0)).collect();
+    let wide = crate::utils::path_text::wide(path).map_err(|error| error.to_string())?;
     unsafe {
         let store: IPropertyStore = SHGetPropertyStoreFromParsingName::<_, Option<&IBindCtx>, _>(
             PCWSTR(wide.as_ptr()),

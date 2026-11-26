@@ -39,8 +39,9 @@ fn error_reply(error: CommandError) -> Reply {
 pub(super) fn run(path: &Path) -> io::Result<()> {
     let _com = super::windows_com::ComApartment::mta_or_existing().map_err(io::Error::other)?;
     let mut output = io::stdout().lock();
-    let path = path.to_str().ok_or_else(|| io::Error::other("PDF path is not Unicode"))?;
-    let document = match super::windows_pdf_thumbnail::open(path) {
+    // A name with a lone surrogate goes on as `path_text` writes it.
+    let path = crate::utils::path_text::encode(path);
+    let document = match super::windows_pdf_thumbnail::open(&path) {
         Ok(document) => document,
         Err(error) => return frame(error_reply(error), &mut output),
     };

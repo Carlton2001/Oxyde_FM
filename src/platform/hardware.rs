@@ -153,7 +153,7 @@ impl FolderCache {
 /// `C:\mnt\hdd\`; `None` on a drive root, where the letter names the volume.
 #[cfg(target_os = "windows")]
 fn folder_mounted_volume(path: &str) -> Option<String> {
-    let wide: Vec<u16> = path.encode_utf16().chain(std::iter::once(0)).collect();
+    let wide = crate::utils::path_text::wide(path).ok()?;
     let mut mount = vec![0u16; wide.len() + 1];
     unsafe { GetVolumePathNameW(PCWSTR(wide.as_ptr()), &mut mount) }.ok()?;
     if mount.iter().position(|c| *c == 0)? <= 3 {

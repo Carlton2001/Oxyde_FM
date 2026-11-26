@@ -83,7 +83,7 @@ pub(super) fn queue(
     if paths.is_empty()
         || paths
             .iter()
-            .any(|path| path.contains('\0') || !std::path::Path::new(path).is_absolute())
+            .any(|path| crate::utils::path_text::wide(path).is_err() || !std::path::Path::new(path).is_absolute())
     {
         return Err("Invalid file drag paths".into());
     }

@@ -563,8 +563,14 @@ impl Worker {
         let app = wide(&executable);
         let mut line = quote(executable.as_os_str());
         for argument in command.get_args() {
+            // A path given as `path_text`'s text reaches the worker decoded. The command
+            // line ends at its first NUL: a NUL left over would pass a shorter path.
+            let argument = crate::utils::path_text::decoded(Path::new(argument));
+            if argument.as_os_str().encode_wide().any(|unit| unit == 0) {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput, "Worker argument holds a NUL"));
+            }
             line.push(32);
-            line.extend(quote(argument));
+            line.extend(quote(argument.as_os_str()));
         }
         if let Some(source) = &source {
             line.extend(

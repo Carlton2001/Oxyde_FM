@@ -1,4 +1,5 @@
 use super::*;
+use std::os::windows::ffi::OsStrExt;
 
 #[test]
 fn an_image_is_also_named_through_subst_and_mapped_letters() {

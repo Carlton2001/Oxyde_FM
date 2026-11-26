@@ -4,7 +4,7 @@
 use log::warn;
 use std::time::{Duration, Instant};
 use windows::{
-    core::{HSTRING, PCSTR},
+    core::PCSTR,
     Win32::{
         System::{
             DataExchange::{IsClipboardFormatAvailable, RegisterClipboardFormatW},
@@ -47,7 +47,9 @@ pub(super) fn available() -> bool {
 }
 
 fn invoke_paste(target: &str) -> windows::core::Result<()> {
-    let target = HSTRING::from(target);
+    let target = crate::utils::path_text::hstring(target).map_err(|error| {
+        windows::core::Error::new(windows::Win32::Foundation::E_INVALIDARG, error.to_string())
+    })?;
     let folder: IShellItem = unsafe { SHCreateItemFromParsingName(&target, None) }?;
     let menu: IContextMenu = unsafe { folder.BindToHandler(None, &BHID_SFUIObject) }?;
     let info = CMINVOKECOMMANDINFO {

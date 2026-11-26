@@ -36,7 +36,7 @@ Linux:
 [held-directory effects](architecture/linux-held-effects.md),
 [access and deletion](architecture/linux-access.md),
 [names and paths](architecture/linux-names.md),
-[non-UTF-8 names](architecture/non-utf8-names.md),
+[names that are not valid Unicode](architecture/non-utf8-names.md),
 [archive open cache](architecture/linux-open-cache.md),
 [properties](architecture/linux-properties.md),
 [network](architecture/linux-network.md),

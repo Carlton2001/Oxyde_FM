@@ -14,7 +14,7 @@
 use super::windows_com::ComApartment;
 use std::cell::RefCell;
 use std::rc::Rc;
-use windows::core::{implement, w, IUnknownImpl, Interface, Ref, BOOL, BSTR, GUID, HRESULT, HSTRING, PCWSTR};
+use windows::core::{implement, w, IUnknownImpl, Interface, Ref, BOOL, BSTR, GUID, HRESULT, PCWSTR};
 use windows::Win32::Foundation::{
     DISP_E_MEMBERNOTFOUND, DISP_E_UNKNOWNNAME, E_NOINTERFACE, E_NOTIMPL, E_POINTER, HWND, LPARAM, RECT, SHANDLE_PTR, VARIANT_BOOL,
     VARIANT_FALSE, VARIANT_TRUE,
@@ -242,7 +242,9 @@ fn hidden_window() -> windows::core::Result<HWND> {
 /// The identifier lists programs know `folder` by: through its known folder, then
 /// through the drive when that is another.
 fn identifier_lists(folder: &str) -> windows::core::Result<Vec<IdList>> {
-    let name = HSTRING::from(folder);
+    let name = crate::utils::path_text::hstring(folder).map_err(|error| {
+        windows::core::Error::new(windows::Win32::Foundation::E_INVALIDARG, error.to_string())
+    })?;
     unsafe {
         let mut item: *mut ITEMIDLIST = std::ptr::null_mut();
         SHParseDisplayName(PCWSTR(name.as_ptr()), None, &mut item, 0, None)?;

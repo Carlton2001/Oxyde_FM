@@ -36,7 +36,7 @@ fn recycles(drive_type: u32) -> bool {
 
 /// `C:\`, `\\server\share\` or a mount folder, as Windows resolves it.
 fn volume_root(path: &Path) -> Option<PathBuf> {
-    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+    let wide = crate::utils::path_text::wide(path).ok()?;
     let mut buffer = vec![0u16; wide.len() + 2];
     unsafe { GetVolumePathNameW(PCWSTR(wide.as_ptr()), &mut buffer) }.ok()?;
     let length = buffer.iter().position(|c| *c == 0)?;

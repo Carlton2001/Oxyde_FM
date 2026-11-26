@@ -60,17 +60,24 @@ pub(super) fn spawn_update(setup: &std::path::Path) -> io::Result<Child> {
 
 /// Explorer splits its command line on commas, semicolons and equal signs as
 /// well as spaces: such a path is quoted, without a trailing separator that
-/// would escape the closing quote.
+/// would escape the closing quote. `path` may be `path_text`'s text of a name
+/// with a lone surrogate.
 pub(super) fn explorer_path_argument(command: &mut Command, path: &str) -> io::Result<()> {
-    use std::os::windows::process::CommandExt;
-    if path.contains('"') {
+    use std::{ffi::OsString, os::windows::{ffi::OsStringExt, process::CommandExt}};
+    let wide = crate::utils::path_text::wide(path)?;
+    let mut units = &wide[..wide.len() - 1];
+    let unit = |character: char| character as u16;
+    if units.contains(&unit('"')) {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Path contains a quote"));
     }
-    if path.contains([' ', '\t', ',', ';', '=']) {
-        let trimmed = path.trim_end_matches('\\');
-        command.raw_arg(format!("\"{trimmed}\""));
+    if units.iter().any(|value| [' ', '\t', ',', ';', '='].map(unit).contains(value)) {
+        while let Some(rest) = units.strip_suffix(&[unit('\\')]) {
+            units = rest;
+        }
+        let quoted: Vec<u16> = [unit('"')].iter().chain(units).chain(&[unit('"')]).copied().collect();
+        command.raw_arg(OsString::from_wide(&quoted));
     } else {
-        command.arg(path);
+        command.arg(OsString::from_wide(units));
     }
     Ok(())
 }

@@ -3,7 +3,6 @@
 use crate::models::CommandError;
 use image::RgbaImage;
 use lazy_static::lazy_static;
-use std::os::windows::ffi::OsStrExt;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use windows::core::PCWSTR;
@@ -46,7 +45,7 @@ fn own_icon_stamp(path: &str) -> String {
     if path.starts_with("oxyde_") || !super::windows_icon_source::has_own_icon(path) {
         return String::new();
     }
-    match std::fs::metadata(path) {
+    match std::fs::metadata(crate::utils::path_text::decode(path)) {
         Ok(metadata) if metadata.is_file() => {
             let modified = metadata
                 .modified()
@@ -105,10 +104,7 @@ fn extract_icon_image(
 }
 
 fn generate_icon_image(path: &str, size: &str, use_attributes: bool) -> Result<RgbaImage, String> {
-    let wide_path: Vec<u16> = std::ffi::OsStr::new(path)
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
+    let wide_path = crate::utils::path_text::wide(path).map_err(|error| error.to_string())?;
 
     let mut shfileinfo = SHFILEINFOW::default();
     let mut flags = SHGFI_SYSICONINDEX

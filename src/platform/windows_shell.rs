@@ -108,7 +108,7 @@ fn invoke_menu_with(
         .map_err(|error| CommandError::SystemError(format!("InvokeCommand failed: {error}")))
 }
 
-fn run_powershell(script: &str, path: &str) -> Result<(), CommandError> {
+fn run_powershell(script: &str, path: impl AsRef<std::ffi::OsStr>) -> Result<(), CommandError> {
     use std::os::windows::process::CommandExt;
     let mut command = std::process::Command::new(
         super::platform()
@@ -197,9 +197,7 @@ fn with_context_menu<T>(
 
     let path = paths.first().ok_or_else(|| CommandError::SystemError("Empty Shell selection".into()))?;
     if is_background && paths.len() != 1 { return Err(CommandError::SystemError("Background menu requires one folder".into())); }
-    let pb = super::windows_shell_selection::shell_path(path)?;
-    let path_norm = pb.to_string_lossy().replace("/", "\\");
-    let path_u16: Vec<u16> = path_norm.encode_utf16().chain(std::iter::once(0)).collect();
+    let path_u16 = super::windows_shell_selection::shell_wide(path)?;
 
     unsafe {
         let _com =
@@ -584,12 +582,11 @@ pub(super) fn execute_shell_verb_by_canonical_name(
         GetMenuItemCount, GetMenuItemID, GetMenuStringW, MF_BYPOSITION,
     };
 
-    let pb = super::windows_shell_selection::shell_path(path)?;
-    let mut path_norm = pb.to_string_lossy().replace("/", "\\");
-    if path_norm.len() == 2 && path_norm.ends_with(':') {
-        path_norm.push('\\');
+    let mut path_u16 = super::windows_shell_selection::shell_wide(path)?;
+    if path_u16.len() == 3 && path_u16[1] == u16::from(b':') {
+        path_u16.insert(2, u16::from(b'\\'));
     }
-    let path_u16: Vec<u16> = path_norm.encode_utf16().chain(std::iter::once(0)).collect();
+    let path_norm = <std::ffi::OsString as std::os::windows::ffi::OsStringExt>::from_wide(&path_u16[..path_u16.len() - 1]);
 
     unsafe {
         let _com = ComApartment::sta_or_existing()

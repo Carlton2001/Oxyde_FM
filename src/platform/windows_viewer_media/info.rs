@@ -2,7 +2,7 @@
 //! engine does not expose them, so a separate source reader reads the native types.
 use super::super::viewer_media::{audio_codec_index, video_codec_index, MediaInfo};
 use std::path::Path;
-use windows::core::{GUID, HSTRING};
+use windows::core::GUID;
 use windows::Win32::Media::MediaFoundation::*;
 
 fn video_codec(subtype: GUID) -> Option<&'static str> {
@@ -45,7 +45,8 @@ pub(super) fn read(path: &Path) -> MediaInfo {
     let mut info = MediaInfo::default();
     // SAFETY: COM calls on owned interfaces; the reader is released when dropped.
     unsafe {
-        let Ok(reader) = MFCreateSourceReaderFromURL(&HSTRING::from(path.as_os_str()), None) else {
+        let Ok(path) = crate::utils::path_text::hstring(path) else { return info };
+        let Ok(reader) = MFCreateSourceReaderFromURL(&path, None) else {
             return info;
         };
         if let Ok(video) = reader.GetNativeMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32, 0) {

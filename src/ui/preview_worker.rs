@@ -41,14 +41,8 @@ pub(crate) fn run_if_requested() -> bool {
             return oxyde_lib::platform::platform().run_pdf_session_worker(path);
         }
         if mode == "video" {
-            // A Unix name that is not UTF-8 goes on as `path_text` writes it.
-            #[cfg(unix)]
+            // A name that is not valid Unicode goes on as `path_text` writes it.
             let path = oxyde_lib::utils::path_text::encode(path);
-            #[cfg(not(unix))]
-            let path = path
-                .to_str()
-                .ok_or_else(|| std::io::Error::other("Video path is not Unicode"))?
-                .to_owned();
             let mut output = std::io::stdout().lock();
             let mut send_error = None;
             let result = oxyde_lib::platform::local_video_preview_worker(path, |image, pts| {

@@ -1,6 +1,6 @@
 #[cfg(target_os = "windows")]
 pub(super) fn get_shortcut_info(path: &std::path::Path) -> Option<crate::models::ShortcutInfo> {
-    use windows::core::{Interface, HSTRING, PCWSTR};
+    use windows::core::{Interface, PCWSTR};
     use windows::Win32::Storage::FileSystem::WIN32_FIND_DATAW;
     use windows::Win32::System::Com::{
         CoCreateInstance, IPersistFile, CLSCTX_INPROC_SERVER, STGM_READ,
@@ -31,7 +31,7 @@ pub(super) fn get_shortcut_info(path: &std::path::Path) -> Option<crate::models:
             }
         };
 
-        let wide_path = HSTRING::from(path.to_string_lossy().as_ref());
+        let wide_path = crate::utils::path_text::hstring(path).ok()?;
         if persist.Load(PCWSTR(wide_path.as_ptr()), STGM_READ).is_err() {
             return None;
         }
@@ -96,14 +96,16 @@ pub(super) fn set_shortcut_info(
     }
     (|| -> Result<(), crate::models::CommandError> {
         use crate::models::CommandError;
-        use std::path::PathBuf;
         use windows::core::{Interface, HSTRING, PCWSTR};
         use windows::Win32::System::Com::{
             CoCreateInstance, IPersistFile, CLSCTX_INPROC_SERVER, STGM_READWRITE,
         };
         use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
 
-        let path_buf = PathBuf::from(&path);
+        let path_buf = crate::utils::path_text::decode(path);
+        let wide = |path: &std::path::Path| {
+            crate::utils::path_text::hstring(path).map_err(|error| CommandError::SystemError(error.to_string()))
+        };
 
         unsafe {
             let _com = super::windows_com::ComApartment::sta()
@@ -118,7 +120,7 @@ pub(super) fn set_shortcut_info(
                 CommandError::SystemError(format!("Cast to IPersistFile failed: {}", e))
             })?;
 
-            let wide_path = HSTRING::from(path_buf.to_string_lossy().as_ref());
+            let wide_path = wide(&path_buf)?;
             persist
                 .Load(PCWSTR(wide_path.as_ptr()), STGM_READWRITE)
                 .map_err(|e| CommandError::SystemError(format!("Load failed: {}", e)))?;
@@ -160,7 +162,7 @@ pub(super) fn set_shortcut_info(
             // Written beside the shortcut, then put in its place: a full disk or a power
             // cut leaves the old shortcut, not a truncated one.
             let temporary = path_buf.with_extension("lnk.oxyde-tmp");
-            let wide_temporary = HSTRING::from(temporary.to_string_lossy().as_ref());
+            let wide_temporary = wide(&temporary)?;
             let saved = persist
                 .Save(PCWSTR(wide_temporary.as_ptr()), true)
                 .map_err(|e| CommandError::SystemError(format!("Save failed: {}", e)));

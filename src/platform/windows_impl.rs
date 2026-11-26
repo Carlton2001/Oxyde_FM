@@ -481,14 +481,13 @@ impl Platform for WindowsPlatform {
     }
 
     fn set_hidden_attribute(&self, path: &std::path::Path, hidden: bool) -> Result<(), String> {
-        use std::os::windows::ffi::OsStrExt;
         use windows::core::PCWSTR;
         use windows::Win32::Storage::FileSystem::{
             GetFileAttributesW, SetFileAttributesW, FILE_ATTRIBUTE_HIDDEN,
             FILE_FLAGS_AND_ATTRIBUTES,
         };
 
-        let wide_path: Vec<u16> = path.as_os_str().encode_wide().chain(Some(0)).collect();
+        let wide_path = crate::utils::path_text::wide(path).map_err(|error| error.to_string())?;
         unsafe {
             let attributes = GetFileAttributesW(PCWSTR(wide_path.as_ptr()));
             if attributes == u32::MAX {
@@ -905,7 +904,10 @@ impl Platform for WindowsPlatform {
         };
 
         std::thread::spawn(move || {
-            let wide_path = HSTRING::from(&normalized);
+            let Ok(wide_path) = crate::utils::path_text::hstring(&normalized) else {
+                log::warn!("Properties of an unrepresentable path");
+                return;
+            };
             let verb = HSTRING::from("properties");
 
             let mut info = SHELLEXECUTEINFOW {

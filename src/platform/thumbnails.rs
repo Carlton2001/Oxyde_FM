@@ -259,7 +259,7 @@ pub fn get_office_thumbnail_raw(path: String) -> Result<RgbaImage, CommandError>
 fn get_thumbnail_uncached(path: String) -> Result<RgbaImage, CommandError> {
     match shell_thumbnail_raw(&path) {
         Ok(image) => Ok(image),
-        Err(shell_error) => match load_source_thumbnail(Path::new(&path)) {
+        Err(shell_error) => match load_source_thumbnail(&crate::utils::path_text::decode(&path)) {
             Ok(image) => {
                 let mut image = image.thumbnail(THUMB_SIZE, THUMB_SIZE).to_rgba8();
                 // RenderImage consumes BGRA buffers; the image decoder returns RGBA.
@@ -506,7 +506,7 @@ where
     }
     let _com = super::windows_com::ComApartment::mta_or_existing().map_err(video_error)?;
     let _media = MediaFoundationGuard::new()?;
-    let wide_path = windows::core::HSTRING::from(path);
+    let wide_path = crate::utils::path_text::hstring(&path).map_err(|error| CommandError::IoError(error.to_string()))?;
     let stream = MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32;
     unsafe {
         play_video(
@@ -718,7 +718,7 @@ fn get_office_thumbnail_uncached(path: String) -> Result<RgbaImage, CommandError
     if let Ok(img) = shell_thumbnail_raw(&path) {
         return Ok(img);
     }
-    let file = fs::File::open(&path).map_err(|e| CommandError::IoError(e.to_string()))?;
+    let file = fs::File::open(crate::utils::path_text::decode(&path)).map_err(|e| CommandError::IoError(e.to_string()))?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| CommandError::Other(e.to_string()))?;
     let target_files = vec!["docProps/thumbnail.jpeg", "Thumbnails/thumbnail.png"];
     for target in target_files {
@@ -760,7 +760,7 @@ fn shell_thumbnail_raw(path: &str) -> Result<RgbaImage, CommandError> {
         let _com = super::windows_com::ComApartment::sta_or_existing()
             .map_err(|error| CommandError::SystemError(error.to_string()))?;
         (|| -> Result<RgbaImage, CommandError> {
-            let wide_path = windows::core::HSTRING::from(path);
+            let wide_path = crate::utils::path_text::hstring(path)?;
             let factory: IShellItemImageFactory =
                 SHCreateItemFromParsingName(PCWSTR(wide_path.as_ptr()), None)?;
             let size = SIZE {
@@ -860,10 +860,8 @@ fn isolated_thumbnail(mode: &str, path: &str) -> Result<RgbaImage, CommandError>
 pub(super) fn worker_reply(mode: &str, path: &Path) -> crate::utils::preview_protocol::Reply {
     use crate::utils::preview_protocol::Reply;
     let result = (|| -> Result<Reply, CommandError> {
-        let path = path
-            .to_str()
-            .ok_or_else(|| CommandError::Other("Preview path is not Unicode".into()))?
-            .to_owned();
+        // A name with a lone surrogate goes on as `path_text` writes it.
+        let path = crate::utils::path_text::encode(path);
         if mode == "office-text" {
             return get_office_text_preview_local(path).map(Reply::Text);
         }
