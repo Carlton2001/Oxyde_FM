@@ -80,7 +80,7 @@ Chaque constat est vérifié sur le code actuel avant d'être corrigé. Un commi
 | F124 | `commands/sidebar.rs:25-31, :45 et :120` | corrigé | 2d015312 | lien vers un dossier affiché avec sa flèche ; « Tout développer » n'y entre pas ; tests |
 | F125 | `commands/sidebar.rs:63-79` | corrigé (en partie) | 592da38b | repli et nouvelle demande l'annulaient déjà ; résultat écarté aussi si l'affichage des fichiers cachés ou système a changé ; lecteur déconnecté pendant le parcours non traité |
 | F126 | `commands/system.rs:9-19` | corrigé | 4db5c2eb | commande sans appelant supprimée (l'interface passe par `Platform::open_item`) |
-| F127 | `commands/system.rs:33-53` | corrigé (en partie) | 4db5c2eb | la purge tente icons et thumbnails puis rend la première erreur ; reste Linux : pas de pause des écritures de miniatures pendant la purge |
+| F127 | `commands/system.rs:33-53` | corrigé | 4db5c2eb, aa472749 | la purge tente icons et thumbnails puis rend la première erreur ; les écritures de miniatures passent par une génération de purge (verrou partagé) : la purge attend celle en cours, et une miniature générée avant elle n'est plus écrite après (Linux, où le cache s'écrit dans le processus) ; test |
 | F130 | `models/error.rs:131-143 et autres` | reporté |  | refonte : remplacer les marqueurs texte par des erreurs typées de bout en bout (workers compris) |
 | F131 | `models/history.rs:142-148 et :170-183` | corrigé | 64e16632 | entrées expirées nettoyées sur un thread dédié (repli sur place si le thread ne démarre pas) ; synchrone dans les tests |
 | F136 | `utils/office_document.rs:109-139` | corrigé | 8a43400a | ligne ou rangée coupée à la place restante (frontière de caractère) ; paragraphe en cours borné au budget ; workers à reconstruire |
