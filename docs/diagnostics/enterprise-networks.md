@@ -6,7 +6,7 @@ Statuses: **fixed**, **to test**, **not simulable** (needs infrastructure we lac
 
 ## Reference case: issue #13
 
-A read-only share whose parent folders the user may traverse but not list. The SMB server refuses any open of those parents, even attribute-only or with no access, while Explorer never opens them. Source selection held every ancestor and walked from the share root, so it failed with os error 5. Fixed in `7df48879`: refused ancestors are skipped, and the no-reparse walk resumes below them from the full name. The limit is recorded in [security status](../security/status.md) (R4).
+A read-only share whose parent folders the user may traverse but not list. The SMB server refuses any open of those parents, even attribute-only or with no access, while Explorer never opens them. Source selection held every ancestor and walked from the share root, so it failed with os error 5. A first fix (`7df48879`) skips refused ancestors and resumes the no-reparse walk below them. The reporter could however list every folder: the actual cause is N16, opens asking for more than reading. The limit is recorded in [security status](../security/status.md) (R4).
 
 ## Local test share
 
@@ -29,11 +29,11 @@ Then, **not elevated**: `net use T: \\127.0.0.1\OxydeRO <password> /user:<comput
 
 | # | Situation | Possible failure in Oxyde | Simulation | Status |
 | --- | --- | --- | --- | --- |
-| N1 | Parents that can be traversed but not listed | Source selection refused (os error 5) | Local test share | **fixed** (#13) |
-| N2 | DFS namespace (`\\domain\dfs\…` → `\\srv\share$\…`) | Canonical path differs from the typed one: "destination inside source", copy onto itself and overlapping sources go undetected or are wrongly refused. DFS links are server reparse points: no-reparse lookup may refuse them (see issue #8) | Needs Windows Server; a server-side `mklink /D` inside the share covers part of it | to test |
-| N3 | Access-based enumeration (ABE) | Hidden but existing entries: conflict naming picks a name that exists, a folder looks empty | `Set-SmbShare OxydeRO -FolderEnumerationMode AccessBased` | to test |
-| N4 | File open elsewhere (Excel lock) | Source opened without `FILE_SHARE_WRITE`: sharing violation (os error 32) where Explorer copies | Open the file in Excel, or keep a `[IO.File]::Open(..., 'Open', 'ReadWrite', 'ReadWrite')` handle | to test |
-| N5 | Drop folder: create allowed, modify/delete refused | Temporary file then rename, replace on conflict, Undo and rollback fail midway; check partial effects are reported and nothing is lost | ACL `(AD,WD)` without `(M)` / `(D)` on the destination | to test |
+| N1 | Parents that can be traversed but not listed | Source selection refused (os error 5) | Local test share | **fixed** (`7df48879`), on an ACL without Synchronize, which the Windows dialog always grants: the reporter's real case is N16 |
+| N2 | DFS namespace (`\\domain\dfs\…` → `\\srv\share$\…`) | Canonical path differs from the typed one: "destination inside source", copy onto itself and overlapping sources go undetected or are wrongly refused. DFS links are server reparse points: no-reparse lookup may refuse them (see issue #8) | Needs Windows Server; a server-side `mklink /D` inside the share covers part of it | partly tested: a file behind a server junction copies; the junction itself is refused, as every Windows reparse point is ([links](../architecture/links.md)). Real DFS untested |
+| N3 | Access-based enumeration (ABE) | Hidden but existing entries: conflict naming picks a name that exists, a folder looks empty | `Set-SmbShare OxydeRO -FolderEnumerationMode AccessBased` | to test: needs a destination where Oxyde can write, blocked by N5 here |
+| N4 | File open elsewhere (Excel lock) | Source opened without `FILE_SHARE_WRITE`: sharing violation (os error 32) where Explorer copies | Open the file in Excel, or keep a `[IO.File]::Open(..., 'Open', 'ReadWrite', 'Read')` handle | **fixed**: the copy source and the native copy guard now share writing, like Explorer; a writer can still change the file during the copy |
+| N5 | Drop folder: create allowed, modify/delete refused | Temporary file then rename, replace on conflict, Undo and rollback fail midway; check partial effects are reported and nothing is lost | ACL `(AD,WD)` without `(M)` / `(D)` on the destination | **confirmed**: any copy into the drop folder fails with access denied, even a new file, where PowerShell creates it. Oxyde stages into a file it must then rename and delete (DELETE access); Explorer writes the target directly. Fixing it means a copy path without staging |
 | N6 | Samba / NAS (Synology, NetApp), WSL share | Null or unstable `FileId` refused by identity checks; case sensitivity; exposed Unix symlinks; no alternate streams (already handled) | `\\wsl$` share | to test |
 | N7 | Azure Files, high-latency SMB | Timeouts, cancellation that waits on the redirector | — | not simulable |
 | N8 | Offline files (CSC), redirected folders | Same item seen through a local and a UNC path, unstable identities | Offline files can be enabled locally, partial | not simulable |
@@ -44,6 +44,7 @@ Then, **not elevated**: `net use T: \\127.0.0.1\OxydeRO <password> /user:<comput
 | N13 | Same server under two identities | Error 1219 at mapping time: not an Oxyde bug, a source of confusing reports | Reproduced while preparing N1 | out of scope |
 | N14 | Antivirus, DLP, Defender ASR filters | Refusal of backup-intent or relative opens | — | not simulable |
 | N15 | Novell / OES through the NCP client | Third-party redirector, ABE-like "File Scan" rights | — | out of scope |
+| N16 | Folders the user may list and read, without "Read permissions" or "Read extended attributes" | `GENERIC_READ` also asks for `READ_CONTROL` and `FILE_READ_EA`: holding parents and opening the source failed with os error 5 (issue #13: `T:\`, `T:\Engineering` and `Dokumentation` all listable) | `icacls <folder> /grant user:(OI)(CI)(RD,X,RA,S)` on the test share, the file itself `(RX)` | **fixed**: same message as the report before, copy succeeds after; those opens ask only `FILE_READ_DATA \| FILE_READ_ATTRIBUTES \| SYNCHRONIZE` |
 
 ## Policy
 
