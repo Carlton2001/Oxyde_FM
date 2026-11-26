@@ -1,17 +1,20 @@
-//! A note per private staging folder (`file_copy::Staging`), kept beside the
-//! configuration while the folder exists, so a process ended during an operation
-//! (crash, kill, closing mid-copy) does not leave its partial output behind for good:
-//! the next start removes the folders whose notes no live process still holds.
+//! A note per file being written (`copy_output::Output`), kept beside the
+//! configuration until the file is kept or cleaned, so a process ended during an
+//! operation (crash, kill, closing mid-copy) does not leave its partial output behind
+//! for good: the next start removes the files whose notes no live process still holds.
 //!
 //! Each note stays locked by its owner; a note that can be locked again belongs to
-//! an ended process. A folder is removed only when it is still the one created
-//! (same identity, same `.pin` marker), and only its `output` and marker: anything
-//! else keeps it, as an in-session cleanup does.
+//! an ended process. A file is removed only when it is still the one created (same
+//! identity and creation date); anything else stays, as an in-session cleanup does.
+//! Notes of the staging folders earlier versions wrote are still recovered: a folder
+//! goes only when it is still the one created (same identity, same `.pin` marker),
+//! and only its `output` and marker.
 use crate::platform::{platform, FileIdentity};
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::SystemTime;
 
 #[cfg(test)]
 #[path = "staging_journal/tests/recovery.rs"]
@@ -23,19 +26,40 @@ static ENABLED: AtomicBool = AtomicBool::new(false);
 const FOLDER: &str = "interrupted";
 const PREFIX: &str = ".oxyde-";
 
-/// Notes the staging folders created from now on in this process.
+/// Notes the files written from now on in this process.
 pub fn enable() {
     ENABLED.store(true, Ordering::Relaxed);
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
-struct Record {
-    path: PathBuf,
-    directory: FileIdentity,
-    pin: FileIdentity,
+#[serde(untagged)]
+enum Record {
+    /// A file written under its own name, or as the temporary of a replacement.
+    File {
+        file: PathBuf,
+        identity: FileIdentity,
+        /// Absent where the file system keeps no creation date: the identity alone
+        /// does not prove the file, whose number a later one may reuse.
+        created: Option<SystemTime>,
+    },
+    /// A staging folder of an earlier version.
+    Folder {
+        path: PathBuf,
+        directory: FileIdentity,
+        pin: FileIdentity,
+    },
 }
 
-/// A staging folder's note, removed when the folder's cleanup is over.
+impl Record {
+    fn path(&self) -> &Path {
+        match self {
+            Self::File { file, .. } => file,
+            Self::Folder { path, .. } => path,
+        }
+    }
+}
+
+/// A written file's note, removed once the file is kept or cleaned.
 pub(crate) struct Entry {
     lock: Option<File>,
     path: PathBuf,
@@ -47,7 +71,7 @@ impl Drop for Entry {
         drop(self.lock.take());
         if let Err(error) = std::fs::remove_file(&self.path) {
             if error.kind() != io::ErrorKind::NotFound {
-                log::warn!("Cannot remove staging note {}: {error}", self.path.display());
+                log::warn!("Cannot remove output note {}: {error}", self.path.display());
             }
         }
     }
@@ -57,38 +81,49 @@ fn folder() -> Option<PathBuf> {
     crate::app_paths::config_dir().map(|config| config.join(FOLDER))
 }
 
-/// Notes `staging` with the identities of its folder and marker; a failure only
-/// loses the recovery of this folder.
-pub(crate) fn record(staging: &Path, directory: &File, pin: &File) -> Option<Entry> {
+/// Notes the file just created at `path` with its identity and creation date; a
+/// failure only loses the recovery of this file.
+pub(crate) fn record_file(path: &Path, identity: FileIdentity, created: Option<SystemTime>) -> Option<Entry> {
     if !ENABLED.load(Ordering::Relaxed) {
         return None;
     }
     let result = folder()
         .ok_or_else(|| io::Error::other("No configuration folder"))
-        .and_then(|folder| write(&folder, staging, directory, pin));
+        .and_then(|folder| write_file(&folder, path, identity, created));
     match result {
         Ok(entry) => Some(entry),
         Err(error) => {
-            log::warn!("Cannot note staging {}: {error}", staging.display());
+            log::warn!("Cannot note output {}: {error}", path.display());
             None
         }
     }
 }
 
-fn write(folder: &Path, staging: &Path, directory: &File, pin: &File) -> io::Result<Entry> {
-    std::fs::create_dir_all(folder)?;
+fn write_file(folder: &Path, path: &Path, identity: FileIdentity, created: Option<SystemTime>) -> io::Result<Entry> {
+    let record = Record::File { file: path.to_path_buf(), identity, created };
+    write(folder, &format!("file-{}", uuid::Uuid::new_v4()), &record)
+}
+
+/// The note of an earlier version's staging folder.
+#[cfg(test)]
+fn write_folder(folder: &Path, staging: &Path, directory: &File, pin: &File) -> io::Result<Entry> {
     let name = staging.file_name().ok_or_else(|| io::Error::other("Staging has no name"))?;
-    // Named after the folder, without its leading dot.
-    let path = folder.join(format!("{}.json", name.to_string_lossy().trim_start_matches('.')));
-    let lock = platform().lock_cache_file(&path)?;
-    // From here, dropping the entry removes a note left incomplete.
-    let mut entry = Entry { lock: Some(lock), path };
-    let record = Record {
+    let record = Record::Folder {
         path: staging.to_path_buf(),
         directory: platform().file_identity(directory)?,
         pin: platform().file_identity(pin)?,
     };
-    let bytes = serde_json::to_vec(&record).map_err(io::Error::other)?;
+    // Named after the folder, without its leading dot.
+    write(folder, name.to_string_lossy().trim_start_matches('.'), &record)
+}
+
+fn write(folder: &Path, name: &str, record: &Record) -> io::Result<Entry> {
+    std::fs::create_dir_all(folder)?;
+    let path = folder.join(format!("{name}.json"));
+    let lock = platform().lock_cache_file(&path)?;
+    // From here, dropping the entry removes a note left incomplete.
+    let mut entry = Entry { lock: Some(lock), path };
+    let bytes = serde_json::to_vec(record).map_err(io::Error::other)?;
     let lock = entry.lock.as_mut().expect("held note");
     lock.set_len(0)?;
     lock.write_all(&bytes)?;
@@ -98,13 +133,14 @@ fn write(folder: &Path, staging: &Path, directory: &File, pin: &File) -> io::Res
 /// What a start found left by ended processes.
 #[derive(Debug, Default)]
 pub struct Recovered {
-    /// Staging folders removed with their partial output.
+    /// Partial files removed, and staging folders removed with their partial output.
     pub removed: Vec<PathBuf>,
-    /// Folders left in place: changed since, or holding more than their output.
+    /// Left in place: changed since, unproven, or a folder holding more than its output.
     pub kept: Vec<PathBuf>,
 }
 
-/// Removes the staging folders of ended processes. Blocking: call it off the UI thread.
+/// Removes the partial files and staging folders of ended processes. Blocking: call
+/// it off the UI thread.
 pub fn recover() -> Recovered {
     folder().map(|folder| recover_in(&folder)).unwrap_or_default()
 }
@@ -125,20 +161,25 @@ fn recover_in(folder: &Path) -> Recovered {
             .ok()
             .and_then(|_| serde_json::from_str::<Record>(&text).ok());
         if let Some(record) = record {
-            match clean(&record) {
-                Ok(Cleaned::Removed) => recovered.removed.push(record.path),
+            let cleaned = match &record {
+                Record::File { file, identity, created } => clean_file(file, *identity, *created),
+                Record::Folder { path, directory, pin } => clean_folder(path, *directory, *pin),
+            };
+            let target = record.path().to_path_buf();
+            match cleaned {
+                Ok(Cleaned::Removed) => recovered.removed.push(target),
                 Ok(Cleaned::Gone) => {}
                 // A USB key unplugged since: the note waits for a start that reaches it,
                 // unless it has waited long enough for the volume to be given up.
                 Ok(Cleaned::Unreachable) if !expired(&path) => {
-                    log::info!("Interrupted staging out of reach for now: {}", record.path.display());
+                    log::info!("Interrupted output out of reach for now: {}", target.display());
                     drop(lock);
                     continue;
                 }
                 Ok(Cleaned::Unreachable) => {}
                 Err(error) => {
-                    log::warn!("Interrupted staging kept at {}: {error}", record.path.display());
-                    recovered.kept.push(record.path);
+                    log::warn!("Interrupted output kept at {}: {error}", target.display());
+                    recovered.kept.push(target);
                 }
             }
         }
@@ -160,42 +201,69 @@ fn expired(note: &Path) -> bool {
 
 enum Cleaned {
     Removed,
-    /// The folder no longer exists where its parent still does.
+    /// The item no longer exists where its parent still does.
     Gone,
-    /// Neither the folder nor its parent can be reached (volume unplugged).
+    /// Neither the item nor its parent can be reached (volume unplugged).
     Unreachable,
 }
 
-/// Removes the noted folder if it is still the one created.
-fn clean(record: &Record) -> io::Result<Cleaned> {
-    let named = record
-        .path
+fn parent_reachable(path: &Path) -> bool {
+    path.parent().is_some_and(Path::exists)
+}
+
+/// Removes the noted file if it is still the one created.
+fn clean_file(path: &Path, identity: FileIdentity, created: Option<SystemTime>) -> io::Result<Cleaned> {
+    let parents = match super::path_parents::HeldParents::new(path) {
+        Ok(parents) => parents,
+        Err(_) if !parent_reachable(path) => return Ok(Cleaned::Unreachable),
+        Err(error) => return Err(error),
+    };
+    let resolved = parents.resolved_path(path)?;
+    let file = match platform().open_copied_file(parents.directory(), &resolved) {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Cleaned::Gone),
+        Err(error) => return Err(error),
+    };
+    if platform().file_identity(&file)? != identity {
+        return Err(io::Error::other("Partial file was replaced"));
+    }
+    let created = created.ok_or_else(|| io::Error::other("No creation date proves the partial file"))?;
+    if file.metadata()?.created().ok() != Some(created) {
+        return Err(io::Error::other("Partial file was replaced"));
+    }
+    platform().remove_copied_file(&file, &resolved)?;
+    Ok(Cleaned::Removed)
+}
+
+/// Removes the noted staging folder if it is still the one created.
+fn clean_folder(path: &Path, directory_identity: FileIdentity, pin_identity: FileIdentity) -> io::Result<Cleaned> {
+    let named = path
         .file_name()
         .and_then(|name| name.to_str())
         .is_some_and(|name| name.starts_with(PREFIX));
     if !named {
         return Err(io::Error::other("Not a staging folder"));
     }
-    let directory = match platform().open_copy_staging(&record.path) {
+    let directory = match platform().open_copy_staging(path) {
         Ok(directory) => directory,
-        Err(_) if !record.path.parent().is_some_and(Path::exists) => return Ok(Cleaned::Unreachable),
+        Err(_) if !parent_reachable(path) => return Ok(Cleaned::Unreachable),
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Cleaned::Gone),
         Err(error) => return Err(error),
     };
-    if platform().file_identity(&directory)? != record.directory {
+    if platform().file_identity(&directory)? != directory_identity {
         return Err(io::Error::other("Staging folder was replaced"));
     }
-    let marker = record.path.join(".pin");
+    let marker = path.join(".pin");
     let pin = platform().open_copied_file(&directory, &marker)?;
-    if platform().file_identity(&pin)? != record.pin {
+    if platform().file_identity(&pin)? != pin_identity {
         return Err(io::Error::other("Staging marker was replaced"));
     }
-    let output = record.path.join("output");
+    let output = path.join("output");
     match platform().open_copied_file(&directory, &output) {
         Ok(file) => platform().remove_copied_file(&file, &output)?,
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => return Err(error),
     }
-    platform().remove_copy_staging(&directory, pin, &record.path)?;
+    platform().remove_copy_staging(&directory, pin, path)?;
     Ok(Cleaned::Removed)
 }

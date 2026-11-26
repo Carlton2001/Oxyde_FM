@@ -209,6 +209,22 @@ pub(super) fn open_copied_relative(parent: &File, path: &Path) -> Result<File> {
     )
 }
 
+/// A written output for verification: read access only, which a drop folder grants
+/// its creator where it refuses deletion. Sharing reads only keeps writers out.
+pub(super) fn open_output_relative(parent: &File, path: &Path) -> Result<File> {
+    let leaf = path
+        .file_name()
+        .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "Copy has no file name"))?;
+    super::windows_no_reparse::open_relative(
+        parent,
+        leaf,
+        false,
+        super::windows_source_selection::READ_CONTENTS,
+        FILE_SHARE_READ.0,
+        1,
+    )
+}
+
 pub(super) fn open_rename_relative(parent: &File, path: &Path) -> Result<File> {
     let leaf = path
         .file_name()

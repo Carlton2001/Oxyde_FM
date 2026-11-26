@@ -660,6 +660,17 @@ pub trait Platform: Send + Sync {
     ) -> std::io::Result<()>;
     /// Hold a copied output for verification/publication and attribute-safe cleanup on Windows.
     fn open_copied_file(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File>;
+    /// Hold a written output for its verification: reading only, without the delete
+    /// or attribute access a drop folder refuses. Windows shares reading only.
+    fn open_copied_output(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        self.open_copied_file(parent, path)
+    }
+    /// Confirm that `file`, just created as `path` in the held `parent`, lies in it.
+    /// Windows creates copies by path, which an empty parent turned junction since
+    /// would redirect; Linux creates relative to the held parent.
+    fn verify_created_child(&self, _parent: &std::fs::File, _file: &std::fs::File, _path: &std::path::Path) -> std::io::Result<()> {
+        Ok(())
+    }
     /// Delete the held copy, clearing readonly only by handle and for a single link on Windows.
     fn remove_copied_file(&self, file: &std::fs::File, path: &std::path::Path) -> std::io::Result<()>;
     /// Rename by source identity into the retained destination parent on Windows.
@@ -674,10 +685,10 @@ pub trait Platform: Send + Sync {
     fn parallel_deletion(&self, _path: &std::path::Path) -> bool {
         true
     }
-    /// Exclusively create hidden copy staging and a retained non-deletable marker on Windows.
+    /// Exclusively create hidden staging (Undo's set-aside folders) and a retained non-deletable marker on Windows.
     fn create_copy_staging(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<(std::fs::File, std::fs::File)>;
-    /// Create a private archive writer relative to staging; retain rename/delete
-    /// access and exclude external writers/replacement on Windows.
+    /// Exclusively create an operation output relative to its held parent; retain
+    /// rename/delete access and exclude external writers/replacement on Windows.
     fn create_operation_output(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File>;
     /// Reopen a staging folder an ended process left, as `create_copy_staging` holds
     /// it, so `remove_copy_staging` can remove it; a link or reparse point is refused.

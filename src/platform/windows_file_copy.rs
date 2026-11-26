@@ -81,6 +81,23 @@ fn wide(path: &Path) -> io::Result<Vec<u16>> {
     result.push(0);
     Ok(result)
 }
+/// The output CopyFileEx created by path lies in the held parent: an empty parent
+/// may have become a junction between the caller's check and the creation.
+pub(super) fn verify_child(parent: &File, file: &File, path: &Path) -> io::Result<()> {
+    let folder = path
+        .parent()
+        .ok_or_else(|| io::Error::other("Copy destination has no parent"))?;
+    let expected = super::windows_final_path::of_handle(parent, folder)?;
+    let actual = super::windows_final_path::of_handle(file, path)?;
+    if actual.parent() != Some(expected.as_path()) {
+        return Err(io::Error::other(format!(
+            "Copy output was created outside its folder: {}",
+            actual.display()
+        )));
+    }
+    Ok(())
+}
+
 pub(super) fn copy(
     source: &Path,
     destination: &Path,
@@ -90,8 +107,8 @@ pub(super) fn copy(
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
 ) -> io::Result<()> {
     let _source_parents = crate::systems::path_parents::HeldParents::new(source)?;
-    // Staging already retains this directory with DELETE access. Reopening its
-    // parent chain without FILE_SHARE_DELETE would conflict with that handle.
+    // The caller holds this directory and its parent chain. Reopening them
+    // without FILE_SHARE_DELETE would conflict with those handles.
     let metadata = destination_parent.metadata()?;
     if !metadata.is_dir() || super::platform().file_attributes(&metadata, "").2 {
         return Err(io::Error::other(

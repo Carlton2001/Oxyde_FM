@@ -13,7 +13,7 @@ pub(crate) enum Phase {
     Publish,
     Pause,
     Parents,
-    StagingCreate,
+    OutputPrepare,
     WriterRelease,
     OutputOpen,
     Checks,
@@ -29,7 +29,7 @@ struct Measurements {
     pause: Duration,
     flush_calls: usize,
     parents: Duration,
-    staging_create: Duration,
+    output_prepare: Duration,
     writer_release: Duration,
     output_open: Duration,
     checks: Duration,
@@ -48,7 +48,7 @@ impl Measurements {
             Phase::Publish => self.publish += active,
             Phase::Pause => self.pause += elapsed,
             Phase::Parents => self.parents += active,
-            Phase::StagingCreate => self.staging_create += active,
+            Phase::OutputPrepare => self.output_prepare += active,
             Phase::WriterRelease => self.writer_release += active,
             Phase::OutputOpen => self.output_open += active,
             Phase::Checks => self.checks += active,
@@ -64,7 +64,7 @@ impl Measurements {
                 + self.hash
                 + self.publish
                 + self.parents
-                + self.staging_create
+                + self.output_prepare
                 + self.writer_release
                 + self.output_open
                 + self.checks
@@ -158,12 +158,12 @@ impl Drop for FileTiming {
             let worker = worker.borrow();
             let (operation, index) = worker.as_ref().map_or(("unattributed", 0), |(id, index)| (id.as_str(), *index));
             log::debug!(target: TARGET,
-                "copy_file op={} worker={} source={:?} destination={:?} bytes={} published={} wall_s={:.6} active_s={:.6} pause_s={:.6} native_s={:.6} flush_s={:.6} flush_calls={} hash_s={:.6} publish_s={:.6} parents_s={:.6} staging_create_s={:.6} writer_release_s={:.6} output_open_s={:.6} checks_s={:.6} cleanup_s={:.6} remaining_s={:.6}",
+                "copy_file op={} worker={} source={:?} destination={:?} bytes={} published={} wall_s={:.6} active_s={:.6} pause_s={:.6} native_s={:.6} flush_s={:.6} flush_calls={} hash_s={:.6} publish_s={:.6} parents_s={:.6} output_prepare_s={:.6} writer_release_s={:.6} output_open_s={:.6} checks_s={:.6} cleanup_s={:.6} remaining_s={:.6}",
                 operation, index, self.source, self.destination, self.bytes, self.published,
                 elapsed.as_secs_f64(), elapsed.saturating_sub(metrics.pause).as_secs_f64(),
                 metrics.pause.as_secs_f64(), metrics.native.as_secs_f64(), metrics.flush.as_secs_f64(),
                 metrics.flush_calls, metrics.hash.as_secs_f64(), metrics.publish.as_secs_f64(),
-                metrics.parents.as_secs_f64(), metrics.staging_create.as_secs_f64(),
+                metrics.parents.as_secs_f64(), metrics.output_prepare.as_secs_f64(),
                 metrics.writer_release.as_secs_f64(), metrics.output_open.as_secs_f64(),
                 metrics.checks.as_secs_f64(), metrics.cleanup.as_secs_f64(), metrics.remaining(elapsed).as_secs_f64());
         });

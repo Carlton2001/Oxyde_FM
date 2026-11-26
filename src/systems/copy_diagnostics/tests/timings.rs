@@ -35,7 +35,7 @@ fn remaining_time_excludes_all_top_level_phases_without_double_counting_flush() 
     let mut metrics = Measurements::default();
     for phase in [
         Phase::Parents,
-        Phase::StagingCreate,
+        Phase::OutputPrepare,
         Phase::WriterRelease,
         Phase::OutputOpen,
         Phase::Checks,

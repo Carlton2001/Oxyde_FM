@@ -209,6 +209,12 @@ impl Platform for WindowsPlatform {
     fn open_copied_file(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         super::windows_file_moves::open_copied_relative(parent, path)
     }
+    fn open_copied_output(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
+        super::windows_file_moves::open_output_relative(parent, path)
+    }
+    fn verify_created_child(&self, parent: &std::fs::File, file: &std::fs::File, path: &std::path::Path) -> std::io::Result<()> {
+        super::windows_file_copy::verify_child(parent, file, path)
+    }
     fn open_rename_item(
         &self,
         parent: &std::fs::File,

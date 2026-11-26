@@ -259,18 +259,18 @@ fn move_bound_controlled(
         }
     }
 
-    let staging = super::file_copy::Staging::with_prefix(destination_parents, ".oxyde-history-")?;
+    let written = super::copy_output::Output::new(destination_parents, &destination, false)?;
     let copied = ops.copy(
         &original,
         &source,
-        &staging.file,
-        &staging.directory,
-        &mut |file| staging.capture_output(file),
+        written.path(),
+        destination_parents.directory(),
+        &mut |file| written.capture(file),
     )?;
     if copied != metadata.len() {
         return Err(io::Error::other("Incomplete history move copy"));
     }
-    let mut output = staging.open_output()?;
+    let mut output = written.open_verified()?;
     // Windows holds the source without write sharing since its hash: reading
     // it again could only find the same bytes.
     if hash(&mut output)? != original_hash
@@ -280,11 +280,20 @@ fn move_bound_controlled(
             "History move copy failed content verification",
         ));
     }
-    ops.rename(&output, &staging.file, &destination, destination_parents)?;
+    written.keep(destination_parents, &output, false)?;
     if let Err(error) = ops.remove(&original, &source) {
-        // The opened destination still belongs to this operation. On Windows
-        // its handle prevents an external writer or path replacement here.
-        let cleanup = platform().remove_copied_file(&output, &destination);
+        // The opened destination still belongs to this operation. On Windows its
+        // handle prevents an external writer or path replacement until it closes,
+        // just before a removal that holds it again by identity.
+        let identity = crate::models::transaction::HistoryFileIdentity::from_file(&output);
+        drop(output);
+        let cleanup = identity.and_then(|identity| {
+            let file = platform().open_copied_file(destination_parents.directory(), &destination)?;
+            if !identity.matches(&file)? {
+                return Err(super::file_copy::identity_changed(&destination));
+            }
+            platform().remove_copied_file(&file, &destination)
+        });
         return match cleanup {
             Ok(()) => Err(error),
             Err(cleanup) => Err(io::Error::other(format!(

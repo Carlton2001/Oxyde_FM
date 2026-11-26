@@ -2,98 +2,154 @@
     use std::fs;
     use std::io::ErrorKind;
 
+    use super::super::copy_output::Output;
+    use super::super::path_parents::HeldParents;
+    use std::path::PathBuf;
+
     #[test]
-    fn staging_preserves_unowned_outputs_after_a_native_creation_collision() {
+    fn output_preserves_an_existing_file_after_a_native_creation_collision() {
         let root = tempfile::tempdir().unwrap();
         let source = root.path().join("source");
+        let destination = root.path().join("destination");
         fs::write(&source, b"selected contents").unwrap();
-        let parents =
-            super::super::path_parents::HeldParents::new(&root.path().join("destination")).unwrap();
-        let staging = Staging::new(&parents).unwrap();
-        let path = staging.path.clone();
-        fs::write(&staging.file, b"independent contents").unwrap();
+        fs::write(&destination, b"independent contents").unwrap();
+        let parents = HeldParents::new(&destination).unwrap();
+        let output = Output::new(&parents, &destination, false).unwrap();
         let mut captured = false;
         let error = platform()
             .copy_file_with_progress(
                 &source,
-                &staging.file,
+                output.path(),
                 None,
-                &staging.directory,
+                parents.directory(),
                 &mut |file| {
                     captured = true;
-                    staging.capture_output(file)
+                    output.capture(file)
                 },
                 &mut |_| Ok(()),
             )
             .unwrap_err();
         assert_eq!(error.kind(), ErrorKind::AlreadyExists);
         assert!(!captured);
-        drop(staging);
-        assert_eq!(
-            fs::read(path.join("output")).unwrap(),
-            b"independent contents"
-        );
-        assert!(!path.join(".pin").exists());
+        drop(output);
+        assert_eq!(fs::read(&destination).unwrap(), b"independent contents");
     }
     #[test]
-    fn staging_refuses_same_content_replacements_for_publication_and_cleanup() {
+    fn output_refuses_a_same_content_replacement_for_verification_and_cleanup() {
         let root = tempfile::tempdir().unwrap();
-        let parents =
-            super::super::path_parents::HeldParents::new(&root.path().join("destination")).unwrap();
-        let staging = Staging::new(&parents).unwrap();
-        let path = staging.path.clone();
+        let destination = root.path().join("destination");
+        let parents = HeldParents::new(&destination).unwrap();
+        let output = Output::new(&parents, &destination, false).unwrap();
         let file = platform()
-            .create_operation_output(&staging.directory, &staging.file)
+            .create_operation_output(parents.directory(), output.path())
             .unwrap();
         use std::io::Write;
         (&file).write_all(b"matching contents").unwrap();
-        staging.capture_output(&file).unwrap();
+        output.capture(&file).unwrap();
         drop(file);
-        staging.release_output().unwrap();
+        drop(output.open_verified().unwrap());
         let displaced = root.path().join("original-output");
-        fs::rename(&staging.file, &displaced).unwrap();
-        fs::write(&staging.file, b"matching contents").unwrap();
-        assert!(staging.open_output().is_err());
-        drop(staging);
-        assert_eq!(fs::read(path.join("output")).unwrap(), b"matching contents");
+        fs::rename(&destination, &displaced).unwrap();
+        fs::write(&destination, b"matching contents").unwrap();
+        assert!(output.open_verified().is_err());
+        drop(output);
+        assert_eq!(fs::read(&destination).unwrap(), b"matching contents");
         assert_eq!(fs::read(displaced).unwrap(), b"matching contents");
-        assert!(!path.join(".pin").exists());
     }
     #[test]
-    fn staging_cleans_only_owned_output_and_preserves_unknown_children() {
+    fn output_cleanup_removes_only_the_created_file() {
         let root = tempfile::tempdir().unwrap();
-        let parents =
-            super::super::path_parents::HeldParents::new(&root.path().join("destination")).unwrap();
-        let staging = Staging::new(&parents).unwrap();
-        let path = staging.path.clone();
+        let destination = root.path().join("destination");
+        let parents = HeldParents::new(&destination).unwrap();
+        let output = Output::new(&parents, &destination, false).unwrap();
         let file = platform()
-            .create_operation_output(&staging.directory, &staging.file)
+            .create_operation_output(parents.directory(), output.path())
             .unwrap();
-        staging.capture_output(&file).unwrap();
+        output.capture(&file).unwrap();
         drop(file);
-        fs::write(path.join("independent"), b"independent contents").unwrap();
-        drop(staging);
-        assert!(!path.join("output").exists());
-        assert!(!path.join(".pin").exists());
+        fs::write(root.path().join("independent"), b"independent contents").unwrap();
+        drop(output);
+        assert!(!destination.exists());
         assert_eq!(
-            fs::read(path.join("independent")).unwrap(),
+            fs::read(root.path().join("independent")).unwrap(),
             b"independent contents"
         );
     }
     #[test]
-    fn staging_keeps_unverified_ownership_without_adopting_a_file() {
+    fn output_never_adopts_a_file_it_did_not_create() {
         let root = tempfile::tempdir().unwrap();
-        let parents =
-            super::super::path_parents::HeldParents::new(&root.path().join("destination")).unwrap();
-        let staging = Staging::new(&parents).unwrap();
-        let path = staging.path.clone();
-        fs::write(&staging.file, b"independent contents").unwrap();
-        assert!(staging.open_output().is_err());
-        drop(staging);
-        assert_eq!(
-            fs::read(path.join("output")).unwrap(),
-            b"independent contents"
-        );
+        let destination = root.path().join("destination");
+        let parents = HeldParents::new(&destination).unwrap();
+        let output = Output::new(&parents, &destination, false).unwrap();
+        fs::write(&destination, b"independent contents").unwrap();
+        assert!(output.open_verified().is_err());
+        drop(output);
+        assert_eq!(fs::read(&destination).unwrap(), b"independent contents");
+    }
+    #[test]
+    fn a_partial_output_the_system_refuses_to_remove_is_emptied() {
+        use std::io::Write;
+        use std::os::windows::fs::OpenOptionsExt;
+        let root = tempfile::tempdir().unwrap();
+        let destination = root.path().join("destination");
+        let parents = HeldParents::new(&destination).unwrap();
+        let output = Output::new(&parents, &destination, false).unwrap();
+        // A creation without delete access, still open without delete sharing: as a
+        // drop folder, the system refuses to remove the file.
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .share_mode(0x1 | 0x2)
+            .open(output.path())
+            .unwrap();
+        (&file).write_all(b"partial contents").unwrap();
+        output.capture(&file).unwrap();
+        drop(output);
+        assert_eq!(file.metadata().unwrap().len(), 0);
+        drop(file);
+        assert_eq!(fs::read(&destination).unwrap(), b"");
+    }
+    #[test]
+    fn a_replacement_writes_beside_its_target_and_takes_its_place() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source");
+        let destination = root.path().join("rapport.pdf");
+        fs::write(&source, b"new contents").unwrap();
+        fs::write(&destination, b"old contents").unwrap();
+        let mut seen = None;
+        copy(&source, &destination, true, &mut |bytes| {
+            if bytes > 0 && seen.is_none() {
+                seen = fs::read_dir(root.path())?
+                    .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+                    .find(|name| name.starts_with(".rapport.pdf.oxyde-"));
+                assert_eq!(fs::read(&destination)?, b"old contents");
+            }
+            Ok(())
+        })
+        .unwrap();
+        assert!(seen.is_some_and(|name| name.len() == ".rapport.pdf.oxyde-".len() + 6));
+        assert_eq!(fs::read(&destination).unwrap(), b"new contents");
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 2);
+    }
+    #[test]
+    fn a_new_file_is_written_under_its_own_name() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source");
+        let destination = root.path().join("destination");
+        fs::write(&source, vec![0x42; 256 * 1024]).unwrap();
+        let mut checked = false;
+        copy(&source, &destination, false, &mut |bytes| {
+            if bytes > 0 && !checked {
+                checked = true;
+                assert!(destination.exists());
+                assert_eq!(fs::read_dir(root.path())?.count(), 2);
+            }
+            Ok(())
+        })
+        .unwrap();
+        assert!(checked);
+        assert_eq!(fs::read(&destination).unwrap(), fs::read(&source).unwrap());
     }
     #[test]
     fn identity_checked_cleanup_preserves_a_matching_replacement() {
@@ -132,7 +188,7 @@
     }
 
     #[test]
-    fn redo_copy_rejects_changed_sources_and_cancels_verification_before_staging() {
+    fn redo_copy_rejects_changed_sources_and_cancels_verification_before_writing() {
         let root = tempfile::tempdir().unwrap();
         let source = root.path().join("source");
         let destination = root.path().join("destination");
@@ -163,11 +219,11 @@
     }
 
     #[test]
-    fn redo_copy_never_publishes_a_staged_hash_mismatch() {
+    fn redo_copy_never_keeps_a_hash_mismatch() {
         let root = tempfile::tempdir().unwrap();
         let source = root.path().join("source");
         let destination = root.path().join("destination");
-        fs::write(&source, b"unexpected staged bytes").unwrap();
+        fs::write(&source, b"unexpected copied bytes").unwrap();
         let parents = super::super::path_parents::HeldParents::new(&destination).unwrap();
         let result = copy_with_parents_checked(
             &source,
@@ -181,7 +237,7 @@
             None,
         );
         let error = match result {
-            Ok(_) => panic!("unverified output was published"),
+            Ok(_) => panic!("unverified output was kept"),
             Err(error) => error,
         };
         assert!(matches!(
@@ -189,7 +245,7 @@
             crate::models::CommandError::HistoryCopy(_)
         ));
         assert!(!destination.exists());
-        assert_eq!(fs::read(&source).unwrap(), b"unexpected staged bytes");
+        assert_eq!(fs::read(&source).unwrap(), b"unexpected copied bytes");
         assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
     }
 
@@ -295,7 +351,7 @@
     }
 
     #[test]
-    fn staging_is_never_created_in_a_new_reparse_target() {
+    fn a_copy_never_leaves_its_output_in_a_new_reparse_target() {
         use crate::platform::windows_reparse_tests::{Retarget, junction};
         let root = tempfile::tempdir().unwrap();
         let source = root.path().join("source");
@@ -309,19 +365,11 @@
         junction(&template, &outside);
         let retarget = Retarget::new(&selected, &template);
         let mut changed = false;
-        let mut foreign_staging = false;
         let result = copy(&source, &selected.join("output"), false, &mut |bytes| {
             if !changed {
                 retarget.apply();
                 changed = true;
             }
-            foreign_staging |= fs::read_dir(&outside)?.any(|entry| {
-                entry
-                    .unwrap()
-                    .file_name()
-                    .to_string_lossy()
-                    .starts_with(".oxyde-copy-")
-            });
             if bytes > 0 {
                 return Err(io::Error::new(ErrorKind::Interrupted, "test stop"));
             }
@@ -329,10 +377,7 @@
         });
         retarget.clear();
         assert!(result.is_err());
-        assert!(
-            !foreign_staging,
-            "copy preparation wrote outside the retained destination"
-        );
+        assert_eq!(fs::read_dir(&outside).unwrap().count(), 1);
         assert_eq!(
             fs::read(outside.join("witness")).unwrap(),
             b"outside witness"
@@ -343,29 +388,55 @@
     }
 
     #[test]
-    fn active_copy_staging_resists_retargeting_and_is_cleaned_after_cancellation() {
+    fn an_output_created_through_a_new_reparse_point_is_refused() {
         use crate::platform::windows_reparse_tests::{Retarget, junction};
-        let fixture = Fixture::new();
-        let outside = fixture.root.path().join("outside");
+        let root = tempfile::tempdir().unwrap();
+        let selected = root.path().join("selected");
+        let outside = root.path().join("outside");
+        fs::create_dir(&selected).unwrap();
+        fs::create_dir(&outside).unwrap();
+        let template = root.path().join("template");
+        junction(&template, &outside);
+        let parents = HeldParents::new(&selected.join("output")).unwrap();
+        let retarget = Retarget::new(&selected, &template);
+        retarget.apply();
+        // CopyFileEx creates by path: after the caller's check, the empty held
+        // folder became a junction and the file lands in its target.
+        let file = fs::File::create_new(selected.join("output")).unwrap();
+        assert!(outside.join("output").exists());
+        assert!(platform()
+            .verify_created_child(parents.directory(), &file, &selected.join("output"))
+            .is_err());
+        drop(file);
+        retarget.clear();
+        fs::remove_file(outside.join("output")).unwrap();
+        let file = fs::File::create_new(selected.join("output")).unwrap();
+        platform()
+            .verify_created_child(parents.directory(), &file, &selected.join("output"))
+            .unwrap();
+        drop((file, retarget, parents));
+        fs::remove_dir(template).unwrap();
+    }
+
+    #[test]
+    fn an_active_output_pins_its_folder_and_is_removed_after_cancellation() {
+        use crate::platform::windows_reparse_tests::{Retarget, junction};
+        let root = tempfile::tempdir().unwrap();
+        let selected = root.path().join("selected");
+        fs::create_dir(&selected).unwrap();
+        let source = root.path().join("source");
+        let destination = selected.join("destination");
+        fs::write(&source, vec![0x42_u8; 3 * 1024 * 1024]).unwrap();
+        let outside = root.path().join("outside");
         fs::create_dir(&outside).unwrap();
         fs::write(outside.join("witness"), b"unchanged").unwrap();
-        let template = fixture.root.path().join("template");
+        let template = root.path().join("template");
         junction(&template, &outside);
         let mut checked = false;
-        let error = copy(&fixture.source, &fixture.destination, false, &mut |bytes| {
+        let error = copy(&source, &destination, false, &mut |bytes| {
             if bytes > 0 {
-                let staging = fs::read_dir(fixture.root.path())?
-                    .find_map(|entry| {
-                        let entry = entry.unwrap();
-                        entry
-                            .file_name()
-                            .to_string_lossy()
-                            .starts_with(".oxyde-copy-")
-                            .then(|| entry.path())
-                    })
-                    .unwrap();
-                assert!(fs::remove_file(staging.join(".pin")).is_err());
-                let retarget = Retarget::new(&staging, &template);
+                // A folder holding a file cannot become a reparse point.
+                let retarget = Retarget::new(&selected, &template);
                 assert!(retarget.try_apply().is_err());
                 checked = true;
                 return Err(io::Error::new(ErrorKind::Interrupted, "test stop"));
@@ -377,8 +448,7 @@
         assert_eq!(error.kind(), ErrorKind::Interrupted);
         assert_eq!(fs::read(outside.join("witness")).unwrap(), b"unchanged");
         assert_eq!(fs::read_dir(&outside).unwrap().count(), 1);
-        fixture.no_staging();
-        assert!(!fixture.destination.exists());
+        assert_eq!(fs::read_dir(&selected).unwrap().count(), 0);
         fs::remove_dir(template).unwrap();
     }
 
@@ -441,11 +511,7 @@
                 if replace { 3 } else { 2 }
             );
             assert!(fs::read_dir(&selected).unwrap().all(|entry| {
-                !entry
-                    .unwrap()
-                    .file_name()
-                    .to_string_lossy()
-                    .starts_with(".oxyde-copy-")
+                !entry.unwrap().file_name().to_string_lossy().contains(".oxyde-")
             }));
             drop((retarget, source_retarget));
             fs::remove_dir(link).unwrap();
@@ -471,13 +537,10 @@
                 destination,
             }
         }
-        fn no_staging(&self) {
+        /// Neither a staging folder nor a replacement's temporary is left.
+        fn no_temporary(&self) {
             assert!(fs::read_dir(self.root.path()).unwrap().all(|entry| {
-                !entry
-                    .unwrap()
-                    .file_name()
-                    .to_string_lossy()
-                    .starts_with(".oxyde-copy-")
+                !entry.unwrap().file_name().to_string_lossy().contains(".oxyde-")
             }));
         }
     }
@@ -519,7 +582,7 @@
     }
 
     #[test]
-    fn cancellation_during_native_copy_removes_only_private_partial_output() {
+    fn cancellation_during_native_copy_removes_the_partial_output() {
         let fixture = Fixture::new();
         let error = copy(&fixture.source, &fixture.destination, false, &mut |bytes| {
             if bytes > 0 {
@@ -537,11 +600,11 @@
             fs::metadata(&fixture.source).unwrap().len(),
             3 * 1024 * 1024
         );
-        fixture.no_staging();
+        fixture.no_temporary();
     }
 
     #[test]
-    fn cancellation_before_replacement_preserves_old_contents_without_publication() {
+    fn cancellation_before_replacement_preserves_old_contents_and_removes_the_temporary() {
         let fixture = Fixture::new();
         fs::write(&fixture.destination, b"old contents").unwrap();
         let error = copy(&fixture.source, &fixture.destination, true, &mut |bytes| {
@@ -557,7 +620,7 @@
         assert_eq!(error.to_string(), "injected overwrite stop");
         assert_eq!(fs::read(&fixture.destination).unwrap(), b"old contents");
         assert!(fixture.source.is_file());
-        fixture.no_staging();
+        fixture.no_temporary();
     }
 
     #[test]
@@ -572,11 +635,11 @@
         .unwrap_err();
         assert_eq!(error.to_string(), "Copy progress callback panicked");
         assert!(!fixture.destination.exists());
-        fixture.no_staging();
+        fixture.no_temporary();
     }
 
     #[test]
-    fn publication_conflict_keeps_foreign_file_and_cleans_readonly_copy() {
+    fn creation_conflict_keeps_a_foreign_file() {
         let fixture = Fixture::new();
         let mut permissions = fs::metadata(&fixture.source).unwrap().permissions();
         permissions.set_readonly(true);
@@ -596,7 +659,7 @@
                 .permissions()
                 .readonly()
         );
-        fixture.no_staging();
+        fixture.no_temporary();
     }
 
     #[test]
@@ -637,7 +700,7 @@
                 .file_attributes(&fs::metadata(&fixture.destination).unwrap(), "")
                 .0
         );
-        fixture.no_staging();
+        fixture.no_temporary();
     }
 
     #[test]
@@ -662,7 +725,7 @@
                 .permissions()
                 .readonly()
         );
-        fixture.no_staging();
+        fixture.no_temporary();
     }
 
     #[test]
@@ -688,7 +751,9 @@
             paused_rx
                 .recv_timeout(std::time::Duration::from_secs(5))
                 .unwrap();
-            assert!(!fixture.destination.exists());
+            // Written under its own name, held against other writers.
+            assert!(fixture.destination.exists());
+            assert!(fs::File::options().write(true).open(&fixture.destination).is_err());
             assert!(
                 fs::File::options()
                     .write(true)
@@ -702,7 +767,7 @@
             fs::read(&fixture.destination).unwrap(),
             fs::read(&fixture.source).unwrap()
         );
-        fixture.no_staging();
+        fixture.no_temporary();
     }
 
     #[test]

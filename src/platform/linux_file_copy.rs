@@ -1,4 +1,4 @@
-//! Copy one regular file's bytes and dates into a new private output, reading
+//! Copy one regular file's bytes and dates into a new output, reading
 //! only the source descriptor the selection verified.
 use rustix::io::Errno;
 use std::{

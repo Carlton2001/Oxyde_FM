@@ -1,127 +1,10 @@
-//! Copy into a private staging directory before publishing the completed file.
+//! Copy a file into a new output, verified by re-reading it, then kept.
 use crate::platform::platform;
 use super::copy_diagnostics::{Phase, Timer};
 use std::io;
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-struct StagingIdentity {
-    object: crate::platform::FileIdentity,
-    created: Option<std::time::SystemTime>,
-}
-impl StagingIdentity {
-    fn from_file(file: &std::fs::File) -> io::Result<Self> {
-        let created = file.metadata()?.created();
-        #[cfg(target_os = "windows")]
-        let created = Some(created?);
-        #[cfg(not(target_os = "windows"))]
-        let created = created.ok(); // Existing Unix copies do not require filesystem birth-time support.
-        Ok(Self {
-            object: platform().file_identity(file)?,
-            created,
-        })
-    }
-    fn matches(self, file: &std::fs::File) -> io::Result<bool> {
-        Ok(self == Self::from_file(file)?)
-    }
-}
-
-pub(super) struct Staging {
-    pub directory: std::fs::File,
-    pin: Option<std::fs::File>,
-    owned_output: std::cell::RefCell<Option<std::fs::File>>,
-    owned_identity: std::cell::Cell<Option<StagingIdentity>>,
-    path: PathBuf,
-    pub file: PathBuf,
-    /// Lets a later start remove this folder if the process ends first; dropped
-    /// after the cleanup below, with the other fields.
-    _journal: Option<super::staging_journal::Entry>,
-}
-impl Staging {
-    fn new(parents: &super::path_parents::HeldParents) -> io::Result<Self> {
-        Self::with_prefix(parents, ".oxyde-copy-")
-    }
-    pub fn with_prefix(
-        parents: &super::path_parents::HeldParents,
-        prefix: &str,
-    ) -> io::Result<Self> {
-        let _timer = Timer::start(Phase::StagingCreate);
-        let leaf = format!("{prefix}{}", uuid::Uuid::new_v4());
-        let path = parents.resolved_path(Path::new(&leaf))?;
-        let (directory, pin) = platform().create_copy_staging(parents.directory(), &path)?;
-        let journal = super::staging_journal::record(&path, &directory, &pin);
-        Ok(Self {
-            _journal: journal,
-            directory,
-            pin: Some(pin),
-            owned_output: std::cell::RefCell::new(None),
-            owned_identity: std::cell::Cell::new(None),
-            file: path.join("output"),
-            path,
-        })
-    }
-    pub(super) fn capture_output(&self, file: &std::fs::File) -> io::Result<()> {
-        let mut owned = self.owned_output.borrow_mut();
-        if owned.is_none() {
-            *owned = Some(file.try_clone()?);
-        }
-        Ok(())
-    }
-    fn release_output(&self) -> io::Result<Option<StagingIdentity>> {
-        if let Some(file) = self.owned_output.borrow_mut().take() {
-            // Native copies apply source dates after their last callback. Capture
-            // the final proof while the actual output still has a retained handle.
-            let identity = StagingIdentity::from_file(&file);
-            drop(file); // The writer's access would conflict with the DELETE snapshot.
-            self.owned_identity.set(identity.as_ref().ok().copied());
-            identity?;
-        }
-        Ok(self.owned_identity.get())
-    }
-    pub(super) fn open_output(&self) -> io::Result<std::fs::File> {
-        let release_timer = Timer::start(Phase::WriterRelease);
-        let expected = self
-            .release_output()?
-            .ok_or_else(|| io::Error::other("Copy output ownership unavailable"))?;
-        drop(release_timer);
-        let _open_timer = Timer::start(Phase::OutputOpen);
-        let file = platform().open_copied_file(&self.directory, &self.file)?;
-        if !expected.matches(&file)? {
-            return Err(identity_changed(&self.file));
-        }
-        Ok(file)
-    }
-    fn clean_owned_output(&self) -> io::Result<()> {
-        if let Some(expected) = self.release_output()? {
-            let file = match platform().open_copied_file(&self.directory, &self.file) {
-                Ok(file) => file,
-                Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
-                Err(error) => return Err(error),
-            };
-            if !expected.matches(&file)? {
-                return Err(identity_changed(&self.file));
-            }
-            platform().remove_copied_file(&file, &self.file)?;
-        }
-        Ok(())
-    }
-}
-impl Drop for Staging {
-    fn drop(&mut self) {
-        let _timer = Timer::start(Phase::Cleanup);
-        if let Err(error) = self.clean_owned_output() {
-            log::warn!("Copy output preserved at {}: {error}", self.file.display());
-            super::archive_recovery::retained(&platform().retained_file_path(&self.directory, &self.path).unwrap_or(self.path.clone()));
-        }
-        if let Some(pin) = self.pin.take() {
-            if let Err(error) = platform().remove_copy_staging(&self.directory, pin, &self.path) {
-                log::warn!("Cannot clean copy staging {}: {error}", self.path.display());
-                super::archive_recovery::retained(&platform().retained_file_path(&self.directory, &self.path).unwrap_or(self.path.clone()));
-            }
-        }
-    }
-}
 pub(crate) fn copy(
     source: &Path,
     destination: &Path,
@@ -201,17 +84,42 @@ fn history_source_changed(source: &Path) -> io::Error {
     })
 }
 
-/// A hard-linked staging name stays hidden in the staging directory on FUSE file systems
-/// while it is open: the copy continues on the published name.
-#[cfg(not(target_os = "windows"))]
-fn reopen_published(output: std::fs::File, parents: &super::path_parents::HeldParents, destination: &Path) -> std::fs::File {
-    let published = platform().open_copied_file(parents.directory(), destination).and_then(|file| {
-        let same = platform().file_identity(&file)? == platform().file_identity(&output)?;
-        Ok(same.then_some(file))
-    });
-    match published {
-        Ok(Some(file)) => file,
-        _ => output,
+/// Copies `source` into a new output for `destination`: the file itself, created
+/// exclusively, or a temporary beside it for a replacement. A temporary name already
+/// taken is drawn again.
+fn write_output(
+    source: &Path,
+    destination: &Path,
+    replace: bool,
+    held_source: Option<&std::fs::File>,
+    parents: &super::path_parents::HeldParents,
+    progress: &mut dyn FnMut(u64) -> io::Result<()>,
+) -> io::Result<super::copy_output::Output> {
+    let mut attempt = 1;
+    loop {
+        let output = super::copy_output::Output::new(parents, destination, replace)?;
+        let native_timer = Timer::start(Phase::Native);
+        let result = platform().copy_file_with_progress(
+            source,
+            output.path(),
+            held_source,
+            parents.directory(),
+            &mut |file| output.capture(file),
+            progress,
+        );
+        drop(native_timer);
+        match result {
+            Ok(()) => return Ok(output),
+            Err(error)
+                if replace
+                    && error.kind() == io::ErrorKind::AlreadyExists
+                    && !output.captured()
+                    && attempt < super::copy_output::TEMPORARY_ATTEMPTS =>
+            {
+                attempt += 1;
+            }
+            Err(error) => return Err(error),
+        }
     }
 }
 
@@ -303,18 +211,8 @@ fn copy_with_parents_checked(
         check_replacement(&destination)?;
     }
     drop(checks_timer);
-    let staging = Staging::new(&destination_parents)?;
-    let native_timer = super::copy_diagnostics::Timer::start(super::copy_diagnostics::Phase::Native);
-    platform().copy_file_with_progress(
-        &source,
-        &staging.file,
-        held_source,
-        &staging.directory,
-        &mut |file| staging.capture_output(file),
-        progress,
-    )?;
-    drop(native_timer);
-    let mut output = staging.open_output()?;
+    let written = write_output(&source, &destination, replace, held_source, &destination_parents, progress)?;
+    let mut output = written.open_verified()?;
     let metadata = output.metadata()?;
     timing.bytes = metadata.len();
     let hash_timer = super::copy_diagnostics::Timer::start(super::copy_diagnostics::Phase::Hash);
@@ -328,7 +226,7 @@ fn copy_with_parents_checked(
     }
     let checks_timer = Timer::start(Phase::Checks);
     if expected.is_some_and(|expected| expected != hash) {
-        // The output is still private: failure never publishes unexpected bytes.
+        // Not kept: unexpected bytes are removed with the output.
         return Err(history_source_changed(&source));
     }
     let exclusive = if replace { if let Some(before_replace) = before_replace { before_replace()? } else { false } } else { false };
@@ -337,9 +235,7 @@ fn copy_with_parents_checked(
     }
     drop(checks_timer);
     let publish_timer = super::copy_diagnostics::Timer::start(super::copy_diagnostics::Phase::Publish);
-    destination_parents.rename(&output, &staging.file, &destination, replace && !exclusive)?;
-    #[cfg(not(target_os = "windows"))]
-    let output = reopen_published(output, &destination_parents, &destination);
+    written.keep(&destination_parents, &output, replace && !exclusive)?;
     drop(publish_timer);
     timing.published = true;
     Ok(CopiedFile {
