@@ -1,8 +1,7 @@
-    use super::{perform_copy_with_progress, redo_last_action, undo_last_action};
+    use super::{redo_last_action, undo_last_action};
+    use crate::systems::file_ops::history_redo::copy_files;
     use crate::models::HistoryManager;
     use crate::models::transaction::{Transaction, TransactionDetails, TransactionType};
-    use std::sync::Arc;
-    use std::sync::atomic::AtomicBool;
 
     #[test]
     fn redo_copy_directory_cleanup_preserves_a_late_empty_replacement() {
@@ -246,7 +245,7 @@
         let second_destination = root.path().join("second-output");
         std::fs::write(&first, b"first copy").unwrap();
         std::fs::write(&second, b"changed second copy").unwrap();
-        let result = perform_copy_with_progress(
+        let result = copy_files(
             vec![
                 (
                     first.clone(),
@@ -259,7 +258,7 @@
                     blake3::hash(b"old second copy").to_hex().to_string(),
                 ),
             ],
-            Arc::new(AtomicBool::new(false)),
+            &mut (),
         );
         assert!(matches!(
             result,
@@ -364,7 +363,7 @@
         std::fs::write(&second_source, b"source version").unwrap();
         std::fs::write(&second_destination, b"existing version").unwrap();
 
-        let result = perform_copy_with_progress(
+        let result = copy_files(
             vec![
                 (
                     first_source,
@@ -377,7 +376,7 @@
                     blake3::hash(b"source version").to_hex().to_string(),
                 ),
             ],
-            Arc::new(AtomicBool::new(false)),
+            &mut (),
         );
 
         assert!(result.is_err());

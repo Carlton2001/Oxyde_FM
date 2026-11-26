@@ -5,8 +5,6 @@ use crate::models::{
 use crate::utils::path_security::validate_path;
 use log::info;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 #[cfg(target_os = "windows")]
 struct RestorationPaths {
     corrected_path: PathBuf,
@@ -383,6 +381,21 @@ pub async fn undo_last_action_report(
 pub async fn redo_last_action(
     history: &HistoryManager,
 ) -> Result<Option<Transaction>, CommandError> {
+    redo(history, None).await
+}
+
+/// Redo, a copy made again shown in the operations panel. Blocking while it copies.
+pub async fn redo_last_action_shown(
+    history: &HistoryManager,
+    panel: &crate::systems::file_ops::RedoCopyPanel,
+) -> Result<Option<Transaction>, CommandError> {
+    redo(history, Some(panel)).await
+}
+
+async fn redo(
+    history: &HistoryManager,
+    panel: Option<&crate::systems::file_ops::RedoCopyPanel>,
+) -> Result<Option<Transaction>, CommandError> {
     let Some(operation) = history
         .begin_redo()
         .map_err(|error| CommandError::Other(error.to_string()))?
@@ -521,7 +534,15 @@ pub async fn redo_last_action(
                         ));
                     }
                     if !files.is_empty() {
-                        match perform_copy_with_progress(files, Arc::new(AtomicBool::new(false))) {
+                        let copied = match panel {
+                            Some(panel) => panel.copy(
+                                tx.details.paths.iter().map(PathBuf::from).collect(),
+                                tx.details.target_dir.as_ref().map(PathBuf::from),
+                                files,
+                            ),
+                            None => crate::systems::file_ops::history_redo::copy_files(files, &mut ()),
+                        };
+                        match copied {
                             Ok(identities) => tx.details.copied_file_identities = Some(identities),
                             Err(error) => {
                                 let error = match crate::systems::history_links::remove(&links) {
@@ -596,64 +617,6 @@ fn rollback_copy_directories(
     }
 }
 
-// Copies files with cancellation and rollback on failure.
-fn perform_copy_with_progress(
-    files: Vec<(PathBuf, PathBuf, String)>,
-    cancel_flag: Arc<AtomicBool>,
-) -> Result<Vec<(String, crate::models::transaction::HistoryFileIdentity)>, CommandError> {
-    let mut published: Vec<(
-        PathBuf,
-        String,
-        Option<crate::models::transaction::HistoryFileIdentity>,
-    )> = Vec::new();
-    let mut identities = Vec::new();
-    for (source, destination, expected) in files {
-        let result = (|| {
-            if let Some(parent) = destination.parent() {
-                std::fs::create_dir_all(parent)?;
-            }
-            crate::systems::file_copy::copy_verified(&source, &destination, &expected, &mut |_| {
-                if cancel_flag.load(Ordering::Relaxed) {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Interrupted,
-                        "Redo copy was cancelled",
-                    ));
-                }
-                Ok(())
-            })
-        })();
-        match result {
-            Ok((hash, identity)) => {
-                if let Some(identity) = identity {
-                    identities.push((destination.to_string_lossy().into_owned(), identity));
-                }
-                published.push((destination, hash, identity));
-            }
-            Err(error) => {
-                let rollback_errors: Vec<_> = published
-                    .iter()
-                    .rev()
-                    .filter_map(|(path, hash, identity)| {
-                        crate::systems::file_copy::remove_verified_output_identity(
-                            path, hash, *identity,
-                        )
-                        .err()
-                        .map(|error| format!("{}: {error}", path.display()))
-                    })
-                    .collect();
-                return Err(if rollback_errors.is_empty() {
-                    CommandError::from(error)
-                } else {
-                    CommandError::IoError(format!(
-                        "{error}; redo copy rollback incomplete: {}",
-                        rollback_errors.join("; ")
-                    ))
-                });
-            }
-        }
-    }
-    Ok(identities)
-}
 #[cfg(test)]
 #[cfg(target_os = "windows")]
 #[path = "ops/tests/trash_restore_tests.rs"]

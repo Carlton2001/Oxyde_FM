@@ -1,5 +1,7 @@
     use super::*;
     use crate::models::{TransactionDetails, TransactionType};
+    use std::sync::atomic::AtomicBool;
+    use std::sync::Arc;
 
     fn details(path: &std::path::Path) -> TransactionDetails {
         TransactionDetails {

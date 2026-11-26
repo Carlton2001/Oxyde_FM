@@ -196,7 +196,10 @@ impl FileOperationManager {
             let mut permit = Some(initial_permit);
             let operation = op_clone.clone();
             let mut execution = Box::pin(async move {
+                // A Redo checked its paths and made its folders before queuing its copy.
+                let redo = operation.lock().unwrap().redo_copy.is_some();
                 let checked = match Self::check_representable(&operation) {
+                    _ if redo => Ok(()),
                     Ok(()) => Self::check_queued_conflicts(operation.clone()).await,
                     Err(error) => Err(error),
                 };

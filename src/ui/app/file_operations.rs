@@ -80,17 +80,38 @@ impl OxydeApp {
         };
         self.history_operation_in_progress = true;
         cx.notify();
+        let operations = self.file_ops.clone();
+        let turbo = self.config.default_turbo_mode;
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
                 let runtime = tokio::runtime::Handle::current();
-                let result = tokio::task::spawn_blocking(move || {
-                    runtime.block_on(oxyde_lib::commands::ops::redo_last_action(&history))
-                })
-                .await;
+                // A copy made again shows in the operations panel, where it can be stopped.
+                let (queued, shown) = futures::channel::oneshot::channel();
+                let panel = oxyde_lib::systems::file_ops::RedoCopyPanel {
+                    manager: operations.clone(),
+                    runtime: runtime.clone(),
+                    history: history.clone(),
+                    turbo,
+                    queued: std::sync::Mutex::new(Some(queued)),
+                };
+                let redo = tokio::task::spawn_blocking(move || {
+                    runtime.block_on(oxyde_lib::commands::ops::redo_last_action_shown(&history, &panel))
+                });
+                let copy = shown.await.ok();
+                if let Some(id) = &copy {
+                    handle.update(&mut cx, |this, cx| this.watch_operation(id.clone(), true, cx));
+                }
+                let result = redo.await;
+                // Stopped from the panel, which shows it: the entry stays to redo.
+                let stopped = copy.as_ref().is_some_and(|id| {
+                    operations.operation_progress(id).is_some_and(|progress| progress.status == oxyde_lib::systems::file_ops::OpStatus::Cancelled)
+                });
                 handle.update(&mut cx, |this, cx| {
                     this.history_operation_in_progress = false;
-                    if let Ok(Err(error)) = &result {
+                    if stopped {
+                        log::info!("Redo copy cancelled");
+                    } else if let Ok(Err(error)) = &result {
                         log::warn!("Redo failed: {error:?}");
                         let (message, detail) = crate::ui::errors::redo_failure(error);
                         this.toast(ToastKind::Error, message, detail, 0, cx);
@@ -274,6 +295,11 @@ impl OxydeApp {
     }
 
     pub(super) fn watch_file_operation(&mut self, op_id: String, cx: &mut Context<Self>) {
+        self.watch_operation(op_id, false, cx);
+    }
+
+    /// `quiet`: whoever queued the operation reports its end, as a Redo does its copy.
+    fn watch_operation(&mut self, op_id: String, quiet: bool, cx: &mut Context<Self>) {
         use oxyde_lib::systems::file_ops::{FileOpType, OpStatus};
         let operations = self.file_ops.clone();
         let Some(handle) = self.handle.clone() else {
@@ -298,6 +324,10 @@ impl OxydeApp {
                     let op_type = progress.op_type.clone();
                     let status = progress.status.clone();
                     previous = Some(progress);
+                    if quiet && matches!(status, OpStatus::Completed | OpStatus::Cancelled | OpStatus::Error(_)) {
+                        handle.update(&mut cx, |_, cx| cx.notify());
+                        break;
+                    }
                     match status {
                         OpStatus::Queued
                         | OpStatus::Calculating

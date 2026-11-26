@@ -20,6 +20,8 @@ mod scheduler;
 mod summaries;
 pub use summaries::{OperationProgress, OperationSummary};
 pub use copy::with_copy_workers_for_benchmark;
+pub(crate) mod history_redo;
+pub use history_redo::RedoCopyPanel;
 mod item_outcomes;
 pub use item_outcomes::ItemOutcome;
 mod overview;
@@ -119,6 +121,8 @@ pub struct FileOperation {
     pub turbo_flag: Arc<AtomicBool>,
     resume_requested: bool,
     execution_started: bool,
+    /// The copy of a Redo, which runs in place of a transfer.
+    redo_copy: Option<history_redo::RedoCopy>,
 }
 
 impl FileOperation {
@@ -191,6 +195,7 @@ impl FileOperation {
             turbo_flag: self.turbo_flag.clone(),
             resume_requested: self.resume_requested,
             execution_started: self.execution_started,
+            redo_copy: None,
         }
     }
 
@@ -260,6 +265,7 @@ impl FileOperation {
             turbo_flag: Arc::new(AtomicBool::new(false)),
             resume_requested: false,
             execution_started: false,
+            redo_copy: None,
         }
     }
 

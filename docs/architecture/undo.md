@@ -23,6 +23,7 @@ The journal records what each operation actually did (files and folders created,
 - A copy that replaced existing files cannot be undone: the old contents are deliberately not kept. Its Redo is refused too, as it would need a new conflict resolution.
 - On Windows, an item whose identity could not be read when it was moved to the Recycle Bin (a volume without file identifiers) stays there on Undo, which restores the others and names it in a notice (`UndoLeftInTrash`); Redo skips it. Undo is refused only when no item of the operation has an identity.
 - One Undo or Redo runs at a time; a press while one runs is ignored.
+- The Redo of a copy copies its files again as an operation of the panel (`systems/file_ops/history_redo.rs`): queued with the others, it shows its progress and can be paused or cancelled. Cancelled, it removes what it had copied and the folders it had made, and the entry stays to redo. It records no entry of its own: the Redo moves its entry back to Undo.
 - A folder recreated by Undo or Redo takes back the attributes its source had (`directory_attributes`, Linux only).
 
 Platform details of the effects: [copies](copies.md), [moves](moves.md), [links](links.md), [deletion](../diagnostics/delete.md).

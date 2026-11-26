@@ -25,7 +25,7 @@ impl FileOperationManager {
         // Run blocking IO in a separate thread
         let result = tokio::task::spawn_blocking(move || {
             let _priority_guard = RestoreNormalPriority;
-            let (op_type, sources, destination, initial_turbo, resolutions) = {
+            let (op_type, sources, destination, initial_turbo, resolutions, redo_copy) = {
                 let mut locked = op_clone.lock().unwrap();
                 locked.status = if locked.pause_flag.load(Ordering::Relaxed) {
                     OpStatus::Paused
@@ -40,11 +40,15 @@ impl FileOperationManager {
                     locked.destination.clone(),
                     turbo,
                     locked.resolutions.clone(),
+                    locked.redo_copy.clone(),
                 )
             };
 
             // Each operation then follows Turbo with its own priority.
             follow_turbo_priority(initial_turbo, ThreadPriority::Normal);
+            if let Some(job) = redo_copy {
+                return Self::perform_redo_copy(&op_clone, job);
+            }
 
             op_clone.lock().unwrap().item_tracking_atomic = matches!(op_type, FileOpType::Compress | FileOpType::Extract)
                 || sources.iter().any(|path| crate::systems::archive_workspace::virtual_source(path).is_some())
@@ -103,7 +107,8 @@ impl FileOperationManager {
                 || locked.destination.as_ref().is_some_and(|p| {
                     crate::systems::archive_workspace::virtual_destination(p).is_some()
                 });
-            let tx_type = if virtual_effects {
+            // A Redo moves its own entry.
+            let tx_type = if virtual_effects || locked.redo_copy.is_some() {
                 None
             } else {
                 match locked.op_type {
