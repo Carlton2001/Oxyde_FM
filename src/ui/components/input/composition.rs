@@ -57,6 +57,19 @@ fn byte_for_utf16(text: &str, units: usize) -> usize {
     text.len()
 }
 
+/// Replaces `range` of `content` with `text`. A buffer too small is wiped once copied
+/// into a larger one, so no copy of a password stays behind in freed memory.
+pub(super) fn replace(content: &mut String, range: Range<usize>, text: &str) {
+    let needed = content.len() - range.len() + text.len();
+    if needed > content.capacity() {
+        let mut grown = String::with_capacity(needed.max(content.capacity() * 2).max(32));
+        grown.push_str(content);
+        zeroize::Zeroize::zeroize(content);
+        *content = grown;
+    }
+    content.replace_range(range, text);
+}
+
 /// Shows `text` as the composition in place of `target`, else the current composition, else
 /// the selection. Returns the new selection: `caret`, given in UTF-16 units within `text` as
 /// input methods do, or the end of the composition.
@@ -69,7 +82,7 @@ pub(super) fn compose(
     caret: Option<Range<usize>>,
 ) -> Range<usize> {
     let range = target.or_else(|| marked.clone()).unwrap_or(selected);
-    content.replace_range(range.clone(), text);
+    replace(content, range.clone(), text);
     let end = range.start + text.len();
     *marked = (!text.is_empty()).then_some(range.start..end);
     caret
@@ -95,7 +108,7 @@ pub(super) fn commit(
         return None;
     }
     let range = target.or_else(|| marked.take()).unwrap_or(selected);
-    content.replace_range(range.clone(), text);
+    replace(content, range.clone(), text);
     *marked = None;
     let caret = range.start + text.len();
     Some(caret..caret)
@@ -106,7 +119,7 @@ impl TextInput {
     /// elsewhere follows the text around it, one the edit reaches into ends.
     pub(super) fn splice(&mut self, range: Range<usize>, text: &str) {
         self.marked_range = self.marked_range.take().and_then(|marked| shift_marked(&marked, &range, text.len()));
-        self.content.replace_range(range, text);
+        replace(&mut self.content, range, text);
     }
 
     fn apply_ime_selection(&mut self, selected: Range<usize>, window: &mut Window, cx: &mut Context<Self>) {

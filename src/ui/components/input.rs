@@ -203,11 +203,15 @@ impl TextInput {
 
     /// Marks the current text as refused: the frame takes the error color until it is edited.
     pub fn mark_invalid(&mut self, cx: &mut Context<Self>) {
+        if let Some(previous) = &mut self.invalid_text {
+            zeroize::Zeroize::zeroize(previous);
+        }
         self.invalid_text = Some(self.content.clone());
         cx.notify();
     }
 
     pub fn set_content(&mut self, content: String, cx: &mut Context<Self>) {
+        zeroize::Zeroize::zeroize(&mut self.content);
         self.content = content;
         self.marked_range = None;
         self.selected_range = self.content.len()..self.content.len();
@@ -1118,6 +1122,16 @@ impl Element for TextInputElement {
                 input.last_layout = Some(line);
                 input.last_bounds = Some(bounds);
             });
+        }
+    }
+}
+
+// A password typed in the field leaves no copy in the memory it frees.
+impl Drop for TextInput {
+    fn drop(&mut self) {
+        zeroize::Zeroize::zeroize(&mut self.content);
+        if let Some(invalid) = &mut self.invalid_text {
+            zeroize::Zeroize::zeroize(invalid);
         }
     }
 }

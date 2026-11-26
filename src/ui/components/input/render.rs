@@ -80,7 +80,7 @@ impl Render for TextInput {
                         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                             cx.stop_propagation();
                             h_clear.update(cx, |this, cx| {
-                                this.content.clear();
+                                zeroize::Zeroize::zeroize(&mut this.content);
                                 this.marked_range = None;
                                 this.selected_range = 0..0;
                                 this.selection_anchor = 0;

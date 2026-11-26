@@ -1,4 +1,4 @@
-use super::{Span, commit, compose, shift_marked, spans};
+use super::{Span, commit, compose, replace, shift_marked, spans};
 
 /// Runs input method updates the way Windows sends them: each composition update without
 /// a range, then the result without a range.
@@ -72,4 +72,19 @@ fn the_line_is_cut_where_the_selection_or_the_composition_changes() {
         [span(2, false, false), span(1, false, true), span(2, true, true), span(1, false, true)]
     );
     assert_eq!(spans(4, &(1..9), None), [span(1, false, false), span(3, true, false)]);
+}
+
+#[test]
+fn a_growing_text_keeps_its_content_and_room_to_grow_without_moving() {
+    let mut content = String::new();
+    for (index, character) in "correct horse battery staple, and more".char_indices() {
+        let mut text = [0; 4];
+        replace(&mut content, index..index, character.encode_utf8(&mut text));
+    }
+    assert_eq!(content, "correct horse battery staple, and more");
+    let (buffer, capacity) = (content.as_ptr(), content.capacity());
+    replace(&mut content, 0..7, "wrong");
+    replace(&mut content, 0..0, "ab");
+    assert_eq!(content, "abwrong horse battery staple, and more");
+    assert_eq!((content.as_ptr(), content.capacity()), (buffer, capacity));
 }
