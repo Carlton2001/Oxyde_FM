@@ -513,6 +513,14 @@ impl OxydeApp {
         std::sync::Arc::make_mut(&mut self.folder_has_subdirs).retain(|path, _| retained(path));
         self.pending_sidebar_requests
             .retain(|path, _| retained(path));
+        // An « Expand all » walk on a removed drive must not bring its folders back.
+        self.sidebar_bulk_expands.retain(|root, cancel| {
+            let keep = retained(root);
+            if !keep {
+                cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+            keep
+        });
         if self
             .sidebar_selected_path
             .as_deref()
