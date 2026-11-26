@@ -189,7 +189,7 @@ impl SelectedEntry {
         if platform().file_attributes(&metadata, "").2
             || (!metadata.is_dir() && !metadata.is_file())
         {
-            return Err(SourceSelectionFailure::changed(&path));
+            return Err(SourceSelectionFailure::special(&path));
         }
         let identity = HistoryFileIdentity::from_file(&captured)
             .map_err(|_| SourceSelectionFailure::unverified(&path))?;

@@ -299,7 +299,7 @@ mod tests {
         for language in [Language::French, Language::English, Language::German, Language::Spanish, Language::Italian] {
             let i18n = I18n::for_language(language);
             for (changed, key) in [(true, Message::TransferSourceChanged), (false, Message::TransferSourceUnverified)] {
-                let failure = oxyde_lib::models::error::SourceSelectionFailure { changed, path: "C:/écriture/空".into() };
+                let failure = oxyde_lib::models::error::SourceSelectionFailure { changed, special: false, path: "C:/écriture/空".into() };
                 let detail = format!("Cannot copy source: {failure}");
                 let displayed = error_detail(&detail, &i18n);
                 assert_eq!(displayed, i18n.text(key).to_string());
@@ -592,6 +592,11 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
         let mut args = FluentArgs::new();
         args.set("path", display_paths(path));
         return i18n.text_with_args(Message::ArchiveLinkRefused, &args).to_string();
+    }
+    if let Some(path) = oxyde_lib::models::error::SourceSelectionFailure::special_path(detail) {
+        let mut args = FluentArgs::new();
+        args.set("path", display_paths(path));
+        return i18n.text_with_args(Message::TransferSourceSpecial, &args).to_string();
     }
     if let Some(changed) = oxyde_lib::models::error::SourceSelectionFailure::from_message(detail) {
         return i18n.text(if changed { Message::TransferSourceChanged } else { Message::TransferSourceUnverified }).to_string();

@@ -145,6 +145,12 @@ impl FileOperationManager {
                         Ok(())
                     });
 
+                    let res = match res {
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound && still_listed(src) => Err(std::io::Error::other(
+                            "the item is still listed but cannot be opened (from Windows, a Linux link whose target is missing cannot be deleted)",
+                        )),
+                        res => res,
+                    };
                     // An item already gone is deleted too: it counts as done, not left unprocessed.
                     let succeeded = res.as_ref().map_or_else(|error| error.kind() == std::io::ErrorKind::NotFound, |_| true);
                     if let Err(e) = res {
@@ -367,4 +373,11 @@ impl FileOperationManager {
             crate::models::error::DeleteBatchFailure::summarize(real_sources.len(), failures)
         }
     }
+}
+
+/// An item reported missing that its folder still lists cannot be reached by name: seen
+/// from Windows, a WSL link to a missing target opens as its absent target.
+fn still_listed(path: &std::path::Path) -> bool {
+    let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else { return false };
+    std::fs::read_dir(parent).is_ok_and(|entries| entries.flatten().any(|entry| entry.file_name() == name))
 }

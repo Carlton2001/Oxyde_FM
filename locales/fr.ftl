@@ -814,6 +814,7 @@ redo-rename-changed = Impossible de rétablir ce renommage : le fichier ou dossi
 redo-rename-unverified = Impossible de rétablir ce renommage en toute sécurité : l’identité du fichier ou dossier n’a pas pu être vérifiée. Il a été conservé. { $detail }
 
 transfer-source-changed = La source a été remplacée ou n’est plus un fichier ou dossier ordinaire. L’opération a été arrêtée ; les éléments déjà transférés sont conservés. Vérifiez la source puis réessayez.
+transfer-source-special = { $path } est un lien ou un fichier spécial (par exemple un tube Linux), que Oxyde ne copie ni ne déplace sous Windows. L’opération a été arrêtée ; les éléments déjà transférés sont conservés. Laissez cet élément de côté puis réessayez.
 transfer-source-unverified = L’identité de la source ne peut pas être vérifiée sur cet emplacement. L’opération a été arrêtée ; les éléments déjà transférés sont conservés. Essayez depuis un dossier local compatible.
 transfer-target-not-replaceable = L’élément existant ne peut pas être remplacé car ce n’est pas un fichier ordinaire (un lien, par exemple). Il a été conservé ; renommez-le ou déplacez-le puis réessayez.
 

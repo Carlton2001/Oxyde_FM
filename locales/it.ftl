@@ -1105,6 +1105,7 @@ redo-rename-changed = Impossibile ripetere questa rinomina: il file o la cartell
 redo-rename-unverified = Impossibile ripetere questa rinomina in sicurezza: non è stato possibile verificare l’identità del file o della cartella. L’elemento è stato conservato. { $detail }
 
 transfer-source-changed = L’origine è stata sostituita o non è più un file o una cartella normale. L’operazione è stata interrotta; gli elementi già trasferiti vengono conservati. Controlla l’origine e riprova.
+transfer-source-special = { $path } è un collegamento o un file speciale (come una pipe Linux), che Oxyde non copia né sposta su Windows. L’operazione è stata interrotta; gli elementi già trasferiti vengono conservati. Escludi questo elemento e riprova.
 transfer-source-unverified = Non è possibile verificare l’identità dell’origine in questa posizione. L’operazione è stata interrotta; gli elementi già trasferiti vengono conservati. Prova da una cartella locale compatibile.
 transfer-target-not-replaceable = L’elemento esistente non può essere sostituito perché non è un file normale (ad esempio un collegamento). È stato conservato; rinominalo o spostalo e riprova.
 

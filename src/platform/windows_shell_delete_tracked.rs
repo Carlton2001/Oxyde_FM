@@ -140,7 +140,7 @@ fn check_source(path: &Path, proof: Option<HistoryFileIdentity>) -> Result<(), S
         Ok(())
     } else {
         Err(crate::models::error::SourceSelectionFailure {
-            changed: true,
+            special: false, changed: true,
             path: path.to_string_lossy().into_owned(),
         }
         .to_string())

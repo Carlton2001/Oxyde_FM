@@ -1105,6 +1105,7 @@ redo-rename-changed = No se puede rehacer este cambio de nombre: el archivo o la
 redo-rename-unverified = No se puede rehacer este cambio de nombre de forma segura: no se pudo verificar la identidad del archivo o la carpeta. Se ha conservado. { $detail }
 
 transfer-source-changed = El origen se ha sustituido o ya no es un archivo o carpeta normal. La operación se ha detenido; los elementos ya transferidos se conservan. Compruebe el origen e inténtelo de nuevo.
+transfer-source-special = { $path } es un enlace o un archivo especial (como una tubería de Linux), que Oxyde no copia ni mueve en Windows. La operación se ha detenido; los elementos ya transferidos se conservan. Deje fuera este elemento e inténtelo de nuevo.
 transfer-source-unverified = No se puede verificar la identidad del origen en esta ubicación. La operación se ha detenido; los elementos ya transferidos se conservan. Pruebe desde una carpeta local compatible.
 transfer-target-not-replaceable = El elemento existente no se puede reemplazar porque no es un archivo normal (por ejemplo, un enlace). Se ha conservado; cámbiele el nombre o muévalo e inténtelo de nuevo.
 

@@ -50,7 +50,7 @@ impl SelectedSource {
 fn source_failure(path: &Path, changed: bool) -> CommandError {
     CommandError::TrashError(
         crate::models::error::SourceSelectionFailure {
-            changed,
+            special: false, changed,
             path: path.to_string_lossy().into_owned(),
         }
         .to_string(),

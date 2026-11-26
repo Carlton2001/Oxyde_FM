@@ -269,6 +269,9 @@ impl TrashSelectionUnavailable {
 #[derive(Clone, Debug)]
 pub struct SourceSelectionFailure {
     pub changed: bool,
+    /// A link or special file (FIFO, socket, device) met as it is, not replaced:
+    /// transfers do not reproduce those on Windows. Implies `changed`.
+    pub special: bool,
     pub path: String,
 }
 impl fmt::Display for SourceSelectionFailure {
@@ -276,7 +279,9 @@ impl fmt::Display for SourceSelectionFailure {
         write!(
             f,
             "Source selection [{}]: {}",
-            if self.changed {
+            if self.special {
+                "special"
+            } else if self.changed {
                 "changed"
             } else {
                 "unverified"
@@ -293,15 +298,23 @@ impl SourceSelectionFailure {
     pub(crate) fn unverified(path: &std::path::Path) -> std::io::Error {
         Self::error(path, false)
     }
+    pub(crate) fn special(path: &std::path::Path) -> std::io::Error {
+        std::io::Error::other(Self { changed: true, special: true, path: path.to_string_lossy().into_owned() })
+    }
     fn error(path: &std::path::Path, changed: bool) -> std::io::Error {
         std::io::Error::other(Self {
             changed,
+            special: false,
             path: path.to_string_lossy().into_owned(),
         })
     }
+    /// The path of a link or special file refused as a source.
+    pub fn special_path(message: &str) -> Option<&str> {
+        message.split_once("Source selection [special]: ").map(|(_, path)| path)
+    }
     pub fn from_message(message: &str) -> Option<bool> {
         let (_, value) = message.split_once("Source selection [")?;
-        if value.starts_with("changed]: ") {
+        if value.starts_with("changed]: ") || value.starts_with("special]: ") {
             Some(true)
         } else if value.starts_with("unverified]: ") {
             Some(false)
