@@ -13,9 +13,10 @@ pub(super) fn is_audio(file: &oxyde_lib::models::FileEntry) -> bool {
         })
 }
 
-/// Files inside archives have none: their path is not on disk.
+/// Files inside archives have none: their path is not on disk. Nor do files left in the
+/// cloud: reading them would download them.
 pub(crate) fn supports_thumbnail(file: &oxyde_lib::models::FileEntry) -> bool {
-    file.archive_path.is_none()
+    file.archive_path.is_none() && !file.is_cloud_placeholder
         && (is_audio(file) || matches!(crate::ui::components::icons::get_preview_type(&file.name),
             crate::ui::components::icons::PreviewType::Image | crate::ui::components::icons::PreviewType::Pdf
                 | crate::ui::components::icons::PreviewType::Video))

@@ -173,7 +173,8 @@ impl Tooltip {
                 size: (file.size, file.is_dir, file.is_calculated), mode: file.mode, date: file.modified,
             };
             // Files inside archives have no preview, as in the Viewer: their path is not on disk.
-            let previews = previews && file.archive_path.is_none();
+            // A file left in the cloud has none either: reading it would download it.
+            let previews = previews && file.archive_path.is_none() && !file.is_cloud_placeholder;
             Self::new_for_file(crate::ui::format::entry_name(&file, cx.i18n()), file.path.clone(), info, previews, cx).into()
         }
     }

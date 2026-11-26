@@ -36,6 +36,8 @@ pub struct FileEntry {
     /// A symbolic link whose target cannot be reached.
     pub is_broken_link: bool,
     pub is_junction: bool,
+    /// Content kept by a cloud provider or offline files: reading it downloads it.
+    pub is_cloud_placeholder: bool,
     pub size: u64,
     pub folders_count: Option<u64>,
     pub files_count: Option<u64>,
@@ -303,6 +305,7 @@ pub(crate) fn file_entry_from_metadata(path: &Path, metadata: &std::fs::Metadata
         is_symlink,
         is_broken_link: is_symlink && cfg!(not(target_os = "windows")) && target.is_none(),
         is_junction,
+        is_cloud_placeholder: is_cloud_placeholder(metadata),
         size,
         folders_count: None,
         files_count: None,
@@ -313,6 +316,21 @@ pub(crate) fn file_entry_from_metadata(path: &Path, metadata: &std::fs::Metadata
         deleted_time: None,
         mode: unix_mode(target.as_ref().unwrap_or(metadata)),
     }
+}
+
+/// A file whose content is not on this disk (OneDrive Files On-Demand, offline files):
+/// opening it for reading triggers a download.
+#[cfg(target_os = "windows")]
+pub(crate) fn is_cloud_placeholder(metadata: &std::fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const OFFLINE: u32 = 0x1000;
+    const RECALL_ON_OPEN: u32 = 0x40000;
+    const RECALL_ON_DATA_ACCESS: u32 = 0x400000;
+    metadata.file_attributes() & (OFFLINE | RECALL_ON_OPEN | RECALL_ON_DATA_ACCESS) != 0
+}
+#[cfg(not(target_os = "windows"))]
+pub(crate) fn is_cloud_placeholder(_metadata: &std::fs::Metadata) -> bool {
+    false
 }
 
 /// Whether a Windows junction or folder link, which Rust does not report as a directory.
@@ -341,3 +359,7 @@ pub(crate) fn unix_mode(metadata: &std::fs::Metadata) -> Option<u32> {
 #[cfg(test)]
 #[path = "file_entry/tests/listing_metadata.rs"]
 mod listing_metadata_tests;
+
+#[cfg(test)]
+#[path = "file_entry/tests/cloud_placeholders.rs"]
+mod cloud_placeholder_tests;

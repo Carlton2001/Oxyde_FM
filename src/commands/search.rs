@@ -206,6 +206,7 @@ pub fn advanced_search(
                         is_system: system,
                         is_symlink: entry.file_type().is_symlink(),
                         mode: crate::models::file_entry::unix_mode(&m),
+                        is_cloud_placeholder: crate::models::file_entry::is_cloud_placeholder(&m),
                         ..Default::default()
                     });
                 }
@@ -332,6 +333,7 @@ pub fn quick_search(
                         is_system: system,
                         is_symlink: entry.file_type().is_symlink(),
                         mode: crate::models::file_entry::unix_mode(&metadata),
+                        is_cloud_placeholder: crate::models::file_entry::is_cloud_placeholder(&metadata),
                         size: if metadata.is_dir() { 0 } else { metadata.len() },
                         modified: metadata
                             .modified()
@@ -508,17 +510,8 @@ fn content_lock<'a>(
 
 /// A file whose content is not on this disk: reading it would download it, so a content
 /// search leaves it out (OneDrive Files On-Demand, offline files).
-#[cfg(windows)]
 fn is_cloud_placeholder(path: &std::path::Path) -> bool {
-    use std::os::windows::fs::MetadataExt;
-    const OFFLINE: u32 = 0x1000;
-    const RECALL_ON_OPEN: u32 = 0x40000;
-    const RECALL_ON_DATA_ACCESS: u32 = 0x400000;
-    std::fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_attributes() & (OFFLINE | RECALL_ON_OPEN | RECALL_ON_DATA_ACCESS) != 0)
-}
-#[cfg(not(windows))]
-fn is_cloud_placeholder(_path: &std::path::Path) -> bool {
-    false
+    std::fs::symlink_metadata(path).is_ok_and(|metadata| crate::models::file_entry::is_cloud_placeholder(&metadata))
 }
 
 fn file_contains_content(

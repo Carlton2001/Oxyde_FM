@@ -57,6 +57,7 @@ async fn list_dir_impl(
                 is_symlink: false,
                 is_broken_link: false,
                 is_junction: false,
+                is_cloud_placeholder: false,
                 size: t.size,
                 modified: t.modified,
                 is_calculated: true,

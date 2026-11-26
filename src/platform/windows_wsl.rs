@@ -57,6 +57,7 @@ pub(super) fn entries() -> Vec<FileEntry> {
         is_symlink: false,
         is_broken_link: false,
         is_junction: false,
+        is_cloud_placeholder: false,
         size: 0,
         modified: 0,
         is_calculated: true,
