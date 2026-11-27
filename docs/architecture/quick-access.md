@@ -1,6 +1,6 @@
 # Quick access and opening
 
-Pinned folders in the Quick Access section, pinning and unpinning, their refresh, the home folder heading them; on Linux, opening an item through the desktop's application, and the Properties system button. OneDrive, network and trash are separate.
+Pinned folders in the Quick Access section, pinning and unpinning, their refresh, the home folder heading them; on Linux, opening an item through the desktop's application, and the Properties system button. Cloud drives, network and trash are separate.
 
 ## Interface
 
@@ -25,6 +25,12 @@ Dragging a pinned folder in the sidebar reorders it (`components/sidebar/reorder
 ## Home folder
 
 The home folder opens the Quick Access section on every system, above the pinned folders, as in Nautilus, with the Lucide `house` icon, in the expanded sidebar and in the rail; it cannot be unpinned. An item with no name designates it, and the interface names it in the chosen language (`sidebar-home`).
+
+## Cloud drives on Windows
+
+`Platform::cloud_sync_roots` reads the Windows Explorer sync root registrations in the background. It uses the current user's SID to find the registered folder, resolves the display name from the registration, and shows each existing folder once above Drives. The sidebar refresh picks up newly registered roots. The Cloud drives setting also recognizes the former `show_onedrive` preference.
+
+Within these folders, Cloud Files reports local availability and whether placeholders are in sync. Oxyde offers offline and online-only actions when the Windows Shell publishes the corresponding commands. Providers that expose a mounted volume appear under Drives. A client that exposes only an ordinary folder without a sync root registration can be pinned manually.
 
 ## Behavior outside Windows
 

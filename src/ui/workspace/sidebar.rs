@@ -15,8 +15,8 @@ impl WorkspaceState {
             }
         }
 
-        for item in &self.onedrive_items {
-            new_items.push(SidebarItem::OneDrive { item: item.clone() });
+        for item in &self.cloud_root_items {
+            new_items.push(SidebarItem::CloudRoot { item: item.clone() });
         }
         new_items.push(SidebarItem::Header(Message::SidebarDrives));
 
@@ -103,8 +103,8 @@ impl WorkspaceState {
 }
 
 #[cfg(test)]
-#[path = "tests/onedrive.rs"]
-mod onedrive_tests;
+#[path = "tests/cloud_roots.rs"]
+mod cloud_root_tests;
 
 #[cfg(test)]
 #[path = "tests/linux.rs"]

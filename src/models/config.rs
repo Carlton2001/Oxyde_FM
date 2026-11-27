@@ -83,8 +83,8 @@ pub struct AppConfig {
     pub sync_sidebar_with_path: bool,
     #[serde(default)]
     pub show_network: bool,
-    #[serde(default = "default_true")]
-    pub show_onedrive: bool,
+    #[serde(default = "default_true", alias = "show_onedrive")]
+    pub show_cloud_roots: bool,
     /// Pinned folder paths in the order chosen inside Oxyde. The system file
     /// manager keeps its own order; folders missing here follow at the end.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -161,7 +161,7 @@ impl Default for AppConfig {
             show_permissions_column: false,
             sync_sidebar_with_path: false,
             show_network: true,
-            show_onedrive: true,
+            show_cloud_roots: true,
             pinned_order: Vec::new(),
             operations_list_width: None,
             confirm_delete: true,

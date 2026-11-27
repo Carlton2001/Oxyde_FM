@@ -8,7 +8,7 @@ fn show_only_replaces_the_layout_and_keeps_the_given_order() {
         active_pane_id: saved.clone(),
         layout: LayoutNode::Pane(Box::new(pane)),
         pinned_items: Vec::new(),
-        onedrive_items: Vec::new(),
+        cloud_root_items: Vec::new(),
         drives: Vec::new(), unmounted_volumes: Vec::new(),
         expanded_paths: Default::default(),
         sidebar_items: Vec::new(),

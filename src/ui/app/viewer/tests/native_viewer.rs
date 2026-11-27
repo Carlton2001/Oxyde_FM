@@ -225,7 +225,7 @@ fn native_viewer_renders_tracks_selection_and_detaches() {
             let (viewer, source) = app.update(cx, |app_state, cx| {
                 app_state.handle = Some(app.clone());
                 app_state.state.pinned_items.clear();
-                app_state.state.onedrive_items.clear();
+                app_state.state.cloud_root_items.clear();
                 app_state.state.drives.clear();
                 app_state.state.sidebar_items.clear();
                 let initial = app_state.state.active_pane_id.clone();

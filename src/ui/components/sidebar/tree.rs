@@ -49,7 +49,7 @@ pub(super) fn render_sidebar_tree(
         .iter()
         .map(|item| match item {
             SidebarItem::Header(_) => 0.0,
-            SidebarItem::Pinned { item } | SidebarItem::OneDrive { item } => {
+            SidebarItem::Pinned { item } | SidebarItem::CloudRoot { item } => {
                 labels.width(&pinned_display_name(item, _cx.i18n()), super::rows::is_virtual_place(&item.path)) + rem(PLACE_CHROME)
             }
             SidebarItem::Linux { .. } => {

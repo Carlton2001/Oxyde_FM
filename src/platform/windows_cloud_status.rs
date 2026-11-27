@@ -1,6 +1,6 @@
 //! Read the states reported by Cloud Files and Google Drive's Shell overlays.
 use super::windows_com::ComApartment;
-use super::windows_onedrive::{open, string, subkey_names};
+use super::windows_registry::{open, string, subkey_names};
 use super::CloudStatusProbe;
 use crate::models::{CloudAvailability, CloudStatus};
 use std::ffi::c_void;

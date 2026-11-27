@@ -20,7 +20,7 @@ pub(super) fn left_rows(cx: &App) -> Vec<(Message, Trailing)> {
         Message::SettingsWindowsIcons, Message::SettingsGridThumbnails,
         Message::SettingsHidden, Message::SettingsSystem, Message::SettingsPreviews,
         Message::SettingsCheckboxes, Message::SettingsPermissionsColumn,
-        Message::SettingsPathTracking, Message::SettingsOnedrive, Message::SettingsNetwork,
+        Message::SettingsPathTracking, Message::SettingsCloudRoots, Message::SettingsNetwork,
     ].map(|label| (label, Trailing::Toggle)));
     rows
 }
@@ -122,11 +122,11 @@ pub(super) fn left_column(view: &OxydeApp, handle: Entity<OxydeApp>, width: f32,
             label: Message::SettingsPathTracking, description: Message::SettingsPathTrackingDescription,
             hint: None, value: view.follows_active_path(),
         }, |view, cx| view.toggle_path_tracking(cx)))
-        .when(view.onedrive_installed, |column| column.child(toggle(Toggle {
+        .when(view.has_cloud_roots, |column| column.child(toggle(Toggle {
             id: "toggle-onedrive", icon: "icons/cloudy.svg",
-            label: Message::SettingsOnedrive, description: Message::SettingsOnedriveDescription,
-            hint: None, value: view.show_onedrive(),
-        }, |view, cx| view.toggle_onedrive(cx))))
+            label: Message::SettingsCloudRoots, description: Message::SettingsCloudRootsDescription,
+            hint: None, value: view.show_cloud_roots(),
+        }, |view, cx| view.toggle_cloud_roots(cx))))
         .child(toggle(Toggle {
             id: "toggle-network", icon: "icons/globe.svg",
             label: Message::SettingsNetwork, description: Message::SettingsNetworkDescription,

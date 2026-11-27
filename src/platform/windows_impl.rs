@@ -71,7 +71,6 @@ impl Platform for WindowsPlatform {
     fn set_fixture_case_sensitive(&self, path: &std::path::Path) -> std::io::Result<()> {
         super::windows_file_names::set_fixture_case_sensitive(path)
     }
-    fn onedrive_installed(&self) -> bool { super::windows_onedrive::installed() }
     fn cloud_status_probe(&self, directory: &std::path::Path) -> Option<super::CloudStatusProbe> {
         Some(super::windows_cloud_status::probe(directory))
     }
@@ -84,7 +83,7 @@ impl Platform for WindowsPlatform {
     fn set_cloud_availability(&self, path: &str, availability: crate::models::CloudAvailability) -> Result<(), String> {
         super::windows_shell::cloud_availability::execute(path, availability).map_err(|error| error.to_string())
     }
-    fn onedrive_folders(&self) -> Vec<crate::models::QuickAccessItem> { super::windows_onedrive::folders() }
+    fn cloud_sync_roots(&self) -> Vec<crate::models::QuickAccessItem> { super::windows_cloud_roots::folders() }
     fn wsl_distributions(&self) -> Vec<crate::models::SidebarNode> { super::windows_wsl::distributions() }
     fn installation(&self) -> super::Installation {
         super::Installation::SelfUpdating { manifest_key: "windows-x86_64", signature: super::ReleaseSignature::Minisign }

@@ -5,6 +5,7 @@
 //! to themselves. An Oxyde run as administrator has a pipe of its own, which the
 //! launcher of folders reaches too: a folder then opens in the Oxyde that runs, not in
 //! one more.
+use super::windows_user_token::{current_user_sid, token_information};
 use super::{InstanceClaim, InstanceMessage, InstanceRequest};
 use futures::channel::mpsc::{unbounded, UnboundedSender};
 use std::io::Write;
@@ -12,15 +13,15 @@ use std::os::windows::io::AsRawHandle;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 use std::time::Duration;
-use windows::core::{HSTRING, PCWSTR, PWSTR};
+use windows::core::{HSTRING, PCWSTR};
 use windows::Win32::Foundation::{CloseHandle, LocalFree, ERROR_BROKEN_PIPE, ERROR_NO_DATA, ERROR_PIPE_BUSY, ERROR_PIPE_CONNECTED, HANDLE, HLOCAL};
 use windows::Win32::Security::Authorization::{
-    ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, GetSecurityInfo, SDDL_REVISION_1, SE_KERNEL_OBJECT,
+    ConvertStringSecurityDescriptorToSecurityDescriptorW, GetSecurityInfo, SDDL_REVISION_1, SE_KERNEL_OBJECT,
 };
 use windows::Win32::Security::{
-    EqualSid, GetSidSubAuthority, GetSidSubAuthorityCount, GetTokenInformation, TokenElevation, TokenIntegrityLevel, TokenUser,
-    OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, SECURITY_ATTRIBUTES, TOKEN_ELEVATION, TOKEN_INFORMATION_CLASS,
-    TOKEN_MANDATORY_LABEL, TOKEN_QUERY, TOKEN_USER,
+    EqualSid, GetSidSubAuthority, GetSidSubAuthorityCount, TokenElevation, TokenIntegrityLevel, TokenUser,
+    OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID, SECURITY_ATTRIBUTES, TOKEN_ELEVATION,
+    TOKEN_MANDATORY_LABEL, TOKEN_USER,
 };
 use windows::Win32::Storage::FileSystem::{ReadFile, FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_ACCESS_INBOUND};
 use windows::Win32::System::Pipes::{
@@ -28,7 +29,7 @@ use windows::Win32::System::Pipes::{
     PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT,
 };
 use windows::Win32::System::RemoteDesktop::ProcessIdToSessionId;
-use windows::Win32::System::Threading::{GetCurrentProcess, GetCurrentProcessId, OpenProcessToken};
+use windows::Win32::System::Threading::GetCurrentProcessId;
 use windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow;
 
 /// First line of a message, which a later version may change: folders to open, items
@@ -77,20 +78,6 @@ impl Drop for Pipe {
     fn drop(&mut self) { unsafe { let _ = CloseHandle(self.0); } }
 }
 
-/// What this process's token says of `class`, in a buffer aligned for its structure.
-fn token_information(class: TOKEN_INFORMATION_CLASS) -> Option<Vec<u64>> {
-    unsafe {
-        let mut token = HANDLE::default();
-        OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).ok()?;
-        let mut size = 0u32;
-        let _ = GetTokenInformation(token, class, None, 0, &mut size);
-        let mut buffer = vec![0u64; (size as usize).div_ceil(8)];
-        let read = GetTokenInformation(token, class, Some(buffer.as_mut_ptr().cast()), size, &mut size);
-        let _ = CloseHandle(token);
-        read.ok().map(|()| buffer)
-    }
-}
-
 /// Whether this process runs as administrator.
 fn elevated() -> bool {
     token_information(TokenElevation).is_some_and(|elevation| unsafe { (*elevation.as_ptr().cast::<TOKEN_ELEVATION>()).TokenIsElevated != 0 })
@@ -118,14 +105,7 @@ impl Drop for Descriptor {
 /// creator runs with: run as administrator, Oxyde would otherwise own it as the
 /// Administrators group and be out of reach of the launcher, which is not.
 fn descriptor() -> Option<Descriptor> {
-    let user = token_information(TokenUser)?;
-    let user = unsafe {
-        let mut text = PWSTR::null();
-        ConvertSidToStringSidW((*user.as_ptr().cast::<TOKEN_USER>()).User.Sid, &mut text).ok()?;
-        let user = text.to_string();
-        let _ = LocalFree(Some(HLOCAL(text.0.cast())));
-        user.ok()?
-    };
+    let user = current_user_sid()?;
     // Medium integrity: what a pipe gets unlabelled, written here so that it does not
     // depend on its creator's.
     let text = HSTRING::from(format!("O:{user}D:(A;;GRGW;;;{user})(A;;GA;;;SY)S:(ML;;NW;;;ME)"));

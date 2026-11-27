@@ -489,9 +489,8 @@ pub trait Platform: Send + Sync {
     fn set_cloud_availability(&self, _path: &str, _availability: crate::models::CloudAvailability) -> Result<(), String> {
         Err("Cloud availability commands are unavailable on this platform".into())
     }
-    /// Available OneDrive sync roots configured for the current user.
-    fn onedrive_installed(&self) -> bool { false }
-    fn onedrive_folders(&self) -> Vec<crate::models::QuickAccessItem> { Vec::new() }
+    /// Cloud sync roots registered with the system for the current user.
+    fn cloud_sync_roots(&self) -> Vec<crate::models::QuickAccessItem> { Vec::new() }
     /// Registered WSL distributions, read without starting any of them. Blocking.
     fn wsl_distributions(&self) -> Vec<crate::models::SidebarNode> { Vec::new() }
     fn show_startup_error(&self, _title: &str, message: &str) { eprintln!("{message}"); }
@@ -1539,7 +1538,11 @@ mod windows_icon_pixels;
 mod windows_icon_source;
 
 #[cfg(target_os = "windows")]
-mod windows_onedrive;
+mod windows_registry;
+#[cfg(target_os = "windows")]
+mod windows_user_token;
+#[cfg(target_os = "windows")]
+mod windows_cloud_roots;
 #[cfg(target_os = "windows")]
 mod windows_cloud_status;
 #[cfg(target_os = "windows")]

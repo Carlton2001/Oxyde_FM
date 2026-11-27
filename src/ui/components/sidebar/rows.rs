@@ -50,7 +50,7 @@ pub(super) fn render_sidebar_rows(
     range.map(|i| {
         let theme    = *OxydeTheme::global(cx);
         let item     = &items[i];
-        let is_onedrive = matches!(item, SidebarItem::OneDrive { .. });
+        let is_cloud_root = matches!(item, SidebarItem::CloudRoot { .. });
         let h        = h.clone();
 
         match item {
@@ -64,10 +64,10 @@ pub(super) fn render_sidebar_rows(
             }
 
             // ── Quick-access (pinned) item ─────────────────
-            SidebarItem::Pinned { item } | SidebarItem::OneDrive { item } => {
+            SidebarItem::Pinned { item } | SidebarItem::CloudRoot { item } => {
                 let path      = item.path.clone();
                 let is_home   = item.name.is_empty();
-                let reorderable = !is_onedrive && !is_home && pinned_paths_for_list.contains(&path);
+                let reorderable = !is_cloud_root && !is_home && pinned_paths_for_list.contains(&path);
                 let moving    = pinned_reorder.as_ref().is_some_and(|reorder| reorder.path == path);
                 let shift     = pinned_shifts.get(&path).copied().unwrap_or(0.0);
                 let is_sel    = sel.as_deref().is_some_and(|selected| paths_match(selected, &path));
@@ -149,7 +149,7 @@ pub(super) fn render_sidebar_rows(
                     .child(
                         div().w_4().h_4().mr_2().flex().items_center().justify_center().flex_shrink_0()
                             .child({
-                                let icon_path = if is_onedrive { "icons/cloudy.svg" } else { match path.as_str() {
+                                let icon_path = if is_cloud_root { "icons/cloudy.svg" } else { match path.as_str() {
                                     "__network_vincinity__" => "icons/globe.svg",
                                     "trash://" => "icons/trash-sidebar.svg",
                                     _ if is_home => "icons/house.svg",

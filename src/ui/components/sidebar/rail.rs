@@ -160,7 +160,7 @@ pub(super) fn render_sidebar_rail(
                 drive_letter(&drive.path).is_none().then(|| crate::ui::components::icons::drive_icon_path(drive)),
                 drive_letter(&drive.path),
             ),
-            SidebarItem::OneDrive { item } => (item.path.clone(), item.name.clone(), Some("icons/cloudy.svg"), None),
+            SidebarItem::CloudRoot { item } => (item.path.clone(), item.name.clone(), Some("icons/cloudy.svg"), None),
             SidebarItem::Linux { .. } => (
                 oxyde_lib::platform::WSL_ROOT.to_string(),
                 cx.i18n().text(Message::SidebarLinux).to_string(),

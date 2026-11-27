@@ -137,14 +137,20 @@ impl OxydeApp {
         self.quick_access_request = self.quick_access_request.wrapping_add(1);
         let request = self.quick_access_request;
         cx.spawn(async move |this, cx| {
-            let result =
-                tokio::task::spawn_blocking(|| (oxyde_lib::commands::system::get_quick_access_items(), oxyde_lib::platform::platform().onedrive_folders(), oxyde_lib::platform::platform().onedrive_installed(), oxyde_lib::platform::platform().wsl_distributions()))
-                    .await;
+            let result = tokio::task::spawn_blocking(|| {
+                let platform = oxyde_lib::platform::platform();
+                (
+                    oxyde_lib::commands::system::get_quick_access_items(),
+                    platform.cloud_sync_roots(),
+                    platform.wsl_distributions(),
+                )
+            })
+            .await;
             let _ = this.update(cx, |this, cx| {
                 if this.quick_access_request != request {
                     return;
                 }
-                let result = result.map(|(items, roots, installed, distributions)| {
+                let result = result.map(|(items, roots, distributions)| {
                     let wsl_root = oxyde_lib::platform::WSL_ROOT;
                     let known = this.state.sidebar_nodes.get(wsl_root).map(Vec::as_slice).unwrap_or_default();
                     if !known.iter().map(|node| &node.path).eq(distributions.iter().map(|node| &node.path)) {
@@ -152,13 +158,14 @@ impl OxydeApp {
                         this.state.refresh_sidebar();
                         cx.notify();
                     }
-                    if this.onedrive_installed != installed {
-                        this.onedrive_installed = installed;
+                    let has_cloud_roots = !roots.is_empty();
+                    if this.has_cloud_roots != has_cloud_roots {
+                        this.has_cloud_roots = has_cloud_roots;
                         cx.notify();
                     }
-                    let roots = if this.config.show_onedrive { roots } else { Vec::new() };
-                    if !this.state.onedrive_items.iter().map(|i| (&i.path, &i.name)).eq(roots.iter().map(|i| (&i.path, &i.name))) {
-                        this.state.onedrive_items = roots;
+                    let roots = if this.config.show_cloud_roots { roots } else { Vec::new() };
+                    if !this.state.cloud_root_items.iter().map(|i| (&i.path, &i.name)).eq(roots.iter().map(|i| (&i.path, &i.name))) {
+                        this.state.cloud_root_items = roots;
                         this.state.refresh_sidebar();
                         cx.notify();
                     }

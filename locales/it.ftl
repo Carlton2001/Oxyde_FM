@@ -1241,8 +1241,8 @@ operations-item-interrupted = Interrotto
 
 default-archive-format = Formato archivio predefinito
 
-settings-onedrive = OneDrive
-settings-onedrive-description = Mostra OneDrive nella barra laterale quando è configurato.
+settings-cloud-roots = Unità cloud
+settings-cloud-roots-description = Mostra le unità cloud registrate nella barra laterale.
 
 trash-restore-summary = Ripristino terminato: { $restored } elemento/i ripristinato/i, { $failed } non riuscito/i. Gli altri elementi sono stati elaborati. Consulta il registro per i dettagli.
 transfer-destination-collision = Più elementi selezionati avrebbero la stessa destinazione: { $path }. Rinominali o trasferiscili separatamente. Nessun file è stato trasferito.

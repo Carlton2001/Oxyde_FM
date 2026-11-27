@@ -348,16 +348,16 @@ impl OxydeApp {
         self.config.show_network = !self.config.show_network;
         self.save_preferences(cx);
     }
-    pub(crate) fn toggle_onedrive(&mut self, cx: &mut Context<Self>) {
-        self.config.show_onedrive = !self.config.show_onedrive;
+    pub(crate) fn toggle_cloud_roots(&mut self, cx: &mut Context<Self>) {
+        self.config.show_cloud_roots = !self.config.show_cloud_roots;
         self.save_preferences(cx);
-        if !self.config.show_onedrive {
-            self.state.onedrive_items.clear();
+        if !self.config.show_cloud_roots {
+            self.state.cloud_root_items.clear();
             self.state.refresh_sidebar();
         }
         self.refresh_quick_access(cx);
     }
-    pub(crate) fn show_onedrive(&self) -> bool { self.config.show_onedrive }
+    pub(crate) fn show_cloud_roots(&self) -> bool { self.config.show_cloud_roots }
 
     pub(crate) fn show_network(&self) -> bool { self.config.show_network }
 

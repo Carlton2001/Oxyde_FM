@@ -1,4 +1,4 @@
-use super::windows_onedrive::{open, string, subkey_names};
+use super::windows_registry::{open, string, subkey_names};
 use crate::models::{FileEntry, SidebarNode};
 use windows::core::w;
 use windows::Win32::System::Registry::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};

@@ -125,7 +125,7 @@ pub enum SortDirection {
 
 #[derive(Clone, Debug)]
 pub enum SidebarItem {
-    OneDrive { item: QuickAccessItem },
+    CloudRoot { item: QuickAccessItem },
     /// Parent of the WSL distributions, whose rows are ordinary directories.
     Linux { is_expanded: bool },
     Header(Message),
@@ -325,7 +325,7 @@ pub enum LayoutNode {
 
 pub struct WorkspaceState {
     pub pinned_items: Vec<QuickAccessItem>,
-    pub onedrive_items: Vec<QuickAccessItem>,
+    pub cloud_root_items: Vec<QuickAccessItem>,
     pub drives: Vec<DriveInfo>,
     pub unmounted_volumes: Vec<oxyde_lib::platform::UnmountedVolume>,
     pub layout: LayoutNode,

@@ -7,7 +7,7 @@ fn workspace() -> WorkspaceState {
         active_pane_id: pane.id.clone(),
         layout: LayoutNode::Pane(Box::new(pane)),
         pinned_items: Vec::new(),
-        onedrive_items: Vec::new(),
+        cloud_root_items: Vec::new(),
         drives: Vec::new(), unmounted_volumes: Vec::new(),
         expanded_paths: Default::default(),
         sidebar_items: Vec::new(),

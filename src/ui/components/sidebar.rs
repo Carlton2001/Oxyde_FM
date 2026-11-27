@@ -34,7 +34,7 @@ pub(crate) fn sidebar_item_height(item: &SidebarItem) -> f32 {
         SidebarItem::Directory { .. } => sidebar_row_h(),
         // A section is a separator between groups, as in menus.
         SidebarItem::Header(_) => crate::ui::style::menu_separator_height(),
-        SidebarItem::Pinned { .. } | SidebarItem::OneDrive { .. } | SidebarItem::Linux { .. }
+        SidebarItem::Pinned { .. } | SidebarItem::CloudRoot { .. } | SidebarItem::Linux { .. }
         | SidebarItem::Drive { .. } | SidebarItem::Volume { .. } => sidebar_entry_h(),
     }
 }

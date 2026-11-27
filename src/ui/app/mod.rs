@@ -329,7 +329,7 @@ pub struct OxydeApp {
     pub(super) shell_features_task: Option<Task<()>>,
     calendar_task: Option<Task<()>>,
     pub(super) quick_access_request: u64,
-    pub(crate) onedrive_installed: bool,
+    pub(crate) has_cloud_roots: bool,
     /// Whether other applications open folders with Oxyde; None until read, or when the
     /// system offers no such choice.
     pub(crate) opens_folders: Option<bool>,
@@ -590,7 +590,7 @@ impl OxydeApp {
             shell_features_task: None,
             calendar_task: None,
             quick_access_request: 0,
-            onedrive_installed: false,
+            has_cloud_roots: false,
             opens_folders: None,
             changing_folder_handler: false,
             chooses_files: None,

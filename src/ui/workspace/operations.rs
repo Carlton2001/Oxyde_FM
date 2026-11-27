@@ -17,7 +17,7 @@ impl WorkspaceState {
 
         let mut state = Self {
             pinned_items: Vec::new(),
-            onedrive_items: Vec::new(),
+            cloud_root_items: Vec::new(),
             drives: Vec::new(),
             unmounted_volumes: Vec::new(),
             layout: LayoutNode::Pane(Box::new(initial_pane)),
