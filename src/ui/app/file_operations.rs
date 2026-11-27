@@ -200,7 +200,7 @@ impl OxydeApp {
         .detach();
     }
 
-    fn prepare_file_operation(
+    pub(super) fn prepare_file_operation(
         &mut self,
         paths: Vec<String>,
         target_dir: String,
@@ -222,6 +222,8 @@ impl OxydeApp {
         cx.spawn(move |_, cx: &mut AsyncApp| {
             let mut cx = cx.clone();
             async move {
+                // Kept to prepare again once an archive is unlocked.
+                let requested = paths.clone();
                 let mut check_paths = paths;
                 let check_destination = target_dir.clone();
                 let runtime = tokio::runtime::Handle::current();
@@ -257,7 +259,11 @@ impl OxydeApp {
                         this.queue_file_operation(paths, target_dir, is_move, None, runtime, staging, cx)
                     }
                     Ok(Err(error)) => {
-                        this.report_notice((Message::PrepareFailed, format!("{error}")), None);
+                        let error = format!("{error}");
+                        // Looking for conflicts opens the archive: a refused password is asked here.
+                        if !this.retry_preparation_with_password(requested, target_dir, is_move, staging, &error, cx) {
+                            this.report_notice((Message::PrepareFailed, error), None);
+                        }
                         cx.notify();
                     }
                     Err(error) => {

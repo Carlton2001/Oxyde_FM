@@ -48,6 +48,21 @@ pub(crate) fn archive_of(path: &str) -> PathBuf {
         .map_or_else(|| PathBuf::from(path), |(archive, _)| archive)
 }
 
+/// The archive an operation needs the password of: the one holding a source, else the
+/// destination's, else a source archive itself (an extraction). An archive only copied
+/// as a file needs none.
+fn transfer_archive(sources: &[PathBuf], destination: Option<&Path>) -> Option<PathBuf> {
+    sources
+        .iter()
+        .find_map(|path| {
+            oxyde_lib::utils::archive::split_virtual_path(&path.to_string_lossy())
+                .filter(|(_, internal)| !internal.is_empty())
+                .map(|(archive, _)| archive)
+        })
+        .or_else(|| destination.map(|path| archive_of(&path.to_string_lossy())).filter(|archive| oxyde_lib::utils::archive::is_archive(archive)))
+        .or_else(|| sources.iter().find(|path| oxyde_lib::utils::archive::is_archive(path)).cloned())
+}
+
 pub(crate) fn password_failure(detail: &str) -> Option<ArchivePasswordFailure> {
     ArchivePasswordFailure::from_message(detail)
 }
@@ -339,17 +354,34 @@ impl OxydeApp {
             return false;
         }
         let Some(retry) = self.file_ops.untouched_retry(op_id) else { return false };
-        let Some(archive) = retry.sources.iter().chain(retry.destination.iter()).find_map(|source| {
-            oxyde_lib::utils::archive::split_virtual_path(&source.to_string_lossy())
-                .map(|(archive, _)| archive)
-                .or_else(|| oxyde_lib::utils::archive::is_archive(source).then(|| source.clone()))
-        }) else {
+        let Some(archive) = transfer_archive(&retry.sources, retry.destination.as_deref()) else {
             return false;
         };
         // Files dropped from another application stay staged until their copy runs again.
         let staging = self.drop_stagings.remove(op_id);
         self.ask_archive_password(&archive, error, move |this, cx| {
             this.requeue_operation(retry, staging, cx);
+        }, cx)
+    }
+
+    /// A copy or a move refused before it started, while its conflicts were looked for in
+    /// an archive: once unlocked, it is prepared again, conflicts asked as usual.
+    pub(super) fn retry_preparation_with_password(
+        &mut self,
+        paths: Vec<String>,
+        target_dir: String,
+        is_move: bool,
+        staging: Option<std::rc::Rc<oxyde_lib::platform::DropStaging>>,
+        error: &str,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        if password_failure(error).is_none() {
+            return false;
+        }
+        let sources: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
+        let Some(archive) = transfer_archive(&sources, Some(Path::new(&target_dir))) else { return false };
+        self.ask_archive_password(&archive, error, move |this, cx| {
+            this.prepare_file_operation(paths, target_dir, is_move, staging, cx);
         }, cx)
     }
 
@@ -373,3 +405,7 @@ impl OxydeApp {
         .detach();
     }
 }
+
+#[cfg(test)]
+#[path = "archive_password/tests/archives.rs"]
+mod tests;
