@@ -26,4 +26,5 @@ fn common_unix_errors_are_named() {
     assert_eq!(message("x (os error 13)"), Some(Message::SystemErrorAccessDenied));
     assert_eq!(message("x (os error 28)"), Some(Message::SystemErrorDiskFull));
     assert_eq!(message("x (os error 17)"), Some(Message::SystemErrorAlreadyExists));
+    assert_eq!(message("x (os error 123)"), Some(Message::SystemErrorNotReady));
 }
