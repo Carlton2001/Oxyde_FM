@@ -189,6 +189,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                                             hovered_item: None,
                                             native_request_id: None, open_up: false,
                           });
+                          this.resolve_cloud_availability_menu(&p_for_right_cap, cx);
                           cx.notify();
                       });
                       if open_text_menu {

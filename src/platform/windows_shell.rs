@@ -10,6 +10,7 @@ impl Drop for PopupMenuGuard {
 use super::windows_com::{take_string, ComApartment, TaskMemory};
 use crate::models::{CommandError, QuickAccessItem, WinMenuItem};
 
+pub(super) mod cloud_availability;
 pub(super) mod new_menu;
 pub(super) mod sharing;
 
@@ -239,13 +240,14 @@ pub(super) fn get_native_context_menu_items(
     paths: Vec<String>,
     is_background: bool,
 ) -> Result<Vec<WinMenuItem>, CommandError> {
-    with_menu_snapshot(&paths, is_background, None, |_, items| Ok(items))
+    with_menu_snapshot(&paths, is_background, None, false, |_, items| Ok(items))
 }
 
 fn with_menu_snapshot<T>(
     paths: &[String],
     is_background: bool,
     only_popup: Option<&str>,
+    enabled_only: bool,
     read: impl FnOnce(
         &windows::Win32::UI::Shell::IContextMenu,
         Vec<WinMenuItem>,
@@ -408,7 +410,7 @@ fn with_menu_snapshot<T>(
             cm2.as_ref(),
             cm3.as_ref(),
             only_popup,
-            only_popup.is_some(),
+            enabled_only,
         );
         read(context_menu, items)
     })

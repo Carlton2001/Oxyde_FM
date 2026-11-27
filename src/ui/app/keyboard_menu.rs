@@ -59,6 +59,7 @@ impl OxydeApp {
             )
         });
         let file = target.map(|index| tab.filtered_files()[index].clone());
+        let cloud_target = file.as_ref().and_then(|file| file.cloud_status.map(|_| file.path.clone()));
         let items = match file {
             Some(file) => {
                 let pinned = self.state.pinned_items.iter().any(|item| paths_match(&item.path, &file.path));
@@ -79,6 +80,9 @@ impl OxydeApp {
             native_request_id: None,
             open_up: false,
         });
+        if let Some(path) = cloud_target {
+            self.resolve_cloud_availability_menu(&path, cx);
+        }
         cx.notify();
     }
 }

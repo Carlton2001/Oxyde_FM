@@ -2,7 +2,7 @@
 use super::windows_com::ComApartment;
 use super::windows_onedrive::{open, string, subkey_names};
 use super::CloudStatusProbe;
-use crate::models::CloudStatus;
+use crate::models::{CloudAvailability, CloudStatus};
 use std::ffi::c_void;
 use std::os::windows::{ffi::OsStrExt, fs::MetadataExt};
 use std::path::{Component, Path, Prefix};
@@ -11,13 +11,15 @@ use windows::core::{s, w, Interface, HRESULT, HSTRING, PCWSTR};
 use windows::Win32::Foundation::{FreeLibrary, S_OK};
 use windows::Win32::Storage::CloudFilters::{
     CF_PLACEHOLDER_STATE, CF_PLACEHOLDER_STATE_INVALID, CF_PLACEHOLDER_STATE_IN_SYNC,
-    CF_PLACEHOLDER_STATE_PARTIALLY_ON_DISK, CF_PLACEHOLDER_STATE_PLACEHOLDER,
-    CF_SYNC_ROOT_BASIC_INFO, CF_SYNC_ROOT_INFO_BASIC, CF_SYNC_ROOT_INFO_CLASS,
+    CF_PLACEHOLDER_STATE_PARTIAL, CF_PLACEHOLDER_STATE_PARTIALLY_ON_DISK,
+    CF_PLACEHOLDER_STATE_PLACEHOLDER, CF_SYNC_ROOT_BASIC_INFO, CF_SYNC_ROOT_INFO_BASIC,
+    CF_SYNC_ROOT_INFO_CLASS,
 };
 use windows::Win32::Storage::FileSystem::{
-    FindClose, FindFirstFileW, GetVolumeInformationW, GetVolumePathNameW, FILE_ATTRIBUTE_OFFLINE,
-    FILE_ATTRIBUTE_PINNED, FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS, FILE_ATTRIBUTE_RECALL_ON_OPEN,
-    FILE_ATTRIBUTE_REPARSE_POINT, WIN32_FIND_DATAW,
+    FindClose, FindFirstFileW, GetVolumeInformationW, GetVolumePathNameW, FILE_ATTRIBUTE_DIRECTORY,
+    FILE_ATTRIBUTE_OFFLINE, FILE_ATTRIBUTE_PINNED, FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS,
+    FILE_ATTRIBUTE_RECALL_ON_OPEN, FILE_ATTRIBUTE_REPARSE_POINT, FILE_ATTRIBUTE_UNPINNED,
+    WIN32_FIND_DATAW,
 };
 use windows::Win32::System::Com::{CLSIDFromString, CoCreateInstance, CLSCTX_INPROC_SERVER};
 use windows::Win32::System::LibraryLoader::{
@@ -25,6 +27,8 @@ use windows::Win32::System::LibraryLoader::{
 };
 use windows::Win32::System::Registry::HKEY_LOCAL_MACHINE;
 use windows::Win32::UI::Shell::IShellIconOverlayIdentifier;
+
+mod folder;
 
 pub(super) fn probe(directory: &Path) -> CloudStatusProbe {
     let cloud_files = CloudFilesApi::get();
@@ -54,6 +58,26 @@ fn wide_path(path: &Path) -> Option<Vec<u16>> {
     }
     wide.push(0);
     Some(wide)
+}
+
+pub(super) fn folder_contents_ready(path: &Path, availability: CloudAvailability) -> Option<bool> {
+    let Some(api) = CloudFilesApi::get() else {
+        return Some(true);
+    };
+    let wide = wide_path(path)?;
+    // Google Drive's Shell overlays already supply their own progress state.
+    let data = api.find(PCWSTR(wide.as_ptr()))?;
+    let state = api.state(&data);
+    if state == CF_PLACEHOLDER_STATE_INVALID {
+        return None;
+    }
+    if !state.contains(CF_PLACEHOLDER_STATE_PLACEHOLDER) {
+        return Some(true);
+    }
+    if !availability.is_confirmed_by(classify_cloud_file(state, data.dwFileAttributes)?) {
+        return Some(false);
+    }
+    api.with_placeholder_tags(|| folder::contents_ready(path, availability, |data| api.state(data)))
 }
 
 struct CloudFilesApi {
@@ -112,18 +136,30 @@ impl CloudFilesApi {
     }
 
     fn status(&self, path: PCWSTR) -> Option<CloudStatus> {
-        const EXPOSE_PLACEHOLDERS: i8 = 2;
+        let data = self.find(path)?;
+        classify_cloud_file(self.state(&data), data.dwFileAttributes)
+    }
+
+    fn find(&self, path: PCWSTR) -> Option<WIN32_FIND_DATAW> {
         let mut data = WIN32_FIND_DATAW::default();
-        // Windows normally hides cloud tags from this process. Expose them
-        // only for this metadata lookup, leaving the listing's file types intact.
+        let handle = self.with_placeholder_tags(|| unsafe { FindFirstFileW(path, &mut data) });
+        let _ = unsafe { FindClose(handle.ok()?) };
+        Some(data)
+    }
+
+    fn state(&self, data: &WIN32_FIND_DATAW) -> CF_PLACEHOLDER_STATE {
+        unsafe { (self.placeholder_state)(data.dwFileAttributes, data.dwReserved0) }
+    }
+
+    fn with_placeholder_tags<T>(&self, read: impl FnOnce() -> T) -> T {
+        const EXPOSE_PLACEHOLDERS: i8 = 2;
+        // Leave the listing's file types intact outside these metadata calls.
         let previous_mode = unsafe { (self.set_compatibility_mode)(EXPOSE_PLACEHOLDERS) };
-        let handle = unsafe { FindFirstFileW(path, &mut data) };
+        let result = read();
         if previous_mode >= 0 {
             unsafe { (self.set_compatibility_mode)(previous_mode) };
         }
-        let _ = unsafe { FindClose(handle.ok()?) };
-        let state = unsafe { (self.placeholder_state)(data.dwFileAttributes, data.dwReserved0) };
-        classify_cloud_file(state, data.dwFileAttributes)
+        result
     }
 }
 
@@ -134,13 +170,24 @@ fn classify_cloud_file(state: CF_PLACEHOLDER_STATE, attributes: u32) -> Option<C
     if !state.contains(CF_PLACEHOLDER_STATE_IN_SYNC) {
         return Some(CloudStatus::SyncPending);
     }
+    let pinned = attributes & FILE_ATTRIBUTE_PINNED.0 != 0;
+    // OneDrive keeps a directory's metadata on disk after freeing its contents.
+    // Unlike a file's data, the directory can therefore stay fully populated.
+    if attributes & FILE_ATTRIBUTE_DIRECTORY.0 != 0
+        && !pinned
+        && attributes & FILE_ATTRIBUTE_UNPINNED.0 != 0
+    {
+        return Some(CloudStatus::OnlineOnly);
+    }
     let recall = FILE_ATTRIBUTE_OFFLINE.0
         | FILE_ATTRIBUTE_RECALL_ON_OPEN.0
         | FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS.0;
     Some(
         if attributes & recall != 0 || state.contains(CF_PLACEHOLDER_STATE_PARTIALLY_ON_DISK) {
             CloudStatus::OnlineOnly
-        } else if attributes & FILE_ATTRIBUTE_PINNED.0 != 0 {
+        } else if pinned && state.contains(CF_PLACEHOLDER_STATE_PARTIAL) {
+            CloudStatus::Syncing
+        } else if pinned {
             CloudStatus::AlwaysAvailable
         } else {
             CloudStatus::LocallyAvailable
@@ -208,7 +255,7 @@ impl GoogleOverlays {
     }
 }
 
-fn is_google_volume(directory: &Path) -> bool {
+pub(super) fn is_google_volume(directory: &Path) -> bool {
     // Skip UNC locations before querying a volume. A streaming volume can use
     // any letter or be mounted in a folder on another drive.
     if !matches!(directory.components().next(), Some(Component::Prefix(prefix))

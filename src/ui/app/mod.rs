@@ -33,6 +33,7 @@ mod pinned_order;
 pub(crate) use pinned_order::PinnedReorder;
 mod calendar;
 mod clipboard;
+mod cloud_availability;
 mod file_operations;
 mod file_preparation;
 mod archives;
@@ -239,6 +240,8 @@ pub struct OxydeApp {
     pub handle: Option<Entity<Self>>,
     pub(crate) next_file_request: u64,
     pub(crate) next_native_menu_request: u64,
+    cloud_badges: std::sync::Arc<cloud_availability::CloudBadges>,
+    next_cloud_change: u64,
     pub(crate) pending_file_requests: std::collections::HashMap<String, u64>,
     /// Set when a tab's listing is superseded, so an archive listing gives up.
     pub(crate) listing_cancels: std::collections::HashMap<String, std::sync::Arc<std::sync::atomic::AtomicBool>>,
@@ -506,6 +509,8 @@ impl OxydeApp {
             handle: None,
             next_file_request: 0,
             next_native_menu_request: 0,
+            cloud_badges: Default::default(),
+            next_cloud_change: 0,
             pending_file_requests: std::collections::HashMap::new(),
             listing_cancels: Default::default(),
             folder_has_subdirs: Default::default(),

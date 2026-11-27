@@ -160,6 +160,9 @@ cloud-status-locally-available = Disponible localmente
 cloud-status-always-available = Siempre disponible sin conexión
 cloud-status-sync-pending = Sincronización pendiente
 cloud-status-syncing = Sincronización en curso
+cloud-keep-offline = Mantener disponible sin conexión
+cloud-make-online-only = Hacer disponible solo en línea
+cloud-availability-failed = No se pudo cambiar la disponibilidad de los elementos en la nube
 
 menu-open = Abrir
 

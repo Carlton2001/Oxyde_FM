@@ -130,6 +130,7 @@ pub(super) fn render_details_file_list(
     let inline_rename_error = view.rename_error.map(|message| cx.i18n().text(message));
     let rename_shake_id = view.rename_shake_id;
     let folder_subdirectory_flags = view.folder_has_subdirs.clone();
+    let cloud_badges = view.cloud_badge_snapshot();
 
     let mut container = div()
         .on_scroll_wheel(|_, window, cx| crate::ui::components::tooltip::hover::dismiss(window, cx))
@@ -214,7 +215,8 @@ pub(super) fn render_details_file_list(
                                                 DisplayRow::Header(group, count) => return group_header(group.clone(), *count, collapsed.contains(group), GroupSelection::for_members(&files, groups.get(group).map(Vec::as_slice).unwrap_or_default(), &selected_paths), p_id_for_list.clone(), h_inner.clone(), crate::ui::style::row_height(), cx),
                                                 DisplayRow::Files(indices) => indices[0],
                                             };
-                                            let file = &files[index];
+                                            let file = cloud_badges.entry(&files[index]);
+                                            let file = file.as_ref();
                                             let is_dir = file.is_dir;
                                             let path = file.path.clone();
                                             let size_flash = size_flashes.get(&path).copied();

@@ -1,19 +1,23 @@
 //! What a card shows, inside the frame `grid_card` draws and wires: the grid's icon
 //! above the name and the type, or a tile's icon beside the name, the type and a
 //! detail line. Measures come from `style::cards`, which the hit tests also read.
-use super::presentation::{file_type_display, network_category, network_entry, selection_checkbox, size_loading};
+use super::cloud_status::sized_cloud_status_icon;
+use super::presentation::{file_type_display, network_category, network_entry, selection_checkbox, size_loading, SELECTION_CHECKBOX_TARGET_SIZE};
 use super::thumbnails::render_grid_thumbnail;
 use crate::ui::app::OxydeApp;
 use crate::ui::components::icons::render_file_icon;
+use crate::ui::elements::checkbox::CHECKBOX_SIZE;
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::style::{CardLayout, CardSpec, TabularFigures, CARD_BORDER, CARD_DETAIL_HEIGHT, CARD_NAME_HEIGHT, GRID_CARD_GAP, GRID_CARD_PADDING_X, GRID_CARD_PADDING_Y, TILE_PADDING_X, TILE_PADDING_Y};
 use crate::ui::theme::OxydeTheme;
 use gpui::prelude::*;
 use gpui::*;
-use oxyde_lib::models::FileEntry;
+use oxyde_lib::models::{CloudStatus, FileEntry};
 
 /// The radius of `rounded_md`, which the card and its name's overlay share.
 const CARD_RADIUS: Rems = rems(0.375);
+/// Inset of the checkbox and cloud badge, measured from their card corners.
+pub(super) const GRID_CARD_CONTROL_INSET: Rems = rems(0.375);
 /// Lines a long name takes in its overlay before it is cut.
 const NAME_OVERLAY_LINES: usize = 4;
 
@@ -114,11 +118,6 @@ impl CardBody<'_> {
             .when(self.dimmed(), |d| d.opacity(0.75))
             .child(kind)
     }
-
-    fn grid_kind_line(&self, kind: String) -> Stateful<Div> {
-        self.kind_line(kind).text_center()
-            .when(self.file.cloud_status.is_some(), |line| line.px(rems(1.0)))
-    }
 }
 
 /// The grid card: its icon area, the name on one line, cut in the middle so the
@@ -128,12 +127,6 @@ pub(super) fn grid(card: Stateful<Div>, body: CardBody<'_>, layout: CardLayout, 
     let spec = layout.spec();
     let kind = body.kind(cx);
     let expanded = body.expanded && body.editing_view.is_none();
-    let badge = body.file.cloud_status.map(|status| {
-        div().absolute().left(GRID_CARD_PADDING_X).bottom(GRID_CARD_PADDING_Y)
-            .h(CARD_DETAIL_HEIGHT).flex().items_center()
-            .when(body.dimmed(), |badge| badge.opacity(0.75))
-            .child(super::cloud_status_icon(status, &body.theme))
-    });
     let name_line = div()
         .w_full()
         .h(CARD_NAME_HEIGHT)
@@ -156,21 +149,28 @@ pub(super) fn grid(card: Stateful<Div>, body: CardBody<'_>, layout: CardLayout, 
                 .w_full()
                 .h(spec.media)
                 .flex_none()
+                .when_some(body.file.cloud_status, |area, status| area.child(
+                    // The media area already starts inside the card padding.
+                    div().absolute()
+                        .left(rems(GRID_CARD_CONTROL_INSET.0 - GRID_CARD_PADDING_X.0))
+                        .bottom(rems(GRID_CARD_CONTROL_INSET.0 - GRID_CARD_PADDING_Y.0))
+                        .size(SELECTION_CHECKBOX_TARGET_SIZE)
+                        .flex().items_center().justify_center()
+                        .child(sized_cloud_status_icon(status, &body.theme, CHECKBOX_SIZE)
+                            .when(status != CloudStatus::AlwaysAvailable, |icon| {
+                                icon.rounded_full().bg(body.theme.badge_surface)
+                            })),
+                ))
                 .when(body.has_subdirectories, |area| area.child(
                     div().absolute().right_0().top_0().h_full().flex().items_center().child(body.chevron()),
                 )),
         )
         .child(name_line);
     if expanded {
-        card.child(div().w_full().h(CARD_DETAIL_HEIGHT)).child(
-            crate::ui::elements::overlay::clipped_overlay(
-                // Keep the badge anchored to the card while the text grows below it.
-                div().absolute().inset_0().child(name_overlay(&body, spec, kind)).children(badge),
-            ),
-        )
+        card.child(div().w_full().h(CARD_DETAIL_HEIGHT))
+            .child(crate::ui::elements::overlay::clipped_overlay(name_overlay(&body, spec, kind)))
     } else {
-        card.child(body.grid_kind_line(kind))
-            .children(badge.map(|badge| div().absolute().inset_0().child(badge)))
+        card.child(body.kind_line(kind).text_center())
     }
 }
 
@@ -212,10 +212,9 @@ fn name_overlay(body: &CardBody<'_>, spec: CardSpec, kind: String) -> impl IntoE
             .line_clamp(NAME_OVERLAY_LINES)
             // GPUI cuts a middle ellipsis to a single line, even with several allowed.
             .text_ellipsis()
-            .when(body.file.cloud_status.is_some(), |name| name.px(rems(1.0)))
             .when(body.dimmed(), |d| d.opacity(0.75))
             .child(body.name.clone()))
-        .child(body.grid_kind_line(kind).relative())
+        .child(body.kind_line(kind).relative().text_center())
 }
 
 /// The tile: the checkbox, the icon, then the name, the size with the modification

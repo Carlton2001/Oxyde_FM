@@ -24,6 +24,22 @@ pub enum CloudStatus {
     Syncing,
 }
 
+/// Requested availability of a cloud file or directory on this device.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CloudAvailability {
+    Offline,
+    OnlineOnly,
+}
+
+impl CloudAvailability {
+    pub fn is_confirmed_by(self, status: CloudStatus) -> bool {
+        matches!(
+            (self, status),
+            (Self::Offline, CloudStatus::AlwaysAvailable) | (Self::OnlineOnly, CloudStatus::OnlineOnly)
+        )
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct FileEntry {
     pub native_kind: Option<NativeFileKind>,

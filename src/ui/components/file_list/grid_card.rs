@@ -212,6 +212,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
                         hovered_item: None,
                         native_request_id: None, open_up: false,
                     });
+                    this.resolve_cloud_availability_menu(&path, cx);
                     cx.notify();
                 });
             }
@@ -292,7 +293,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
             });
     }
     card.when(grid && show_checkboxes, |d| d.child(
-        div().absolute().top(rems(0.375)).left(rems(0.375))
+        div().absolute().top(card_body::GRID_CARD_CONTROL_INSET).left(card_body::GRID_CARD_CONTROL_INSET)
             .when(!is_selected, |d| d.opacity(0.0).group_hover("file-grid-card", |s| s.opacity(1.0)))
             .child(selection_checkbox(is_selected, path.clone(), pid.clone(), h.clone(), theme))
     ))

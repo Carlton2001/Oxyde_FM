@@ -51,6 +51,8 @@ pub enum IconName {
     /// An image file, such as an application's icon; the window icon when missing.
     Image(Option<std::path::PathBuf>),
     HardDrive,
+    CloudUpload,
+    CloudDownload,
     Copy,
     Undo,
     Redo,
@@ -534,6 +536,8 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                                     IconName::HardDrive => {
                                                                         "icons/hard-drive.svg"
                                                                     }
+                                                                    IconName::CloudUpload => "icons/cloud-upload.svg",
+                                                                    IconName::CloudDownload => "icons/cloud-download.svg",
                                                                     IconName::Undo | IconName::ReopenClosedTab => "icons/undo-2.svg",
                                                                     IconName::Redo => "icons/redo-2.svg",
                                                                     IconName::Copy => {

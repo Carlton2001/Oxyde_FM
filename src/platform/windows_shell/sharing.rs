@@ -87,7 +87,7 @@ fn with_folder_sharing<T>(
     if !super::super::windows_shell_selection::shell_path(folder)?.is_dir() {
         return Ok(None);
     }
-    with_menu_snapshot(paths, false, Some(SHARING_VERB), |menu, mut items| {
+    with_menu_snapshot(paths, false, Some(SHARING_VERB), true, |menu, mut items| {
         if items.len() == 1 {
             read(menu, items.remove(0)).map(Some)
         } else {

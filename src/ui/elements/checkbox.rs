@@ -1,11 +1,13 @@
 use crate::ui::theme::OxydeTheme;
 use gpui::{prelude::*, *};
 
+pub(crate) const CHECKBOX_SIZE: Rems = rems(1.0);
+
 /// Shared visual only; callers retain focus, hit targets and actions.
 pub(crate) fn checkbox(theme: OxydeTheme, checked: bool, partial: bool) -> Div {
     let marked = checked || partial;
     div()
-        .size(rems(1.0))
+        .size(CHECKBOX_SIZE)
         .flex_none()
         .rounded(rems(0.25))
         .border(rems(0.0625))

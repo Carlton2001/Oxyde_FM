@@ -75,6 +75,15 @@ impl Platform for WindowsPlatform {
     fn cloud_status_probe(&self, directory: &std::path::Path) -> Option<super::CloudStatusProbe> {
         Some(super::windows_cloud_status::probe(directory))
     }
+    fn cloud_folder_contents_ready(&self, path: &std::path::Path, availability: crate::models::CloudAvailability) -> Option<bool> {
+        super::windows_cloud_status::folder_contents_ready(path, availability)
+    }
+    fn cloud_availability_commands(&self, path: &str) -> Result<Vec<crate::models::CloudAvailability>, String> {
+        super::windows_shell::cloud_availability::available(path).map_err(|error| error.to_string())
+    }
+    fn set_cloud_availability(&self, path: &str, availability: crate::models::CloudAvailability) -> Result<(), String> {
+        super::windows_shell::cloud_availability::execute(path, availability).map_err(|error| error.to_string())
+    }
     fn onedrive_folders(&self) -> Vec<crate::models::QuickAccessItem> { super::windows_onedrive::folders() }
     fn wsl_distributions(&self) -> Vec<crate::models::SidebarNode> { super::windows_wsl::distributions() }
     fn installation(&self) -> super::Installation {

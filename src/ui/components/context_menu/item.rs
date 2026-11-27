@@ -196,6 +196,15 @@ pub(super) fn oxyde_context_menu_items_raw(
         });
     }
 
+    if entry.cloud_status.is_some() {
+        let paths = view.context_action_paths(&path);
+        if let Some(availability) = view.cloud_availability_action(&paths) {
+            items.push(crate::ui::app::OxydeApp::cloud_availability_menu_item(
+                i18n, h_app.clone(), paths, availability, false,
+            ));
+        }
+    }
+
     items.push(crate::ui::components::dropdown::DropdownItem {
         label: i18n.text(Message::Cut).to_string(),
         icon: Some(IconName::Scissors),

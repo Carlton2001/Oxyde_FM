@@ -6,6 +6,10 @@ use oxyde_lib::models::CloudStatus;
 const ICON_SIZE: Rems = rems(0.75);
 
 pub(crate) fn cloud_status_icon(status: CloudStatus, theme: &OxydeTheme) -> Div {
+    sized_cloud_status_icon(status, theme, ICON_SIZE)
+}
+
+pub(super) fn sized_cloud_status_icon(status: CloudStatus, theme: &OxydeTheme, size: Rems) -> Div {
     let (path, color) = match status {
         CloudStatus::OnlineOnly => ("icons/cloud.svg", theme.accent),
         CloudStatus::LocallyAvailable => ("icons/circle-check.svg", theme.success_text),
@@ -14,7 +18,7 @@ pub(crate) fn cloud_status_icon(status: CloudStatus, theme: &OxydeTheme) -> Div 
     };
     let pinned = status == CloudStatus::AlwaysAvailable;
     div()
-        .size(ICON_SIZE)
+        .size(size)
         .flex_none()
         .flex()
         .items_center()
@@ -23,7 +27,7 @@ pub(crate) fn cloud_status_icon(status: CloudStatus, theme: &OxydeTheme) -> Div 
         .child(
             svg()
                 .path(path)
-                .size(if pinned { rems(0.625) } else { ICON_SIZE })
+                .size(if pinned { rems(size.0 * 5.0 / 6.0) } else { size })
                 .text_color(color),
         )
 }

@@ -154,6 +154,8 @@ pub(crate) fn network_protocol(uri: &str) -> String {
     }
 }
 
+pub(super) const SELECTION_CHECKBOX_TARGET_SIZE: Rems = rems(1.5);
+
 pub(super) fn selection_checkbox(
     selected: bool,
     path: String,
@@ -163,7 +165,7 @@ pub(super) fn selection_checkbox(
 ) -> impl IntoElement {
     div()
         .id(SharedString::from(format!("selection-checkbox-{path}")))
-        .size(rems(1.5))
+        .size(SELECTION_CHECKBOX_TARGET_SIZE)
         .flex_none()
         .flex()
         .items_center()

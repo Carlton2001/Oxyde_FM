@@ -114,6 +114,9 @@ cloud-status-locally-available = Available locally
 cloud-status-always-available = Always available offline
 cloud-status-sync-pending = Sync pending
 cloud-status-syncing = Syncing
+cloud-keep-offline = Keep available offline
+cloud-make-online-only = Make available online only
+cloud-availability-failed = Could not change the availability of the cloud items
 
 ## Main interface and commands
 menu-open = Open

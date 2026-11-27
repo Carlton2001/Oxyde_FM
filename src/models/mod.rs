@@ -12,7 +12,7 @@ pub use error::CommandError;
 
 pub use config::{AppConfig, ConfigManager};
 pub use file_entry::{
-    get_file_entry_from_path, CloudStatus, ConflictAction, ConflictEntry, DriveInfo,
+    get_file_entry_from_path, CloudAvailability, CloudStatus, ConflictAction, ConflictEntry, DriveInfo,
     FileEntry, FileStamp, FileProperties, FolderSizeResult, MimeType, NetResource, QuickAccessItem,
     ShortcutInfo, SidebarNode, TrashEntry, WinMenuItem,
 };

@@ -165,6 +165,7 @@ pub(super) fn render_grid_file_list(
                 let rename_error = rename_error.clone();
                 let folder_subdirectory_flags = folder_subdirectory_flags.clone();
                 let hovered_card = hovered_card.clone();
+                let cloud_badges = view.cloud_badge_snapshot();
                 move |range: std::ops::Range<usize>, cx: &mut App| {
                     range
                         .map(|row_index| {
@@ -176,7 +177,8 @@ pub(super) fn render_grid_file_list(
                             let cells = indices
                                 .iter()
                                 .map(|index| {
-                                    let file = &files[*index];
+                                    let file = cloud_badges.entry(&files[*index]);
+                                    let file = file.as_ref();
                                     let path = file.path.clone();
                                     let name = crate::ui::format::entry_name(file, cx.i18n());
                                     let is_dir = file.is_dir;

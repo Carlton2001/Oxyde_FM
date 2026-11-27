@@ -41,6 +41,31 @@ fn distinguishes_pending_from_an_invalid_cloud_state() {
         Some(CloudStatus::SyncPending)
     );
     assert_eq!(classify_cloud_file(CF_PLACEHOLDER_STATE_INVALID, 0), None);
+    let validating = CF_PLACEHOLDER_STATE_PLACEHOLDER
+        | CF_PLACEHOLDER_STATE_IN_SYNC
+        | CF_PLACEHOLDER_STATE_PARTIAL;
+    assert_eq!(
+        classify_cloud_file(validating, FILE_ATTRIBUTE_PINNED.0),
+        Some(CloudStatus::Syncing)
+    );
+}
+
+#[test]
+fn an_unpinned_directory_can_be_online_only_with_metadata_on_disk() {
+    let ready = CF_PLACEHOLDER_STATE_PLACEHOLDER | CF_PLACEHOLDER_STATE_IN_SYNC;
+    let directory = FILE_ATTRIBUTE_DIRECTORY.0 | FILE_ATTRIBUTE_REPARSE_POINT.0;
+    assert_eq!(
+        classify_cloud_file(ready, directory | FILE_ATTRIBUTE_UNPINNED.0),
+        Some(CloudStatus::OnlineOnly),
+    );
+    assert_eq!(
+        classify_cloud_file(ready, directory | FILE_ATTRIBUTE_PINNED.0),
+        Some(CloudStatus::AlwaysAvailable),
+    );
+    assert_eq!(
+        classify_cloud_file(ready, FILE_ATTRIBUTE_UNPINNED.0),
+        Some(CloudStatus::LocallyAvailable),
+    );
 }
 
 #[test]

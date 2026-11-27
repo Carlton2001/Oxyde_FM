@@ -19,6 +19,7 @@ const GROUPS: &[&[Message]] = &[
     &[Message::ExpandAll, Message::CollapseAll],
     &[Message::MapNetworkDrive, Message::DisconnectNetworkDrive, Message::DisconnectThisNetworkDrive],
     &[Message::MountDiskImage, Message::UnmountDiskImage, Message::PinQuickAccess,
+        Message::CloudKeepOffline, Message::CloudMakeOnlineOnly,
         Message::UnpinQuickAccess, Message::UnmountDrive, Message::EjectDrive, Message::TrashRestore, Message::TrashRestoreAll],
     &[Message::Cut, Message::Copy, Message::Paste],
     &[Message::NewItem, Message::NewFolder, Message::NewFile],

@@ -120,6 +120,9 @@ cloud-status-locally-available = Disponible localement
 cloud-status-always-available = Toujours disponible hors connexion
 cloud-status-sync-pending = Synchronisation en attente
 cloud-status-syncing = Synchronisation en cours
+cloud-keep-offline = Garder hors connexion
+cloud-make-online-only = Rendre disponible en ligne uniquement
+cloud-availability-failed = Impossible de modifier la disponibilité des éléments cloud
 
 ## Main interface and commands
 menu-open = Ouvrir

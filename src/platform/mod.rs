@@ -476,6 +476,19 @@ pub trait Platform: Send + Sync {
     fn file_name_rules(&self, directory: &std::fs::File) -> std::io::Result<FileNameRules>;
     /// Background-only, scoped to one listing or search. Only metadata is queried.
     fn cloud_status_probe(&self, _directory: &std::path::Path) -> Option<CloudStatusProbe> { None }
+    /// Background-only check after the directory itself reaches the requested availability.
+    /// `None` means its contents could not be checked.
+    fn cloud_folder_contents_ready(&self, _path: &std::path::Path, _availability: crate::models::CloudAvailability) -> Option<bool> {
+        Some(true)
+    }
+    /// Commands enabled by the provider for the current item, queried off the UI thread.
+    fn cloud_availability_commands(&self, _path: &str) -> Result<Vec<crate::models::CloudAvailability>, String> {
+        Ok(Vec::new())
+    }
+    /// Runs the provider's native command on a background thread.
+    fn set_cloud_availability(&self, _path: &str, _availability: crate::models::CloudAvailability) -> Result<(), String> {
+        Err("Cloud availability commands are unavailable on this platform".into())
+    }
     /// Available OneDrive sync roots configured for the current user.
     fn onedrive_installed(&self) -> bool { false }
     fn onedrive_folders(&self) -> Vec<crate::models::QuickAccessItem> { Vec::new() }
