@@ -164,7 +164,13 @@ fn open_by_components(
     // FILE_TRAVERSE | FILE_READ_ATTRIBUTES, all sharing. A network server
     // refuses any open of a folder the user may only traverse: the walk then
     // resumes below it from the full name, which the server resolves itself.
-    let denied = |error: &io::Error| error.kind() == io::ErrorKind::PermissionDenied;
+    // A local volume keeps refusing, and an object reached by its full name
+    // is still refused when it is itself a reparse point.
+    let network = std::cell::OnceCell::new();
+    let denied = |error: &io::Error| {
+        error.kind() == io::ErrorKind::PermissionDenied
+            && *network.get_or_init(|| super::hardware::is_network_path(absolute))
+    };
     let mut prefix = root.clone();
     let mut parent = match open_name(native_name(&root), std::ptr::null_mut(), Some(true), 0x20 | 0x80, 7, 1, false) {
         Err(error) if denied(&error) => None,
@@ -174,7 +180,7 @@ fn open_by_components(
         prefix.push(name);
         parent = match match &parent {
             Some(parent) => open_relative(parent, name, true, 0x20 | 0x80, 7, 1),
-            None => open_name(native_name(&prefix), std::ptr::null_mut(), Some(true), 0x20 | 0x80, 7, 1, false),
+            None => open_full_name(&prefix, true, 0x20 | 0x80, 7, 1),
         } {
             Err(error) if denied(&error) => None,
             result => Some(result?),
@@ -182,8 +188,18 @@ fn open_by_components(
     }
     match parent {
         Some(parent) => open_relative(&parent, last, directory, access, sharing, disposition),
-        None => open_name(native_name(absolute), std::ptr::null_mut(), Some(directory), access, sharing, disposition, false),
+        None => open_full_name(absolute, directory, access, sharing, disposition),
     }
+}
+
+/// Below a network folder that cannot be opened: the server resolves the path, and
+/// only the object reached is checked.
+fn open_full_name(path: &Path, directory: bool, access: u32, sharing: u32, disposition: u32) -> io::Result<File> {
+    let file = open_name(native_name(path), std::ptr::null_mut(), Some(directory), access, sharing, disposition, false)?;
+    if file.metadata()?.file_attributes() & 0x400 != 0 {
+        return Err(io::Error::other(REPARSE_OBJECT_REFUSED));
+    }
+    Ok(file)
 }
 
 fn native_name(path: &Path) -> Vec<u16> {

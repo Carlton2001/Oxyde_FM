@@ -20,10 +20,16 @@ impl HeldParents {
         // This does not prevent attribute-only reparse mutation: these guards
         // provide parent rename protection, not complete path confinement.
         // A network server refuses any open of a folder the user may only
-        // traverse: such an ancestor cannot be held, and stays renamable.
+        // traverse: such an ancestor cannot be held, and stays renamable. A
+        // local volume keeps refusing.
         let mut hold = |ancestor: &Path| match platform().hold_operation_directory(ancestor) {
             Ok(handle) => Ok(handles.push(handle)),
-            Err(error) if error.kind() == io::ErrorKind::PermissionDenied => Ok(()),
+            Err(error)
+                if error.kind() == io::ErrorKind::PermissionDenied
+                    && platform().is_network_path(ancestor) =>
+            {
+                Ok(())
+            }
             Err(error) => Err(error),
         };
         for ancestor in parent.ancestors().collect::<Vec<_>>().into_iter().rev() {
