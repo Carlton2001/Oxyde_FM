@@ -70,7 +70,8 @@ pub(crate) struct Entry {
 impl Entry {
     /// Notes the creation date the file ended with: a native copy applies the source's
     /// date after the note was written, and a note left with the first one would keep
-    /// a finished copy after a crash. The previous note stays if the rewrite fails.
+    /// a finished copy after a crash. A rewrite that fails leaves an unreadable note,
+    /// which recovery discards without removing the file.
     pub(crate) fn update_created(&mut self, created: Option<SystemTime>) {
         let Some(Record::File { created: noted, .. }) = &mut self.record else { return };
         if *noted == created {
