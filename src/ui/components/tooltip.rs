@@ -186,13 +186,7 @@ impl Tooltip {
         title: impl Into<SharedString>,
         shortcut: Option<SharedString>,
     ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
-        let title = title.into();
-        move |_, cx| {
-            cx.new(|_| Self {
-                native_presentation: false, secondary_action: None, title: title.clone(), wrap_title: false, meta: None, shortcut: shortcut.clone(),
-                file_info: None, fixed_bounds: None, preview_view: None,
-            }).into()
-        }
+        Self::label_tooltip(title.into(), shortcut, None)
     }
     /// An alternate mouse action below the primary label, with its own shortcut.
     pub fn with_secondary_action(
@@ -230,19 +224,34 @@ impl Tooltip {
         }
     }
 
-    /// Crée un constructeur de tooltip avec un texte principal et un sous-texte (méta/raccourci).
+    /// Show details below the title.
     pub fn with_meta(
         title: impl Into<SharedString>,
         meta: impl Into<SharedString>,
     ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
-        let title = title.into();
-        let meta = meta.into();
+        Self::label_tooltip(title.into(), None, Some(meta.into()))
+    }
+
+    /// Show the shortcut beside the title and the details below.
+    pub(super) fn with_shortcut_and_meta(
+        title: impl Into<SharedString>,
+        shortcut: impl Into<SharedString>,
+        meta: impl Into<SharedString>,
+    ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+        Self::label_tooltip(title.into(), Some(shortcut.into()), Some(meta.into()))
+    }
+
+    fn label_tooltip(
+        title: SharedString,
+        shortcut: Option<SharedString>,
+        meta: Option<SharedString>,
+    ) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
         move |_, cx| {
             cx.new(|_| Self {
                 native_presentation: false, secondary_action: None, title: title.clone(),
                 wrap_title: false,
-                meta: Some(meta.clone()),
-                shortcut: None,
+                meta: meta.clone(),
+                shortcut: shortcut.clone(),
                 file_info: None,
                 fixed_bounds: None, preview_view: None,
             })

@@ -285,6 +285,7 @@ impl Render for Tooltip {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = *OxydeTheme::global(cx);
         let chrome = rem_pixels(rems(1.625));
+        let shortcut_gap = rems(0.75);
         // Pane items share one envelope, with or without a preview; other tooltips keep 40rem.
         let width_limit = rem_pixels(if self.file_info.is_some() { ITEM_MAXIMUM_WIDTH } else { PLAIN_MAXIMUM_WIDTH });
         // A title over details reads as a heading; a lone label reads like the interface.
@@ -369,10 +370,14 @@ impl Render for Tooltip {
             // Resolve the width before laying out percentage-width flex rows.
             // Standalone tooltips must not inherit a host row's line height.
             let title_width = shape(window, &self.title, TITLE_SIZE, title_weight).width;
+            let shortcut_width = self.shortcut.as_ref().map_or(px(0.0), |shortcut| {
+                rem_pixels(shortcut_gap)
+                    + shape(window, shortcut, DETAIL_SIZE, crate::ui::style::DEFAULT_FONT_WEIGHT).width
+            });
             let shaped_meta: Vec<_> = meta.lines().map(|line| (line.to_owned(), shape(window, &line.to_owned().into(), DETAIL_SIZE, crate::ui::style::DEFAULT_FONT_WEIGHT))).collect();
             let meta_width = shaped_meta.iter().fold(px(0.0), |width, (_, line)| width.max(line.width));
             // The slack absorbs layout rounding so a fitting line never wraps.
-            tooltip_width = (title_width.max(meta_width) + chrome + px(1.0)).min(maximum_width);
+            tooltip_width = ((title_width + shortcut_width).max(meta_width) + chrome + px(1.0)).min(maximum_width);
             let content_width = (tooltip_width - chrome - px(1.0)).as_f32().max(1.0);
             meta_lines = Some(shaped_meta.iter().flat_map(|(text, line)| {
                 location_line_ranges(text, content_width, glyph_positions(&line))
@@ -415,13 +420,15 @@ impl Render for Tooltip {
                     .font_weight(title_weight)
                     .flex()
                     .items_center()
-                    .gap(rems(0.75))
+                    .gap(shortcut_gap)
                     .child(div().flex_1().min_w_0().flex().flex_col()
                         .children(title_lines.into_iter().map(|line| div()
                             .when(self.file_info.is_some() || self.meta.is_none(), |title| title.whitespace_nowrap())
+                            .when(self.meta.is_some() && self.shortcut.is_some(), |title| title.truncate())
                             .child(line))))
                     .when_some(self.shortcut.clone(), |row, shortcut| {
                         row.child(div().whitespace_nowrap().text_color(theme.text_muted)
+                            .font_weight(crate::ui::style::DEFAULT_FONT_WEIGHT)
                             .text_size(DETAIL_SIZE).child(shortcut))
                     }),
             )

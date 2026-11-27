@@ -255,10 +255,10 @@ pub fn render_top_bar(
                     && (!matches!(action, 1 | 2) || !view.history_operation_in_progress)
                     && (!(7..=10).contains(&action) || (!view.trash_busy && (action < 9 || !active_tab.files.is_empty())));
                 let mut button = bar_button::cell(id, crate::ui::style::NAV_BAR_HEIGHT)
-                    .when(show_tooltips && action == 1, |d| d.fixed_tooltip(Tooltip::with_meta(
-                        _cx.i18n().text(label), format!("{tip}\n{UNDO_SHORTCUT}"))))
-                    .when(show_tooltips && action == 2, |d| d.fixed_tooltip(Tooltip::with_meta(
-                        _cx.i18n().text(label), format!("{tip}\n{REDO_SHORTCUT}"))))
+                    .when(show_tooltips && action == 1, |d| d.fixed_tooltip(Tooltip::with_shortcut_and_meta(
+                        _cx.i18n().text(label), UNDO_SHORTCUT, tip.clone())))
+                    .when(show_tooltips && action == 2, |d| d.fixed_tooltip(Tooltip::with_shortcut_and_meta(
+                        _cx.i18n().text(label), REDO_SHORTCUT, tip.clone())))
                     .when(show_tooltips && action == 6, |d| d.fixed_tooltip(Tooltip::for_delete(handle.clone(), pane_id.clone())))
                     .when(show_tooltips && !matches!(action, 1 | 2 | 6 | 9 | 10), |d| d.fixed_tooltip(Tooltip::with_shortcut(_cx.i18n().text(label),
                         (!tip.is_empty()).then(|| SharedString::from(tip)))));
