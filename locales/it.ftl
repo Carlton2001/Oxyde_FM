@@ -1105,10 +1105,11 @@ redo-rename-changed = Impossibile ripetere questa rinomina: il file o la cartell
 redo-rename-unverified = Impossibile ripetere questa rinomina in sicurezza: non è stato possibile verificare l’identità del file o della cartella. L’elemento è stato conservato. { $detail }
 
 transfer-source-changed = L’origine è stata sostituita o non è più un file o una cartella normale. L’operazione è stata interrotta; gli elementi già trasferiti vengono conservati. Controlla l’origine e riprova.
-transfer-source-special = { $path } è un collegamento o un file speciale (come una pipe Linux), che Oxyde non copia né sposta su Windows. L’operazione è stata interrotta; gli elementi già trasferiti vengono conservati. Escludi questo elemento e riprova.
+transfer-source-special = { $path } è un collegamento o un file speciale che Oxyde non può copiare né spostare qui (come una pipe, o un collegamento Linux visto da Windows). L’operazione è stata interrotta; gli elementi già trasferiti vengono conservati. Escludi questo elemento e riprova.
 transfer-source-unverified = Non è possibile verificare l’identità dell’origine in questa posizione. L’operazione è stata interrotta; gli elementi già trasferiti vengono conservati. Prova da una cartella locale compatibile.
 transfer-target-not-replaceable = L’elemento esistente non può essere sostituito perché non è un file normale (ad esempio un collegamento). È stato conservato; rinominalo o spostalo e riprova.
-transfer-identity-unavailable = Questa posizione non identifica i propri file (ad esempio un’unità WebDAV o SharePoint), quindi Oxyde non può verificare l’operazione e non l’ha eseguita. Usa una cartella locale o una normale condivisione di rete.
+delete-item-unreachable = { $path } è ancora elencato nella sua cartella ma non può essere aperto, quindi non è stato eliminato. Visto da Windows, così si comporta un collegamento Linux la cui destinazione non esiste più: eliminalo da Linux.
+transfer-identity-unavailable = Questa posizione non identifica i propri file (ad esempio alcune unità di terze parti o virtuali), quindi Oxyde non può verificare l’operazione e non l’ha eseguita. Usa una cartella locale o una normale condivisione di rete.
 transfer-inside-source = La destinazione si trova all’interno di uno degli elementi trasferiti. Scegli una destinazione al di fuori di essi.
 transfer-overlapping-sources = Alcuni elementi selezionati si trovano all’interno di altri elementi selezionati. Seleziona solo le cartelle che li contengono oppure solo il loro contenuto.
 system-error-not-found = Impossibile trovare l’elemento. Potrebbe essere stato spostato, rinominato o eliminato.
@@ -1120,6 +1121,7 @@ system-error-not-empty = La cartella non è vuota.
 system-error-name-too-long = Il nome o il percorso è troppo lungo per questa posizione.
 system-error-read-only = La destinazione è di sola lettura.
 system-error-network = Impossibile raggiungere il percorso di rete. Verifica la connessione e riprova.
+system-error-not-ready = L’unità non è pronta. Verifica che il disco o il dispositivo sia inserito e collegato.
 system-error-item = Elemento: { $path }
 
 trash-restore-ambiguous = Più elementi del { -trash } provengono dalla stessa posizione. Apri il { -trash } e seleziona l’elemento preciso da ripristinare. Gli elementi già ripristinati vengono conservati.

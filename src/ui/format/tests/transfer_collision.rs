@@ -80,9 +80,23 @@ fn common_system_errors_are_translated_with_their_item() {
         let i18n = I18n::for_language(language);
         let translated = error_detail(detail, &i18n);
         assert!(translated.starts_with(&*i18n.text(Message::SystemErrorAccessDenied)));
-        assert!(translated.contains(r"C:\Users\a.txt"));
+        assert!(translated.contains(r"C:\Users\a.txt → D:\a.txt"));
         assert!(!translated.contains("os error"));
     }
     let unknown = "Something odd (os error 4390)";
     assert_eq!(error_detail(unknown, &I18n::for_language(Language::ALL[0])), display_paths(unknown));
+}
+
+#[test]
+fn an_item_listed_but_unreachable_is_translated_with_its_path() {
+    let detail = format!(
+        "Failed to delete {:?}: {}",
+        std::path::Path::new("/mnt/wsl/link"),
+        oxyde_lib::models::error::ITEM_LISTED_BUT_UNREACHABLE
+    );
+    for language in Language::ALL {
+        let translated = error_detail(&detail, &crate::ui::i18n::I18n::for_language(language));
+        assert!(translated.contains("/mnt/wsl/link"));
+        assert!(!translated.contains(oxyde_lib::models::error::ITEM_LISTED_BUT_UNREACHABLE));
+    }
 }

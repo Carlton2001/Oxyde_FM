@@ -147,7 +147,7 @@ impl FileOperationManager {
 
                     let res = match res {
                         Err(error) if error.kind() == std::io::ErrorKind::NotFound && still_listed(src) => Err(std::io::Error::other(
-                            "the item is still listed but cannot be opened (from Windows, a Linux link whose target is missing cannot be deleted)",
+                            crate::models::error::ITEM_LISTED_BUT_UNREACHABLE,
                         )),
                         res => res,
                     };

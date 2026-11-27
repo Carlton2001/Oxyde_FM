@@ -611,6 +611,11 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
     if detail.contains(oxyde_lib::models::error::FILE_IDENTITY_UNAVAILABLE) {
         return i18n.text(Message::TransferIdentityUnavailable).to_string();
     }
+    if detail.contains(oxyde_lib::models::error::ITEM_LISTED_BUT_UNREACHABLE) {
+        let mut args = FluentArgs::new();
+        args.set("path", quoted_paths(detail).join(" → "));
+        return i18n.text_with_args(Message::DeleteItemUnreachable, &args).to_string();
+    }
     if detail.contains(oxyde_lib::models::error::COPY_TARGET_NOT_REPLACEABLE) {
         return i18n.text(Message::TransferTargetNotReplaceable).to_string();
     }
@@ -620,9 +625,12 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
     let Some(failure) = ArchiveLimitFailure::from_message(detail) else {
         if let Some(message) = system_errors::message(detail) {
             let mut text = i18n.text(message).to_string();
-            if let Some(path) = first_quoted_path(detail) {
+            let paths = quoted_paths(detail);
+            if !paths.is_empty() {
+                // A transfer names its source then its destination: either may be the
+                // one refused, so both are shown.
                 let mut args = FluentArgs::new();
-                args.set("path", path);
+                args.set("path", paths.join(" → "));
                 text.push('\n');
                 text.push_str(&i18n.text_with_args(Message::SystemErrorItem, &args));
             }
@@ -651,22 +659,24 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
     i18n.text_with_args(message, &args).to_string()
 }
 
-/// The first quoted path of a raw message, shown without its `\\?\` prefix.
-fn first_quoted_path(text: &str) -> Option<String> {
+/// The quoted paths of a raw message, in order, shown without their `\\?\` prefix.
+fn quoted_paths(text: &str) -> Vec<String> {
     use once_cell::sync::Lazy;
     static QUOTED: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r#""(?:\\.|[^"\\])*""#).unwrap());
-    QUOTED.find_iter(text).find_map(|quoted| {
-        let path = serde_json::from_str::<String>(quoted.as_str()).ok()?;
-        let bytes = path.as_bytes();
-        let is_path = path.starts_with(r"\\")
-            || (bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && matches!(bytes[2], b'\\' | b'/'))
-            || path.starts_with('/');
-        is_path.then(|| display_paths(quoted.as_str()).trim_matches('"').to_string())
-    })
+    QUOTED
+        .find_iter(text)
+        .filter_map(|quoted| {
+            let path = serde_json::from_str::<String>(quoted.as_str()).ok()?;
+            let bytes = path.as_bytes();
+            let is_path = path.starts_with(r"\\")
+                || (bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && matches!(bytes[2], b'\\' | b'/'))
+                || path.starts_with('/');
+            is_path.then(|| display_paths(quoted.as_str()).trim_matches('"').to_string())
+        })
+        .collect()
 }
 
 /// Presentation only: retain extended/native paths in all filesystem operations.
-
 pub fn display_paths(text: &str) -> String {
     use once_cell::sync::Lazy;
     use regex::{Captures, Regex};

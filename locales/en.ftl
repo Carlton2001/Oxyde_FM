@@ -808,10 +808,11 @@ redo-rename-changed = Cannot redo this rename: the file or folder was replaced. 
 redo-rename-unverified = Cannot safely redo this rename: the file or folder’s identity could not be verified. It was preserved. { $detail }
 
 transfer-source-changed = The source was replaced or is no longer a regular file or folder. The operation stopped; items already transferred were kept. Check the source and try again.
-transfer-source-special = { $path } is a link or a special file (such as a Linux pipe), which Oxyde does not copy or move on Windows. The operation stopped; items already transferred were kept. Leave this item out and try again.
+transfer-source-special = { $path } is a link or a special file that Oxyde cannot copy or move here (such as a pipe, or a Linux link seen from Windows). The operation stopped; items already transferred were kept. Leave this item out and try again.
 transfer-source-unverified = The source identity cannot be verified at this location. The operation stopped; items already transferred were kept. Try from a compatible local folder.
 transfer-target-not-replaceable = The existing item cannot be replaced because it is not a regular file (for example a link). It was kept; rename or move it and try again.
-transfer-identity-unavailable = This location does not identify its files (a WebDAV or SharePoint drive, for example), so Oxyde cannot check the operation there and did not perform it. Use a local folder or a regular network share.
+delete-item-unreachable = { $path } is still listed in its folder but cannot be opened, so it was not deleted. Seen from Windows, a Linux link whose target is missing does this: delete it from Linux.
+transfer-identity-unavailable = This location does not identify its files (some third-party or virtual drives, for example), so Oxyde cannot check the operation there and did not perform it. Use a local folder or a regular network share.
 transfer-inside-source = The destination is inside one of the items being transferred. Choose a destination outside them.
 transfer-overlapping-sources = Some selected items are inside other selected items. Select only the containing folders, or only the items inside them.
 system-error-not-found = The item cannot be found. It may have been moved, renamed or deleted.
@@ -823,6 +824,7 @@ system-error-not-empty = The folder is not empty.
 system-error-name-too-long = The name or path is too long for this location.
 system-error-read-only = The destination is read-only.
 system-error-network = The network location cannot be reached. Check the connection and try again.
+system-error-not-ready = The drive is not ready. Check that the disk or device is inserted and connected.
 system-error-item = Item: { $path }
 
 trash-restore-ambiguous = Several { -trash } items came from the same location. Open the { -trash } and select the specific item to restore. Items already restored were kept.

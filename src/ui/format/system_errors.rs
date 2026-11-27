@@ -24,7 +24,8 @@ fn message_for(code: i32) -> Option<Message> {
         145 => Message::SystemErrorNotEmpty,
         206 => Message::SystemErrorNameTooLong,
         19 => Message::SystemErrorReadOnly,
-        21 | 53 | 59 | 64 | 67 | 121 | 1231 | 1232 => Message::SystemErrorNetwork,
+        21 => Message::SystemErrorNotReady,
+        53 | 59 | 64 | 67 | 121 | 1231 | 1232 => Message::SystemErrorNetwork,
         _ => return None,
     })
 }

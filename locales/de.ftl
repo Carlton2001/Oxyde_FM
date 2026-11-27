@@ -1105,10 +1105,11 @@ redo-rename-changed = Das Umbenennen kann nicht wiederholt werden: Die Datei ode
 redo-rename-unverified = Das Umbenennen kann nicht sicher wiederholt werden: Die Identität der Datei oder des Ordners konnte nicht überprüft werden. Das Element bleibt erhalten. { $detail }
 
 transfer-source-changed = Die Quelle wurde ersetzt oder ist keine reguläre Datei bzw. kein regulärer Ordner mehr. Der Vorgang wurde gestoppt; bereits übertragene Elemente bleiben erhalten. Prüfen Sie die Quelle und versuchen Sie es erneut.
-transfer-source-special = { $path } ist eine Verknüpfung oder eine Spezialdatei (etwa eine Linux-Pipe), die Oxyde unter Windows weder kopiert noch verschiebt. Der Vorgang wurde gestoppt; bereits übertragene Elemente bleiben erhalten. Lassen Sie dieses Element weg und versuchen Sie es erneut.
+transfer-source-special = { $path } ist eine Verknüpfung oder eine Spezialdatei, die Oxyde hier weder kopieren noch verschieben kann (etwa eine Pipe oder eine von Windows aus gesehene Linux-Verknüpfung). Der Vorgang wurde gestoppt; bereits übertragene Elemente bleiben erhalten. Lassen Sie dieses Element weg und versuchen Sie es erneut.
 transfer-source-unverified = Die Identität der Quelle kann an diesem Speicherort nicht überprüft werden. Der Vorgang wurde gestoppt; bereits übertragene Elemente bleiben erhalten. Versuchen Sie es von einem kompatiblen lokalen Ordner aus.
 transfer-target-not-replaceable = Das vorhandene Element kann nicht ersetzt werden, da es keine reguläre Datei ist (zum Beispiel ein Link). Es wurde beibehalten; benennen Sie es um oder verschieben Sie es und versuchen Sie es erneut.
-transfer-identity-unavailable = Dieser Speicherort kennzeichnet seine Dateien nicht eindeutig (etwa ein WebDAV- oder SharePoint-Laufwerk), daher kann Oxyde den Vorgang dort nicht prüfen und hat ihn nicht ausgeführt. Verwenden Sie einen lokalen Ordner oder eine normale Netzwerkfreigabe.
+delete-item-unreachable = { $path } wird in seinem Ordner noch aufgeführt, lässt sich aber nicht öffnen und wurde daher nicht gelöscht. So verhält sich von Windows aus eine Linux-Verknüpfung, deren Ziel fehlt: Löschen Sie sie unter Linux.
+transfer-identity-unavailable = Dieser Speicherort kennzeichnet seine Dateien nicht eindeutig (etwa manche Laufwerke von Drittanbietern oder virtuelle Laufwerke), daher kann Oxyde den Vorgang dort nicht prüfen und hat ihn nicht ausgeführt. Verwenden Sie einen lokalen Ordner oder eine normale Netzwerkfreigabe.
 transfer-inside-source = Das Ziel liegt innerhalb eines der übertragenen Elemente. Wählen Sie ein Ziel außerhalb davon.
 transfer-overlapping-sources = Einige ausgewählte Elemente liegen in anderen ausgewählten Elementen. Wählen Sie nur die enthaltenden Ordner oder nur deren Inhalt aus.
 system-error-not-found = Das Element wurde nicht gefunden. Es wurde möglicherweise verschoben, umbenannt oder gelöscht.
@@ -1120,6 +1121,7 @@ system-error-not-empty = Der Ordner ist nicht leer.
 system-error-name-too-long = Der Name oder Pfad ist für diesen Speicherort zu lang.
 system-error-read-only = Das Ziel ist schreibgeschützt.
 system-error-network = Der Netzwerkspeicherort ist nicht erreichbar. Prüfen Sie die Verbindung und versuchen Sie es erneut.
+system-error-not-ready = Das Laufwerk ist nicht bereit. Prüfen Sie, ob der Datenträger oder das Gerät eingelegt und angeschlossen ist.
 system-error-item = Element: { $path }
 
 trash-restore-ambiguous = Mehrere Papierkorbelemente stammen vom selben Speicherort. Öffnen Sie den Papierkorb und wählen Sie das gewünschte Element zum Wiederherstellen aus. Bereits wiederhergestellte Elemente bleiben erhalten.

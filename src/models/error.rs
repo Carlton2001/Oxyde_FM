@@ -158,12 +158,16 @@ impl std::error::Error for ShellDeleteFailure {}
 /// Message of the copy step that refuses to replace a link, a folder or another item that
 /// is not a regular file; the interface recognizes it to translate it.
 pub const COPY_TARGET_NOT_REPLACEABLE: &str = "Copy target is not an ordinary file";
-/// A file system that gives its files no identity (WebDAV): operations cannot be checked there.
 /// A transfer into one of its own sources, refused before any write.
 pub const DESTINATION_INSIDE_SOURCE: &str = "is inside source";
 /// Two selected sources where one contains the other, refused before any write.
 pub const OVERLAPPING_SOURCES: &str = "Overlapping source paths are not supported";
+/// A volume that gives its files no identity, outside the network volumes identified by
+/// path (WebDAV): operations cannot be checked there.
 pub const FILE_IDENTITY_UNAVAILABLE: &str = "Filesystem did not provide a stable file identity";
+/// An item its folder lists but that cannot be opened by its name, so not deleted: seen
+/// from Windows, a WSL link whose target is missing.
+pub const ITEM_LISTED_BUT_UNREACHABLE: &str = "the item is still listed but cannot be opened";
 
 /// Why Windows refused an item, recognized from the HRESULT in its message.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

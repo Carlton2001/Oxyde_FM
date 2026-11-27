@@ -15,6 +15,8 @@ fn common_windows_errors_are_named() {
     assert_eq!(message("x (os error 32)"), Some(Message::SystemErrorInUse));
     assert_eq!(message("x (os error 112)"), Some(Message::SystemErrorDiskFull));
     assert_eq!(message("x (os error 80)"), Some(Message::SystemErrorAlreadyExists));
+    assert_eq!(message("x (os error 21)"), Some(Message::SystemErrorNotReady));
+    assert_eq!(message("x (os error 53)"), Some(Message::SystemErrorNetwork));
     assert_eq!(message("x (os error 4390)"), None);
 }
 
