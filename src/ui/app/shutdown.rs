@@ -72,6 +72,9 @@ impl super::OxydeApp {
                 }
             }
             let _ = this.update(cx, |this, cx| {
+                // The first listings may have been read before the removal, and a
+                // folder's watcher may start after it: list the tabs again.
+                this.refresh_all_tabs(cx);
                 this.toast(
                     super::toasts::ToastKind::Success,
                     crate::ui::i18n::Message::InterruptedOutputRemoved,
