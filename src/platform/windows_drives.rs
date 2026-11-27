@@ -507,11 +507,13 @@ pub fn list_drives(skip_hardware_info: bool) -> Vec<DriveInfo> {
                                 None,
                             )
                             .is_ok()
+                                // Numbers count per device type: CD-ROM 0 is not disk 0.
+                                && device_number.DeviceType == windows::Win32::Storage::FileSystem::FILE_DEVICE_DISK.0
                             {
                                 physical_id = Some(format!("Disk {}", device_number.DeviceNumber));
                             }
 
-                            // 2. Detect SSD vs HDD (Seek Penalty)
+                            // 2. Detect SSD vs HDD (Seek Penalty); a disc drive is neither.
                             let mut query = STORAGE_PROPERTY_QUERY {
                                 PropertyId: StorageDeviceSeekPenaltyProperty,
                                 QueryType: PropertyStandardQuery,
@@ -529,6 +531,7 @@ pub fn list_drives(skip_hardware_info: bool) -> Vec<DriveInfo> {
                                 None,
                             )
                             .is_ok()
+                                && win_type != 5
                             {
                                 media_type = Some(if descriptor.IncursSeekPenalty {
                                     "HDD".to_string()

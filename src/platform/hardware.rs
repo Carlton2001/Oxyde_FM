@@ -205,7 +205,8 @@ fn device_number(handle: HANDLE) -> Option<u64> {
         )
     }
     .ok()?;
-    Some(device_number.DeviceNumber as u64 + 1)
+    // Numbers count per device type: CD-ROM 0 (a mounted ISO) is not disk 0.
+    Some(((device_number.DeviceType as u64) << 32) | (device_number.DeviceNumber as u64 + 1))
 }
 
 #[cfg(target_os = "windows")]
