@@ -124,16 +124,24 @@ pub struct HistoryFileIdentity {
 
 impl HistoryFileIdentity {
     pub(crate) fn from_file(file: &std::fs::File) -> std::io::Result<Self> {
+        let identity = crate::platform::platform().file_identity(file)?;
+        // The WebDAV redirector applies a copied creation date only once the file is
+        // closed: on a volume identified by path, the date would change under the proof.
+        if identity.is_path() {
+            return Ok(Self { identity, created: None });
+        }
         let created = file.metadata()?.created();
         #[cfg(target_os = "windows")]
         let created = Some(created?);
         // Unix file systems without birth time, such as ntfs-3g, rely on the identifier.
         #[cfg(not(target_os = "windows"))]
         let created = created.ok();
-        Ok(Self {
-            identity: crate::platform::platform().file_identity(file)?,
-            created,
-        })
+        Ok(Self { identity, created })
+    }
+
+    /// Derived from the path (WebDAV): a rename changes it.
+    pub(crate) fn follows_path(&self) -> bool {
+        self.identity.is_path()
     }
 
     pub(crate) fn matches(&self, file: &std::fs::File) -> std::io::Result<bool> {

@@ -103,7 +103,7 @@ pub(super) fn is_volume_root(file: &File) -> io::Result<bool> {
     Ok(final_name(file, GETFINALPATHNAMEBYHANDLE_FLAGS(0x4))? == "\\")
 }
 
-fn final_name(file: &File, flags: GETFINALPATHNAMEBYHANDLE_FLAGS) -> io::Result<OsString> {
+pub(super) fn final_name(file: &File, flags: GETFINALPATHNAMEBYHANDLE_FLAGS) -> io::Result<OsString> {
     let mut buffer = vec![0u16; 32768];
     let count = unsafe { GetFinalPathNameByHandleW(HANDLE(file.as_raw_handle()), &mut buffer, flags) } as usize;
     if count == 0 {

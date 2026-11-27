@@ -197,6 +197,7 @@ fn move_opened_file(
     // Capture the renamed object while its mutation handle still excludes
     // substitution. A missing proof only disables history, not a completed move.
     let identity = crate::models::transaction::HistoryMoveIdentity::from_file(&file)
+        .or_else(|error| path_identity_after_move(&destination_parents, destination).ok_or(error))
         .map_err(|error| {
             log::warn!(
                 "Move identity unavailable for {}: {error}",
@@ -205,6 +206,16 @@ fn move_opened_file(
         })
         .ok();
     Ok((metadata.len(), identity))
+}
+
+/// The WebDAV redirector no longer names a handle once renamed. A volume identified by
+/// path is identified as well by reopening the destination name.
+fn path_identity_after_move(
+    destination_parents: &HeldParents,
+    destination: &Path,
+) -> Option<crate::models::transaction::HistoryMoveIdentity> {
+    let file = platform().track_source_item(destination_parents.directory(), destination).ok()?;
+    platform().file_identity(&file).ok()?.is_path().then(|| crate::models::transaction::HistoryMoveIdentity::from_file(&file).ok())?
 }
 
 pub(crate) fn remove(

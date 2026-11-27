@@ -506,6 +506,9 @@ impl Journal {
                 hash: hash.clone(),
             },
         )?;
+        // A path identity named the output before staging, not its staged name: the
+        // content hash alone then confirms the file before its removal.
+        let identity = identity.filter(|identity| !identity.follows_path());
         self.discarded.push((saved, hash, identity));
         Ok(())
     }

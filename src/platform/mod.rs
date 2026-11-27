@@ -81,12 +81,21 @@ pub enum SystemExecutable {
 }
 
 /// Opaque identity of an opened file or directory. Keep a handle alive while comparing it
-/// across an operation so a deleted file's identifier cannot be reused.
+/// across an operation so a deleted file's identifier cannot be reused. On Windows, `kind`
+/// gives the source: 1 the 128-bit file ID, 2 the 64-bit index, 3 a volume root without ID,
+/// 4 the path, on a network volume that provides no ID (WebDAV).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct FileIdentity {
     volume: u64,
     value: [u8; 16],
     kind: u8,
+}
+
+impl FileIdentity {
+    /// Derived from the path (kind 4): it follows the name, not the object.
+    pub(crate) fn is_path(&self) -> bool {
+        self.kind == 4
+    }
 }
 
 /// The file system and mount an item lies on: a walk that stays on its own never counts
