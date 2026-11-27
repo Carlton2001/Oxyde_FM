@@ -41,7 +41,7 @@ fn root_identity(file: &File, volume: u64) -> io::Result<FileIdentity> {
     }
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
-        "Filesystem did not provide a stable file identity",
+        crate::models::error::FILE_IDENTITY_UNAVAILABLE,
     ))
 }
 

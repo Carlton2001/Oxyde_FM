@@ -137,12 +137,15 @@ impl Names {
         if next != 0 && (next < 12 + length || next >= entry.len()) {
             return Err(invalid());
         }
-        let name = OsString::from_wide(
-            &entry[12..12 + length]
-                .as_chunks::<2>().0.iter()
-                .map(|pair| u16::from_le_bytes(*pair))
-                .collect::<Vec<_>>(),
-        );
+        let mut wide = entry[12..12 + length]
+            .as_chunks::<2>().0.iter()
+            .map(|pair| u16::from_le_bytes(*pair))
+            .collect::<Vec<_>>();
+        // The WebDAV redirector counts a terminating NUL in every name length.
+        if wide.last() == Some(&0) {
+            wide.pop();
+        }
+        let name = OsString::from_wide(&wide);
         self.offset = (next != 0).then_some(offset + next);
         Ok(Some(name))
     }

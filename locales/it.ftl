@@ -1108,6 +1108,7 @@ transfer-source-changed = L’origine è stata sostituita o non è più un file 
 transfer-source-special = { $path } è un collegamento o un file speciale (come una pipe Linux), che Oxyde non copia né sposta su Windows. L’operazione è stata interrotta; gli elementi già trasferiti vengono conservati. Escludi questo elemento e riprova.
 transfer-source-unverified = Non è possibile verificare l’identità dell’origine in questa posizione. L’operazione è stata interrotta; gli elementi già trasferiti vengono conservati. Prova da una cartella locale compatibile.
 transfer-target-not-replaceable = L’elemento esistente non può essere sostituito perché non è un file normale (ad esempio un collegamento). È stato conservato; rinominalo o spostalo e riprova.
+transfer-identity-unavailable = Questa posizione non identifica i propri file (ad esempio un’unità WebDAV o SharePoint), quindi Oxyde non può verificare l’operazione e non l’ha eseguita. Usa una cartella locale o una normale condivisione di rete.
 
 trash-restore-ambiguous = Più elementi del { -trash } provengono dalla stessa posizione. Apri il { -trash } e seleziona l’elemento preciso da ripristinare. Gli elementi già ripristinati vengono conservati.
 invalid-encoding-name = { $name } (codifica non valida)

@@ -811,6 +811,7 @@ transfer-source-changed = The source was replaced or is no longer a regular file
 transfer-source-special = { $path } is a link or a special file (such as a Linux pipe), which Oxyde does not copy or move on Windows. The operation stopped; items already transferred were kept. Leave this item out and try again.
 transfer-source-unverified = The source identity cannot be verified at this location. The operation stopped; items already transferred were kept. Try from a compatible local folder.
 transfer-target-not-replaceable = The existing item cannot be replaced because it is not a regular file (for example a link). It was kept; rename or move it and try again.
+transfer-identity-unavailable = This location does not identify its files (a WebDAV or SharePoint drive, for example), so Oxyde cannot check the operation there and did not perform it. Use a local folder or a regular network share.
 
 trash-restore-ambiguous = Several { -trash } items came from the same location. Open the { -trash } and select the specific item to restore. Items already restored were kept.
 invalid-encoding-name = { $name } (invalid encoding)

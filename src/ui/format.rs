@@ -601,6 +601,9 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
     if let Some(changed) = oxyde_lib::models::error::SourceSelectionFailure::from_message(detail) {
         return i18n.text(if changed { Message::TransferSourceChanged } else { Message::TransferSourceUnverified }).to_string();
     }
+    if detail.contains(oxyde_lib::models::error::FILE_IDENTITY_UNAVAILABLE) {
+        return i18n.text(Message::TransferIdentityUnavailable).to_string();
+    }
     if detail.contains(oxyde_lib::models::error::COPY_TARGET_NOT_REPLACEABLE) {
         return i18n.text(Message::TransferTargetNotReplaceable).to_string();
     }

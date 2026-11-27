@@ -1108,6 +1108,7 @@ transfer-source-changed = Die Quelle wurde ersetzt oder ist keine reguläre Date
 transfer-source-special = { $path } ist eine Verknüpfung oder eine Spezialdatei (etwa eine Linux-Pipe), die Oxyde unter Windows weder kopiert noch verschiebt. Der Vorgang wurde gestoppt; bereits übertragene Elemente bleiben erhalten. Lassen Sie dieses Element weg und versuchen Sie es erneut.
 transfer-source-unverified = Die Identität der Quelle kann an diesem Speicherort nicht überprüft werden. Der Vorgang wurde gestoppt; bereits übertragene Elemente bleiben erhalten. Versuchen Sie es von einem kompatiblen lokalen Ordner aus.
 transfer-target-not-replaceable = Das vorhandene Element kann nicht ersetzt werden, da es keine reguläre Datei ist (zum Beispiel ein Link). Es wurde beibehalten; benennen Sie es um oder verschieben Sie es und versuchen Sie es erneut.
+transfer-identity-unavailable = Dieser Speicherort kennzeichnet seine Dateien nicht eindeutig (etwa ein WebDAV- oder SharePoint-Laufwerk), daher kann Oxyde den Vorgang dort nicht prüfen und hat ihn nicht ausgeführt. Verwenden Sie einen lokalen Ordner oder eine normale Netzwerkfreigabe.
 
 trash-restore-ambiguous = Mehrere Papierkorbelemente stammen vom selben Speicherort. Öffnen Sie den Papierkorb und wählen Sie das gewünschte Element zum Wiederherstellen aus. Bereits wiederhergestellte Elemente bleiben erhalten.
 invalid-encoding-name = { $name } (ungültige Kodierung)
