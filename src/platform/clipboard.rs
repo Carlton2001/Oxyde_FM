@@ -269,13 +269,18 @@ mod read_tests {
     }
 
     #[test]
-    fn invalid_utf16_after_a_valid_path_rejects_the_entire_list() {
+    fn a_lone_surrogate_name_is_kept_escaped_after_a_valid_path() {
         let mut bytes = fixture(&[r"C:\First.txt"], std::mem::size_of::<DROPFILES>());
         bytes.truncate(bytes.len() - 2);
         for unit in [0xd800_u16, 0, 0] {
             bytes.extend_from_slice(&unit.to_le_bytes());
         }
-        assert!(parse_dropfiles(&bytes).is_err());
+        let files = parse_dropfiles(&bytes).unwrap();
+        assert_eq!(files[0], r"C:\First.txt");
+        use std::os::windows::ffi::OsStrExt;
+        let decoded: Vec<u16> = crate::utils::path_text::decode(&files[1]).as_os_str().encode_wide().collect();
+        assert_eq!(decoded, [0xd800]);
+        assert_eq!(files.len(), 2);
     }
 
     #[test]
