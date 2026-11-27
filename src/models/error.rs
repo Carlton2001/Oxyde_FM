@@ -159,6 +159,10 @@ impl std::error::Error for ShellDeleteFailure {}
 /// is not a regular file; the interface recognizes it to translate it.
 pub const COPY_TARGET_NOT_REPLACEABLE: &str = "Copy target is not an ordinary file";
 /// A file system that gives its files no identity (WebDAV): operations cannot be checked there.
+/// A transfer into one of its own sources, refused before any write.
+pub const DESTINATION_INSIDE_SOURCE: &str = "is inside source";
+/// Two selected sources where one contains the other, refused before any write.
+pub const OVERLAPPING_SOURCES: &str = "Overlapping source paths are not supported";
 pub const FILE_IDENTITY_UNAVAILABLE: &str = "Filesystem did not provide a stable file identity";
 
 /// Why Windows refused an item, recognized from the HRESULT in its message.

@@ -10,6 +10,7 @@ mod transfer_collision_tests;
 #[path = "format/tests/input.rs"]
 mod input_tests;
 pub mod permissions;
+mod system_errors;
 impl gpui::Global for DateFormatPreference {}
 
 pub fn drive_label(label: &str, path: &str, i18n: &crate::ui::i18n::I18n) -> String {
@@ -601,6 +602,12 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
     if let Some(changed) = oxyde_lib::models::error::SourceSelectionFailure::from_message(detail) {
         return i18n.text(if changed { Message::TransferSourceChanged } else { Message::TransferSourceUnverified }).to_string();
     }
+    if detail.contains(oxyde_lib::models::error::DESTINATION_INSIDE_SOURCE) {
+        return i18n.text(Message::TransferInsideSource).to_string();
+    }
+    if detail.contains(oxyde_lib::models::error::OVERLAPPING_SOURCES) {
+        return i18n.text(Message::TransferOverlappingSources).to_string();
+    }
     if detail.contains(oxyde_lib::models::error::FILE_IDENTITY_UNAVAILABLE) {
         return i18n.text(Message::TransferIdentityUnavailable).to_string();
     }
@@ -611,6 +618,16 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
         return i18n.text(Message::ArchiveSourceChanged).to_string();
     }
     let Some(failure) = ArchiveLimitFailure::from_message(detail) else {
+        if let Some(message) = system_errors::message(detail) {
+            let mut text = i18n.text(message).to_string();
+            if let Some(path) = first_quoted_path(detail) {
+                let mut args = FluentArgs::new();
+                args.set("path", path);
+                text.push('\n');
+                text.push_str(&i18n.text_with_args(Message::SystemErrorItem, &args));
+            }
+            return text;
+        }
         return display_paths(detail);
     };
     let message = match failure.kind {
@@ -634,7 +651,22 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
     i18n.text_with_args(message, &args).to_string()
 }
 
+/// The first quoted path of a raw message, shown without its `\\?\` prefix.
+fn first_quoted_path(text: &str) -> Option<String> {
+    use once_cell::sync::Lazy;
+    static QUOTED: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r#""(?:\\.|[^"\\])*""#).unwrap());
+    QUOTED.find_iter(text).find_map(|quoted| {
+        let path = serde_json::from_str::<String>(quoted.as_str()).ok()?;
+        let bytes = path.as_bytes();
+        let is_path = path.starts_with(r"\\")
+            || (bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && matches!(bytes[2], b'\\' | b'/'))
+            || path.starts_with('/');
+        is_path.then(|| display_paths(quoted.as_str()).trim_matches('"').to_string())
+    })
+}
+
 /// Presentation only: retain extended/native paths in all filesystem operations.
+
 pub fn display_paths(text: &str) -> String {
     use once_cell::sync::Lazy;
     use regex::{Captures, Regex};

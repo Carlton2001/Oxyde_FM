@@ -213,14 +213,14 @@ impl FileOperationManager {
             let canonical = selected.resolved_path();
             if canonical == target_dir || target_dir.starts_with(&canonical) {
                 return Err(format!(
-                    "Destination {:?} is inside source {:?}",
-                    target_dir, canonical
+                    "Destination {:?} {} {:?}",
+                    target_dir, crate::models::error::DESTINATION_INSIDE_SOURCE, canonical
                 ));
             }
             if !source_paths.insert(canonical.clone()) {
                 return Err(format!(
-                    "Overlapping source paths are not supported: {:?}",
-                    source
+                    "{}: {:?}",
+                    crate::models::error::OVERLAPPING_SOURCES, source
                 ));
             }
             canonical_sources.push(canonical);

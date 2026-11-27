@@ -65,3 +65,24 @@ fn a_deletion_refused_at_a_mount_is_translated_with_its_path() {
         assert!(!translated.contains("Mount not entered"));
     }
 }
+
+#[cfg(target_os = "windows")]
+#[test]
+fn common_system_errors_are_translated_with_their_item() {
+    use crate::ui::i18n::{I18n, Message};
+    let detail = format!(
+        "Cannot copy {:?} to {:?}: Accès refusé. (os error 5)",
+        std::path::Path::new(r"\\?\C:\Users\a.txt"),
+        std::path::Path::new(r"\\?\D:\a.txt")
+    );
+    let detail = detail.as_str();
+    for language in Language::ALL {
+        let i18n = I18n::for_language(language);
+        let translated = error_detail(detail, &i18n);
+        assert!(translated.starts_with(&*i18n.text(Message::SystemErrorAccessDenied)));
+        assert!(translated.contains(r"C:\Users\a.txt"));
+        assert!(!translated.contains("os error"));
+    }
+    let unknown = "Something odd (os error 4390)";
+    assert_eq!(error_detail(unknown, &I18n::for_language(Language::ALL[0])), display_paths(unknown));
+}
