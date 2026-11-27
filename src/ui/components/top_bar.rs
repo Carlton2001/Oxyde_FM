@@ -18,13 +18,14 @@ use gpui::*;
 
 /// Returns the display label for a drive letter segment (e.g. "C:" → "Disque local (C:)").
 /// Falls back to the raw part if no matching drive is found in sidebar_items.
-fn drive_display(part: &str, view: &OxydeApp) -> String {
+fn drive_display(part: &str, view: &OxydeApp, i18n: &crate::ui::i18n::I18n) -> String {
     use crate::ui::workspace::SidebarItem;
     let part_upper = part.to_uppercase();
     for item in &view.state.sidebar_items {
         if let SidebarItem::Drive { drive, .. } = item {
             if drive.path.to_uppercase().starts_with(&part_upper) && !drive.label.is_empty() {
-                return format!("{} ({})", drive.label, part);
+                // Named as the sidebar names it: an unnamed disk is « Local Disk » translated.
+                return crate::ui::format::drive_label(&drive.label, part, i18n);
             }
         }
     }
@@ -434,7 +435,7 @@ pub fn render_top_bar(
                             } else if let Some(share) = share {
                                 share.label.clone()
                             } else if part.ends_with(':') {
-                                drive_display(part, view)
+                                drive_display(part, view, _cx.i18n())
                             } else {
                                 oxyde_lib::utils::path_text::display(part)
                             }

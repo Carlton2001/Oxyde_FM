@@ -26,10 +26,10 @@ fn remote_share<'a>(path: &str, drives: &'a [DriveInfo]) -> Option<&'a DriveInfo
 }
 
 /// A drive letter's crumb, `C:`, named as the main window names it: its label first.
-fn drive_label(part: &str, drives: &[DriveInfo]) -> String {
+fn drive_label(part: &str, drives: &[DriveInfo], i18n: &crate::ui::i18n::I18n) -> String {
     let letter = part.to_uppercase();
     drives.iter().find(|drive| drive.path.to_uppercase().starts_with(&letter) && !drive.label.is_empty())
-        .map_or_else(|| part.to_string(), |drive| format!("{} ({part})", drive.label))
+        .map_or_else(|| part.to_string(), |drive| crate::ui::format::drive_label(&drive.label, part, i18n))
 }
 
 /// The volume holding `path`, as the main window's root icon shows it.
@@ -299,7 +299,7 @@ impl FileChooserWindow {
             }
             let label = match share {
                 Some(share) if index == 0 => share.label.clone(),
-                None if index == 0 && part.ends_with(':') => drive_label(part, &self.places.drives),
+                None if index == 0 && part.ends_with(':') => drive_label(part, &self.places.drives, cx.i18n()),
                 _ => oxyde_lib::utils::path_text::display(part),
             };
             let context_level = level.clone();
