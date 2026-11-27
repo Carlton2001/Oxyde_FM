@@ -134,7 +134,7 @@ impl Tooltip {
     pub(crate) fn item_revision(file: &oxyde_lib::models::FileEntry, provisional_size: bool) -> u64 {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        (file.size, file.modified, file.is_calculated, provisional_size).hash(&mut hasher);
+        (file.size, file.modified, file.is_calculated, file.cloud_status, provisional_size).hash(&mut hasher);
         hasher.finish()
     }
 
@@ -154,7 +154,7 @@ impl Tooltip {
                 let mut args = FluentArgs::new(); args.set("value", value);
                 cx.i18n().text_with_args(message, &args)
             };
-            let (location, extra) = if let Some(original) = &file.original_path {
+            let (location, mut extra) = if let Some(original) = &file.original_path {
                 let deleted = file.deleted_time.and_then(|date| u64::try_from(date).ok());
                 (Some(line(Message::TooltipOriginalLocation, parent(original).unwrap_or_default())),
                     deleted.map(|deleted| line(Message::TooltipDeleted, format_date(deleted, crate::ui::format::date_format(cx)))).into_iter().collect())
@@ -163,6 +163,9 @@ impl Tooltip {
             } else {
                 (None, Vec::new())
             };
+            if let Some(status) = file.cloud_status {
+                extra.push(cx.i18n().text(crate::ui::components::file_list::cloud_status_message(status)));
+            }
             let notice = if provisional_size {
                 cx.i18n().text(Message::FolderSizeProvisionalDescription)
                     .lines().map(|line| SharedString::from(line.to_owned())).collect()

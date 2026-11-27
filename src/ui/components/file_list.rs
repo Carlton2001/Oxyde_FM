@@ -6,6 +6,7 @@ mod grid;
 mod grid_scroll;
 mod grid_card;
 mod card_body;
+mod cloud_status;
 mod headers;
 mod presentation;
 mod group_header;
@@ -14,6 +15,8 @@ mod scroll_top;
 mod thumbnails;
 
 pub(crate) use filters::{filter_entries, filter_summary, filters_summary, FilterEntry};
+use cloud_status::cloud_status_icon;
+pub(crate) use cloud_status::cloud_status_message;
 pub(crate) use presentation::{file_type_display, file_type_label, network_category, network_entry};
 pub(crate) use thumbnails::{clear_grid_thumbnails, render_grid_thumbnail, supports_thumbnail};
 

@@ -155,6 +155,11 @@ tooltip-permissions = Rechte: { $value }
 tooltip-location = Speicherort: { $value }
 tooltip-original-location = Ursprünglicher Speicherort: { $value }
 tooltip-deleted = Gelöscht: { $value }
+cloud-status-online-only = Nur online verfügbar
+cloud-status-locally-available = Lokal verfügbar
+cloud-status-always-available = Immer offline verfügbar
+cloud-status-sync-pending = Synchronisierung ausstehend
+cloud-status-syncing = Synchronisierung läuft
 
 menu-open = Öffnen
 

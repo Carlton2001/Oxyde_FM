@@ -137,6 +137,7 @@ features = [
     "Win32_System_ApplicationInstallationAndServicing",
     "Win32_System_LibraryLoader",
     "Win32_Storage_FileSystem",
+    "Win32_Storage_CloudFilters",
     "Win32_Storage_Vhd",
     "Win32_UI_Shell",
     "Win32_UI_Shell_Common",

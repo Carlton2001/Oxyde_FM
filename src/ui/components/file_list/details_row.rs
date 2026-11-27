@@ -333,7 +333,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                                                 );
                                             });
                                         });
-                                    if has_subdirectories {
+                                    if has_subdirectories || file.cloud_status.is_some() {
                                         div()
                                             .flex_1()
                                             .min_w_0()
@@ -341,7 +341,10 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                                             .items_center()
                                             .overflow_hidden()
                                             .child(name)
-                                            .child(
+                                            .when_some(file.cloud_status, |row, status| row.child(
+                                                div().ml_2().flex_none().child(super::cloud_status_icon(status, &theme)),
+                                            ))
+                                            .when(has_subdirectories, |row| row.child(
                                                 div()
                                                     .ml_2()
                                                     .flex_none()
@@ -352,7 +355,7 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                                                             .text_color(theme.text)
                                                             .opacity(0.5),
                                                     ),
-                                            )
+                                            ))
                                             .into_any_element()
                                     } else {
                                         name.into_any_element()

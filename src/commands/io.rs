@@ -58,6 +58,7 @@ async fn list_dir_impl(
                 is_broken_link: false,
                 is_junction: false,
                 is_cloud_placeholder: false,
+                cloud_status: None,
                 size: t.size,
                 modified: t.modified,
                 is_calculated: true,
@@ -161,6 +162,7 @@ fn read_local_entries(
         _ => CommandError::IoError(error.to_string()),
     })?;
     let attributes = crate::utils::visibility::DirectoryAttributes::load(path_buf);
+    let cloud_status = crate::platform::platform().cloud_status_probe(path_buf);
     let mut unreadable = 0;
     for entry in dir {
         // An entry that cannot be read, or that vanished before its metadata (a temporary
@@ -191,7 +193,9 @@ fn read_local_entries(
             return Ok((entries, false));
         }
 
-        let mut file_entry = crate::models::file_entry::file_entry_from_metadata(&entry.path(), &metadata);
+        let entry_path = entry.path();
+        let mut file_entry = crate::models::file_entry::file_entry_from_metadata(&entry_path, &metadata)
+            .with_cloud_status(cloud_status.as_ref().and_then(|probe| probe(&entry_path, &metadata)));
         file_entry.is_hidden = is_hidden;
         entries.push(file_entry);
     }

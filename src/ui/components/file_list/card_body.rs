@@ -114,6 +114,16 @@ impl CardBody<'_> {
             .when(self.dimmed(), |d| d.opacity(0.75))
             .child(kind)
     }
+
+    fn grid_kind_line(&self, kind: String) -> Stateful<Div> {
+        self.kind_line(kind).text_center()
+            .when_some(self.file.cloud_status, |line, status| {
+                line.relative().px(rems(1.0)).child(
+                    div().absolute().left_0().top_0().h_full().flex().items_center()
+                        .child(super::cloud_status_icon(status, &self.theme)),
+                )
+            })
+    }
 }
 
 /// The grid card: its icon area, the name on one line, cut in the middle so the
@@ -153,7 +163,7 @@ pub(super) fn grid(card: Stateful<Div>, body: CardBody<'_>, layout: CardLayout, 
         .child(if expanded {
             div().w_full().h(CARD_DETAIL_HEIGHT).into_any_element()
         } else {
-            body.kind_line(kind.clone()).text_center().into_any_element()
+            body.grid_kind_line(kind.clone()).into_any_element()
         })
         .when(expanded, |card| card.child(name_overlay(&body, spec, kind)))
 }
@@ -199,7 +209,7 @@ fn name_overlay(body: &CardBody<'_>, spec: CardSpec, kind: String) -> impl IntoE
                 .text_ellipsis()
                 .when(body.dimmed(), |d| d.opacity(0.75))
                 .child(body.name.clone()))
-            .child(body.kind_line(kind).relative().text_center()),
+            .child(body.grid_kind_line(kind).relative()),
     )
 }
 
@@ -208,6 +218,7 @@ fn name_overlay(body: &CardBody<'_>, spec: CardSpec, kind: String) -> impl IntoE
 pub(super) fn tile(card: Stateful<Div>, body: CardBody<'_>, layout: CardLayout, cx: &App) -> Stateful<Div> {
     let spec = layout.spec();
     let kind = body.kind(cx);
+    let status = body.file.cloud_status.filter(|_| body.editing_view.is_none());
     let name_line = div()
         .w_full()
         .h(CARD_NAME_HEIGHT)
@@ -217,7 +228,13 @@ pub(super) fn tile(card: Stateful<Div>, body: CardBody<'_>, layout: CardLayout, 
         .text_ellipsis_middle()
         .overflow_hidden()
         .when(body.dimmed(), |d| d.opacity(0.75))
-        .child(body.name(true));
+        .when(status.is_some(), |line| line.flex().items_center().gap(rems(0.375)))
+        .child(if status.is_some() {
+            div().min_w_0().overflow_hidden().child(body.name(true)).into_any_element()
+        } else {
+            body.name(true)
+        })
+        .when_some(status, |line, status| line.child(super::cloud_status_icon(status, &body.theme)));
     card.px(TILE_PADDING_X)
         .py(TILE_PADDING_Y)
         .flex()

@@ -474,6 +474,8 @@ pub trait Platform: Send + Sync {
 
     /// Name comparison of an existing directory; newly created children inherit it.
     fn file_name_rules(&self, directory: &std::fs::File) -> std::io::Result<FileNameRules>;
+    /// Background-only, scoped to one listing or search. Only metadata is queried.
+    fn cloud_status_probe(&self, _directory: &std::path::Path) -> Option<CloudStatusProbe> { None }
     /// Available OneDrive sync roots configured for the current user.
     fn onedrive_installed(&self) -> bool { false }
     fn onedrive_folders(&self) -> Vec<crate::models::QuickAccessItem> { Vec::new() }
@@ -1404,6 +1406,8 @@ use linux_impl::LinuxPlatform as CurrentPlatform;
 #[cfg(target_os = "windows")]
 use windows_impl::WindowsPlatform as CurrentPlatform;
 
+pub(crate) type CloudStatusProbe = Box<dyn Fn(&std::path::Path, &std::fs::Metadata) -> Option<crate::models::CloudStatus>>;
+
 /// Retourne l'implémentation platform courante (singleton).
 pub fn platform() -> &'static dyn Platform {
     use std::sync::OnceLock;
@@ -1523,6 +1527,8 @@ mod windows_icon_source;
 
 #[cfg(target_os = "windows")]
 mod windows_onedrive;
+#[cfg(target_os = "windows")]
+mod windows_cloud_status;
 #[cfg(target_os = "windows")]
 mod windows_wsl;
 #[cfg(target_os = "windows")]

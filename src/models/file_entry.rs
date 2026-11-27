@@ -15,6 +15,15 @@ pub struct NetworkDetails {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeFileKind { Documents, Images, Audio, Video, Archives, Applications }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CloudStatus {
+    OnlineOnly,
+    LocallyAvailable,
+    AlwaysAvailable,
+    SyncPending,
+    Syncing,
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct FileEntry {
     pub native_kind: Option<NativeFileKind>,
@@ -38,6 +47,7 @@ pub struct FileEntry {
     pub is_junction: bool,
     /// Content kept by a cloud provider or offline files: reading it downloads it.
     pub is_cloud_placeholder: bool,
+    pub cloud_status: Option<CloudStatus>,
     pub size: u64,
     pub folders_count: Option<u64>,
     pub files_count: Option<u64>,
@@ -73,6 +83,12 @@ impl FileStamp {
 }
 
 impl FileEntry {
+    pub(crate) fn with_cloud_status(mut self, status: Option<CloudStatus>) -> Self {
+        self.cloud_status = status;
+        self.is_cloud_placeholder |= status == Some(CloudStatus::OnlineOnly);
+        self
+    }
+
     pub fn is_navigable_archive(&self) -> bool {
         !self.is_dir && self.archive_path.is_none() && crate::utils::archive::navigable_format(Path::new(&self.path))
     }
@@ -306,6 +322,7 @@ pub(crate) fn file_entry_from_metadata(path: &Path, metadata: &std::fs::Metadata
         is_broken_link: is_symlink && cfg!(not(target_os = "windows")) && target.is_none(),
         is_junction,
         is_cloud_placeholder: is_cloud_placeholder(metadata),
+        cloud_status: None,
         size,
         folders_count: None,
         files_count: None,

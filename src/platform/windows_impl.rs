@@ -72,6 +72,9 @@ impl Platform for WindowsPlatform {
         super::windows_file_names::set_fixture_case_sensitive(path)
     }
     fn onedrive_installed(&self) -> bool { super::windows_onedrive::installed() }
+    fn cloud_status_probe(&self, directory: &std::path::Path) -> Option<super::CloudStatusProbe> {
+        Some(super::windows_cloud_status::probe(directory))
+    }
     fn onedrive_folders(&self) -> Vec<crate::models::QuickAccessItem> { super::windows_onedrive::folders() }
     fn wsl_distributions(&self) -> Vec<crate::models::SidebarNode> { super::windows_wsl::distributions() }
     fn installation(&self) -> super::Installation {

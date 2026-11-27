@@ -109,6 +109,11 @@ tooltip-permissions = Mode: { $value }
 tooltip-location = Location: { $value }
 tooltip-original-location = Original location: { $value }
 tooltip-deleted = Deleted: { $value }
+cloud-status-online-only = Available online only
+cloud-status-locally-available = Available locally
+cloud-status-always-available = Always available offline
+cloud-status-sync-pending = Sync pending
+cloud-status-syncing = Syncing
 
 ## Main interface and commands
 menu-open = Open

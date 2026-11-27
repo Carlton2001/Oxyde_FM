@@ -72,6 +72,7 @@ pub fn list_network_entries(path: Option<String>) -> Result<Vec<FileEntry>, crat
                 is_broken_link: false,
                 is_junction: false,
                 is_cloud_placeholder: false,
+                cloud_status: None,
                 size: 0,
                 modified: 0,
                 is_calculated: true,

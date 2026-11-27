@@ -8,6 +8,7 @@ use once_cell::sync::Lazy;
 use regex::RegexBuilder;
 use std::fs::File;
 use std::io::Read;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -142,6 +143,7 @@ pub fn advanced_search(
             let mut count = 0;
             let mut flush = std::time::Instant::now();
             let mut attributes = crate::utils::visibility::WalkAttributes::default();
+            let cloud_status = crate::platform::platform().cloud_status_probe(Path::new(&root));
             let mut walker = walkdir::WalkDir::new(&root)
                 .follow_links(false)
                 .max_depth(if options.recursive { usize::MAX } else { 1 })
@@ -208,7 +210,7 @@ pub fn advanced_search(
                         mode: crate::models::file_entry::unix_mode(&m),
                         is_cloud_placeholder: crate::models::file_entry::is_cloud_placeholder(&m),
                         ..Default::default()
-                    });
+                    }.with_cloud_status(cloud_status.as_ref().and_then(|probe| probe(path, &m))));
                 }
                 if options.archives && !m.is_dir() && is_archive(path) {
                     match search_archive(path, &params, &cancellation) {
@@ -284,6 +286,7 @@ pub fn quick_search(
             SearchPattern::literal(query, false, false)
         };
         let attributes = std::cell::RefCell::new(crate::utils::visibility::WalkAttributes::default());
+        let cloud_status = crate::platform::platform().cloud_status_probe(Path::new(&root));
         let walker = walkdir::WalkDir::new(&root)
             .follow_links(false)
             .into_iter()
@@ -342,7 +345,7 @@ pub fn quick_search(
                             .unwrap_or_default()
                             .as_millis() as u64,
                         ..FileEntry::default()
-                    });
+                    }.with_cloud_status(cloud_status.as_ref().and_then(|probe| probe(entry.path(), &metadata))));
                     count += 1;
                 }
             }
