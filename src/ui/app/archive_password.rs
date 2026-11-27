@@ -331,45 +331,42 @@ impl OxydeApp {
     }
 
     /// An operation refused for an archive's password (extraction, copy out of or into
-    /// it, deletion inside it) runs again with the same sources and destination.
+    /// it, deletion inside it) runs again for the sources it left untouched, with the
+    /// same destination, conflict decisions and settings. When one may hold part of the
+    /// work, the refusal is reported instead: running it again could do that part twice.
     pub(super) fn retry_operation_with_password(&mut self, op_id: &str, error: &str, cx: &mut Context<Self>) -> bool {
         if password_failure(error).is_none() {
             return false;
         }
-        let Some((kind, sources, destination)) = self.file_ops.operation_request(op_id) else { return false };
-        let Some(archive) = sources.iter().chain(destination.iter()).find_map(|source| {
+        let Some(retry) = self.file_ops.untouched_retry(op_id) else { return false };
+        let Some(archive) = retry.sources.iter().chain(retry.destination.iter()).find_map(|source| {
             oxyde_lib::utils::archive::split_virtual_path(&source.to_string_lossy())
                 .map(|(archive, _)| archive)
                 .or_else(|| oxyde_lib::utils::archive::is_archive(source).then(|| source.clone()))
         }) else {
             return false;
         };
+        // Files dropped from another application stay staged until their copy runs again.
+        let staging = self.drop_stagings.remove(op_id);
         self.ask_archive_password(&archive, error, move |this, cx| {
-            this.requeue_operation(kind, sources, destination, cx);
+            this.requeue_operation(retry, staging, cx);
         }, cx)
     }
 
     fn requeue_operation(
         &mut self,
-        kind: oxyde_lib::systems::file_ops::FileOpType,
-        sources: Vec<PathBuf>,
-        destination: Option<PathBuf>,
+        operation: oxyde_lib::systems::file_ops::FileOperation,
+        staging: Option<std::rc::Rc<oxyde_lib::platform::DropStaging>>,
         cx: &mut Context<Self>,
     ) {
-        let quality_path = destination.clone().or_else(|| sources.first().cloned());
-        let quality = quality_path.map(|path| self.archive_quality_for_path(&path));
-        let (qualities, turbo) = (self.archive_qualities(), self.config.default_turbo_mode);
         // As `queue_archive_operation`: the runtime is reached from a spawned task.
         cx.spawn(async move |this, cx| {
             let runtime = tokio::runtime::Handle::current();
             let _ = this.update(cx, |this, cx| {
-                let mut operation = oxyde_lib::systems::file_ops::FileOperation::new(kind, sources, destination, None);
-                if let Some(quality) = quality {
-                    operation.compression_quality = quality;
-                }
-                operation.archive_qualities = qualities;
-                operation.set_turbo(turbo);
                 let id = this.file_ops.queue_operation_on(&runtime, this.history.clone(), operation);
+                if let Some(staging) = staging {
+                    this.drop_stagings.insert(id.clone(), staging);
+                }
                 this.watch_file_operation(id, cx);
             });
         })

@@ -26,6 +26,7 @@ mod item_outcomes;
 pub use item_outcomes::ItemOutcome;
 mod overview;
 pub use overview::compare_names;
+mod retry;
 
 const SPEED_HISTORY_LIMIT: usize = 60;
 const FILE_OPS_LOG_TARGET: &str = module_path!();
@@ -68,6 +69,9 @@ pub struct FileOperation {
     /// The first sources in natural name order, for previews.
     pub first_sources: Vec<PathBuf>,
     pub destination: Option<PathBuf>, // None for Delete/Trash
+    /// The destination as asked: an extraction or a compression replaces `destination`
+    /// with the name it took.
+    requested_destination: Option<PathBuf>,
     pub status: OpStatus,
     pub total_bytes: u64,
     pub processed_bytes: u64,
@@ -147,6 +151,7 @@ impl FileOperation {
             source_parent: self.source_parent.clone(),
             first_sources: self.first_sources.clone(),
             destination: self.destination.clone(),
+            requested_destination: self.requested_destination.clone(),
             status: self.status.clone(),
             total_bytes: self.total_bytes,
             processed_bytes: self.processed_bytes,
@@ -216,6 +221,7 @@ impl FileOperation {
             source_parent: overview::common_parent(&sources),
             first_sources: overview::first_by_name(&sources, overview::PREVIEW_LEN),
             sources,
+            requested_destination: destination.clone(),
             destination,
             status: OpStatus::Queued,
             total_bytes: 0,

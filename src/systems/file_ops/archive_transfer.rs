@@ -1,7 +1,7 @@
 use super::{FileOperation, FileOperationManager};
 use crate::models::ConflictAction;
 use crate::platform::platform;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -92,6 +92,14 @@ impl FileOperationManager {
             crate::systems::archive_move_sources::ArchiveMoveSources::default(),
         )));
         let trash_entries = platform().trash_transfer_entries(&real_sources)?;
+        // Until here only private views were written: a failure, a refused password
+        // among them, left every source untouched.
+        {
+            let mut locked = op.lock().unwrap();
+            for source in &sources {
+                locked.item_started(source);
+            }
+        }
         Self::perform_copy_real(
             op,
             real_sources.clone(),
@@ -189,10 +197,42 @@ impl FileOperationManager {
         Ok(())
     }
 
-    pub(super) fn remove_archive_entries(
+    /// Removes the selected entries of archives, one archive after the other, and returns
+    /// the sources outside archives, or None when cancelled. Each archive rewritten records
+    /// its sources as done: a later refusal runs again for the others only.
+    pub(super) fn remove_virtual_sources(
+        op: &Arc<Mutex<FileOperation>>,
+        sources: &[PathBuf],
+    ) -> Result<Option<Vec<PathBuf>>, String> {
+        let mut real_sources = Vec::new();
+        // In path order, the same from one run to the next.
+        let mut virtual_sources: BTreeMap<PathBuf, Vec<(PathBuf, String)>> = BTreeMap::new();
+        for source in sources {
+            match crate::utils::archive::resolve_virtual_path(source) {
+                Some((archive, internal)) if !internal.is_empty() => {
+                    virtual_sources.entry(archive).or_default().push((source.clone(), internal));
+                }
+                _ => real_sources.push(source.clone()),
+            }
+        }
+        let cancel = op.lock().unwrap().cancel_flag.clone();
+        for (archive, entries) in virtual_sources {
+            if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+                return Ok(None);
+            }
+            Self::remove_archive_entries(op, archive, &entries)?;
+            let mut locked = op.lock().unwrap();
+            for (source, _) in entries {
+                locked.item_outcomes.insert(source, super::ItemOutcome::Completed);
+            }
+        }
+        Ok(Some(real_sources))
+    }
+
+    fn remove_archive_entries(
         op: &Arc<Mutex<FileOperation>>,
         archive: PathBuf,
-        internal: Vec<String>,
+        entries: &[(PathBuf, String)],
     ) -> Result<(), String> {
         use crate::systems::archive_workspace::{
             lock_for_operation, mutation_locks, writable, ArchiveWorkspace,
@@ -204,11 +244,17 @@ impl FileOperationManager {
         }
         Self::archive_checkpoint(op)?;
         let workspace = ArchiveWorkspace::open_for_operation(archive, op)?;
-        op.lock().unwrap().archive_path_mappings =
-            vec![(workspace.root().to_path_buf(), workspace.archive.clone())];
-        for path in internal {
+        {
+            let mut locked = op.lock().unwrap();
+            locked.archive_path_mappings = vec![(workspace.root().to_path_buf(), workspace.archive.clone())];
+            // Opened, so unlocked: from here the archive may be rewritten.
+            for (source, _) in entries {
+                locked.item_started(source);
+            }
+        }
+        for (_, internal) in entries {
             Self::archive_checkpoint(op)?;
-            let path = workspace.path(&path)?;
+            let path = workspace.path(internal)?;
             workspace.remove(&path, &mut || Self::archive_checkpoint(op).map_err(std::io::Error::other)).map_err(|e| e.to_string())?;
         }
         workspace.commit(op)
