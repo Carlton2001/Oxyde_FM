@@ -117,12 +117,7 @@ impl CardBody<'_> {
 
     fn grid_kind_line(&self, kind: String) -> Stateful<Div> {
         self.kind_line(kind).text_center()
-            .when_some(self.file.cloud_status, |line, status| {
-                line.relative().px(rems(1.0)).child(
-                    div().absolute().left_0().top_0().h_full().flex().items_center()
-                        .child(super::cloud_status_icon(status, &self.theme)),
-                )
-            })
+            .when(self.file.cloud_status.is_some(), |line| line.px(rems(1.0)))
     }
 }
 
@@ -133,6 +128,12 @@ pub(super) fn grid(card: Stateful<Div>, body: CardBody<'_>, layout: CardLayout, 
     let spec = layout.spec();
     let kind = body.kind(cx);
     let expanded = body.expanded && body.editing_view.is_none();
+    let badge = body.file.cloud_status.map(|status| {
+        div().absolute().left(GRID_CARD_PADDING_X).bottom(GRID_CARD_PADDING_Y)
+            .h(CARD_DETAIL_HEIGHT).flex().items_center()
+            .when(body.dimmed(), |badge| badge.opacity(0.75))
+            .child(super::cloud_status_icon(status, &body.theme))
+    });
     let name_line = div()
         .w_full()
         .h(CARD_NAME_HEIGHT)
@@ -144,7 +145,7 @@ pub(super) fn grid(card: Stateful<Div>, body: CardBody<'_>, layout: CardLayout, 
         .overflow_hidden()
         .when(body.dimmed(), |d| d.opacity(0.75))
         .child(body.name(!expanded));
-    card.px(GRID_CARD_PADDING_X)
+    let card = card.px(GRID_CARD_PADDING_X)
         .py(GRID_CARD_PADDING_Y)
         .flex()
         .flex_col()
@@ -159,13 +160,18 @@ pub(super) fn grid(card: Stateful<Div>, body: CardBody<'_>, layout: CardLayout, 
                     div().absolute().right_0().top_0().h_full().flex().items_center().child(body.chevron()),
                 )),
         )
-        .child(name_line)
-        .child(if expanded {
-            div().w_full().h(CARD_DETAIL_HEIGHT).into_any_element()
-        } else {
-            body.grid_kind_line(kind.clone()).into_any_element()
-        })
-        .when(expanded, |card| card.child(name_overlay(&body, spec, kind)))
+        .child(name_line);
+    if expanded {
+        card.child(div().w_full().h(CARD_DETAIL_HEIGHT)).child(
+            crate::ui::elements::overlay::clipped_overlay(
+                // Keep the badge anchored to the card while the text grows below it.
+                div().absolute().inset_0().child(name_overlay(&body, spec, kind)).children(badge),
+            ),
+        )
+    } else {
+        card.child(body.grid_kind_line(kind))
+            .children(badge.map(|badge| div().absolute().inset_0().child(badge)))
+    }
 }
 
 /// The name wrapped over several lines and the type, where the card shows them. The
@@ -183,34 +189,33 @@ fn name_overlay(body: &CardBody<'_>, spec: CardSpec, kind: String) -> impl IntoE
         .bg(body.pane_fill)
         .child(div().size_full().rounded_b(CARD_RADIUS).bg(body.fill)
             .border_l(CARD_BORDER).border_r(CARD_BORDER).border_b(CARD_BORDER).border_color(body.border));
-    crate::ui::elements::overlay::clipped_overlay(
-        div()
-            .absolute()
-            .top(rems(GRID_CARD_PADDING_Y.0 + spec.media.0 + GRID_CARD_GAP.0))
-            .left(rems(-CARD_BORDER.0))
-            .right(rems(-CARD_BORDER.0))
-            .px(rems(CARD_BORDER.0 + GRID_CARD_PADDING_X.0))
-            .pb(GRID_CARD_PADDING_Y)
-            .flex()
-            .flex_col()
-            .items_center()
-            .gap(GRID_CARD_GAP)
-            .child(fill)
-            .child(div()
-                .relative()
-                .w_full()
-                .line_height(CARD_NAME_HEIGHT)
-                .text_center()
-                .text_size(rems(0.75))
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(body.theme.text)
-                .line_clamp(NAME_OVERLAY_LINES)
-                // GPUI cuts a middle ellipsis to a single line, even with several allowed.
-                .text_ellipsis()
-                .when(body.dimmed(), |d| d.opacity(0.75))
-                .child(body.name.clone()))
-            .child(body.grid_kind_line(kind).relative()),
-    )
+    div()
+        .absolute()
+        .top(rems(GRID_CARD_PADDING_Y.0 + spec.media.0 + GRID_CARD_GAP.0))
+        .left(rems(-CARD_BORDER.0))
+        .right(rems(-CARD_BORDER.0))
+        .px(rems(CARD_BORDER.0 + GRID_CARD_PADDING_X.0))
+        .pb(GRID_CARD_PADDING_Y)
+        .flex()
+        .flex_col()
+        .items_center()
+        .gap(GRID_CARD_GAP)
+        .child(fill)
+        .child(div()
+            .relative()
+            .w_full()
+            .line_height(CARD_NAME_HEIGHT)
+            .text_center()
+            .text_size(rems(0.75))
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(body.theme.text)
+            .line_clamp(NAME_OVERLAY_LINES)
+            // GPUI cuts a middle ellipsis to a single line, even with several allowed.
+            .text_ellipsis()
+            .when(body.file.cloud_status.is_some(), |name| name.px(rems(1.0)))
+            .when(body.dimmed(), |d| d.opacity(0.75))
+            .child(body.name.clone()))
+        .child(body.grid_kind_line(kind).relative())
 }
 
 /// The tile: the checkbox, the icon, then the name, the size with the modification
