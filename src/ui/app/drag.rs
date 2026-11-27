@@ -257,6 +257,8 @@ impl OxydeApp {
         self.selection_autoscroll_task = None;
         self.file_drag_origin = None;
         self.drag_target_refused = false;
+        // The next drag, or an external one, must not inherit this source's read-only copy.
+        self.drag_source_read_only = false;
         self.set_file_drag_new_tab(false, cx);
         let mut needs_notify = false;
         let workspace_layout_changed = matches!(
