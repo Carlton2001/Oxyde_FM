@@ -4,6 +4,9 @@ use crate::ui::i18n::{FluentArgs, I18n, Message};
 use gpui::Entity;
 use oxyde_lib::models::TransactionType;
 
+pub(super) const UNDO_SHORTCUT: &str = "Ctrl+Z";
+pub(super) const REDO_SHORTCUT: &str = "Ctrl+Y";
+
 pub(super) fn operation_label(i18n: &I18n, message: Message, operation: TransactionType) -> String {
     let operation = match operation {
         TransactionType::Copy => Message::OpCopy,

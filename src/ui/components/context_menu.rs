@@ -329,7 +329,7 @@ fn reopen_closed_tab_item(
     use crate::ui::components::dropdown::IconName;
     crate::ui::components::dropdown::DropdownItem {
         label: i18n.text(Message::ReopenClosedTab).to_string(),
-        icon: Some(IconName::Undo),
+        icon: Some(IconName::ReopenClosedTab),
         badge: None,
         stay_open: false,
         has_submenu: false,

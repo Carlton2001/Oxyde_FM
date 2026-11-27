@@ -8,18 +8,23 @@ use gpui::*;
 use std::rc::Rc;
 
 
-fn context_shortcut(label: &str, i18n: &I18n, shift: bool) -> Option<&'static str> {
+fn context_shortcut(item: &DropdownItem, i18n: &I18n, shift: bool) -> Option<&'static str> {
+    match item.icon {
+        Some(IconName::Undo) => return Some(super::history_actions::UNDO_SHORTCUT),
+        Some(IconName::Redo) => return Some(super::history_actions::REDO_SHORTCUT),
+        _ => {}
+    }
     [(Message::Open, "Enter"), (Message::OpenTerminal, "Ctrl+."), (Message::Cut, "Ctrl+X"),
         (Message::Rename, "F2"), (Message::Delete, "Del"),
         (Message::Properties, "Alt+Enter"), (Message::Paste, "Ctrl+V"),
         (Message::NewFolder, "Ctrl+Shift+N"), (Message::Copy, "Ctrl+C"), (Message::CopyName, "Ctrl+Alt+C"),
         (Message::CopyPath, "Ctrl+Shift+C"), (Message::TrashDeletePermanent, if shift { "Shift+Del" } else { "Del" })].into_iter()
-        .find_map(|(message, shortcut)| (label == i18n.text(message).as_ref()).then_some(shortcut))
+        .find_map(|(message, shortcut)| (item.label == i18n.text(message).as_ref()).then_some(shortcut))
 }
 
 #[cfg(test)]
-#[path = "dropdown/tests/delete_shortcuts.rs"]
-mod delete_shortcuts;
+#[path = "dropdown/tests/context_shortcuts.rs"]
+mod context_shortcuts;
 
 #[derive(Clone)]
 pub enum IconName {
@@ -49,6 +54,7 @@ pub enum IconName {
     Copy,
     Undo,
     Redo,
+    ReopenClosedTab,
     Shield,
     Printer,
     Settings,
@@ -279,7 +285,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                 && item.label == cx.i18n().text(Message::Copy).as_ref();
             let chevron_width = if item.has_submenu { logical(if split_copy { 23.0 } else { 14.0 }) } else { 0.0 };
             let shortcut_width = if self.is_context_menu {
-                context_shortcut(&item.label, cx.i18n(), window.modifiers().shift).map_or(0.0, |shortcut| {
+                context_shortcut(item, cx.i18n(), window.modifiers().shift).map_or(0.0, |shortcut| {
                     text_system.shape_line(shortcut.into(), rem_pixels(rems(0.75)), &[TextRun {
                         len: shortcut.len(), font: font.clone(), color: theme.text_muted,
                         background_color: None, underline: None, strikethrough: None,
@@ -421,7 +427,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                     let row_bounds = Rc::new(std::cell::Cell::new(None::<Bounds<Pixels>>));
                                     let measured_row = row_bounds.clone();
                                     let hovered_row = row_bounds.clone();
-                                    let shortcut = if self_is_context_menu { context_shortcut(&item.label, cx.i18n(), window.modifiers().shift) } else { None };
+                                    let shortcut = if self_is_context_menu { context_shortcut(item, cx.i18n(), window.modifiers().shift) } else { None };
                                     let split_copy = self_is_context_menu && item.has_submenu
                                         && item.label == cx.i18n().text(Message::Copy).as_ref();
 
@@ -528,7 +534,7 @@ impl<T: crate::ui::components::scrollbar::ScrollbarState + 'static> RenderOnce f
                                                                     IconName::HardDrive => {
                                                                         "icons/hard-drive.svg"
                                                                     }
-                                                                    IconName::Undo => "icons/undo-2.svg",
+                                                                    IconName::Undo | IconName::ReopenClosedTab => "icons/undo-2.svg",
                                                                     IconName::Redo => "icons/redo-2.svg",
                                                                     IconName::Copy => {
                                                                         "icons/copy.svg"
