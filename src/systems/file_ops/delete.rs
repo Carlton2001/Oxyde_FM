@@ -1,6 +1,5 @@
 use super::{FileOperation, FileOperationManager, OpStatus, RestoreNormalPriority};
 use crate::platform::{follow_turbo_priority, platform, ThreadPriority};
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
@@ -22,33 +21,8 @@ impl FileOperationManager {
             )
         };
 
-        let mut real_sources = Vec::new();
-        let mut virtual_sources: HashMap<PathBuf, Vec<String>> = HashMap::new();
-
-        for src in &sources {
-            if let Some((archive_path, internal_path)) =
-                crate::utils::archive::resolve_virtual_path(src)
-            {
-                if internal_path.is_empty() {
-                    real_sources.push(src.clone());
-                } else {
-                    virtual_sources
-                        .entry(archive_path)
-                        .or_default()
-                        .push(internal_path);
-                }
-            } else {
-                real_sources.push(src.clone());
-            }
-        }
-
-        // 1. Handle Virtual Sources (Archive Deletion)
-        for (archive_path, internal_paths) in virtual_sources {
-            if cancel_flag.load(Ordering::Relaxed) {
-                return Ok(());
-            }
-            Self::remove_archive_entries(op, archive_path, internal_paths)?;
-        }
+        // Entries inside archives first.
+        let Some(real_sources) = Self::remove_virtual_sources(op, &sources)? else { return Ok(()) };
 
         if real_sources.is_empty() {
             return Ok(());
@@ -236,33 +210,8 @@ impl FileOperationManager {
             )
         };
 
-        let mut real_sources = Vec::new();
-        let mut virtual_sources: HashMap<PathBuf, Vec<String>> = HashMap::new();
-
-        for src in &sources {
-            if let Some((archive_path, internal_path)) =
-                crate::utils::archive::resolve_virtual_path(src)
-            {
-                if internal_path.is_empty() {
-                    real_sources.push(src.clone());
-                } else {
-                    virtual_sources
-                        .entry(archive_path)
-                        .or_default()
-                        .push(internal_path);
-                }
-            } else {
-                real_sources.push(src.clone());
-            }
-        }
-
-        // 1. Handle Virtual Sources (Delete from Archive, no Trash support)
-        for (archive_path, internal_paths) in virtual_sources {
-            if cancel_flag.load(Ordering::Relaxed) {
-                return Ok(());
-            }
-            Self::remove_archive_entries(op, archive_path, internal_paths)?;
-        }
+        // Entries inside archives first: the Recycle Bin cannot take them.
+        let Some(real_sources) = Self::remove_virtual_sources(op, &sources)? else { return Ok(()) };
 
         if real_sources.is_empty() {
             return Ok(());

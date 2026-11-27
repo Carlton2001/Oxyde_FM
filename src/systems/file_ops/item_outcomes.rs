@@ -171,6 +171,9 @@ impl FileOperation {
                             ItemOutcome::Completed
                         } else if terminal && !self.execution_started {
                             ItemOutcome::NotProcessed
+                        } else if terminal && !progress.started {
+                            // Its work stayed in private folders, which went with the failure.
+                            ItemOutcome::NotProcessed
                         } else if terminal {
                             ItemOutcome::Unknown
                         } else if self.execution_started {
