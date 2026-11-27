@@ -65,8 +65,14 @@ fn initialize_logging() {
     let mut logger = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn"));
     logger.filter_module("oxyde", log::LevelFilter::Info)
         .filter_module("oxyde_lib", log::LevelFilter::Info)
-        .format(|buffer, record| writeln!(buffer, "{} [{:?}] {} {}: {}",
-            buffer.timestamp_millis(), std::thread::current().id(), record.level(), record.target(), record.args()));
+        .format(|buffer, record| {
+            // GPUI's `log_err` names no target outside a `crates/` tree: name its line instead.
+            let location = record.target().is_empty().then(|| {
+                format!("{}:{}", record.file().unwrap_or("?"), record.line().unwrap_or(0))
+            });
+            writeln!(buffer, "{} [{:?}] {} {}: {}", buffer.timestamp_millis(), std::thread::current().id(),
+                record.level(), location.as_deref().unwrap_or(record.target()), record.args())
+        });
     let log_file = oxyde_lib::models::ConfigManager::config_path().ok().and_then(|config| {
         let directory = config.parent()?;
         std::fs::create_dir_all(directory).ok()?;
