@@ -127,6 +127,11 @@ impl Output {
         if !expected.matches(&file)? {
             return Err(super::file_copy::identity_changed(&self.path));
         }
+        // The note proves the file by the date it now has: a native copy applied the
+        // source's after the note was written, the WebDAV redirector only on close.
+        if let Some(journal) = self.journal.borrow_mut().as_mut() {
+            journal.update_created(file.metadata()?.created().ok());
+        }
         Ok(file)
     }
 

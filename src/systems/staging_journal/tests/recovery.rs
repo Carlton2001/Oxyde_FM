@@ -122,6 +122,43 @@ fn a_partial_file_of_an_ended_process_is_removed() {
     assert_eq!(std::fs::read_dir(&notes).unwrap().count(), 0);
 }
 
+/// A native copy applies the source's creation date once its bytes are written.
+#[cfg(target_os = "windows")]
+fn apply_source_date(path: &Path) -> Option<std::time::SystemTime> {
+    use std::os::windows::fs::FileTimesExt;
+    let file = std::fs::OpenOptions::new().write(true).open(path).unwrap();
+    let source = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_600_000_000);
+    file.set_times(std::fs::FileTimes::new().set_created(source)).unwrap();
+    file.metadata().unwrap().created().ok()
+}
+
+#[cfg(target_os = "windows")]
+#[test]
+fn a_finished_copy_with_its_source_date_noted_is_removed() {
+    let root = tempfile::tempdir().unwrap();
+    let notes = root.path().join("notes");
+    let (path, mut entry) = partial(root.path(), &notes, "copy.bin");
+    let created = apply_source_date(&path);
+    entry.update_created(created);
+    end(entry);
+    let recovered = recover_in(&notes);
+    assert_eq!(recovered.removed, std::slice::from_ref(&path));
+    assert!(!path.exists());
+}
+
+#[cfg(target_os = "windows")]
+#[test]
+fn a_finished_copy_whose_date_was_not_noted_is_kept() {
+    let root = tempfile::tempdir().unwrap();
+    let notes = root.path().join("notes");
+    let (path, entry) = partial(root.path(), &notes, "copy.bin");
+    apply_source_date(&path);
+    end(entry);
+    let recovered = recover_in(&notes);
+    assert_eq!(recovered.kept, std::slice::from_ref(&path));
+    assert!(path.exists());
+}
+
 #[test]
 fn a_running_copy_keeps_its_partial_file() {
     let root = tempfile::tempdir().unwrap();

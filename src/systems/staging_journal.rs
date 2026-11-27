@@ -11,7 +11,7 @@
 //! and only its `output` and marker.
 use crate::platform::{platform, FileIdentity};
 use std::fs::File;
-use std::io::{self, Read, Write};
+use std::io::{self, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
@@ -31,7 +31,7 @@ pub fn enable() {
     ENABLED.store(true, Ordering::Relaxed);
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 enum Record {
     /// A file written under its own name, or as the temporary of a replacement.
@@ -63,6 +63,28 @@ impl Record {
 pub(crate) struct Entry {
     lock: Option<File>,
     path: PathBuf,
+    /// What the note holds, to rewrite it; none for a note recovery removes.
+    record: Option<Record>,
+}
+
+impl Entry {
+    /// Notes the creation date the file ended with: a native copy applies the source's
+    /// date after the note was written, and a note left with the first one would keep
+    /// a finished copy after a crash. The previous note stays if the rewrite fails.
+    pub(crate) fn update_created(&mut self, created: Option<SystemTime>) {
+        let Some(Record::File { created: noted, .. }) = &mut self.record else { return };
+        if *noted == created {
+            return;
+        }
+        *noted = created;
+        let result = match self.lock.as_mut() {
+            Some(lock) => store(lock, self.record.as_ref().expect("noted file")),
+            None => return,
+        };
+        if let Err(error) = result {
+            log::warn!("Cannot update output note {}: {error}", self.path.display());
+        }
+    }
 }
 
 impl Drop for Entry {
@@ -122,12 +144,17 @@ fn write(folder: &Path, name: &str, record: &Record) -> io::Result<Entry> {
     let path = folder.join(format!("{name}.json"));
     let lock = platform().lock_cache_file(&path)?;
     // From here, dropping the entry removes a note left incomplete.
-    let mut entry = Entry { lock: Some(lock), path };
-    let bytes = serde_json::to_vec(record).map_err(io::Error::other)?;
-    let lock = entry.lock.as_mut().expect("held note");
-    lock.set_len(0)?;
-    lock.write_all(&bytes)?;
+    let mut entry = Entry { lock: Some(lock), path, record: Some(record.clone()) };
+    store(entry.lock.as_mut().expect("held note"), record)?;
     Ok(entry)
+}
+
+/// Replaces the content of the held note with `record`.
+fn store(lock: &mut File, record: &Record) -> io::Result<()> {
+    let bytes = serde_json::to_vec(record).map_err(io::Error::other)?;
+    lock.set_len(0)?;
+    lock.rewind()?;
+    lock.write_all(&bytes)
 }
 
 /// What a start found left by ended processes.
@@ -183,7 +210,7 @@ fn recover_in(folder: &Path) -> Recovered {
                 }
             }
         }
-        drop(Entry { lock: Some(lock), path });
+        drop(Entry { lock: Some(lock), path, record: None });
     }
     recovered
 }
