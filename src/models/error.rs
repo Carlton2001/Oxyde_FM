@@ -168,6 +168,8 @@ pub const FILE_IDENTITY_UNAVAILABLE: &str = "Filesystem did not provide a stable
 /// An item its folder lists but that cannot be opened by its name, so not deleted: seen
 /// from Windows, a WSL link whose target is missing.
 pub const ITEM_LISTED_BUT_UNREACHABLE: &str = "the item is still listed but cannot be opened";
+/// A name ending with a dot or a space, which the Windows Shell would read as its twin.
+pub const SHELL_NAME_UNADDRESSABLE: &str = "The Windows Shell cannot address a name ending with a dot or a space";
 
 /// Why Windows refused an item, recognized from the HRESULT in its message.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

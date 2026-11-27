@@ -100,3 +100,23 @@ fn an_item_listed_but_unreachable_is_translated_with_its_path() {
         assert!(!translated.contains(oxyde_lib::models::error::ITEM_LISTED_BUT_UNREACHABLE));
     }
 }
+
+#[test]
+fn shell_trailing_dot_refusal_is_translated_with_its_path() {
+    use crate::ui::i18n::{FluentArgs, I18n, Message};
+    let path = r"E:\notes.";
+    let raw = oxyde_lib::models::CommandError::PathError(format!(
+        "{}: {path}",
+        oxyde_lib::models::error::SHELL_NAME_UNADDRESSABLE
+    ))
+    .to_string();
+    for language in Language::ALL {
+        let i18n = I18n::for_language(language);
+        let mut args = FluentArgs::new();
+        args.set("path", path);
+        assert_eq!(
+            error_detail(&raw, &i18n),
+            i18n.text_with_args(Message::ShellNameUnaddressable, &args).to_string()
+        );
+    }
+}

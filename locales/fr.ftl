@@ -284,6 +284,7 @@ new-template-name = Nouveau { $type }
 new-item-numbered = { $name } ({ $number })
 native-menu-empty = Aucune commande disponible
 native-menu-failed = Chargement du menu natif échoué : { $detail }
+shell-name-unaddressable = Le Shell de Windows ne peut pas traiter un élément dont le nom se termine par un point ou une espace : { $path }
 native-menu-timeout = Le menu système ne répond pas
 drag-items = { $count ->
     [one] { $number } élément

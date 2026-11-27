@@ -423,6 +423,7 @@ new-item-numbered = { $name } ({ $number })
 native-menu-empty = Keine Befehle verfügbar
 
 native-menu-failed = Systemmenü konnte nicht geladen werden: { $detail }
+shell-name-unaddressable = Die Windows-Shell kann kein Element verarbeiten, dessen Name mit einem Punkt oder Leerzeichen endet: { $path }
 native-menu-timeout = Das Systemmenü reagiert nicht
 
 drag-items = { $count ->

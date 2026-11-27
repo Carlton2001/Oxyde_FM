@@ -31,7 +31,8 @@ pub(super) fn shell_path(path: &str) -> Result<std::path::PathBuf, CommandError>
     });
     if unaddressable {
         return Err(CommandError::PathError(format!(
-            "The Windows Shell cannot address a name ending with a dot or a space: {path}"
+            "{}: {path}",
+            crate::models::error::SHELL_NAME_UNADDRESSABLE
         )));
     }
     validate_path(path).map(|path| crate::utils::path_text::decoded(&path).into_owned())

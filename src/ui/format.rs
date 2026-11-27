@@ -616,6 +616,11 @@ pub fn error_detail(detail: &str, i18n: &crate::ui::i18n::I18n) -> String {
         args.set("path", quoted_paths(detail).join(" → "));
         return i18n.text_with_args(Message::DeleteItemUnreachable, &args).to_string();
     }
+    if let Some((_, path)) = detail.split_once(oxyde_lib::models::error::SHELL_NAME_UNADDRESSABLE) {
+        let mut args = FluentArgs::new();
+        args.set("path", display_paths(path.trim_start_matches(':').trim()));
+        return i18n.text_with_args(Message::ShellNameUnaddressable, &args).to_string();
+    }
     if detail.contains(oxyde_lib::models::error::COPY_TARGET_NOT_REPLACEABLE) {
         return i18n.text(Message::TransferTargetNotReplaceable).to_string();
     }

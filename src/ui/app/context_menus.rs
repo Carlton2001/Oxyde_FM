@@ -261,7 +261,7 @@ impl OxydeApp {
                     Some(Ok(Ok(_))) => Err(i18n.text(Message::NativeMenuEmpty).to_string()),
                     Some(Ok(Err(error))) => {
                         let mut args = FluentArgs::new();
-                        args.set("detail", error.to_string());
+                        args.set("detail", crate::ui::format::error_detail(&error.to_string(), &i18n));
                         Err(i18n
                             .text_with_args(Message::NativeMenuFailed, &args)
                             .to_string())
