@@ -379,7 +379,8 @@ pub struct OxydeApp {
     pub _subscriptions: Vec<Subscription>,
     pub(crate) window_geometry_save_task: Option<Task<()>>,
     /// Effective drag operation: true = copy, false = move.
-    /// Derived from `drag_modifier_copy` (if Some) or `drag_target_default_copy` otherwise.
+    /// Derived from `drag_modifier_copy` (if Some) or `drag_target_default_copy` otherwise,
+    /// and always a copy from a read-only location.
     pub drag_copy_mode: bool,
     pub(crate) drag_new_tab: bool,
     pub(crate) file_drag_origin: Option<(String, String)>,
@@ -392,6 +393,8 @@ pub struct OxydeApp {
     /// Drive-based default for the currently hovered drop target:
     /// true if source and target are on different drives → default to copy.
     pub drag_target_default_copy: bool,
+    /// The dragged items come from a read-only location: dropping them copies, even with Shift.
+    pub(crate) drag_source_read_only: bool,
     /// The hovered drop target refuses writes (read-only volume or archive): the ghost says so.
     pub(crate) drag_target_refused: bool,
     pub(crate) drag_tab_switch: Option<drag::DragTabSwitch>,
@@ -647,6 +650,7 @@ impl OxydeApp {
             file_drag_session: None,
             drag_modifier_copy: None,
             drag_target_default_copy: false,
+            drag_source_read_only: false,
             drag_target_refused: false,
             drag_tab_switch: None,
             editing_path: None,

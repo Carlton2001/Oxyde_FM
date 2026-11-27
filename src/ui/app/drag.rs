@@ -301,6 +301,13 @@ impl OxydeApp {
     pub(crate) fn note_drag_target(&mut self, paths: &[String], target: &str, cx: &mut Context<Self>) -> bool {
         let refused = self.refuses_drop(target);
         let default_copy = paths.first().is_some_and(|path| drives_differ(path, target));
+        // The items of a drag share one folder: the first one tells for all.
+        let source_read_only = paths.first().and_then(|path| std::path::Path::new(path).parent())
+            .is_some_and(|parent| self.is_read_only_path(&parent.to_string_lossy()));
+        if self.drag_source_read_only != source_read_only {
+            self.drag_source_read_only = source_read_only;
+            self.update_drag_copy_mode(cx);
+        }
         if self.drag_target_refused != refused {
             self.drag_target_refused = refused;
             cx.notify();
@@ -315,9 +322,9 @@ impl OxydeApp {
     /// Recompute `drag_copy_mode` from modifier override and drive-based default.
     /// Notifies if the value changed.
     pub fn update_drag_copy_mode(&mut self, cx: &mut Context<Self>) {
-        let new_mode = self
-            .drag_modifier_copy
-            .unwrap_or(self.drag_target_default_copy);
+        // The drop turns a move from a read-only location into a copy: so does the ghost.
+        let new_mode = self.drag_source_read_only
+            || self.drag_modifier_copy.unwrap_or(self.drag_target_default_copy);
         if self.drag_copy_mode != new_mode {
             self.drag_copy_mode = new_mode;
             cx.notify();
