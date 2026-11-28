@@ -137,7 +137,7 @@ pub fn render_top_bar(
     // Nothing can be written here: write actions hide, New folder stays disabled.
     let read_only = view.is_read_only_location(&pane_id, &current_path);
     // Others' entries in a sticky folder (`/tmp`) can be neither cut nor removed.
-    let selection_locked = active_tab.selected_paths.iter().any(|path| active_tab.undeletable_entries.contains(path));
+    let selection_locked = !active_tab.undeletable_entries.is_empty() && active_tab.selected_paths.iter().any(|path| active_tab.undeletable_entries.contains(path));
 
     let undo_tooltip = history_state.undo.map(|operation| {
         super::history_actions::operation_label(_cx.i18n(), Message::UndoOperation, operation)

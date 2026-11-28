@@ -243,10 +243,10 @@ impl Source {
     fn capture(owner: &OxydeApp, previous: &Source) -> Self {
         let from_tab = |tab: &crate::ui::workspace::TabState| Self {
             tab: tab.id.clone(),
-            selected: if previous.tab == tab.id && *previous.selected == tab.selected_paths {
+            selected: if previous.tab == tab.id && *previous.selected == *tab.selected_paths {
                 previous.selected.clone()
             } else {
-                Arc::new(tab.selected_paths.clone())
+                Arc::new((*tab.selected_paths).clone())
             },
             focus: tab.keyboard_cursor.clone().filter(|path| tab.selected_paths.contains(path))
                 .or_else(|| tab.selection_anchor.clone()),

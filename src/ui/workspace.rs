@@ -8,6 +8,8 @@ mod presentation;
 mod sorting;
 mod preparation;
 mod folder_sizes;
+mod selected_paths;
+pub(crate) use selected_paths::SelectedPaths;
 pub(crate) use preparation::{resolve_native_kinds, FileUpdate};
 pub(crate) use folder_sizes::{measurable as measurable_folder, SIZE_FLASH_DURATION};
 pub(crate) use sorting::sort_files;
@@ -217,7 +219,7 @@ pub struct TabState {
     pub filter_deleted_range: Option<DateRange>,
     /// Column filters survive navigating to another folder.
     pub keep_filters: bool,
-    pub selected_paths: std::collections::HashSet<String>,
+    pub selected_paths: SelectedPaths,
     pub selection_anchor: Option<String>,
     pub keyboard_cursor: Option<String>,
     pub view_mode: ViewMode,

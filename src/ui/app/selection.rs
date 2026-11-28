@@ -233,7 +233,7 @@ impl OxydeApp {
                 // Most movements stay within the same rows: the selection is the same.
                 if covered.as_deref() != Some(current_rect.as_slice()) {
                     let current_rect_paths = current_rect.iter().map(|index| files[*index].path.clone()).collect();
-                    tab.selected_paths = rectangle_selection(&initial_selection_cap, current_rect_paths, modifiers);
+                    tab.selected_paths = rectangle_selection(&initial_selection_cap, current_rect_paths, modifiers).into();
                     *covered = Some(current_rect.into());
                 }
                 if !modifiers.control && !modifiers.shift {
@@ -350,7 +350,7 @@ impl OxydeApp {
         if !modifiers.control && !modifiers.shift {
             return Default::default();
         }
-        std::sync::Arc::new(self.state.find_pane(pane_id).map(|pane| pane.active_tab().selected_paths.clone()).unwrap_or_default())
+        std::sync::Arc::new(self.state.find_pane(pane_id).map(|pane| (*pane.active_tab().selected_paths).clone()).unwrap_or_default())
     }
 }
 
