@@ -309,17 +309,11 @@ pub(crate) fn file_entry_from_metadata(path: &Path, metadata: &std::fs::Metadata
     let is_dir = target.as_ref().map_or(metadata.is_dir(), std::fs::Metadata::is_dir)
         || is_directory_link(metadata, is_reparse_point);
 
-    // On Windows, junctions are reparse points that are dirs but (historically) returned false for is_symlink in older Rust,
-    // but modern Rust might return true.
-    // Secure check: It is a junction if it is a reparse point, is a directory, and (is_symlink logic is variable).
-    // Let's rely on our explicit reparse_point check.
-    // If it is a symlink AND a dir, it is a symlink-to-dir.
-    // If it is a reparse point AND a dir AND NOT a symlink (strictly), it is a junction.
-    // However, Rust's `is_symlink()` now often covers junctions too.
-    // For UI purposes, we just want to know "Is it a fancy link?".
-    // We will separate them if possible, but identifying it as a System+Hidden item is the priority.
-
-    let is_junction = is_reparse_point && is_dir && !is_symlink;
+    // Junctions and directory symlinks are name-surrogate reparse points, which std
+    // reports as symlinks. Other reparse tags mark ordinary folders that Explorer
+    // opens and measures: the OneDrive root and other cloud sync roots, deduplicated
+    // or WCI folders. Calling them junctions kept them out of size calculations.
+    let is_junction = is_symlink && is_directory_link(metadata, is_reparse_point);
 
     // Retrieve size: if it's a file, get len. If symlink/junction, size is usually 0/irrelevant for listing.
     let size = if is_dir { 0 } else { target.as_ref().unwrap_or(metadata).len() };
