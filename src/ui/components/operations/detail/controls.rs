@@ -8,7 +8,7 @@ use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
-use oxyde_lib::systems::file_ops::{FileOperation, FileOperationManager, OpStatus};
+use oxyde_lib::systems::file_ops::{FileOperationManager, OpStatus, OperationDetail};
 use std::sync::Arc;
 
 /// A footer button with its icon and label; `active` keeps a toggle selected.
@@ -48,7 +48,7 @@ fn command(
 }
 
 pub(in super::super) fn render(
-    operation: &FileOperation,
+    operation: &OperationDetail,
     app: WeakEntity<OxydeApp>,
     cx: &mut Context<OperationsPanelView>,
 ) -> Div {

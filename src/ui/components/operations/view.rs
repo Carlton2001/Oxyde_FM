@@ -5,7 +5,7 @@ use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::ThemeContext;
 use gpui::prelude::*;
 use gpui::*;
-use oxyde_lib::systems::file_ops::{FileOperation, OperationSummary};
+use oxyde_lib::systems::file_ops::{OperationDetail, OperationSummary};
 
 /// Scrollbar tracks, told apart by their name's end.
 pub(super) const LIST_TRACK: &str = "operations-list";
@@ -92,7 +92,7 @@ impl OperationsPanelView {
 
     /// The secondary windows' footer: removing finished operations, then the selected
     /// one's commands and the window's closing.
-    fn render_footer(&self, summaries: &[OperationSummary], operation: Option<&FileOperation>, cx: &mut Context<Self>) -> Div {
+    fn render_footer(&self, summaries: &[OperationSummary], operation: Option<&OperationDetail>, cx: &mut Context<Self>) -> Div {
         let any_finished = summaries.iter().any(|summary| super::is_final(&summary.progress.status));
         let manager = self.app.upgrade().map(|app| app.read(cx).file_ops.clone());
         let app = self.app.clone();
@@ -158,7 +158,7 @@ impl Render for OperationsPanelView {
         if let Some(input) = &self.items.input {
             input.update(cx, |input, cx| input.set_placeholder(placeholder, cx));
         }
-        let operation = self.selected.as_deref().and_then(|id| manager.get_operation(id));
+        let operation = self.selected.as_deref().and_then(|id| manager.operation_detail(id));
         if let Some(operation) = &operation {
             self.follow_items(operation, cx);
         }

@@ -21,6 +21,28 @@ pub struct OperationSummary {
     pub source_count: usize,
 }
 
+/// The operation the operations window details: its progress and places, without
+/// its sources or per-item results, which it reads apart and less often.
+#[derive(Clone, Debug, PartialEq)]
+pub struct OperationDetail {
+    pub id: String,
+    pub op_type: FileOpType,
+    pub status: OpStatus,
+    pub total_bytes: u64,
+    pub processed_bytes: u64,
+    pub total_files: usize,
+    pub processed_files: usize,
+    pub bytes_per_second: u64,
+    pub speed_history: Vec<u64>,
+    pub duration_ms: Option<u64>,
+    pub turbo: bool,
+    /// The first source in name order and how many there are.
+    pub first_source: Option<std::path::PathBuf>,
+    pub source_count: usize,
+    pub source_parent: Option<std::path::PathBuf>,
+    pub destination: Option<std::path::PathBuf>,
+}
+
 impl FileOperationManager {
     /// Every operation, oldest first, without cloning sources or per-item results.
     pub fn list_summaries(&self) -> Vec<OperationSummary> {
@@ -49,6 +71,28 @@ impl FileOperationManager {
             .collect();
         summaries.sort_by_key(|(sequence, _)| *sequence);
         summaries.into_iter().map(|(_, summary)| summary).collect()
+    }
+
+    pub fn operation_detail(&self, id: &str) -> Option<OperationDetail> {
+        let operations = self.operations.lock().unwrap();
+        let op = operations.get(id)?.lock().unwrap();
+        Some(OperationDetail {
+            id: op.id.clone(),
+            op_type: op.op_type.clone(),
+            status: op.status.clone(),
+            total_bytes: op.total_bytes,
+            processed_bytes: op.processed_bytes,
+            total_files: op.total_files,
+            processed_files: op.processed_files,
+            bytes_per_second: op.bytes_per_second,
+            speed_history: op.speed_history.clone(),
+            duration_ms: op.duration_ms,
+            turbo: op.turbo,
+            first_source: op.first_sources.first().cloned(),
+            source_count: op.sources.len(),
+            source_parent: op.source_parent.clone(),
+            destination: op.destination.clone(),
+        })
     }
 
     pub fn operation_progress(&self, id: &str) -> Option<OperationProgress> {

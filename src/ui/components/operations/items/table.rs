@@ -16,21 +16,7 @@ use crate::ui::theme::{OxydeTheme, ThemeContext};
 use crate::ui::workspace::SortDirection;
 use gpui::prelude::*;
 use gpui::*;
-use oxyde_lib::systems::file_ops::{FileOperation, ItemOutcome};
-use std::collections::HashMap;
-use std::path::PathBuf;
-
-const OUTCOMES: [ItemOutcome; 9] = [
-    ItemOutcome::InProgress,
-    ItemOutcome::Failed,
-    ItemOutcome::Partial,
-    ItemOutcome::Interrupted,
-    ItemOutcome::Pending,
-    ItemOutcome::Skipped,
-    ItemOutcome::NotProcessed,
-    ItemOutcome::Unknown,
-    ItemOutcome::Completed,
-];
+use oxyde_lib::systems::file_ops::OperationDetail;
 
 /// Corners of the box that frames the list, as the Duplicates window's.
 const BOX_RADIUS: Rems = rems(0.375);
@@ -67,7 +53,7 @@ impl OperationsPanelView {
         let widest = |values: &std::collections::HashSet<String>, tabular: bool| {
             values.iter().map(|value| measure(value, false, tabular)).fold(0.0_f32, f32::max)
         };
-        let state = OUTCOMES
+        let state = outcome::OUTCOMES
             .iter()
             .map(|&state| measure(i18n.text(outcome::label(state, *cx.theme()).0).as_ref(), false, false))
             .fold(0.0_f32, f32::max)
@@ -131,14 +117,14 @@ impl OperationsPanelView {
             .child(self.header_cell("operation-items-header-state", Message::ColumnState, Column::State, widths.state, theme, cx))
     }
 
-    fn render_item_row(&self, position: usize, widths: RowWidths, outcomes: &HashMap<PathBuf, ItemOutcome>, system: bool, theme: OxydeTheme, cx: &mut Context<Self>) -> AnyElement {
+    fn render_item_row(&self, position: usize, widths: RowWidths, system: bool, theme: OxydeTheme, cx: &mut Context<Self>) -> AnyElement {
         let Some(&row) = self.items.shown.get(position) else { return div().into_any_element() };
         let Some(item) = self.items.rows.get(row) else { return div().into_any_element() };
         let i18n = cx.i18n();
         let is_selected = self.items.selected == Some(row);
         let file_type = item.entry.as_ref().map(|entry| crate::ui::components::file_list::file_type_display(entry, i18n)).unwrap_or_default();
         let size = item.entry.as_ref().map(|entry| size_column_text(entry.size, entry.is_dir, entry.is_calculated, i18n)).unwrap_or_default();
-        let state = outcomes.get(&item.path).map(|&state| outcome::label(state, theme));
+        let state = self.items.states.outcomes.get(row).map(|&state| outcome::label(state, theme));
         div()
             .id(("operation-item", position))
             .relative()
@@ -182,20 +168,19 @@ impl OperationsPanelView {
     }
 
     /// The section's title, how far each state got, then the filter field.
-    fn render_items_toolbar(&self, operation: &FileOperation, outcomes: &HashMap<PathBuf, ItemOutcome>, window: &Window, cx: &mut Context<Self>) -> Div {
+    fn render_items_toolbar(&self, operation: &OperationDetail, window: &Window, cx: &mut Context<Self>) -> Div {
         let theme = *cx.theme();
         let i18n = cx.i18n();
         let language = i18n.language();
         let mut args = FluentArgs::new();
-        args.set("count", operation.sources.len() as i64);
-        args.set("number", format_number(operation.sources.len() as u64, language));
+        args.set("count", operation.source_count as i64);
+        args.set("number", format_number(operation.source_count as u64, language));
         let mut counts = div().flex().flex_wrap().items_center().gap(rems(0.375)).tabular_figures();
-        for state in OUTCOMES {
-            let count = outcomes.values().filter(|&&outcome| outcome == state).count();
+        for (state, &count) in outcome::OUTCOMES.iter().zip(&self.items.states.counts) {
             if count == 0 {
                 continue;
             }
-            let (message, fill, color) = outcome::label(state, theme);
+            let (message, fill, color) = outcome::label(*state, theme);
             let mut args = FluentArgs::new();
             args.set("value", i18n.text(message).to_string());
             args.set("number", format_number(count as u64, language));
@@ -230,9 +215,8 @@ impl OperationsPanelView {
     }
 
     /// The toolbar, then the details list in a framed box.
-    pub(in super::super) fn render_items(&self, operation: &FileOperation, system: bool, window: &Window, cx: &mut Context<Self>) -> Div {
+    pub(in super::super) fn render_items(&self, operation: &OperationDetail, system: bool, window: &Window, cx: &mut Context<Self>) -> Div {
         let theme = *cx.theme();
-        let outcomes = std::rc::Rc::new(operation.item_outcomes.clone());
         let viewport = self.items.pane_width.get().max(1.0);
         let columns = DetailsColumnWidths::for_viewport_with_search(
             viewport,
@@ -254,7 +238,6 @@ impl OperationsPanelView {
         let source = cx.entity();
         let entity_id = source.entity_id();
         let measured = self.items.pane_width.clone();
-        let row_outcomes = outcomes.clone();
         let mut table = div()
             .flex_1()
             .min_h_0()
@@ -300,7 +283,7 @@ impl OperationsPanelView {
                     .child(
                         uniform_list("operation-items", count, move |range, _, cx| {
                             source.update(cx, |this, cx| range.map(|position| {
-                                this.render_item_row(position, widths, &row_outcomes, system, *cx.theme(), cx)
+                                this.render_item_row(position, widths, system, *cx.theme(), cx)
                             }).collect::<Vec<_>>())
                         })
                         .track_scroll(&self.items.list)
@@ -352,7 +335,7 @@ impl OperationsPanelView {
             .min_h_0()
             .flex()
             .flex_col()
-            .child(self.render_items_toolbar(operation, &outcomes, window, cx))
+            .child(self.render_items_toolbar(operation, window, cx))
             .child(table)
     }
 }

@@ -4,6 +4,30 @@ use gpui::prelude::*;
 use gpui::*;
 use oxyde_lib::systems::file_ops::ItemOutcome;
 
+/// The states in the order the toolbar counts them.
+pub(super) const OUTCOMES: [ItemOutcome; 9] = [
+    ItemOutcome::InProgress,
+    ItemOutcome::Failed,
+    ItemOutcome::Partial,
+    ItemOutcome::Interrupted,
+    ItemOutcome::Pending,
+    ItemOutcome::Skipped,
+    ItemOutcome::NotProcessed,
+    ItemOutcome::Unknown,
+    ItemOutcome::Completed,
+];
+
+/// How many items are in each state, in the order of `OUTCOMES`.
+pub(super) fn tally(outcomes: &[ItemOutcome]) -> [usize; OUTCOMES.len()] {
+    let mut counts = [0; OUTCOMES.len()];
+    for outcome in outcomes {
+        if let Some(slot) = OUTCOMES.iter().position(|state| state == outcome) {
+            counts[slot] += 1;
+        }
+    }
+    counts
+}
+
 /// What the State column says of an item, and its badge's fill and text: solid for
 /// work under way and failures, tinted for success and partial results, neutral
 /// for the rest, so the states also differ by lightness.
