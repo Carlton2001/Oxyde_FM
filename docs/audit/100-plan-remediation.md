@@ -155,8 +155,8 @@ Statuts : à faire, en cours, corrigé (hash), obsolète, reporté. Mettre à jo
 | 6 | M27 | corrigé | 07d4f7bc | plus de 20 éléments : refus avec message (5 langues), pas de confirmation |
 | 6 | M28 | corrigé en partie | b6789b89 | tâche de l'aperçu gardée : un travail en file disparaît à la fermeture de l'infobulle ; M29 corrigé à la reprise (lecture bloquante qui occupe l'emplacement unique : exige un délai) |
 | 6 | M30 | corrigé | 667cc2d7 | `smb://` gardé dans les cibles du fil d'Ariane ; deux-points final lu comme lecteur seulement sous Windows ; Linux non compilé ici |
-| 6 | M31 | corrigé en partie | cd347c81 | sélection de glisser partagée (Rc) au lieu d'une copie par ligne ; **reporté** : copie de `selected_paths` par rendu (type partagé par ~90 sites) |
-| 6 | M32 | corrigé en partie | e7f47d6c | un seul parcours au lieu de deux ; toujours sur le thread UI |
+| 6 | M31 | corrigé | cd347c81, 2ca699e9 | sélection de glisser partagée (Rc) au lieu d'une copie par ligne ; **reporté** : copie de `selected_paths` par rendu (type partagé par ~90 sites) ; puis 2ca699e9 : sélection comparée par tampon (`SelectedPaths`), mesuré 11,3 → 3,2 ms par image après Ctrl+A sur 100 000 fichiers |
+| 6 | M32 | corrigé | e7f47d6c, e9373e4d | un seul parcours au lieu de deux ; toujours sur le thread UI ; puis e9373e4d : comptes gardés tant que fichiers et autres filtres sont inchangés, clic sur une case 2 × 50 ms → 7 ms sur 300 000 fichiers ; ouverture du menu 70 ms, une image |
 | 6 | M46, M48 | corrigé | 7894cd05 | BOM, UTF-16, cp1252 (visionneuse texte et Markdown) ; Markdown plafonné à 16 Mio |
 | 6 | M47, M49, M50, M51 | corrigé | bd5c876a, 33981a1c, 19d780f0, 4921c8a5 | tableau, autolien linéaire, image en ligne (test), plage de pages PDF plafonnée |
 | 6 | M101 | corrigé | 1146aec9 | plus de balayage des miniatures par fichier au vidage du cache |
