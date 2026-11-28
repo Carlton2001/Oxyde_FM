@@ -1,11 +1,11 @@
 //! The filter panel of a details column, opened from its header: its fields, the custom
 //! range of Size and Date, and the values it lists.
 use crate::ui::app::{ContextMenuContent, ContextMenuInstance, OxydeApp};
-use crate::ui::components::file_list::FilterEntry;
+use crate::ui::components::file_list::{FilterEntry, FilterFacets};
 use crate::ui::components::input::{TextInput, TextInputOptions};
 use crate::ui::format::DateFormat;
 use crate::ui::i18n::{I18n, I18nContext, Language, Message};
-use crate::ui::workspace::{DateRange, FilterColumn, SizeRange, TabState};
+use crate::ui::workspace::{DateRange, FacetKey, FilterColumn, SizeRange, TabState};
 use chrono::NaiveDate;
 use gpui::*;
 use std::cell::{Cell, RefCell};
@@ -32,6 +32,9 @@ pub(crate) struct ColumnFilterPanel {
     pub focused: Rc<Cell<bool>>,
     /// Values counted for one state of the tab, kept while it does not change.
     entries: Rc<RefCell<Option<(EntriesKey, Rc<Vec<FilterEntry>>)>>>,
+    /// The walk of every file behind `entries`, kept while checking values of this
+    /// column: hundreds of thousands of files are not walked again at each click.
+    facets: Rc<RefCell<Option<(FacetKey, Rc<FilterFacets>)>>>,
 }
 
 #[derive(Clone)]
@@ -56,7 +59,17 @@ impl ColumnFilterPanel {
                 return entries.clone();
             }
         }
-        let entries = Rc::new(crate::ui::components::file_list::filter_entries(tab, self.column, i18n));
+        let facet_key = tab.facet_key(self.column, chrono::Local::now().date_naive());
+        let facets = match self.facets.borrow().as_ref() {
+            Some((cached, facets)) if *cached == facet_key => Some(facets.clone()),
+            _ => None,
+        };
+        let facets = facets.unwrap_or_else(|| {
+            let facets = Rc::new(crate::ui::components::file_list::filter_facets(tab, self.column, facet_key.today));
+            *self.facets.borrow_mut() = Some((facet_key, facets.clone()));
+            facets
+        });
+        let entries = Rc::new(crate::ui::components::file_list::filter_entries_from(tab, self.column, &facets, i18n));
         *self.entries.borrow_mut() = Some((key, entries.clone()));
         entries
     }
@@ -202,6 +215,7 @@ impl OxydeApp {
             range,
             focused: Rc::new(Cell::new(false)),
             entries: Default::default(),
+            facets: Default::default(),
         })
     }
 

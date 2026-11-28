@@ -19,6 +19,10 @@ mod metadata_indicator_tests;
 mod trash_search_tests;
 
 #[cfg(test)]
+#[path = "filters/tests/facet_key.rs"]
+mod facet_key_tests;
+
+#[cfg(test)]
 #[path = "filters/tests/criteria.rs"]
 mod criteria_tests;
 
@@ -76,6 +80,29 @@ impl FileFilters {
             filter_date_range: tab.filter_date_range,
             filter_deleted: tab.filter_deleted.clone(),
             filter_deleted_range: tab.filter_deleted_range,
+        }
+    }
+    fn clear_column(&mut self, column: FilterColumn) {
+        match column {
+            FilterColumn::Name => {
+                self.filter_name.clear();
+                self.filter_name_regex = false;
+            }
+            FilterColumn::Location => self.filter_original_location.clear(),
+            FilterColumn::Type => self.filter_types.clear(),
+            FilterColumn::Size => {
+                self.filter_sizes.clear();
+                self.filter_size_range = None;
+            }
+            FilterColumn::Permissions => self.filter_permissions.clear(),
+            FilterColumn::Date => {
+                self.filter_dates.clear();
+                self.filter_date_range = None;
+            }
+            FilterColumn::Deleted => {
+                self.filter_deleted.clear();
+                self.filter_deleted_range = None;
+            }
         }
     }
     fn is_empty(&self) -> bool {
@@ -172,6 +199,19 @@ impl CalendarFilterRequest {
             reference: self.reference,
             files,
         }
+    }
+}
+
+/// See [`TabState::facet_key`]. The Weak keeps the files' address from another vector.
+pub(crate) struct FacetKey {
+    files: std::sync::Weak<Vec<FileEntry>>,
+    filters: FileFilters,
+    pub(crate) today: chrono::NaiveDate,
+}
+
+impl PartialEq for FacetKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.files.ptr_eq(&other.files) && self.filters == other.filters && self.today == other.today
     }
 }
 
@@ -349,6 +389,14 @@ impl TabState {
         for file in self.files.iter() {
             visit(file, compiled.matches(file, Some(column)));
         }
+    }
+
+    /// What the values of `column` and their counts depend on: the files, today and the
+    /// filters of the other columns. Checking a value of `column` keeps the key.
+    pub(crate) fn facet_key(&self, column: FilterColumn, today: chrono::NaiveDate) -> FacetKey {
+        let mut filters = FileFilters::from_tab(self);
+        filters.clear_column(column);
+        FacetKey { files: std::sync::Arc::downgrade(&self.files), filters, today }
     }
 
     /// Changes whenever the files or their filters do; keys caches of faceted counts.

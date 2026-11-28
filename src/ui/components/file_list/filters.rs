@@ -34,9 +34,22 @@ pub(crate) fn type_label(value: &str, i18n: &I18n) -> String {
     i18n.text(message).to_string()
 }
 
+/// The values of `column` present in the files, counted among the entries the other
+/// filters keep: the part of a panel's entries that walks every file, kept while its
+/// [`FacetKey`](crate::ui::workspace::FacetKey) holds.
+pub(crate) struct FilterFacets {
+    present: Vec<FilterValue>,
+    counts: HashMap<FilterValue, u64>,
+    samples: HashMap<String, (String, IconType)>,
+}
+
 /// The values of `column`, in display order. Text columns have none.
+#[cfg(test)]
 pub(crate) fn filter_entries(tab: &TabState, column: FilterColumn, i18n: &I18n) -> Vec<FilterEntry> {
-    let today = chrono::Local::now().date_naive();
+    filter_entries_from(tab, column, &filter_facets(tab, column, chrono::Local::now().date_naive()), i18n)
+}
+
+pub(crate) fn filter_facets(tab: &TabState, column: FilterColumn, today: chrono::NaiveDate) -> FilterFacets {
     let mut counts = HashMap::<FilterValue, u64>::new();
     let mut present = Vec::<FilterValue>::new();
     let mut samples = HashMap::<String, (String, IconType)>::new();
@@ -56,6 +69,14 @@ pub(crate) fn filter_entries(tab: &TabState, column: FilterColumn, i18n: &I18n) 
             present.push(value);
         }
     });
+    FilterFacets { present, counts, samples }
+}
+
+/// The values of `column`, in display order: those of `facets` and those still checked.
+pub(crate) fn filter_entries_from(tab: &TabState, column: FilterColumn, facets: &FilterFacets, i18n: &I18n) -> Vec<FilterEntry> {
+    let FilterFacets { present, counts, samples } = facets;
+    let mut present = present.clone();
+    let mut seen: std::collections::HashSet<&FilterValue> = facets.present.iter().collect();
     // Values checked in another folder stay listed, to be unchecked.
     let checked: Vec<FilterValue> = match column {
         FilterColumn::Type => tab.filter_types.iter().cloned().map(FilterValue::Type).collect(),
@@ -65,9 +86,9 @@ pub(crate) fn filter_entries(tab: &TabState, column: FilterColumn, i18n: &I18n) 
         FilterColumn::Permissions => tab.filter_permissions.iter().copied().map(FilterValue::Permissions).collect(),
         FilterColumn::Name | FilterColumn::Location => Vec::new(),
     };
-    for value in checked {
-        if seen.insert(value.clone()) {
-            present.push(value);
+    for value in &checked {
+        if seen.insert(value) {
+            present.push(value.clone());
         }
     }
     present.sort_by_key(order_key);

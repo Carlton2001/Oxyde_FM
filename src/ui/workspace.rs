@@ -14,7 +14,7 @@ pub(crate) use preparation::{resolve_native_kinds, FileUpdate};
 pub(crate) use folder_sizes::{measurable as measurable_folder, SIZE_FLASH_DURATION};
 pub(crate) use sorting::sort_files;
 pub use filters::{DateRange, FilterColumn, FilterValue, SizeRange};
-pub(crate) use filters::{deleted_ms, NameMatcher};
+pub(crate) use filters::{deleted_ms, FacetKey, NameMatcher};
 #[cfg(test)]
 pub(crate) use filters::ColumnFilterFlags;
 mod tree;
@@ -254,7 +254,7 @@ pub enum TabLoadStatus {
     ArchiveListing(oxyde_lib::models::error::ArchiveListingFailure),
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 struct FileFilters {
     filter_types: std::collections::HashSet<String>,
     filter_name: String,

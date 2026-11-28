@@ -14,7 +14,7 @@ mod selection_button;
 mod scroll_top;
 mod thumbnails;
 
-pub(crate) use filters::{filter_entries, filter_summary, filters_summary, FilterEntry};
+pub(crate) use filters::{filter_entries_from, filter_facets, filter_summary, filters_summary, FilterEntry, FilterFacets};
 use cloud_status::cloud_status_icon;
 pub(crate) use cloud_status::cloud_status_message;
 pub(crate) use presentation::{file_type_display, file_type_label, network_category, network_entry};
