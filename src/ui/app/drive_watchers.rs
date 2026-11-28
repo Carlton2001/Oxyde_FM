@@ -2,6 +2,7 @@ use super::{drive_watchers, OxydeApp, ToastKind};
 use crate::ui::i18n::{I18nContext, Message};
 use crate::ui::paths::paths_match;
 use gpui::*;
+mod absences;
 mod changes;
 pub use changes::{DirectoryWatcher, WatcherChanges};
 pub(super) use changes::{take_size_changes, SizeChanges};
@@ -283,8 +284,8 @@ impl OxydeApp {
                     Ok(Err(error)) => { log::warn!("Drive notifications unavailable: {error}"); None }
                     Err(error) => { log::warn!("Drive notification worker failed: {error}"); None }
                 };
-                // Drives absent from the previous survey: one transient survey does not remove a drive.
-                let mut suspect: Vec<String> = Vec::new();
+                // A drive missing for a moment keeps its tabs and their history.
+                let mut absences = absences::DriveAbsences::default();
                 let mut schedule = drive_watchers::DriveRefreshSchedule::new(
                     _registration.is_some(), std::time::Instant::now());
                 loop {
@@ -312,12 +313,7 @@ impl OxydeApp {
                                     .filter(|old| !roots.iter().any(|root| paths_match(&root.path, &old.path)))
                                     .cloned()
                                     .collect();
-                                for old in &missing {
-                                    if !suspect.contains(&old.path) {
-                                        roots.push(old.clone());
-                                    }
-                                }
-                                suspect = missing.into_iter().map(|old| old.path).collect();
+                                roots.extend(absences.still_shown(missing, |old| old.path.as_str(), std::time::Instant::now()));
                                 let changed = roots.len() != this.state.drives.len()
                                     || roots.iter().any(|root| !this.state.drives.iter()
                                         .any(|old| old.path == root.path && old.drive_type == root.drive_type));
