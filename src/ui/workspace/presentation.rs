@@ -52,7 +52,10 @@ impl TabState {
             heights.push(heights.last().unwrap() + crate::ui::date_groups::row_height(row, cards));
         }
         let folders = files.iter().filter(|file| file.is_dir).count();
-        let histogram_total = if files.iter().all(|file| !file.is_dir || file.is_calculated) {
+        // Links are never measured: they must not hold the histogram back.
+        let histogram_total = if files.iter().all(|file| {
+            !file.is_dir || file.is_calculated || !super::folder_sizes::measurable(file)
+        }) {
             files
                 .iter()
                 .fold(0u64, |total, file| total.saturating_add(file.size))

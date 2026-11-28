@@ -74,3 +74,24 @@ fn links_behave_like_their_target_and_broken_links_stay_links() {
     assert!(!entry("file").is_broken_link);
     assert_eq!(broken.size, "missing".len() as u64);
 }
+
+#[cfg(target_os = "windows")]
+#[test]
+fn junctions_stay_links_and_plain_folders_stay_measurable() {
+    let root = tempfile::tempdir().unwrap();
+    let target = root.path().join("target");
+    let junction = root.path().join("junction");
+    std::fs::create_dir(&target).unwrap();
+    let status = std::process::Command::new("cmd")
+        .args(["/C", "mklink", "/J"])
+        .arg(&junction)
+        .arg(&target)
+        .output()
+        .unwrap()
+        .status;
+    assert!(status.success());
+    let link = get_file_entry_from_path(&junction).unwrap();
+    assert!(link.is_dir && link.is_symlink && link.is_junction);
+    let folder = get_file_entry_from_path(&target).unwrap();
+    assert!(folder.is_dir && !folder.is_symlink && !folder.is_junction);
+}

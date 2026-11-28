@@ -54,3 +54,26 @@ fn repeated_large_pane_snapshots_reuse_files_rows_and_geometry() {
         assert!(tab.presentation(None, 1).rows.is_empty());
     }
 }
+
+#[test]
+fn unmeasured_links_do_not_hold_back_the_size_histogram() {
+    let mut tab = TabState::new("pane-1".into(), "fixture".into());
+    let folder = |name: &str| FileEntry {
+        name: name.into(),
+        path: format!("C:/fixture/{name}"),
+        is_dir: true,
+        ..Default::default()
+    };
+    let mut measured = folder("measured");
+    measured.size = 42;
+    measured.is_calculated = true;
+    let mut junction = folder("junction");
+    junction.is_symlink = true;
+    junction.is_junction = true;
+    tab.files = vec![measured, junction, folder("pending")].into();
+    tab.update_cache();
+    assert_eq!(tab.presentation(None, 1).histogram_total, 0);
+    Arc::make_mut(&mut tab.files).pop();
+    tab.update_cache();
+    assert_eq!(tab.presentation(None, 1).histogram_total, 42);
+}
