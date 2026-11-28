@@ -67,6 +67,8 @@ fn decode_thumbnail_image(
     if data.len() as u64 > policy.encoded_bytes {
         return Err(encoded_thumbnail_limit_error(policy));
     }
+    // Icons are small: the file is kept to read the mask of a legacy entry.
+    let icon = data.starts_with(&[0, 0, 1, 0]).then(|| data.clone());
     let mut reader = image::ImageReader::new(std::io::Cursor::new(data));
     if let Some(format) = format {
         reader.set_format(format);
@@ -80,9 +82,13 @@ fn decode_thumbnail_image(
     // This is not a bound on process memory, especially with concurrent previews.
     limits.max_alloc = Some(policy.alloc_bytes);
     reader.limits(limits);
-    reader
+    let decoded = reader
         .decode()
-        .map_err(|error| CommandError::Other(error.to_string()))
+        .map_err(|error| CommandError::Other(error.to_string()))?;
+    Ok(match icon {
+        Some(icon) => crate::utils::image_preview_decode::ico_mask::apply_legacy_mask(&icon, decoded),
+        None => decoded,
+    })
 }
 
 fn load_thumbnail_image(

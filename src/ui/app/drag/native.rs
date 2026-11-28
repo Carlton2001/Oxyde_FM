@@ -21,6 +21,7 @@ pub(super) fn has_ghost(cx: &App) -> bool {
 pub(super) fn begin(
     paths: Vec<String>,
     is_dir: bool,
+    from_trash: bool,
     app: Entity<OxydeApp>,
     window: &mut Window,
     cx: &mut Context<super::FileDragPreview>,
@@ -69,7 +70,9 @@ pub(super) fn begin(
                     .as_mut()
                     .filter(|session| session.token == token)
                 {
-                    session.ready = real;
+                    // Other applications would take a trashed item's content without
+                    // its record: Explorer moves it out of the Recycle Bin.
+                    session.ready = real && !from_trash;
                     app.promote_file_drag(window, cx);
                 }
             })

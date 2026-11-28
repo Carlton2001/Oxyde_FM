@@ -134,7 +134,7 @@ impl TabState {
             filter_deleted: std::collections::HashSet::new(),
             filter_deleted_range: None,
             keep_filters: false,
-            selected_paths: std::collections::HashSet::new(),
+            selected_paths: Default::default(),
             selection_anchor: None,
             keyboard_cursor: None,
             view_mode: ViewMode::Grid,
@@ -192,7 +192,7 @@ impl TabState {
     pub(crate) fn selection_snapshot(&self) -> std::rc::Rc<SelectionSnapshot> {
         let mut cache = self.selection_cache.borrow_mut();
         if let Some(cached) = cache.as_ref() {
-            if std::sync::Arc::ptr_eq(&cached.files, &self.cached_filtered_files) && *cached.paths == self.selected_paths {
+            if std::sync::Arc::ptr_eq(&cached.files, &self.cached_filtered_files) && cached.stamp == self.selected_paths.stamp() {
                 return cached.clone();
             }
         }
@@ -204,7 +204,8 @@ impl TabState {
         let folders = shown.iter().filter(|file| file.is_dir).count();
         let snapshot = std::rc::Rc::new(SelectionSnapshot {
             files: self.cached_filtered_files.clone(),
-            paths: std::rc::Rc::new(self.selected_paths.clone()),
+            paths: std::rc::Rc::new((*self.selected_paths).clone()),
+            stamp: self.selected_paths.stamp(),
             folders,
             file_count: shown.len() - folders,
             bytes: shown.iter().filter(|file| !file.is_dir || file.is_calculated).map(|file| file.size).sum(),
@@ -255,6 +256,8 @@ pub(crate) struct SelectionSnapshot {
     /// The shown files it was taken from.
     files: std::sync::Arc<Vec<FileEntry>>,
     pub(crate) paths: std::rc::Rc<std::collections::HashSet<String>>,
+    /// The [`SelectedPaths`](super::SelectedPaths) stamp `paths` was copied at.
+    stamp: u64,
     /// The shown selected paths, in display order: what a drag carries.
     pub(crate) shown: std::rc::Rc<Vec<String>>,
     pub(crate) folders: usize,

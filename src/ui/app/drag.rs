@@ -77,6 +77,7 @@ impl FileDragPreview {
         paths: Vec<String>,
         cursor_offset: Point<Pixels>,
         single_is_dir: bool,
+        from_trash: bool,
         app_handle: Entity<OxydeApp>,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -94,7 +95,9 @@ impl FileDragPreview {
         });
         let sub = cx.observe(&app_handle, |_, _entity, cx| cx.notify());
         #[cfg(target_os = "windows")]
-        native::begin(paths.clone(), single_is_dir, app_handle.clone(), window, cx);
+        native::begin(paths.clone(), single_is_dir, from_trash, app_handle.clone(), window, cx);
+        #[cfg(not(target_os = "windows"))]
+        let _ = from_trash;
         Self {
             paths,
             single_is_dir,

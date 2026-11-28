@@ -170,7 +170,7 @@ impl OxydeApp {
 
     pub(crate) fn context_action_paths(&self, clicked_path: &str) -> Vec<String> {
         action_paths(clicked_path, self.state.find_pane(&self.state.active_pane_id)
-            .map(|pane| &pane.active_tab().selected_paths))
+            .map(|pane| &*pane.active_tab().selected_paths))
     }
 
     pub(crate) fn request_native_context_menu(

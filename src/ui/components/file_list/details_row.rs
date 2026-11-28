@@ -216,10 +216,11 @@ pub(super) fn render_details_row(params: DetailsRowParams<'_>, cx: &mut App) -> 
                     std::rc::Rc::new(vec![path.clone()])
                 };
                 let h_drag = h.clone();
-                move |_, cursor_offset, window, cx| {
+                move |data: &FileDragData, cursor_offset, window, cx| {
                     let app = h_drag.clone();
                     let paths = drag_paths.to_vec();
-                    cx.new(|cx| FileDragPreview::new(paths, cursor_offset, is_dir, app, window, cx))
+                    let from_trash = data.from_trash;
+                    cx.new(|cx| FileDragPreview::new(paths, cursor_offset, is_dir, from_trash, app, window, cx))
                 }
             })
             .external_drag_payload(crate::ui::app::outgoing_drag())

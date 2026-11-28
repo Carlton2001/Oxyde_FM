@@ -381,7 +381,7 @@ pub(super) fn render_sidebar_rows(
                             move |_, cursor_offset, window, cx| {
                                 let app   = h_drag.clone();
                                 let paths = vec![drag_path.clone()];
-                                cx.new(|cx| FileDragPreview::new(paths, cursor_offset, true, app, window, cx))
+                                cx.new(|cx| FileDragPreview::new(paths, cursor_offset, true, false, app, window, cx))
                             }
                         }
                     )

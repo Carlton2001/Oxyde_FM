@@ -236,6 +236,11 @@ Les copies, compressions et déplacements annulés écrivent sous le nom final ;
 
 - [ ] M67 (`ae156245`) : copier 50 000 petits fichiers d'un même dossier (Ctrl+A, Ctrl+C, Ctrl+V) avec la fenêtre des opérations ouverte : l'opération apparaît en quelques secondes, la sélection et le parcours durent quelques secondes (journal `copy_source_selection`, `copy_plan_traversal`), `ls /proc/$(pidof oxyde)/fd | wc -l` ne croît pas avec le nombre de fichiers ; la fenêtre suit sans à-coups.
 
+## Validations du 28 novembre
+
+- [ ] M11 (`38156904`) : ouvrir un onglet sur une clé USB ou un partage GVfs, le faire disparaître moins de deux secondes (débrancher et rebrancher, ou `udisksctl unmount` puis `mount`) : l'onglet et son historique restent. Retiré pour de bon : le lecteur quitte la barre latérale et l'onglet est redirigé en trois secondes environ.
+- [ ] M85 (`354625e0`) : afficher en grille un .ico 32 bits à alpha nul (icône d'avant Windows XP) : elle est visible, transparente seulement où son masque le dit.
+
 ## Tests X11 (non prévus)
 
 Sortis de leurs lots : l'utilisateur ne compte pas les faire. Ils restent ouverts, sans échéance.

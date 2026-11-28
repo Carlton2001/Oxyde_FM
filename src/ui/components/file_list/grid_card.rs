@@ -225,14 +225,16 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
             },
             {
                 let h = h.clone();
-                move |_, cursor_offset, window, cx| {
+                move |data: &FileDragData, cursor_offset, window, cx| {
                     let app = h.clone();
                     let paths = paths.to_vec();
+                    let from_trash = data.from_trash;
                     cx.new(|cx| {
                         FileDragPreview::new(
                             paths,
                             cursor_offset,
                             is_dir,
+                            from_trash,
                             app,
                             window,
                             cx,

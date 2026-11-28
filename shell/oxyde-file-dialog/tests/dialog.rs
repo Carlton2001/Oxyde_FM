@@ -5,14 +5,14 @@
 use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
 use std::path::{Path, PathBuf};
-use windows::core::{implement, w, Interface, Ref, GUID, HRESULT, HSTRING, PCSTR, PCWSTR};
+use windows::core::{implement, w, AsImpl, Interface, Ref, GUID, HRESULT, HSTRING, PCSTR, PCWSTR};
 use windows::Win32::Foundation::{ERROR_CANCELLED, E_NOTIMPL, S_FALSE};
 use windows::Win32::System::Com::{CoInitializeEx, CoTaskMemFree, IClassFactory, COINIT_APARTMENTTHREADED};
 use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 use windows::Win32::UI::Shell::Common::COMDLG_FILTERSPEC;
 use windows::Win32::UI::Shell::{
     IFileDialog, IFileDialog2, IFileDialogCustomize, IFileDialogEvents, IFileDialogEvents_Impl, IFileOpenDialog, IFileSaveDialog, IShellItem,
-    SHCreateItemFromParsingName, CDCS_INACTIVE, CDCS_VISIBLE, FDAP_TOP, FDE_OVERWRITE_RESPONSE, FDE_SHAREVIOLATION_RESPONSE, FOS_ALLOWMULTISELECT, FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
+    SHCreateItemFromParsingName, CDCS_INACTIVE, CDCS_VISIBLE, FDAP_TOP, FDEOR_ACCEPT, FDEOR_REFUSE, FDE_OVERWRITE_RESPONSE, FDE_SHAREVIOLATION_RESPONSE, FOS_ALLOWMULTISELECT, FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
 };
 
 const OPEN: GUID = GUID::from_u128(0xDC1C5A9C_E88A_4DDE_A5A1_60F82A20AEF7);
@@ -89,11 +89,15 @@ fn item(path: &Path) -> IShellItem {
     unsafe { SHCreateItemFromParsingName(&HSTRING::from(path.as_os_str()), None).unwrap() }
 }
 
-/// A listener that refuses the first choices it is told of.
+/// A listener that refuses the first choices it is told of, and the first files it is
+/// asked to let overwrite.
 #[implement(IFileDialogEvents)]
+#[derive(Default)]
 struct Listener {
     refusals: Cell<usize>,
     told: RefCell<Vec<String>>,
+    overwrite_refusals: Cell<usize>,
+    overwrites: RefCell<Vec<String>>,
 }
 
 impl IFileDialogEvents_Impl for Listener_Impl {
@@ -111,7 +115,14 @@ impl IFileDialogEvents_Impl for Listener_Impl {
     fn OnSelectionChange(&self, _: Ref<IFileDialog>) -> windows::core::Result<()> { Ok(()) }
     fn OnShareViolation(&self, _: Ref<IFileDialog>, _: Ref<IShellItem>) -> windows::core::Result<FDE_SHAREVIOLATION_RESPONSE> { Err(E_NOTIMPL.into()) }
     fn OnTypeChange(&self, _: Ref<IFileDialog>) -> windows::core::Result<()> { Ok(()) }
-    fn OnOverwrite(&self, _: Ref<IFileDialog>, _: Ref<IShellItem>) -> windows::core::Result<FDE_OVERWRITE_RESPONSE> { Err(E_NOTIMPL.into()) }
+    fn OnOverwrite(&self, _: Ref<IFileDialog>, item: Ref<IShellItem>) -> windows::core::Result<FDE_OVERWRITE_RESPONSE> {
+        self.overwrites.borrow_mut().push(path(item.unwrap()));
+        if self.overwrite_refusals.get() > 0 {
+            self.overwrite_refusals.set(self.overwrite_refusals.get() - 1);
+            return Ok(FDEOR_REFUSE);
+        }
+        Ok(FDEOR_ACCEPT)
+    }
 }
 
 fn opens_what_oxyde_answers(installed: &Installed, folder: &Path) {
@@ -189,7 +200,7 @@ fn a_refused_choice_is_asked_again(installed: &Installed, folder: &Path) {
     let (first, second) = (folder.join("a.txt"), folder.join("b.md"));
     installed.answers(&[&format!("ok\npath\t{}\n", first.display()), &format!("ok\npath\t{}\n", second.display())]);
     let dialog: IFileOpenDialog = installed.dialog(&OPEN);
-    let listener: IFileDialogEvents = Listener { refusals: Cell::new(1), told: RefCell::default() }.into();
+    let listener: IFileDialogEvents = Listener { refusals: Cell::new(1), ..Default::default() }.into();
     unsafe {
         let cookie = dialog.Advise(&listener).unwrap();
         dialog.Show(None).unwrap();
@@ -197,6 +208,32 @@ fn a_refused_choice_is_asked_again(installed: &Installed, folder: &Path) {
         dialog.Unadvise(cookie).unwrap();
     }
     assert_eq!(installed.asked().len(), 2);
+}
+
+/// An application that refuses to overwrite the file chosen gets Oxyde again, and the
+/// file stays as it was: the system's dialog does the same.
+fn a_refused_overwrite_is_asked_again(installed: &Installed, folder: &Path) {
+    let (existing, free) = (folder.join("kept.txt"), folder.join("other.txt"));
+    std::fs::write(&existing, b"kept").unwrap();
+    installed.answers(&[&format!("ok
+path	{}
+", existing.display()), &format!("ok
+path	{}
+", free.display())]);
+    let dialog: IFileSaveDialog = installed.dialog(&SAVE);
+    let listener = Listener { overwrite_refusals: Cell::new(1), ..Default::default() };
+    let listener: IFileDialogEvents = listener.into();
+    unsafe {
+        let cookie = dialog.Advise(&listener).unwrap();
+        dialog.Show(None).unwrap();
+        assert_eq!(path(&dialog.GetResult().unwrap()), free.to_str().unwrap());
+        dialog.Unadvise(cookie).unwrap();
+    }
+    let told: &Listener = unsafe { listener.as_impl() };
+    assert_eq!(*told.overwrites.borrow(), [existing.to_str().unwrap()]);
+    assert_eq!(*told.told.borrow(), [free.to_str().unwrap()]);
+    assert_eq!(installed.asked().len(), 2);
+    assert_eq!(std::fs::read(&existing).unwrap(), b"kept");
 }
 
 fn the_applications_controls_are_asked_and_answered(installed: &Installed, folder: &Path) {
@@ -271,6 +308,7 @@ fn the_dialog_applications_get_is_answered_by_the_launcher() {
     folders_are_asked_for_as_folders(&installed, &folder);
     saves_under_a_name_that_is_still_free(&installed, &folder);
     a_refused_choice_is_asked_again(&installed, &folder);
+    a_refused_overwrite_is_asked_again(&installed, &folder);
     the_applications_controls_are_asked_and_answered(&installed, &folder);
     the_other_interfaces_are_there(&installed);
 }
