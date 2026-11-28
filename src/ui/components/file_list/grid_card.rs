@@ -86,7 +86,7 @@ pub(super) fn render_grid_card(params: GridCardParams<'_>, cx: &mut App) -> Stat
     };
     let can_browse = is_dir || file.is_navigable_archive() || file.needs_mount_for_browsing();
     let can_drop = is_dir || file.is_writable_archive();
-    let loading_size = calculating_sizes && is_dir && !file.is_calculated;
+    let loading_size = calculating_sizes && crate::ui::workspace::measurable_folder(file) && !file.is_calculated;
     let mut card = div()
         .id(SharedString::from(format!("file-card-{path}"))).relative().when(histogram_total > 0, |d| d.child(
             crate::ui::elements::rounded_fill::rounded_fill(
