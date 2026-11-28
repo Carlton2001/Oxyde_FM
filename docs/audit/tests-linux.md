@@ -232,6 +232,10 @@ Les copies, compressions et déplacements annulés écrivent sous le nom final ;
 - [ ] Compression ZIP puis TAR.ZST d'un dossier, annulée au milieu : l'archive partielle disparaît ; terminée, l'archive porte son nom (`(1)` si pris) dès le début de la compression.
 - [ ] Déplacer un fichier vers une clé USB, puis Annuler : il revient à sa place d'origine sans dossier `.oxyde-history-`.
 
+## M67 : grosses copies
+
+- [ ] M67 (`ae156245`) : copier 50 000 petits fichiers d'un même dossier (Ctrl+A, Ctrl+C, Ctrl+V) avec la fenêtre des opérations ouverte : l'opération apparaît en quelques secondes, la sélection et le parcours durent quelques secondes (journal `copy_source_selection`, `copy_plan_traversal`), `ls /proc/$(pidof oxyde)/fd | wc -l` ne croît pas avec le nombre de fichiers ; la fenêtre suit sans à-coups.
+
 ## Tests X11 (non prévus)
 
 Sortis de leurs lots : l'utilisateur ne compte pas les faire. Ils restent ouverts, sans échéance.
