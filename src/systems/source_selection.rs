@@ -148,6 +148,36 @@ impl SelectedLink {
     }
 }
 
+/// The folders holding selected sources, held once for all the sources they hold:
+/// tens of thousands of files chosen in one folder share its handles instead of
+/// each holding the whole chain of its folders.
+#[derive(Default)]
+pub(super) struct SelectionParents {
+    held: std::collections::HashMap<PathBuf, Arc<BoundDirectory>>,
+}
+
+impl SelectionParents {
+    fn parent_of(&mut self, path: &Path) -> io::Result<Arc<BoundDirectory>> {
+        let absolute = std::path::absolute(path)?;
+        let key = absolute
+            .parent()
+            .ok_or_else(|| io::Error::other("Path has no parent"))?
+            .to_path_buf();
+        if let Some(parent) = self.held.get(&key) {
+            return Ok(Arc::clone(parent));
+        }
+        let root = Arc::new(HeldParents::new(path)?);
+        let parent = Arc::new(BoundDirectory {
+            file: root.directory().try_clone()?,
+            resolved: root.resolved_directory().to_path_buf(),
+            root,
+            ancestor: None,
+        });
+        self.held.insert(key, Arc::clone(&parent));
+        Ok(parent)
+    }
+}
+
 #[derive(Clone)]
 pub(super) struct SelectedEntry {
     path: PathBuf,
@@ -157,14 +187,13 @@ pub(super) struct SelectedEntry {
     link: Option<SelectedLink>,
 }
 impl SelectedEntry {
+    #[cfg(test)]
     pub fn select(path: &Path) -> io::Result<Self> {
-        let root = Arc::new(HeldParents::new(path)?);
-        let parent = Arc::new(BoundDirectory {
-            file: root.directory().try_clone()?,
-            resolved: root.resolved_directory().to_path_buf(),
-            root,
-            ancestor: None,
-        });
+        Self::select_in(path, &mut SelectionParents::default())
+    }
+    /// Selects `path` bound to its folder as `parents` holds it, held there first.
+    pub fn select_in(path: &Path, parents: &mut SelectionParents) -> io::Result<Self> {
+        let parent = parents.parent_of(path)?;
         Self::child(path.to_path_buf(), parent)
     }
     fn child(path: PathBuf, parent: Arc<BoundDirectory>) -> io::Result<Self> {
@@ -376,6 +405,10 @@ impl SourceWalk {
 #[cfg(test)]
 #[path = "source_selection/tests/vanished.rs"]
 mod vanished_tests;
+
+#[cfg(test)]
+#[path = "source_selection/tests/shared_parents.rs"]
+mod shared_parents_tests;
 
 #[cfg(all(test, target_os = "windows"))]
 mod tests {

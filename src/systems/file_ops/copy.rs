@@ -206,9 +206,10 @@ impl FileOperationManager {
         let mut canonical_sources = Vec::with_capacity(sources.len());
         let mut source_paths = crate::systems::source_path_set::SourcePathSet::default();
         let selection_started = std::time::Instant::now();
+        let mut selection_parents = crate::systems::source_selection::SelectionParents::default();
         for source in &sources {
             Self::archive_checkpoint(op)?;
-            let selected = crate::systems::source_selection::SelectedEntry::select(source)
+            let selected = crate::systems::source_selection::SelectedEntry::select_in(source, &mut selection_parents)
                 .map_err(|error| format!("Cannot select source {:?}: {error}", source))?;
             let canonical = selected.resolved_path();
             if canonical == target_dir || target_dir.starts_with(&canonical) {
