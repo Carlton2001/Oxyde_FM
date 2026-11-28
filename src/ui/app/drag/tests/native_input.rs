@@ -18,7 +18,7 @@ impl Render for Probe {
                     paths: std::rc::Rc::new(vec!["C:/probe.txt".into()]), source_pane_id: "probe".into(), from_trash: false,
                 }, move |_, offset, window, cx| {
                     let ghost = cx.new(|cx| FileDragPreview::new(
-                        vec!["C:/probe.txt".into()], offset, false, app.clone(), window, cx,
+                        vec!["C:/probe.txt".into()], offset, false, false, app.clone(), window, cx,
                     ));
                     source.update(cx, |probe, _| probe.preview = Some(ghost.clone()));
                     ghost
