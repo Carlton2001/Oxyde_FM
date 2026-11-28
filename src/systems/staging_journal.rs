@@ -4,7 +4,9 @@
 //! for good: the next start removes the files whose notes no live process still holds.
 //!
 //! Each note stays locked by its owner; a note that can be locked again belongs to
-//! an ended process. A file is removed only when it is still the one created (same
+//! an ended process. A note whose file was kept is emptied rather than removed and
+//! serves the thread's next file: creating and removing a note per file cost about as
+//! much as copying a small file. An empty note proves nothing and recovery removes it. A file is removed only when it is still the one created (same
 //! identity and creation date); anything else stays, as an in-session cleanup does.
 //! Notes of the staging folders earlier versions wrote are still recovered: a folder
 //! goes only when it is still the one created (same identity, same `.pin` marker),
@@ -25,6 +27,54 @@ static ENABLED: AtomicBool = AtomicBool::new(false);
 
 const FOLDER: &str = "interrupted";
 const PREFIX: &str = ".oxyde-";
+/// Emptied notes a thread keeps locked for its next files: a file being written
+/// rarely overlaps more than one other on the same thread.
+const SPARE_NOTES: usize = 4;
+
+/// An emptied note, still locked, removed when its thread ends.
+struct Spare {
+    lock: Option<File>,
+    path: PathBuf,
+}
+
+impl Drop for Spare {
+    fn drop(&mut self) {
+        drop(self.lock.take());
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+thread_local! {
+    static SPARES: std::cell::RefCell<Vec<Spare>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// An emptied note of `folder` this thread holds, if any.
+fn take_spare(folder: &Path) -> Option<(File, PathBuf)> {
+    SPARES
+        .try_with(|spares| {
+            let mut spares = spares.borrow_mut();
+            let index = spares.iter().position(|spare| spare.path.parent() == Some(folder))?;
+            let mut spare = spares.swap_remove(index);
+            let lock = spare.lock.take().expect("spare note is held");
+            Some((lock, std::mem::take(&mut spare.path)))
+        })
+        .ok()
+        .flatten()
+}
+
+/// Keeps an emptied note for this thread's next file; false when it has enough.
+fn keep_spare(lock: &mut Option<File>, path: &Path) -> bool {
+    SPARES
+        .try_with(|spares| {
+            let mut spares = spares.borrow_mut();
+            if spares.len() >= SPARE_NOTES {
+                return false;
+            }
+            spares.push(Spare { lock: lock.take(), path: path.to_path_buf() });
+            true
+        })
+        .unwrap_or(false)
+}
 
 /// Notes the files written from now on in this process.
 pub fn enable() {
@@ -90,6 +140,14 @@ impl Entry {
 
 impl Drop for Entry {
     fn drop(&mut self) {
+        // A note of this process, emptied, serves again; a note recovery read goes.
+        if self.record.is_some() {
+            if let Some(lock) = self.lock.as_mut() {
+                if lock.set_len(0).is_ok() && keep_spare(&mut self.lock, &self.path) {
+                    return;
+                }
+            }
+        }
         // Windows refuses to delete a file its own exclusive handle holds.
         drop(self.lock.take());
         if let Err(error) = std::fs::remove_file(&self.path) {
@@ -141,6 +199,11 @@ fn write_folder(folder: &Path, staging: &Path, directory: &File, pin: &File) -> 
 }
 
 fn write(folder: &Path, name: &str, record: &Record) -> io::Result<Entry> {
+    if let Some((lock, path)) = take_spare(folder) {
+        let mut entry = Entry { lock: Some(lock), path, record: Some(record.clone()) };
+        store(entry.lock.as_mut().expect("held note"), record)?;
+        return Ok(entry);
+    }
     std::fs::create_dir_all(folder)?;
     let path = folder.join(format!("{name}.json"));
     let lock = platform().lock_cache_file(&path)?;

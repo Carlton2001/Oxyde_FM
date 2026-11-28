@@ -4,6 +4,14 @@ use crate::systems::path_parents::HeldParents;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+/// Notes that still name something: an emptied note waits for the thread's next file.
+fn noted(notes: &Path) -> usize {
+    std::fs::read_dir(notes)
+        .unwrap()
+        .filter(|note| note.as_ref().unwrap().metadata().unwrap().len() > 0)
+        .count()
+}
+
 /// A partial file and its note, as a copy leaves them.
 fn partial(root: &Path, notes: &Path, name: &str) -> (PathBuf, Entry) {
     let path = root.join(name);
@@ -48,7 +56,7 @@ fn an_ended_process_leaves_nothing_after_the_next_start() {
     assert_eq!(recovered.removed, std::slice::from_ref(&path));
     assert!(recovered.kept.is_empty());
     assert!(!path.exists());
-    assert_eq!(std::fs::read_dir(&notes).unwrap().count(), 0);
+    assert_eq!(noted(&notes), 0);
 }
 
 #[test]
@@ -60,7 +68,7 @@ fn a_running_operation_keeps_its_staging() {
     assert!(recovered.removed.is_empty() && recovered.kept.is_empty());
     assert!(path.join("output").exists());
     drop(entry);
-    assert_eq!(std::fs::read_dir(&notes).unwrap().count(), 0);
+    assert_eq!(noted(&notes), 0);
 }
 
 #[test]
@@ -84,7 +92,7 @@ fn unknown_content_or_a_replaced_folder_is_left_in_place() {
     assert_eq!(std::fs::read(foreign.join("witness")).unwrap(), b"unowned");
     assert_eq!(std::fs::read(replaced.join("output")).unwrap(), b"someone else's");
     // Reported once: the notes are gone.
-    assert_eq!(std::fs::read_dir(&notes).unwrap().count(), 0);
+    assert_eq!(noted(&notes), 0);
 }
 
 #[test]
@@ -99,12 +107,12 @@ fn a_staging_on_an_unplugged_volume_is_cleaned_once_it_is_back() {
     std::fs::rename(&volume, &away).unwrap();
     let recovered = recover_in(&notes);
     assert!(recovered.removed.is_empty() && recovered.kept.is_empty());
-    assert_eq!(std::fs::read_dir(&notes).unwrap().count(), 1);
+    assert_eq!(noted(&notes), 1);
     std::fs::rename(&away, &volume).unwrap();
     let recovered = recover_in(&notes);
     assert_eq!(recovered.removed, std::slice::from_ref(&path));
     assert!(!path.exists());
-    assert_eq!(std::fs::read_dir(&notes).unwrap().count(), 0);
+    assert_eq!(noted(&notes), 0);
 }
 
 #[test]
@@ -119,7 +127,7 @@ fn a_partial_file_of_an_ended_process_is_removed() {
     assert!(recovered.kept.is_empty());
     assert!(!path.exists());
     assert_eq!(std::fs::read(root.path().join("witness")).unwrap(), b"unowned");
-    assert_eq!(std::fs::read_dir(&notes).unwrap().count(), 0);
+    assert_eq!(noted(&notes), 0);
 }
 
 /// A native copy applies the source's creation date once its bytes are written.
@@ -168,7 +176,7 @@ fn a_running_copy_keeps_its_partial_file() {
     assert!(recovered.removed.is_empty() && recovered.kept.is_empty());
     assert!(path.exists());
     drop(entry);
-    assert_eq!(std::fs::read_dir(&notes).unwrap().count(), 0);
+    assert_eq!(noted(&notes), 0);
 }
 
 #[test]
@@ -184,7 +192,7 @@ fn a_file_that_took_the_partial_files_name_is_kept() {
     assert!(recovered.removed.is_empty());
     assert_eq!(recovered.kept, std::slice::from_ref(&path));
     assert_eq!(std::fs::read(&path).unwrap(), b"the user's file");
-    assert_eq!(std::fs::read_dir(&notes).unwrap().count(), 0);
+    assert_eq!(noted(&notes), 0);
 }
 
 #[test]
@@ -212,9 +220,53 @@ fn a_partial_file_whose_folder_went_away_waits_for_it() {
     std::fs::rename(&volume, &away).unwrap();
     let recovered = recover_in(&notes);
     assert!(recovered.removed.is_empty() && recovered.kept.is_empty());
-    assert_eq!(std::fs::read_dir(&notes).unwrap().count(), 1);
+    assert_eq!(noted(&notes), 1);
     std::fs::rename(&away, &volume).unwrap();
     let recovered = recover_in(&notes);
     assert_eq!(recovered.removed, std::slice::from_ref(&path));
     assert!(!path.exists());
+}
+
+#[test]
+fn a_kept_files_note_is_emptied_and_serves_the_next_file() {
+    let root = tempfile::tempdir().unwrap();
+    let notes = root.path().join("notes");
+    let (_, entry) = partial(root.path(), &notes, "first.bin");
+    let note = entry.path.clone();
+    drop(entry);
+    assert_eq!(std::fs::metadata(&note).unwrap().len(), 0);
+    let (_, entry) = partial(root.path(), &notes, "second.bin");
+    assert_eq!(entry.path, note);
+    assert!(std::fs::metadata(&note).unwrap().len() > 0);
+    drop(entry);
+    assert_eq!(std::fs::read_dir(&notes).unwrap().count(), 1);
+}
+
+#[test]
+fn a_thread_removes_its_emptied_notes_when_it_ends() {
+    let root = tempfile::tempdir().unwrap();
+    let notes = root.path().join("notes");
+    let folder = root.path().to_path_buf();
+    let worker_notes = notes.clone();
+    std::thread::spawn(move || drop(partial(&folder, &worker_notes, "copy.bin").1)).join().unwrap();
+    assert_eq!(std::fs::read_dir(&notes).unwrap().count(), 0);
+}
+
+#[test]
+fn an_emptied_note_left_by_an_ended_process_is_removed_without_a_report() {
+    let root = tempfile::tempdir().unwrap();
+    let notes = root.path().join("notes");
+    let (path, entry) = partial(root.path(), &notes, "kept.bin");
+    let note = entry.path.clone();
+    drop(entry);
+    // The process ends without its thread's cleanup, as Oxyde's final exit does.
+    super::SPARES.with(|spares| spares.borrow_mut().drain(..).for_each(|mut spare| {
+        drop(spare.lock.take());
+        std::mem::forget(spare);
+    }));
+    assert!(note.exists());
+    let recovered = recover_in(&notes);
+    assert!(recovered.removed.is_empty() && recovered.kept.is_empty());
+    assert!(path.exists());
+    assert!(!note.exists());
 }
