@@ -86,3 +86,43 @@ fn an_idle_history_returns_no_progress_without_removing_file_details() {
         crate::systems::file_ops::ItemOutcome::Completed
     );
 }
+
+#[test]
+fn the_operations_window_reads_details_states_and_items_apart() {
+    let manager = FileOperationManager::new();
+    let sources: Vec<std::path::PathBuf> = ["b", "a", "c"].iter().map(std::path::PathBuf::from).collect();
+    let mut operation = FileOperation::new(FileOpType::Copy, sources.clone(), Some("target".into()), None);
+    operation.item_plan(&sources[1], "target/a (2)".into(), 1, false, false);
+    operation.item_done(&sources[1]);
+    operation.item_started(&sources[2]);
+    operation.status = OpStatus::Running;
+    operation.speed_history = vec![1, 2];
+    let id = operation.id.clone();
+    manager
+        .operations
+        .lock()
+        .unwrap()
+        .insert(id.clone(), Arc::new(Mutex::new(operation)));
+
+    let detail = manager.operation_detail(&id).unwrap();
+    assert_eq!(detail.source_count, 3);
+    assert_eq!(detail.first_source, Some("a".into()));
+    assert_eq!(detail.destination, Some("target".into()));
+    assert_eq!(detail.speed_history, [1, 2]);
+
+    // In the order of the sources, as the window's rows.
+    let states = manager.operation_item_states(&id).unwrap();
+    use crate::systems::file_ops::ItemOutcome;
+    assert_eq!(states.outcomes, [ItemOutcome::Pending, ItemOutcome::Completed, ItemOutcome::InProgress]);
+    assert!(!states.settled);
+
+    let items = manager.operation_items(&id).unwrap();
+    assert_eq!(items.sources, sources);
+    assert_eq!(items.destinations[&sources[1]], std::path::PathBuf::from("target/a (2)"));
+
+    manager.operations.lock().unwrap()[&id].lock().unwrap().status = OpStatus::Cancelled;
+    let states = manager.operation_item_states(&id).unwrap();
+    assert!(states.settled);
+    assert_eq!(states.outcomes[0], ItemOutcome::NotProcessed);
+    assert!(manager.operation_item_states("missing").is_none());
+}

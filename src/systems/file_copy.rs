@@ -2,7 +2,6 @@
 use crate::platform::platform;
 use super::copy_diagnostics::{Phase, Timer};
 use std::io;
-use std::io::Read;
 use std::path::Path;
 
 pub(crate) fn copy(
@@ -56,6 +55,7 @@ fn copy_verified_with_checkpoint(
         destination_parents,
         progress,
         None,
+        false,
     )
     .map(|output| {
         let identity = crate::models::transaction::HistoryFileIdentity::from_file(&output.file)
@@ -159,10 +159,13 @@ pub(super) fn copy_with_parents(
     destination_parents: super::path_parents::HeldParents,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
 ) -> io::Result<CopiedFile> {
-    copy_with_parents_observed(source, destination, replace, held_source, None, destination_parents, progress, None)
+    copy_with_parents_observed(source, destination, replace, held_source, None, destination_parents, progress, None, false)
 }
 /// `source_parents`, when given, already holds the parents of `source`, which
-/// is then their resolved path: they are not opened again for each file.
+/// is then their resolved path: they are not opened again for each file. With
+/// `shared_output`, the kept output is held by a handle other readers share, read in
+/// order (archive moves compress it later); otherwise it may be the creation handle,
+/// which shares nothing and reads only by position.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn copy_with_parents_observed(
     source: &Path, destination: &Path, replace: bool,
@@ -171,6 +174,7 @@ pub(super) fn copy_with_parents_observed(
     destination_parents: super::path_parents::HeldParents,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
     before_replace: Option<&mut dyn FnMut() -> io::Result<bool>>,
+    shared_output: bool,
 ) -> io::Result<CopiedFile> {
     copy_with_parents_checked(
         source,
@@ -182,6 +186,7 @@ pub(super) fn copy_with_parents_observed(
         destination_parents,
         progress,
         before_replace,
+        shared_output,
     )
 }
 
@@ -196,6 +201,7 @@ fn copy_with_parents_checked(
     destination_parents: super::path_parents::HeldParents,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
     before_replace: Option<&mut dyn FnMut() -> io::Result<bool>>,
+    shared_output: bool,
 ) -> io::Result<CopiedFile> {
     let mut timing = super::copy_diagnostics::FileTiming::start(source, destination);
     let parents_timer = Timer::start(Phase::Parents);
@@ -216,11 +222,15 @@ fn copy_with_parents_checked(
     }
     drop(checks_timer);
     let written = write_output(&source, &destination, replace, held_source, &destination_parents, progress)?;
-    let mut output = written.open_verified()?;
+    let writer = if shared_output { None } else { written.verified_writer()? };
+    let output = match writer {
+        Some(writer) => writer,
+        None => written.open_verified()?,
+    };
     let metadata = output.metadata()?;
     timing.bytes = metadata.len();
     let hash_timer = super::copy_diagnostics::Timer::start(super::copy_diagnostics::Phase::Hash);
-    let hash = hash(&mut output, progress)?;
+    let hash = hash(&output, progress)?;
     drop(hash_timer);
     if let Err(error) = metadata
         .accessed()
@@ -322,20 +332,26 @@ fn check_replacement(path: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Read by position: the creation handle a Windows copy verifies through is asynchronous.
 fn hash(
-    file: &mut std::fs::File,
+    file: &std::fs::File,
     progress: &mut dyn FnMut(u64) -> io::Result<()>,
 ) -> io::Result<String> {
     let size = file.metadata()?.len();
     let mut hasher = blake3::Hasher::new();
     let mut buffer = vec![0_u8; 128 * 1024];
+    let mut offset = 0;
     loop {
         progress(size)?;
-        let count = file.read(&mut buffer)?;
+        #[cfg(target_os = "windows")]
+        let count = std::os::windows::fs::FileExt::seek_read(file, &mut buffer, offset)?;
+        #[cfg(not(target_os = "windows"))]
+        let count = std::os::unix::fs::FileExt::read_at(file, &mut buffer, offset)?;
         if count == 0 {
             break;
         }
         hasher.update(&buffer[..count]);
+        offset += count as u64;
     }
     Ok(hasher.finalize().to_hex().to_string())
 }
@@ -343,3 +359,7 @@ fn hash(
 #[cfg(all(test, target_os = "windows"))]
 #[path = "file_copy/tests/tests.rs"]
 mod tests;
+
+#[cfg(all(test, target_os = "windows"))]
+#[path = "file_copy/tests/creation_handle.rs"]
+mod creation_handle_tests;

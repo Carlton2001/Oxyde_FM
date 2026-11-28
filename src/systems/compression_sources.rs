@@ -86,9 +86,10 @@ pub(super) fn plan_controlled(
         }
     };
     let mut roots = Vec::with_capacity(sources.len());
+    let mut parents = super::source_selection::SelectionParents::default();
     for path in sources {
         check()?;
-        roots.push(SelectedEntry::select(path)?);
+        roots.push(SelectedEntry::select_in(path, &mut parents)?);
     }
     let mut entries = Vec::new();
     let mut names = std::collections::HashSet::new();

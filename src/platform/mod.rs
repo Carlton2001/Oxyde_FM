@@ -688,6 +688,13 @@ pub trait Platform: Send + Sync {
     fn open_copied_output(&self, parent: &std::fs::File, path: &std::path::Path) -> std::io::Result<std::fs::File> {
         self.open_copied_file(parent, path)
     }
+    /// Whether a copy's verification may read through `writer`, the creation handle
+    /// `copy_file_with_progress` passed to its observer, by position. Windows: the
+    /// handle CopyFileEx opens reads and shares nothing, and reopening a file just
+    /// written waits for the antivirus scan.
+    fn copy_writer_verifies(&self, _writer: &std::fs::File) -> bool {
+        false
+    }
     /// Confirm that `file`, just created as `path` in the held `parent`, lies in it.
     /// Windows creates copies by path, which an empty parent turned junction since
     /// would redirect; Linux creates relative to the held parent.

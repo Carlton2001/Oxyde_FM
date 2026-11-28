@@ -135,6 +135,28 @@ impl Output {
         Ok(file)
     }
 
+    /// The creation handle itself, for verification by position, where the platform
+    /// allows it (see `Platform::copy_writer_verifies`): it is the object created and
+    /// keeps every other opener out until kept. None otherwise, and on a volume that
+    /// identifies files by path (WebDAV), which applies the copied dates on close.
+    pub fn verified_writer(&self) -> io::Result<Option<File>> {
+        let _timer = Timer::start(Phase::OutputOpen);
+        let writer = self.writer.borrow();
+        let Some(writer) = writer.as_ref().filter(|writer| platform().copy_writer_verifies(writer)) else {
+            return Ok(None);
+        };
+        // Taken again: a native copy applied the source's dates after its last callback.
+        let identity = HistoryFileIdentity::from_file(writer)?;
+        if identity.follows_path() {
+            return Ok(None);
+        }
+        self.identity.set(Some(identity));
+        if let Some(journal) = self.journal.borrow_mut().as_mut() {
+            journal.update_created(writer.metadata()?.created().ok());
+        }
+        writer.try_clone().map(Some)
+    }
+
     /// Keeps the verified output: a replacement takes the place of its target.
     pub fn keep(&self, parents: &HeldParents, file: &File, replace: bool) -> io::Result<()> {
         if self.replacing() {

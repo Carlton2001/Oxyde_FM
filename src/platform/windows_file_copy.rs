@@ -109,6 +109,46 @@ pub(super) fn verify_child(parent: &File, file: &File, path: &Path) -> io::Resul
     Ok(())
 }
 
+#[repr(C)]
+struct IoStatusBlock {
+    status: usize,
+    information: usize,
+}
+#[repr(C)]
+#[derive(Default)]
+struct ObjectBasicInformation {
+    attributes: u32,
+    granted_access: u32,
+    reserved: [u32; 12],
+}
+#[link(name = "ntdll")]
+unsafe extern "system" {
+    fn NtQueryObject(handle: *mut std::ffi::c_void, class: u32, information: *mut ObjectBasicInformation, length: u32, returned: *mut u32) -> i32;
+    fn NtQueryInformationFile(handle: *mut std::ffi::c_void, status: *mut IoStatusBlock, information: *mut u32, length: u32, class: u32) -> i32;
+}
+
+/// The creation handle CopyFileEx passes to its callback reads the output and shares
+/// nothing, not even reading (measured on NTFS): verification reads through it rather
+/// than reopen a file just written, which waits for the antivirus scan. Its I/O is
+/// asynchronous, read by position only; an unbuffered one would need aligned reads.
+pub(super) fn writer_verifies(writer: &File) -> bool {
+    use std::os::windows::io::AsRawHandle;
+    const FILE_READ_DATA: u32 = 0x1;
+    const FILE_NO_INTERMEDIATE_BUFFERING: u32 = 0x8;
+    let handle = writer.as_raw_handle();
+    let mut basic = ObjectBasicInformation::default();
+    // ObjectBasicInformation; FileModeInformation.
+    let granted = unsafe {
+        NtQueryObject(handle, 0, &mut basic, std::mem::size_of::<ObjectBasicInformation>() as u32, std::ptr::null_mut())
+    } >= 0
+        && basic.granted_access & FILE_READ_DATA != 0;
+    let mut status = IoStatusBlock { status: 0, information: 0 };
+    let mut mode = 0u32;
+    granted
+        && unsafe { NtQueryInformationFile(handle, &mut status, &mut mode, 4, 16) } >= 0
+        && mode & FILE_NO_INTERMEDIATE_BUFFERING == 0
+}
+
 pub(super) fn copy(
     source: &Path,
     destination: &Path,

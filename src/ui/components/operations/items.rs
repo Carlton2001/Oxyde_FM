@@ -11,14 +11,17 @@ use crate::ui::components::input::{InputAppearance, TextInput, TextInputOptions}
 use crate::ui::workspace::SortDirection;
 use gpui::*;
 use oxyde_lib::models::FileEntry;
-use oxyde_lib::systems::file_ops::{FileOpType, FileOperation, ItemOutcome, OpStatus};
-
-/// How often a sort by state follows a running operation's outcomes.
-const STATE_SORT_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
+use oxyde_lib::systems::file_ops::{FileOpType, FileOperationManager, ItemOutcome, OperationDetail};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+
+/// How often a running operation's outcomes are read again: each read walks every
+/// item under the lock its workers publish their progress with.
+const STATES_INTERVAL: std::time::Duration = std::time::Duration::from_millis(500);
+/// How often a sort by state follows a running operation's outcomes.
+const STATE_SORT_INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
 
 #[cfg(test)]
 #[path = "items/tests/arrange.rs"]
@@ -83,14 +86,35 @@ pub(super) enum Column {
     State,
 }
 
+/// The outcome of each item, by its position among the operation's sources, and
+/// how many are in each state, both read off the UI thread.
+#[derive(Clone, Default)]
+pub(super) struct States {
+    pub(super) outcomes: Arc<Vec<ItemOutcome>>,
+    pub(super) counts: [usize; outcome::OUTCOMES.len()],
+    /// The operation had ended when they were read: they no longer change.
+    settled: bool,
+}
+
+impl States {
+    fn read(manager: &FileOperationManager, id: &str) -> Option<Self> {
+        let states = manager.operation_item_states(id)?;
+        Some(Self {
+            counts: outcome::tally(&states.outcomes),
+            outcomes: Arc::new(states.outcomes),
+            settled: states.settled,
+        })
+    }
+}
+
 /// The rows to show, in order: those whose path (or name, when they share a folder)
-/// holds `query`, sorted by `column`.
+/// holds `query`, sorted by `column`. `outcomes` follow the rows' order.
 pub(super) fn arrange(
     rows: &[Item],
     query: &str,
     column: Column,
     direction: SortDirection,
-    outcomes: &HashMap<PathBuf, ItemOutcome>,
+    outcomes: &[ItemOutcome],
 ) -> Vec<usize> {
     let names = |a: &Item, b: &Item| oxyde_lib::systems::file_ops::compare_names(&a.path, &b.path);
     let mut shown: Vec<usize> = rows
@@ -107,8 +131,8 @@ pub(super) fn arrange(
             // Folders before files, as the type column of the file list.
             Column::Type => b.is_dir().cmp(&a.is_dir()).then_with(|| a.extension.cmp(&b.extension)),
             Column::Size => a.size().cmp(&b.size()),
-            Column::State => outcome::rank(outcomes.get(&a.path).copied())
-                .cmp(&outcome::rank(outcomes.get(&b.path).copied())),
+            Column::State => outcome::rank(outcomes.get(left).copied())
+                .cmp(&outcome::rank(outcomes.get(right).copied())),
         }
         .then_with(|| names(a, b));
         match direction {
@@ -119,10 +143,13 @@ pub(super) fn arrange(
     shown
 }
 
-/// Where a copied or moved `source` went: the path the operation planned for it,
-/// renamed when a conflict kept both, else `folder` with its name.
+/// Where a copied or moved `source` went in `folder`: under the name the operation
+/// planned for it (a copy into its own folder is renamed), else under its own.
+/// The planned path is the engine's, often verbatim (`\\?\`): only its name is
+/// kept, so the main window finds the item under the folder it lists.
 fn moved_to(destinations: &HashMap<PathBuf, PathBuf>, folder: &Path, source: &Path) -> Option<PathBuf> {
-    destinations.get(source).cloned().or_else(|| source.file_name().map(|name| folder.join(name)))
+    let name = destinations.get(source).and_then(|planned| planned.file_name()).or_else(|| source.file_name())?;
+    Some(folder.join(name))
 }
 
 /// Metadata column widths, in the file list's units.
@@ -143,6 +170,7 @@ pub(super) struct Items {
     /// The folder every item comes from; without one, a Location column names each.
     origin: Option<PathBuf>,
     rows: Arc<Vec<Item>>,
+    pub(super) states: States,
     shown: Arc<Vec<usize>>,
     query: String,
     sort: Column,
@@ -154,6 +182,9 @@ pub(super) struct Items {
     settled: bool,
     /// When the State column last sorted rows of a running operation.
     arranged_at: Option<std::time::Instant>,
+    states_task: Option<Task<()>>,
+    /// When the outcomes were last read.
+    states_at: Option<std::time::Instant>,
     /// Raised when the rows being read are no longer wanted: their thread stops early.
     load_cancelled: Arc<std::sync::atomic::AtomicBool>,
     arrange_task: Option<Task<()>>,
@@ -177,6 +208,7 @@ impl Default for Items {
             destinations: Arc::default(),
             origin: None,
             rows: Arc::default(),
+            states: States::default(),
             shown: Arc::default(),
             query: String::new(),
             sort: Column::Name,
@@ -186,6 +218,8 @@ impl Default for Items {
             load_task: None,
             settled: false,
             arranged_at: None,
+            states_task: None,
+            states_at: None,
             load_cancelled: Arc::default(),
             arrange_task: None,
             selected: None,
@@ -240,63 +274,71 @@ impl OperationsPanelView {
 
     /// Lists `operation`'s items again when another operation is selected.
     /// Once the operation ends, its rows are read again: moved items show their size
-    /// and type where they went. Meanwhile a sort by state follows the outcomes.
-    pub(super) fn follow_items(&mut self, operation: &FileOperation, cx: &mut Context<Self>) {
-        let ended = matches!(operation.status, OpStatus::Completed | OpStatus::Cancelled | OpStatus::Error(_));
-        if self.items.operation.as_deref() == Some(operation.id.as_str()) {
-            if self.items.loading || self.items.settled {
-                return;
-            }
-            if ended {
-                self.load_items(operation, false, cx);
-            } else if self.items.sort == Column::State
-                && self.items.arrange_task.is_none()
-                && self.items.arranged_at.is_none_or(|at| at.elapsed() >= STATE_SORT_INTERVAL)
-            {
-                self.items.arranged_at = Some(std::time::Instant::now());
-                self.arrange_items(false, cx);
-            }
+    /// and type where they went. Meanwhile its outcomes are read again at intervals,
+    /// which a sort by state follows.
+    pub(super) fn follow_items(&mut self, operation: &OperationDetail, cx: &mut Context<Self>) {
+        let ended = super::is_final(&operation.status);
+        if self.items.operation.as_deref() != Some(operation.id.as_str()) {
+            self.load_items(operation, true, cx);
             return;
         }
-        self.load_items(operation, true, cx);
+        if self.items.loading {
+            return;
+        }
+        if ended && !self.items.settled {
+            self.load_items(operation, false, cx);
+        } else if !self.items.states.settled
+            && self.items.states_task.is_none()
+            && (ended || self.items.states_at.is_none_or(|at| at.elapsed() >= STATES_INTERVAL))
+        {
+            self.refresh_states(cx);
+        }
+    }
+
+    fn manager(&self, cx: &App) -> Option<Arc<FileOperationManager>> {
+        self.app.upgrade().map(|app| app.read(cx).file_ops.clone())
     }
 
     /// Reads `operation`'s rows; `fresh` when it was just chosen, which also clears the
     /// selection and the scroll.
-    fn load_items(&mut self, operation: &FileOperation, fresh: bool, cx: &mut Context<Self>) {
+    fn load_items(&mut self, operation: &OperationDetail, fresh: bool, cx: &mut Context<Self>) {
+        let Some(manager) = self.manager(cx) else { return };
         let items = &mut self.items;
-        items.settled = matches!(operation.status, OpStatus::Completed | OpStatus::Cancelled | OpStatus::Error(_));
+        items.settled = super::is_final(&operation.status);
         items.operation = Some(operation.id.clone());
         items.kind = Some(operation.op_type.clone());
         items.destination = operation.destination.clone();
-        items.destinations = Arc::new(operation.item_destinations());
-        let destinations = items.destinations.clone();
         items.origin = operation.source_parent.clone();
         if fresh {
             items.rows = Arc::default();
+            items.states = States::default();
             items.shown = Arc::default();
+            items.destinations = Arc::default();
             items.selected = None;
             items.list = UniformListScrollHandle::new();
         }
         items.loading = true;
         items.arrange_task = None;
+        items.states_task = None;
         items.load_cancelled.store(true, std::sync::atomic::Ordering::Relaxed);
         let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
         items.load_cancelled = cancelled.clone();
-        let sources = operation.sources.clone();
+        let id = operation.id.clone();
         // Moved and copied items are found at their destination once their source is gone.
         let destination = matches!(operation.op_type, FileOpType::Copy | FileOpType::Move)
             .then(|| operation.destination.clone())
             .flatten();
-        let outcomes = operation.item_outcomes.clone();
         let shared_folder = operation.source_parent.is_some();
         let (query, sort, direction) = (items.query.clone(), items.sort, items.direction);
         let launched = query.clone();
         items.load_task = Some(cx.spawn(async move |this, cx| {
-            let (rows, shown) = cx
+            let loaded = cx
                 .background_executor()
                 .spawn(async move {
-                    let rows: Vec<Item> = sources
+                    let listed = manager.operation_items(&id)?;
+                    let destinations = Arc::new(listed.destinations);
+                    let rows: Vec<Item> = listed
+                        .sources
                         .iter()
                         // Another operation chosen: its disk reads stop here.
                         .take_while(|_| !cancelled.load(std::sync::atomic::Ordering::Relaxed))
@@ -305,14 +347,24 @@ impl OperationsPanelView {
                             Item::new(source, icons::resolve_entry(source, moved.as_deref()).ok(), shared_folder)
                         })
                         .collect();
-                    let shown = arrange(&rows, &query, sort, direction, &outcomes);
-                    (Arc::new(rows), Arc::new(shown))
+                    // Read after the disk reads, which can be long, so they are current.
+                    let states = States::read(&manager, &id).unwrap_or_default();
+                    let shown = arrange(&rows, &query, sort, direction, &states.outcomes);
+                    Some((Arc::new(rows), Arc::new(shown), destinations, states))
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
+                this.items.loading = false;
+                // The operation was removed meanwhile: the selection moves on.
+                let Some((rows, shown, destinations, states)) = loaded else {
+                    cx.notify();
+                    return;
+                };
                 this.items.rows = rows;
                 this.items.shown = shown;
-                this.items.loading = false;
+                this.items.destinations = destinations;
+                this.items.states = states;
+                this.items.states_at = Some(std::time::Instant::now());
                 this.items.revision += 1;
                 // A filter or a sort typed while loading was not applied to these rows.
                 if (&this.items.query, this.items.sort, this.items.direction) != (&launched, sort, direction) {
@@ -324,12 +376,40 @@ impl OperationsPanelView {
         cx.notify();
     }
 
+    /// Reads the outcomes of the listed operation again, off the UI thread.
+    fn refresh_states(&mut self, cx: &mut Context<Self>) {
+        let (Some(id), Some(manager)) = (self.items.operation.clone(), self.manager(cx)) else { return };
+        self.items.states_at = Some(std::time::Instant::now());
+        self.items.states_task = Some(cx.spawn(async move |this, cx| {
+            let read = id.clone();
+            let states = cx
+                .background_executor()
+                .spawn(async move { States::read(&manager, &read) })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.items.states_task = None;
+                let Some(states) = states.filter(|_| this.items.operation.as_deref() == Some(id.as_str())) else {
+                    return;
+                };
+                this.items.states = states;
+                if this.items.sort == Column::State
+                    && this.items.arrange_task.is_none()
+                    && this.items.arranged_at.is_none_or(|at| at.elapsed() >= STATE_SORT_INTERVAL)
+                {
+                    this.items.arranged_at = Some(std::time::Instant::now());
+                    this.arrange_items(false, cx);
+                }
+                cx.notify();
+            });
+        }));
+    }
+
     /// Filters and sorts the loaded rows again, off the UI thread.
     /// `to_top` when the user changed the filter or the order, not when outcomes moved.
     fn arrange_items(&mut self, to_top: bool, cx: &mut Context<Self>) {
         let rows = self.items.rows.clone();
         let (query, sort, direction) = (self.items.query.clone(), self.items.sort, self.items.direction);
-        let outcomes = self.selected_outcomes(cx);
+        let outcomes = self.items.states.outcomes.clone();
         self.items.arrange_task = Some(cx.spawn(async move |this, cx| {
             let shown = cx
                 .background_executor()
@@ -344,15 +424,6 @@ impl OperationsPanelView {
                 cx.notify();
             });
         }));
-    }
-
-    fn selected_outcomes(&self, cx: &App) -> HashMap<PathBuf, ItemOutcome> {
-        let id = self.items.operation.clone();
-        self.app
-            .upgrade()
-            .zip(id)
-            .and_then(|(app, id)| app.read(cx).file_ops.operation_item_outcomes(&id))
-            .unwrap_or_default()
     }
 
     /// A header press: sorts by its column, or reverses the order when it already does.

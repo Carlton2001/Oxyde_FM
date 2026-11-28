@@ -11,7 +11,7 @@ use crate::ui::i18n::{FluentArgs, I18nContext, Message};
 use crate::ui::theme::{OxydeTheme, ThemeContext};
 use gpui::prelude::*;
 use gpui::*;
-use oxyde_lib::systems::file_ops::{FileOpType, FileOperation, OpStatus};
+use oxyde_lib::systems::file_ops::{FileOpType, OpStatus, OperationDetail};
 use std::path::{Path, PathBuf};
 
 pub(super) fn status_color(status: &OpStatus, theme: OxydeTheme) -> Hsla {
@@ -112,15 +112,11 @@ fn place(
 
 impl OperationsPanelView {
     /// The selected operation's kind, sources and state.
-    pub(super) fn render_heading(&self, operation: &FileOperation, cx: &mut Context<Self>) -> Div {
+    pub(super) fn render_heading(&self, operation: &OperationDetail, cx: &mut Context<Self>) -> Div {
         let theme = *cx.theme();
         let (kind, icon) = kind(&operation.op_type);
         let (fill, text) = status_badge(&operation.status, theme);
-        let summary = source_summary(
-            operation.first_sources.first().map(PathBuf::as_path),
-            operation.sources.len(),
-            cx,
-        );
+        let summary = source_summary(operation.first_source.as_deref(), operation.source_count, cx);
         div()
             .flex_none()
             .px(rems(1.0))
@@ -138,7 +134,7 @@ impl OperationsPanelView {
     }
 
     /// Progress, places and failure of the selected operation.
-    pub(super) fn render_overview(&self, operation: &FileOperation, cx: &mut Context<Self>) -> Div {
+    pub(super) fn render_overview(&self, operation: &OperationDetail, cx: &mut Context<Self>) -> Div {
         let theme = *cx.theme();
         let compress = matches!(operation.op_type, FileOpType::Compress);
         let mut places = div().flex().flex_col().gap(rems(0.375));

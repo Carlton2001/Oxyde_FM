@@ -226,6 +226,9 @@ impl Platform for WindowsPlatform {
     fn verify_created_child(&self, parent: &std::fs::File, file: &std::fs::File, path: &std::path::Path) -> std::io::Result<()> {
         super::windows_file_copy::verify_child(parent, file, path)
     }
+    fn copy_writer_verifies(&self, writer: &std::fs::File) -> bool {
+        super::windows_file_copy::writer_verifies(writer)
+    }
     fn open_rename_item(
         &self,
         parent: &std::fs::File,

@@ -155,12 +155,17 @@ impl FileOperation {
     }
 
     pub(super) fn snapshot_item_outcomes(&self) -> HashMap<PathBuf, ItemOutcome> {
+        self.sources.iter().cloned().zip(self.item_states()).collect()
+    }
+
+    /// The outcome of each source, in the order of `sources`, without cloning paths.
+    pub(super) fn item_states(&self) -> Vec<ItemOutcome> {
         let terminal = FileOperationManager::is_final(&self.status);
         let archive = self.item_tracking_atomic;
         self.sources
             .iter()
             .map(|path| {
-                let result = if let Some(saved) = self.item_outcomes.get(path) {
+                if let Some(saved) = self.item_outcomes.get(path) {
                     *saved
                 } else if let Some(progress) = self.item_progress.get(path) {
                     if archive {
@@ -209,11 +214,27 @@ impl FileOperation {
                     }
                 } else {
                     ItemOutcome::Unknown
-                };
-                (path.clone(), result)
+                }
             })
             .collect()
     }
+}
+
+/// The outcome of each item of an operation, as the operations window lists them.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ItemStates {
+    /// One per source, in the order of the operation's sources.
+    pub outcomes: Vec<ItemOutcome>,
+    /// The operation had ended when they were read: they no longer change.
+    pub settled: bool,
+}
+
+/// What an operation works on, read once by the operations window.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct OperationItems {
+    pub sources: Vec<PathBuf>,
+    /// Where each source was planned to go, as `FileOperation::item_destinations`.
+    pub destinations: HashMap<PathBuf, PathBuf>,
 }
 
 impl FileOperationManager {
@@ -222,6 +243,31 @@ impl FileOperationManager {
         operations
             .get(id)
             .map(|operation| operation.lock().unwrap().snapshot_item_outcomes())
+    }
+
+    /// The operation is taken out of the list first: other operations stay
+    /// available while its items are walked.
+    fn operation_handle(&self, id: &str) -> Option<std::sync::Arc<std::sync::Mutex<FileOperation>>> {
+        self.operations.lock().unwrap().get(id).cloned()
+    }
+
+    /// The outcome of each source by position, without cloning their paths.
+    pub fn operation_item_states(&self, id: &str) -> Option<ItemStates> {
+        let operation = self.operation_handle(id)?;
+        let operation = operation.lock().unwrap();
+        Some(ItemStates {
+            outcomes: operation.item_states(),
+            settled: FileOperationManager::is_final(&operation.status),
+        })
+    }
+
+    pub fn operation_items(&self, id: &str) -> Option<OperationItems> {
+        let operation = self.operation_handle(id)?;
+        let operation = operation.lock().unwrap();
+        Some(OperationItems {
+            sources: operation.sources.clone(),
+            destinations: operation.item_destinations(),
+        })
     }
 }
 

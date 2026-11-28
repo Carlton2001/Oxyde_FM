@@ -6,9 +6,9 @@ use crate::ui::theme::ThemeContext;
 use crate::ui::style::TabularFigures;
 use gpui::prelude::*;
 use gpui::*;
-use oxyde_lib::systems::file_ops::{FileOperation, OpStatus};
+use oxyde_lib::systems::file_ops::{OpStatus, OperationDetail};
 
-pub(super) fn render(operation: &FileOperation, cx: &App) -> Div {
+pub(super) fn render(operation: &OperationDetail, cx: &App) -> Div {
     let theme = *cx.theme();
     let i18n = cx.i18n();
     let language = i18n.language();

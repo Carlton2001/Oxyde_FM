@@ -9,6 +9,11 @@ use std::{
 };
 
 pub(crate) fn same_entry(source: &Path, target: &Path) -> bool {
+    // A free name is no entry: its folders need not be held to tell. A broken link
+    // is an entry of its own.
+    if target.symlink_metadata().is_err_and(|error| error.kind() == io::ErrorKind::NotFound) {
+        return false;
+    }
     let compare = || -> io::Result<bool> {
         let source_parent = HeldParents::new(source)?;
         let target_parent = HeldParents::new(target)?;
