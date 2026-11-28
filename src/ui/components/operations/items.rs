@@ -143,10 +143,13 @@ pub(super) fn arrange(
     shown
 }
 
-/// Where a copied or moved `source` went: the path the operation planned for it,
-/// renamed when a conflict kept both, else `folder` with its name.
+/// Where a copied or moved `source` went in `folder`: under the name the operation
+/// planned for it (a copy into its own folder is renamed), else under its own.
+/// The planned path is the engine's, often verbatim (`\\?\`): only its name is
+/// kept, so the main window finds the item under the folder it lists.
 fn moved_to(destinations: &HashMap<PathBuf, PathBuf>, folder: &Path, source: &Path) -> Option<PathBuf> {
-    destinations.get(source).cloned().or_else(|| source.file_name().map(|name| folder.join(name)))
+    let name = destinations.get(source).and_then(|planned| planned.file_name()).or_else(|| source.file_name())?;
+    Some(folder.join(name))
 }
 
 /// Metadata column widths, in the file list's units.

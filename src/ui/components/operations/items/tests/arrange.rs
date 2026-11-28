@@ -59,3 +59,14 @@ fn the_toolbar_counts_each_state_once() {
     let failed = super::outcome::OUTCOMES.iter().position(|&state| state == ItemOutcome::Failed).unwrap();
     assert_eq!((counts[completed], counts[failed], counts.iter().sum::<usize>()), (2, 1, 3));
 }
+
+#[cfg(windows)]
+#[::core::prelude::v1::test]
+fn a_renamed_copy_is_found_under_the_folder_as_listed() {
+    let source = PathBuf::from(r"C:\a\rapport.txt");
+    let planned = PathBuf::from(r"\?\C:\a\rapport - Copie.txt");
+    let destinations = std::collections::HashMap::from([(source.clone(), planned)]);
+    assert_eq!(super::moved_to(&destinations, Path::new(r"C:\a"), &source), Some(PathBuf::from(r"C:\a\rapport - Copie.txt")));
+    let other = PathBuf::from(r"C:\b\notes.txt");
+    assert_eq!(super::moved_to(&destinations, Path::new(r"C:\a"), &other), Some(PathBuf::from(r"C:\a\notes.txt")));
+}
