@@ -1,6 +1,6 @@
 # Audit — Remédiations et validations restantes
 
-État au 27 novembre 2026. Les validations citées proviennent des comptes rendus du dépôt. Les lignes « à confirmer » correspondent à un scénario pour lequel le suivi ne consigne pas clairement le résultat.
+État au 28 novembre 2026. Les validations citées proviennent des comptes rendus du dépôt. Les lignes « à confirmer » correspondent à un scénario pour lequel le suivi ne consigne pas clairement le résultat.
 
 ## Corrections et mesures
 
@@ -16,20 +16,17 @@
 
 ## Windows — Validations ouvertes
 
-Les cinq premières lignes sont explicitement ouvertes dans le [compte rendu du 27 novembre](100-plan-remediation.md#L286).
+Les trois premières lignes sont explicitement ouvertes dans le [compte rendu du 27 novembre](100-plan-remediation.md#L286).
 
 | ID | État de la remédiation | Scénario restant | Référence |
 |---|---|---|---|
 | **M13** | Corrigé, test manuel ouvert | Désépingler un favori pendant sa réorganisation. Vérifier que le glisser se termine et que les interactions reprennent. | [Suivi](100-plan-remediation.md#L149) |
 | **M26** | Corrigé, test manuel ouvert | Refuser la fermeture après le lancement de l’installeur. Oxyde doit reproposer la mise à jour. | [Suivi](100-plan-remediation.md#L154) |
 | **M77** | Corrigé, test manuel ouvert | Inverser les boutons de la souris et glisser d’Oxyde vers l’Explorateur avec le bouton principal configuré. | [Constat](99-synthese.md#L154) |
-| **M85** | Test automatisé présent, test visuel ouvert | Afficher l’icône héritée d’un .exe ou .ico sans alpha exploitable. Elle doit être visible. | [Constat](99-synthese.md#L162) |
-| **M92** | Corrigé, test d’intégration ouvert | Faire refuser un écrasement via OnOverwrite par une application cliente. Vérifier que le refus est relayé et que le fichier existant est conservé. | [Constat](99-synthese.md#L169) |
 | **F25 / dépôt en flux** | ZIP de l’Explorateur validé, variante Outlook ouverte | Déposer une pièce jointe Outlook dans Oxyde et vérifier le contenu de la copie. | [Suivi](100-plan-remediation.md#L282) |
 | **F53** | Corrigé, test matériel ouvert | Monter un volume dans un dossier et vérifier que les informations de stockage correspondent au volume monté. | [Suivi](102-faibles.md#L21) |
 | **F163** | Corrigé, test manuel ouvert | Glisser entre deux volumes dont l’un est monté dans un dossier sous la même lettre. L’action par défaut doit être Copier. | [Suivi](102-faibles.md#L113) |
-| **F68** | Corrigé, validation réseau ouverte | Vérifier l’énumération des partages et l’abandon côté onglet après environ 30 secondes si le serveur ne répond plus. | [Suivi](102-faibles.md#L36) |
-| **E2 / WM7** | Partiellement validé | Vérifier la suppression sur partage réseau et avec la stratégie NoRecycleFiles. | [Suivi](100-plan-remediation.md#L107) |
+| **E2 / WM7** | Partiellement validé | Vérifier la suppression sur partage réseau et avec la stratégie NoRecycleFiles. Le 28 novembre, ni la clé de stratégie HKCU ni le partage `so39i Agde` n’étaient accessibles en écriture sans élévation : à faire par l’utilisateur (`reg add HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer /v NoRecycleFiles /t REG_DWORD /d 1` en administrateur, puis relancer Oxyde). | [Suivi](100-plan-remediation.md#L107) |
 | **F109** | Corrigé, test passé sous Windows le 28 novembre ; test manuel ouvert | Annuler une mise à la corbeille mêlant des éléments avec et sans identité. Vérifier la restauration des premiers et le signalement des autres. | [Suivi](102-faibles.md#L69) |
 | **E10** | IME japonais validé, variantes ouvertes | Tester la composition avec les IME chinois et coréen sous Windows. | [Suivi](100-plan-remediation.md#L147) |
 | **WF2** | Corrigé, repli spécifique sans résultat consigné | Vérifier le parcours par composants sur une ancienne build sans OBJ_DONT_REPARSE. | [Suivi](100-plan-remediation.md#L117) |
@@ -71,27 +68,23 @@ Ces tests ont pour référence leur ligne dans la checklist.
 
 | ID | État de la remédiation | Scénario à confirmer | Référence |
 |---|---|---|---|
-| **M2** | Corrigé, validation à confirmer | F2 avec plusieurs éléments sélectionnés. | [Suivi](100-plan-remediation.md#L114) |
-| **M3** | Corrigé, validation à confirmer | F2 et Ctrl+Maj+N dans la corbeille. | [Suivi](100-plan-remediation.md#L114) |
-| **M5** | Corrigé, validation à confirmer | Saisir du texte, l’effacer via la croix, puis faire Maj+clic et saisir de nouveau. | [Constat](99-synthese.md#L72) |
-| **M6** | Corrigé, validation à confirmer | Tester copier, couper et double-cliquer dans le champ mot de passe. | [Suivi](100-plan-remediation.md#L114) |
-| **M7** | Corrigé, validation à confirmer | Ouvrir le menu « Exécuter » des propriétés d’un raccourci Windows avec le menu de repli. | [Constat](99-synthese.md#L74) |
-| **M9** | Corrigé, validation à confirmer | Éjecter un support après la disparition d’un dossier surveillé. | [Constat](99-synthese.md#L76) |
-| **M10** | Corrigé, validation à confirmer | Vérifier le rafraîchissement des onglets après un montage ou une éjection longue. | [Constat](99-synthese.md#L77) |
-| **M11** | Corrigé, validation à confirmer | Vérifier qu’une disparition transitoire d’un lecteur ne redirige pas les onglets et ne purge pas l’historique. | [Constat](99-synthese.md#L78) |
-| **M12** | Corrigé, validation à confirmer | Glisser depuis la corbeille, passer par un autre onglet, puis sortir de la fenêtre. Aucun fichier de la corbeille ne doit être offert à l’application tierce. | [Constat](99-synthese.md#L79) |
-| **M16** | Corrigé, validation à confirmer | Extraire deux archives chiffrées et vérifier que les deux demandes de mot de passe sont présentées. | [Constat](99-synthese.md#L83) |
-| **M18** | Corrigé, validation à confirmer | Relancer la recherche avancée depuis un autre volet et vérifier la racine et le volet utilisés. | [Constat](99-synthese.md#L85) |
-| **M19** | Corrigé, validation à confirmer | Couper A, copier B sur un partage lent, puis coller aussitôt. Vérifier que B est copié. | [Constat](99-synthese.md#L86) |
+| **M9** | Corrigé, validation à confirmer | Éjecter un support après la disparition d’un dossier surveillé. Sous Windows, une ISO est en lecture seule : il faut une clé USB ou un VHD (élévation), ou le faire sous Linux comme dans le scénario d’origine. | [Constat](99-synthese.md#L76) |
 | **M23** | Corrigé, validation Linux à confirmer | Changer d’adresse pendant une invite SMB et vérifier que l’invite disparaît. | [Suivi](100-plan-remediation.md#L112) |
-| **M24** | Corrigé, validation à confirmer | Fermer la fenêtre des propriétés pendant l’application récursive des droits et vérifier qu’aucune interruption partielle ne passe sous silence. | [Constat](99-synthese.md#L91) |
-| **M25** | Corrigé, validation à confirmer | Tabuler dans les réglages de la corbeille lorsque le champ de capacité est masqué. | [Constat](99-synthese.md#L92) |
-| **F171** | Corrigé, validation à confirmer | Trier dans le sélecteur après un refus de listage. L’erreur doit rester visible. | [Suivi](100-plan-remediation.md#L246) |
-| **F172** | Corrigé, validation à confirmer | Appuyer sur Entrée sans sélection dans le sélecteur. La validation doit suivre l’état du bouton. | [Suivi](100-plan-remediation.md#L246) |
+| **M24** | Corrigé, validation Linux à confirmer | Fermer la fenêtre des propriétés pendant l’application récursive des droits et vérifier qu’aucune interruption partielle ne passe sous silence. | [Constat](99-synthese.md#L91) |
 | **F202** | Corrigé, validation Linux à confirmer | Modifier les droits après ouverture des propriétés. Vérifier la relecture des droits et le comportement au deuxième OK. | [Suivi](102-faibles.md#L143) |
 
 ## Validations déjà consignées et limites actées
 
 - **Windows, à l’écran**. F67, F93, M70 et O89, notification de récupération NTFS/exFAT, et Annuler/Rétablir sur USB. [Compte rendu](100-plan-remediation.md#L286)
 - **Windows, côté moteur**. M66 et M79, notamment. [Compte rendu](100-plan-remediation.md#L285)
+- **Windows, à l’écran, 28 novembre**. Oxyde piloté par clavier, souris et captures :
+  - M2 (F2 renomme l’élément du curseur), M3 (F2 et Ctrl+Maj+N sans effet dans la corbeille), M5 (croix, Maj+clic puis saisie : « xy », sans panique), M6 (Ctrl+C et Ctrl+X refusés dans le champ masqué, Couper et Copier grisés dans son menu), M7 (menu « Exécuter » de repli, sans panique).
+  - M12 : un glisser depuis la corbeille déposé dans l’Explorateur sortait l’élément de la corbeille. Corrigé (4b9b722c) : rien n’est offert hors d’Oxyde, vérifié.
+  - M16 (deux invites de mot de passe à la suite, deux archives extraites), M18 (nouvelle fenêtre, racine de l’autre volet, résultats dans ce volet), M19 (Ctrl+X A, Ctrl+C B, Ctrl+V : B copié ; en local, pas sur un partage lent), M25 (Tab saute la capacité masquée, Échap ferme).
+  - F171 (l’erreur reste après un tri) et F172 (Entrée sans sélection ne fait rien, avec sélection répond le chemin), par le lanceur `--choose`.
+  - M10 : 20 fichiers créés pendant le démontage d’une ISO depuis Oxyde, tous affichés ensuite.
+  - M11 : la disparition passagère d’un lecteur (SUBST retiré environ une seconde, pendant les relevés déclenchés par le montage d’une ISO) redirigeait l’onglet : une notification amène deux relevés en 150 ms. Corrigé (38156904) : un lecteur doit manquer deux secondes. Vérifié : onglet et historique gardés ; un vrai retrait est pris en compte vers 3 s.
+  - M85 : un .ico 32 bits à alpha nul s’affichait vide dans la grille et les aperçus (décodeur `image`, pas le chemin HICON corrigé en 8190cc52). Corrigé (354625e0) : le masque AND décide de la transparence. Vérifié avec une icône sans masque et une icône à quart transparent.
+  - F68 : serveur muet simulé (port 445 qui accepte sans répondre, dans WSL) : l’onglet abandonne à 30 s et dit que le serveur n’a pas répondu ; l’énumération de `\\PCS` liste ses partages.
+- **Windows, tests automatiques, 28 novembre**. M92 : un écouteur qui refuse l’écrasement dans OnOverwrite fait redemander Oxyde, et le fichier existant est conservé (2c958470).
 - **Limites actées**. Les décisions sur M14, F77 et WM1 figurent dans la liste des choix volontaires. [Décisions](101-restes.md#L87)
