@@ -192,6 +192,8 @@ impl FileOperationManager {
                     #[cfg(any(not(target_os = "windows"), test))]
                     { Ok(false) }
                 }),
+                // Compressed later into the archive, read in order.
+                deferred_moves.is_some(),
             )
             .map_err(|error| {
                 let message = match error.kind() {

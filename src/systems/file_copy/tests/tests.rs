@@ -235,6 +235,7 @@
             parents,
             &mut |_| Ok(()),
             None,
+            false,
         );
         let error = match result {
             Ok(_) => panic!("unverified output was kept"),
