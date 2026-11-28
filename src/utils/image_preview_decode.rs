@@ -243,6 +243,8 @@ fn collect_frames(
     Ok((frames, false))
 }
 
+pub(crate) mod ico_mask;
+
 fn raster(
     data: &[u8],
     format: ImageFormat,
@@ -267,6 +269,15 @@ fn raster(
             } else {
                 Ok((static_image(decoder, policy)?, false))
             }
+        }
+        ImageFormat::Ico => {
+            let mut reader = image::ImageReader::with_format(Cursor::new(data), format);
+            reader.limits(limits(policy));
+            let mut decoder = reader.into_decoder().map_err(classify_decode)?;
+            prepare_decoder(&mut decoder, policy)?;
+            let image = DynamicImage::from_decoder(decoder).map_err(classify_decode)?;
+            let image = ico_mask::apply_legacy_mask(data, image);
+            Ok((vec![Frame::new(fitted_bgra(image, policy))], false))
         }
         format => {
             let mut reader = image::ImageReader::with_format(Cursor::new(data), format);
